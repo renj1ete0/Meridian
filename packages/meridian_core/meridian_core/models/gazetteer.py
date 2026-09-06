@@ -15,7 +15,7 @@ share one table rather than duplicating.
 
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, Text, text
+from sqlalchemy import Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,29 @@ class GazetteerTerm(Base, TimestampMixin):
     entity_type: Mapped[str] = mapped_column(GAZETTEER_ENTITY_TYPE, nullable=False)
     topic_labels: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
+    # Which country this expansion belongs to; NULL for genuinely global terms.
+    # LTA is the Land Transport Authority in Singapore and a Local Transport
+    # Authority in the UK.
+    jurisdiction: Mapped[str | None] = mapped_column(Text, index=True)
+
+    # True when the surface form collides — with a common word, with another
+    # domain, or with another term in the SAME country. Jurisdiction alone does
+    # not settle it: in one Singapore transport document ERP is Electronic Road
+    # Pricing or Enterprise Resource Planning, COE is Certificate of Entitlement
+    # or Centre of Excellence, and PC is park connector, pedestrian crossing or
+    # personal computer.
+    #
+    # An ambiguous surface form therefore maps to SEVERAL rows here, and this
+    # table can only offer candidates — it cannot decide. The resolver picks
+    # using document context (co-occurring entities, the document's topic,
+    # whether a full form appears nearby), and where context is insufficient it
+    # must leave the mention UNRESOLVED rather than guess. That is §5.5's middle
+    # band: a wrong resolution corrupts the graph invisibly, an unresolved
+    # mention stays visible and fixable.
+    ambiguous: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+
     source: Mapped[str] = mapped_column(
         GAZETTEER_SOURCE, nullable=False, default="manual", server_default="manual"
     )
@@ -54,7 +77,12 @@ class GazetteerTerm(Base, TimestampMixin):
     )
 
     __table_args__ = (
-        Index("ix_gazetteer_canonical", "canonical", unique=True),
+        # Not unique on canonical alone: one surface form legitimately has
+        # several expansions across jurisdictions and contexts.
+        Index("ix_gazetteer_canonical", "canonical"),
+        UniqueConstraint(
+            "canonical", "jurisdiction", "entity_type", name="uq_gazetteer_term_scope"
+        ),
         # The EntityRuler load: approved terms only.
         Index("ix_gazetteer_approved_type", "approved", "entity_type"),
     )

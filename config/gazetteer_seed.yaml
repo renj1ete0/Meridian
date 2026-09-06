@@ -1,123 +1,356 @@
-# ~50 hand-seeded gazetteer terms, loaded into spaCy's EntityRuler at worker
-# startup (spec §5.6). This is a starting set, not the full 50 — extend it
-# during the Phase 0 evening the spec recommends spending on cold-start
-# seeding. Auto-harvesting (Full Name (ACRONYM) pattern) and model-proposed
-# additions grow this list after ingestion begins; this file only seeds it
-# once at first boot.
+# Hand-seeded gazetteer, loaded into spaCy's EntityRuler at worker startup so
+# gazetteer matches take precedence over statistical NER (spec §5.6).
+#
+# A pretrained model will resolve "Land Transport Authority" as an ORG if you are
+# lucky, and will make nothing at all of "Electronic Road Pricing", "Silver Zone",
+# "ODD" or "farebox recovery ratio". This list is what makes fast-loop entity
+# extraction useful on day one, before any auto-harvesting has run.
+#
+# It is also entity resolution's alias source (§5.5) — the alias lists here are
+# exactly the matching that stops "LTA", "Land Transport Authority" and "the
+# Authority" becoming three nodes. The two tables share one definition rather
+# than duplicating.
+#
+# This is the seed, not the target. Three mechanisms grow it: auto-harvesting the
+# "Full Name (ACRONYM)" pattern out of already-extracted text, which is extremely
+# high-yield in government and academic documents; model-proposed terms arriving
+# as approved:false; and manual additions. Everything here is approved:true
+# because a human wrote it.
 
 terms:
-  # Singapore — agencies
+  # ── Singapore: agencies ────────────────────────────────────────────────
   - canonical: Land Transport Authority
     aliases: ["LTA", "LTA Singapore", "the Authority"]
     entity_type: agency
+    jurisdiction: SG
+    ambiguous: true
     topic_labels: [walkability, on-demand-bus, av-deployment]
-    source: manual
-    approved: true
-
   - canonical: Urban Redevelopment Authority
     aliases: ["URA"]
     entity_type: agency
+    jurisdiction: SG
     topic_labels: [walkability]
-    source: manual
-    approved: true
-
   - canonical: Housing & Development Board
-    aliases: ["HDB"]
+    aliases: ["HDB", "Housing and Development Board"]
     entity_type: agency
+    jurisdiction: SG
     topic_labels: [walkability]
-    source: manual
-    approved: true
-
   - canonical: Building and Construction Authority
     aliases: ["BCA"]
     entity_type: agency
+    jurisdiction: SG
+    ambiguous: true
     topic_labels: [walkability]
-    source: manual
-    approved: true
-
   - canonical: National Parks Board
     aliases: ["NParks"]
     entity_type: agency
+    jurisdiction: SG
     topic_labels: [walkability]
-    source: manual
-    approved: true
-
   - canonical: Public Utilities Board
     aliases: ["PUB"]
     entity_type: agency
+    jurisdiction: SG
+    ambiguous: true
     topic_labels: [walkability]
-    source: manual
-    approved: true
+  - canonical: Ministry of Transport
+    aliases: ["MOT", "MOT Singapore"]
+    entity_type: agency
+    jurisdiction: SG
+    topic_labels: [av-deployment, on-demand-bus]
+  - canonical: Singapore Land Authority
+    aliases: ["SLA"]
+    entity_type: agency
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [walkability]
+  - canonical: Centre for Liveable Cities
+    aliases: ["CLC"]
+    entity_type: agency
+    jurisdiction: SG
+    topic_labels: [walkability]
+  - canonical: Centre of Excellence for Testing and Research of AVs
+    aliases: ["CETRAN"]
+    entity_type: agency
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [av-deployment]
 
-  # Singapore — infrastructure / schemes
+  # ── Singapore: operators ───────────────────────────────────────────────
+  - canonical: SMRT Corporation
+    aliases: ["SMRT"]
+    entity_type: agency
+    jurisdiction: SG
+    topic_labels: [on-demand-bus]
+  - canonical: SBS Transit
+    aliases: ["SBST"]
+    entity_type: agency
+    jurisdiction: SG
+    topic_labels: [on-demand-bus]
+  - canonical: Tower Transit Singapore
+    aliases: ["Tower Transit"]
+    entity_type: agency
+    jurisdiction: SG
+    topic_labels: [on-demand-bus]
+  - canonical: Go-Ahead Singapore
+    aliases: ["Go Ahead Singapore"]
+    entity_type: agency
+    jurisdiction: SG
+    topic_labels: [on-demand-bus]
+
+  # ── Singapore: schemes ─────────────────────────────────────────────────
+  - canonical: Electronic Road Pricing
+    aliases: ["ERP", "ERP 2.0"]
+    entity_type: scheme
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [av-deployment, on-demand-bus]
+  - canonical: Certificate of Entitlement
+    aliases: ["COE"]
+    entity_type: scheme
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [on-demand-bus]
+  - canonical: Vehicular Emissions Scheme
+    aliases: ["VES"]
+    entity_type: scheme
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [av-deployment]
+  - canonical: Bus Service Enhancement Programme
+    aliases: ["BSEP"]
+    entity_type: scheme
+    jurisdiction: SG
+    topic_labels: [on-demand-bus]
+  - canonical: Bus Contracting Model
+    aliases: ["BCM"]
+    entity_type: scheme
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [on-demand-bus]
+  - canonical: Walk2Ride
+    aliases: ["Walk 2 Ride"]
+    entity_type: scheme
+    jurisdiction: SG
+    topic_labels: [walkability]
+  - canonical: Silver Zone
+    aliases: ["Silver Zones"]
+    entity_type: scheme
+    jurisdiction: SG
+    topic_labels: [walkability]
+  - canonical: Friendly Streets
+    aliases: []
+    entity_type: scheme
+    jurisdiction: SG
+    topic_labels: [walkability]
+  - canonical: Green Man Plus
+    aliases: ["Green Man+"]
+    entity_type: scheme
+    jurisdiction: SG
+    topic_labels: [walkability]
+  - canonical: Car-Lite
+    aliases: ["Car Lite", "car-lite"]
+    entity_type: concept
+    topic_labels: [walkability, on-demand-bus]
+  - canonical: SimplyGo
+    aliases: ["Simply Go"]
+    entity_type: scheme
+    jurisdiction: SG
+    topic_labels: [on-demand-bus]
+
+  # ── Singapore: infrastructure ──────────────────────────────────────────
   - canonical: Mass Rapid Transit
     aliases: ["MRT"]
     entity_type: infrastructure
+    jurisdiction: SG
     topic_labels: [walkability, on-demand-bus]
-    source: manual
-    approved: true
-
-  - canonical: Electronic Road Pricing
-    aliases: ["ERP"]
-    entity_type: scheme
-    topic_labels: [av-deployment, on-demand-bus]
-    source: manual
-    approved: true
-
-  - canonical: Walk2Ride
-    aliases: []
-    entity_type: scheme
+  - canonical: Light Rail Transit
+    aliases: ["LRT"]
+    entity_type: infrastructure
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [on-demand-bus]
+  # "PC" is deliberately NOT an alias here: park connector, pedestrian crossing
+  # and personal computer are all plausible in this corpus, so the bare form must
+  # reach the resolver as an ambiguous mention rather than auto-matching.
+  - canonical: Park Connector Network
+    aliases: ["PCN", "park connector"]
+    entity_type: infrastructure
+    jurisdiction: SG
+    ambiguous: true
     topic_labels: [walkability]
-    source: manual
-    approved: true
-
-  - canonical: Silver Zone
-    aliases: []
-    entity_type: scheme
+  - canonical: Covered Linkway
+    aliases: ["covered linkways", "sheltered walkway"]
+    entity_type: infrastructure
+    jurisdiction: SG
     topic_labels: [walkability]
-    source: manual
-    approved: true
+  - canonical: Round Island Route
+    aliases: ["RIR"]
+    entity_type: infrastructure
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [walkability]
+  - canonical: Thomson-East Coast Line
+    aliases: ["TEL", "Thomson East Coast Line"]
+    entity_type: infrastructure
+    jurisdiction: SG
+    ambiguous: true
+    topic_labels: [on-demand-bus]
 
-  # Cross-topic / AV concepts
+  # ── AV: concepts and vocabulary ────────────────────────────────────────
   - canonical: Operational Design Domain
-    aliases: ["ODD"]
+    aliases: ["ODD", "ODDs"]
     entity_type: concept
     topic_labels: [av-deployment]
-    source: manual
-    approved: true
+  - canonical: Automated Driving System
+    aliases: ["ADS"]
+    entity_type: concept
+    ambiguous: true
+    topic_labels: [av-deployment]
+  - canonical: Dynamic Driving Task
+    aliases: ["DDT"]
+    entity_type: concept
+    ambiguous: true
+    topic_labels: [av-deployment]
+  - canonical: Minimal Risk Condition
+    aliases: ["MRC", "minimal risk manoeuvre", "MRM"]
+    entity_type: concept
+    ambiguous: true
+    topic_labels: [av-deployment]
+  - canonical: SAE J3016
+    aliases: ["J3016", "SAE levels", "levels of driving automation"]
+    entity_type: concept
+    topic_labels: [av-deployment]
+  - canonical: Safety Driver
+    aliases: ["safety operator", "test driver"]
+    entity_type: concept
+    topic_labels: [av-deployment]
+  - canonical: Teleoperation
+    aliases: ["remote operation", "remote assistance"]
+    entity_type: concept
+    topic_labels: [av-deployment]
+  - canonical: Disengagement
+    aliases: ["disengagements", "takeover"]
+    entity_type: metric
+    topic_labels: [av-deployment]
+  - canonical: Robotaxi
+    aliases: ["robo-taxi", "driverless taxi"]
+    entity_type: concept
+    topic_labels: [av-deployment]
+  - canonical: Platooning
+    aliases: ["truck platooning"]
+    entity_type: concept
+    topic_labels: [av-deployment]
 
+  # ── On-demand transit ──────────────────────────────────────────────────
+  - canonical: Demand Responsive Transport
+    aliases: ["DRT", "demand responsive transit", "on-demand transit"]
+    entity_type: concept
+    topic_labels: [on-demand-bus]
+  - canonical: Mobility as a Service
+    aliases: ["MaaS"]
+    entity_type: concept
+    topic_labels: [on-demand-bus]
+  - canonical: Microtransit
+    aliases: ["micro-transit"]
+    entity_type: concept
+    topic_labels: [on-demand-bus]
+  - canonical: First and Last Mile
+    aliases: ["first mile last mile", "FMLM", "last mile"]
+    entity_type: concept
+    topic_labels: [on-demand-bus, walkability]
+  - canonical: Paratransit
+    aliases: ["dial-a-ride"]
+    entity_type: concept
+    topic_labels: [on-demand-bus]
+
+  # ── Walkability ────────────────────────────────────────────────────────
   - canonical: Transit-Oriented Development
-    aliases: ["TOD"]
+    aliases: ["TOD", "transit oriented development"]
     entity_type: concept
     topic_labels: [walkability, on-demand-bus]
-    source: manual
-    approved: true
+  - canonical: Complete Streets
+    aliases: []
+    entity_type: concept
+    topic_labels: [walkability]
+  - canonical: Active Mobility
+    aliases: ["active travel", "active transport"]
+    entity_type: concept
+    topic_labels: [walkability]
+  - canonical: Pedestrian Level of Service
+    aliases: ["PLOS", "pedestrian LOS"]
+    entity_type: metric
+    topic_labels: [walkability]
+  - canonical: Thermal Comfort
+    aliases: ["outdoor thermal comfort", "PET", "universal thermal climate index"]
+    entity_type: metric
+    ambiguous: true
+    topic_labels: [walkability]
+  - canonical: 15-Minute City
+    aliases: ["fifteen minute city", "20-minute neighbourhood"]
+    entity_type: concept
+    topic_labels: [walkability]
 
-  # Comparison-city counterparts (spec §7.2 analogical expansion)
-  - canonical: Mass Transit Railway
-    aliases: ["MTR"]
-    entity_type: infrastructure
-    topic_labels: [walkability, on-demand-bus]
-    source: manual
-    approved: true
-
-  - canonical: Land Transport Authority of Hong Kong
-    aliases: ["Transport Department Hong Kong", "TD HK"]
-    entity_type: agency
+  # ── Metrics, cross-topic ───────────────────────────────────────────────
+  - canonical: Mode Share
+    aliases: ["modal share", "modal split"]
+    entity_type: metric
     topic_labels: [walkability, on-demand-bus, av-deployment]
-    source: manual
-    approved: true
+  - canonical: Farebox Recovery Ratio
+    aliases: ["farebox recovery", "cost recovery ratio"]
+    entity_type: metric
+    topic_labels: [on-demand-bus]
+  - canonical: Vehicle Kilometres Travelled
+    aliases: ["VKT", "vehicle miles travelled", "VMT"]
+    entity_type: metric
+    topic_labels: [av-deployment, on-demand-bus]
+  - canonical: Headway
+    aliases: ["service headway"]
+    entity_type: metric
+    topic_labels: [on-demand-bus]
 
+  # ── Comparison cities (§7.2 analogical axes) ───────────────────────────
+  # Corrected: earlier drafts invented "Land Transport Authority of Hong Kong"
+  # and "…of Seoul". Neither body exists under those names.
+  - canonical: Transport for London
+    aliases: ["TfL"]
+    entity_type: agency
+    jurisdiction: GB
+    topic_labels: [on-demand-bus, walkability]
+  - canonical: Transport Department (Hong Kong)
+    aliases: ["Hong Kong Transport Department", "HK Transport Department"]
+    entity_type: agency
+    jurisdiction: HK
+    ambiguous: true
+    topic_labels: [walkability, on-demand-bus]
+  - canonical: MTR Corporation
+    aliases: ["MTR", "Mass Transit Railway"]
+    entity_type: agency
+    jurisdiction: HK
+    topic_labels: [walkability, on-demand-bus]
   - canonical: Tokyo Metropolitan Government
     aliases: ["TMG"]
     entity_type: agency
+    jurisdiction: JP
+    ambiguous: true
     topic_labels: [walkability, on-demand-bus]
-    source: manual
-    approved: true
-
-  - canonical: Land Transport Authority of Seoul
-    aliases: ["Seoul Metropolitan Government", "SMG"]
+  - canonical: Seoul Metropolitan Government
+    aliases: ["SMG", "Seoul city government"]
     entity_type: agency
+    jurisdiction: KR
+    ambiguous: true
     topic_labels: [walkability, on-demand-bus]
-    source: manual
-    approved: true
+  - canonical: Kowloon Motor Bus
+    aliases: ["KMB"]
+    entity_type: agency
+    jurisdiction: HK
+    topic_labels: [on-demand-bus]
+  - canonical: Transjakarta
+    aliases: ["TransJakarta"]
+    entity_type: agency
+    jurisdiction: ID
+    topic_labels: [on-demand-bus]
+  - canonical: Prasarana Malaysia
+    aliases: ["Prasarana", "Rapid KL", "RapidKL"]
+    entity_type: agency
+    jurisdiction: MY
+    topic_labels: [on-demand-bus]

@@ -120,7 +120,11 @@ async def seed_gazetteer(sess) -> tuple[int, int]:
     added = skipped = 0
     for row in data.get("terms", []):
         existing = await sess.scalar(
-            select(GazetteerTerm).where(GazetteerTerm.canonical == row["canonical"])
+            select(GazetteerTerm).where(
+                GazetteerTerm.canonical == row["canonical"],
+                GazetteerTerm.jurisdiction.is_not_distinct_from(row.get("jurisdiction")),
+                GazetteerTerm.entity_type == row["entity_type"],
+            )
         )
         if existing is not None:
             skipped += 1
@@ -130,6 +134,11 @@ async def seed_gazetteer(sess) -> tuple[int, int]:
                 canonical=row["canonical"],
                 aliases=row.get("aliases") or [],
                 entity_type=row["entity_type"],
+                jurisdiction=row.get("jurisdiction"),
+                # An ambiguous surface form offers candidates, never a decision:
+                # the resolver disambiguates from document context, and leaves
+                # the mention unresolved when context is insufficient (§5.5).
+                ambiguous=row.get("ambiguous", False),
                 topic_labels=row.get("topic_labels") or [],
                 source=row.get("source", "manual"),
                 # Hand-seeded terms are approved by definition; model-proposed

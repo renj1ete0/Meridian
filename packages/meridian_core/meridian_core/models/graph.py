@@ -103,6 +103,15 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
         BigInteger, ForeignKey("entities.entity_id", ondelete="SET NULL"), index=True
     )
 
+    # ISO country code, or NULL for genuinely global concepts. Part of the
+    # uniqueness key, because the same name is routinely a different thing in a
+    # different country: "Light Rail Transit" is a rubber-tyred automated feeder
+    # in Singapore, a metro-like system in Kuala Lumpur, and a street-running
+    # tram in Calgary. Alias matching and string matching both succeed on those,
+    # so without this the graph is *forced* to conflate them — and §5.5's rule
+    # that a bad merge is worse than a duplicate applies exactly here.
+    jurisdiction: Mapped[str | None] = mapped_column(Text, index=True)
+
     # Set for annotation nodes — the highest-quality layer in the system, and the
     # one that actually reflects the user's thinking (§12.5).
     is_annotation: Mapped[bool] = mapped_column(
@@ -110,10 +119,15 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
     )
 
     __table_args__ = (
-        # Blocking step of entity resolution: candidates of the same type only.
-        # Never merge across node types (§5.5).
-        Index("ix_entities_type_name", "node_type", "canonical_name"),
-        UniqueConstraint("canonical_name", "node_type", name="uq_entities_canonical_name_type"),
+        # Blocking step of entity resolution: same type AND same jurisdiction.
+        # Never merge across either (§5.5, extended).
+        Index("ix_entities_type_name", "node_type", "canonical_name", "jurisdiction"),
+        UniqueConstraint(
+            "canonical_name",
+            "node_type",
+            "jurisdiction",
+            name="uq_entities_canonical_name_type_jurisdiction",
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

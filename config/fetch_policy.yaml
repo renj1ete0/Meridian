@@ -27,6 +27,14 @@ backoff_base_s:         5
 # Enforced after DNS resolution, not by inspecting the string: a public hostname
 # can resolve to, or redirect to, an internal one.
 allowed_schemes:        [http, https]     # never file:, ftp:, gopher:, data:
+
+# An http:// link may be *followed* — most sites redirect — but content still
+# served in plaintext at the end of the chain is rejected. On plain HTTP anyone
+# on the path can rewrite the page, and for a crawler feeding a model that holds
+# write tools that is an injection vector needing no compromise of the origin.
+# Override per domain in Admin for the handful of legitimate http-only sources
+# worth the risk; the per-domain mechanism (§6.4) already exists for exactly this.
+require_https_final:     true
 block_private_addresses: true             # 10/8, 172.16/12, 192.168/16, 127/8,
                                           # ::1, fc00::/7, and link-local
 block_cloud_metadata:    true             # 169.254.169.254 and friends

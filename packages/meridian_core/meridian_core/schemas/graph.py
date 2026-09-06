@@ -25,6 +25,7 @@ class EntityCreate(ProvenanceFields):
 
     canonical_name: str = Field(min_length=1)
     node_type: NodeType
+    jurisdiction: str | None = None
     aliases: list[str] | None = None
     embedding: list[float] | None = None
     topic_labels: list[str] | None = None
@@ -42,6 +43,7 @@ class EntityRead(BaseModel):
     entity_id: int
     canonical_name: str
     node_type: NodeType
+    jurisdiction: str | None
     aliases: list[str] | None
     topic_labels: list[str] | None
     description: str | None

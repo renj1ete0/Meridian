@@ -70,7 +70,12 @@ doing before much of phase 1, since seed quality propagates downstream.
       Crawl targets come from untrusted pages — this is the control that stops the
       crawler reaching the LAN
 - [ ] `P1-21` Content safeguards: content-type allowlist, streaming abort at
-      `max_page_bytes`, decompression-ratio cap
+      `max_page_bytes`, decompression-ratio cap, reject a plaintext final response
+      unless the domain overrides `require_https_final`
+- [ ] `P1-23` **Injection pre-screen, mechanical (no LLM).** At extraction time flag
+      hidden text (`display:none`, `visibility:hidden`, white-on-white, 0px fonts,
+      offscreen), imperative HTML comments, and instruction-like phrasing addressed
+      to a model. Regex and DOM work only, so the fast loop stays model-free
 - [ ] `P1-17` Tier-derived queue priority: resolve a URL's tier from
       `config/source_tiers.yaml` (patterns, then exact, then default) and set
       `queue.priority` from `priority_by_tier`, so search results self-sort
@@ -146,6 +151,13 @@ doing before much of phase 1, since seed quality propagates downstream.
       must exist before the first autonomous run, and nothing currently enforces the
       ordering — the compounding seed→crawl→cost loop is first noticed as a bill
 - [ ] `P4-06` Untrusted-data framing for all retrieved content in prompts (spec §11.8)
+- [ ] `P4-14` **Quarantine and screening for unknown domains.** `sources.trust_state`
+      (unscreened | cleared | quarantined | rejected) plus a domain-level verdict
+      cached on `fetch_policy`, so screening is paid once per domain, not per page.
+      A domain that is tier-mapped or has N clean fetches is cleared automatically;
+      an unknown domain that trips `P1-23` is quarantined and queued for a frontier
+      model to judge. Quarantined content is still stored — never deleted — but is
+      excluded from the chunk set the slow loop pulls until cleared
 - [ ] `P4-07` Agent registry, task-type routing, fallback chains
 - [ ] `P4-08` Orchestrator run state machine + `runs` table resumability
 - [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
