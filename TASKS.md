@@ -76,11 +76,9 @@ fetcher, not after it.
 - [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
 - [ ] `P1-05` Blocked-domain marking after N consecutive failures
 - [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
-- [ ] `P1-20` **SSRF guard.** Resolve DNS and reject private, loopback, link-local and
-      cloud-metadata addresses before connecting; re-validate on every redirect hop;
-      scheme allowlist; reject when any resolved address is private (DNS rebinding).
-      Crawl targets come from untrusted pages — this is the control that stops the
-      crawler reaching the LAN
+- [x] `P1-20` **SSRF guard** — `meridian_core/netguard.py`. Post-DNS address
+      classification, per-hop redirect revalidation, scheme allowlist, DNS-rebinding
+      rejection, integer-encoded host normalisation, https-final enforcement
 - [ ] `P1-21` Content safeguards: content-type allowlist, streaming abort at
       `max_page_bytes`, decompression-ratio cap, reject a plaintext final response
       unless the domain overrides `require_https_final`
