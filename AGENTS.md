@@ -86,6 +86,12 @@ compiles (see [TASKS.md](TASKS.md)).
 - Tasks marked **⚑ human** need a judgment call — don't complete them autonomously.
 - Add new tasks freely; never renumber existing ones.
 
+[docs/handover.md](docs/handover.md) is its companion, and answers a different
+question: not what to build, but how the built parts fit together, which traps have
+already cost someone a session, and what has been verified against the real web
+rather than only against tests. Read it too at the start of a session, and add to it
+whenever you learn something the next person would rather not rediscover.
+
 ## Versioning
 
 `MAJOR.MINOR.PATCH`, no zero-padding. [`VERSION`](VERSION) at the repo root is the

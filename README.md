@@ -132,9 +132,11 @@ cd web && npm run dev                               # UI on :21115
 Production runs the whole stack in containers behind `cloudflared`
 (`docker compose up -d`). Full sequence: [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
 
-> `packages/meridian_core` is built and tested, so `make migrate` and `make seed` work
-> today. `services/` is not implemented yet, so the uvicorn and worker commands above
-> are what phase 1 and 2 fill in.
+> `packages/meridian_core` and the worker's fetch path are built and tested, so
+> `make migrate`, `make seed` and `make test` work today. The worker's main loop
+> (`P1-15`) is not written yet, so `python -m worker.main` is still a phase-1 target;
+> the API and web commands are phase 2 and 3. See [docs/handover.md](docs/handover.md)
+> for what runs today and what does not.
 
 Host ports sit in a distinctive `211xx` block — `21111` postgres, `21112` searxng,
 `21113` crawl4ai, `21114` api, `21115` web — so a fresh clone doesn't collide with
@@ -165,6 +167,7 @@ docs/         specs, roadmap, design system and brand assets
 | [Project scaffold](docs/spec/meridian-project-scaffold.md) | Directory layout, container topology, database roles, build and deploy. |
 | [Roadmap](docs/roadmap.md) | Build phases and their acceptance checkpoints. |
 | [TASKS.md](TASKS.md) | The live build list — what's done, what's next, broken into single-sitting tasks. |
+| [Handover](docs/handover.md) | How the built parts fit together, the traps already discovered, and what is verified live rather than only tested. |
 | [Design system](docs/design/design-system.md) | Mark geometry, colour tokens, typography, voice, interaction rules. |
 | [AGENTS.md](AGENTS.md) | Conventions and invariants for anyone writing code here, human or agent. |
 | [CHANGELOG.md](CHANGELOG.md) | Version history. |

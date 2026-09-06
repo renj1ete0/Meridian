@@ -8,7 +8,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
-Nothing yet.
+Documentation only, so no version bump (AGENTS.md).
+
+- `docs/handover.md` — how the built parts fit together, the traps already
+  discovered (Alembic and CHECK constraints, `urllib.robotparser`'s version
+  dependence, httpx decoding a whole network read at once, TEST-NET addresses
+  being non-global, Crawl4AI's loopback bind), and what has been verified against
+  the real web rather than only against tests. Linked from AGENTS.md and README
+- README's getting-started no longer claims `services/` is unimplemented
 
 ## [0.10.0] — 2026-09-06
 
