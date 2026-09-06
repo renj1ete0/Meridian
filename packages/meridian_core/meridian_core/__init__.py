@@ -4,4 +4,4 @@ Anything touching the database lives here. Services import from this package;
 they never define their own models (AGENTS.md).
 """
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"

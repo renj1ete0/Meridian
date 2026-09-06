@@ -8,7 +8,47 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
-Documentation only, so no version bump (AGENTS.md).
+## [0.11.0] — 2026-09-07
+
+**The crawl now keeps a record of itself.** Every fetch has always returned a
+valid `fetch_attempts.outcome` and nothing had ever written one, so the only
+trace a crawl left was the most recent error on each queue row. §12.5 asks for a
+daily health line for a specific reason — *"without this the Pi can crawl 404s
+for a week unnoticed"* — and that line needs a log, not a counter. The same
+outcome now also reaches the policy that governs the next request to the domain.
+
+### Added
+
+- `P1-19` `meridian_core/attempts.py` — the fetch attempt log. `record_attempt()`
+  writes one row per fetch on every path including the refusals that never
+  touched the network, `fetch_health()` derives §12.5's success rate and a
+  breakdown by outcome from it, and `prune_attempts()` keeps a table with one row
+  per request bounded, deleting in batches so a prune skipped for a month is
+  still a series of statements rather than one that locks the table
+- `FetchHealth` DTO. `success_rate` is `None` rather than `0.0` when nothing was
+  attempted: a crawler that fetched nothing and a crawler where everything failed
+  need different responses, and 0% reports the first as the second
+- `P1-05` `domain_signal()` and `apply_fetch_outcome()` in `policy.py` — what a
+  fetch outcome says about the *domain*, which is a different question from what
+  it says about the URL. Three answers, not two: the domain answered (a 404, an
+  oversized file, a rejected media type — evidence it is alive, so the counter
+  resets), the domain is unreachable (timeouts, 5xx, 429, redirect loops, a
+  decompression bomb, an address `netguard` refuses), or no request went out at
+  all (robots denial, an already-blocked domain — no evidence either way).
+  Counting a robots denial as a failure would auto-block every well-behaved site
+  with a restrictive robots.txt
+
+### Changed
+
+- `Crawler.fetch` records the attempt and applies its consequence before
+  returning, rather than leaving both to the worker loop. A log that depends on
+  each caller remembering to write it has holes in exactly the paths nobody
+  thought about
+- A newly blocked domain is dropped from the rate limiter's state. A crawl that
+  runs for weeks would otherwise keep a semaphore per domain it ever touched,
+  including the ones it will never fetch again
+
+### Documentation
 
 - `docs/handover.md` — how the built parts fit together, the traps already
   discovered (Alembic and CHECK constraints, `urllib.robotparser`'s version

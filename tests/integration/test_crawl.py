@@ -20,9 +20,10 @@ from contextlib import asynccontextmanager
 import httpx
 import pytest
 from http_doubles import RecordingTransport, streamed
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
-from meridian_core.models import FetchPolicy, Source
+from meridian_core.attempts import fetch_health
+from meridian_core.models import FetchAttempt, FetchPolicy, Source
 from worker.crawl import Crawler, conditional_headers, validators
 from worker.fetch import Fetcher
 from worker.ratelimit import DomainLimiter
@@ -43,6 +44,7 @@ def crawl_domain() -> str:
 async def cleanup(session_for, crawl_domain):
     yield
     sess = await session_for("rw")
+    await sess.execute(delete(FetchAttempt).where(FetchAttempt.domain == crawl_domain))
     await sess.execute(delete(FetchPolicy).where(FetchPolicy.domain == crawl_domain))
     await sess.execute(delete(Source).where(Source.url.like(f"https://{crawl_domain}%")))
     await sess.commit()
@@ -50,7 +52,14 @@ async def cleanup(session_for, crawl_domain):
 
 @asynccontextmanager
 async def _session(sess):
-    """Hand the Crawler the same transaction the test is inspecting."""
+    """Hand the Crawler the same transaction the test is inspecting.
+
+    ``Crawler._record`` commits — the attempt row and the policy consequence
+    have to survive the process that wrote them. Here that commit is downgraded
+    to a flush so the rows are visible to the test inside its own transaction
+    and vanish with the rollback, rather than landing in the dev database.
+    """
+    sess.commit = sess.flush
     yield sess
 
 
@@ -350,3 +359,203 @@ async def test_robots_itself_goes_through_the_rate_limiter(
     await crawler.fetch(f"https://{crawl_domain}/page")
 
     assert limiter.tracked_domains == 1, "robots.txt bypassed the limiter entirely"
+
+
+# --------------------------------------------------------------------------
+# Every attempt is recorded, and every outcome has its consequence (P1-19, P1-05)
+# --------------------------------------------------------------------------
+
+
+async def _attempts(sess, domain: str) -> list[FetchAttempt]:
+    rows = await sess.scalars(
+        select(FetchAttempt).where(FetchAttempt.domain == domain).order_by(FetchAttempt.attempt_id)
+    )
+    return list(rows)
+
+
+async def _policy_row(sess, domain: str) -> FetchPolicy | None:
+    return await sess.scalar(select(FetchPolicy).where(FetchPolicy.domain == domain))
+
+
+async def test_a_successful_fetch_writes_one_attempt_row(
+    session_for, resolver, crawl_domain, cleanup
+) -> None:
+    """§12.5: without this the Pi can crawl 404s for a week unnoticed."""
+    sess = await session_for("rw")
+    crawler, _ = build(sess, ok_html, crawl_domain, resolver=resolver({crawl_domain: [PUBLIC]}))
+
+    result = await crawler.fetch(f"https://{crawl_domain}/page", task_id=None, attempt_number=3)
+
+    (row,) = await _attempts(sess, crawl_domain)
+    assert row.outcome == result.outcome == "success"
+    assert row.status_code == 200
+    assert row.url == f"https://{crawl_domain}/page"
+    assert row.bytes_fetched == len(result.content) > 0
+    assert row.attempt_number == 3
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [("/private/x", "robots_denied"), ("/public/x", "success")],
+)
+async def test_a_refusal_is_recorded_as_faithfully_as_a_success(
+    session_for, resolver, crawl_domain, cleanup, path, expected
+) -> None:
+    """A refusal that leaves no row is a crawler that looks idle while working."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return streamed(
+                200,
+                headers={"content-type": "text/plain"},
+                chunks=[b"User-agent: *\nDisallow: /private/\n"],
+            )
+        return ok_html(request)
+
+    sess = await session_for("rw")
+    crawler, _ = build(
+        sess, handler, crawl_domain, robots_rules=None, resolver=resolver({crawl_domain: [PUBLIC]})
+    )
+
+    await crawler.fetch(f"https://{crawl_domain}{path}")
+
+    (row,) = await _attempts(sess, crawl_domain)
+    assert row.outcome == expected
+
+
+async def test_a_blocked_domain_is_recorded_without_being_requested(
+    session_for, resolver, crawl_domain, cleanup
+) -> None:
+    """The row is how a queue quietly spinning on a blocked domain becomes visible."""
+    sess = await session_for("rw")
+    sess.add(FetchPolicy(domain=crawl_domain, settings={}, status="blocked"))
+    await sess.flush()
+
+    crawler, rec = build(sess, ok_html, crawl_domain, resolver=resolver({crawl_domain: [PUBLIC]}))
+    await crawler.fetch(f"https://{crawl_domain}/page")
+
+    (row,) = await _attempts(sess, crawl_domain)
+    assert row.outcome == "blocked"
+    assert rec.requests == []
+    # A refusal to fetch an already-blocked domain is not fresh evidence, and
+    # counting it would have the block deepen itself.
+    assert (await _policy_row(sess, crawl_domain)).consecutive_failures == 0
+
+
+async def test_repeated_failures_block_the_domain_and_clear_its_limiter_state(
+    session_for, resolver, crawl_domain, cleanup
+) -> None:
+    """§6.4: one dead site must not consume crawl budget for weeks unnoticed."""
+    sess = await session_for("rw")
+    sess.add(
+        FetchPolicy(
+            domain=crawl_domain,
+            settings={"blocked_after_failures": 3, "delay_per_domain_ms": 0, "delay_jitter_ms": 0},
+            status="active",
+        )
+    )
+    await sess.flush()
+
+    def dead(request: httpx.Request) -> httpx.Response:
+        return streamed(503, headers={"content-type": "text/html"})
+
+    crawler, rec = build(sess, dead, crawl_domain, resolver=resolver({crawl_domain: [PUBLIC]}))
+
+    for _ in range(3):
+        await crawler.fetch(f"https://{crawl_domain}/page")
+
+    row = await _policy_row(sess, crawl_domain)
+    assert row.status == "blocked"
+    assert row.consecutive_failures == 3
+    assert "consecutive failures" in (row.note or "")
+    assert crawler.limiter.tracked_domains == 0, "a domain never to be fetched again kept its slot"
+
+    # And the block takes effect on the next request rather than at some later
+    # reload: the fourth fetch never reaches the network.
+    before = len(rec.requests)
+    fourth = await crawler.fetch(f"https://{crawl_domain}/page")
+    assert fourth.outcome == "blocked"
+    assert len(rec.requests) == before
+
+
+async def test_a_404_does_not_count_against_the_domain(
+    session_for, resolver, crawl_domain, cleanup
+) -> None:
+    """A missing page is the domain answering correctly. Blocking a live site
+    over five dead links would take the good part of the crawl down with them."""
+    sess = await session_for("rw")
+    sess.add(
+        FetchPolicy(
+            domain=crawl_domain,
+            settings={"blocked_after_failures": 2, "delay_per_domain_ms": 0, "delay_jitter_ms": 0},
+            status="active",
+        )
+    )
+    await sess.flush()
+
+    def missing(request: httpx.Request) -> httpx.Response:
+        return streamed(404, headers={"content-type": "text/html"})
+
+    crawler, _ = build(sess, missing, crawl_domain, resolver=resolver({crawl_domain: [PUBLIC]}))
+    for _ in range(3):
+        await crawler.fetch(f"https://{crawl_domain}/gone")
+
+    row = await _policy_row(sess, crawl_domain)
+    assert row.status == "active"
+    assert row.consecutive_failures == 0
+    assert [r.outcome for r in await _attempts(sess, crawl_domain)] == ["http_error"] * 3
+
+
+async def test_one_good_fetch_clears_the_failures_before_it(
+    session_for, resolver, crawl_domain, cleanup
+) -> None:
+    """Only *consecutive* failures block, so an intermittent domain survives."""
+    sess = await session_for("rw")
+    sess.add(
+        FetchPolicy(
+            domain=crawl_domain,
+            settings={"blocked_after_failures": 3, "delay_per_domain_ms": 0, "delay_jitter_ms": 0},
+            status="active",
+        )
+    )
+    await sess.flush()
+
+    responses = [503, 503, 200]
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        status = responses.pop(0)
+        if status == 200:
+            return ok_html(request)
+        return streamed(status, headers={"content-type": "text/html"})
+
+    crawler, _ = build(sess, flaky, crawl_domain, resolver=resolver({crawl_domain: [PUBLIC]}))
+    for _ in range(3):
+        await crawler.fetch(f"https://{crawl_domain}/page")
+
+    row = await _policy_row(sess, crawl_domain)
+    assert row.status == "active"
+    assert row.consecutive_failures == 0
+
+
+async def test_the_health_line_reads_what_the_crawler_wrote(
+    session_for, resolver, crawl_domain, cleanup
+) -> None:
+    """The end of the loop P1-19 exists to close: fetches in, a rate out."""
+    sess = await session_for("rw")
+    responses = [200, 500, 200, 200]
+
+    def mixed(request: httpx.Request) -> httpx.Response:
+        status = responses.pop(0)
+        if status == 200:
+            return ok_html(request)
+        return streamed(status, headers={"content-type": "text/html"})
+
+    crawler, _ = build(sess, mixed, crawl_domain, resolver=resolver({crawl_domain: [PUBLIC]}))
+    for i in range(4):
+        await crawler.fetch(f"https://{crawl_domain}/p{i}")
+
+    health = await fetch_health(sess, hours=1, domain=crawl_domain)
+    assert health.attempts == 4
+    assert health.successes == 3
+    assert health.success_rate == pytest.approx(0.75)
+    assert health.by_outcome == {"success": 3, "http_error": 1}

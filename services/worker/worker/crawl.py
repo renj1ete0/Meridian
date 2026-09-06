@@ -16,8 +16,12 @@ The order matters and is the cheapest-refusal-first order:
 4. **What do we already have?** ETag and Last-Modified from the previous fetch,
    which turns an unchanged page into a 304 and no body.
 
-The worker loop (`P1-15`) will call :meth:`Crawler.fetch` and record the result;
-everything it needs for a ``fetch_attempts`` row is on the returned object.
+Every path through :meth:`Crawler.fetch` then ends in the same place: one
+``fetch_attempts`` row, and the policy consequence that outcome carries
+(`P1-19`, `P1-05`). Recording here rather than in the worker loop is deliberate
+— the loop is not the only caller a crawler ever grows, and a log that depends
+on each caller remembering to write it is a log with holes in exactly the paths
+nobody thought about.
 """
 
 from __future__ import annotations
@@ -28,9 +32,10 @@ from contextlib import AbstractAsyncContextManager
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core.attempts import record_attempt
 from meridian_core.logging import get_logger
 from meridian_core.models import Source
-from meridian_core.policy import ResolvedPolicy, resolve_policy
+from meridian_core.policy import ResolvedPolicy, apply_fetch_outcome, resolve_policy
 from meridian_core.tiering import registrable_domain
 
 from .fetch import Fetcher, FetchResult
@@ -101,14 +106,35 @@ class Crawler:
         ):
             return await self._fetcher.fetch_static(url, policy)
 
-    async def fetch(self, url: str, *, task_id: int | None = None) -> FetchResult:
-        """Fetch ``url`` under its domain's policy, or say why it was not."""
+    async def fetch(
+        self, url: str, *, task_id: int | None = None, attempt_number: int = 1
+    ) -> FetchResult:
+        """Fetch ``url`` under its domain's policy, or say why it was not.
+
+        Whatever happens, the attempt is recorded and its consequence applied
+        before the result is handed back.
+        """
         domain = registrable_domain(url)
 
         async with self._session_factory() as sess:
             policy = await resolve_policy(sess, domain)
             source = await sess.scalar(select(Source).where(Source.url == url))
             conditional = conditional_headers(source, enabled=policy.conditional_requests)
+
+        result = await self._attempt(url, policy, conditional, task_id=task_id)
+        await self._record(result, policy, task_id=task_id, attempt_number=attempt_number)
+        return result
+
+    async def _attempt(
+        self,
+        url: str,
+        policy: ResolvedPolicy,
+        conditional: dict[str, str],
+        *,
+        task_id: int | None,
+    ) -> FetchResult:
+        """Everything between the policy lookup and the result. Records nothing."""
+        domain = policy.domain
 
         if not policy.is_fetchable:
             return _refused(url, "blocked", f"domain is {policy.status}")
@@ -150,6 +176,57 @@ class Crawler:
             },
         )
         return result
+
+    async def _record(
+        self,
+        result: FetchResult,
+        policy: ResolvedPolicy,
+        *,
+        task_id: int | None,
+        attempt_number: int,
+    ) -> None:
+        """Write the attempt row and apply what it means for the domain.
+
+        One transaction for both. A log saying a domain failed five times beside
+        a policy row that counted none of them is worse than either alone, and
+        two commits is how that happens.
+        """
+        async with self._session_factory() as sess:
+            await record_attempt(
+                sess,
+                domain=policy.domain,
+                url=result.requested_url,
+                outcome=result.outcome,
+                status_code=result.status_code,
+                error_detail=result.detail or None,
+                duration_ms=result.elapsed_ms,
+                bytes_fetched=len(result.content),
+                task_id=task_id,
+                attempt_number=attempt_number,
+            )
+            blocked_now = await apply_fetch_outcome(
+                sess,
+                policy.domain,
+                result.outcome,
+                status_code=result.status_code,
+                blocked_after=policy.blocked_after_failures,
+            )
+            await sess.commit()
+
+        if blocked_now:
+            # The limiter keeps per-domain state forever otherwise, and a domain
+            # that will never be fetched again does not need a semaphore.
+            self._limiter.forget(policy.domain)
+            log.warning(
+                "domain auto-blocked after consecutive failures",
+                extra={
+                    "domain": policy.domain,
+                    "url": result.requested_url,
+                    "outcome": result.outcome,
+                    "status": result.status_code,
+                    "threshold": policy.blocked_after_failures,
+                },
+            )
 
 
 def _refused(url: str, outcome: str, detail: str) -> FetchResult:

@@ -62,3 +62,22 @@ class FetchAttemptRead(BaseModel):
     duration_ms: int | None
     bytes_fetched: int | None
     attempt_number: int
+
+
+class FetchHealth(BaseModel):
+    """The fetch half of the daily health line (§12.5), over a time window.
+
+    Derived from ``fetch_attempts``, never from a running counter: a counter
+    that resets on success cannot say what the rate *was*, which is the question
+    "is the crawler still working" actually reduces to.
+    """
+
+    window_hours: int = Field(gt=0)
+    domain: str | None = None  # None = every domain
+
+    attempts: int = Field(ge=0)
+    successes: int = Field(ge=0)
+    # None when nothing was attempted in the window. 0.0 would report a crawler
+    # that fetched nothing as a crawler where everything failed.
+    success_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    by_outcome: dict[FetchOutcome, int] = Field(default_factory=dict)

@@ -14,8 +14,8 @@ add it here.
 ## 1. Where the build actually is
 
 Phase 0 is closed. Phase 1 has its fetch path complete: a URL goes in, bytes come out,
-politely and without becoming a route into the network. As of `v0.10.0`, 387 tests pass
-with a real Postgres.
+politely, without becoming a route into the network, and leaving a record of itself.
+As of `v0.11.0`, 434 tests pass with a real Postgres.
 
 ```
 queue ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -35,13 +35,22 @@ queue ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
    fetch_static             fetch_rendered
    httpx, address-pinned    Crawl4AI browser
    netguard on every hop    (validated, not pinned)
+                    │
+                    ▼
+        Crawler._record — one transaction
+                    │
+        ┌───────────┴────────────┐
+        ▼                        ▼
+   record_attempt()      apply_fetch_outcome()
+   (attempts.py)         (policy.py) → blocked?
+   one fetch_attempts    → limiter.forget(domain)
+   row, every path
 ```
 
 **What does not exist yet.** There is no worker main loop (`P1-15`), so nothing calls
-`Crawler.fetch` in production. Nothing writes `fetch_attempts` rows (`P1-19`) even
-though every code path already returns a valid `outcome` for one. Nothing calls
-`record_failure()` / `record_success()` (`P1-05`), which are written and tested in
-`policy.py` and sit unused. No extraction, no embeddings, no API, no frontend.
+`Crawler.fetch` in production. No extraction, no embeddings, no API, no frontend.
+`fetch_health()` computes §12.5's success rate and nothing displays it yet;
+`prune_attempts()` exists and nothing schedules it — both are waiting on `P1-15`.
 
 The README's "Getting started" lists `uv run python -m worker.main` — that module is
 still `P1-15` and does not exist.
@@ -119,6 +128,15 @@ mysteriously returns `unsafe_target` is usually this.
 Use `streamed(...)` from `tests/http_doubles.py`, which builds a real `AsyncByteStream`
 and lets a test control chunk boundaries, which is where the caps are enforced.
 
+### `caplog` does not work in this suite
+
+`addopts` carries `-p no:logging`, because pytest's logging plugin attaches handlers to
+the root logger and interleaves plain-text records into the JSON stream the logging
+tests parse. The fixture is gone with the plugin, and asking for it fails deep inside
+pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
+To assert on a log record, attach a handler to the module's own logger — see
+`tests/unit/test_fetch_signals.py`.
+
 ### Crawl4AI 0.9.2 binds loopback *inside* its container
 
 Without `CRAWL4AI_API_TOKEN` set, its entrypoint binds gunicorn to `127.0.0.1` inside
@@ -154,22 +172,17 @@ local socket serving a synthetic bomb), and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**`P1-19` + `P1-05` together, one sitting.** They close the loop between a fetch and the
-policy governing the next one. Everything needed already exists and is unused:
-`FetchResult` carries a valid `fetch_attempts.outcome`, a status code, byte count and
-duration; `record_failure()` and `record_success()` are written and tested. What is
-missing is the writer and the call. Do them together — `P1-05` without `P1-19` blocks
-domains with no record of why, and `P1-19` without `P1-05` records failures nothing acts
-on. Remember `DomainLimiter.forget()` when a domain becomes blocked.
+**`P1-15`, the worker main loop.** Everything it composes now exists and is unused:
+`claim_next`/`fail`/`advance` in `queueing.py`, `Crawler.fetch`, and the attempt log
+that makes an unattended run legible. Two things it must not forget — pass
+`task.attempts + 1` as `attempt_number` (the default of 1 would make every retry look
+like a first try), and give `prune_attempts()` somewhere to run, since nothing else
+bounds a table with one row per request.
 
-**Then `P1-15`, the worker main loop**, which is what finally makes the fast loop run
-unattended, followed by extraction (`P1-07`–`P1-11`) with `P1-23`'s injection pre-screen
-landing alongside rather than after.
+**`P1-06` and `P1-28` are both cheap and both feed it.** The prefilter keeps
+already-seen URLs out of the queue; sitemap discovery enqueues the sitemaps
+`RobotsRules.sitemaps` already parses and throws away — Wikipedia's robots.txt lists
+one today.
 
-**Do not point this at a wide crawl before `P1-19` exists.** Not for politeness — the
-rate limiting is done — but because an unattended crawler with no attempt log fails
-silently, which §13.4 names as the thing this system must not do.
-
-One task worth doing early because it is nearly free: **`P1-28`**, enqueueing the
-sitemaps `RobotsRules.sitemaps` already parses out. Wikipedia's robots.txt lists one and
-the value is thrown away today.
+**Then extraction** (`P1-07`–`P1-11`), with `P1-23`'s injection pre-screen landing
+alongside rather than after.

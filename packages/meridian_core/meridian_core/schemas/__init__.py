@@ -77,7 +77,7 @@ from .graph import (
     ObservationCreate,
     ObservationRead,
 )
-from .queue import FetchAttemptRead, QueueTaskCreate, QueueTaskRead
+from .queue import FetchAttemptRead, FetchHealth, QueueTaskCreate, QueueTaskRead
 from .runs import (
     EnrichmentItemCreate,
     EnrichmentItemRead,
@@ -147,6 +147,7 @@ __all__ = [
     "SteeringLogCreate",
     "SteeringLogRead",
     "FetchAttemptRead",
+    "FetchHealth",
     "FetchPolicyCreate",
     "FetchPolicyRead",
     "AgentCreate",

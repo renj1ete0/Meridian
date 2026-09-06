@@ -23,11 +23,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .logging import get_logger
 from .models import FetchPolicy as FetchPolicyRow
 from .tiering import jittered_delay_ms, registrable_domain
 
 _FILE_DEFAULTS_PATH = Path(__file__).resolve().parents[3] / "config" / "fetch_policy.yaml"
 _file_defaults_cache: dict[str, Any] | None = None
+
+log = get_logger(__name__)
 
 GLOBAL_DOMAIN = "*"
 
@@ -173,3 +176,96 @@ async def record_success(sess: AsyncSession, domain: str) -> None:
     if row is not None and row.consecutive_failures:
         row.consecutive_failures = 0
         await sess.flush()
+
+
+# --------------------------------------------------------------------------
+# What a fetch outcome says about the domain (task P1-05)
+# --------------------------------------------------------------------------
+#
+# Consecutive-failure blocking asks one question — *is this domain still worth
+# spending crawl budget on* — and most fetch outcomes are not evidence either
+# way. Three answers, because two would force every outcome into a judgement it
+# does not support.
+
+#: The domain answered. Whatever went wrong was about this URL or its content,
+#: not about the host being gone — a 404, an oversized file, a media type the
+#: allowlist does not take. Evidence the domain is alive *resets* the counter,
+#: because only consecutive failures block. A domain serving nothing but 404s is
+#: a real problem and a different one; ``fetch_attempts`` is where it shows up.
+DOMAIN_ALIVE = frozenset(
+    {
+        "success",
+        "not_modified",
+        "too_large",
+        "content_type_rejected",
+        "parse_error",
+    }
+)
+
+#: Nothing usable came back and the domain is why. Timeouts and connection
+#: errors are the obvious members; a redirect loop is a server misconfiguration,
+#: and a decompression bomb or an address ``netguard`` refuses is a host it is
+#: affirmatively wrong to keep requesting from.
+DOMAIN_UNREACHABLE = frozenset(
+    {
+        "timeout",
+        "connection_error",
+        "too_many_redirects",
+        "decompression_bomb",
+        "unsafe_target",
+    }
+)
+
+#: No request went out, so there is nothing to conclude. Counting a robots
+#: denial as a failure would auto-block every well-behaved site with a
+#: restrictive robots.txt, and counting a refusal to fetch an already-blocked
+#: domain would make the block deepen itself.
+DOMAIN_NO_SIGNAL = frozenset({"robots_denied", "blocked"})
+
+# `http_error` is deliberately in none of the three: the status code decides it.
+# 5xx is the server failing, and 429 is the server saying stop, which is a
+# reason to back off the domain rather than to keep asking. Every other 4xx is
+# the domain answering correctly about a URL that is not there.
+BACKOFF_STATUS = 429
+
+
+def domain_signal(outcome: str, status_code: int | None = None) -> str:
+    """``"alive"``, ``"unreachable"`` or ``"none"`` for one fetch outcome."""
+    if outcome in DOMAIN_ALIVE:
+        return "alive"
+    if outcome in DOMAIN_UNREACHABLE:
+        return "unreachable"
+    if outcome in DOMAIN_NO_SIGNAL:
+        return "none"
+    if outcome == "http_error":
+        if status_code is None or status_code >= 500 or status_code == BACKOFF_STATUS:
+            return "unreachable"
+        return "alive"
+    # An outcome nobody classified. Not fatal on purpose: the attempt row still
+    # records it, so it is visible on the health line rather than silent, and a
+    # worker that runs for weeks should not die over a string. The drift test
+    # over FETCH_OUTCOME is what keeps this branch unreachable in practice.
+    log.warning("unclassified fetch outcome; no policy consequence", extra={"outcome": outcome})
+    return "none"
+
+
+async def apply_fetch_outcome(
+    sess: AsyncSession,
+    domain: str,
+    outcome: str,
+    *,
+    status_code: int | None = None,
+    blocked_after: int | None = None,
+) -> bool:
+    """Apply one fetch outcome to the domain's policy row.
+
+    Returns True if this outcome blocked the domain, which the caller needs in
+    order to drop the domain's rate-limiter state and say so on the log.
+    """
+    signal = domain_signal(outcome, status_code)
+    if signal == "alive":
+        await record_success(sess, domain)
+        return False
+    if signal == "unreachable":
+        return await record_failure(sess, domain, blocked_after=blocked_after)
+    return False

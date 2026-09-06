@@ -16,17 +16,18 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. Fetching is complete and polite:
-`P1-01`, `P1-02`, `P1-03`, `P1-04`, `P1-12`, `P1-17`, `P1-18`, `P1-20`, `P1-21`
-and `P1-24` are done, at 387 tests. Verified live — arxiv.org's `Crawl-delay: 15`
-is honoured, and an unchanged page comes back 304. The only open phase-0 item is
-`P0-15`, deferred until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. Fetching is complete, polite, and now
+records itself: `P1-01`, `P1-02`, `P1-03`, `P1-04`, `P1-05`, `P1-12`, `P1-17`,
+`P1-18`, `P1-19`, `P1-20`, `P1-21` and `P1-24` are done, at 434 tests. Verified
+live — arxiv.org's `Crawl-delay: 15` is honoured, and an unchanged page comes
+back 304. The only open phase-0 item is `P0-15`, deferred until phase 2 needs it.
 
-Next: `P1-19` (record every attempt in `fetch_attempts`) and `P1-05`
-(blocked-domain marking), which together close the loop between a fetch and the
-policy that governs the next one — `record_failure()` and `record_success()`
-exist in `policy.py` and nothing calls them yet. After that, extraction:
-`P1-07` through `P1-10`, with `P1-23` (injection pre-screen) landing alongside.
+Next: `P1-15`, the worker main loop. Everything it composes now exists —
+`claim_next`/`fail`/`advance`, `Crawler.fetch`, and the attempt log that makes an
+unattended run legible — and nothing runs unattended until it does. `P1-06`
+(prefilter) and `P1-28` (sitemaps from robots.txt) are both cheap and both feed
+it. After that, extraction: `P1-07` through `P1-10`, with `P1-23` (injection
+pre-screen) landing alongside.
 
 ---
 
@@ -91,10 +92,13 @@ exist in `policy.py` and nothing calls them yet. After that, extraction:
       `Disallow: /*.pdf$` and a longer `Allow` — §14.2 makes this a commitment, and
       one that varies by interpreter is not one. Conditional requests needed
       `sources.etag`/`last_modified`
-- [ ] `P1-05` Blocked-domain marking after N consecutive failures. `record_failure()`
-      and `record_success()` are written and tested in `policy.py`; what is missing is
-      the call from the fetch path, and `DomainLimiter.forget()` on a newly-blocked
-      domain so its state does not linger
+- [x] `P1-05` Blocked-domain marking after N consecutive failures. `domain_signal()`
+      decides what each outcome is evidence *of*, which is the part that had to be
+      right: three answers, not two — the domain answered (a 404 or a rejected media
+      type resets the counter), the domain is unreachable (timeout, 5xx, 429,
+      redirect loop, decompression bomb, refused address), or no request went out
+      (robots denial, already-blocked domain, so no evidence either way). A newly
+      blocked domain is dropped from the limiter
 - [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
 - [x] `P1-20` **SSRF guard** — `meridian_core/netguard.py`. Post-DNS address
       classification, per-hop redirect revalidation, scheme allowlist, DNS-rebinding
@@ -114,10 +118,12 @@ exist in `policy.py` and nothing calls them yet. After that, extraction:
 - [x] `P1-18` Randomised per-domain delay — `jittered_delay_ms()`. Wiring it into the
       fetch loop happened with `P1-04` — `Crawler` draws a fresh jittered delay per
       request and takes the larger of it and any `Crawl-delay` from robots.txt
-- [ ] `P1-19` Record every fetch attempt in `fetch_attempts`, success or failure, and
+- [x] `P1-19` Record every fetch attempt in `fetch_attempts`, success or failure, and
       derive the health line's fetch success rate from it. Add a retention prune.
-      `fetch.py` already returns a valid `outcome` on every path, including the four
-      added for the safeguards; what is missing is the writer
+      `meridian_core/attempts.py`: `record_attempt()`, `fetch_health()` (rate plus a
+      breakdown by outcome — the rate says something is wrong and only the breakdown
+      says what) and `prune_attempts()`. Written by `Crawler.fetch` itself rather
+      than by its callers, in the same transaction as the policy consequence
 - [ ] `P1-07` `extract/html.py` — Crawl4AI markdown, `PruningContentFilter`, citation extraction
 - [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
 - [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
@@ -127,7 +133,11 @@ exist in `policy.py` and nothing calls them yet. After that, extraction:
       pattern → default, seeded into the DB with the global fetch policy
 - [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
 - [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
-- [ ] `P1-15` Worker main loop, supervision, graceful restart
+- [ ] `P1-15` Worker main loop, supervision, graceful restart. Everything it
+      composes exists: `claim_next`/`fail`/`advance` (`P1-01`), `Crawler.fetch`
+      (`P1-04`), and the attempt log (`P1-19`). Pass `task.attempts + 1` as
+      `attempt_number`, and call `prune_attempts()` on whatever housekeeping tick
+      the loop grows
 - [ ] `P1-25` **Egress restriction — the defence that survives an application bug.**
       Everything in `netguard` is one mistake from failing open. Give the fetching
       process no route to RFC1918 at all: a network namespace without a LAN route, or
