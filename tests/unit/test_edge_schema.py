@@ -12,10 +12,9 @@ error (a 500) instead of a 422 naming the missing field (AGENTS.md Testing:
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from meridian_core.models.graph import COMPARISON_RELATION
 from meridian_core.schemas import EdgeCreate
+from pydantic import ValidationError
 
 
 def _base(**overrides: object) -> dict:

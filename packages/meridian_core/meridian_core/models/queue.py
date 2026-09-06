@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Index, Integer, Text, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from meridian_core.db import Base
@@ -76,3 +76,72 @@ class QueueTask(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<QueueTask {self.task_id} {self.status} {self.url_or_query[:60]!r}>"
+
+
+# Why the attempt ended. Recorded rather than inferred from a status code,
+# because "blocked" and "robots_denied" are policy outcomes with no HTTP status,
+# and the daily health line needs to tell them apart from a genuine 500.
+FETCH_OUTCOME = constrained(
+    "success",
+    "not_modified",  # conditional request paid off; nothing refetched
+    "http_error",
+    "timeout",
+    "too_large",
+    "robots_denied",
+    "blocked",  # domain marked blocked by policy before the request went out
+    "connection_error",
+    "parse_error",
+    name="fetch_outcome",
+)
+
+
+class FetchAttempt(Base):
+    """One record per fetch attempt, successful or not.
+
+    ``fetch_policy.consecutive_failures`` is a counter that resets, and
+    ``queue.error`` holds only the most recent message — neither can answer "what
+    is the fetch success rate today" (§12.5's health line) or "has this domain
+    been serving nothing but 404s for a week". Unattended systems fail silently;
+    the counter tells you something is wrong now, this tells you what has been
+    happening.
+
+    High volume by design — one row per request. Prune on a retention window
+    rather than keeping it forever; the aggregate rates are what matter after a
+    few weeks, not the individual rows.
+    """
+
+    __tablename__ = "fetch_attempts"
+
+    attempt_id: Mapped[int] = pk()
+
+    # Nullable: the task may be deleted or the attempt may predate one (a robots
+    # or blocklist rejection happens before anything is claimed).
+    task_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("queue.task_id", ondelete="SET NULL"), index=True
+    )
+
+    # Denormalised so per-domain rates survive the task being pruned.
+    domain: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+
+    attempted_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    outcome: Mapped[str] = mapped_column(FETCH_OUTCOME, nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    error_detail: Mapped[str | None] = mapped_column(Text)
+
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    bytes_fetched: Mapped[int | None] = mapped_column(Integer)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    __table_args__ = (
+        # "success rate over the last N hours", the health line's core query.
+        Index("ix_fetch_attempts_outcome_time", "outcome", "attempted_at"),
+        # "what is this domain doing", for the blocked-domain decision and for
+        # noticing a site that started failing without tripping the counter.
+        Index("ix_fetch_attempts_domain_time", "domain", "attempted_at"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<FetchAttempt {self.attempt_id} {self.outcome} {self.domain}>"

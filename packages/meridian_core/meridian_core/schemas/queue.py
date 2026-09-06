@@ -12,7 +12,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase
-from .enums import SeedSource, TaskStatus, TaskType
+from .enums import FetchOutcome, SeedSource, TaskStatus, TaskType
 
 
 class QueueTaskCreate(CreateBase):
@@ -39,3 +39,21 @@ class QueueTaskRead(BaseModel):
     fetched_at: dt.datetime | None
     error: str | None
     created_at: dt.datetime
+
+
+class FetchAttemptRead(BaseModel):
+    """One fetch attempt. Read-only — the worker writes these, nothing else does."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    attempt_id: int
+    task_id: int | None
+    domain: str
+    url: str
+    attempted_at: dt.datetime
+    outcome: FetchOutcome
+    status_code: int | None
+    error_detail: str | None
+    duration_ms: int | None
+    bytes_fetched: int | None
+    attempt_number: int

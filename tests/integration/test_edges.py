@@ -18,9 +18,8 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from sqlalchemy import text
-
 from meridian_core.models import Edge, Entity
+from sqlalchemy import text
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -75,7 +74,7 @@ async def test_edge_valid_period_is_independent_of_recording_timestamps(session_
     sess.add_all([a, b])
     await sess.flush()
 
-    produced_at = dt.datetime(2026, 1, 15, tzinfo=dt.timezone.utc)
+    produced_at = dt.datetime(2026, 1, 15, tzinfo=dt.UTC)
     edge = Edge(
         from_node=a.entity_id,
         to_node=b.entity_id,

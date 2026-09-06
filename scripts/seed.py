@@ -196,7 +196,10 @@ async def seed_cold_start_queue(sess) -> tuple[int, int]:
         sess.add(
             QueueTask(
                 url_or_query=url,
-                task_type="url",
+                # Query seeds run through the search backend rather than being
+                # fetched directly; hardcoding "url" would send a search string
+                # to the fetcher as if it were an address.
+                task_type=row.get("task_type", "url"),
                 status="pending",
                 topic=row.get("topic"),
                 seed_source="user",

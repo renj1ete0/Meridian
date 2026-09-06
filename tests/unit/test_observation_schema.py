@@ -15,9 +15,8 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from pydantic import ValidationError
-
 from meridian_core.schemas import ObservationCreate
+from pydantic import ValidationError
 
 
 def _base(**overrides: object) -> dict:

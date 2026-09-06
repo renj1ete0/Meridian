@@ -14,15 +14,14 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
+from meridian_core.db import Role, normalize_url
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from meridian_core.db import Role, normalize_url
-
 DEV_URLS = {
-    "rw": "postgresql://meridian_rw:dev@localhost:5432/meridian",
-    "ro": "postgresql://meridian_ro:dev@localhost:5432/meridian",
-    "owner": "postgresql://meridian:dev@localhost:5432/meridian",
+    "rw": "postgresql://meridian_rw:dev@localhost:21111/meridian",
+    "ro": "postgresql://meridian_ro:dev@localhost:21111/meridian",
+    "owner": "postgresql://meridian:dev@localhost:21111/meridian",
 }
 
 

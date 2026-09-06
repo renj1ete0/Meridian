@@ -14,10 +14,9 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from sqlalchemy import text
-
 from meridian_core.models import Entity, Observation
 from meridian_core.schemas import ObservationRead
+from sqlalchemy import text
 
 pytestmark = pytest.mark.usefixtures("require_db")
 

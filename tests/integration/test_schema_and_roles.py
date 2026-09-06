@@ -18,9 +18,8 @@ from __future__ import annotations
 import subprocess
 
 import pytest
-from sqlalchemy import inspect, text
-
 from meridian_core.db import Base
+from sqlalchemy import inspect, text
 
 # Importing the models package is what registers tables on Base.metadata. Without
 # it these tests compare against an EMPTY metadata and pass vacuously — which is

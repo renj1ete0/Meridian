@@ -28,7 +28,12 @@ from meridian_core.models.graph import (
     NODE_TYPE,
     STANCE,
 )
-from meridian_core.models.queue import SEED_SOURCE, TASK_STATUS, TASK_TYPE
+from meridian_core.models.queue import (
+    FETCH_OUTCOME,
+    SEED_SOURCE,
+    TASK_STATUS,
+    TASK_TYPE,
+)
 from meridian_core.models.runs import (
     ENRICHMENT_TYPE,
     JOB_STATUS,
@@ -42,6 +47,7 @@ from meridian_core.models.source import OCR_TIER, RETENTION_TIER, SOURCE_TIER
 TaskStatus = Literal[*TASK_STATUS.enums]
 TaskType = Literal[*TASK_TYPE.enums]
 SeedSource = Literal[*SEED_SOURCE.enums]
+FetchOutcome = Literal[*FETCH_OUTCOME.enums]
 
 # source.py
 SourceTier = Literal[*SOURCE_TIER.enums]

@@ -1,34 +1,112 @@
-# Domain -> tier mapping, seeded into source-tier assignment at ingestion
-# (spec §5.2). Tier is assigned mechanically from this table, never a model
-# judgment. Extend as new domains are ingested; unmatched domains default to
-# `informal` until classified.
+# Domain → source tier (spec §5.2).
+#
+# Tier is assigned mechanically at ingestion from the domain and document
+# structure — never by asking a model. It is the first tiebreaker when sources
+# conflict, and it drives two other things:
+#
+#   - queue priority: a result from a government or peer-reviewed domain enters
+#     the queue above a blog, so search-driven discovery self-sorts without a
+#     hand-curated seed list
+#   - tier-imbalance counter-seeding (§7.4): a node evidenced entirely by one
+#     tier gets seeds aimed at the missing ones
+#
+# **Patterns first, exact domains second.** An exact-domain list only upranks
+# what someone thought to type; a transport ministry nobody has seen before
+# would land as `informal` and sit at the back of the queue. Suffix patterns
+# catch the general case, and specific entries handle what patterns cannot.
+#
+# Resolution order: exact domain → longest matching pattern → default.
 
-tiers:
-  peer_reviewed:
-    - arxiv.org
-    - openalex.org
-    - doi.org
-    - sciencedirect.com
-    - tandfonline.com
-    - journals.sagepub.com
+default_tier: informal
 
+# Matched against the registrable domain, longest suffix wins.
+patterns:
+  # Scoped to the comparison set §7.2 names, not "all governments". Each line
+  # earns its place from an analogical axis; drop one and that city's official
+  # sources fall through to `informal` and rank below blogs.
   government:
-    - lta.gov.sg
-    - ura.gov.sg
-    - data.gov.sg
-    - nparks.gov.sg
-    - mot.gov.sg
-    - gov.sg
+    - "*.gov"          # US federal and state
+    - "*.gov.sg"       # home
+    - "*.gov.uk"       # London — high income, demand management
+    - "*.gov.hk"       # Hong Kong — density, land scarcity, governance capacity
+    - "*.go.jp"        # Tokyo
+    - "*.go.kr"        # Seoul
+    - "*.gov.cn"       # Shenzhen
+    - "*.go.th"        # Bangkok — equatorial
+    - "*.gov.my"       # Kuala Lumpur — equatorial
+    - "*.go.id"        # Jakarta — equatorial
+    - "*.europa.eu"    # EU-level transport regulation
+
+  peer_reviewed:
+    - "*.edu"
+    - "*.ac.uk"
+    - "*.ac.jp"
+    - "*.ac.kr"
+    - "*.edu.sg"
+    - "*.edu.au"
+    - "*.edu.hk"
+    - "*.arxiv.org"    # subdomains only — bare arxiv.org is under `exact`
+    - "*.springer.com"
+    - "*.sciencedirect.com"
+    - "*.tandfonline.com"
+    - "*.sagepub.com"
+    - "*.wiley.com"
+    - "*.mdpi.com"
 
   institutional:
-    - itdp.org
-    - wri.org
-    - worldbank.org
-    - oecd.org
+    - "*.org"          # broad, and deliberately below the two above
+    - "*.int"
+
+# Exact domains, checked before patterns.
+#
+# **Only list a domain if the entry changes the outcome.** Everything else is
+# noise that drifts: `itdp.org`, `nacto.org`, `uitp.org` and `sae.org` all match
+# `*.org` and are already institutional; `datamall.lta.gov.sg` already matches
+# `*.gov.sg`; `core.ac.uk` already matches `*.ac.uk`. Listing individual
+# operators (`mtr.com.hk`) invites an endless list with no principle behind it —
+# their material arrives through the relevant `.gov` domain or via citations.
+#
+# So an entry belongs here in exactly two cases: a bare domain no `*.` pattern
+# can match, or a domain a pattern puts in the wrong tier.
+exact:
+  peer_reviewed:
+    # Bare domains — a "*.x" pattern does not match "x" itself.
+    - arxiv.org
+    - doi.org
+    # Promotions: these match *.org (institutional) but are scholarly indexes.
+    - openalex.org
+    - crossref.org
+    - semanticscholar.org
+    - trid.trb.org
 
   press:
     - straitstimes.com
     - todayonline.com
     - channelnewsasia.com
+    - bloomberg.com
+    - reuters.com
+    - theguardian.com
 
-  # anything unmatched falls through to `informal`
+  # Only demotions belong here. `default_tier` is already `informal`, so a domain
+  # matching no pattern lands there without being listed — medium.com,
+  # substack.com, reddit.com and landtransportguru.net all match nothing and need
+  # no entry. What needs an entry is a domain a pattern would over-rank.
+  informal:
+    - humantransit.org   # matches *.org, but it is one person's blog
+    - blogspot.com       # in case a pattern is added above it later
+    - wordpress.com
+
+# Priority added to a queue task by tier, so search results self-sort (§5.2).
+# Kept modest: tier decides order, not whether something is crawled at all.
+#
+# Do not raise the government weight further without watching tier balance.
+# A corpus evidenced only by government sources is its own bias — official
+# optimism about official schemes — which is exactly what §7.4's tier-imbalance
+# counter-seeding exists to correct. Upranking speeds up the cold start; it must
+# not become the reason the crawl never leaves gov domains.
+priority_by_tier:
+  peer_reviewed: 60
+  government: 50
+  institutional: 30
+  press: 10
+  informal: 5

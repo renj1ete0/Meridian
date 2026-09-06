@@ -14,7 +14,7 @@ from .mixins import (
     ProvenanceMixin,
     TimestampMixin,
 )
-from .queue import QueueTask
+from .queue import FetchAttempt, QueueTask
 from .runs import EnrichmentItem, Notification, Report, Run
 from .source import EMBEDDING_DIM, Chunk, Figure, Source
 
@@ -31,6 +31,7 @@ __all__ = [
     "Edge",
     "EnrichmentItem",
     "Entity",
+    "FetchAttempt",
     "FetchPolicy",
     "Figure",
     "GazetteerTerm",

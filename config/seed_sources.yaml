@@ -1,24 +1,140 @@
-# Cold-start sources (spec §15 phase 0 — target 15-25). This is deliberately
-# left as a template: the spec calls hand-seeding a "careful manual" task
-# worth an evening, since seed quality propagates through everything
-# downstream (§16, "cold-start seed quality"). Fill in specific report/article
-# URLs yourself rather than trusting a generated list — do that here, not by
-# asking an agent to invent URLs.
+# Cold-start sources (spec §15 phase 0).
 #
-# domain_allowlist below can start from known institutional root domains;
-# add the specific documents you want ingested first under `sources`.
+# The first crawl starts here; frontier expansion grows outward by following
+# citations, links and sitemaps. Seed quality propagates through everything
+# downstream (§16), which is why this list is hand-curated rather than generated.
+#
+# Deliberately short. Search plus tier-upranking does the discovery: SearXNG
+# results are prioritised by source tier (config/source_tiers.yaml), so a .gov
+# result enters the queue above a blog without anyone curating it. What a seed
+# list still buys is an authority spine — a handful of roots whose *navigation*
+# reaches material that ranks for no natural query, and whose reference lists
+# open a dense citation neighbourhood immediately.
+#
+# Seeds are site roots and search queries, not deep links. §6.4 prefers structured
+# APIs over scraping and plans for sitemap-based discovery, so pointing at an
+# organisation's root and letting discovery work is both more robust and less
+# likely to rot than a hand-copied path.
+#
+# task_type: url    — fetch this page, follow what it links to
+#            query  — run this against the search backend, enqueue the results
+#
+# source_tier drives conflict resolution (§5.2) and is assigned here rather than
+# inferred. `informal` is deliberately included: enthusiast sources are often more
+# current and more detailed than official channels, and are sometimes the only
+# record of a scheme. They are cited with their tier visible, not excluded.
 
+# Seeds the allowlist that gates MODEL-PROPOSED targets only (§11.8). Frontier
+# expansion — following links and citations out of pages already fetched — is
+# mechanical, involves no model, and is governed by the blocklist in fetch_policy
+# instead. Gating it here would stop citation-following at the first hop.
+#
+# The list grows without you: a domain frontier expansion reaches, fetches
+# successfully and gets novel content from is auto-approved, because its trust
+# came from discovery rather than from a model's suggestion. A domain a *model*
+# proposes queues for approval, the same way model-proposed gazetteer terms do.
 domain_allowlist:
-  - lta.gov.sg
-  - ura.gov.sg
-  - data.gov.sg
-  - nparks.gov.sg
+  - "*.gov.sg"
+  - "*.gov"
+  - "*.gov.uk"
+  - "*.gov.hk"
+  - "*.edu"
+  - "*.ac.uk"
+  - "*.org"
   - arxiv.org
   - openalex.org
+  - doi.org
+  - core.ac.uk
+  - crossref.org
+  - semanticscholar.org
+  - trid.trb.org
+  - landtransportguru.net
+  - mtr.com.hk
+  - humantransit.org
 
 sources:
-  # - url: "<fill in>"
-  #   topic: walkability          # walkability | on-demand-bus | av-deployment
-  #   source_tier: government     # peer_reviewed | government | institutional | press | informal
-  #   note: "<why this is a good cold-start seed>"
-  []
+  # --- Singapore: government and institutional -----------------------------
+  - url: https://www.lta.gov.sg
+    task_type: url
+    topic: on-demand-bus
+    source_tier: government
+    note: Land Transport Authority — policy, press, publications
+
+  - url: https://datamall.lta.gov.sg
+    task_type: url
+    topic: on-demand-bus
+    source_tier: government
+    note: LTA DataMall. VERIFY the host before first run — may be under lta.gov.sg
+
+  - url: https://www.ura.gov.sg
+    task_type: url
+    topic: walkability
+    source_tier: government
+    note: Urban Redevelopment Authority — land use, TOD, street design
+
+  - url: https://www.mot.gov.sg
+    task_type: url
+    topic: av-deployment
+    source_tier: government
+    note: Ministry of Transport — AV policy sits here rather than with LTA
+
+  - url: https://www.clc.gov.sg
+    task_type: url
+    topic: walkability
+    source_tier: institutional
+    note: Centre for Liveable Cities — case studies, unusually well documented
+
+  # --- Singapore: informal, high-detail ------------------------------------
+  - url: https://landtransportguru.net
+    task_type: url
+    topic: on-demand-bus
+    source_tier: informal
+    note: >
+      Enthusiast, frequently more current than official channels and sometimes
+      the only record of a route or scheme change. Tier is visible on every
+      claim it supports; §7.4 will counter-seed if a node rests only on it.
+
+  # --- AV: standards and regulation ----------------------------------------
+  - url: https://www.sae.org
+    task_type: url
+    topic: av-deployment
+    source_tier: institutional
+    note: J3016 driving-automation taxonomy — the ODD vocabulary the graph uses
+
+  - url: https://unece.org/transport/vehicle-regulations
+    task_type: url
+    topic: av-deployment
+    source_tier: government
+    note: WP.29 — binding vehicle regulation, distinct from voluntary standards
+
+  # --- Academic: queries, not scraping (§6.4) ------------------------------
+  # Structured APIs return clean metadata, do not captcha, and do not rate-limit
+  # aggressively. These run through the search backend and enqueue what they find.
+  - url: "walkability tropical climate thermal comfort pedestrian"
+    task_type: query
+    topic: walkability
+    source_tier: peer_reviewed
+
+  - url: "demand responsive transit on-demand bus service evaluation"
+    task_type: query
+    topic: on-demand-bus
+    source_tier: peer_reviewed
+
+  - url: "autonomous vehicle deployment operational design domain public road"
+    task_type: query
+    topic: av-deployment
+    source_tier: peer_reviewed
+
+  - url: "autonomous shuttle minibus pilot evaluation ridership"
+    task_type: query
+    topic: av-deployment
+    source_tier: peer_reviewed
+
+  - url: "fare elasticity public transport ridership price sensitivity"
+    task_type: query
+    topic: on-demand-bus
+    source_tier: peer_reviewed
+
+# Add your own below. A specific report you already know you want is worth more
+# than any of the roots above, because it seeds the citation graph at the right
+# depth rather than at a homepage.

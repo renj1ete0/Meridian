@@ -64,6 +64,20 @@ doing before much of phase 1, since seed quality propagates downstream.
 - [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
 - [ ] `P1-05` Blocked-domain marking after N consecutive failures
 - [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
+- [ ] `P1-20` **SSRF guard.** Resolve DNS and reject private, loopback, link-local and
+      cloud-metadata addresses before connecting; re-validate on every redirect hop;
+      scheme allowlist; reject when any resolved address is private (DNS rebinding).
+      Crawl targets come from untrusted pages — this is the control that stops the
+      crawler reaching the LAN
+- [ ] `P1-21` Content safeguards: content-type allowlist, streaming abort at
+      `max_page_bytes`, decompression-ratio cap
+- [ ] `P1-17` Tier-derived queue priority: resolve a URL's tier from
+      `config/source_tiers.yaml` (patterns, then exact, then default) and set
+      `queue.priority` from `priority_by_tier`, so search results self-sort
+- [ ] `P1-18` Randomised per-domain delay — `delay_per_domain_ms` as a floor plus a
+      random draw from `[0, delay_jitter_ms]`
+- [ ] `P1-19` Record every fetch attempt in `fetch_attempts`, success or failure, and
+      derive the health line's fetch success rate from it. Add a retention prune
 - [ ] `P1-07` `extract/html.py` — Crawl4AI markdown, `PruningContentFilter`, citation extraction
 - [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
 - [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
@@ -73,6 +87,12 @@ doing before much of phase 1, since seed quality propagates downstream.
 - [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
 - [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
 - [ ] `P1-15` Worker main loop, supervision, graceful restart
+- [ ] `P1-22` **Network topology.** `internal: true` blocks outbound, but worker,
+      crawl4ai and searxng all need it — the compose file admits this in a comment
+      and never resolves it. Split into `internal` (postgres, api, web) and `egress`
+      (worker, crawl4ai, searxng, orchestrator, cloudflared), with worker on both.
+      crawl4ai drives a browser against hostile content and must hold no credentials
+      and have no route to postgres
 - [ ] `P1-16` 48h unattended acceptance run → `make snapshot-corpus`
 
 ## Phase 2 · Embeddings and search — the go/no-go
@@ -119,6 +139,12 @@ doing before much of phase 1, since seed quality propagates downstream.
 - [ ] `P4-03` Merge reversibility: redirects, `merged_from`, merge log
 - [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`
 - [ ] `P4-05` `validation.py` — server-side guards, node existence, domain allowlist, caps
+- [ ] `P4-12` Allowlist growth: `fetch_policy.seed_allowed` + `first_seen_via`. Domains
+      reached by frontier expansion auto-approve after N successful novel fetches;
+      model-proposed domains queue for approval like gazetteer terms
+- [ ] `P4-13` Refuse to start a synthesis run with no budget configured. §16 says caps
+      must exist before the first autonomous run, and nothing currently enforces the
+      ordering — the compounding seed→crawl→cost loop is first noticed as a bill
 - [ ] `P4-06` Untrusted-data framing for all retrieved content in prompts (spec §11.8)
 - [ ] `P4-07` Agent registry, task-type routing, fallback chains
 - [ ] `P4-08` Orchestrator run state machine + `runs` table resumability

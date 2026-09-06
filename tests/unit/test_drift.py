@@ -11,11 +11,10 @@ from __future__ import annotations
 import typing
 
 import pytest
-from sqlalchemy import Enum as SAEnum
-
 from meridian_core import models, schemas
 from meridian_core.db import Base
 from meridian_core.models import mixins
+from sqlalchemy import Enum as SAEnum
 
 # --------------------------------------------------------------------------
 # Enum drift: DTO Literal aliases vs the models' CHECK-constrained columns
@@ -26,6 +25,7 @@ ENUM_PAIRS = [
     ("TaskStatus", models.queue.TASK_STATUS),
     ("TaskType", models.queue.TASK_TYPE),
     ("SeedSource", models.queue.SEED_SOURCE),
+    ("FetchOutcome", models.queue.FETCH_OUTCOME),
     ("SourceTier", models.source.SOURCE_TIER),
     ("RetentionTier", models.source.RETENTION_TIER),
     ("OcrTier", models.source.OCR_TIER),
@@ -83,6 +83,7 @@ def test_every_model_enum_has_a_dto_alias() -> None:
 # model class -> Read DTO. Fields deliberately withheld are listed with a reason.
 READ_PAIRS = [
     (models.QueueTask, schemas.QueueTaskRead, set()),
+    (models.FetchAttempt, schemas.FetchAttemptRead, set()),
     # Embeddings are 1024 floats — never in a response payload.
     (models.Source, schemas.SourceRead, set()),
     (models.Chunk, schemas.ChunkRead, {"embedding"}),

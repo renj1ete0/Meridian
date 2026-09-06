@@ -13,7 +13,6 @@ import json
 import logging
 
 import pytest
-
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 
