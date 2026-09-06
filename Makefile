@@ -1,8 +1,15 @@
 # Meridian — common tasks. See docs/spec/meridian-project-scaffold.md §5.
 #
+# Local development reads .env.dev if present, so `make migrate` and `make seed`
+# work with no manual exports. In production the environment comes from the
+# container (env_file in docker-compose.yml) and this include is simply absent.
+#
 # Targets that shell out to application code (migrate, seed, test, ...) are
 # stubs until the corresponding phase is built (README.md build order). They
 # are declared now so the interface is stable as pieces land.
+
+-include .env.dev
+export
 
 .PHONY: dev-up dev-down up down logs migrate seed \
         snapshot-corpus restore-corpus backup test build-push
