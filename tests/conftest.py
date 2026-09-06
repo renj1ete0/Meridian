@@ -9,15 +9,19 @@ reported every one of them as passing.
 
 from __future__ import annotations
 
+import ipaddress
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
+from http_doubles import RecordingTransport, streamed
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from meridian_core.db import Role, normalize_url
+from meridian_core.netguard import IPAddress
+from meridian_core.policy import ResolvedPolicy
 
 DEV_URLS = {
     "rw": "postgresql://meridian_rw:dev@localhost:21111/meridian",
@@ -79,3 +83,58 @@ async def session_for(require_db) -> AsyncIterator[callable]:
         await sess.close()
     for engine in engines.values():
         await engine.dispose()
+
+
+@pytest.fixture
+def policy() -> Callable[..., ResolvedPolicy]:
+    """Build a ResolvedPolicy with the shipped defaults, overridden per test."""
+
+    def make(**overrides: object) -> ResolvedPolicy:
+        return ResolvedPolicy(domain=overrides.pop("domain", "example.test"), **overrides)
+
+    return make
+
+
+@pytest.fixture
+def resolver() -> Callable[..., object]:
+    """A stub resolver over a host → addresses mapping.
+
+    ``sequence`` gives a *different* answer per call for one host, which is how
+    DNS rebinding is expressed: the check sees one address and the connection
+    would see another.
+    """
+
+    def make(
+        mapping: dict[str, list[str]] | None = None,
+        *,
+        sequence: dict[str, list[list[str]]] | None = None,
+        fail: set[str] | None = None,
+    ):
+        calls: dict[str, int] = {}
+
+        async def resolve(host: str, port: int = 443) -> list[IPAddress]:
+            calls[host] = calls.get(host, 0) + 1
+            if fail and host in fail:
+                raise OSError(f"Name or service not known: {host}")
+            if sequence and host in sequence:
+                answers = sequence[host]
+                index = min(calls[host] - 1, len(answers) - 1)
+                return [ipaddress.ip_address(a) for a in answers[index]]
+            if mapping and host in mapping:
+                return [ipaddress.ip_address(a) for a in mapping[host]]
+            raise OSError(f"Name or service not known: {host}")
+
+        resolve.calls = calls  # type: ignore[attr-defined]
+        return resolve
+
+    return make
+
+
+@pytest.fixture
+def recorder() -> type[RecordingTransport]:
+    return RecordingTransport
+
+
+@pytest.fixture
+def stream_response():
+    return streamed

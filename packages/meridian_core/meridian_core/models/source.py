@@ -62,6 +62,18 @@ class Source(Base, TimestampMixin):
     accessed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     checksum: Mapped[str | None] = mapped_column(Text)
 
+    # HTTP cache validators from the last successful fetch, echoed back on the
+    # next one (§6.4 `conditional_requests`, which makes re-checks nearly free).
+    #
+    # ``last_modified`` is Text, not a timestamp, and that is not laziness. The
+    # header is compared by the origin as an opaque string; parsing it to a
+    # datetime and formatting it back would re-serialise a server's
+    # "Sun, 30 Aug 2026 04:11:49 GMT" into whatever this codebase prefers, and a
+    # strict origin would then stop returning 304 — silently turning the
+    # cheapest request in the crawl back into the most expensive one.
+    etag: Mapped[str | None] = mapped_column(Text)
+    last_modified: Mapped[str | None] = mapped_column(Text)
+
     source_tier: Mapped[str] = mapped_column(
         SOURCE_TIER, nullable=False, default="informal", server_default="informal"
     )

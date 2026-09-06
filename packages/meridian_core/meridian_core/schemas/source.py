@@ -22,6 +22,8 @@ class SourceCreate(CreateBase):
     doi: str | None = None
     accessed_at: dt.datetime | None = None
     checksum: str | None = None
+    etag: str | None = None
+    last_modified: str | None = None
     source_tier: SourceTier = "informal"
     retention_tier: RetentionTier = "background"
     raw_file_path: str | None = None
@@ -46,6 +48,8 @@ class SourceRead(BaseModel):
     doi: str | None
     accessed_at: dt.datetime | None
     checksum: str | None
+    etag: str | None
+    last_modified: str | None
     source_tier: SourceTier
     retention_tier: RetentionTier
     raw_file_path: str | None

@@ -16,17 +16,17 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. The fetcher now runs against the real
-internet and a real Crawl4AI: `P1-01`, `P1-02`, `P1-03`, `P1-12`, `P1-17`,
-`P1-18`, `P1-20`, `P1-21` and `P1-24` are done, at 312 tests. The only open
-phase-0 item is `P0-15`, deferred until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. Fetching is complete and polite:
+`P1-01`, `P1-02`, `P1-03`, `P1-04`, `P1-12`, `P1-17`, `P1-18`, `P1-20`, `P1-21`
+and `P1-24` are done, at 387 tests. Verified live — arxiv.org's `Crawl-delay: 15`
+is honoured, and an unchanged page comes back 304. The only open phase-0 item is
+`P0-15`, deferred until phase 2 needs it.
 
-Next: `P1-04` (robots, per-domain concurrency and delay, conditional requests) —
-the fetcher currently has no rate limiting, so nothing should point it at a real
-crawl until that lands. `P1-19` (record every attempt) is its natural companion:
-`fetch.py` already returns a `fetch_attempts.outcome` for every path, and nothing
-writes the rows yet. `P1-23` (injection pre-screen) is safety work that belongs
-with extraction.
+Next: `P1-19` (record every attempt in `fetch_attempts`) and `P1-05`
+(blocked-domain marking), which together close the loop between a fetch and the
+policy that governs the next one — `record_failure()` and `record_success()`
+exist in `policy.py` and nothing calls them yet. After that, extraction:
+`P1-07` through `P1-10`, with `P1-23` (injection pre-screen) landing alongside.
 
 ---
 
@@ -84,8 +84,17 @@ with extraction.
       original hostname; `follow_redirects` is off at the client level, and each hop
       is re-validated, re-resolved and re-pinned by hand. Verified by a test that
       hands the resolver a different answer on its second call
-- [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
-- [ ] `P1-05` Blocked-domain marking after N consecutive failures
+- [x] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests —
+      `worker/robots.py`, `worker/ratelimit.py`, `worker/crawl.py`. robots.txt is
+      parsed here rather than by `urllib.robotparser`, which only became RFC 9309
+      compliant in Python 3.13 and gives opposite answers on 3.12 for both
+      `Disallow: /*.pdf$` and a longer `Allow` — §14.2 makes this a commitment, and
+      one that varies by interpreter is not one. Conditional requests needed
+      `sources.etag`/`last_modified`
+- [ ] `P1-05` Blocked-domain marking after N consecutive failures. `record_failure()`
+      and `record_success()` are written and tested in `policy.py`; what is missing is
+      the call from the fetch path, and `DomainLimiter.forget()` on a newly-blocked
+      domain so its state does not linger
 - [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
 - [x] `P1-20` **SSRF guard** — `meridian_core/netguard.py`. Post-DNS address
       classification, per-hop redirect revalidation, scheme allowlist, DNS-rebinding
@@ -103,7 +112,8 @@ with extraction.
 - [x] `P1-17` Tier-derived queue priority — `priority_for_domain()`. Wiring it into
       enqueue happens with the fetcher in `P1-03`
 - [x] `P1-18` Randomised per-domain delay — `jittered_delay_ms()`. Wiring it into the
-      fetch loop happens with `P1-04`
+      fetch loop happened with `P1-04` — `Crawler` draws a fresh jittered delay per
+      request and takes the larger of it and any `Crawl-delay` from robots.txt
 - [ ] `P1-19` Record every fetch attempt in `fetch_attempts`, success or failure, and
       derive the health line's fetch success rate from it. Add a retention prune.
       `fetch.py` already returns a valid `outcome` on every path, including the four
@@ -134,6 +144,14 @@ with extraction.
       fetcher degrades to static — correct, but silent. A worker that has quietly
       lost its browser for a week should say so on the health line (§12.5), not just
       extract worse
+- [ ] `P1-28` **Sitemap discovery from robots.txt.** `RobotsRules.sitemaps` is parsed
+      and returned already — Wikipedia's lists one, and §6.4 names `AsyncUrlSeeder` for
+      sitemap-based discovery — but nothing enqueues them. Cheap frontier expansion
+      that needs no model
+- [ ] `P1-29` **Persist the robots cache across restarts.** It is in-process, so a
+      worker restart re-fetches robots.txt for every origin it touches. Harmless at
+      current scale and wasteful at corpus scale; revisit when the crawl is wide
+      rather than deep
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

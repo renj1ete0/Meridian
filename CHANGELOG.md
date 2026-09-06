@@ -10,6 +10,60 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 Nothing yet.
 
+## [0.10.0] — 2026-09-06
+
+**Politeness.** The fetcher could get bytes; now it knows whether it should, how
+often, and what it already has. Verified live: arxiv.org's `Crawl-delay: 15` is
+honoured with real 15-second gaps, and a second fetch of an unchanged page comes
+back 304 with no body.
+
+### Added
+
+- `P1-04` `worker/robots.py`, `worker/ratelimit.py` and `worker/crawl.py` —
+  robots.txt, per-domain concurrency and delay, and conditional requests, with
+  `Crawler` composing them in cheapest-refusal-first order: the policy row (no
+  network), then robots.txt (one cached request per origin per day), then the
+  domain's delay, then the request itself
+- `sources.etag` and `sources.last_modified`. `last_modified` is Text rather
+  than a timestamp deliberately — the header is compared by the origin as an
+  opaque string, and parsing it to a datetime and formatting it back would
+  re-serialise the server's own wording, so a strict origin would quietly stop
+  returning 304 and the cheapest request in the crawl would become the most
+  expensive one
+
+### Notes
+
+- **robots.txt is parsed here rather than by `urllib.robotparser`.** The stdlib
+  parser was rewritten for RFC 9309 in Python 3.13; before that it had no
+  wildcard support and returned the first matching rule rather than the longest.
+  On the two most ordinary patterns in a real robots.txt it gives *opposite*
+  answers across the versions this project supports:
+
+  | | 3.12 | 3.13+ |
+  |---|---|---|
+  | `Disallow: /*.pdf$` | fetch | refuse |
+  | `Allow: /private/notice` over `Disallow: /private/` | refuse | fetch |
+
+  §14.2 states respecting robots.txt as a commitment, and a commitment that
+  depends on which interpreter the container shipped is not one. The parser
+  implements RFC 9309 §2.2 directly: longest match wins, `Allow` breaks a tie,
+  `*` and `$` are the only metacharacters, and a named group suppresses the `*`
+  group entirely
+- An unreadable robots.txt refuses the origin (RFC 9309 §2.3.1.3). A 4xx means
+  the site has stated no exclusions and everything is allowed; a 5xx or timeout
+  means permission could not be established, and assuming it would have been
+  granted is how a crawler gets banned. The refusal is cached for ten minutes
+  rather than a day, so one 503 does not take a domain out of the crawl
+- Delay is measured between request *starts*, not completions — a server sees
+  arrivals — and the limiter's gate is held across the sleep, because releasing
+  it first would let every waiter wake at the same instant and start together,
+  which is a burst wearing a delay's clothing
+
+### Fixed
+
+- The `policy`, `resolver` and transport fixtures moved from `tests/unit/` to
+  `tests/conftest.py` so the integration suite can use them too
+
 ## [0.9.0] — 2026-09-06
 
 **The fetcher.** A URL now becomes bytes, and does so without becoming a way
