@@ -1,0 +1,163 @@
+# Meridian — build tasks
+
+**This file is the source of truth for what to build next.** Read it at the start of a
+session, update it at the end of one. If work happened and this file didn't change,
+something went wrong.
+
+- Phases and their acceptance checkpoints: [docs/roadmap.md](docs/roadmap.md)
+- Conventions and invariants before writing code: [AGENTS.md](AGENTS.md)
+
+## How to use this file
+
+- Task IDs are stable (`P1-04`). Reference them in commit messages and PR titles.
+- Status: `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` dropped (say why).
+- Tick a task only when it runs, not when it compiles.
+- A task should be one sitting of work. If it isn't, split it and give the parts new IDs.
+- Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
+- Add new tasks freely; don't renumber existing ones.
+
+**Current phase: 0** — scaffold complete, no application code yet.
+
+---
+
+## Phase 0 · Foundations
+
+*Checkpoint: `make migrate && make seed` yields a clean, empty database ready to crawl.*
+
+- [x] `P0-01` Repo scaffold: layout, compose files, Makefile, `.env.example`, `.gitignore`
+- [x] `P0-02` Brand and design system: mark, palette, typography, voice, UI mockups, assets
+- [x] `P0-03` Licence, README, roadmap, task tracking, versioning policy
+- [ ] `P0-04` `meridian_core` package: `pyproject.toml`, `db.py` (engine, session, pooling)
+- [ ] `P0-05` SQLAlchemy models — queue
+- [ ] `P0-06` SQLAlchemy models — sources, chunks, figures
+- [ ] `P0-07` SQLAlchemy models — graph (entities, edges, attributes) with provenance columns
+- [ ] `P0-08` SQLAlchemy models — gazetteer, `topic_config`, `fetch_policy`, agent registry
+- [ ] `P0-09` SQLAlchemy models — `runs`, `steering_log`, `enrichment_queue`, `reports`
+- [ ] `P0-10` Pydantic DTOs in `meridian_core/schemas/` for every service boundary
+- [ ] `P0-11` Alembic setup + initial migration; verify `meridian_rw` / `meridian_ro` roles apply
+- [ ] `P0-12` `scripts/seed.py` — idempotent `config/*.yaml` → DB, config only, never content
+- [ ] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
+- [ ] `P0-14` ⚑ human — write the ten questions (spec §14.3), check the schema answers them
+- [ ] `P0-15` ⚑ human — held-out question set of 20–30 for monthly regression (spec §14.1)
+- [ ] `P0-16` ⚑ human — hand-seed 15–25 cold-start sources into `config/seed_sources.yaml`
+- [ ] `P0-17` ⚑ human — expand `config/gazetteer_seed.yaml` toward ~50 terms
+
+## Phase 1 · Ingestion
+
+*Checkpoint: runs 48h unattended without failing; the result becomes the dev corpus.*
+
+- [ ] `P1-01` Queue claim/pop semantics: status flow, attempts, exponential backoff
+- [ ] `P1-02` `fetch_policy` resolution: per-domain row → global row → file default
+- [ ] `P1-03` `fetch.py` — httpx for static, Crawl4AI for JS-dependent, `render_js: auto`
+- [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
+- [ ] `P1-05` Blocked-domain marking after N consecutive failures
+- [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
+- [ ] `P1-07` `extract/html.py` — Crawl4AI markdown, `PruningContentFilter`, citation extraction
+- [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
+- [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
+- [ ] `P1-10` `extract/figures.py` — figure extraction with captions
+- [ ] `P1-11` Raw store writer: path scheme, checksum, retention tiers
+- [ ] `P1-12` Source tier assignment from `config/source_tiers.yaml` domain map
+- [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
+- [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
+- [ ] `P1-15` Worker main loop, supervision, graceful restart
+- [ ] `P1-16` 48h unattended acceptance run → `make snapshot-corpus`
+
+## Phase 2 · Embeddings and search — the go/no-go
+
+*Checkpoint: is searching the corpus already useful with no model involved?*
+
+- [ ] `P2-01` `embeddings.py` — bge-m3 wrapper, batching, arm64 sanity check
+- [ ] `P2-02` Chunking with `page_or_offset` captured at extraction time
+- [ ] `P2-03` `novelty.py` — cosine gate, drop above 0.95
+- [ ] `P2-04` pgvector HNSW index; measure recall and latency at corpus size
+- [ ] `P2-05` `tsvector` index and trigger
+- [ ] `P2-06` `search.py` — hybrid retrieval, RRF fusion, **filters before vector search**
+- [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
+- [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible
+- [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
+
+## Phase 3 · MCP read surface
+
+*Checkpoint: an external agent can retrieve usefully.*
+
+- [ ] `P3-01` MCP server scaffold inside `api`
+- [ ] `P3-02` Read tools: `search_chunks`, `get_source_metadata`, `list_new_since`
+- [ ] `P3-03` Scoped tokens: `allowed_tools`, rate limit, expiry (spec §11.4)
+- [ ] `P3-04` `run_readonly_query` behind the read-only role, statement timeout, row cap
+- [ ] `P3-05` Cloudflare Tunnel + Access in front of the API
+
+## Phase 4 · Graph and writes — the loop closes
+
+*Checkpoint: a model can write validated, provenance-bearing edges.*
+
+- [ ] `P4-01` Apache AGE setup, graph schema, typed node ontology
+- [ ] `P4-02` Entity resolution: normalise → block → score → three-band decision
+- [ ] `P4-03` Merge reversibility: redirects, `merged_from`, merge log
+- [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`
+- [ ] `P4-05` `validation.py` — server-side guards, node existence, domain allowlist, caps
+- [ ] `P4-06` Untrusted-data framing for all retrieved content in prompts (spec §11.8)
+- [ ] `P4-07` Agent registry, task-type routing, fallback chains
+- [ ] `P4-08` Orchestrator run state machine + `runs` table resumability
+- [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
+- [ ] `P4-10` `budget.py` — per-run token and seed caps, cost logging, monthly ceiling
+- [ ] `P4-11` High-water mark advances only after writes commit
+
+## Phase 5 · Autonomy
+
+*Checkpoint: it runs itself, and tells you when it can't.*
+
+- [ ] `P5-01` `frontier.py` — outbound links, citations, spaCy NER, TF-IDF co-occurrence
+- [ ] `P5-02` Gazetteer into `EntityRuler` at worker startup; acronym auto-harvest
+- [ ] `P5-03` Coverage scoring, schema-aware, topic × dimension
+- [ ] `P5-04` Gap analysis and seed emission, capped and validated
+- [ ] `P5-05` Diversity seeding — stance-imbalance counter-seeds first (spec §7.4)
+- [ ] `P5-06` Scheduler reads its timetable from the DB — no cron files
+- [ ] `P5-07` Telegram digest, alerts on sustained conditions only, inbound commands
+- [ ] `P5-08` Health endpoint, watchdog, off-device snapshot job
+
+## Phase 6 · Interface — the payoff layer
+
+*Checkpoint: reading the graph is genuinely better than reading the sources.*
+
+- [ ] `P6-01` Sigma.js canvas, focus + expand, depth-1 neighbours capped and ranked
+- [ ] `P6-02` Canvas filters: topic, attribute, source tier, date, contested-only
+- [ ] `P6-03` Path mode between two nodes
+- [ ] `P6-04` Node detail panel: grouped tags with overflow, attribute list with confidence
+- [ ] `P6-05` Annotation as first-class nodes
+- [ ] `P6-06` Synthesis panel: collapsible toggle, thread, node chips, inline citations
+- [ ] `P6-07` Conversation history within the synthesis panel
+- [ ] `P6-08` Notifications panel, filterable by type
+- [ ] `P6-09` Saved views
+- [ ] `P6-10` Coverage grid and contested list as entry points
+- [ ] `P6-11` Explore landing state with since-last-visit delta
+- [ ] `P6-12` Admin: topic management — add, pause, archive with re-normalising weights
+- [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
+- [ ] `P6-14` Figures panel with page-accurate raw file links
+- [ ] `P6-15` Export: Markdown and BibTeX
+
+## Phase 7 · Full design
+
+*Checkpoint: the analytical layer the whole thing was for.*
+
+- [ ] `P7-01` Attribute proposal gate: evidence requirement, discrimination test, hard cap
+- [ ] `P7-02` Monthly attribute audit with hysteresis before retirement
+- [ ] `P7-03` Schema evolution backfill, amortised across runs
+- [ ] `P7-04` Analogical expansion with disanalogies recorded on every comparison edge
+- [ ] `P7-05` Contradiction tracking and contested-pair marking
+- [ ] `P7-06` Temporal decay flags in gap analysis
+- [ ] `P7-07` Enrichment queue: figure VLM, quality-tier OCR, chart OCR — user-triggered
+- [ ] `P7-08` Reprocessing, downgrade guard, old-vs-new disagreement logging
+- [ ] `P7-09` Report generation with coverage pre-flight (spec §11.13)
+- [ ] `P7-10` Edge precision sampling and entity resolution audit as routine
+
+---
+
+## Backlog — unscheduled
+
+Things worth doing that don't belong to a phase yet.
+
+- [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
+- [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
+- [ ] `B-03` Multimodal embeddings for figure similarity search
+- [ ] `B-04` Offline corpora (OSM extract, filtered arXiv) — selective, storage-hungry

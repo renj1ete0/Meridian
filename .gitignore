@@ -1,0 +1,31 @@
+# Environment / secrets
+.env
+.env.dev
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+web/dist/
+
+# Local dev data (bind-mount targets, never in the repo)
+.devdata/
+
+# Corpus snapshots and dumps (kept beside backups, not in git)
+fixtures/corpus_*.dump
+*.dump
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log

@@ -1,0 +1,178 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB; }
+    .cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; color: #7C8AAB; }
+    .seg { font-size: 11.5px; color: #7C8AAB; padding: 6px 11px; border-right: 1px solid #2A3654; }
+    .segon { font-size: 11.5px; color: #E6EBF5; background: #1E2942; padding: 6px 11px; border-right: 1px solid #2A3654; }
+    .it { display: flex; gap: 12px; padding: 13px 18px; border-bottom: 1px solid #1A2338; align-items: flex-start; }
+    .ittl { font-size: 13px; line-height: 1.45; color: #E6EBF5; }
+    .imeta { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10px; color: #7C8AAB; }
+    .act { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #49D0DA; flex-shrink: 0; }
+    .dag { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 0.72em; vertical-align: super; line-height: 0; color: #E6B061; }
+    .note { font-size: 12.5px; line-height: 1.6; color: #9BA8C4; text-wrap: pretty; }
+  </style>
+</helmet>
+<div style="position: relative; width: 1080px; height: 800px; overflow: hidden; background: #0D1424; box-sizing: border-box;">
+
+  <div style="height: 54px; border-bottom: 1px solid #2A3654; background: rgba(21,30,51,0.90); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; gap: 14px; padding: 0 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <svg viewBox="0 0 100 100" width="22" height="22" fill="none" style="display: block;">
+        <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="3.6"></circle>
+        <ellipse cx="50" cy="50" rx="17" ry="38" stroke="#E6EBF5" stroke-width="3.6"></ellipse>
+        <circle cx="50" cy="88" r="5" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="50" r="6" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="12" r="7" fill="#49D0DA"></circle>
+      </svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.004em; color: #E6EBF5;">Meridian</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #2A3654;"></div>
+    <div style="display: flex; gap: 4px;">
+      <span style="font-size: 12.5px; color: #E6EBF5; background: #1E2942; padding: 6px 12px;">Explore</span>
+      <span style="font-size: 12.5px; color: #7C8AAB; padding: 6px 12px;">Admin</span>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+      <span class="m" style="display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #9BA8C4; border: 1px solid #2A3654; padding: 5px 10px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #49D0DA; display: block;"></span>queue 412 · fetch 96% · 07:14</span>
+      <div style="width: 1px; height: 20px; background: #2A3654;"></div>
+      <span style="position: relative; display: flex; padding: 4px; background: #1E2942;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M7 10.6 a5 5 0 0 1 10 0 v4 l2 3 H5 l2 -3 z" stroke="#E6EBF5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.9 20.6 a2.3 2.3 0 0 0 4.2 0" stroke="#E6EBF5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="m" style="position: absolute; top: -2px; right: -4px; min-width: 15px; height: 15px; background: #E6B061; color: #241703; font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 3px;">3</span>
+      </span>
+      <span style="display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M3.4 8.6 H20.6 M3.4 15.4 H20.6" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round"></path><rect x="8" y="6.4" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect><rect x="13.8" y="13.2" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect></svg>
+      </span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 44px; top: 96px; width: 520px; display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <div class="cap">Notifications &amp; the status cluster</div>
+      <div class="cap">19</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-size: 16px; font-weight: 600; color: #E6EBF5;">No greeting.</div>
+      <div class="note">One person owns this system and it runs on their own hardware. A welcome line would be addressing them on behalf of nobody. The top-right cluster carries state instead: what the system is doing, what it needs from you, and where the controls are.</div>
+    </div>
+
+    <div style="height: 1px; background: #202B45;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div class="lbl">The cluster, left to right</div>
+      <div style="display: flex; gap: 14px; align-items: flex-start;">
+        <span class="m" style="font-size: 10.5px; color: #E6EBF5; width: 88px; flex-shrink: 0;">status</span>
+        <span class="note" style="font-size: 12px;">Queue depth and fetch health, always visible. A brass dot replaces the cyan when a run has failed.</span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: flex-start;">
+        <span class="m" style="font-size: 10.5px; color: #E6EBF5; width: 88px; flex-shrink: 0;">notifications</span>
+        <span class="note" style="font-size: 12px;">Cyan count for things that finished; brass count when anything in the list is an alert, as shown above.</span>
+      </div>
+      <div style="display: flex; gap: 14px; align-items: flex-start;">
+        <span class="m" style="font-size: 10.5px; color: #E6EBF5; width: 88px; flex-shrink: 0;">settings</span>
+        <span class="note" style="font-size: 12px;">Preferences and digest schedule today. This is where an account menu goes once auth stops being Cloudflare Access.</span>
+      </div>
+    </div>
+
+    <div style="height: 1px; background: #202B45;"></div>
+
+    <div class="note">Filtering is by type, not by read state: the question a returning user asks is &ldquo;did anything need me?&rdquo;, not &ldquo;what have I already seen?&rdquo;</div>
+  </div>
+
+  <div style="position: absolute; right: 44px; top: 62px; width: 440px; background: #151E33; border: 1px solid #3E4D71; box-shadow: 0 20px 46px rgba(4,8,18,0.6); display: flex; flex-direction: column; overflow: hidden;">
+
+    <div style="padding: 14px 18px; border-bottom: 1px solid #2A3654; display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 14.5px; font-weight: 600; color: #E6EBF5;">Notifications</span>
+      <span class="m" style="margin-left: auto; font-size: 10.5px; color: #7C8AAB;">Mark all read</span>
+    </div>
+
+    <div style="padding: 12px 18px; border-bottom: 1px solid #2A3654; display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; border: 1px solid #2A3654;">
+        <span class="segon">All 6</span>
+        <span class="seg">Jobs 3</span>
+        <span class="seg">Approvals 2</span>
+        <span class="seg" style="border-right: none; color: #E6B061;">Alerts 1</span>
+      </div>
+    </div>
+
+    <div style="padding: 9px 18px; background: #121A2C; border-bottom: 1px solid #1A2338;">
+      <span class="lbl">Today</span>
+    </div>
+
+    <div class="it" style="background: rgba(101,70,23,0.14);">
+      <span class="m" style="font-size: 14px; color: #E6B061; line-height: 1.2; flex-shrink: 0; width: 16px; text-align: center;">&dagger;</span>
+      <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+        <span class="ittl">lta.gov.sg timed out three times in 40 minutes. Requeued for 06:00. No chunks lost.</span>
+        <span class="imeta" style="color: #E6B061;">Alert · fetch · 05:52</span>
+      </div>
+      <span class="act" style="color: #E6B061;">Fetch policy</span>
+    </div>
+
+    <div class="it">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0; margin-top: 1px;"><rect x="5" y="2.6" width="14" height="18.8" rx="2" stroke="#8FA0C0" stroke-width="1.6"></rect></svg>
+      <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+        <span class="ittl">Draft ready &mdash; Shade &times; elderly, SG</span>
+        <span class="imeta">Job · 4 sections · 34 citations · $1.62 · 06:48</span>
+      </div>
+      <span class="act">Open</span>
+    </div>
+
+    <div class="it">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="8.4" stroke="#8FA0C0" stroke-width="1.6"></circle></svg>
+      <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+        <span class="ittl">18 gazetteer terms are waiting for approval</span>
+        <span class="imeta">Approval · auto-harvested acronyms · 06:12</span>
+      </div>
+      <span class="act">Review</span>
+    </div>
+
+    <div style="padding: 9px 18px; background: #121A2C; border-bottom: 1px solid #1A2338; border-top: 1px solid #1A2338;">
+      <span class="lbl">Yesterday</span>
+    </div>
+
+    <div class="it">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0; margin-top: 1px;"><rect x="5" y="2.6" width="14" height="18.8" rx="2" stroke="#8FA0C0" stroke-width="1.6"></rect></svg>
+      <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+        <span class="ittl">Enrichment pass complete &mdash; 62 figures read, 4 skipped</span>
+        <span class="imeta">Job · VLM · 22:40</span>
+      </div>
+      <span class="act">Open</span>
+    </div>
+
+    <div class="it">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0; margin-top: 1px;"><path d="M6 3 H18 V21 L12 16.4 L6 21 Z" stroke="#8FA0C0" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+        <span class="ittl">6 seed sources proposed by diversity seeding</span>
+        <span class="imeta">Approval · 3 non-English · 21:15</span>
+      </div>
+      <span class="act">Review</span>
+    </div>
+
+    <div class="it" style="border-bottom: none;">
+      <span class="m" style="font-size: 14px; color: #E6B061; line-height: 1.2; flex-shrink: 0; width: 16px; text-align: center;">&dagger;</span>
+      <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+        <span class="ittl">Synthesis ran partial &mdash; 1,140 chunks carried into today</span>
+        <span class="imeta">Job · token ceiling reached · 06:14</span>
+      </div>
+      <span class="act">Run log</span>
+    </div>
+
+    <div style="padding: 12px 18px; border-top: 1px solid #2A3654; background: #121A2C;">
+      <span class="m" style="font-size: 10px; color: #7C8AAB;">Same items reach Telegram in the 07:00 digest.</span>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

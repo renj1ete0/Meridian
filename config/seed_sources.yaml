@@ -1,0 +1,24 @@
+# Cold-start sources (spec §15 phase 0 — target 15-25). This is deliberately
+# left as a template: the spec calls hand-seeding a "careful manual" task
+# worth an evening, since seed quality propagates through everything
+# downstream (§16, "cold-start seed quality"). Fill in specific report/article
+# URLs yourself rather than trusting a generated list — do that here, not by
+# asking an agent to invent URLs.
+#
+# domain_allowlist below can start from known institutional root domains;
+# add the specific documents you want ingested first under `sources`.
+
+domain_allowlist:
+  - lta.gov.sg
+  - ura.gov.sg
+  - data.gov.sg
+  - nparks.gov.sg
+  - arxiv.org
+  - openalex.org
+
+sources:
+  # - url: "<fill in>"
+  #   topic: walkability          # walkability | on-demand-bus | av-deployment
+  #   source_tier: government     # peer_reviewed | government | institutional | press | informal
+  #   note: "<why this is a good cold-start seed>"
+  []

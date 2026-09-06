@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB; }
+    .stat { display: flex; flex-direction: column; gap: 8px; flex-grow: 1; flex-basis: 0; }
+    .statn { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 27px; color: #E6EBF5; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .card { background: #151E33; border: 1px solid #2A3654; padding: 20px; display: flex; flex-direction: column; gap: 12px; flex-grow: 1; flex-basis: 0; }
+    .cardt { font-size: 16px; font-weight: 600; letter-spacing: -0.004em; color: #E6EBF5; }
+    .cardd { font-size: 12.5px; line-height: 1.55; color: #9BA8C4; text-wrap: pretty; }
+  </style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #0D1424; box-sizing: border-box;">
+
+  <svg viewBox="0 0 1440 900" width="1440" height="900" fill="none" style="position: absolute; inset: 0; display: block;">
+    <circle cx="720" cy="1230" r="700" stroke="#16233D" stroke-width="1.2"></circle>
+    <ellipse cx="720" cy="1230" rx="258" ry="700" stroke="#16233D" stroke-width="1.2"></ellipse>
+    <circle cx="720" cy="530" r="7" fill="#22314F"></circle>
+    <circle cx="253" cy="686" r="5" fill="#1E2B46"></circle>
+    <circle cx="1187" cy="686" r="5" fill="#1E2B46"></circle>
+    <path d="M720 530 L253 686" stroke="#16233D" stroke-width="1"></path>
+    <path d="M720 530 L1187 686" stroke="#16233D" stroke-width="1"></path>
+    <circle cx="188" cy="-190" r="420" stroke="#131F35" stroke-width="1.2"></circle>
+    <ellipse cx="188" cy="-190" rx="155" ry="420" stroke="#131F35" stroke-width="1.2"></ellipse>
+    <circle cx="188" cy="230" r="5" fill="#1B2740"></circle>
+  </svg>
+
+  <div style="position: absolute; left: 0; right: 0; top: 0; height: 54px; border-bottom: 1px solid #2A3654; background: rgba(21,30,51,0.90); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; gap: 20px; padding: 0 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <svg viewBox="0 0 100 100" width="22" height="22" fill="none" style="display: block;">
+        <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="3.6"></circle>
+        <ellipse cx="50" cy="50" rx="17" ry="38" stroke="#E6EBF5" stroke-width="3.6"></ellipse>
+        <circle cx="50" cy="88" r="5" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="50" r="6" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="12" r="7" fill="#49D0DA"></circle>
+      </svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.004em; color: #E6EBF5;">Meridian</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #2A3654;"></div>
+    <div style="display: flex; gap: 4px;">
+      <span style="font-size: 12.5px; color: #E6EBF5; background: #1E2942; padding: 6px 12px;">Explore</span>
+      <span style="font-size: 12.5px; color: #7C8AAB; padding: 6px 12px;">Admin</span>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+      <span class="m" style="display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #9BA8C4; border: 1px solid #2A3654; padding: 5px 10px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #49D0DA; display: block;"></span>queue 412 · fetch 96% · 07:14</span>
+      <div style="width: 1px; height: 20px; background: #2A3654;"></div>
+      <span style="position: relative; display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M7 10.6 a5 5 0 0 1 10 0 v4 l2 3 H5 l2 -3 z" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.9 20.6 a2.3 2.3 0 0 0 4.2 0" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="m" style="position: absolute; top: -2px; right: -4px; min-width: 15px; height: 15px; background: #49D0DA; color: #04222A; font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 3px;">3</span>
+      </span>
+      <span style="display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M3.4 8.6 H20.6 M3.4 15.4 H20.6" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round"></path><rect x="8" y="6.4" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect><rect x="13.8" y="13.2" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect></svg>
+      </span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 330px; width: 780px; top: 150px; display: flex; flex-direction: column; gap: 46px;">
+
+    <div style="display: flex; flex-direction: column; gap: 26px; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <svg viewBox="0 0 100 100" width="34" height="34" fill="none" style="display: block;">
+          <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="2.4"></circle>
+          <ellipse cx="50" cy="50" rx="14" ry="38" stroke="#E6EBF5" stroke-width="2.8"></ellipse>
+          <path d="M50 50 L81.1 71.8" stroke="#E6EBF5" stroke-width="2.4" stroke-linecap="round"></path>
+          <circle cx="81.1" cy="71.8" r="4" fill="#E6EBF5"></circle>
+          <circle cx="50" cy="88" r="4.2" fill="#E6EBF5"></circle>
+          <circle cx="50" cy="50" r="5" fill="#E6EBF5"></circle>
+          <circle cx="50" cy="12" r="6" fill="#49D0DA"></circle>
+        </svg>
+        <div style="width: 1px; height: 24px; background: #3E4D71;"></div>
+        <div style="font-size: 26px; font-weight: 500; letter-spacing: -0.006em; color: #E6EBF5; line-height: 1;">Meridian</div>
+      </div>
+
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 13px; background: #151E33; border: 1px solid #3E4D71; padding: 16px 18px;">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" style="flex-shrink: 0;"><circle cx="7" cy="7" r="4.6" stroke="#7C8AAB" stroke-width="1.4"></circle><path d="M10.4 10.4 L14 14" stroke="#7C8AAB" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          <span style="font-size: 15px; color: #7C8AAB;">Search concepts, places, findings, sources</span>
+          <span class="m" style="margin-left: auto; font-size: 9.5px; color: #7C8AAB; border: 1px solid #2A3654; padding: 3px 6px;">hybrid</span>
+        </div>
+        <div class="m" style="display: flex; justify-content: space-between; font-size: 10.5px; color: #7C8AAB;">
+          <span>Filters apply before the vector search.</span>
+          <span>&#8984;K from anywhere</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; border-top: 1px solid #202B45; border-bottom: 1px solid #202B45; padding: 20px 0;">
+      <div class="stat">
+        <span class="statn">41,208</span>
+        <span class="lbl">Documents</span>
+      </div>
+      <div style="width: 1px; background: #202B45;"></div>
+      <div class="stat" style="padding-left: 24px;">
+        <span class="statn">17,402</span>
+        <span class="lbl">Nodes</span>
+      </div>
+      <div style="width: 1px; background: #202B45;"></div>
+      <div class="stat" style="padding-left: 24px;">
+        <span class="statn">63,915</span>
+        <span class="lbl">Edges</span>
+      </div>
+      <div style="width: 1px; background: #202B45;"></div>
+      <div class="stat" style="padding-left: 24px;">
+        <span class="statn" style="color: #E6B061;">214<span style="font-size: 17px; vertical-align: super; line-height: 0;">&dagger;</span></span>
+        <span class="lbl" style="color: #E6B061;">Contested</span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 20px;">
+
+      <div class="card">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="display: block;">
+          <circle cx="10.5" cy="10.5" r="6.6" stroke="#49D0DA" stroke-width="1.6"></circle>
+          <path d="M15.4 15.4 L20.5 20.5" stroke="#49D0DA" stroke-width="1.6" stroke-linecap="round"></path>
+        </svg>
+        <div class="cardt">Search</div>
+        <div class="cardd">Hybrid retrieval over chunks and nodes, fused by reciprocal rank. Start here when you know what you are looking for.</div>
+      </div>
+
+      <div class="card">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="display: block;">
+          <rect x="3" y="3" width="18" height="18" stroke="#49D0DA" stroke-width="1.6"></rect>
+          <path d="M9 3 V21 M15 3 V21 M3 9 H21 M3 15 H21" stroke="#49D0DA" stroke-width="1.2"></path>
+          <rect x="15" y="9" width="6" height="6" fill="#49D0DA" opacity="0.35"></rect>
+        </svg>
+        <div class="cardt">Coverage</div>
+        <div class="cardd">Topic against dimension, thin cells first. This is the view that makes absence visible.</div>
+        <div class="m" style="margin-top: auto; font-size: 10.5px; color: #7C8AAB;">9 thin cells · 3 stale</div>
+      </div>
+
+      <div class="card">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="display: block;">
+          <path d="M9 3.5 A 9 9 0 0 0 9 20.5" stroke="#E6B061" stroke-width="1.6" stroke-linecap="round"></path>
+          <path d="M15 3.5 A 9 9 0 0 1 15 20.5" stroke="#E6B061" stroke-width="1.6" stroke-linecap="round"></path>
+          <circle cx="12" cy="12" r="2.2" fill="#E6B061"></circle>
+        </svg>
+        <div class="cardt">Contested<span class="m" style="color: #E6B061; font-size: 12px; vertical-align: super; line-height: 0;">&dagger;</span></div>
+        <div class="cardd">214 pairs where sources disagree. Both edges are kept; neither is resolved.</div>
+        <div class="m" style="margin-top: auto; font-size: 10.5px; color: #E6B061;">31 new this week</div>
+      </div>
+
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div class="lbl">Where you were</div>
+        <span class="m" style="font-size: 10.5px; color: #49D0DA;">All saved views &rarr;</span>
+      </div>
+      <div class="m" style="font-size: 11.5px; line-height: 1.5; color: #9BA8C4; font-variant-numeric: tabular-nums;">Since you were last here, 3 days ago &mdash; <span style="color: #E6EBF5;">+1,204</span> documents &middot; <span style="color: #E6EBF5;">+318</span> edges &middot; <span style="color: #E6B061;">7</span> newly contested<span style="font-size: 0.72em; vertical-align: super; line-height: 0; color: #E6B061;">&dagger;</span></div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 14px;">
+          <span style="font-size: 13.5px; color: #C3CCE0; flex-grow: 1;">Shade &times; elderly, SG</span>
+          <span class="m" style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #7C8AAB;">Saved view</span>
+          <span class="m" style="font-size: 10.5px; color: #7C8AAB; width: 76px; text-align: right;">3 days ago</span>
+        </div>
+        <div style="height: 1px; background: #1A2338;"></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;">
+          <span style="font-size: 13.5px; color: #C3CCE0; flex-grow: 1;">ODD vs kerb geometry</span>
+          <span class="m" style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #7C8AAB;">Saved view</span>
+          <span class="m" style="font-size: 10.5px; color: #7C8AAB; width: 76px; text-align: right;">6 days ago</span>
+        </div>
+        <div style="height: 1px; background: #1A2338;"></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;">
+          <span style="font-size: 13.5px; color: #C3CCE0; flex-grow: 1;">Silver Zone</span>
+          <span class="m" style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #7C8AAB;">Node</span>
+          <span class="m" style="font-size: 10.5px; color: #7C8AAB; width: 76px; text-align: right;">Yesterday</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# Agent registry defaults, seeded into the `agents` table at first boot
+# (spec §11.3). quality_tier is ordinal (1=local small ... 4=hosted frontier)
+# and distinct from cost_tier (spec §11.12). Fill in real endpoints/models
+# before first synthesis run; disabled rows are safe placeholders.
+
+agents:
+  - agent_id: hosted-frontier
+    provider: anthropic
+    model: "<fill in exact model string>"
+    task_types: [relation_extraction, gap_analysis, analogical_expansion, drafting]
+    token_scope: read_write
+    cost_tier: high
+    quality_tier: 4
+    max_context: 200000
+    enabled: false
+    fallback_agent_id: null
+    endpoint: null
+    health_url: null
+    availability: on_demand
+    wake_mac: null
+
+  - agent_id: hosted-mid
+    provider: anthropic
+    model: "<fill in exact model string>"
+    task_types: [tag_attributes]
+    token_scope: read_write
+    cost_tier: medium
+    quality_tier: 3
+    max_context: 200000
+    enabled: false
+    fallback_agent_id: hosted-frontier
+    endpoint: null
+    health_url: null
+    availability: on_demand
+    wake_mac: null
+
+  - agent_id: local-llamacpp
+    provider: openai_compatible
+    model: "<fill in — dedicated Meridian process, not the interactive one>"
+    task_types: [tagging, translation, triage, extraction_fallback]
+    token_scope: read_write
+    cost_tier: free
+    quality_tier: 2
+    max_context: null
+    enabled: false
+    fallback_agent_id: hosted-mid
+    endpoint: "${LOCAL_LLM_URL}"
+    health_url: "${LOCAL_LLM_HEALTH_URL}"
+    availability: opportunistic
+    wake_mac: "${LOCAL_LLM_MAC}"

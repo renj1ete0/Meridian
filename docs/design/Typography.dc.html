@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #7C8AAB; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .note { font-size: 12.5px; line-height: 1.6; color: #9BA8C4; text-wrap: pretty; }
+    .rule { height: 1px; background: #202B45; }
+    .tr { display: flex; align-items: baseline; gap: 12px; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #9BA8C4; }
+    .tr > span:nth-child(1) { width: 96px; flex-shrink: 0; color: #E6EBF5; }
+    .tr > span:nth-child(2) { width: 58px; flex-shrink: 0; }
+    .tr > span:nth-child(3) { width: 44px; flex-shrink: 0; }
+    .tr > span:nth-child(4) { width: 40px; flex-shrink: 0; }
+    .tr > span:nth-child(5) { width: 44px; flex-shrink: 0; }
+  </style>
+</helmet>
+<div style="width: 1080px; height: 920px; overflow: hidden; background: #0D1424; box-sizing: border-box; padding: 44px 48px; display: flex; flex-direction: column; gap: 24px;">
+
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <div class="cap">Typography</div>
+    <div class="cap">09</div>
+  </div>
+
+  <div style="display: flex; gap: 40px; align-items: flex-start;">
+    <div style="width: 600px; display: flex; flex-direction: column; gap: 18px;">
+      <div style="display: flex; align-items: baseline; gap: 14px;">
+        <div style="font-size: 17px; font-weight: 600; color: #E6EBF5;">Archivo</div>
+        <div class="cap">Display &amp; text · Omnibus-Type · 300&ndash;700</div>
+      </div>
+      <div style="font-size: 62px; font-weight: 500; letter-spacing: -0.012em; color: #E6EBF5; line-height: 1;">Meridian</div>
+      <div style="display: flex; gap: 26px; align-items: baseline; flex-wrap: wrap;">
+        <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 21px; font-weight: 300; color: #E6EBF5;">Zenith</span><span class="cap">300</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 21px; font-weight: 400; color: #E6EBF5;">Zenith</span><span class="cap">400</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 21px; font-weight: 500; color: #E6EBF5;">Zenith</span><span class="cap">500</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 21px; font-weight: 600; color: #E6EBF5;">Zenith</span><span class="cap">600</span></div>
+        <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 21px; font-weight: 700; color: #E6EBF5;">Zenith</span><span class="cap">700</span></div>
+      </div>
+      <div class="rule"></div>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-size: 29px; font-weight: 600; letter-spacing: -0.008em; color: #E6EBF5; line-height: 1.15;">Contested claims, ranked by edge weight</div>
+        <div style="font-size: 19px; font-weight: 600; letter-spacing: -0.004em; color: #E6EBF5;">Coverage by topic &times; dimension</div>
+        <div style="font-size: 14.5px; font-weight: 400; line-height: 1.62; color: #C3CCE0; max-width: 62ch;">Every node carries the chunk that justifies it. Where two chunks disagree, both edges are kept and the pair is marked contested &mdash; the graph does not resolve the conflict on your behalf.</div>
+      </div>
+    </div>
+
+    <div style="width: 1px; align-self: stretch; background: #202B45;"></div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; align-items: baseline; gap: 14px;">
+        <div style="font-size: 17px; font-weight: 600; color: #E6EBF5;">IBM Plex Mono</div>
+      </div>
+      <div class="cap">Data, labels, provenance · 300&ndash;600 + italic</div>
+      <div class="m" style="font-size: 24px; color: #E6EBF5; letter-spacing: -0.01em;">0123456789</div>
+      <div class="m" style="font-size: 13px; color: #C3CCE0; line-height: 1.8;">lta.gov.sg&nbsp;&middot;&nbsp;government<br>2024-11-06&nbsp;&middot;&nbsp;chunk&nbsp;#8f21c4<br>confidence&nbsp;0.62&nbsp;&plusmn;&nbsp;0.08</div>
+      <div class="m" style="font-size: 11px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB;">Supporting chunks</div>
+      <div class="m" style="font-size: 12.5px; font-style: italic; color: #9BA8C4; line-height: 1.65;">&ldquo;may reduce dwell time&rdquo;<br>&mdash; hedged, not asserted</div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div style="display: flex; gap: 40px; align-items: flex-start;">
+    <div style="width: 560px; display: flex; flex-direction: column; gap: 12px;">
+      <div class="cap">Scale</div>
+      <div style="display: flex; flex-direction: column; gap: 9px; margin-top: 2px;">
+        <div class="tr" style="color: #7C8AAB; padding-bottom: 6px; border-bottom: 1px solid #2A3654;"><span style="color: #7C8AAB;">Role</span><span>Family</span><span>Size</span><span>Wt</span><span>LH</span><span>Tracking</span></div>
+        <div class="tr"><span>wordmark</span><span>Archivo</span><span>&mdash;</span><span>500</span><span>1.0</span><span>&minus;0.006em</span></div>
+        <div class="tr"><span>display</span><span>Archivo</span><span>29</span><span>600</span><span>1.15</span><span>&minus;0.008em</span></div>
+        <div class="tr"><span>heading</span><span>Archivo</span><span>19</span><span>600</span><span>1.3</span><span>&minus;0.004em</span></div>
+        <div class="tr"><span>subhead</span><span>Archivo</span><span>15</span><span>600</span><span>1.4</span><span>0</span></div>
+        <div class="tr"><span>body</span><span>Archivo</span><span>14.5</span><span>400</span><span>1.62</span><span>0</span></div>
+        <div class="tr"><span>small</span><span>Archivo</span><span>12.5</span><span>400</span><span>1.55</span><span>0</span></div>
+        <div class="tr"><span>data</span><span>Plex Mono</span><span>12.5</span><span>400</span><span>1.7</span><span>0</span></div>
+        <div class="tr"><span>label</span><span>Plex Mono</span><span>10</span><span>500</span><span>1.4</span><span>0.15em</span></div>
+      </div>
+    </div>
+
+    <div style="width: 1px; align-self: stretch; background: #202B45;"></div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px;">
+      <div class="cap">Why this pair</div>
+      <div class="note">Archivo was drawn for signage and small-size print &mdash; open apertures, a tall x-height, weight that holds at 12px. It is a wayfinding face, which is the right register for a system about reference lines and bearings. It replaces Space Grotesk here: same technical family, without the 2021 startup accent.</div>
+      <div class="note">IBM Plex Mono was drawn for engineering documentation. It carries humanist detail into a monospace, so a column of confidence values and source domains stays warm rather than clinical &mdash; and its true italic gives hedged quotations somewhere to live.</div>
+      <div class="m" style="font-size: 10.5px; color: #7C8AAB; line-height: 1.7;">fonts.googleapis.com &middot; both families<br>fallbacks: Helvetica&nbsp;Neue / Arial, ui-monospace / Menlo</div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div style="display: flex; gap: 40px; align-items: flex-start;">
+    <div style="width: 380px; background: #151E33; border: 1px solid #2A3654; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 19px; font-weight: 600; letter-spacing: -0.004em; color: #E6EBF5; line-height: 1.2;">Silver Zone</div>
+          <div class="m" style="font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB;">intervention &middot; walkability</div>
+        </div>
+        <div class="m" style="flex-shrink: 0; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #E6B061; border: 1px solid #654617; background: rgba(101,70,23,0.35); padding: 4px 7px;">&dagger;&nbsp; Contested</div>
+      </div>
+      <div style="font-size: 13.5px; line-height: 1.6; color: #C3CCE0;">Area-wide traffic calming around neighbourhoods with high elderly pedestrian counts. Speed limit reduction, kerb extensions, longer crossing times.</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="m" style="font-size: 10px; color: #9BA8C4; background: #1E2942; border: 1px solid #2A3654; padding: 4px 8px;">density 0.81</span>
+        <span class="m" style="font-size: 10px; color: #9BA8C4; background: #1E2942; border: 1px solid #2A3654; padding: 4px 8px;">governance 0.74</span>
+        <span class="m" style="font-size: 10px; color: #9BA8C4; background: #1E2942; border: 1px solid #2A3654; padding: 4px 8px;">shade 0.29</span>
+      </div>
+      <div style="height: 1px; background: #2A3654;"></div>
+      <div class="m" style="font-size: 9.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB;">Provenance</div>
+      <div class="m" style="font-size: 11px; line-height: 1.7; color: #9BA8C4;">lta.gov.sg &middot; <span style="color: #49D0DA;">government</span> &middot; 2023-08<br>journals.sagepub.com &middot; <span style="color: #49D0DA;">peer&nbsp;reviewed</span> &middot; 2021-04</div>
+    </div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px; padding-top: 4px;">
+      <div class="cap">In use</div>
+      <div class="note" style="max-width: 52ch;">The split is strict: Archivo carries anything written for a reader, Plex Mono carries anything the system measured. A source domain, a confidence value, a tier, a timestamp, a chunk id &mdash; all mono, so provenance is recognisable before it is read.</div>
+      <div class="note" style="max-width: 52ch;">Uppercase is reserved for mono labels at 10px with 0.15em tracking. Archivo is never set in caps.</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

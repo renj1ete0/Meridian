@@ -1,0 +1,214 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/design/assets/meridian-lockup-dark-transparent.png">
+    <img src="docs/design/assets/meridian-lockup-light-transparent.png" alt="Meridian" width="420">
+  </picture>
+</p>
+
+<p align="center"><em>A line to measure everything else against.</em></p>
+
+<p align="center">
+  <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
+  <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-0D6F7C">
+  <img alt="Status: pre-build" src="https://img.shields.io/badge/status-pre--build-805A28">
+</p>
+
+---
+
+**Meridian is a self-hosted research system that reads the web so you can read the graph.**
+
+It continuously crawls public sources on the topics you care about, extracts entities
+and relationships into a knowledge graph, and records where every single claim came
+from. You explore that graph, annotate it, and ask questions of it — and it tells you
+not just what it knows, but where the evidence is thin, stale, or contradictory.
+
+> **Status: pre-build.** The architecture and design system are complete; application
+> code has not been written yet. See the [roadmap](docs/roadmap.md).
+
+## Why it exists
+
+Reading widely on a complex topic is slow, and the slowness isn't in the reading — it's
+in the *finding*, the *relating*, and the *forgetting*. Meridian automates only those parts.
+
+- **Primary goal:** learn a domain deeply, and see how its topics interconnect.
+- **Secondary goal:** the accumulated graph eventually supports written output.
+
+The organising principle: **autonomous acquisition, deliberately non-autonomous
+consumption.** Everything mechanical — crawling, extraction, tagging, coverage scoring,
+gap detection — runs unattended. The reading is not automated, because the reading *is*
+the learning.
+
+Three things make it different from a bookmarking tool or a RAG chatbot:
+
+1. **Provenance on everything.** Every node, edge, and tag records the source chunk that
+   justifies it. Nothing is assertable without a citation you can follow back to a file.
+2. **Contradictions are signal, not error.** When sources disagree, both edges are kept
+   and the pair is marked contested. Contested nodes are the highest-value nodes — they
+   locate live debates.
+3. **Absence is visible.** Coverage scoring shows topic × dimension cells where the
+   evidence is thin or ageing, which is what drives the system's next crawl.
+
+## How it works
+
+Three decoupled planes sharing one Postgres database. No plane blocks another.
+
+```
+  INGESTION  ── 24/7, no LLM ──┐
+  crawl · extract · embed      │
+  novelty gate · frontier      ▼
+                        ┌──────────────┐
+                        │   POSTGRES   │        REASONING ── ~1h/day
+                        │ queue·graph  │◄────── extract relations · tag
+                        │   vectors    │        coverage · gap analysis
+                        └──────┬───────┘
+                               ▼
+                          INTERFACE
+                 search · graph · steering · export
+```
+
+The ingestion loop never calls a language model, so it keeps working whether or not any
+model is reachable. Reasoning happens in one batched pass, which sees a whole day of
+material at once and therefore produces better gap analysis than trickled inference.
+
+| Layer | Choice |
+|---|---|
+| Queue, metadata, graph | Postgres + Apache AGE |
+| Vectors | pgvector (HNSW) |
+| Embeddings | bge-m3 (multilingual) |
+| Entity extraction | spaCy + curated gazetteer |
+| Backend | FastAPI — serves UI and MCP |
+| Frontend | Sigma.js v3 + graphology |
+| Search | SearXNG, self-hosted, with a paid API fallback |
+| Fetch and extract | Crawl4AI (version-pinned) |
+| Document conversion | MarkItDown |
+| Reasoning | Any frontier model over MCP, or a local OpenAI-compatible endpoint |
+| Remote access | Cloudflare Tunnel — the only exposed service |
+
+Rationale for each choice, and the alternatives rejected, are in the
+[architecture spec](docs/spec/autonomous-research-system-spec.md) §4.
+
+## Minimum requirements
+
+Meridian is designed to run unattended on one modest always-on machine. It is not
+picky about which one.
+
+| | Minimum | Recommended |
+|---|---|---|
+| OS | 64-bit Linux (x86_64 or arm64) | same |
+| CPU | 4 cores | 6+ cores |
+| Memory | 8 GB | 16 GB or more |
+| Storage | 100 GB SSD | 500 GB+ NVMe |
+| Runtime | Docker + Compose v2 | same |
+| Network | Outbound HTTPS | + Cloudflare Tunnel for remote access |
+
+Storage is the figure that grows: extracted text, embeddings, and the graph together
+stay in the low single-digit gigabytes for a 50k-document corpus, but retained raw PDFs
+and HTML can reach 50–150 GB. Retention is tiered and configurable.
+
+**Optional:** a machine on your network running an OpenAI-compatible endpoint (llama.cpp,
+Ollama, vLLM) for local inference, and/or an API key for a hosted model. Meridian routes
+work between them by task type and cost.
+
+## Getting started
+
+```bash
+git clone <this-repo> && cd meridian
+cp .env.example .env.dev                          # fill in secrets — see comments inside
+
+docker compose -f docker-compose.dev.yml up -d    # postgres, searxng, crawl4ai
+make migrate                                      # schema
+make seed                                         # config/*.yaml → database, once
+```
+
+Application services run natively during development for fast iteration:
+
+```bash
+uv run uvicorn api.main:app --reload --port 8000  # API + MCP
+uv run python -m worker.main                      # ingestion loop
+cd web && npm run dev                             # UI on :5173
+```
+
+Production runs the whole stack in containers behind `cloudflared`
+(`docker compose up -d`). Full sequence: [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
+
+> Nothing under `services/` or `packages/` is implemented yet, so today these commands
+> bring up infrastructure only.
+
+**Configuration lives in the database, not in files.** The YAML in `config/` seeds topic
+weights, the attribute schema, fetch policy, the agent registry, and the gazetteer
+exactly once at first boot. After that, change things in the Admin UI or over MCP —
+editing the files has no effect.
+
+## Repository layout
+
+```
+config/       first-boot seed values (YAML → DB, then the DB is authoritative)
+packages/     meridian_core — shared models and schemas, imported by every service
+services/     worker (ingestion) · orchestrator (synthesis) · api (Explore, Admin, MCP)
+web/          Explore and Admin frontend
+migrations/   alembic
+docs/         specs, roadmap, design system and brand assets
+```
+
+## Documentation
+
+| Document | What's in it |
+|---|---|
+| [Architecture spec](docs/spec/autonomous-research-system-spec.md) | The full design: data model, the two loops, agent integration, interface, evaluation. The "why." |
+| [Project scaffold](docs/spec/meridian-project-scaffold.md) | Directory layout, container topology, database roles, build and deploy. |
+| [Roadmap](docs/roadmap.md) | Build phases and their acceptance checkpoints. |
+| [TASKS.md](TASKS.md) | The live build list — what's done, what's next, broken into single-sitting tasks. |
+| [Design system](docs/design/design-system.md) | Mark geometry, colour tokens, typography, voice, interaction rules. |
+| [AGENTS.md](AGENTS.md) | Conventions and invariants for anyone writing code here, human or agent. |
+| [CHANGELOG.md](CHANGELOG.md) | Version history. |
+
+## FAQ
+
+**Can I run it today?**
+No. The design is finished and the scaffold is in place, but application code hasn't been
+written. The [roadmap](docs/roadmap.md) tracks progress; phase 2 is the honest go/no-go.
+
+**How is this different from Zotero, Obsidian, or a RAG chatbot?**
+Those store or retrieve documents. Meridian builds a *typed graph of claims* with
+provenance, tracks where sources contradict each other, and measures its own coverage so
+it can tell you what it doesn't know. Retrieval is a feature of it, not the point of it.
+
+**Does it need a language model running constantly?**
+No. Ingestion runs 24/7 with no model at all. Reasoning is a batched pass of roughly an
+hour a day, and if no model is reachable it simply defers — crawling continues regardless.
+
+**Is my data sent anywhere?**
+Only what you configure. Crawling reads public sources. During synthesis, source chunks
+go to whichever model you point it at — which can be a local one on your own network, in
+which case nothing leaves the building.
+
+**What does it cost to run?**
+Hardware you already own, plus optional model API usage. Token budgets, per-run seed caps,
+and a monthly ceiling are enforced server-side, because the seed→crawl→synthesis loop
+compounds if left uncapped.
+
+**Can I use it for my own topics?**
+Yes. Topics are configuration, not code — the shipped set (walkability, on-demand buses,
+AV deployment) is just the author's. Topics can be added, weighted, paused, and archived
+at runtime.
+
+**Why "Meridian"?**
+A meridian is the reference line a position is measured against — and the sun's zenith,
+its highest point. Both senses fit: a fixed line for relating scattered things, and the
+clarity you're aiming at.
+
+## Versioning
+
+`MAJOR.MINOR.PATCH`, bumped on every change to application code. Documentation and design
+changes don't require a bump. See [CHANGELOG.md](CHANGELOG.md) for history and
+[AGENTS.md](AGENTS.md) for the rules on which number moves.
+
+## Conduct
+
+Public sources only. The crawler identifies itself honestly, respects `robots.txt` and
+per-domain rate limits, and never routes around paywalls. Retained raw files are for
+personal research — cite them, don't redistribute them.
+
+## License
+
+[MIT](LICENSE) © 2026 [renj1ete0](https://github.com/renj1ete0)

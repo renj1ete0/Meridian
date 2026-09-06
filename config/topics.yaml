@@ -1,0 +1,25 @@
+# Topic labels and initial steering weights. Seeded into `topic_config` at
+# first boot; edit weights afterwards through the Admin UI or MCP, not here
+# (spec §10, §10.1). Weights should normalise to 1.0.
+
+topics:
+  - topic: walkability
+    weight: 0.40
+    floor: 0.10      # minimum share so nothing fully stalls (spec §10)
+    ceiling: 0.60
+    pinned: false
+    status: active
+
+  - topic: on-demand-bus
+    weight: 0.35
+    floor: 0.10
+    ceiling: 0.60
+    pinned: false
+    status: active
+
+  - topic: av-deployment
+    weight: 0.25
+    floor: 0.10
+    ceiling: 0.60
+    pinned: false
+    status: active

@@ -1,0 +1,28 @@
+# Minimal SearXNG settings for Meridian's self-hosted metasearch backend
+# (spec §6.4). Mounted read-only into the searxng container. Extend the
+# engine list as engines break or get rate-limited — treat that as routine,
+# per the spec, not a reason to remove the fallback API path.
+
+use_default_settings: true
+
+general:
+  instance_name: "meridian-searxng"
+
+search:
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "changeme-generate-a-real-secret-before-first-boot"
+  limiter: false        # internal network only; no public rate-limit needed
+
+engines:
+  - name: google scholar
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: arxiv
+    disabled: false

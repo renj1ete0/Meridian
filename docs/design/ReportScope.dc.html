@@ -1,0 +1,206 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB; }
+    .sec { font-size: 16px; font-weight: 600; letter-spacing: -0.004em; color: #E6EBF5; }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #7C8AAB; border: 1px solid #2A3654; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .card { background: #151E33; border: 1px solid #2A3654; }
+    .th { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 8.5px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB; }
+    .tdm { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #C3CCE0; font-variant-numeric: tabular-nums; }
+    .seg { font-size: 12.5px; color: #7C8AAB; padding: 8px 14px; border-right: 1px solid #2A3654; }
+    .segon { font-size: 12.5px; color: #E6EBF5; background: #1E2942; padding: 8px 14px; border-right: 1px solid #2A3654; }
+    .btn { font-size: 12.5px; color: #C3CCE0; background: #1E2942; border: 1px solid #3E4D71; padding: 9px 14px; }
+    .btnp { font-size: 12.5px; color: #04222A; background: #49D0DA; border: 1px solid #49D0DA; padding: 9px 14px; font-weight: 500; }
+    .dag { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 0.72em; vertical-align: super; line-height: 0; color: #E6B061; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 1060px; overflow: hidden; background: #0D1424; box-sizing: border-box; display: flex; flex-direction: column;">
+
+  <div style="height: 54px; flex-shrink: 0; border-bottom: 1px solid #2A3654; background: rgba(21,30,51,0.90); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; gap: 20px; padding: 0 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <svg viewBox="0 0 100 100" width="22" height="22" fill="none" style="display: block;">
+        <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="3.6"></circle>
+        <ellipse cx="50" cy="50" rx="17" ry="38" stroke="#E6EBF5" stroke-width="3.6"></ellipse>
+        <circle cx="50" cy="88" r="5" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="50" r="6" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="12" r="7" fill="#49D0DA"></circle>
+      </svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.004em; color: #E6EBF5;">Meridian</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #2A3654;"></div>
+    <span style="font-size: 12.5px; color: #C3CCE0;">Explore</span>
+    <span class="m" style="font-size: 10.5px; color: #48587A;">&rsaquo;</span>
+    <span style="font-size: 12.5px; color: #E6EBF5;">New draft</span>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+      <span class="m" style="display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #9BA8C4; border: 1px solid #2A3654; padding: 5px 10px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #49D0DA; display: block;"></span>queue 412 · fetch 96% · 07:14</span>
+      <div style="width: 1px; height: 20px; background: #2A3654;"></div>
+      <span style="position: relative; display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M7 10.6 a5 5 0 0 1 10 0 v4 l2 3 H5 l2 -3 z" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.9 20.6 a2.3 2.3 0 0 0 4.2 0" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="m" style="position: absolute; top: -2px; right: -4px; min-width: 15px; height: 15px; background: #49D0DA; color: #04222A; font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 3px;">3</span>
+      </span>
+      <span style="display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M3.4 8.6 H20.6 M3.4 15.4 H20.6" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round"></path><rect x="8" y="6.4" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect><rect x="13.8" y="13.2" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect></svg>
+      </span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; justify-content: center; padding: 34px 0 0; min-height: 0;">
+    <div style="width: 900px; display: flex; flex-direction: column; gap: 26px;">
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; color: #E6EBF5;">New draft</div>
+        <div style="font-size: 13.5px; line-height: 1.55; color: #9BA8C4; max-width: 76ch;">Drafting reads the scope you give it and nothing else. If the evidence under that scope is thin, the pre-flight says so before you spend anything &mdash; and the draft marks its own gaps if you proceed.</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span class="num">1</span><span class="sec">Scope</span>
+          <span class="m" style="margin-left: auto; font-size: 10.5px; color: #7C8AAB;">from something that already exists</span>
+        </div>
+        <div style="display: flex; border: 1px solid #2A3654; align-self: flex-start;">
+          <span class="segon">Saved view</span>
+          <span class="seg">Coverage cell</span>
+          <span class="seg">Contested list</span>
+          <span class="seg" style="border-right: none;">Path result</span>
+        </div>
+        <div class="card" style="padding: 16px 18px; display: flex; align-items: center; gap: 16px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0;"><path d="M6 3 H18 V21 L12 16.4 L6 21 Z" stroke="#49D0DA" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 5px; flex-grow: 1;">
+            <span style="font-size: 14px; font-weight: 600; color: #E6EBF5;">Shade &times; elderly, SG</span>
+            <span class="m" style="font-size: 10.5px; color: #7C8AAB;">412 nodes · 1,180 chunks · 5 dimensions · walkability</span>
+          </div>
+          <span class="m" style="font-size: 11px; color: #49D0DA; flex-shrink: 0;">Change</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span class="lbl">Question</span>
+          <div class="card" style="padding: 14px 16px; font-size: 13.5px; line-height: 1.6; color: #E6EBF5; border-color: #3E4D71;">Does shade provision change how far elderly residents will walk to a transit stop, and is the evidence strong enough to carry a recommendation for Singapore?</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #202B45;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span class="num">2</span><span class="sec">Coverage pre-flight</span>
+          <span class="m" style="margin-left: auto; font-size: 10.5px; color: #7C8AAB;">what is actually under the scope</span>
+        </div>
+
+        <div class="card">
+          <div style="display: flex; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #2A3654;">
+            <span class="th" style="flex-grow: 1;">Dimension</span>
+            <span class="th" style="width: 62px; text-align: right;">Sources</span>
+            <span class="th" style="width: 68px; text-align: right;">Tagged</span>
+            <span class="th" style="width: 188px;">Tier spread</span>
+            <span class="th" style="width: 74px; text-align: right;">Newest</span>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #1A2338; align-items: baseline; background: rgba(101,70,23,0.14);">
+            <span style="font-size: 12.5px; color: #E6B061; flex-grow: 1;">shade_provision<span class="dag">&dagger;</span></span>
+            <span class="tdm" style="width: 62px; text-align: right; color: #E6B061;">6</span>
+            <span class="tdm" style="width: 68px; text-align: right; color: #E6B061;">41%</span>
+            <span class="tdm" style="width: 188px; color: #E6B061;">peer 1 · gov 2 · press 3</span>
+            <span class="tdm" style="width: 74px; text-align: right; color: #C3CCE0;">2024-02</span>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #1A2338; align-items: baseline;">
+            <span style="font-size: 12.5px; color: #C3CCE0; flex-grow: 1;">sidewalk_width</span>
+            <span class="tdm" style="width: 62px; text-align: right;">23</span>
+            <span class="tdm" style="width: 68px; text-align: right;">88%</span>
+            <span class="tdm" style="width: 188px; color: #9BA8C4;">peer 9 · gov 8 · inst 4 · press 2</span>
+            <span class="tdm" style="width: 74px; text-align: right;">2026-05</span>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #1A2338; align-items: baseline;">
+            <span style="font-size: 12.5px; color: #C3CCE0; flex-grow: 1;">density</span>
+            <span class="tdm" style="width: 62px; text-align: right;">31</span>
+            <span class="tdm" style="width: 68px; text-align: right;">94%</span>
+            <span class="tdm" style="width: 188px; color: #9BA8C4;">peer 14 · gov 11 · inst 6</span>
+            <span class="tdm" style="width: 74px; text-align: right;">2026-07</span>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #1A2338; align-items: baseline;">
+            <span style="font-size: 12.5px; color: #C3CCE0; flex-grow: 1;">governance_capacity</span>
+            <span class="tdm" style="width: 62px; text-align: right;">18</span>
+            <span class="tdm" style="width: 68px; text-align: right;">76%</span>
+            <span class="tdm" style="width: 188px; color: #9BA8C4;">gov 12 · inst 4 · press 2</span>
+            <span class="tdm" style="width: 74px; text-align: right;">2026-03</span>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 10px 18px; align-items: baseline; background: rgba(101,70,23,0.14);">
+            <span style="font-size: 12.5px; color: #E6B061; flex-grow: 1;">climate<span class="dag">&dagger;</span></span>
+            <span class="tdm" style="width: 62px; text-align: right; color: #C3CCE0;">11</span>
+            <span class="tdm" style="width: 68px; text-align: right; color: #C3CCE0;">82%</span>
+            <span class="tdm" style="width: 188px; color: #9BA8C4;">peer 7 · gov 3 · inst 1</span>
+            <span class="tdm" style="width: 74px; text-align: right; color: #E6B061;">2018-09</span>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #654617; background: rgba(101,70,23,0.20); padding: 14px 18px; display: flex; gap: 14px; align-items: flex-start;">
+          <span class="m" style="font-size: 17px; color: #E6B061; line-height: 1; flex-shrink: 0; padding-top: 1px;">&dagger;</span>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+            <span style="font-size: 13.5px; font-weight: 600; color: #E6B061;">Two of five dimensions will not carry a recommendation.</span>
+            <span style="font-size: 13px; line-height: 1.6; color: #C3CCE0;">shade_provision rests on one peer-reviewed source and is 41% tagged. climate has nothing newer than 2018. You can draft anyway &mdash; the output marks both, and says so in its own words rather than writing around them.</span>
+          </div>
+          <span class="btn" style="flex-shrink: 0; padding: 7px 12px;">Widen scope</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #202B45;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; padding-bottom: 30px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span class="num">3</span><span class="sec">Estimate</span>
+        </div>
+        <div style="display: flex; gap: 20px; align-items: stretch;">
+          <div class="card" style="padding: 16px 18px; display: flex; gap: 34px; flex-grow: 1;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span class="lbl">Chunks read</span>
+              <span class="m" style="font-size: 18px; color: #E6EBF5; font-variant-numeric: tabular-nums;">1,180</span>
+            </div>
+            <div style="width: 1px; background: #202B45;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span class="lbl">Tokens</span>
+              <span class="m" style="font-size: 18px; color: #E6EBF5; font-variant-numeric: tabular-nums;">~412k</span>
+            </div>
+            <div style="width: 1px; background: #202B45;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span class="lbl">Cost</span>
+              <span class="m" style="font-size: 18px; color: #E6EBF5; font-variant-numeric: tabular-nums;">$1.90</span>
+            </div>
+            <div style="width: 1px; background: #202B45;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <span class="lbl">Wall time</span>
+              <span class="m" style="font-size: 18px; color: #E6EBF5; font-variant-numeric: tabular-nums;">~14 min</span>
+            </div>
+            <div style="width: 1px; background: #202B45;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px; justify-content: center;">
+              <span class="m" style="font-size: 10.5px; line-height: 1.6; color: #7C8AAB;">$7.16 of today&rsquo;s $10.00<br>ceiling still unspent</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span class="m" style="font-size: 10.5px; color: #7C8AAB;">Runs asynchronously. You will be notified here and in the daily digest.</span>
+          <span style="margin-left: auto; display: flex; gap: 8px;">
+            <span class="btn">Cancel</span>
+            <span class="btnp">Queue draft</span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

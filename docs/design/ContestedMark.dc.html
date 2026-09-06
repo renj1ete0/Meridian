@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; color: #7C8AAB; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .dag { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 0.72em; vertical-align: super; line-height: 0; }
+    .row { display: flex; align-items: center; gap: 12px; }
+    .rl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 8.5px; letter-spacing: 0.13em; text-transform: uppercase; color: #7C8AAB; width: 74px; flex-shrink: 0; }
+  </style>
+</helmet>
+<div style="width: 560px; height: 520px; overflow: hidden; background: #0D1424; box-sizing: border-box; padding: 34px 38px; display: flex; flex-direction: column; gap: 20px;">
+
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <div class="cap">Contested mark</div>
+    <div class="cap">17</div>
+  </div>
+
+  <div style="display: flex; gap: 26px; align-items: center;">
+    <div class="m" style="font-size: 74px; line-height: 0.8; color: #E6B061; flex-shrink: 0; padding: 0 8px;">&dagger;</div>
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div style="font-size: 12.5px; line-height: 1.6; color: #C3CCE0; text-wrap: pretty;">The dagger is the typographic mark for &ldquo;a qualifying note is attached to this&rdquo;. That is exactly what contested means, and it already exists in both families &mdash; no new icon language.</div>
+      <div class="m" style="font-size: 10.5px; line-height: 1.7; color: #7C8AAB;">U+2020 · IBM Plex Mono · 0.72em superscript · #E6B061</div>
+    </div>
+  </div>
+
+  <div style="height: 1px; background: #202B45;"></div>
+
+  <div style="display: flex; flex-direction: column; gap: 13px;">
+    <div class="cap">Where it appears</div>
+
+    <div class="row">
+      <span class="rl">Inline</span>
+      <span style="font-size: 13px; line-height: 1.5; color: #C3CCE0;">&hellip;which one press item reports as <span style="color: #E6B061; border-bottom: 1px solid #B98737;">reducing the stops served<span class="dag" style="color: #E6B061;">&dagger;</span></span></span>
+    </div>
+
+    <div class="row">
+      <span class="rl">Node chip</span>
+      <span class="m" style="font-size: 10px; color: #E6B061; background: rgba(101,70,23,0.35); border: 1px solid #654617; padding: 4px 8px;">Modal shift claim<span class="dag" style="color: #E6B061;">&dagger;</span></span>
+    </div>
+
+    <div class="row">
+      <span class="rl">Badge</span>
+      <span class="m" style="font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #E6B061; border: 1px solid #654617; background: rgba(101,70,23,0.4); padding: 4px 8px;">&dagger;&nbsp; Contested</span>
+    </div>
+
+    <div class="row">
+      <span class="rl">Canvas</span>
+      <span style="display: flex; align-items: center; gap: 9px;">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink: 0;"><circle cx="10" cy="10" r="8" stroke="#E6B061" stroke-width="1.3" opacity="0.6"></circle><circle cx="10" cy="10" r="4.6" fill="#E6B061"></circle></svg>
+        <span style="font-size: 12px; color: #E6B061;">Modal shift claim<span class="dag" style="color: #E6B061;">&dagger;</span></span>
+      </span>
+    </div>
+  </div>
+
+  <div style="height: 1px; background: #202B45;"></div>
+
+  <div style="display: flex; flex-direction: column; gap: 13px;">
+    <div class="cap">Without colour</div>
+    <div style="display: flex; gap: 22px; align-items: center; flex-wrap: wrap;">
+      <span style="font-size: 13px; color: #C3CCE0; border-bottom: 1px solid #6C7A9B;">reducing the stops served<span class="dag" style="color: #C3CCE0;">&dagger;</span></span>
+      <span class="m" style="font-size: 10px; color: #C3CCE0; background: #1E2942; border: 1px solid #3E4D71; padding: 4px 8px;">Modal shift claim<span class="dag" style="color: #C3CCE0;">&dagger;</span></span>
+      <span class="m" style="font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #C3CCE0; border: 1px solid #3E4D71; padding: 4px 8px;">&dagger;&nbsp; Contested</span>
+    </div>
+    <div style="font-size: 12px; line-height: 1.6; color: #9BA8C4; text-wrap: pretty;">The brass tint is emphasis, not information. Strip the colour and the reading survives &mdash; which is the whole test.</div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

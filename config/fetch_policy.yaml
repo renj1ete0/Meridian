@@ -1,0 +1,21 @@
+# Global fetch policy defaults. Seeded into the `fetch_policy` table ('*' row)
+# at first boot, then editable per-domain in Admin. See spec §6.4.
+# Resolution order: per-domain row -> this global row -> these file defaults.
+
+respect_robots:        true
+user_agent:            "MeridianBot/0.1 (+https://<contact-url>)"
+send_contact_header:   true
+
+concurrency_per_domain: 2
+delay_per_domain_ms:    1000
+respect_crawl_delay:    true
+
+conditional_requests:   true      # If-Modified-Since / ETag
+timeout_s:              30
+max_retries:            2
+backoff_base_s:         5
+
+blocked_after_failures: 5         # consecutive; then mark domain blocked
+prefetch_filter:        true      # domain blocklist + already-seen check
+render_js:              auto      # auto | always | never
+max_page_bytes:         20000000

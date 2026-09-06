@@ -1,0 +1,123 @@
+# ~50 hand-seeded gazetteer terms, loaded into spaCy's EntityRuler at worker
+# startup (spec §5.6). This is a starting set, not the full 50 — extend it
+# during the Phase 0 evening the spec recommends spending on cold-start
+# seeding. Auto-harvesting (Full Name (ACRONYM) pattern) and model-proposed
+# additions grow this list after ingestion begins; this file only seeds it
+# once at first boot.
+
+terms:
+  # Singapore — agencies
+  - canonical: Land Transport Authority
+    aliases: ["LTA", "LTA Singapore", "the Authority"]
+    entity_type: agency
+    topic_labels: [walkability, on-demand-bus, av-deployment]
+    source: manual
+    approved: true
+
+  - canonical: Urban Redevelopment Authority
+    aliases: ["URA"]
+    entity_type: agency
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  - canonical: Housing & Development Board
+    aliases: ["HDB"]
+    entity_type: agency
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  - canonical: Building and Construction Authority
+    aliases: ["BCA"]
+    entity_type: agency
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  - canonical: National Parks Board
+    aliases: ["NParks"]
+    entity_type: agency
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  - canonical: Public Utilities Board
+    aliases: ["PUB"]
+    entity_type: agency
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  # Singapore — infrastructure / schemes
+  - canonical: Mass Rapid Transit
+    aliases: ["MRT"]
+    entity_type: infrastructure
+    topic_labels: [walkability, on-demand-bus]
+    source: manual
+    approved: true
+
+  - canonical: Electronic Road Pricing
+    aliases: ["ERP"]
+    entity_type: scheme
+    topic_labels: [av-deployment, on-demand-bus]
+    source: manual
+    approved: true
+
+  - canonical: Walk2Ride
+    aliases: []
+    entity_type: scheme
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  - canonical: Silver Zone
+    aliases: []
+    entity_type: scheme
+    topic_labels: [walkability]
+    source: manual
+    approved: true
+
+  # Cross-topic / AV concepts
+  - canonical: Operational Design Domain
+    aliases: ["ODD"]
+    entity_type: concept
+    topic_labels: [av-deployment]
+    source: manual
+    approved: true
+
+  - canonical: Transit-Oriented Development
+    aliases: ["TOD"]
+    entity_type: concept
+    topic_labels: [walkability, on-demand-bus]
+    source: manual
+    approved: true
+
+  # Comparison-city counterparts (spec §7.2 analogical expansion)
+  - canonical: Mass Transit Railway
+    aliases: ["MTR"]
+    entity_type: infrastructure
+    topic_labels: [walkability, on-demand-bus]
+    source: manual
+    approved: true
+
+  - canonical: Land Transport Authority of Hong Kong
+    aliases: ["Transport Department Hong Kong", "TD HK"]
+    entity_type: agency
+    topic_labels: [walkability, on-demand-bus, av-deployment]
+    source: manual
+    approved: true
+
+  - canonical: Tokyo Metropolitan Government
+    aliases: ["TMG"]
+    entity_type: agency
+    topic_labels: [walkability, on-demand-bus]
+    source: manual
+    approved: true
+
+  - canonical: Land Transport Authority of Seoul
+    aliases: ["Seoul Metropolitan Government", "SMG"]
+    entity_type: agency
+    topic_labels: [walkability, on-demand-bus]
+    source: manual
+    approved: true

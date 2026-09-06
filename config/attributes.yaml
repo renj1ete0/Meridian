@@ -1,0 +1,30 @@
+# Attribute schema: global (cross-topic) + topic-local. Seeded at first boot;
+# schema evolution thereafter goes through the mechanical proposal/retirement
+# gate, not a file edit (spec §7.1, §7.3). Hard cap ~12 active attributes.
+
+global:
+  - name: climate
+    description: Equatorial / tropical / temperate / arid classification
+  - name: density
+    description: Population or built-form density
+  - name: governance_capacity
+    description: State/municipal capacity to plan, fund and enforce interventions
+  - name: income_level
+    description: City/region income level
+  - name: land_constraint
+    description: Degree of land scarcity shaping transport/urban choices
+  - name: modal_share
+    description: Existing split across walking, transit, private vehicle, etc.
+
+topic_local:
+  av-deployment:
+    - name: odd
+      description: Operational Design Domain — where the AV is permitted to operate
+    - name: fleet_size
+      description: Scale of the deployed or piloted fleet
+
+  walkability:
+    - name: shade_provision
+      description: Availability of covered walkways / tree canopy on pedestrian routes
+    - name: sidewalk_width
+      description: Physical sidewalk/footpath width relative to pedestrian volume

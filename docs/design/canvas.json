@@ -1,0 +1,73 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 880, "h": 520, "title": "01 · Lockup, dark" },
+    { "file": "LockupLight.dc.html", "x": 960, "y": 0, "w": 880, "h": 520, "title": "02 · Lockup, light" },
+    { "file": "LockupOver.dc.html", "x": 1920, "y": 0, "w": 880, "h": 520, "title": "03 · Lockup, translucent" },
+
+    { "file": "MarkSmallDark.dc.html", "x": 0, "y": 680, "w": 560, "h": 520, "title": "04 · Mark at size, dark" },
+    { "file": "MarkSmallLight.dc.html", "x": 640, "y": 680, "w": 560, "h": 520, "title": "05 · Mark at size, light" },
+    { "file": "Construction.dc.html", "x": 1280, "y": 680, "w": 560, "h": 520, "title": "06 · Construction" },
+
+    { "file": "Usage.dc.html", "x": 0, "y": 1320, "w": 1080, "h": 740, "title": "07 · Logo usage" },
+    { "file": "Voice.dc.html", "x": 1160, "y": 1320, "w": 1080, "h": 760, "title": "10 · Voice & tone" },
+
+    { "file": "Palette.dc.html", "x": 0, "y": 2200, "w": 1240, "h": 820, "title": "08 · Colour" },
+    { "file": "Typography.dc.html", "x": 1320, "y": 2200, "w": 1080, "h": 920, "title": "09 · Typography" },
+
+    { "file": "Explore.dc.html", "x": 0, "y": 3240, "w": 1440, "h": 900, "title": "11 · Explore, node focused" },
+    { "file": "AdminLight.dc.html", "x": 1520, "y": 3240, "w": 1440, "h": 900, "title": "12 · Admin, light" },
+
+    { "file": "About.dc.html", "x": 0, "y": 4260, "w": 1080, "h": 700, "title": "13 · About" },
+    { "file": "ExploreLanding.dc.html", "x": 1160, "y": 4260, "w": 1440, "h": 900, "title": "14 · Explore, default state" },
+
+    { "file": "SynthesisToggle.dc.html", "x": 0, "y": 5280, "w": 560, "h": 520, "title": "15 · Synthesis, collapsed" },
+    { "file": "SynthesisPanel.dc.html", "x": 640, "y": 5280, "w": 1440, "h": 900, "title": "16 · Synthesis, expanded" },
+    { "file": "ContestedMark.dc.html", "x": 2160, "y": 5280, "w": 560, "h": 520, "title": "17 · Contested mark" },
+
+    { "file": "Icons.dc.html", "x": 0, "y": 6300, "w": 1080, "h": 900, "title": "18 · Icons" },
+    { "file": "Notifications.dc.html", "x": 1160, "y": 6300, "w": 1080, "h": 800, "title": "19 · Notifications & status cluster" },
+    { "file": "AdminAddTopic.dc.html", "x": 2320, "y": 6300, "w": 720, "h": 620, "title": "20 · Add topic" },
+
+    { "file": "ReportScope.dc.html", "x": 0, "y": 7320, "w": 1440, "h": 1060, "title": "21 · Draft — scope & pre-flight" },
+    { "file": "ReportOutput.dc.html", "x": 1520, "y": 7320, "w": 1440, "h": 980, "title": "22 · Draft — output" },
+    { "file": "ReportJob.dc.html", "x": 3040, "y": 7320, "w": 560, "h": 620, "title": "23 · Draft — job states" }
+  ],
+  "annotations": [
+    {
+      "id": "mark-rationale",
+      "x": 0,
+      "y": -172,
+      "w": 560,
+      "text": "The mark: a globe outline crossed by one meridian, with graph nodes sitting on that line.\nThe meridian stroke is heavier than the globe — the reference line is the subject, the sphere is context. One straight edge leaves the hub on a bearing and terminates on the rim, so the drawing reads as a graph that continues past the single line."
+    },
+    {
+      "id": "open-questions",
+      "x": 1920,
+      "y": -172,
+      "w": 560,
+      "text": "Open, and adjustable:\n· Voice register assumes the reader built the system. Softens if that stops being true.\n· Brass on paper (#805A28) is gamut-matched to the cyan, which makes it browner than a bright brass. Swap to #8A5A0E if it reads too muddy in print.\n· Graph content in the UI artboards is sample data."
+    },
+    {
+      "id": "interaction-row",
+      "x": 0,
+      "y": 5000,
+      "w": 780,
+      "text": "INTERACTION MODEL — 13 to 17\n\n13 About is the only surface carrying the tagline; the panel to its right shows the bare wordmark everywhere else.\n\n14 The default Explore state: search, four counts, three entry points, and the since-you-were-last-here delta. The arcs behind it are the mark's geometry blown up and cropped — decoration, not corpus data. Spec §12.2 forbids rendering the whole graph.\n\n15 and 16 The synthesis panel floats collapsed and slides in expanded, with earlier questions reopenable from inside it. 15 also carries the translucency rule: translucent floats, opaque reads.\n\n17 Contested is a dagger plus brass, never brass alone."
+    },
+    {
+      "id": "system-row",
+      "x": 3120,
+      "y": 6300,
+      "w": 520,
+      "text": "SYSTEM SURFACES — 18 to 20\n\n18 The icon set, drawn on a 24 grid with the mark's own 1.6 / 1.35 weight ratio. Below 20px the detail strokes drop and the silhouette carries alone — the compact-mark rule, applied to icons.\n\n19 The top-right cluster — status, notifications, settings — designed once and used on every screen. No greeting.\n\n20 Adding a topic re-normalises the unpinned pool and shows the arithmetic before you commit. Pinned topics hold."
+    },
+    {
+      "id": "drafting-row",
+      "x": 3680,
+      "y": 7320,
+      "w": 520,
+      "text": "DRAFTING — 21 to 23\n\nScope comes from something that already exists, never from a blank field.\n\nThe coverage pre-flight is the point of the flow: it tells you what is thin or stale before you spend anything, flags it in brass with the dagger, and then lets you proceed anyway. The draft carries the same flags forward as its own coverage note — it marks its gaps rather than writing around them.\n\nA partial job keeps what it drafted."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

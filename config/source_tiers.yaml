@@ -1,0 +1,34 @@
+# Domain -> tier mapping, seeded into source-tier assignment at ingestion
+# (spec §5.2). Tier is assigned mechanically from this table, never a model
+# judgment. Extend as new domains are ingested; unmatched domains default to
+# `informal` until classified.
+
+tiers:
+  peer_reviewed:
+    - arxiv.org
+    - openalex.org
+    - doi.org
+    - sciencedirect.com
+    - tandfonline.com
+    - journals.sagepub.com
+
+  government:
+    - lta.gov.sg
+    - ura.gov.sg
+    - data.gov.sg
+    - nparks.gov.sg
+    - mot.gov.sg
+    - gov.sg
+
+  institutional:
+    - itdp.org
+    - wri.org
+    - worldbank.org
+    - oecd.org
+
+  press:
+    - straitstimes.com
+    - todayonline.com
+    - channelnewsasia.com
+
+  # anything unmatched falls through to `informal`

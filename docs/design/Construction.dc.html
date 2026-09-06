@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; color: #7C8AAB; }
+    .k { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #9BA8C4; }
+    .v { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #E6EBF5; }
+  </style>
+</helmet>
+<div style="width: 560px; height: 520px; overflow: hidden; background: #0D1424; box-sizing: border-box; padding: 40px; display: flex; flex-direction: column; gap: 20px;">
+
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <div class="cap">Construction · 100-unit grid</div>
+    <div class="cap">06</div>
+  </div>
+
+  <div style="display: flex; justify-content: center;">
+    <svg viewBox="-4 -4 108 108" width="286" height="286" fill="none" style="display: block;">
+      <rect x="0" y="0" width="100" height="100" stroke="#212C48" stroke-width="0.5" stroke-dasharray="2 2"></rect>
+      <line x1="50" y1="-2" x2="50" y2="102" stroke="#2E3C60" stroke-width="0.5" stroke-dasharray="3 2.5"></line>
+      <line x1="-2" y1="50" x2="102" y2="50" stroke="#2E3C60" stroke-width="0.5" stroke-dasharray="3 2.5"></line>
+
+      <line x1="50" y1="50" x2="88" y2="50" stroke="#49D0DA" stroke-width="0.6" opacity="0.55"></line>
+      <path d="M70 50 A 20 20 0 0 1 66.38 61.47" stroke="#E6B061" stroke-width="0.6"></path>
+      <line x1="50" y1="50" x2="94.6" y2="81.2" stroke="#E6B061" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.6"></line>
+
+      <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="2.4"></circle>
+      <ellipse cx="50" cy="50" rx="14" ry="38" stroke="#E6EBF5" stroke-width="2.8"></ellipse>
+      <path d="M50 50 L81.1 71.8" stroke="#E6EBF5" stroke-width="2.4" stroke-linecap="round"></path>
+      <circle cx="81.1" cy="71.8" r="4" fill="#E6EBF5"></circle>
+      <circle cx="50" cy="88" r="4.2" fill="#E6EBF5"></circle>
+      <circle cx="50" cy="50" r="5" fill="#E6EBF5"></circle>
+      <circle cx="50" cy="12" r="6" fill="#49D0DA"></circle>
+
+      <text x="66" y="47" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#49D0DA">r 38</text>
+      <text x="73.5" y="59.5" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#E6B061">35°</text>
+      <text x="26" y="49" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#7C8AAB" text-anchor="end">rx 14</text>
+      <line x1="27.5" y1="47.6" x2="36" y2="47.6" stroke="#7C8AAB" stroke-width="0.4"></line>
+      <text x="55.5" y="10.5" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#7C8AAB">zenith · r 6</text>
+      <text x="57.5" y="54" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#7C8AAB">hub · r 5</text>
+      <text x="55.5" y="94" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#7C8AAB">base · r 4.2</text>
+      <text x="86" y="78" font-family="'IBM Plex Mono', monospace" font-size="3.6" fill="#7C8AAB">bearing · r 4</text>
+    </svg>
+  </div>
+
+  <div style="height: 1px; background: #202B45;"></div>
+
+  <div style="display: flex; gap: 40px;">
+    <div style="display: flex; flex-direction: column; gap: 7px; flex-grow: 1;">
+      <div style="display: flex; justify-content: space-between;"><span class="k">globe stroke</span><span class="v">2.4</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">meridian stroke</span><span class="v">2.8</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">edge stroke</span><span class="v">2.4</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">meridian ry</span><span class="v">38</span></div>
+    </div>
+    <div style="width: 1px; background: #202B45;"></div>
+    <div style="display: flex; flex-direction: column; gap: 7px; flex-grow: 1;">
+      <div style="display: flex; justify-content: space-between;"><span class="k">bearing end</span><span class="v">81.1, 71.8</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">optical centre</span><span class="v">50, 50</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">bbox</span><span class="v">76 &times; 86.2</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">clear-space x</span><span class="v">28 (meridian width)</span></div>
+    </div>
+  </div>
+
+  <div style="font-size: 12px; line-height: 1.6; color: #9BA8C4; text-wrap: pretty;">The meridian is heavier than the globe outline. The reference line is the subject; the sphere is context.</div>
+
+</div>
+</x-dc>
+</body>
+</html>

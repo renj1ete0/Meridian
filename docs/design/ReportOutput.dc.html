@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB; }
+    .h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.005em; color: #E6EBF5; }
+    .p { font-size: 14.5px; line-height: 1.68; color: #C3CCE0; }
+    .cite { border-bottom: 1px solid #49D0DA; color: #E6EBF5; }
+    .contested { color: #E6B061; border-bottom: 1px solid #B98737; }
+    .dag { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 0.72em; vertical-align: super; line-height: 0; color: #E6B061; }
+    .chip { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10px; color: #C3CCE0; background: #1E2942; border: 1px solid #2A3654; padding: 4px 8px; }
+    .btn { font-size: 12.5px; color: #C3CCE0; background: #1E2942; border: 1px solid #3E4D71; padding: 8px 13px; display: flex; align-items: center; gap: 8px; }
+    .srow { display: flex; align-items: baseline; gap: 10px; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #9BA8C4; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 980px; overflow: hidden; background: #0D1424; box-sizing: border-box; display: flex; flex-direction: column;">
+
+  <div style="height: 54px; flex-shrink: 0; border-bottom: 1px solid #2A3654; background: rgba(21,30,51,0.90); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; gap: 14px; padding: 0 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <svg viewBox="0 0 100 100" width="22" height="22" fill="none" style="display: block;">
+        <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="3.6"></circle>
+        <ellipse cx="50" cy="50" rx="17" ry="38" stroke="#E6EBF5" stroke-width="3.6"></ellipse>
+        <circle cx="50" cy="88" r="5" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="50" r="6" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="12" r="7" fill="#49D0DA"></circle>
+      </svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.004em; color: #E6EBF5;">Meridian</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #2A3654;"></div>
+    <span style="font-size: 12.5px; color: #C3CCE0;">Drafts</span>
+    <span class="m" style="font-size: 10.5px; color: #48587A;">&rsaquo;</span>
+    <span style="font-size: 12.5px; color: #E6EBF5;">Shade &times; elderly, SG</span>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+      <span class="m" style="display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #9BA8C4; border: 1px solid #2A3654; padding: 5px 10px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #49D0DA; display: block;"></span>queue 412 · fetch 96% · 07:14</span>
+      <div style="width: 1px; height: 20px; background: #2A3654;"></div>
+      <span style="position: relative; display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M7 10.6 a5 5 0 0 1 10 0 v4 l2 3 H5 l2 -3 z" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.9 20.6 a2.3 2.3 0 0 0 4.2 0" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="m" style="position: absolute; top: -2px; right: -4px; min-width: 15px; height: 15px; background: #49D0DA; color: #04222A; font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 3px;">3</span>
+      </span>
+      <span style="display: flex; padding: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="display: block;"><path d="M3.4 8.6 H20.6 M3.4 15.4 H20.6" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round"></path><rect x="8" y="6.4" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect><rect x="13.8" y="13.2" width="3.6" height="4.4" rx="1" fill="#C3CCE0"></rect></svg>
+      </span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; justify-content: center; padding: 40px 40px 0; overflow: hidden;">
+      <div style="width: 720px; display: flex; flex-direction: column; gap: 22px;">
+
+        <div style="display: flex; flex-direction: column; gap: 11px;">
+          <div style="font-size: 30px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.18; color: #E6EBF5; text-wrap: balance;">Shade provision and elderly walking distance to transit</div>
+          <div class="m" style="font-size: 10.5px; color: #7C8AAB;">drafted 06:48 · scope: saved view &ldquo;Shade &times; elderly, SG&rdquo; · 412 nodes · 34 citations</div>
+        </div>
+
+        <div style="border-left: 2px solid #654617; background: rgba(101,70,23,0.16); padding: 13px 16px; display: flex; gap: 12px; align-items: flex-start;">
+          <span class="m" style="font-size: 15px; color: #E6B061; line-height: 1; flex-shrink: 0; padding-top: 1px;">&dagger;</span>
+          <span style="font-size: 13px; line-height: 1.6; color: #C3CCE0;"><span style="color: #E6B061; font-weight: 600;">Coverage note, carried from the pre-flight.</span> The shade&ndash;distance link below rests on one peer-reviewed source and three press items. Nothing here is strong enough to carry a recommendation on its own. Climate context is drawn from work no newer than 2018.</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 13px;">
+          <div class="h2">What the evidence supports</div>
+          <div class="p">Across the sources in scope, sheltered walking routes are consistently associated with <span class="cite">longer accepted walking distances among residents over 65</span>, but the size of the effect is not settled. The one peer-reviewed measurement in scope reports a shift of roughly 80&ndash;120&thinsp;m in stated willingness; the government material <span class="cite">describes the mechanism without quantifying it</span>.</div>
+          <div class="p">Thermal comfort is the mechanism every source proposes, and no source in scope proposes a competing one. That agreement is worth something, though it may reflect a shared literature rather than independent confirmation.</div>
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <span class="chip">Sheltered linkway</span>
+          <span class="chip">Walk2Ride</span>
+          <span class="chip">Thermal comfort</span>
+          <span class="chip">Elderly density</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 13px;">
+          <div class="h2">Where the sources disagree</div>
+          <div class="p">Two sources conflict on whether the effect survives outside the immediate catchment. One reports <span class="contested">no measurable change beyond 400&thinsp;m from the stop<span class="dag">&dagger;</span></span>; the other treats the gradient as continuous. Both edges are kept in the graph; neither has been resolved.</div>
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <span class="chip" style="color: #E6B061; border-color: #654617; background: rgba(101,70,23,0.35);">Catchment gradient<span class="dag">&dagger;</span></span>
+          <span class="chip">Silver Zone</span>
+        </div>
+
+      </div>
+    </div>
+
+    <div style="width: 340px; flex-shrink: 0; border-left: 1px solid #2A3654; background: #151E33; padding: 26px 22px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span class="lbl">Export</span>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span class="btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3.4 V15 M8.2 7.2 L12 3.4 L15.8 7.2 M4.6 14.6 V20.6 H19.4 V14.6" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Markdown &mdash; prose and node links</span>
+          <span class="btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3.4 V15 M8.2 7.2 L12 3.4 L15.8 7.2 M4.6 14.6 V20.6 H19.4 V14.6" stroke="#C3CCE0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>BibTeX &mdash; 34 citations</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #202B45;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span class="lbl">Sources cited</span>
+          <span class="m" style="font-size: 10px; color: #7C8AAB;">21</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">Peer reviewed</span><span>4</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">Government</span><span>7</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">Institutional</span><span>3</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">Press</span><span>7</span></div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #202B45;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <span class="lbl">Coverage, as drafted</span>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div class="srow"><span style="flex-grow: 1; color: #E6B061;">shade_provision<span class="dag">&dagger;</span></span><span style="color: #E6B061;">thin</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #E6B061;">climate<span class="dag">&dagger;</span></span><span style="color: #E6B061;">stale</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">sidewalk_width</span><span>ok</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">density</span><span>ok</span></div>
+          <div class="srow"><span style="flex-grow: 1; color: #C3CCE0;">governance_capacity</span><span>ok</span></div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #202B45;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span class="lbl">Scope</span>
+        <span style="font-size: 12.5px; line-height: 1.55; color: #9BA8C4;">Every claim above traces to a chunk in this scope. Nothing outside it was read.</span>
+        <span class="m" style="font-size: 11px; color: #49D0DA;">Open scope in Explore &rarr;</span>
+      </div>
+
+      <div style="margin-top: auto;">
+        <span class="m" style="font-size: 10px; color: #7C8AAB; line-height: 1.7;">A draft is a starting point, not a finding.<br>It carries the gaps it was built on.</span>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

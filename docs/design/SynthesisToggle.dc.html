@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #49D0DA; } a:hover { color: #8CE0E8; }
+    .cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase; color: #7C8AAB; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .k { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #9BA8C4; }
+    .v { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #E6EBF5; }
+  </style>
+</helmet>
+<div style="width: 560px; height: 520px; overflow: hidden; background: #0D1424; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px;">
+
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <div class="cap">Synthesis · collapsed</div>
+    <div class="cap">15</div>
+  </div>
+
+  <div style="position: relative; height: 176px; background: #070B14; border: 1px solid #202B45; overflow: hidden;">
+    <svg viewBox="0 0 478 174" width="478" height="174" fill="none" style="position: absolute; inset: 0; display: block;">
+      <g stroke="#2E93A0" stroke-width="1.4">
+        <path d="M170 84 L84 44"></path><path d="M170 84 L96 130"></path><path d="M170 84 L248 52"></path><path d="M170 84 L232 138"></path>
+      </g>
+      <g stroke="#0C646A" stroke-width="1.1">
+        <path d="M248 52 L318 92"></path><path d="M232 138 L318 92"></path><path d="M84 44 L30 96"></path>
+      </g>
+      <g fill="#8FA0C0"><circle cx="84" cy="44" r="6"></circle><circle cx="96" cy="130" r="5.5"></circle><circle cx="248" cy="52" r="6"></circle><circle cx="232" cy="138" r="5.5"></circle><circle cx="318" cy="92" r="5"></circle><circle cx="30" cy="96" r="4"></circle></g>
+      <circle cx="170" cy="84" r="19" stroke="#49D0DA" stroke-width="1" opacity="0.4"></circle>
+      <circle cx="170" cy="84" r="10" fill="#49D0DA"></circle>
+    </svg>
+    <div style="position: absolute; right: 20px; bottom: 20px; width: 44px; height: 44px; border-radius: 3px; background: rgba(73,208,218,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M3.5 5.5 h17 v10.5 h-11 l-4.4 3.6 v-3.6 h-1.6 z" stroke="#04222A" stroke-width="1.7" stroke-linejoin="round"></path><path d="M7.6 9.4 h8.8 M7.6 12.4 h5.6" stroke="#04222A" stroke-width="1.7" stroke-linecap="round"></path></svg>
+    </div>
+    <div class="m" style="position: absolute; right: 74px; bottom: 34px; font-size: 9.5px; color: #7C8AAB;">24px from both edges</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div class="cap">States, 2&times;</div>
+    <div style="display: flex; gap: 30px; align-items: flex-start;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+        <div style="width: 88px; height: 88px; border-radius: 6px; background: rgba(73,208,218,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none"><path d="M3.5 5.5 h17 v10.5 h-11 l-4.4 3.6 v-3.6 h-1.6 z" stroke="#04222A" stroke-width="1.7" stroke-linejoin="round"></path><path d="M7.6 9.4 h8.8 M7.6 12.4 h5.6" stroke="#04222A" stroke-width="1.7" stroke-linecap="round"></path></svg>
+        </div>
+        <div class="cap">Rest</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+        <div style="width: 88px; height: 88px; border-radius: 6px; background: rgba(123,223,231,0.94); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 0 0 3px rgba(73,208,218,0.28); display: flex; align-items: center; justify-content: center;">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none"><path d="M3.5 5.5 h17 v10.5 h-11 l-4.4 3.6 v-3.6 h-1.6 z" stroke="#04222A" stroke-width="1.7" stroke-linejoin="round"></path><path d="M7.6 9.4 h8.8 M7.6 12.4 h5.6" stroke="#04222A" stroke-width="1.7" stroke-linecap="round"></path></svg>
+        </div>
+        <div class="cap">Hover</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+        <div style="width: 88px; height: 88px; border-radius: 6px; background: rgba(21,30,51,0.90); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 2px solid #49D0DA; display: flex; align-items: center; justify-content: center;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M15.5 5 L8.5 12 L15.5 19" stroke="#49D0DA" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+        <div class="cap">Panel open</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="height: 1px; background: #202B45;"></div>
+
+  <div style="display: flex; gap: 26px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 7px; width: 206px; flex-shrink: 0;">
+      <div style="display: flex; justify-content: space-between;"><span class="k">size</span><span class="v">44 &times; 44</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">radius</span><span class="v">3</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">fill</span><span class="v">accent @ 92%</span></div>
+      <div style="display: flex; justify-content: space-between;"><span class="k">backdrop</span><span class="v">blur 8px</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div class="cap">Translucent floats, opaque reads</div>
+      <div style="font-size: 12px; line-height: 1.6; color: #9BA8C4; text-wrap: pretty;">Translucency means <span style="color: #E6EBF5;">floating above your work</span>: this toggle, hover cards, the top bar over the canvas &mdash; 90&ndash;92% tint over an 8&ndash;10px blur, enough that the graph beneath stays continuous. Opacity means <span style="color: #E6EBF5;">this is the thing you are reading</span>: the synthesis thread, the node detail panel, a draft. Those carry citations and confidence values, and text over a live graph is harder to read. There is no unread badge here &mdash; an answer only arrives because you asked for one.</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

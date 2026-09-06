@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #0D6F7C; } a:hover { color: #0A5761; }
+    .cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #5C6A85; }
+    .card { display: flex; flex-direction: column; gap: 11px; }
+    .ttl { font-size: 16px; font-weight: 600; letter-spacing: -0.003em; color: #101A2E; }
+    .stmt { font-size: 12.5px; line-height: 1.58; color: #4E5A73; text-wrap: pretty; }
+    .ex { display: flex; gap: 9px; align-items: flex-start; }
+    .ex svg { flex-shrink: 0; margin-top: 3px; }
+    .exl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; width: 30px; flex-shrink: 0; margin-top: 3px; }
+    .exs { font-size: 13px; line-height: 1.55; }
+  </style>
+</helmet>
+<div style="width: 1080px; height: 760px; overflow: hidden; background: #F1F3F7; box-sizing: border-box; padding: 44px 48px; display: flex; flex-direction: column; gap: 26px;">
+
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <div class="cap">Voice &amp; tone</div>
+    <div class="cap">10</div>
+  </div>
+
+  <div style="font-size: 14.5px; line-height: 1.6; color: #33405A; max-width: 78ch; text-wrap: pretty;">Meridian talks the way a careful engineer talks about their own system: short declaratives, concrete nouns, limits named out loud. Warmth comes from precision, not encouragement.</div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px 44px;">
+
+    <div class="card">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="cap">01</span>
+        <span class="ttl">State the absence.</span>
+      </div>
+      <div class="stmt">A gap is a finding. Say what is missing, how much, and since when &mdash; never reassure the reader that coverage is fine.</div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.4 L4.8 9 L10 3" stroke="#0D6F7C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="exl" style="color: #0D6F7C;">Do</span>
+        <span class="exs" style="color: #101A2E;">No peer-reviewed source on shade provision in Seoul since 2019. Three press items, no primary data.</span>
+      </div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 2.5 L9.5 9.5 M9.5 2.5 L2.5 9.5" stroke="#B03A38" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        <span class="exl" style="color: #B03A38;">Not</span>
+        <span class="exs" style="color: #5C6A85;">Great coverage across your topics &mdash; just a few gaps left to explore.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="cap">02</span>
+        <span class="ttl">Report structure, not verdicts.</span>
+      </div>
+      <div class="stmt">The system extracts observable properties &mdash; stance, funder, hedging, tier. It does not score credibility, and the copy must not imply it did.</div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.4 L4.8 9 L10 3" stroke="#0D6F7C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="exl" style="color: #0D6F7C;">Do</span>
+        <span class="exs" style="color: #101A2E;">Funder: advocacy organisation. Stance: pro-intervention. Hedging: low. Original data: none.</span>
+      </div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 2.5 L9.5 9.5 M9.5 2.5 L2.5 9.5" stroke="#B03A38" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        <span class="exl" style="color: #B03A38;">Not</span>
+        <span class="exs" style="color: #5C6A85;">Low-credibility source &mdash; reliability 32/100. Likely biased.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="cap">03</span>
+        <span class="ttl">A contradiction is a result.</span>
+      </div>
+      <div class="stmt">Contested nodes are the valuable ones. Never frame disagreement as an error, a warning, or something to clear.</div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.4 L4.8 9 L10 3" stroke="#0D6F7C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="exl" style="color: #0D6F7C;">Do</span>
+        <span class="exs" style="color: #101A2E;">Two sources disagree on modal shift. Both edges kept. Open the pair.</span>
+      </div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 2.5 L9.5 9.5 M9.5 2.5 L2.5 9.5" stroke="#B03A38" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        <span class="exl" style="color: #B03A38;">Not</span>
+        <span class="exs" style="color: #5C6A85;">Conflict detected. Resolve this contradiction to continue.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="cap">04</span>
+        <span class="ttl">An error says what broke and what happens next.</span>
+      </div>
+      <div class="stmt">The system runs unattended. Every failure message names the cause, the scope, and the recovery &mdash; and never apologises.</div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.4 L4.8 9 L10 3" stroke="#0D6F7C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <span class="exl" style="color: #0D6F7C;">Do</span>
+        <span class="exs" style="color: #101A2E;">lta.gov.sg timed out three times in 40 minutes. Requeued for 06:00. No chunks lost.</span>
+      </div>
+      <div class="ex">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 2.5 L9.5 9.5 M9.5 2.5 L2.5 9.5" stroke="#B03A38" stroke-width="1.5" stroke-linecap="round"></path></svg>
+        <span class="exl" style="color: #B03A38;">Not</span>
+        <span class="exs" style="color: #5C6A85;">Oops! Something went wrong. Please try again later.</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="height: 1px; background: #DBE0EA; margin-top: 4px;"></div>
+
+  <div style="display: flex; gap: 44px; align-items: flex-start;">
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px;">
+      <div class="cap">Words this system does not use</div>
+      <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11.5px; line-height: 1.85; color: #4E5A73;">unlock &nbsp;&middot;&nbsp; seamless &nbsp;&middot;&nbsp; supercharge &nbsp;&middot;&nbsp; empower &nbsp;&middot;&nbsp; effortless &nbsp;&middot;&nbsp; insights<br>leverage &nbsp;&middot;&nbsp; oops &nbsp;&middot;&nbsp; smart &nbsp;&middot;&nbsp; AI-powered &nbsp;&middot;&nbsp; exclamation marks</div>
+    </div>
+    <div style="width: 1px; align-self: stretch; background: #DBE0EA;"></div>
+    <div style="width: 330px; display: flex; flex-direction: column; gap: 10px;">
+      <div class="cap">Open</div>
+      <div style="font-size: 12.5px; line-height: 1.58; color: #4E5A73; text-wrap: pretty;">This register is a proposal, not a fixture. The main lever is how much the copy explains: it currently assumes the reader built the system. If Meridian ever addresses a reader who did not, principle 04 is the first to soften.</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
