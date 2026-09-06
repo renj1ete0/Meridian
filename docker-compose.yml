@@ -21,11 +21,13 @@ services:
     image: pgvector/pgvector:pg17          # TODO: pin by digest before production
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/pgdata:/var/lib/postgresql/data
-      - ./scripts/init-roles.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+      - ./scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
     environment:
       POSTGRES_DB: meridian
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
+      PG_RW_PASSWORD: ${PG_RW_PASSWORD}
+      PG_RO_PASSWORD: ${PG_RO_PASSWORD}
     command: >
       postgres
       -c shared_buffers=2GB

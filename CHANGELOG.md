@@ -10,6 +10,40 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 Nothing yet.
 
+## [0.1.1] — 2026-09-06
+
+### Added
+
+- `P0-04` `meridian_core` package with the database layer: lazily-created async
+  engines for both roles, session scopes, `check_connection`, and a declarative
+  `Base` carrying a constraint naming convention so Alembic autogenerate produces
+  deterministic migration names
+- uv workspace at the repository root; services join `members` as they gain a
+  `pyproject.toml`
+- Backlog `B-05`–`B-09`: making Meridian runnable locally by someone who isn't
+  developing it
+
+### Fixed
+
+- `P0-18` Role bootstrap never ran. `scripts/init-roles.sql` used psql variable
+  syntax (`:'rw_password'`), but the Postgres entrypoint executes `.sql` files
+  with no variable bindings — the script errored and the container died during
+  init. Replaced with `scripts/init-roles.sh`, taking passwords from the
+  environment. The same broken snippet is corrected in scaffold doc §4
+- Default privileges are now declared for both writers. They only cover objects
+  created by the role that declared them, so a table created by `meridian_rw`
+  left `meridian_ro` without `SELECT` — caught by testing the roles against a
+  real database rather than assuming
+- `pgvector` is enabled at first boot
+- Dev Postgres uses a named volume instead of a bind mount; the previous bind
+  mount left a root-owned `pgdata` in the working tree that couldn't be removed
+  without a container
+
+### Changed
+
+- `.env.example` gained `PG_RW_PASSWORD`, `PG_RO_PASSWORD`, `PG_MIGRATION_URL`,
+  and commented pooling knobs
+
 ## [0.1.0] — 2026-09-06
 
 First tagged state. Design and scaffold complete; no application code yet.

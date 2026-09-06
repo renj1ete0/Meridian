@@ -15,9 +15,14 @@ services:
       POSTGRES_DB: meridian
       POSTGRES_USER: meridian
       POSTGRES_PASSWORD: dev
+      PG_RW_PASSWORD: dev
+      PG_RO_PASSWORD: dev
     volumes:
-      - ./.devdata/pgdata:/var/lib/postgresql/data
-      - ./scripts/init-roles.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+      # Named volume, not a bind mount: Postgres writes as root, and a
+      # root-owned pgdata inside the working tree can't be cleaned up without a
+      # container. `docker compose down -v` removes this properly.
+      - meridian_pgdata:/var/lib/postgresql/data
+      - ./scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
 
   searxng:
     image: searxng/searxng:latest
@@ -30,3 +35,6 @@ services:
     shm_size: 1g
     environment:
       CRAWL4AI_HOOKS_ENABLED: "false"
+
+volumes:
+  meridian_pgdata:

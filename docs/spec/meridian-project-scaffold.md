@@ -298,17 +298,35 @@ networks:
 
 ## 4. Database roles
 
-`scripts/init-roles.sql`, run at first boot:
+`scripts/init-roles.sh`, run at first boot:
 
-```sql
-CREATE ROLE meridian_rw LOGIN PASSWORD :'rw_password';
-CREATE ROLE meridian_ro LOGIN PASSWORD :'ro_password';
+```bash
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+	CREATE ROLE meridian_rw LOGIN PASSWORD '${PG_RW_PASSWORD}';
+	CREATE ROLE meridian_ro LOGIN PASSWORD '${PG_RO_PASSWORD}';
 
-GRANT ALL ON ALL TABLES IN SCHEMA public TO meridian_rw;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO meridian_ro;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT ON TABLES TO meridian_ro;
+	GRANT USAGE ON SCHEMA public TO meridian_rw, meridian_ro;
+	GRANT CREATE ON SCHEMA public TO meridian_rw;
+
+	ALTER DEFAULT PRIVILEGES FOR ROLE $POSTGRES_USER IN SCHEMA public
+	  GRANT ALL ON TABLES TO meridian_rw;
+	ALTER DEFAULT PRIVILEGES FOR ROLE $POSTGRES_USER IN SCHEMA public
+	  GRANT SELECT ON TABLES TO meridian_ro;
+
+	CREATE EXTENSION IF NOT EXISTS vector;
+EOSQL
 ```
+
+**It must be a shell script, not plain `.sql`.** The Postgres entrypoint runs
+`.sql` files through psql with no variable bindings, so `:'rw_password'` is a
+syntax error and the container dies mid-init. Passwords arrive as environment
+variables (`PG_RW_PASSWORD`, `PG_RO_PASSWORD`).
+
+`ALTER DEFAULT PRIVILEGES` is the line that matters — at first boot no tables
+exist yet, so the grants that count are the ones applied to tables Alembic
+creates later. It is scoped `FOR ROLE $POSTGRES_USER` because default privileges
+only cover objects created by the role that declared them, and migrations run as
+that user.
 
 - `worker`, `orchestrator` → `meridian_rw`
 - `api` explore routes and `run_readonly_query` → `meridian_ro`

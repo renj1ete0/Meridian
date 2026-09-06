@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 0** — scaffold complete, no application code yet.
+**Current phase: 0** — core database layer landed; models next (`P0-05`).
 
 ---
 
@@ -27,14 +27,16 @@ something went wrong.
 - [x] `P0-01` Repo scaffold: layout, compose files, Makefile, `.env.example`, `.gitignore`
 - [x] `P0-02` Brand and design system: mark, palette, typography, voice, UI mockups, assets
 - [x] `P0-03` Licence, README, roadmap, task tracking, versioning policy
-- [ ] `P0-04` `meridian_core` package: `pyproject.toml`, `db.py` (engine, session, pooling)
+- [x] `P0-04` `meridian_core` package: `pyproject.toml`, `db.py` (engine, session, pooling)
 - [ ] `P0-05` SQLAlchemy models — queue
 - [ ] `P0-06` SQLAlchemy models — sources, chunks, figures
 - [ ] `P0-07` SQLAlchemy models — graph (entities, edges, attributes) with provenance columns
 - [ ] `P0-08` SQLAlchemy models — gazetteer, `topic_config`, `fetch_policy`, agent registry
 - [ ] `P0-09` SQLAlchemy models — `runs`, `steering_log`, `enrichment_queue`, `reports`
 - [ ] `P0-10` Pydantic DTOs in `meridian_core/schemas/` for every service boundary
-- [ ] `P0-11` Alembic setup + initial migration; verify `meridian_rw` / `meridian_ro` roles apply
+- [x] `P0-18` Fix role bootstrap: `.sql` → `.sh` (entrypoint has no psql var bindings),
+      default privileges declared for both writers, pgvector enabled at init
+- [ ] `P0-11` Alembic setup + initial migration; run as `PG_MIGRATION_URL` (owner), not rw
 - [ ] `P0-12` `scripts/seed.py` — idempotent `config/*.yaml` → DB, config only, never content
 - [ ] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
 - [ ] `P0-14` ⚑ human — write the ten questions (spec §14.3), check the schema answers them
@@ -161,3 +163,23 @@ Things worth doing that don't belong to a phase yet.
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search
 - [ ] `B-04` Offline corpora (OSM extract, filtered arXiv) — selective, storage-hungry
+
+### Running it locally
+
+For someone who wants to *run* Meridian rather than develop it. Today's quickstart
+assumes `uv`, `npm`, and three terminals; this is the path that doesn't.
+
+- [ ] `B-05` `docker-compose.local.yml` — the full stack building from source rather
+      than pulling the private GHCR images, so a fresh clone needs no registry access
+- [ ] `B-06` `make quickstart` — one command: bring up infra, wait for health, migrate,
+      seed, start every service. Ends by printing the URL
+- [ ] `B-07` First-run experience — pick topics and confirm cold-start sources from the
+      UI instead of hand-editing `config/*.yaml` before the first crawl
+- [ ] `B-08` Preflight check script — verify Docker version, available memory and disk
+      against the stated minimums, and fail with a readable message rather than a
+      container crash loop
+- [ ] `B-09` Decide what a first run should *show*. Production starts empty by design
+      (scaffold §1.7), so a fresh install has nothing to look at until it has crawled
+      for a while. Options: ship a small real crawl snapshot as an opt-in demo corpus,
+      or design an empty state that makes the first hour legible. Not synthetic
+      fixtures either way — they don't resemble real extraction output
