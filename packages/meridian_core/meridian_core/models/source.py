@@ -24,6 +24,7 @@ from sqlalchemy import (
     Integer,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -61,25 +62,35 @@ class Source(Base, TimestampMixin):
     accessed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     checksum: Mapped[str | None] = mapped_column(Text)
 
-    source_tier: Mapped[str] = mapped_column(SOURCE_TIER, nullable=False, default="informal")
+    source_tier: Mapped[str] = mapped_column(
+        SOURCE_TIER, nullable=False, default="informal", server_default="informal"
+    )
     retention_tier: Mapped[str] = mapped_column(
-        RETENTION_TIER, nullable=False, default="background"
+        RETENTION_TIER, nullable=False, default="background", server_default="background"
     )
     raw_file_path: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str | None] = mapped_column(Text, index=True)
 
     # A source with no extractable text is still a citable graph participant and
     # still counts toward coverage — metadata-only is a valid resting state (§6.5).
-    text_available: Mapped[bool] = mapped_column(default=False, nullable=False)
+    text_available: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
 
     # Recorded explicitly so silently-skipped OCR is findable (§6.6).
-    ocr_applied: Mapped[bool] = mapped_column(default=False, nullable=False)
-    ocr_tier: Mapped[str] = mapped_column(OCR_TIER, nullable=False, default="none")
+    ocr_applied: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+    ocr_tier: Mapped[str] = mapped_column(
+        OCR_TIER, nullable=False, default="none", server_default="none"
+    )
     ocr_confidence: Mapped[float | None] = mapped_column()
 
     extra: Mapped[dict | None] = mapped_column(JSONB)
 
-    chunks: Mapped[list[Chunk]] = relationship(back_populates="source", cascade="all, delete-orphan")
+    chunks: Mapped[list[Chunk]] = relationship(
+        back_populates="source", cascade="all, delete-orphan"
+    )
     figures: Mapped[list[Figure]] = relationship(
         back_populates="source", cascade="all, delete-orphan"
     )

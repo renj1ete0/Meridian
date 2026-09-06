@@ -451,7 +451,7 @@ Develop on the Fedora box (x86, ample RAM, llama.cpp already present), not the P
 
 | Layer | Directory | Surface |
 |---|---|---|
-| Frontend | `web/` | Vite dev server, port 5173 |
+| Frontend | `web/` | React + TypeScript + Tailwind on Vite, port 5173 |
 | Backend — API | `services/api/` | FastAPI, port 8000. Serves Explore, Admin, MCP |
 | Backend — ingestion | `services/worker/` | Headless daemon; no HTTP |
 | Backend — synthesis | `services/orchestrator/` | Headless; scheduled, or `--once` |

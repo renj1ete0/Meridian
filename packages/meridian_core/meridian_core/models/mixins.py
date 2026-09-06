@@ -12,8 +12,9 @@ from __future__ import annotations
 import datetime as dt
 from typing import Final
 
-from sqlalchemy import BigInteger, DateTime, Enum, Integer, Text, func
+from sqlalchemy import BigInteger, DateTime, Enum, Integer, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
+
 
 # VARCHAR + CHECK rather than native Postgres enums: adding a value to a native
 # enum needs ALTER TYPE and cannot run inside some migrations, and this schema is
@@ -69,7 +70,10 @@ class ProvenanceMixin:
         DateTime(timezone=True), server_default=func.now()
     )
     schema_version: Mapped[int] = mapped_column(
-        Integer, default=CURRENT_SCHEMA_VERSION, nullable=False
+        Integer,
+        default=CURRENT_SCHEMA_VERSION,
+        server_default=text(str(CURRENT_SCHEMA_VERSION)),
+        nullable=False,
     )
 
 

@@ -85,9 +85,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "timestamp": dt.datetime.fromtimestamp(
-                record.created, tz=dt.timezone.utc
-            ).isoformat(),
+            "timestamp": dt.datetime.fromtimestamp(record.created, tz=dt.UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -140,9 +138,7 @@ def _resolve_level(level: str | None) -> int:
     raw = level or os.environ.get("MERIDIAN_LOG_LEVEL") or _DEFAULT_LEVEL
     resolved = logging.getLevelName(raw.strip().upper())
     if not isinstance(resolved, int):
-        raise RuntimeError(
-            f"MERIDIAN_LOG_LEVEL must be a valid level name, got {raw!r}"
-        )
+        raise RuntimeError(f"MERIDIAN_LOG_LEVEL must be a valid level name, got {raw!r}")
     return resolved
 
 

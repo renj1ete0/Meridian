@@ -33,7 +33,40 @@ below (§n) point to the architecture spec unless marked "(scaffold)".
 - Alembic for every schema change — no manual DDL.
 - Structured logging; every run logs `run_id`.
 - No `platform:` keys in compose; images are multi-arch (scaffold §5).
-- Tests: unit for logic, integration against ephemeral Postgres.
+
+## Testing
+
+**Every new function ships with a test, frontend and backend.** Not as ceremony —
+as the only thing that catches the failures this codebase actually produces.
+
+**Write the test first when the spec already says what should happen.** The
+architecture spec states its invariants precisely, so for anything it covers —
+provenance is mandatory, quality tier only moves up, the read-only role cannot
+write, steering never destroys — the test is a transcription of a spec section and
+belongs before the implementation. Cite the section in the test docstring. For
+exploratory or mechanical code the spec doesn't cover, test-after is fine; don't
+perform TDD ritual where the design isn't known yet.
+
+**What counts as a test here.** A single `assert result is True` does not. Prefer,
+in rough order of value:
+
+1. **Drift tests** — compare two sources of truth and fail when they disagree:
+   models vs the migration, DTO enums vs database CHECK constraints, model columns
+   vs schema fields. Never hardcode the expected value set; a test that needs
+   editing whenever the schema legitimately grows will be edited into passing.
+2. **Rejection tests** — assert invalid input is actually *refused*. That valid
+   input works is the weaker half. Three Phase 0 bugs were "the constraint exists"
+   assumptions that turned out to be false.
+3. **Real dependencies** — integration tests run against a real Postgres, never
+   SQLite or a mock. A role bootstrap that never ran, CHECK constraints that were
+   never created, and default privileges that silently denied reads were all
+   invisible to anything else.
+4. **Completeness probes** — assert that a new column is exposed, a new enum has a
+   DTO alias, a new artifact table carries full provenance. These catch the
+   *absent*, which is what review misses.
+
+**Run `make test` before committing.** A task is done when it runs, not when it
+compiles (see [TASKS.md](TASKS.md)).
 
 ## Config
 

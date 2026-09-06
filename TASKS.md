@@ -78,13 +78,15 @@ something went wrong.
 - [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
 - [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible
 - [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
-- [ ] `P2-10` ⚑ human — choose the frontend framework. The specs fix Sigma.js v3 +
-      graphology for the canvas but never name a framework around it; this blocks
-      `P2-11` and everything in phase 6
-- [ ] `P2-11` Frontend scaffold: Vite + TypeScript, `web/` structure per scaffold §2,
-      dev proxy `/api` → `localhost:8000` so no environment-specific base URL exists
+- [x] `P2-10` ⚑ human — frontend framework chosen: **React + TypeScript + Tailwind CSS**,
+      with Sigma.js v3 + graphology for the canvas
+- [ ] `P2-11` Frontend scaffold: Vite + React + TypeScript + Tailwind, `web/` structure
+      per scaffold §2, dev proxy `/api` → `localhost:8000` so no environment-specific
+      base URL exists
 - [ ] `P2-12` Design tokens in code — the two palettes, type scale, and surface rules
-      from `docs/design/design-system.md` as CSS custom properties, light and dark
+      from `docs/design/design-system.md` as CSS custom properties, wired into the
+      Tailwind theme. Tokens must stay the single source: no raw hex in className,
+      or the design system and the app drift apart immediately
 - [ ] `P2-13` `web/src/lib/api.ts` — typed client over `/api/explore/*`, with the
       request/response types kept in step with the pydantic DTOs
 

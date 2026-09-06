@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: aabb62e9602e
+Revision ID: 95e3784b4e2c
 Revises:
-Create Date: 2026-09-06 18:36:13.409751
+Create Date: 2026-09-06 18:51:35.465536
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 import pgvector.sqlalchemy
 
-revision: str = "aabb62e9602e"
+revision: str = "95e3784b4e2c"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("rate_limit", sa.Integer(), nullable=True),
         sa.Column("seed_cap_per_run", sa.Integer(), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("revoked", sa.Boolean(), nullable=False),
+        sa.Column("revoked", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -56,12 +56,13 @@ def upgrade() -> None:
             sa.Enum(
                 "read", "read_write", name="token_scope", native_enum=False, create_constraint=True
             ),
+            server_default="read",
             nullable=False,
         ),
         sa.Column("cost_tier", sa.Text(), nullable=True),
         sa.Column("quality_tier", sa.Integer(), nullable=True),
         sa.Column("max_context", sa.Integer(), nullable=True),
-        sa.Column("enabled", sa.Boolean(), nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("fallback_agent_id", sa.Text(), nullable=True),
         sa.Column("endpoint", sa.Text(), nullable=True),
         sa.Column("health_url", sa.Text(), nullable=True),
@@ -75,6 +76,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="on_demand",
             nullable=False,
         ),
         sa.Column("wake_mac", sa.Text(), nullable=True),
@@ -105,6 +107,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="global",
             nullable=False,
         ),
         sa.Column("topic", sa.Text(), nullable=True),
@@ -118,12 +121,15 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="active",
             nullable=False,
         ),
-        sa.Column("schema_version", sa.Integer(), nullable=False),
+        sa.Column("schema_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.Column("discrimination", sa.Float(), nullable=True),
-        sa.Column("usage_count", sa.Integer(), nullable=False),
-        sa.Column("consecutive_audit_failures", sa.Integer(), nullable=False),
+        sa.Column("usage_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column(
+            "consecutive_audit_failures", sa.Integer(), server_default=sa.text("0"), nullable=False
+        ),
         sa.Column("last_audited_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
@@ -171,6 +177,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="pending",
             nullable=False,
         ),
         sa.Column("requested_by", sa.Text(), nullable=True),
@@ -228,7 +235,7 @@ def upgrade() -> None:
         sa.Column("confidence", sa.Float(), nullable=True),
         sa.Column("merged_from", postgresql.ARRAY(sa.BigInteger()), nullable=True),
         sa.Column("redirects_to", sa.BigInteger(), nullable=True),
-        sa.Column("is_annotation", sa.Boolean(), nullable=False),
+        sa.Column("is_annotation", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -244,7 +251,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=True,
         ),
-        sa.Column("schema_version", sa.Integer(), nullable=False),
+        sa.Column("schema_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.ForeignKeyConstraint(
             ["redirects_to"],
             ["entities.entity_id"],
@@ -275,10 +282,13 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="active",
             nullable=False,
         ),
         sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("consecutive_failures", sa.Integer(), nullable=False),
+        sa.Column(
+            "consecutive_failures", sa.Integer(), server_default=sa.text("0"), nullable=False
+        ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_by", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("domain", name=op.f("pk_fetch_policy")),
@@ -313,10 +323,11 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="manual",
             nullable=False,
         ),
-        sa.Column("approved", sa.Boolean(), nullable=False),
-        sa.Column("occurrence_count", sa.Integer(), nullable=False),
+        sa.Column("approved", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("occurrence_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -385,6 +396,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="url",
             nullable=False,
         ),
         sa.Column(
@@ -401,9 +413,10 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="pending",
             nullable=False,
         ),
-        sa.Column("priority", sa.Integer(), nullable=False),
+        sa.Column("priority", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("topic", sa.Text(), nullable=True),
         sa.Column(
             "seed_source",
@@ -416,9 +429,10 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="frontier",
             nullable=False,
         ),
-        sa.Column("attempts", sa.Integer(), nullable=False),
+        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("fetched_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column(
@@ -451,6 +465,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="queued",
             nullable=False,
         ),
         sa.Column("output_path", sa.Text(), nullable=True),
@@ -496,15 +511,16 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="running",
             nullable=False,
         ),
         sa.Column("last_chunk_id", sa.BigInteger(), nullable=True),
         sa.Column("agent_id", sa.Text(), nullable=True),
-        sa.Column("tokens_used", sa.Integer(), nullable=False),
+        sa.Column("tokens_used", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("cost_usd", sa.Float(), nullable=True),
-        sa.Column("edges_added", sa.Integer(), nullable=False),
-        sa.Column("tags_added", sa.Integer(), nullable=False),
-        sa.Column("seeds_emitted", sa.Integer(), nullable=False),
+        sa.Column("edges_added", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("tags_added", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("seeds_emitted", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("error", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("run_id", name=op.f("pk_runs")),
     )
@@ -533,6 +549,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="informal",
             nullable=False,
         ),
         sa.Column(
@@ -545,12 +562,13 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="background",
             nullable=False,
         ),
         sa.Column("raw_file_path", sa.Text(), nullable=True),
         sa.Column("language", sa.Text(), nullable=True),
-        sa.Column("text_available", sa.Boolean(), nullable=False),
-        sa.Column("ocr_applied", sa.Boolean(), nullable=False),
+        sa.Column("text_available", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("ocr_applied", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column(
             "ocr_tier",
             sa.Enum(
@@ -561,6 +579,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="none",
             nullable=False,
         ),
         sa.Column("ocr_confidence", sa.Float(), nullable=True),
@@ -602,12 +621,12 @@ def upgrade() -> None:
     op.create_table(
         "topic_config",
         sa.Column("topic", sa.Text(), nullable=False),
-        sa.Column("weight", sa.Float(), nullable=False),
-        sa.Column("floor", sa.Float(), nullable=False),
-        sa.Column("ceiling", sa.Float(), nullable=False),
+        sa.Column("weight", sa.Float(), server_default=sa.text("0.0"), nullable=False),
+        sa.Column("floor", sa.Float(), server_default=sa.text("0.05"), nullable=False),
+        sa.Column("ceiling", sa.Float(), server_default=sa.text("1.0"), nullable=False),
         sa.Column("boost_factor", sa.Float(), nullable=True),
         sa.Column("boost_expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("pinned", sa.Boolean(), nullable=False),
+        sa.Column("pinned", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column(
             "status",
             sa.Enum(
@@ -619,6 +638,7 @@ def upgrade() -> None:
                 native_enum=False,
                 create_constraint=True,
             ),
+            server_default="active",
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("topic", name=op.f("pk_topic_config")),
@@ -649,7 +669,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=True,
         ),
-        sa.Column("schema_version", sa.Integer(), nullable=False),
+        sa.Column("schema_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.ForeignKeyConstraint(
             ["attribute_id"],
             ["attribute_definitions.attribute_id"],
@@ -763,7 +783,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=True,
         ),
-        sa.Column("schema_version", sa.Integer(), nullable=False),
+        sa.Column("schema_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.ForeignKeyConstraint(
             ["from_node"],
             ["entities.entity_id"],

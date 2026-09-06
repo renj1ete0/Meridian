@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Float, Index, Integer, Text
+from sqlalchemy import DateTime, Float, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,17 +41,27 @@ class TopicConfig(Base):
 
     topic: Mapped[str] = mapped_column(Text, primary_key=True)
 
-    weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    floor: Mapped[float] = mapped_column(Float, nullable=False, default=0.05)
-    ceiling: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    weight: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, server_default=text("0.0")
+    )
+    floor: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.05, server_default=text("0.05")
+    )
+    ceiling: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default=text("1.0")
+    )
 
     # Decay handled by expiry, not by anyone remembering to undo it.
     boost_factor: Mapped[float | None] = mapped_column(Float)
     boost_expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Autonomous adjustment may not touch a pinned topic.
-    pinned: Mapped[bool] = mapped_column(default=False, nullable=False)
-    status: Mapped[str] = mapped_column(TOPIC_STATUS, nullable=False, default="active")
+    pinned: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        TOPIC_STATUS, nullable=False, default="active", server_default="active"
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<TopicConfig {self.topic} w={self.weight} {self.status}>"
@@ -95,11 +105,15 @@ class FetchPolicy(Base):
     domain: Mapped[str] = mapped_column(Text, primary_key=True)  # '*' = global default
 
     settings: Mapped[dict | None] = mapped_column(JSONB)
-    status: Mapped[str] = mapped_column(DOMAIN_STATUS, nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        DOMAIN_STATUS, nullable=False, default="active", server_default="active"
+    )
     note: Mapped[str | None] = mapped_column(Text)
 
     # Otherwise one dead site consumes crawl budget for weeks unnoticed.
-    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[str | None] = mapped_column(Text)
@@ -123,19 +137,25 @@ class Agent(Base, TimestampMixin):
     provider: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str | None] = mapped_column(Text)
     task_types: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    token_scope: Mapped[str] = mapped_column(TOKEN_SCOPE, nullable=False, default="read")
+    token_scope: Mapped[str] = mapped_column(
+        TOKEN_SCOPE, nullable=False, default="read", server_default="read"
+    )
 
     cost_tier: Mapped[str | None] = mapped_column(Text)
     # Ordinal, and deliberately distinct from cost_tier (§11.12).
     quality_tier: Mapped[int | None] = mapped_column(Integer)
     max_context: Mapped[int | None] = mapped_column(Integer)
 
-    enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
     fallback_agent_id: Mapped[str | None] = mapped_column(Text)
 
     endpoint: Mapped[str | None] = mapped_column(Text)
     health_url: Mapped[str | None] = mapped_column(Text)
-    availability: Mapped[str] = mapped_column(AVAILABILITY, nullable=False, default="on_demand")
+    availability: Mapped[str] = mapped_column(
+        AVAILABILITY, nullable=False, default="on_demand", server_default="on_demand"
+    )
     wake_mac: Mapped[str | None] = mapped_column(Text)
 
     # The NAME of the environment variable holding the key — never the key.
@@ -166,7 +186,9 @@ class AgentToken(Base, TimestampMixin):
     rate_limit: Mapped[int | None] = mapped_column(Integer)
     seed_cap_per_run: Mapped[int | None] = mapped_column(Integer)
     expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    revoked: Mapped[bool] = mapped_column(default=False, nullable=False)
+    revoked: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<AgentToken {self.token_id} agent={self.agent_id} revoked={self.revoked}>"

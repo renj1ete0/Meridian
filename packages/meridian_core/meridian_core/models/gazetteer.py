@@ -15,7 +15,7 @@ share one table rather than duplicating.
 
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, Text
+from sqlalchemy import Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,9 +27,7 @@ GAZETTEER_ENTITY_TYPE = constrained(
     "agency", "scheme", "infrastructure", "metric", "concept", name="gazetteer_entity_type"
 )
 
-GAZETTEER_SOURCE = constrained(
-    "manual", "auto_acronym", "model_proposed", name="gazetteer_source"
-)
+GAZETTEER_SOURCE = constrained("manual", "auto_acronym", "model_proposed", name="gazetteer_source")
 
 
 class GazetteerTerm(Base, TimestampMixin):
@@ -42,12 +40,18 @@ class GazetteerTerm(Base, TimestampMixin):
     entity_type: Mapped[str] = mapped_column(GAZETTEER_ENTITY_TYPE, nullable=False)
     topic_labels: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
-    source: Mapped[str] = mapped_column(GAZETTEER_SOURCE, nullable=False, default="manual")
+    source: Mapped[str] = mapped_column(
+        GAZETTEER_SOURCE, nullable=False, default="manual", server_default="manual"
+    )
 
     # Model-proposed terms land as approved=false and are confirmed in the UI —
     # a two-minute weekly task, or auto-approved above a frequency threshold.
-    approved: Mapped[bool] = mapped_column(default=False, nullable=False)
-    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    approved: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+    occurrence_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     __table_args__ = (
         Index("ix_gazetteer_canonical", "canonical", unique=True),

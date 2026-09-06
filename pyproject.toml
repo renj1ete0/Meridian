@@ -1,6 +1,6 @@
 [project]
 name = "meridian"
-version = "0.1.11"
+version = "0.1.12"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"
@@ -37,3 +37,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# pytest's logging plugin attaches its own handlers to the root logger, which
+# interleaves plain-text records with the JSON ones the logging tests parse.
+addopts = "-p no:logging"

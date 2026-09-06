@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Index, Integer, Text
+from sqlalchemy import DateTime, Index, Integer, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from meridian_core.db import Base
@@ -45,15 +45,25 @@ class QueueTask(Base, TimestampMixin):
     task_id: Mapped[int] = pk()
 
     url_or_query: Mapped[str] = mapped_column(Text, nullable=False)
-    task_type: Mapped[str] = mapped_column(TASK_TYPE, nullable=False, default="url")
-    status: Mapped[str] = mapped_column(TASK_STATUS, nullable=False, default="pending")
+    task_type: Mapped[str] = mapped_column(
+        TASK_TYPE, nullable=False, default="url", server_default="url"
+    )
+    status: Mapped[str] = mapped_column(
+        TASK_STATUS, nullable=False, default="pending", server_default="pending"
+    )
 
     # Higher runs first. Seeds drawn proportionally to the topic weight vector (§10).
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    priority: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     topic: Mapped[str | None] = mapped_column(Text, index=True)
-    seed_source: Mapped[str] = mapped_column(SEED_SOURCE, nullable=False, default="frontier")
+    seed_source: Mapped[str] = mapped_column(
+        SEED_SOURCE, nullable=False, default="frontier", server_default="frontier"
+    )
 
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
 

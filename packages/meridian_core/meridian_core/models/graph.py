@@ -29,6 +29,7 @@ from sqlalchemy import (
     Integer,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -97,7 +98,9 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
 
     # Set for annotation nodes — the highest-quality layer in the system, and the
     # one that actually reflects the user's thinking (§12.5).
-    is_annotation: Mapped[bool] = mapped_column(default=False, nullable=False)
+    is_annotation: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
 
     __table_args__ = (
         # Blocking step of entity resolution: candidates of the same type only.
@@ -163,18 +166,28 @@ class AttributeDefinition(Base, TimestampMixin):
 
     name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
-    scope: Mapped[str] = mapped_column(ATTRIBUTE_SCOPE, nullable=False, default="global")
+    scope: Mapped[str] = mapped_column(
+        ATTRIBUTE_SCOPE, nullable=False, default="global", server_default="global"
+    )
     topic: Mapped[str | None] = mapped_column(Text, index=True)  # set when topic_local
-    status: Mapped[str] = mapped_column(ATTRIBUTE_STATUS, nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        ATTRIBUTE_STATUS, nullable=False, default="active", server_default="active"
+    )
 
-    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    schema_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
 
     # Audit signals (§7.3): discrimination is entropy across applicable entities;
     # explanatory power counts appearances in cross-topic edges and contradiction
     # resolutions, which is the strongest signal of the four.
     discrimination: Mapped[float | None] = mapped_column(Float)
-    usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    consecutive_audit_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    usage_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    consecutive_audit_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     last_audited_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.1.11"
+version = "0.1.12"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 dependencies = [

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, Text
+from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,9 +26,7 @@ RUN_STATUS = constrained("running", "done", "failed", "deferred", name="run_stat
 
 JOB_STATUS = constrained("pending", "queued", "running", "done", "failed", name="job_status")
 
-ENRICHMENT_TYPE = constrained(
-    "figure_vlm", "ocr_quality", "chart_ocr", name="enrichment_item_type"
-)
+ENRICHMENT_TYPE = constrained("figure_vlm", "ocr_quality", "chart_ocr", name="enrichment_item_type")
 
 NOTIFICATION_TYPE = constrained(
     "run_summary",
@@ -51,20 +49,30 @@ class Run(Base):
     started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     completed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     stage: Mapped[str | None] = mapped_column(RUN_STAGE)
-    status: Mapped[str] = mapped_column(RUN_STATUS, nullable=False, default="running")
+    status: Mapped[str] = mapped_column(
+        RUN_STATUS, nullable=False, default="running", server_default="running"
+    )
 
     # The high-water mark. Advanced only after writes commit (§6.3).
     last_chunk_id: Mapped[int | None] = mapped_column(BigInteger)
 
     agent_id: Mapped[str | None] = mapped_column(Text)
-    tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     # Logged per run so a 20% week-on-week rise is visible well before the
     # monthly ceiling is reached (§11.9).
     cost_usd: Mapped[float | None] = mapped_column(Float)
 
-    edges_added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    tags_added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    seeds_emitted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edges_added: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    tags_added: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    seeds_emitted: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     error: Mapped[str | None] = mapped_column(Text)
 
@@ -86,7 +94,9 @@ class EnrichmentItem(Base, TimestampMixin):
 
     item_type: Mapped[str] = mapped_column(ENRICHMENT_TYPE, nullable=False, index=True)
     target_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    status: Mapped[str] = mapped_column(JOB_STATUS, nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(
+        JOB_STATUS, nullable=False, default="pending", server_default="pending"
+    )
 
     requested_by: Mapped[str | None] = mapped_column(Text)
     requested_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
@@ -116,16 +126,16 @@ class Report(Base):
     question: Mapped[str | None] = mapped_column(Text)
     coverage_snapshot: Mapped[dict | None] = mapped_column(JSONB)
 
-    status: Mapped[str] = mapped_column(JOB_STATUS, nullable=False, default="queued")
+    status: Mapped[str] = mapped_column(
+        JOB_STATUS, nullable=False, default="queued", server_default="queued"
+    )
     output_path: Mapped[str | None] = mapped_column(Text)
 
     produced_by: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(Text)
     quality_tier: Mapped[int | None] = mapped_column(Integer)
 
-    created_at: Mapped[dt.datetime | None] = mapped_column(
-        DateTime(timezone=True), index=True
-    )
+    created_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     completed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
 
