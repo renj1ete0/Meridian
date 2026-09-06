@@ -64,12 +64,23 @@ class QueueTask(Base, TimestampMixin):
     attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+
+    # Backoff. A failed task is not eligible again until this passes, so a dead
+    # domain stops spinning the queue (§13.4) without being removed from it.
+    next_attempt_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+    # A lease, not a status. Claiming by flipping status would need a new state
+    # in the flow, and a worker that dies mid-fetch would strand the task there
+    # forever. With a lease, an expired claim is simply reclaimable — which is
+    # what "runs unattended for weeks" requires (§13.4).
+    claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    claimed_by: Mapped[str | None] = mapped_column(Text)
     fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
-        # The claim query: highest-priority pending task, oldest first.
-        Index("ix_queue_claim", "status", "priority", "created_at"),
+        # The claim query: eligible tasks, highest priority first, oldest first.
+        Index("ix_queue_claim", "status", "priority", "created_at", "next_attempt_at"),
         # Cheap already-seen check before enqueuing (§6.4 prefetch filtering).
         Index("ix_queue_url_or_query", "url_or_query"),
     )

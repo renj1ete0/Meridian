@@ -36,6 +36,11 @@ class QueueTaskRead(BaseModel):
     topic: str | None
     seed_source: SeedSource
     attempts: int
+    # Operational state, surfaced so the Admin queue view can show why a task is
+    # waiting — a backoff window and a held lease look identical otherwise.
+    next_attempt_at: dt.datetime | None
+    claimed_at: dt.datetime | None
+    claimed_by: str | None
     fetched_at: dt.datetime | None
     error: str | None
     created_at: dt.datetime

@@ -68,8 +68,10 @@ fetcher, not after it.
 
 *Checkpoint: runs 48h unattended without failing; the result becomes the dev corpus.*
 
-- [ ] `P1-01` Queue claim/pop semantics: status flow, attempts, exponential backoff
-- [ ] `P1-02` `fetch_policy` resolution: per-domain row → global row → file default
+- [x] `P1-01` Queue claim/pop — `meridian_core/queueing.py`. FOR UPDATE SKIP LOCKED,
+      a lease rather than a status flip, exponential backoff with full jitter
+- [x] `P1-02` Policy resolution — `meridian_core/policy.py`. Per-domain → global → file,
+      shallow merge, plus consecutive-failure blocking
 - [ ] `P1-03` `fetch.py` — httpx for static, Crawl4AI for JS-dependent, `render_js: auto`
 - [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
 - [ ] `P1-05` Blocked-domain marking after N consecutive failures
