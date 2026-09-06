@@ -6,7 +6,7 @@ Alembic autogenerate reflects against.
 
 from .config import Agent, AgentToken, FetchPolicy, SteeringLog, TopicConfig
 from .gazetteer import GazetteerTerm
-from .graph import AttributeDefinition, AttributeValue, Edge, Entity
+from .graph import AttributeDefinition, AttributeValue, Edge, Entity, Observation
 from .mixins import (
     CURRENT_SCHEMA_VERSION,
     QUALITY_TIER_MAX,
@@ -35,6 +35,7 @@ __all__ = [
     "Figure",
     "GazetteerTerm",
     "Notification",
+    "Observation",
     "ProvenanceMixin",
     "QueueTask",
     "Report",

@@ -22,6 +22,12 @@ from sqlalchemy import inspect, text
 
 from meridian_core.db import Base
 
+# Importing the models package is what registers tables on Base.metadata. Without
+# it these tests compare against an EMPTY metadata and pass vacuously — which is
+# exactly what happened: the CHECK-constraint guard below reported success while
+# the constraint it was guarding was absent from the database.
+import meridian_core.models  # noqa: F401  isort:skip
+
 pytestmark = pytest.mark.usefixtures("require_db")
 
 
@@ -146,6 +152,58 @@ async def test_check_constraints_exist_for_every_constrained_column(session_for)
     assert live >= len(expected), (
         f"{len(expected)} constrained columns in the models but only {live} CHECK "
         "constraints in the database"
+    )
+
+
+async def test_every_model_check_constraint_exists_in_the_database(session_for) -> None:
+    """Alembic autogenerate cannot see a ``CheckConstraint`` added to an
+    existing table, and ``test_migrations_match_the_models`` above uses that
+    same autogenerate comparison — so it does not catch this either.
+    ``ck_edges_valid_period_ordered`` and ``ck_edges_comparison_states_its_limits``
+    were both declared on the ``Edge`` model and silently absent from the
+    database until someone wrote them into a migration by hand
+    (``op.create_check_constraint``). Only a live query against
+    ``pg_constraint`` — not the model, not ``alembic check`` — can catch the
+    next one.
+    """
+    from sqlalchemy import CheckConstraint
+
+    # Constraint names are already fully rendered through Base.metadata's
+    # naming convention at import time (e.g. name="valid_period_ordered" on
+    # the model becomes "ck_edges_valid_period_ordered" here), so they compare
+    # directly against what Postgres reports. This also picks up the CHECKs
+    # `constrained()` enum columns generate — expected, since those should
+    # all be present too.
+    expected = {
+        str(c.name)
+        for t in Base.metadata.tables.values()
+        for c in t.constraints
+        if isinstance(c, CheckConstraint)
+    }
+    # A comparison against an empty model set would pass no matter what the
+    # database contained. Assert there is something to compare before comparing.
+    assert expected, "Base.metadata has no CheckConstraints — models were not imported"
+    sess = await session_for("rw")
+    live = set(
+        (
+            await sess.execute(
+                text(
+                    "SELECT conname FROM pg_constraint c "
+                    "JOIN pg_class t ON c.conrelid = t.oid "
+                    "JOIN pg_namespace n ON t.relnamespace = n.oid "
+                    "WHERE c.contype = 'c' AND n.nspname = 'public'"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    missing = expected - live
+    assert not missing, (
+        f"CheckConstraints declared on the model but absent from the database: "
+        f"{sorted(missing)}. Alembic autogenerate does not detect a CheckConstraint "
+        "added to an existing table — write it into a migration by hand with "
+        "op.create_check_constraint()."
     )
 
 

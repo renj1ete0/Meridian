@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from meridian_core.models.graph import COMPARISON_RELATION
 
 from .common import Confidence, CreateBase, ProvenanceFields, QualityTier, SupportingChunkIds
 from .enums import AttributeScope, AttributeStatus, Certainty, NodeType, Stance
@@ -69,7 +72,27 @@ class EdgeCreate(ProvenanceFields):
     stance: Stance | None = None
     certainty: Certainty | None = None
     contested_with: list[int] | None = None
+    similarity_dimension: str | None = None
+    disanalogy: str | None = None
+    # When the fact held — not when we learned it (§9 temporal decay).
+    valid_from: dt.date | None = None
+    valid_to: dt.date | None = None
     created_by: str | None = None
+
+    @model_validator(mode="after")
+    def _comparison_states_its_limits(self) -> EdgeCreate:
+        """§7.2: a comparison edge must name its axis and its limits.
+
+        Mirrors the database CHECK so the caller gets a 422 naming the missing
+        field rather than an opaque integrity error.
+        """
+        if self.relation_type == COMPARISON_RELATION and not (
+            self.similarity_dimension and self.disanalogy
+        ):
+            raise ValueError(
+                "a comparison edge requires similarity_dimension and disanalogy (§7.2)"
+            )
+        return self
 
 
 class EdgeRead(BaseModel):
@@ -85,6 +108,10 @@ class EdgeRead(BaseModel):
     stance: Stance | None
     certainty: Certainty | None
     contested_with: list[int] | None
+    similarity_dimension: str | None
+    disanalogy: str | None
+    valid_from: dt.date | None
+    valid_to: dt.date | None
     created_by: str | None
     produced_by: str | None
     model: str | None
@@ -151,6 +178,69 @@ class AttributeValueRead(BaseModel):
     confidence: Confidence | None
     supporting_chunk_ids: list[int]
     tagged_at: dt.datetime | None
+    produced_by: str | None
+    model: str | None
+    quality_tier: QualityTier | None
+    produced_at: dt.datetime | None
+    schema_version: int
+    created_at: dt.datetime
+
+
+class ObservationCreate(ProvenanceFields):
+    """A measured quantity attached to an entity.
+
+    ``metric`` plus ``unit`` plus ``denominator`` are what make a number mean
+    anything — "3.2 percent" is unusable without knowing percent *of what*
+    (§8: extract the structure rather than letting it be summarised away).
+    """
+
+    subject_entity_id: int
+    metric: str = Field(min_length=1)
+    value_numeric: float | None = None
+    value_text: str | None = None
+    unit: str | None = None
+    denominator: str | None = None
+    geography_entity_id: int | None = None
+    period_start: dt.date | None = None
+    period_end: dt.date | None = None
+    method: str | None = None
+    qualifiers: dict[str, Any] | None = None
+    confidence: Confidence | None = None
+    supporting_chunk_ids: SupportingChunkIds
+    contested_with: list[int] | None = None
+
+    @model_validator(mode="after")
+    def _needs_a_value(self) -> ObservationCreate:
+        """Mirrors the database CHECK; an observation with no value is not one."""
+        if self.value_numeric is None and self.value_text is None:
+            raise ValueError("observation needs value_numeric or value_text")
+        return self
+
+    @model_validator(mode="after")
+    def _period_ordered(self) -> ObservationCreate:
+        if self.period_start and self.period_end and self.period_end < self.period_start:
+            raise ValueError("period_end precedes period_start")
+        return self
+
+
+class ObservationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    observation_id: int
+    subject_entity_id: int
+    metric: str
+    value_numeric: float | None
+    value_text: str | None
+    unit: str | None
+    denominator: str | None
+    geography_entity_id: int | None
+    period_start: dt.date | None
+    period_end: dt.date | None
+    method: str | None
+    qualifiers: dict[str, Any] | None
+    confidence: Confidence | None
+    supporting_chunk_ids: list[int]
+    contested_with: list[int] | None
     produced_by: str | None
     model: str | None
     quality_tier: QualityTier | None

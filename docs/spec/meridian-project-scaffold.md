@@ -451,12 +451,52 @@ Develop on the Fedora box (x86, ample RAM, llama.cpp already present), not the P
 
 | Layer | Directory | Surface |
 |---|---|---|
-| Frontend | `web/` | React + TypeScript + Tailwind on Vite, port 5173 |
-| Backend — API | `services/api/` | FastAPI, port 8000. Serves Explore, Admin, MCP |
+| Frontend | `web/` | React + TypeScript + Tailwind on Vite, port 21115 |
+| Backend — API | `services/api/` | FastAPI, port 21114. Serves Explore, Admin, MCP |
 | Backend — ingestion | `services/worker/` | Headless daemon; no HTTP |
 | Backend — synthesis | `services/orchestrator/` | Headless; scheduled, or `--once` |
 
 Only `api` has an HTTP surface. Worker and orchestrator are background processes that communicate through Postgres.
+
+### Host ports
+
+Published host ports use a distinctive `211xx` block so a fresh clone does not
+collide with an existing Postgres on 5432 or anything already holding 8080:
+
+| Port | Service |
+|---|---|
+| 21111 | postgres |
+| 21112 | searxng |
+| 21113 | crawl4ai |
+| 21114 | api (run natively) |
+| 21115 | web (Vite, run natively) |
+
+Meridian does not run a local model, so no port is reserved for one. The optional
+local tier (§11.7) is a process you run yourself, on whatever port you choose;
+Meridian only stores that endpoint in the agent registry if you enable it.
+
+**These are development ports.** In production the count of ports reachable from
+outside the machine is zero:
+
+| Direction | Who | Port needed |
+|---|---|---|
+| Egress | worker → the web; orchestrator → hosted API or LAN model | none — the OS assigns an ephemeral source port |
+| Internal | worker → searxng, crawl4ai; every service → postgres | none published; container ports on the compose network |
+| Ingress | `api` | `127.0.0.1:21114` — loopback only, reachable solely by `cloudflared` |
+| Ingress | everything else | none |
+
+`cloudflared` is the reason. It dials *out* to Cloudflare and holds the tunnel
+open, so inbound traffic arrives over a connection Meridian initiated — which is
+what "no open inbound ports" actually means. Describing it as "the only exposed
+service" undersells it: it is not exposed either.
+
+Do not add a `ports:` mapping to a production service to debug something. Use
+`docker compose exec`, or publish on loopback temporarily and remove it.
+
+**Container-internal ports are unchanged** — services still reach each other at
+`postgres:5432` and `searxng:8080`, because each compose project has its own
+network namespace and nothing there can clash. In production only `api`
+publishes a host port at all, on loopback; everything else is internal.
 
 ### Pattern: infra in Docker, application code native
 
@@ -469,7 +509,7 @@ name: meridian-dev
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    ports: ["5432:5432"]              # exposed for host-native services
+    ports: ["21111:5432"]             # host 21111 -> container 5432
     environment:
       POSTGRES_DB: meridian
       POSTGRES_USER: meridian
@@ -480,12 +520,12 @@ services:
 
   searxng:
     image: searxng/searxng:latest
-    ports: ["8080:8080"]
+    ports: ["21112:8080"]
     volumes: ["./config/searxng:/etc/searxng:ro"]
 
   crawl4ai:
     image: unclecode/crawl4ai:0.9.2
-    ports: ["11235:11235"]
+    ports: ["21113:11235"]
     shm_size: 1g
     environment:
       CRAWL4AI_HOOKS_ENABLED: "false"
@@ -503,13 +543,13 @@ make migrate
 make seed                          # config/*.yaml → DB
 
 # terminal 1 — API (hot reload)
-uv run uvicorn api.main:app --reload --port 8000
+uv run uvicorn api.main:app --reload --port 21114
 
 # terminal 2 — ingestion worker
 uv run python -m worker.main
 
 # terminal 3 — frontend
-cd web && npm run dev              # → http://localhost:5173
+cd web && npm run dev              # → http://localhost:21115
 ```
 
 The orchestrator is **not** run continuously in development:
@@ -526,7 +566,7 @@ uv run python -m orchestrator.main --once             # real synthesis pass
 ```js
 // web/vite.config.ts
 server: {
-  proxy: { '/api': 'http://localhost:8000' }
+  proxy: { '/api': 'http://localhost:21114' }
 }
 ```
 
@@ -537,8 +577,8 @@ So the frontend calls `/api/explore/...` in both dev and production, with no env
 llama.cpp already runs on this machine. Point the dev agent registry at it:
 
 ```
-LOCAL_LLM_URL=http://localhost:8080/v1
-LOCAL_LLM_HEALTH_URL=http://localhost:8080/health
+LOCAL_LLM_URL=http://localhost:<your-port>/v1
+LOCAL_LLM_HEALTH_URL=http://localhost:<your-port>/health
 ```
 
 **Run a separate llama.cpp process on its own port for Meridian** (§11.7) rather than sharing the one serving editor tooling — it avoids slot contention and makes request hangs attributable.

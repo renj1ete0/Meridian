@@ -74,6 +74,8 @@ from .graph import (
     EdgeRead,
     EntityCreate,
     EntityRead,
+    ObservationCreate,
+    ObservationRead,
 )
 from .queue import QueueTaskCreate, QueueTaskRead
 from .runs import (
@@ -157,4 +159,6 @@ __all__ = [
     "ReportRead",
     "NotificationCreate",
     "NotificationRead",
+    "ObservationCreate",
+    "ObservationRead",
 ]

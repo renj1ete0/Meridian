@@ -1,5 +1,13 @@
 # Meridian — local dev infra only. See docs/spec/meridian-project-scaffold.md §6.
 #
+# Host ports live in a distinctive 211xx block so nothing here collides with a
+# stray Postgres on 5432 or whatever else is already bound to 8080. Container
+# ports stay standard, so service-to-service URLs inside the compose network are
+# unchanged (postgres:5432, searxng:8080).
+#
+#   21111 postgres · 21112 searxng · 21113 crawl4ai
+#   21114 api (native) · 21115 web (native)
+#
 # Runs the stateful dependencies (postgres, searxng, crawl4ai) in containers,
 # exposed on localhost. Application services (api/worker/orchestrator/web) run
 # natively via `uv` / `npm` against this infra — see README.md and scaffold §6
@@ -10,7 +18,7 @@ name: meridian-dev
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    ports: ["5432:5432"]              # exposed for host-native services
+    ports: ["21111:5432"]             # host 21111 -> container 5432
     environment:
       POSTGRES_DB: meridian
       POSTGRES_USER: meridian
@@ -26,12 +34,12 @@ services:
 
   searxng:
     image: searxng/searxng:latest
-    ports: ["8080:8080"]
+    ports: ["21112:8080"]
     volumes: ["./config/searxng:/etc/searxng:ro"]
 
   crawl4ai:
     image: unclecode/crawl4ai:0.9.2
-    ports: ["11235:11235"]
+    ports: ["21113:11235"]
     shm_size: 1g
     environment:
       CRAWL4AI_HOOKS_ENABLED: "false"

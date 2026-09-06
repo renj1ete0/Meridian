@@ -9,8 +9,8 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-0D6F7C">
-  <img alt="Status: pre-build" src="https://img.shields.io/badge/status-pre--build-805A28">
+  <img alt="Version 0.2" src="https://img.shields.io/badge/version-0.2-0D6F7C">
+  <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
 ---
@@ -22,8 +22,9 @@ and relationships into a knowledge graph, and records where every single claim c
 from. You explore that graph, annotate it, and ask questions of it — and it tells you
 not just what it knows, but where the evidence is thin, stale, or contradictory.
 
-> **Status: pre-build.** The architecture and design system are complete; application
-> code has not been written yet. See the [roadmap](docs/roadmap.md).
+> **Status: phase 1 of 7.** The design, the shared core, the database schema and its
+> migrations are in place and tested. The crawler is next — nothing ingests yet.
+> See the [roadmap](docs/roadmap.md) and [TASKS.md](TASKS.md).
 
 ## Why it exists
 
@@ -77,7 +78,7 @@ material at once and therefore produces better gap analysis than trickled infere
 | Embeddings | bge-m3 (multilingual) |
 | Entity extraction | spaCy + curated gazetteer |
 | Backend | FastAPI — serves UI and MCP |
-| Frontend | Sigma.js v3 + graphology |
+| Frontend | React + TypeScript + Tailwind, with Sigma.js v3 + graphology |
 | Search | SearXNG, self-hosted, with a paid API fallback |
 | Fetch and extract | Crawl4AI (version-pinned) |
 | Document conversion | MarkItDown |
@@ -115,7 +116,7 @@ work between them by task type and cost.
 git clone <this-repo> && cd meridian
 cp .env.example .env.dev                          # fill in secrets — see comments inside
 
-docker compose -f docker-compose.dev.yml up -d    # postgres, searxng, crawl4ai
+docker compose -f docker-compose.dev.yml up -d     # postgres, searxng, crawl4ai
 make migrate                                      # schema
 make seed                                         # config/*.yaml → database, once
 ```
@@ -123,16 +124,22 @@ make seed                                         # config/*.yaml → database, 
 Application services run natively during development for fast iteration:
 
 ```bash
-uv run uvicorn api.main:app --reload --port 8000  # API + MCP
-uv run python -m worker.main                      # ingestion loop
-cd web && npm run dev                             # UI on :5173
+uv run uvicorn api.main:app --reload --port 21114   # API + MCP
+uv run python -m worker.main                        # ingestion loop
+cd web && npm run dev                               # UI on :21115
 ```
 
 Production runs the whole stack in containers behind `cloudflared`
 (`docker compose up -d`). Full sequence: [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
 
-> Nothing under `services/` or `packages/` is implemented yet, so today these commands
-> bring up infrastructure only.
+> `packages/meridian_core` is built and tested, so `make migrate` and `make seed` work
+> today. `services/` is not implemented yet, so the uvicorn and worker commands above
+> are what phase 1 and 2 fill in.
+
+Host ports sit in a distinctive `211xx` block — `21111` postgres, `21112` searxng,
+`21113` crawl4ai, `21114` api, `21115` web — so a fresh clone doesn't collide with
+whatever else is already bound to 5432 or 8080. Container-internal ports are
+unchanged.
 
 **Configuration lives in the database, not in files.** The YAML in `config/` seeds topic
 weights, the attribute schema, fetch policy, the agent registry, and the gazetteer
@@ -165,8 +172,9 @@ docs/         specs, roadmap, design system and brand assets
 ## FAQ
 
 **Can I run it today?**
-No. The design is finished and the scaffold is in place, but application code hasn't been
-written. The [roadmap](docs/roadmap.md) tracks progress; phase 2 is the honest go/no-go.
+Not usefully. The schema, migrations and seeding work — `make migrate && make seed` gives
+you a real, empty database — but nothing crawls yet. The [roadmap](docs/roadmap.md) tracks
+progress; phase 2 is the honest go/no-go.
 
 **How is this different from Zotero, Obsidian, or a RAG chatbot?**
 Those store or retrieve documents. Meridian builds a *typed graph of claims* with

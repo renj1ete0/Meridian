@@ -91,6 +91,7 @@ READ_PAIRS = [
     (models.Edge, schemas.EdgeRead, set()),
     (models.AttributeDefinition, schemas.AttributeDefinitionRead, set()),
     (models.AttributeValue, schemas.AttributeValueRead, set()),
+    (models.Observation, schemas.ObservationRead, set()),
     (models.GazetteerTerm, schemas.GazetteerTermRead, set()),
     (models.TopicConfig, schemas.TopicConfigRead, set()),
     (models.FetchPolicy, schemas.FetchPolicyRead, set()),
@@ -128,7 +129,7 @@ def test_read_dto_invents_no_fields(model, dto, exempt: set[str]) -> None:
 PROVENANCE_COLUMNS = {"produced_by", "model", "quality_tier", "produced_at", "schema_version"}
 
 # Tables whose rows are model-produced artifacts and must therefore be auditable.
-PROVENANCE_BEARING = ["entities", "edges", "attribute_values"]
+PROVENANCE_BEARING = ["entities", "edges", "attribute_values", "observations"]
 
 
 @pytest.mark.parametrize("table_name", PROVENANCE_BEARING)
@@ -140,9 +141,10 @@ def test_artifact_tables_carry_full_provenance(table_name: str) -> None:
     assert not missing, f"{table_name} is missing provenance columns: {sorted(missing)}"
 
 
-@pytest.mark.parametrize("table_name", ["edges", "attribute_values"])
+@pytest.mark.parametrize("table_name", ["edges", "attribute_values", "observations"])
 def test_assertable_rows_require_supporting_chunks(table_name: str) -> None:
-    """An edge or tag without a justifying chunk is not assertable (§2 principle 3)."""
+    """An edge, tag, or observation without a justifying chunk is not assertable
+    (§2 principle 3)."""
     column = Base.metadata.tables[table_name].c.supporting_chunk_ids
     assert not column.nullable, (
         f"{table_name}.supporting_chunk_ids is nullable — provenance would be optional"

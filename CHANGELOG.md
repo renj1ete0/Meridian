@@ -10,6 +10,42 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 Nothing yet.
 
+## [0.3.0] — 2026-09-06
+
+The §14.3 design exercise, and the schema changes it forced. Ten questions
+traced against the schema before any content exists — five were unanswerable.
+Full write-up in [docs/design-questions.md](docs/design-questions.md).
+
+### Added
+
+- `P0-14` The ten questions, each traced against the schema with its verdict
+- `P0-20` `observations` — a measured quantity attached to an entity: metric,
+  value, unit, denominator, geography, period, method, and a JSONB `qualifiers`
+  column (GIN-indexed) for open-ended breakdowns like user segment or time of
+  day. Keyed to one subject so a time series accumulates against a stable node
+  rather than spawning near-identical entities for resolution to mis-merge
+- `edges.valid_from` / `valid_to` — when the fact held, distinct from when it
+  was recorded, derived, or published
+- `edges.similarity_dimension` / `disanalogy`, with a CHECK rejecting any
+  `comparable_to` edge missing either. §7.2 requires both; enforcing it in
+  Postgres rather than in a prompt follows §2 principle 6
+- Host ports moved to a distinctive `211xx` block, with the ingress/egress
+  split documented — production publishes exactly one port, on loopback
+
+### Fixed
+
+- `P0-21` Alembic autogenerate does not detect a `CheckConstraint` added to an
+  existing table, and `alembic check` shares that blind spot. Two edge
+  constraints existed only in the model. Hand-written into the migration, and a
+  drift test now compares `Base.metadata` against `pg_constraint`
+- That drift test initially passed while the constraint it guarded was absent:
+  the module imported `Base` but not the models, so it compared against an empty
+  metadata. It now imports the models and asserts the expected set is non-empty
+  before comparing — a guard that cannot fail is worse than no guard
+- Local-model config no longer reserves a port. Meridian is the client there,
+  not the server; the tier stays optional and disabled
+- Stale README claims corrected — the core is built and tested, not unwritten
+
 ## [0.2.0] — 2026-09-06
 
 **Phase 0 complete.** `make migrate && make seed` yields a clean, empty database

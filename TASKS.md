@@ -37,12 +37,19 @@ doing before much of phase 1, since seed quality propagates downstream.
 - [x] `P0-09` SQLAlchemy models — `runs`, `steering_log`, `enrichment_queue`, `reports`
 - [x] `P0-10` Pydantic DTOs in `meridian_core/schemas/` for every service boundary
 - [x] `P0-19` Test suite: drift, rejection and completeness tests against real Postgres
+- [x] `P0-20` Schema changes from the `P0-14` trace: `observations` table (with JSONB
+      `qualifiers`), `edges.valid_from`/`valid_to`, `edges.similarity_dimension`/`disanalogy`
+      with a CHECK enforcing §7.2
+- [x] `P0-21` Fix: Alembic autogenerate does not detect CheckConstraints on existing
+      tables, so two edge constraints existed only in the model. Hand-written into the
+      migration; drift test added so it cannot recur
 - [x] `P0-18` Fix role bootstrap: `.sql` → `.sh` (entrypoint has no psql var bindings),
       default privileges declared for both writers, pgvector enabled at init
 - [x] `P0-11` Alembic setup + initial migration; run as `PG_MIGRATION_URL` (owner), not rw
 - [x] `P0-12` `scripts/seed.py` — idempotent `config/*.yaml` → DB, config only, never content
 - [x] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
-- [ ] `P0-14` ⚑ human — write the ten questions (spec §14.3), check the schema answers them
+- [x] `P0-14` ⚑ human — the ten questions, traced against the schema → `docs/design-questions.md`.
+      Found five gaps; fixed in `P0-20`
 - [ ] `P0-15` ⚑ human — held-out question set of 20–30 for monthly regression (spec §14.1)
 - [ ] `P0-16` ⚑ human — hand-seed 15–25 cold-start sources into `config/seed_sources.yaml`
 - [ ] `P0-17` ⚑ human — expand `config/gazetteer_seed.yaml` toward ~50 terms

@@ -91,7 +91,7 @@ services:
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures:ro
-    ports: ["127.0.0.1:8000:8000"]   # loopback only; cloudflared fronts it
+    ports: ["127.0.0.1:21114:8000"]  # loopback only; cloudflared fronts it
 
   web:
     <<: *common
