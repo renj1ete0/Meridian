@@ -73,6 +73,13 @@ fetcher, not after it.
 - [x] `P1-02` Policy resolution — `meridian_core/policy.py`. Per-domain → global → file,
       shallow merge, plus consecutive-failure blocking
 - [ ] `P1-03` `fetch.py` — httpx for static, Crawl4AI for JS-dependent, `render_js: auto`
+- [ ] `P1-24` **Pin the validated address (closes the SSRF TOCTOU gap).** `netguard`
+      resolves and validates, but nothing currently stops the HTTP client doing a
+      *second* DNS lookup and getting a different answer — which is exactly what DNS
+      rebinding exploits. The fetcher must connect to the address it validated, with
+      the `Host` header and TLS SNI set to the original hostname, and must disable
+      automatic redirect following so each hop is handed back to `netguard` first.
+      `block_mixed_dns` narrows this window; only pinning closes it
 - [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
 - [ ] `P1-05` Blocked-domain marking after N consecutive failures
 - [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
@@ -102,6 +109,10 @@ fetcher, not after it.
 - [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
 - [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
 - [ ] `P1-15` Worker main loop, supervision, graceful restart
+- [ ] `P1-25` **Egress restriction — the defence that survives an application bug.**
+      Everything in `netguard` is one mistake from failing open. Give the fetching
+      process no route to RFC1918 at all: a network namespace without a LAN route, or
+      an egress proxy that refuses private destinations
 - [ ] `P1-22` **Network topology.** `internal: true` blocks outbound, but worker,
       crawl4ai and searxng all need it — the compose file admits this in a comment
       and never resolves it. Split into `internal` (postgres, api, web) and `egress`
