@@ -16,9 +16,13 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1** — phase 0 complete and pushed. Next: `P1-01`, the queue
-claim/pop semantics. The three ⚑ human tasks below are still open and are worth
-doing before much of phase 1, since seed quality propagates downstream.
+**Current phase: 1.** Phase 0 is closed — schema, migrations, seeding, logging, DTOs
+and 116 tests, plus the §14.3 design exercise and its five schema fixes. The only
+open phase-0 item is `P0-15`, deferred until phase 2 needs it.
+
+Next: `P1-01`, queue claim/pop semantics. Note that `P1-20` (SSRF guard) and
+`P1-23` (injection pre-screen) are safety work that should land alongside the
+fetcher, not after it.
 
 ---
 
@@ -50,9 +54,15 @@ doing before much of phase 1, since seed quality propagates downstream.
 - [x] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
 - [x] `P0-14` ⚑ human — the ten questions, traced against the schema → `docs/design-questions.md`.
       Found five gaps; fixed in `P0-20`
-- [ ] `P0-15` ⚑ human — held-out question set of 20–30 for monthly regression (spec §14.1)
-- [ ] `P0-16` ⚑ human — hand-seed 15–25 cold-start sources into `config/seed_sources.yaml`
-- [ ] `P0-17` ⚑ human — expand `config/gazetteer_seed.yaml` toward ~50 terms
+- [-] `P0-15` ⚑ human — held-out question set, **deferred by decision**. Needed before
+      the phase 2 go/no-go, not before phase 1: §14.1 uses it to measure whether the
+      graph improves month to month, and there is nothing to measure until the corpus
+      exists. Re-open when phase 2 starts
+- [x] `P0-16` ⚑ human — cold-start seeds: 8 authority roots + 5 query seeds. Kept short
+      deliberately; tier-upranking of search results does the discovery
+- [x] `P0-17` ⚑ human — gazetteer at 64 terms, jurisdiction-scoped, with 20 ambiguous
+      surface forms flagged so the resolver disambiguates from context rather than
+      guessing
 
 ## Phase 1 · Ingestion
 

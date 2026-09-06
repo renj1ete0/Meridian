@@ -10,6 +10,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 Nothing yet.
 
+## [0.5.1] — 2026-09-06
+
+**Phase 0 closed.** From an empty database, `make migrate && make seed` applies
+six migrations and yields 21 tables with configuration populated and every
+content table empty — the checkpoint the roadmap set. 116 tests pass.
+
+`P0-15`, the held-out question set, is deferred by decision: §14.1 uses it to
+measure whether the graph improves month to month, and there is nothing to
+measure until a corpus exists. It is needed before the phase 2 go/no-go, not
+before phase 1.
+
+### Added
+
+- `P0-16` Cold-start seeds — 8 authority roots and 5 query seeds
+- `P0-17` Gazetteer at 64 terms, jurisdiction-scoped, 20 ambiguous surface forms
+  flagged
+
 ## [0.3.0] — 2026-09-06
 
 The §14.3 design exercise, and the schema changes it forced. Ten questions
