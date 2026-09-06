@@ -19,6 +19,8 @@ import random
 import uuid
 
 import pytest
+from sqlalchemy import delete, func, select
+
 from meridian_core.models import QueueTask
 from meridian_core.queueing import (
     DEFAULT_LEASE_SECONDS,
@@ -28,7 +30,6 @@ from meridian_core.queueing import (
     reclaim_expired,
     release,
 )
-from sqlalchemy import delete, func, select
 
 pytestmark = pytest.mark.usefixtures("require_db")
 

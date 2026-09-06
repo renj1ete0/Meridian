@@ -68,9 +68,7 @@ def _include_object(obj, name: str, type_: str, reflected: bool, compare_to) -> 
     Apache AGE and pgvector create catalog tables in their own schemas; without
     this, autogenerate proposes dropping them.
     """
-    if type_ == "table" and getattr(obj, "schema", None) not in (None, "public"):
-        return False
-    return True
+    return not (type_ == "table" and getattr(obj, "schema", None) not in (None, "public"))
 
 
 def run_migrations_offline() -> None:

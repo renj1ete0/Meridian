@@ -14,9 +14,10 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from meridian_core.db import Role, normalize_url
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from meridian_core.db import Role, normalize_url
 
 DEV_URLS = {
     "rw": "postgresql://meridian_rw:dev@localhost:21111/meridian",

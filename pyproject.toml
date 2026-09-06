@@ -1,12 +1,13 @@
 [project]
 name = "meridian"
-version = "0.8.0"
+version = "0.9.0"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
     "meridian-core",
+    "meridian-worker",
     "pyyaml>=6.0",
 ]
 
@@ -14,10 +15,11 @@ dependencies = [
 # pytest, scripts). Add each service to `members` as it gains a pyproject.toml —
 # a bare glob over services/* fails for directories that don't have one yet.
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*", "services/worker"]
 
 [tool.uv.sources]
 meridian-core = { workspace = true }
+meridian-worker = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -34,9 +36,18 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+# The workspace packages. Without this ruff sorts them with third-party
+# imports, which disagrees with how every module in the repo is written and
+# left `ruff check .` failing on files nobody had touched.
+[tool.ruff.lint.isort]
+known-first-party = ["meridian_core", "worker", "api", "orchestrator"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# tests/http_doubles.py holds the HTTP test doubles the fetcher tests import
+# directly; importlib mode does not put a test file's own directory on the path.
+pythonpath = ["tests"]
 # pytest's logging plugin attaches its own handlers to the root logger, which
 # interleaves plain-text records with the JSON ones the logging tests parse.
 # importlib mode: without it, two test files sharing a basename across

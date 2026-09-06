@@ -102,6 +102,16 @@ FETCH_OUTCOME = constrained(
     "blocked",  # domain marked blocked by policy before the request went out
     "connection_error",
     "parse_error",
+    # The safeguards in worker/fetch.py, each recorded separately rather than
+    # collapsed into "blocked". They diagnose different things and want
+    # different responses: an unsafe_target spike means frontier expansion is
+    # chasing internal addresses, content_type_rejected means the allowlist is
+    # too narrow for a domain, and a decompression_bomb is someone being hostile.
+    # One shared bucket would make all three read as "a domain went bad".
+    "unsafe_target",  # netguard refused the address, scheme or redirect hop
+    "content_type_rejected",
+    "decompression_bomb",
+    "too_many_redirects",
     name="fetch_outcome",
 )
 

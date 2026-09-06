@@ -10,6 +10,7 @@ from __future__ import annotations
 import ipaddress
 
 import pytest
+
 from meridian_core.netguard import (
     BlockedTarget,
     address_verdict,
@@ -27,7 +28,11 @@ def resolver_returning(*addresses: str):
     return _resolve
 
 
-def failing_resolver(exc: Exception = OSError("nxdomain")):
+def failing_resolver(exc: Exception | None = None):
+    # Built inside the function: an exception instance in a default argument is
+    # shared across every call, and accumulates a traceback from the first raise.
+    exc = exc or OSError("nxdomain")
+
     async def _resolve(host: str, port: int = 443):
         raise exc
 

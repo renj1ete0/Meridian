@@ -10,6 +10,90 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 Nothing yet.
 
+## [0.9.0] — 2026-09-06
+
+**The fetcher.** A URL now becomes bytes, and does so without becoming a way
+into the network it runs on. Live against the real internet and a real Crawl4AI
+0.9.2, not only against tests.
+
+### Added
+
+- `P1-03` `worker/fetch.py` — `httpx` for static content, Crawl4AI's browser for
+  JS-dependent pages, `render_js: auto` deciding per page from a mechanical
+  heuristic (no model, per the §2.1 fast-loop invariant). `auto` short-circuits
+  on any page that already has a paragraph of visible text, which is what keeps
+  §6.4's "don't render every page" constraint from eroding
+- `P1-24` **The SSRF TOCTOU gap is closed.** Requests are addressed to the IP
+  literal `netguard` validated, with `Host` and TLS SNI set to the original
+  hostname, so the certificate is still checked against the name while the
+  socket cannot be steered elsewhere by a second DNS answer. Redirects are
+  followed by hand — `follow_redirects` is off at the client level, not just per
+  request — with every hop re-validated, re-resolved and re-pinned
+- `P1-21` Content safeguards: content-type allowlist checked on the headers,
+  streaming abort at `max_page_bytes`, and a decompression-ratio cap that
+  actually bounds memory. The first implementation did not: letting `httpx`
+  decode meant one 64KB network read arrived as a single 67MB object, so the cap
+  was checked after the allocation it existed to prevent. The body is now read
+  raw and pushed through `zlib` in 1MiB steps with both caps re-checked between
+  them — a 200MB gzip bomb costs single-digit megabytes and is refused mid-inflation
+- `fetch_attempts.outcome` gains `unsafe_target`, `content_type_rejected`,
+  `decompression_bomb` and `too_many_redirects`. Kept distinct rather than
+  folded into `blocked`: they diagnose different things, and the §12.5 health
+  line is the only place an unattended crawler's problems become visible
+- `netguard.check_https_final()` plus named refusal reasons, so the fetcher can
+  tell a dead link (`connection_error`) from a hostile target (`unsafe_target`)
+  without matching on prose. A drift test asserts the two modules still agree
+- `services/worker` as a workspace package, with `httpx` scoped to it rather
+  than added to `meridian_core` — an HTTP client has no business in the
+  dependency closure the API and orchestrator import for database access
+
+### Fixed
+
+- `docker-compose.dev.yml` published port 21113 for Crawl4AI, which reached
+  nothing: since 0.9.0 its entrypoint binds gunicorn to loopback *inside the
+  container* unless `CRAWL4AI_API_TOKEN` is set. Now set, and every request
+  carries the bearer token
+- Migration `28fc51373a89` is hand-written for the reason `P0-21` recorded:
+  autogenerate detected the VARCHAR widening and left the CHECK constraint
+  alone, which would have produced a column accepting the new outcomes and a
+  constraint rejecting all of them
+
+## [0.8.0] — 2026-09-06
+
+### Added
+
+- `P1-20` **SSRF guard** — `meridian_core/netguard.py`. Classification happens
+  after DNS resolution, on the addresses, never on the hostname text; every
+  redirect hop is re-checked; a name answering with *any* private address is
+  refused outright, which is the DNS-rebinding defence; and the integer and
+  IPv4-mapped spellings of a loopback address are normalised before judgement.
+  Allow-nothing-by-default — an address it cannot classify is refused
+
+## [0.7.0] — 2026-09-06
+
+### Added
+
+- `P1-01` Queue claim/pop — `meridian_core/queueing.py`. `FOR UPDATE SKIP
+  LOCKED` so N workers drain the queue without coordination, a lease rather than
+  a status flip so a crashed worker's task expires instead of stranding, and
+  exponential backoff with full jitter so a recovering domain does not get a
+  thundering herd
+- `P1-02` Policy resolution — `meridian_core/policy.py`. Per-domain row → global
+  `'*'` row → file defaults, shallow merge, plus the consecutive-failure counter
+  that blocks a dead domain before it eats weeks of crawl budget
+
+## [0.6.0] — 2026-09-06
+
+### Added
+
+- `P1-12` Source tier assignment — `meridian_core/tiering.py`. Exact match, then
+  longest matching suffix pattern, then default; mechanical and pure, never a
+  model judgement (§5.2)
+- `P1-17` Tier-derived queue priority, so a government search result is fetched
+  before a blog without anyone curating a seed list
+- `P1-18` Randomised per-domain delay. A fixed interval is both a recognisable
+  fingerprint and a way to synchronise bursts across domains
+
 ## [0.5.1] — 2026-09-06
 
 **Phase 0 closed.** From an empty database, `make migrate && make seed` applies

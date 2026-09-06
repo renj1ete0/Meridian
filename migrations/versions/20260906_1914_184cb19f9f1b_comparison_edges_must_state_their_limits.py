@@ -27,7 +27,6 @@ def upgrade() -> None:
     op.add_column("edges", sa.Column("disanalogy", sa.Text(), nullable=True))
     # ### end Alembic commands ###
 
-
     op.create_check_constraint(
         "valid_period_ordered",
         "edges",

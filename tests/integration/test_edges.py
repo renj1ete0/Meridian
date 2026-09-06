@@ -18,8 +18,9 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from meridian_core.models import Edge, Entity
 from sqlalchemy import text
+
+from meridian_core.models import Edge, Entity
 
 pytestmark = pytest.mark.usefixtures("require_db")
 

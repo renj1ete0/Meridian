@@ -42,6 +42,11 @@ services:
     ports: ["21113:11235"]
     shm_size: 1g
     environment:
+      # Not optional, despite the name. Since 0.9.0 the entrypoint binds
+      # gunicorn to 127.0.0.1 *inside the container* unless a credential is
+      # configured, so without this the published port above reaches nothing.
+      # Every request then needs `Authorization: Bearer $CRAWL4AI_TOKEN`.
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_TOKEN:-dev}
       CRAWL4AI_HOOKS_ENABLED: "false"
 
 volumes:

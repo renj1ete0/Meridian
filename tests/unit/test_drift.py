@@ -11,10 +11,11 @@ from __future__ import annotations
 import typing
 
 import pytest
+from sqlalchemy import Enum as SAEnum
+
 from meridian_core import models, schemas
 from meridian_core.db import Base
 from meridian_core.models import mixins
-from sqlalchemy import Enum as SAEnum
 
 # --------------------------------------------------------------------------
 # Enum drift: DTO Literal aliases vs the models' CHECK-constrained columns

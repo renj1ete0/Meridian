@@ -52,6 +52,15 @@ METADATA_HOSTNAMES: frozenset[str] = frozenset(
 )
 
 
+# Refusal reasons that callers branch on rather than merely log. The fetcher
+# maps a DNS failure to a connection outcome and everything else to an
+# unsafe-target one, so those strings are constants rather than inline literals.
+PLAINTEXT_FINAL = "plaintext final response"
+DNS_FAILED = "dns resolution failed"
+DNS_EMPTY = "dns returned no addresses"
+DNS_REASONS: frozenset[str] = frozenset({DNS_FAILED, DNS_EMPTY})
+
+
 class BlockedTarget(Exception):
     """Raised when a URL or address must not be fetched.
 
@@ -159,6 +168,18 @@ def check_scheme(url: str, allowed_schemes: list[str]) -> None:
         raise BlockedTarget("scheme not allowed", scheme)
 
 
+def check_https_final(url: str, require_https_final: bool) -> None:
+    """Refuse a final response still served in plaintext.
+
+    Separate from :func:`assert_redirect_allowed` because the fetcher only
+    learns which hop was the last one *after* the response arrives — by then
+    the chain is already resolved and re-running DNS to re-ask the question
+    would open a fresh rebinding window for no benefit.
+    """
+    if require_https_final and urlsplit(url).scheme.lower() != "https":
+        raise BlockedTarget(PLAINTEXT_FINAL, url)
+
+
 async def assert_url_allowed(
     url: str,
     *,
@@ -195,10 +216,10 @@ async def assert_url_allowed(
         try:
             addresses = await resolve(host, parts.port or (80 if parts.scheme == "http" else 443))
         except Exception as exc:  # DNS failure is a refusal, not a crash
-            raise BlockedTarget("dns resolution failed", f"{host}: {exc}") from exc
+            raise BlockedTarget(DNS_FAILED, f"{host}: {exc}") from exc
 
     if not addresses:
-        raise BlockedTarget("dns returned no addresses", host)
+        raise BlockedTarget(DNS_EMPTY, host)
 
     if block_private:
         verdicts = [(ip, address_verdict(ip)) for ip in addresses]
@@ -225,6 +246,6 @@ async def assert_redirect_allowed(
     anyone on the path can rewrite the page, and for a crawler feeding a model
     that holds write tools that needs no compromise of the origin.
     """
-    if is_final and require_https_final and urlsplit(location).scheme.lower() != "https":
-        raise BlockedTarget("plaintext final response", location)
+    if is_final:
+        check_https_final(location, require_https_final)
     return await assert_url_allowed(location, **kwargs)

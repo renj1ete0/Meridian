@@ -56,9 +56,7 @@ async def seed_topics(sess) -> tuple[int, int]:
     data = _load("topics.yaml") or {}
     added = skipped = 0
     for row in data.get("topics", []):
-        existing = await sess.scalar(
-            select(TopicConfig).where(TopicConfig.topic == row["topic"])
-        )
+        existing = await sess.scalar(select(TopicConfig).where(TopicConfig.topic == row["topic"]))
         if existing is not None:
             skipped += 1
             continue

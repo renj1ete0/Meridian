@@ -13,6 +13,9 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy import delete, select
+
 from meridian_core.models import FetchPolicy as FetchPolicyRow
 from meridian_core.policy import (
     ResolvedPolicy,
@@ -22,8 +25,6 @@ from meridian_core.policy import (
     record_success,
     resolve_policy,
 )
-from pydantic import ValidationError
-from sqlalchemy import delete, select
 
 pytestmark = pytest.mark.usefixtures("require_db")
 

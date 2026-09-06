@@ -1,0 +1,19 @@
+[project]
+name = "meridian-worker"
+version = "0.9.0"
+description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
+requires-python = ">=3.12"
+dependencies = [
+    "meridian-core",
+    # The static fetch path. httpx is here rather than in meridian_core because
+    # the core package is what the API and orchestrator import for database
+    # access — an HTTP client has no business in that dependency closure.
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["worker"]

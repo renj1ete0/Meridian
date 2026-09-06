@@ -16,13 +16,17 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed — schema, migrations, seeding, logging, DTOs
-and 116 tests, plus the §14.3 design exercise and its five schema fixes. The only
-open phase-0 item is `P0-15`, deferred until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. The fetcher now runs against the real
+internet and a real Crawl4AI: `P1-01`, `P1-02`, `P1-03`, `P1-12`, `P1-17`,
+`P1-18`, `P1-20`, `P1-21` and `P1-24` are done, at 312 tests. The only open
+phase-0 item is `P0-15`, deferred until phase 2 needs it.
 
-Next: `P1-01`, queue claim/pop semantics. Note that `P1-20` (SSRF guard) and
-`P1-23` (injection pre-screen) are safety work that should land alongside the
-fetcher, not after it.
+Next: `P1-04` (robots, per-domain concurrency and delay, conditional requests) —
+the fetcher currently has no rate limiting, so nothing should point it at a real
+crawl until that lands. `P1-19` (record every attempt) is its natural companion:
+`fetch.py` already returns a `fetch_attempts.outcome` for every path, and nothing
+writes the rows yet. `P1-23` (injection pre-screen) is safety work that belongs
+with extraction.
 
 ---
 
@@ -72,23 +76,26 @@ fetcher, not after it.
       a lease rather than a status flip, exponential backoff with full jitter
 - [x] `P1-02` Policy resolution — `meridian_core/policy.py`. Per-domain → global → file,
       shallow merge, plus consecutive-failure blocking
-- [ ] `P1-03` `fetch.py` — httpx for static, Crawl4AI for JS-dependent, `render_js: auto`
-- [ ] `P1-24` **Pin the validated address (closes the SSRF TOCTOU gap).** `netguard`
-      resolves and validates, but nothing currently stops the HTTP client doing a
-      *second* DNS lookup and getting a different answer — which is exactly what DNS
-      rebinding exploits. The fetcher must connect to the address it validated, with
-      the `Host` header and TLS SNI set to the original hostname, and must disable
-      automatic redirect following so each hop is handed back to `netguard` first.
-      `block_mixed_dns` narrows this window; only pinning closes it
+- [x] `P1-03` `fetch.py` — httpx for static, Crawl4AI for JS-dependent, `render_js: auto`.
+      `auto` short-circuits on any page that already has a paragraph of visible text,
+      so the browser is reserved for genuine shells (§6.4 constraint 1)
+- [x] `P1-24` **Pin the validated address (closes the SSRF TOCTOU gap).** The request
+      goes to the IP literal `netguard` judged, with `Host` and TLS SNI set to the
+      original hostname; `follow_redirects` is off at the client level, and each hop
+      is re-validated, re-resolved and re-pinned by hand. Verified by a test that
+      hands the resolver a different answer on its second call
 - [ ] `P1-04` Robots handling, per-domain concurrency and delay, conditional requests
 - [ ] `P1-05` Blocked-domain marking after N consecutive failures
 - [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
 - [x] `P1-20` **SSRF guard** — `meridian_core/netguard.py`. Post-DNS address
       classification, per-hop redirect revalidation, scheme allowlist, DNS-rebinding
       rejection, integer-encoded host normalisation, https-final enforcement
-- [ ] `P1-21` Content safeguards: content-type allowlist, streaming abort at
-      `max_page_bytes`, decompression-ratio cap, reject a plaintext final response
-      unless the domain overrides `require_https_final`
+- [x] `P1-21` Content safeguards: content-type allowlist checked on the headers,
+      streaming abort at `max_page_bytes`, decompression-ratio cap, plaintext final
+      response refused unless the domain overrides `require_https_final`. The
+      decompression is driven by hand through `zlib` in bounded steps — letting
+      httpx decode meant a 64KB read arrived as one 67MB object, so the cap was
+      checked after the allocation it existed to prevent
 - [ ] `P1-23` **Injection pre-screen, mechanical (no LLM).** At extraction time flag
       hidden text (`display:none`, `visibility:hidden`, white-on-white, 0px fonts,
       offscreen), imperative HTML comments, and instruction-like phrasing addressed
@@ -98,7 +105,9 @@ fetcher, not after it.
 - [x] `P1-18` Randomised per-domain delay — `jittered_delay_ms()`. Wiring it into the
       fetch loop happens with `P1-04`
 - [ ] `P1-19` Record every fetch attempt in `fetch_attempts`, success or failure, and
-      derive the health line's fetch success rate from it. Add a retention prune
+      derive the health line's fetch success rate from it. Add a retention prune.
+      `fetch.py` already returns a valid `outcome` on every path, including the four
+      added for the safeguards; what is missing is the writer
 - [ ] `P1-07` `extract/html.py` — Crawl4AI markdown, `PruningContentFilter`, citation extraction
 - [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
 - [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
@@ -120,6 +129,16 @@ fetcher, not after it.
       crawl4ai drives a browser against hostile content and must hold no credentials
       and have no route to postgres
 - [ ] `P1-16` 48h unattended acceptance run → `make snapshot-corpus`
+- [ ] `P1-26` **Crawl4AI needs a Dockerfile and a health check the worker trusts.**
+      `Crawl4aiClient.from_env()` returns None when `CRAWL4AI_URL` is unset and the
+      fetcher degrades to static — correct, but silent. A worker that has quietly
+      lost its browser for a week should say so on the health line (§12.5), not just
+      extract worse
+- [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
+      the browser every time it sees one, so a JS-only domain pays two requests per
+      page forever. Record the escalation on `fetch_policy` after N confirmations and
+      go straight to the browser. Cheap, and only worth doing once real crawl data
+      shows which domains actually do this
 
 ## Phase 2 · Embeddings and search — the go/no-go
 
@@ -242,6 +261,13 @@ fetcher, not after it.
 
 Things worth doing that don't belong to a phase yet.
 
+- [ ] `B-10` `figures.linked_entity_ids` is `json`, not `jsonb`, and is the only
+      column in the schema that stores a list of IDs as JSON at all — `entities.
+      merged_from` is exactly the same shape and uses `ARRAY(BigInteger)`. `json`
+      keeps the literal text, so it cannot be indexed and preserves whitespace and
+      key order for nothing. Change it to `ARRAY(BigInteger)` with a migration while
+      the table is still empty; add a drift test asserting no ID-list column uses
+      `json`
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search
