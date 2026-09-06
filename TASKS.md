@@ -16,7 +16,9 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 0** — core database layer landed; models next (`P0-05`).
+**Current phase: 1** — phase 0 complete and pushed. Next: `P1-01`, the queue
+claim/pop semantics. The three ⚑ human tasks below are still open and are worth
+doing before much of phase 1, since seed quality propagates downstream.
 
 ---
 
@@ -28,17 +30,18 @@ something went wrong.
 - [x] `P0-02` Brand and design system: mark, palette, typography, voice, UI mockups, assets
 - [x] `P0-03` Licence, README, roadmap, task tracking, versioning policy
 - [x] `P0-04` `meridian_core` package: `pyproject.toml`, `db.py` (engine, session, pooling)
-- [ ] `P0-05` SQLAlchemy models — queue
-- [ ] `P0-06` SQLAlchemy models — sources, chunks, figures
-- [ ] `P0-07` SQLAlchemy models — graph (entities, edges, attributes) with provenance columns
-- [ ] `P0-08` SQLAlchemy models — gazetteer, `topic_config`, `fetch_policy`, agent registry
-- [ ] `P0-09` SQLAlchemy models — `runs`, `steering_log`, `enrichment_queue`, `reports`
-- [ ] `P0-10` Pydantic DTOs in `meridian_core/schemas/` for every service boundary
+- [x] `P0-05` SQLAlchemy models — queue
+- [x] `P0-06` SQLAlchemy models — sources, chunks, figures
+- [x] `P0-07` SQLAlchemy models — graph (entities, edges, attributes) with provenance columns
+- [x] `P0-08` SQLAlchemy models — gazetteer, `topic_config`, `fetch_policy`, agent registry
+- [x] `P0-09` SQLAlchemy models — `runs`, `steering_log`, `enrichment_queue`, `reports`
+- [x] `P0-10` Pydantic DTOs in `meridian_core/schemas/` for every service boundary
+- [x] `P0-19` Test suite: drift, rejection and completeness tests against real Postgres
 - [x] `P0-18` Fix role bootstrap: `.sql` → `.sh` (entrypoint has no psql var bindings),
       default privileges declared for both writers, pgvector enabled at init
-- [ ] `P0-11` Alembic setup + initial migration; run as `PG_MIGRATION_URL` (owner), not rw
-- [ ] `P0-12` `scripts/seed.py` — idempotent `config/*.yaml` → DB, config only, never content
-- [ ] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
+- [x] `P0-11` Alembic setup + initial migration; run as `PG_MIGRATION_URL` (owner), not rw
+- [x] `P0-12` `scripts/seed.py` — idempotent `config/*.yaml` → DB, config only, never content
+- [x] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
 - [ ] `P0-14` ⚑ human — write the ten questions (spec §14.3), check the schema answers them
 - [ ] `P0-15` ⚑ human — held-out question set of 20–30 for monthly regression (spec §14.1)
 - [ ] `P0-16` ⚑ human — hand-seed 15–25 cold-start sources into `config/seed_sources.yaml`

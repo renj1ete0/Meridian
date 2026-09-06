@@ -10,6 +10,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 Nothing yet.
 
+## [0.2.0] — 2026-09-06
+
+**Phase 0 complete.** `make migrate && make seed` yields a clean, empty database
+ready to crawl, with 84 tests passing against a real Postgres.
+
+### Added
+
+- `P0-04` `meridian_core` database layer: lazy async engines per role, session
+  scopes, declarative `Base` with a constraint naming convention
+- `P0-05`–`P0-09` SQLAlchemy models — 18 tables covering the queue, sources,
+  chunks, figures, entities, edges, attributes, gazetteer, topic config, fetch
+  policy, agent registry, runs, enrichment, reports and notifications
+- `P0-10` Pydantic DTOs, 60 exports, with enum values derived from the models'
+  own CHECK constraints so the two cannot drift
+- `P0-11` Alembic, wired to run as the database owner
+- `P0-12` `scripts/seed.py` — idempotent, configuration only, never overwrites
+- `P0-13` Structured JSON logging with contextvar-scoped `run_id`
+- `P0-19` 84 tests: drift, rejection and completeness, against real Postgres
+- Testing conventions in AGENTS.md; frontend chosen as React + TypeScript + Tailwind
+
+### Fixed
+
+- `P0-18` Role bootstrap never ran — psql variable syntax in a `.sql` file the
+  entrypoint cannot bind. Now a shell script; scaffold doc §4 corrected
+- Default privileges declared for both writers, so the read-only role keeps
+  SELECT regardless of which role created a table
+- `constrained()` omitted `create_constraint`, so every status column was an
+  unchecked VARCHAR accepting any string
+- 35 NOT NULL columns had Python-side defaults only, failing any non-ORM insert
+- pgvector enabled at first boot; dev Postgres moved to a named volume
+
 ## [0.1.1] — 2026-09-06
 
 ### Added
