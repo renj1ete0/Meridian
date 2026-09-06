@@ -78,6 +78,15 @@ something went wrong.
 - [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
 - [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible
 - [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
+- [ ] `P2-10` ⚑ human — choose the frontend framework. The specs fix Sigma.js v3 +
+      graphology for the canvas but never name a framework around it; this blocks
+      `P2-11` and everything in phase 6
+- [ ] `P2-11` Frontend scaffold: Vite + TypeScript, `web/` structure per scaffold §2,
+      dev proxy `/api` → `localhost:8000` so no environment-specific base URL exists
+- [ ] `P2-12` Design tokens in code — the two palettes, type scale, and surface rules
+      from `docs/design/design-system.md` as CSS custom properties, light and dark
+- [ ] `P2-13` `web/src/lib/api.ts` — typed client over `/api/explore/*`, with the
+      request/response types kept in step with the pydantic DTOs
 
 ## Phase 3 · MCP read surface
 
@@ -137,6 +146,9 @@ something went wrong.
 - [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
 - [ ] `P6-14` Figures panel with page-accurate raw file links
 - [ ] `P6-15` Export: Markdown and BibTeX
+- [ ] `P6-16` Shared UI primitives from the design system: the 17-icon set, source-tier
+      and contested (dagger) badges, node chips, the top-right status/notification cluster
+- [ ] `P6-17` Theme switching, honouring the system preference by default
 
 ## Phase 7 · Full design
 
