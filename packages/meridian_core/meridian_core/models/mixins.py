@@ -19,8 +19,20 @@ from sqlalchemy.orm import Mapped, mapped_column
 # enum needs ALTER TYPE and cannot run inside some migrations, and this schema is
 # expected to gain statuses and tiers as it grows (§7.3 schema evolution).
 def constrained(*values: str, name: str) -> Enum:
-    """A string column constrained to ``values`` by a CHECK, not a native enum."""
-    return Enum(*values, name=name, native_enum=False, validate_strings=True)
+    """A string column constrained to ``values`` by a CHECK, not a native enum.
+
+    ``create_constraint=True`` is not optional here. SQLAlchemy has defaulted it
+    to False since 1.4, so without it these columns are plain VARCHAR that
+    silently accept any string — which defeats the entire point, and is only
+    visible if you actually try to insert a bad value.
+    """
+    return Enum(
+        *values,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        validate_strings=True,
+    )
 
 
 # Ordinal from the agent registry: local small = 1, local large = 2,
