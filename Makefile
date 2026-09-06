@@ -25,8 +25,15 @@ logs:
 	docker compose logs -f
 
 # --- Database -----------------------------------------------------------------
+# Both read credentials from .env.dev locally, or the environment in production.
+# Migrations run as the owner (PG_MIGRATION_URL), never as meridian_rw — see
+# migrations/env.py for why that distinction matters.
 migrate:
 	uv run alembic upgrade head
+
+revision:
+	@test -n "$(m)" || { echo 'usage: make revision m="what changed"'; exit 1; }
+	uv run alembic revision --autogenerate -m "$(m)"
 
 seed:
 	uv run python scripts/seed.py

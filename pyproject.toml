@@ -1,12 +1,13 @@
 [project]
 name = "meridian"
-version = "0.1.9"
+version = "0.1.10"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
     "meridian-core",
+    "pyyaml>=6.0",
 ]
 
 # Monorepo root. The root project exists so `uv run` works from here (alembic,
