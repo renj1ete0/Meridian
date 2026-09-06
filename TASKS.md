@@ -86,11 +86,10 @@ fetcher, not after it.
       hidden text (`display:none`, `visibility:hidden`, white-on-white, 0px fonts,
       offscreen), imperative HTML comments, and instruction-like phrasing addressed
       to a model. Regex and DOM work only, so the fast loop stays model-free
-- [ ] `P1-17` Tier-derived queue priority: resolve a URL's tier from
-      `config/source_tiers.yaml` (patterns, then exact, then default) and set
-      `queue.priority` from `priority_by_tier`, so search results self-sort
-- [ ] `P1-18` Randomised per-domain delay — `delay_per_domain_ms` as a floor plus a
-      random draw from `[0, delay_jitter_ms]`
+- [x] `P1-17` Tier-derived queue priority — `priority_for_domain()`. Wiring it into
+      enqueue happens with the fetcher in `P1-03`
+- [x] `P1-18` Randomised per-domain delay — `jittered_delay_ms()`. Wiring it into the
+      fetch loop happens with `P1-04`
 - [ ] `P1-19` Record every fetch attempt in `fetch_attempts`, success or failure, and
       derive the health line's fetch success rate from it. Add a retention prune
 - [ ] `P1-07` `extract/html.py` — Crawl4AI markdown, `PruningContentFilter`, citation extraction
@@ -98,7 +97,8 @@ fetcher, not after it.
 - [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
 - [ ] `P1-10` `extract/figures.py` — figure extraction with captions
 - [ ] `P1-11` Raw store writer: path scheme, checksum, retention tiers
-- [ ] `P1-12` Source tier assignment from `config/source_tiers.yaml` domain map
+- [x] `P1-12` Source tier assignment — `meridian_core/tiering.py`, exact → longest
+      pattern → default, seeded into the DB with the global fetch policy
 - [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
 - [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
 - [ ] `P1-15` Worker main loop, supervision, graceful restart

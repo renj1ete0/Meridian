@@ -104,10 +104,20 @@ async def seed_attributes(sess) -> tuple[int, int]:
 
 
 async def seed_fetch_policy(sess) -> tuple[int, int]:
-    """The global '*' row. Per-domain overrides are created in Admin (§6.4)."""
+    """The global '*' row. Per-domain overrides are created in Admin (§6.4).
+
+    The source-tier mapping rides along in the same row rather than in a table
+    of its own. It is one global blob of domain policy, read together with the
+    fetch settings on every request, and §13.1 requires it to live in the
+    database — leaving it in a file the worker re-reads would make the YAML
+    authoritative again.
+    """
     settings = _load("fetch_policy.yaml")
     if settings is None:
         return 0, 0
+    tiers = _load("source_tiers.yaml")
+    if tiers is not None:
+        settings = {**settings, "source_tiers": tiers}
     existing = await sess.scalar(select(FetchPolicy).where(FetchPolicy.domain == "*"))
     if existing is not None:
         return 0, 1
