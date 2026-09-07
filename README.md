@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.21" src="https://img.shields.io/badge/version-0.21-0D6F7C">
+  <img alt="Version 0.24" src="https://img.shields.io/badge/version-0.24-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -23,9 +23,12 @@ from. You explore that graph, annotate it, and ask questions of it — and it te
 not just what it knows, but where the evidence is thin, stale, or contradictory.
 
 > **Status: phase 1 of 7.** The design, the shared core and the schema are in place,
-> and the crawler now runs: it drains a queue unattended, fetches politely, keeps what
-> it fetched, reads it, chunks it, and follows its links onward. Embeddings and
-> search are next.
+> and the crawler runs: it drains a queue unattended, fetches politely, keeps what it
+> fetched, reads it, chunks it, and widens its own frontier from both links and
+> sitemaps — supervised, in containers, on a network topology that keeps the browser
+> away from the database. Chunks carry embeddings. **Nothing searches them yet**, and
+> that is the next thing: phase 2 asks whether searching this corpus is useful with no
+> model involved, and it is a real go/no-go.
 > See the [roadmap](docs/roadmap.md) and [TASKS.md](TASKS.md).
 
 ## Why it exists
@@ -194,9 +197,12 @@ docs/         specs, roadmap, design system and brand assets
 ## FAQ
 
 **Can I run it today?**
-Not usefully. The schema, migrations and seeding work — `make migrate && make seed` gives
-you a real, empty database — but nothing crawls yet. The [roadmap](docs/roadmap.md) tracks
-progress; phase 2 is the honest go/no-go.
+You can run the *ingestion* half. `make migrate && make seed` gives you a real, empty
+database, and the worker will then crawl unattended — politely, storing what it fetches,
+extracting and chunking it, and expanding its own frontier. What you cannot do is read
+any of it back: there is no search, no API and no interface yet, so the corpus is only
+reachable through SQL. The [roadmap](docs/roadmap.md) tracks progress; phase 2 is the
+honest go/no-go.
 
 **How is this different from Zotero, Obsidian, or a RAG chatbot?**
 Those store or retrieve documents. Meridian builds a *typed graph of claims* with

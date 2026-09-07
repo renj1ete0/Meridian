@@ -8,6 +8,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Docs: `TASKS.md` and `docs/handover.md` brought up to date with `v0.21.0`–
+  `v0.24.0`. The handover's "what does not exist yet" claimed there were no
+  embeddings, and its build-state and test counts were four releases stale
+- Docs: `README.md` status block and version badge refreshed. The FAQ still said
+  "nothing crawls yet", which stopped being true five releases ago
+- New task `P1-34`: nothing handles `query` rows. SearXNG runs in compose with
+  its JSON API enabled and the cold-start seeds ship query seeds, but no handler
+  claims them — so when the frontier empties the crawl idles rather than
+  searching for more
+
+
 ## [0.24.0] — 2026-09-07
 
 **The stack gets a topology, and the browser stops being invisible.** Closes the

@@ -17,22 +17,26 @@ something went wrong.
 - Add new tasks freely; don't renumber existing ones.
 
 **Current phase: 2 opening, phase 1 not yet closed.** The crawl runs unattended,
-expands its own frontier, and reads HTML, PDFs and Office documents: `P1-01`–`P1-09`,
-`P1-11`–`P1-13`, `P1-15`, `P1-17`–`P1-21`, `P1-23`, `P1-24`, `P1-30` and (pulled
-forward) `P2-02` are done, at 964 tests. `P2-01` adds embeddings, so chunks now
-carry vectors. Verified live — real government PDFs extracted with page-accurate chunks,
-and the injection screen clean across every page crawled so far.
+expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
+documents: `P1-01`–`P1-09`, `P1-11`–`P1-13`, `P1-15`, `P1-17`–`P1-24`, `P1-26`,
+`P1-28`, `P1-30`, `P1-33` and (pulled forward) `P2-02` are done, at 1080 tests.
+`P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
+pass, not by the fetch loop. `P1-22` gave the stack a topology, so it is now a
+stack rather than an image. Verified live — real government PDFs extracted with
+page-accurate chunks, and the injection screen clean across every page crawled.
 
 Phase 1's checkpoint (`P1-16`, the 48h run) is the gate on phase 2's go/no-go
-(`P2-09`), because a search quality judgement over 17 sources and 28 chunks
-measures nothing. The agreed sequence:
+(`P2-09`), because a search-quality judgement over a corpus this small measures
+nothing. The agreed sequence:
 
 1. ~~`P1-28` sitemaps~~ — **done in v0.22.0**, with topic matching
 2. ~~`P1-22` network topology, then `P1-26`~~ — **done in v0.24.0**. The stack
    has a topology, the browser has an image, and the health line says whether
    it is actually there
-3. A short bounded run (`MERIDIAN_WORKER_MAX_TASKS`, not a timer) as a **stack**
-   smoke test, deployed to the server rather than run from a checkout
+3. **← next.** A short bounded run (`MERIDIAN_WORKER_MAX_TASKS`, not a timer) as
+   a **stack** smoke test, deployed to the server rather than run from a
+   checkout. Its purpose is "do the containers come up and talk to each other",
+   not corpus volume
 4. `P2-03` novelty gate, then `P2-05`/`P2-04`/`P2-06` search, built against that
    real output. The novelty gate goes before the long run deliberately: nothing
    deletes from the raw store (`P1-31`), so an ungated 48h run keeps every
@@ -41,7 +45,15 @@ measures nothing. The agreed sequence:
    before `P2-06` is judged, not after — and `P2-09`, the call
 
 `P1-10` (figures) and `P1-14` (DOI resolution) are the remaining phase-1
-extraction work and neither blocks the checkpoint.
+extraction work and neither blocks the checkpoint. `P1-25` (egress restriction)
+is **not** closed by `P1-22`: `internal: true` stops a container reaching the
+internet, and does nothing about the worker — which must have a default route —
+reaching the LAN.
+
+Worth knowing before the run: **`query` rows have no handler.** SearXNG is in
+compose and the cold-start seeds include search queries, but nothing consumes
+them, so when the frontier empties the crawl idles rather than searching for
+more. Tracked as `P1-34`.
 
 ---
 
@@ -260,6 +272,14 @@ extraction work and neither blocks the checkpoint.
       (default 15s, 0 disables). The non-interactive kind clears itself; the
       interactive kind never does, so it is bounded and tried once. Detection is
       narrow on purpose — the costly error is re-fetching ordinary 403s
+- [ ] `P1-34` **Nothing handles `query` rows.** `task_type: query` exists, SearXNG
+      runs in compose with its JSON API enabled, and `config/seed_sources.yaml`
+      ships query seeds — but no handler claims them, so search-driven discovery
+      never happens and an empty frontier means an idle crawler rather than a
+      wider one. Needs the same shape as `P1-28`'s handler: claim, call the
+      backend, prefilter the results, enqueue at tier priority. Note §6.4 warns
+      that individual engines break and rate-limit routinely, so a dead engine
+      must not stall the queue
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

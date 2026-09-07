@@ -18,8 +18,10 @@ bytes come out, politely, without becoming a route into the network, leaving a r
 of itself, keeping what it read, reading it, cutting it into citable chunks, and
 following its links onward — and all of it with nobody watching. HTML and PDFs are
 both read, Office documents too, and every page is screened for prompt injection on
-the way past — and as of `v0.20.0` it does all of that from a container image, not
-just from a checkout. 929 tests pass with a real Postgres.
+the way past. As of `v0.20.0` it does that from a container image rather than a
+checkout, and as of `v0.24.0` the whole stack has a topology rather than one flat
+network. Chunks carry vectors (`v0.22.0` reads sitemaps too). 1080 tests pass with a
+real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -75,12 +77,22 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
         queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** No embeddings, no search, no API, no frontend. HTML,
-PDFs and OOXML Office documents are read; `.doc`, `.xls` and EPub are deliberately
-outside the converter allowlist and stay metadata-only. Scanned PDFs are detected and filed in `enrichment_queue`, and **nothing
-ever runs that queue** — §6.6 makes OCR explicitly user-triggered, so the rows sit
-there until a UI exists to spend against them. The frontier is the link half of
-`P5-01` only: no citation-driven seeding, no spaCy NER, no TF-IDF.
+**What does not exist yet.** No search, no API, no frontend. Embeddings exist as of
+`P2-01`, but only as a **separate backfill pass** (`python -m worker.embed`) — the
+fetch loop never touches the model — and nothing queries them yet: there is no
+novelty gate (`P2-03`), no index (`P2-04`/`P2-05`) and no retrieval (`P2-06`).
+
+HTML, PDFs and OOXML Office documents are read; `.doc`, `.xls` and EPub are
+deliberately outside the converter allowlist and stay metadata-only. Scanned PDFs are
+detected and filed in `enrichment_queue`, and **nothing ever runs that queue** — §6.6
+makes OCR explicitly user-triggered, so the rows sit there until a UI exists to spend
+against them.
+
+The frontier is now links plus sitemaps (`P1-28`), with topics assigned from the URL
+path rather than inherited. It is still not the rest of `P5-01`: no citation-driven
+seeding, no spaCy NER, no TF-IDF. **`query` rows still have no handler** — SearXNG
+runs in compose and the cold-start seeds include search queries, but nothing consumes
+them, so when the frontier empties the crawl simply idles.
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
 Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
@@ -535,10 +547,20 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**`P1-22` and `P1-26` before `P1-16`.** The worker image exists and runs, but the
-*stack* does not: `docker-compose.yml` still admits in a comment that `internal: true`
-blocks the outbound access worker, crawl4ai and searxng all need, and Crawl4AI has no
-image and no health check the worker trusts. The 48-hour acceptance run needs both.
+**A short bounded run before the long one.** `P1-22` and `P1-26` are done, so the
+stack is runnable; what has not happened is running it. Bound it with
+`MERIDIAN_WORKER_MAX_TASKS`, not a timer — polite per-domain delays mean a fixed
+wall-clock window yields wildly different volume depending on which domains the
+frontier hands you, and a task count is reproducible.
+
+Its purpose is to smoke-test the **stack**, not to build a corpus: do the containers
+come up, does egress work, does the browser answer its health check, do the logs land.
+Corpus volume is what `P1-16` is for.
+
+**`P2-03` before `P1-16`, not after.** Nothing deletes from the raw store (`P1-31`),
+so a 48-hour run with no novelty gate keeps every near-duplicate it finds and the disk
+fills at phase-1 speed. Build the gate first and the long run produces a corpus that
+is already gated.
 
 **Decide `P1-32` before the first real edges land.** `replace_chunks()` deletes a
 source's chunks when its content changes, and `edges.supporting_chunk_ids` is an
