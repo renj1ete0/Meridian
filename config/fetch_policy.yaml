@@ -57,6 +57,15 @@ allowed_content_types:
 
 max_decompression_ratio: 100              # zip/gzip bomb guard
 
+# A bot-challenge interstitial is re-fetched once through the browser and held
+# open this long, because the common non-interactive kind runs a few seconds of
+# JavaScript and then serves the real page. That is not evasion — it is what an
+# ordinary browser does — and §6.4's decision to skip stealth mode, undetected
+# browsers and proxy escalation is unaffected. The interactive kind never
+# clears however long it is given, so this is deliberately bounded and tried
+# once. Set to 0 to disable the re-fetch.
+challenge_wait_s: 15
+
 blocked_after_failures: 5         # consecutive; then mark domain blocked
 prefetch_filter:        true      # domain blocklist + already-seen check
 

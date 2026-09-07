@@ -80,7 +80,17 @@ _INFLATE_STEP_BYTES = 1 << 20
 
 # Response headers worth keeping for the conditional request next time round
 # (§6.4 `conditional_requests`), and for extraction to know what it is holding.
-_KEPT_HEADERS = ("content-type", "etag", "last-modified", "content-length", "content-encoding")
+_KEPT_HEADERS = (
+    "content-type",
+    "etag",
+    "last-modified",
+    "content-length",
+    "content-encoding",
+    # Not a validator. Kept because it is what tells a bot challenge apart from
+    # an ordinary refusal, and the decision to re-fetch through the browser is
+    # made from the result rather than from inside the response context.
+    "cf-mitigated",
+)
 
 #: Headers that say *why* a 4xx happened, when the status code does not.
 #:
@@ -97,6 +107,42 @@ _DIAGNOSTIC_HEADERS = (
     "x-error",
     "server",
 )
+
+
+#: Body markers for a challenge interstitial, for origins that send no header.
+#: Deliberately few and specific — these strings do not occur in ordinary prose,
+#: and a loose match here would send perfectly good pages through the browser.
+_CHALLENGE_MARKERS = (b"cf-chl", b"/cdn-cgi/challenge-platform", b"just a moment")
+
+#: Statuses a challenge interstitial is served with. A 503 is the classic
+#: non-interactive one, which is exactly the case worth waiting out.
+_CHALLENGE_STATUSES = frozenset({403, 429, 503})
+
+
+def is_challenge(
+    status_code: int | None,
+    headers: Mapping[str, str] | None = None,
+    body: bytes = b"",
+) -> bool:
+    """Does this response look like a bot-challenge interstitial?
+
+    Worth asking because a challenge is the one refusal a browser can sometimes
+    turn into a success. The common non-interactive kind runs a few seconds of
+    JavaScript and then serves the real page, so waiting is all that is needed —
+    no evasion, just being patient in the way an ordinary browser is.
+
+    The interactive kind never resolves however long it is given (§6.4 declines
+    to defeat those, and measurement says undetected browsing does not anyway),
+    so this is a cheap bounded attempt rather than a guarantee.
+    """
+    if status_code not in _CHALLENGE_STATUSES:
+        return False
+    if headers:
+        lowered = {k.lower(): (v or "").strip().lower() for k, v in headers.items()}
+        if lowered.get("cf-mitigated") == "challenge":
+            return True
+    window = body[:8192].lower()
+    return any(marker in window for marker in _CHALLENGE_MARKERS)
 
 
 def describe_http_error(status_code: int, headers: Mapping[str, str] | None = None) -> str:
@@ -337,12 +383,20 @@ class Crawl4aiClient:
             self._client = httpx.AsyncClient(timeout=timeout_s)
         return self._client
 
-    async def crawl(self, url: str, policy: ResolvedPolicy) -> dict[str, Any]:
+    async def crawl(
+        self, url: str, policy: ResolvedPolicy, *, settle_s: float = 0.0
+    ) -> dict[str, Any]:
         """Render one URL and return Crawl4AI's result dict.
 
         The browser gets its own generous timeout on top of the policy's: page
         load, JS execution and settling are all inside it, and reusing the
         static timeout would report every heavy page as a failure.
+
+        ``settle_s`` holds the page open after load before reading the HTML. It
+        is zero for an ordinary render — waiting costs a browser slot and buys
+        nothing on a page that is already complete — and non-zero only when the
+        static fetch saw a challenge interstitial, which resolves itself a few
+        seconds later or not at all.
         """
         headers = {"Content-Type": "application/json"}
         if self.token:
@@ -367,7 +421,19 @@ class Crawl4aiClient:
                 },
             },
         }
-        response = await self._http(policy.timeout_s * 3).post(
+        if settle_s > 0:
+            run_params = payload["crawler_config"]["params"]
+            run_params["delay_before_return_html"] = settle_s
+            # `networkidle` rather than `domcontentloaded`: a challenge fires its
+            # own requests, and returning at DOM-ready reads the interstitial
+            # instead of whatever replaces it.
+            run_params["wait_until"] = "networkidle"
+
+        # The settle happens inside the browser, so the HTTP timeout has to
+        # cover it as well as the page load, or the wait is spent and then
+        # thrown away by a client-side timeout.
+        http_timeout = policy.timeout_s * 3 + settle_s
+        response = await self._http(http_timeout).post(
             f"{self.base_url}/crawl", json=payload, headers=headers
         )
         response.raise_for_status()
@@ -469,6 +535,42 @@ class Fetcher:
             return await self.fetch_static(url, policy, extra_headers=extra_headers)
 
         static = await self.fetch_static(url, policy, extra_headers=extra_headers)
+
+        # A challenge is the one refusal a browser can sometimes turn into a
+        # success, so it is checked before `static.ok` sends the result back.
+        # The common non-interactive challenge runs a few seconds of JavaScript
+        # and then serves the real page; waiting it out is not evasion, it is
+        # what any browser does. The interactive kind never resolves, which is
+        # why this is bounded and tried once.
+        if (
+            not static.ok
+            and mode != "never"
+            and policy.challenge_wait_s > 0
+            and self._browser is not None
+            and is_challenge(static.status_code, static.headers)
+        ):
+            log.info(
+                "challenge interstitial; re-fetching through the browser",
+                extra={
+                    "url": url,
+                    "domain": registrable_domain(url),
+                    "status": static.status_code,
+                    "settle_s": policy.challenge_wait_s,
+                },
+            )
+            rendered = await self.fetch_rendered(
+                url, policy, settle_s=float(policy.challenge_wait_s)
+            )
+            if rendered.ok:
+                return rendered
+            # Still challenged. Keep the static refusal, which carries the
+            # header that says so, rather than the browser's less specific one.
+            log.info(
+                "challenge did not clear within the wait",
+                extra={"url": url, "domain": registrable_domain(url)},
+            )
+            return static
+
         if mode != "auto" or not static.ok:
             return static
         if media_type(static.headers.get("content-type")) not in ("text/html", None):
@@ -500,7 +602,12 @@ class Fetcher:
         def elapsed() -> int:
             return int((time.monotonic() - started) * 1000)
 
-        def refuse(outcome: str, detail: str, status: int | None = None) -> FetchResult:
+        def refuse(
+            outcome: str,
+            detail: str,
+            status: int | None = None,
+            headers: Mapping[str, str] | None = None,
+        ) -> FetchResult:
             log.warning(
                 "fetch refused",
                 extra={
@@ -517,6 +624,10 @@ class Fetcher:
                 outcome=outcome,
                 status_code=status,
                 detail=detail,
+                # Carried even on a refusal: `is_challenge` reads them, and the
+                # decision to re-fetch through a browser is made by the caller
+                # from the result, long after the response context has closed.
+                headers=dict(headers or {}),
                 redirect_chain=tuple(chain),
                 elapsed_ms=elapsed(),
             )
@@ -584,6 +695,7 @@ class Fetcher:
                             "http_error",
                             describe_http_error(response.status_code, response.headers),
                             response.status_code,
+                            kept,
                         )
 
                     if not content_type_allowed(media, policy.allowed_content_types):
@@ -632,7 +744,9 @@ class Fetcher:
         except httpx.HTTPError as exc:
             return refuse("connection_error", f"{type(exc).__name__}: {exc}")
 
-    async def fetch_rendered(self, url: str, policy: ResolvedPolicy) -> FetchResult:
+    async def fetch_rendered(
+        self, url: str, policy: ResolvedPolicy, *, settle_s: float = 0.0
+    ) -> FetchResult:
         """The browser path, through Crawl4AI.
 
         The URL is validated before it is handed over and the URL Crawl4AI
@@ -681,7 +795,7 @@ class Fetcher:
             return refuse(outcome, str(exc))
 
         try:
-            result = await self._browser.crawl(url, policy)
+            result = await self._browser.crawl(url, policy, settle_s=settle_s)
         except httpx.TimeoutException as exc:
             return refuse("timeout", f"{type(exc).__name__}: {exc}")
         except httpx.HTTPError as exc:

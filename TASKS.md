@@ -254,6 +254,11 @@ extraction work and neither blocks the checkpoint.
       invisible — so the unit is `oneshot` and owns only the stack. Verified by
       running the image against the real database: fetched, stored, extracted,
       chunked and expanded the frontier, read-only, as an unprivileged user
+- [x] `P1-33` **Wait out a bot-challenge interstitial.** A static fetch that hits
+      one is re-fetched through the browser and held open for `challenge_wait_s`
+      (default 15s, 0 disables). The non-interactive kind clears itself; the
+      interactive kind never does, so it is bounded and tried once. Detection is
+      narrow on purpose — the costly error is re-fetching ordinary 403s
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

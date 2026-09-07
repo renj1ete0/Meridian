@@ -44,11 +44,15 @@ class FakeBrowser:
 
     def __init__(self, result: dict | None = None, raises: Exception | None = None) -> None:
         self.calls: list[str] = []
+        #: The settle wait each call asked for, so a test can assert that a
+        #: challenge re-fetch actually waits and an ordinary render does not.
+        self.settles: list[float] = []
         self._result = result
         self._raises = raises
 
-    async def crawl(self, url: str, policy) -> dict:
+    async def crawl(self, url: str, policy, *, settle_s: float = 0.0) -> dict:
         self.calls.append(url)
+        self.settles.append(settle_s)
         if self._raises is not None:
             raise self._raises
         return self._result or crawl_result(url)
@@ -340,3 +344,110 @@ async def test_a_crawl_that_reports_failure_is_not_treated_as_a_page(policy, res
 
     assert not result.ok
     assert "page timed out" in result.detail
+
+
+# --------------------------------------------------------------------------
+# Waiting out a challenge interstitial (§6.4)
+# --------------------------------------------------------------------------
+
+
+CHALLENGE_HEADERS = {"content-type": "text/html", "cf-mitigated": "challenge"}
+
+
+async def test_a_challenge_is_re_fetched_through_the_browser(
+    policy, resolver, recorder
+) -> None:
+    """The static path refuses it; the browser is given a bounded chance.
+
+    `Fetcher.fetch` used to return any failed static result immediately, so a
+    challenge — the one refusal a browser can sometimes clear — never reached
+    the browser at all.
+    """
+    browser = FakeBrowser()
+    rec = recorder(lambda r: streamed(403, headers=CHALLENGE_HEADERS, chunks=[b"just a moment"]))
+    async with Fetcher(
+        client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=browser
+    ) as f:
+        result = await f.fetch("https://example.test/", policy(render_js="auto"))
+
+    assert browser.calls == ["https://example.test/"]
+    assert browser.settles == [15.0], "the browser must be told to wait"
+    assert result.ok
+    assert result.render_mode == "browser"
+
+
+async def test_an_ordinary_refusal_is_not_re_fetched(policy, resolver, recorder) -> None:
+    """The expensive false positive: a browser launch per forbidden URL."""
+    browser = FakeBrowser()
+    rec = recorder(
+        lambda r: streamed(403, headers={"content-type": "text/html"}, chunks=[b"<h1>Forbidden</h1>"])
+    )
+    async with Fetcher(
+        client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=browser
+    ) as f:
+        result = await f.fetch("https://example.test/", policy(render_js="auto"))
+
+    assert browser.calls == []
+    assert not result.ok
+    assert result.status_code == 403
+
+
+async def test_a_challenge_that_does_not_clear_keeps_the_static_refusal(
+    policy, resolver, recorder
+) -> None:
+    """The interactive kind never resolves, and the static result is the more
+    informative of the two — it carries the header that says what happened."""
+    browser = FakeBrowser(result=crawl_result("https://example.test/", success=False))
+    rec = recorder(lambda r: streamed(403, headers=CHALLENGE_HEADERS, chunks=[b"just a moment"]))
+    async with Fetcher(
+        client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=browser
+    ) as f:
+        result = await f.fetch("https://example.test/", policy(render_js="auto"))
+
+    assert browser.calls == ["https://example.test/"], "tried once, not repeatedly"
+    assert not result.ok
+    assert result.status_code == 403
+    assert result.headers.get("cf-mitigated") == "challenge"
+
+
+async def test_the_wait_can_be_disabled_per_domain(policy, resolver, recorder) -> None:
+    """A domain known to serve an unclearable challenge should not pay for a
+    browser launch on every URL."""
+    browser = FakeBrowser()
+    rec = recorder(lambda r: streamed(403, headers=CHALLENGE_HEADERS, chunks=[b"just a moment"]))
+    async with Fetcher(
+        client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=browser
+    ) as f:
+        result = await f.fetch(
+            "https://example.test/", policy(render_js="auto", challenge_wait_s=0)
+        )
+
+    assert browser.calls == []
+    assert not result.ok
+
+
+async def test_no_browser_means_no_re_fetch(policy, resolver, recorder) -> None:
+    """Degraded, not broken — and not a crash on a missing browser."""
+    rec = recorder(lambda r: streamed(403, headers=CHALLENGE_HEADERS, chunks=[b"just a moment"]))
+    async with Fetcher(
+        client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=None
+    ) as f:
+        result = await f.fetch("https://example.test/", policy(render_js="auto"))
+
+    assert not result.ok
+    assert result.status_code == 403
+
+
+async def test_an_ordinary_render_does_not_wait(policy, resolver, recorder) -> None:
+    """The settle is for challenges only; on a normal page it is a browser slot
+    held open for nothing."""
+    browser = FakeBrowser()
+    rec = recorder(
+        lambda r: streamed(200, headers={"content-type": "text/html"}, chunks=[SPA_SHELL.encode()])
+    )
+    async with Fetcher(
+        client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=browser
+    ) as f:
+        await f.fetch("https://example.test/", policy(render_js="auto"))
+
+    assert browser.settles == [0.0]

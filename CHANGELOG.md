@@ -8,6 +8,46 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-09-07
+
+**A challenge interstitial gets one bounded chance to clear itself.**
+
+### Added
+
+- `is_challenge()` and a re-fetch through the browser when a static fetch hits a
+  bot-challenge interstitial. The common non-interactive kind runs a few seconds
+  of JavaScript and then serves the real page, so waiting it out is not evasion
+  — it is what an ordinary browser does, and §6.4's decision to skip stealth
+  mode, undetected browsers and proxy escalation is untouched
+- `challenge_wait_s` on the fetch policy, default 15s, `0` to disable per
+  domain. Bounded and tried **once**: the interactive kind never clears however
+  long it is given, so a domain that serves one should not pay for a browser
+  launch on every URL
+- `Crawl4aiClient.crawl(settle_s=...)` holds the page open after load and waits
+  on `networkidle` rather than `domcontentloaded` — a challenge fires its own
+  requests, and returning at DOM-ready reads the interstitial instead of
+  whatever replaces it. The HTTP timeout grows by the settle, or the wait would
+  be spent and then discarded by a client-side timeout
+
+### Fixed
+
+- `Fetcher.fetch` returned any failed static result immediately, so a challenge
+  — the one refusal a browser can sometimes turn into a success — never reached
+  the browser at all
+- A refused static fetch now carries its response headers. Detection reads them
+  from the result, long after the response context has closed, and `cf-mitigated`
+  is what separates a challenge from an ordinary refusal
+
+### Notes
+
+- Detection is deliberately narrow, because the expensive mistake is the false
+  positive: a detector that fires on ordinary 403s spends a browser launch on
+  every permission-denied URL in the corpus. It requires a challenge status
+  *and* either the mitigation header or one of three machine-generated body
+  markers, scanned only in the first 8KB — so an article discussing bot
+  challenges does not trip it, the same distinction `P1-23` turns on
+
+
 ## [0.22.0] — 2026-09-07
 
 **Sitemaps become frontier, and a URL's topic stops being inherited.** Measured

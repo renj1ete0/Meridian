@@ -70,6 +70,11 @@ class ResolvedPolicy(BaseModel):
     revalidate_each_redirect: bool = True
     block_mixed_dns: bool = True
     allowed_content_types: list[str] = Field(default_factory=list)
+    # Seconds to hold a challenge interstitial open in the browser before
+    # giving up on it. The non-interactive kind clears in about five; the
+    # interactive kind never does, so this is bounded rather than generous.
+    # 0 disables the re-fetch entirely.
+    challenge_wait_s: int = Field(default=15, ge=0)
     max_decompression_ratio: int = Field(default=100, gt=0)
 
     @property
