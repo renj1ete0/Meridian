@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.14" src="https://img.shields.io/badge/version-0.14-0D6F7C">
+  <img alt="Version 0.15" src="https://img.shields.io/badge/version-0.15-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -24,7 +24,7 @@ not just what it knows, but where the evidence is thin, stale, or contradictory.
 
 > **Status: phase 1 of 7.** The design, the shared core and the schema are in place,
 > and the crawler now runs: it drains a queue unattended, fetches politely, keeps what
-> it fetched, and reads it. Chunking and embeddings are next — nothing searches yet.
+> it fetched, reads it, and chunks it. Embeddings and search are next.
 > See the [roadmap](docs/roadmap.md) and [TASKS.md](TASKS.md).
 
 ## Why it exists
@@ -136,10 +136,11 @@ Production runs the whole stack in containers behind `cloudflared`
 > `packages/meridian_core` and the worker are built and tested, so `make migrate`,
 > `make seed`, `make test` and `python -m worker.main` all work today — the worker
 > drains the queue, fetches politely, records every attempt, keeps what it fetched
-> as a `sources` row plus (for primary sources) a local copy, and extracts HTML to
-> text, bibliographic metadata and citations. PDFs and Office documents are stored
-> and left metadata-only until `P1-08`/`P1-09`, and nothing chunks or embeds yet
-> (`P2-*`). The API and web commands are phase 2 and 3. See
+> as a `sources` row plus (for primary sources) a local copy, extracts HTML to text,
+> bibliographic metadata and citations, and cuts it into citable chunks. PDFs and
+> Office documents are stored and left metadata-only until `P1-08`/`P1-09`, nothing
+> embeds or searches yet (`P2-*`), and nothing yet enqueues new URLs — the crawl
+> drains its seed list and stops. The API and web commands are phase 2 and 3. See
 > [docs/handover.md](docs/handover.md) for what runs today and what does not.
 >
 > The loop is configured entirely from the environment — `MERIDIAN_WORKER_CONCURRENCY`,

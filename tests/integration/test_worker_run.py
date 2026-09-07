@@ -857,3 +857,178 @@ async def test_a_title_found_once_is_not_erased_by_a_later_fetch(
     source = await get_source(sess, url)
     assert source.title == "The Original Title"
     assert source.text_available is True, "the new fetch did extract text"
+
+
+# --------------------------------------------------------------------------
+# Chunking (P2-02, pulled into phase 1)
+# --------------------------------------------------------------------------
+
+
+def long_page(marker: str = "one") -> bytes:
+    paragraphs = "".join(f"<p>Paragraph {i} ({marker}). {ARTICLE}</p>" for i in range(6))
+    return (
+        f'<!doctype html><html lang="en"><head><title>Ridership {marker}</title></head>'
+        f"<body><article>{paragraphs}</article></body></html>"
+    ).encode()
+
+
+async def chunks_of(sess, url: str):
+    from meridian_core.models import Chunk
+
+    source = await get_source(sess, url)
+    rows = await sess.execute(
+        select(Chunk).where(Chunk.source_id == source.source_id).order_by(Chunk.chunk_index)
+    )
+    return source, list(rows.scalars())
+
+
+async def test_extracted_text_becomes_chunks_in_the_same_pass(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The gap this task closes: extraction produced text and dropped it.
+
+    In the same pass as the fetch, not a later sweep — a `background` source
+    keeps no raw file (§5.4), so text not chunked now needs the page fetched
+    again to recover.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+    body = long_page()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/a")
+    assert stats.chunks == len(rows) > 1
+    assert [r.chunk_index for r in rows] == list(range(len(rows)))
+    assert all(r.embedding is None for r in rows), "embedding is P2-01, not this pass"
+    assert source.text_available is True
+
+
+async def test_a_stored_offset_locates_the_passage_in_the_re_extracted_text(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§5.3's whole point, asserted against the raw file rather than a variable.
+
+    Extraction is deterministic, so re-extracting the stored bytes must give
+    back text in which every stored offset still lands on its chunk. If that
+    does not hold, every citation in the corpus is unresolvable and nothing
+    would say so.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+    body = long_page()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/a")
+    from worker.extract import extract_html
+    from worker.rawstore import resolve as resolve_raw
+
+    stored_bytes = resolve_raw(source.raw_file_path, root=raw_store).read_bytes()
+    text = extract_html(stored_bytes, f"https://{run_domain}/a").text
+
+    for row in rows:
+        start = row.page_or_offset
+        assert text[start : start + len(row.text)] == row.text, (
+            f"chunk {row.chunk_index}'s offset does not locate it in the re-extracted text"
+        )
+
+
+async def test_a_re_crawl_of_unchanged_content_leaves_the_chunks_alone(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§6.3's high-water mark is a chunk id.
+
+    Rewriting identical chunks would hand the slow loop a day of "new" material
+    it has already read — the most expensive possible no-op, since reading it is
+    the part that costs tokens.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    body = long_page()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    for _ in range(2):
+        task = await enqueue(sess, run_domain, run_topic)
+        worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+        stats = await worker.run()
+        await sess.refresh(task)
+        task.status = "done"
+        await sess.flush()
+
+    _, rows = await chunks_of(sess, f"https://{run_domain}/a")
+    assert stats.chunks == 0, "the second run rewrote chunks for unchanged content"
+    assert len(rows) > 1
+
+
+async def test_changed_content_replaces_the_chunks(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """And the new ids are what make the slow loop re-read it."""
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    url = f"https://{run_domain}/a"
+    bodies = iter([long_page("one"), long_page("two")])
+    current = {"body": next(bodies)}
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[current["body"]])
+
+    task = await enqueue(sess, run_domain, run_topic)
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+    _, before = await chunks_of(sess, url)
+    before_ids = {r.chunk_id for r in before}
+
+    await sess.refresh(task)
+    task.status = "done"
+    await sess.flush()
+    current["body"] = next(bodies)
+    task2 = await enqueue(sess, run_domain, run_topic, path="/a")
+    worker2, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker2.run()
+
+    _, after = await chunks_of(sess, url)
+    after_ids = {r.chunk_id for r in after}
+    assert before_ids.isdisjoint(after_ids), "the old chunks survived a content change"
+    assert any("(two)" in r.text for r in after)
+    assert not any("(one)" in r.text for r in after)
+    await sess.refresh(task2)
+
+
+async def test_a_page_with_no_text_writes_no_chunks(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Metadata-only (§6.5) means a source row and nothing under it."""
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+
+    def shell(request: httpx.Request) -> httpx.Response:
+        return streamed(
+            200,
+            headers={"content-type": "text/html"},
+            chunks=[b"<html><body><nav>menu</nav></body></html>"],
+        )
+
+    worker, _ = build_worker(sess, shell, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/a")
+    assert rows == []
+    assert stats.chunks == 0
+    assert source.text_available is False

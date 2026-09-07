@@ -17,18 +17,20 @@ something went wrong.
 - Add new tasks freely; don't renumber existing ones.
 
 **Current phase: 1.** Phase 0 is closed. The crawl runs unattended, keeps what
-it fetches, and reads it: `P1-01`–`P1-05`, `P1-07`, `P1-11`, `P1-12`, `P1-15`,
-`P1-17`–`P1-21` and `P1-24` are done, at 663 tests. Verified live — the seeded
-frontier crawled, stored under §5.4's retention split, re-crawled to four real
-`304`s, and extracted to titles, dates and text. The only open phase-0 item is
-`P0-15`, deferred until phase 2 needs it.
+it fetches, reads it, and chunks it: `P1-01`–`P1-05`, `P1-07`, `P1-11`, `P1-12`,
+`P1-15`, `P1-17`–`P1-21`, `P1-24` and (pulled forward) `P2-02` are done, at 711
+tests. Verified live — the frontier crawled and chunked with every stored offset
+round-tripping from the raw file on disk, then re-crawled to five `304`s and one
+byte-identical `200`, rewriting nothing. The only open phase-0 item is `P0-15`,
+deferred until phase 2 needs it.
 
 Next: the other extractors — `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10`
 (figures). Government sources arrive as Office documents and PDFs far more often
 than expected, and today both are stored and left metadata-only. `P1-06`
 (prefilter) and `P1-28` (sitemaps from robots.txt) are still cheap and now have
-both a loop to feed and a link list to feed it from. `P1-23`'s injection
-pre-screen belongs with extraction and is now overdue rather than early.
+both a loop to feed and a link list to feed it from — without them the crawl
+only ever fetches the 13 seeded rows. `P1-23`'s injection pre-screen belongs
+with extraction and is now overdue rather than early.
 
 ---
 
@@ -184,6 +186,13 @@ pre-screen belongs with extraction and is now overdue rather than early.
       worker restart re-fetches robots.txt for every origin it touches. Harmless at
       current scale and wasteful at corpus scale; revisit when the crawl is wide
       rather than deep
+- [ ] `P1-32` **Replacing chunks orphans the edges that cite them.**
+      `edges.supporting_chunk_ids` is an array of ids with no foreign key behind
+      it, and `replace_chunks()` deletes the old set when a page's content
+      changes. Nothing is orphaned today because no edges exist, and the fix is
+      not obvious — superseding rather than deleting, a `superseded_by` column,
+      or re-deriving affected edges — so it needs the graph to exist first. Do
+      not let the first real edges land before this is decided
 - [ ] `P1-31` **Nothing ever deletes from the raw store.** `P1-11` decides what
       gets written; §5.4 also says junk and near-duplicates are dropped *after*
       the novelty gate, and background sources get a snapshot only if cited.
@@ -207,7 +216,15 @@ pre-screen belongs with extraction and is now overdue rather than early.
 *Checkpoint: is searching the corpus already useful with no model involved?*
 
 - [ ] `P2-01` `embeddings.py` — bge-m3 wrapper, batching, arm64 sanity check
-- [ ] `P2-02` Chunking with `page_or_offset` captured at extraction time
+- [x] `P2-02` Chunking with `page_or_offset` captured at extraction time —
+      **built in phase 1** (`v0.15.0`), because `P1-07` was discarding the text
+      it extracted and a `background` source keeps no raw file to re-derive from.
+      `worker/extract/chunk.py` cuts on structure (paragraphs, then sentences,
+      then a hard cap) and every chunk is a verbatim slice: `text[offset:offset +
+      len(chunk)] == chunk`. `meridian_core/chunks.py` writes them in the same
+      transaction as the source row. Unchanged content is left alone; changed
+      content is replaced, and the new ids are what make §6.3's high-water mark
+      re-read the page
 - [ ] `P2-03` `novelty.py` — cosine gate, drop above 0.95
 - [ ] `P2-04` pgvector HNSW index; measure recall and latency at corpus size
 - [ ] `P2-05` `tsvector` index and trigger

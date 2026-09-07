@@ -8,6 +8,61 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-09-07
+
+**Extracted text stops being discarded.** `P1-07` produced text and dropped it,
+because `chunks` is the only home the schema has for it and chunking sat in
+phase 2. That was survivable for a primary source — its raw file is kept, so
+§11.12 can re-derive — and permanent loss for a `background` one, which keeps no
+file at all. `P2-02` is pulled forward for that reason: the loss was live, and
+`P1-16`'s 48-hour unattended run would have spent two days making it worse.
+
+Verified live across two passes. First: seven sites crawled, six chunked, and
+every stored offset round-trips — re-extracting the raw file from disk puts each
+chunk back exactly where its `page_or_offset` says it is. Second: five real
+`304`s, one `200` whose bytes were byte-identical, and `chunks: 0` for all of
+them.
+
+### Added
+
+- `P2-02` `worker/extract/chunk.py`. **A chunk is a verbatim slice**:
+  `source[offset:offset + len(text)] == text`, exactly. §5.3 requires the offset
+  at extraction time because reconstructing it later is "painful and often
+  impossible", and an offset that does not locate its passage is worse than none
+  — it makes a citation look checkable when it is not. Offsets are tracked
+  through every split rather than recovered by searching for the text
+  afterwards, which would resolve a repeated boilerplate paragraph to its first
+  occurrence and cite the wrong copy
+- Structure-aware splitting: whole paragraphs packed to a target, sentences when
+  a paragraph exceeds the cap, a hard cut only when a single sentence does. Each
+  fallback reached only when the one above it cannot help. Undersized chunks are
+  merged into a neighbour — backwards normally, forwards for a leading one,
+  since a document opening with a `# Title` line is the common case
+- **No overlap, deliberately.** Overlap compensates for blind splitting cutting
+  through an idea; splitting on paragraph boundaries fixes the same problem
+  directly, and paying for both duplicates text in the table, in the embedding
+  index, and in every batch the slow loop reads
+- `meridian_core/chunks.py` — `replace_chunks()`, `delete_chunks()`,
+  `chunk_count()`, and an `as_writes()` seam so the core package can describe its
+  own table without depending on a service's dataclasses
+- Chunking runs in the same transaction as the source row. A source whose
+  checksum says one thing and whose chunks were cut from another is a corpus
+  citing text it does not hold
+
+### Notes
+
+- A re-crawl of unchanged content leaves the chunks alone. §6.3's high-water mark
+  is a `chunk_id`, so rewriting identical chunks would hand the slow loop a day
+  of "new" material it has already read — the most expensive possible no-op,
+  since reading it is the part that costs tokens
+- Changed content *replaces* them, and the new ids are what make the slow loop
+  re-read the page. Nothing has to notice the change or schedule the re-read;
+  the mark simply falls behind
+- Replacement is not yet safe for provenance. `edges.supporting_chunk_ids` is an
+  array with no foreign key behind it, so a deleted chunk leaves an edge pointing
+  at nothing. No edges exist today, so nothing is orphaned — recorded as `P1-32`,
+  which needs the graph to exist before it can be answered
+
 ## [0.14.0] — 2026-09-07
 
 **The bytes become text.** §6.6's routing table sends HTML to Crawl4AI and

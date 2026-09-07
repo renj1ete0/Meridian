@@ -55,9 +55,10 @@ from contextlib import AbstractAsyncContextManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
+from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
-from meridian_core.models import QueueTask
+from meridian_core.models import QueueTask, Source
 from meridian_core.policy import resolve_source_tier
 from meridian_core.queueing import (
     DEFAULT_BACKOFF_BASE_S,
@@ -77,6 +78,7 @@ from meridian_core.sources import get_source, touch_source, upsert_source
 from . import rawstore
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
+from .extract.chunk import chunk_text
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
@@ -223,6 +225,7 @@ class Kept:
     changed: bool
     #: None when the format has no extractor yet (`P1-08`, `P1-09`).
     document: ExtractedDocument | None = None
+    chunks: int = 0
 
 
 @dataclasses.dataclass
@@ -238,6 +241,7 @@ class WorkerStats:
     stored: int = 0
     bytes_stored: int = 0
     extracted: int = 0
+    chunks: int = 0
     outcomes: Counter[str] = dataclasses.field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
@@ -251,6 +255,7 @@ class WorkerStats:
             "stored": self.stored,
             "bytes_stored": self.bytes_stored,
             "extracted": self.extracted,
+            "chunks": self.chunks,
             "outcomes": dict(self.outcomes),
         }
 
@@ -477,6 +482,7 @@ class Worker:
                 "stored": kept.stored.path if kept else None,
                 "content_changed": kept.changed if kept else None,
                 "chars": kept.document.char_count if kept and kept.document else None,
+                "chunks": kept.chunks if kept else None,
             },
         )
 
@@ -521,7 +527,7 @@ class Worker:
             document = self._extract(claim, result)
 
             async with self._session_factory() as sess:
-                _, changed = await upsert_source(
+                source, changed = await upsert_source(
                     sess,
                     claim.url,
                     checksum=stored.checksum,
@@ -533,6 +539,10 @@ class Worker:
                     **_bibliography(document),
                     **validators(result.headers),
                 )
+                # In the same transaction as the source row. A source whose
+                # checksum says one thing and whose chunks were cut from another
+                # is a corpus that cites text it does not hold.
+                chunks_written = await self._chunk(sess, source, document, changed=changed)
                 await sess.commit()
         except Exception as exc:
             log.exception(
@@ -546,7 +556,51 @@ class Worker:
             self._stats.bytes_stored += stored.bytes_written
         if document is not None and document.has_text:
             self._stats.extracted += 1
-        return Kept(stored=stored, changed=changed, document=document)
+        self._stats.chunks += chunks_written
+        return Kept(stored=stored, changed=changed, document=document, chunks=chunks_written)
+
+    async def _chunk(
+        self,
+        sess: AsyncSession,
+        source: Source,
+        document: ExtractedDocument | None,
+        *,
+        changed: bool,
+    ) -> int:
+        """Cut the extracted text into chunks and make them the source's set.
+
+        Skipped entirely when the checksum says the content did not change: the
+        chunks already stored were cut from these exact bytes, and rewriting
+        them would hand the slow loop a day of "new" material it has already
+        read (§6.3's high-water mark is a chunk id).
+
+        This has to happen here, in the fetch pass, and not in a later
+        re-extraction sweep — a `background` source keeps no raw file (§5.4), so
+        text not chunked now is text that needs the page fetched again.
+        """
+        if document is None or not document.has_text:
+            return 0
+        if not changed and await chunk_count(sess, source.source_id):
+            log.debug(
+                "content unchanged; chunks left alone",
+                extra={"url": source.url, "source_id": source.source_id},
+            )
+            return 0
+
+        written, deleted = await replace_chunks(
+            sess, source.source_id, as_writes(chunk_text(document.text))
+        )
+        log.info(
+            "chunked",
+            extra={
+                "url": source.url,
+                "source_id": source.source_id,
+                "chunks": written,
+                "replaced": deleted,
+                "chars": document.char_count,
+            },
+        )
+        return written
 
     def _extract(self, claim: Claim, result: FetchResult) -> ExtractedDocument | None:
         """Turn the bytes into text, for the formats that have an extractor.

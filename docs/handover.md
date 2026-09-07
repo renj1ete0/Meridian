@@ -15,8 +15,8 @@ add it here.
 
 Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
 bytes come out, politely, without becoming a route into the network, leaving a record
-of itself, keeping what it read, and reading it — and now with nobody watching. As
-of `v0.14.0`, 663 tests pass with a real Postgres.
+of itself, keeping what it read, reading it, and cutting it into citable chunks —
+and now with nobody watching. As of `v0.15.0`, 711 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -57,19 +57,24 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
    path from    trafilatura  raw path, title, date,
    the URL,     or crawl4ai  language, doi,
    primary      fit_markdown text_available
-   only (§5.4)
+   only (§5.4)       │              │
+                     ▼              ▼
+                chunk_text()   replace_chunks()
+                verbatim       same transaction
+                slices +       as the source row
+                offsets
                     │
                     ▼
         worker.main settles the task
         queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** No chunking, no embeddings, no API, no frontend. HTML
-is extracted; PDFs and Office documents are stored and left metadata-only until
-`P1-09` and `P1-08`. **The extracted text is not persisted anywhere** — chunking is
-`P2-02`, so today extraction fills the `sources` metadata columns and the text
-itself is discarded. That is fine for a primary source, whose raw file can be
-re-extracted, and lossy for a `background` one, which has no file (see §5.4 below).
+**What does not exist yet.** No embeddings, no search, no API, no frontend. HTML is
+extracted and chunked; PDFs and Office documents are stored and left metadata-only
+until `P1-09` and `P1-08`. **Nothing enqueues anything** — the crawl only ever
+fetches the 13 seeded rows, because the prefilter (`P1-06`), sitemap discovery
+(`P1-28`) and frontier expansion (`P5-01`) are all unbuilt, and the link list
+`ExtractedDocument` produces is logged and dropped.
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
 Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
@@ -180,6 +185,22 @@ tests parse. The fixture is gone with the plugin, and asking for it fails deep i
 pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
+
+### An offset recovered by searching for the text cites the wrong copy
+
+The obvious way to attach an offset to a chunk is `text.index(chunk)` after the fact.
+It is wrong on any document that repeats a passage — a boilerplate disclaimer, a
+repeated table header, a navigation string that survived extraction — because it
+resolves to the *first* occurrence and the citation silently points somewhere else.
+`chunk_text` threads offsets through every split instead, and works in `(start, end)`
+spans rather than substrings so a chunk is always a verbatim slice.
+
+### `zip(xs, xs[1:], strict=True)` always raises
+
+The pairwise idiom is inherently unequal in length, so `strict=True` — which is
+otherwise the right default and what ruff's `B905` asks for — turns it into a
+guaranteed `ValueError`. Use `itertools.pairwise`. This survived the unit tests and
+was caught by a stress input that reached the sentence-splitting fallback.
 
 ### `iterlinks()` is not a link list
 
@@ -305,6 +326,14 @@ And `v0.14.0`:
 | Real bibliographic metadata | arxiv.org/abs/2401.02777 → title, `2024-01-05`, abstract, `10.48550/arxiv.2401.02777` |
 | A paper does not cite itself | the same arXiv page → `citations == ()` after self-identifier exclusion |
 
+And `v0.15.0`, where the round-trip is the claim worth checking:
+
+| Behaviour | Evidence |
+|---|---|
+| Chunking in the fetch pass | 7 fetched, 6 chunked, including a `background` source that keeps no raw file |
+| Offsets locate their passage | every stored `page_or_offset` re-extracted from the raw file on disk and matched exactly |
+| A re-crawl rewrites nothing | 5 real `304`s plus one byte-identical `200` → `chunks: 0` across the run |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -314,32 +343,30 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
+**`P1-06` and `P1-28`, because nothing enqueues anything.** The crawl has drained
+the same 13 seeded rows on every run since `P1-15`. `ExtractedDocument.links` is
+already populated (anchors only, absolute, deduped, capped at 500) and already
+dropped on the floor — the prefilter and sitemap discovery are what turn it into
+queue rows. This is the difference between a crawler and a fetcher.
+
+Links are deliberately *not* stored in `sources.extra`: 500 URLs per source is ~40KB
+of JSONB, which is ~2GB across a 50k corpus, and the right destination is queue rows
+rather than a column. That means frontier expansion has to consume them in the same
+pass as the fetch, exactly as chunking does.
+
 **The remaining extractors: `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10` (figures).**
 `Worker._extract` dispatches on `result.media_type` against `HTML_MEDIA_TYPES`; adding
 a format is a branch there plus a module under `worker/extract/`. Two constraints
 carried from AGENTS.md and §6.6: MarkItDown gets `convert_local()` or
 `convert_stream()` on already-fetched bytes, never `convert()` on a URL; and OCR never
-runs inline — a scanned PDF is enqueued and the source stays metadata-only.
+runs inline — a scanned PDF is enqueued and the source stays metadata-only. For PDFs,
+`page_or_offset` is a **page number** rather than a character offset (§5.3), so
+`chunk_text` is the wrong tool there and a page-aware sibling is needed.
 
-**The gap worth closing next, though, may be `P2-02` (chunking) rather than either.**
-Extraction currently produces text and throws it away, because `chunks` is the only
-home the schema has for it and chunking is a phase-2 task. Two consequences:
-
-- A **primary** source is fine — its raw file is kept, so §11.12's reprocessing can
-  re-derive the text whenever it is wanted.
-- A **background** source is not. It has a checksum and no file, so text not chunked
-  during the fetch pass is gone until the page is fetched again. That asymmetry is
-  the one thing in §5.4 that will bite, and it is already live.
-
-**`upsert_source` already tells you when not to bother.** It returns `changed`, and a
-re-crawl of an unchanged page should skip re-extraction and re-embedding entirely.
-Wire that in when chunking lands; retrofitting it means a pass that re-derives the
-whole corpus every night.
-
-**Links go nowhere yet.** `ExtractedDocument.links` is populated, logged, and dropped
-— the frontier is `P1-06`/`P1-28`/`P5-01`. They are deliberately *not* stored in
-`sources.extra`: 500 URLs per source is ~40KB of JSONB, which is 2GB across a 50k
-corpus, and the right destination is queue rows rather than a column.
+**Decide `P1-32` before the first real edges land.** `replace_chunks()` deletes a
+source's chunks when its content changes, and `edges.supporting_chunk_ids` is an
+array with no foreign key behind it. Nothing is orphaned today because no edges
+exist. That stops being true the moment the orchestrator writes one.
 
 **`P1-06` and `P1-28` are both cheap and now have a loop to feed.** The prefilter keeps
 already-seen URLs out of the queue; sitemap discovery enqueues the sitemaps
