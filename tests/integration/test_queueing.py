@@ -24,11 +24,14 @@ from sqlalchemy import delete, func, select
 from meridian_core.models import QueueTask
 from meridian_core.queueing import (
     DEFAULT_LEASE_SECONDS,
+    abandon,
     advance,
     claim_next,
     fail,
+    queue_depth,
     reclaim_expired,
     release,
+    release_worker_claims,
 )
 
 pytestmark = pytest.mark.usefixtures("require_db")
@@ -387,3 +390,176 @@ async def test_reclaim_expired_clears_only_expired_leases_and_returns_the_count(
     assert fresh.claimed_at is not None and fresh.claimed_by == "alive-worker", (
         "reclaim_expired must leave a live lease alone"
     )
+
+
+# --------------------------------------------------------------------------
+# Task-type filtering — the loop claims only what it can handle (P1-15)
+# --------------------------------------------------------------------------
+
+
+async def test_a_claim_can_be_narrowed_to_the_task_types_a_caller_handles(session_for) -> None:
+    """The worker fetches URLs; `query`, `doi` and `sitemap` have no handler yet.
+
+    Without the filter the loop's only options for a `doi` row are to fail a
+    task that is not broken or to claim it, release it and claim it again
+    forever. Asserted here rather than in a unit test because the filter is a
+    SQL predicate — an in-memory double would pass with it removed.
+    """
+    topic = f"test_queueing_types_{uuid.uuid4().hex[:8]}"
+    sess = await session_for("rw")
+    sess.add_all(
+        [
+            QueueTask(
+                url_or_query="10.1234/some-doi",
+                task_type="doi",
+                topic=topic,
+                priority=10,  # highest, so it would be claimed first if eligible
+            ),
+            QueueTask(
+                url_or_query="https://queueing-test.example/typed",
+                task_type="url",
+                topic=topic,
+                priority=1,
+            ),
+        ]
+    )
+    await sess.flush()
+
+    claimed = await claim_next(sess, worker_id="w", topics=[topic], task_types=["url"])
+
+    assert claimed is not None
+    assert claimed.task_type == "url"
+
+    # And the doi row is still pending, waiting for the handler that will take it.
+    nothing_left = await claim_next(sess, worker_id="w", topics=[topic], task_types=["url"])
+    assert nothing_left is None
+
+
+async def test_an_unfiltered_claim_still_takes_any_type(session_for) -> None:
+    """The filter is opt-in: existing callers must not silently start skipping."""
+    topic = f"test_queueing_types_{uuid.uuid4().hex[:8]}"
+    sess = await session_for("rw")
+    sess.add(QueueTask(url_or_query="10.1234/lonely-doi", task_type="doi", topic=topic))
+    await sess.flush()
+
+    claimed = await claim_next(sess, worker_id="w", topics=[topic])
+
+    assert claimed is not None and claimed.task_type == "doi"
+
+
+# --------------------------------------------------------------------------
+# Abandoning, releasing, and counting (P1-15)
+# --------------------------------------------------------------------------
+
+
+async def test_abandon_fails_a_task_immediately_and_counts_the_attempt(session_for) -> None:
+    """A refusal spends no retries but is still an attempt that happened.
+
+    `fail` would leave this pending with a backoff, and robots.txt would be
+    asked the same question two more times over the next hour to be given the
+    same answer.
+    """
+    sess = await session_for("rw")
+    task = QueueTask(
+        url_or_query="https://queueing-test.example/abandoned",
+        topic="test_queueing_abandon",
+        claimed_at=_now(),
+        claimed_by="worker-1",
+    )
+    sess.add(task)
+    await sess.flush()
+
+    await abandon(sess, task, "robots_denied: disallowed by robots.txt")
+
+    assert task.status == "failed"
+    assert task.attempts == 1
+    assert task.next_attempt_at is None
+    assert task.claimed_at is None and task.claimed_by is None
+    assert task.error == "robots_denied: disallowed by robots.txt"
+
+
+async def test_abandon_truncates_an_enormous_error_rather_than_failing_the_write(
+    session_for,
+) -> None:
+    """`queue.error` is TEXT, but the same 2000-char bound as `fail` applies.
+
+    A refusal detail carrying a whole HTML error page would otherwise make the
+    record of *why* a URL failed unreadable.
+    """
+    sess = await session_for("rw")
+    task = QueueTask(url_or_query="https://queueing-test.example/long-error")
+    sess.add(task)
+    await sess.flush()
+
+    await abandon(sess, task, "x" * 5000)
+
+    assert len(task.error) == 2000
+
+
+async def test_release_worker_claims_drops_only_this_workers_pending_leases(session_for) -> None:
+    """Shutdown hands work back; it must not reopen tasks that finished.
+
+    The `status == pending` half is the part worth asserting: without it a
+    restart would clear the lease on a task that had already been fetched,
+    which is harmless today and exactly the sort of thing that stops being
+    harmless once a later stage claims on the same column.
+    """
+    worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+    other_id = f"worker-{uuid.uuid4().hex[:8]}"
+    sess = await session_for("rw")
+    now = _now()
+
+    mine = QueueTask(
+        url_or_query="https://queueing-test.example/release-mine",
+        claimed_at=now,
+        claimed_by=worker_id,
+        status="pending",
+    )
+    mine_done = QueueTask(
+        url_or_query="https://queueing-test.example/release-mine-done",
+        claimed_at=now,
+        claimed_by=worker_id,
+        status="fetched",
+    )
+    theirs = QueueTask(
+        url_or_query="https://queueing-test.example/release-theirs",
+        claimed_at=now,
+        claimed_by=other_id,
+        status="pending",
+    )
+    sess.add_all([mine, mine_done, theirs])
+    await sess.flush()
+
+    released = await release_worker_claims(sess, worker_id)
+
+    assert released == 1
+    for row in (mine, mine_done, theirs):
+        await sess.refresh(row)
+    assert mine.claimed_by is None and mine.claimed_at is None
+    assert mine_done.claimed_by == worker_id, "a finished task must not be reopened"
+    assert theirs.claimed_by == other_id, "another worker's lease is not ours to drop"
+
+
+async def test_queue_depth_counts_by_status(session_for) -> None:
+    """The queue half of §12.5's health line.
+
+    Counted per status rather than as one number: 4,000 pending and 4,000
+    failed are the same depth and opposite situations, and a health line that
+    cannot tell them apart is the silent failure it exists to prevent.
+    """
+    sess = await session_for("rw")
+    before = await queue_depth(sess)
+
+    sess.add_all(
+        [
+            QueueTask(url_or_query="https://queueing-test.example/depth-1", status="pending"),
+            QueueTask(url_or_query="https://queueing-test.example/depth-2", status="pending"),
+            QueueTask(url_or_query="https://queueing-test.example/depth-3", status="failed"),
+        ]
+    )
+    await sess.flush()
+
+    after = await queue_depth(sess)
+
+    assert after["pending"] == before.get("pending", 0) + 2
+    assert after["failed"] == before.get("failed", 0) + 1

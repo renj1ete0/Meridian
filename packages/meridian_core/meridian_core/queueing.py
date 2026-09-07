@@ -19,6 +19,10 @@ weeks".
 **A failing domain stops spinning the queue.** Failures set ``next_attempt_at``
 to an exponentially backed-off time, so a dead site costs one attempt per backoff
 window instead of one per loop iteration (§13.4).
+
+**A refusal is not a failure to retry.** :func:`queue_disposition` decides which
+of the two a fetch outcome is, so a robots denial is abandoned once rather than
+re-asked three times over an hour to be told the same thing.
 """
 
 from __future__ import annotations
@@ -26,10 +30,14 @@ from __future__ import annotations
 import datetime as dt
 import random
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .logging import get_logger
 from .models import QueueTask
+from .policy import BACKOFF_STATUS
+
+log = get_logger(__name__)
 
 DEFAULT_LEASE_SECONDS = 900  # 15 min — longer than any single fetch should take
 DEFAULT_MAX_RETRIES = 2
@@ -65,12 +73,19 @@ async def claim_next(
     worker_id: str,
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
     topics: list[str] | None = None,
+    task_types: list[str] | None = None,
 ) -> QueueTask | None:
     """Claim the highest-priority eligible task, or return None if there is none.
 
     Eligible means: pending, past its backoff time, and either unclaimed or
     holding a lease that has expired. Ordered by priority then age, so
     tier-upranked results (§5.2) are fetched first and nothing starves.
+
+    ``task_types`` narrows the claim to the kinds the caller can actually
+    handle. The queue holds ``query``, ``doi`` and ``sitemap`` tasks as well as
+    ``url`` ones, and a claimer that takes a row it cannot process has only two
+    ways out — fail a task that was never broken, or hand it back and claim it
+    again on the next pass forever. Filtering in the query is the third.
 
     The row lock is held only for the duration of this statement — the claim is
     committed before any fetching starts, because holding a transaction open
@@ -92,6 +107,8 @@ async def claim_next(
     )
     if topics:
         stmt = stmt.where(QueueTask.topic.in_(topics))
+    if task_types:
+        stmt = stmt.where(QueueTask.task_type.in_(task_types))
 
     task = (await sess.execute(stmt)).scalar_one_or_none()
     if task is None:
@@ -171,3 +188,120 @@ async def reclaim_expired(sess: AsyncSession, *, lease_seconds: int = DEFAULT_LE
     )
     await sess.flush()
     return result.rowcount or 0
+
+
+async def abandon(sess: AsyncSession, task: QueueTask, error: str) -> None:
+    """Mark a task failed now, with no further attempts.
+
+    Distinct from :func:`fail`, which spends a retry. Some outcomes are refusals
+    rather than failures — robots.txt disallows the path, the domain is blocked,
+    the media type is not on the allowlist — and asking again in five seconds
+    gets the same answer for the same reason. The attempt is still counted, so
+    ``queue.attempts`` stays an honest record of how many requests a URL cost.
+    """
+    task.attempts += 1
+    task.error = error[:2000]
+    task.status = "failed"
+    task.next_attempt_at = None
+    task.claimed_at = None
+    task.claimed_by = None
+    await sess.flush()
+
+
+async def release_worker_claims(sess: AsyncSession, worker_id: str) -> int:
+    """Drop every lease this worker still holds. Returns how many.
+
+    Called on the way out of a clean shutdown. Without it, a restart cannot
+    touch the tasks the previous process had claimed until their leases expire
+    — fifteen minutes of a queue that looks busy and is doing nothing, on every
+    deploy. Only ``pending`` rows are touched, so a task that finished and moved
+    on is not reopened.
+    """
+    result = await sess.execute(
+        update(QueueTask)
+        .where(QueueTask.claimed_by == worker_id, QueueTask.status == "pending")
+        .values(claimed_at=None, claimed_by=None)
+    )
+    await sess.flush()
+    return result.rowcount or 0
+
+
+async def queue_depth(sess: AsyncSession) -> dict[str, int]:
+    """Count of tasks by status — the queue-depth half of §12.5's health line.
+
+    Returned as counts per status rather than a single number: a queue of 4,000
+    ``pending`` and one of 4,000 ``failed`` are the same depth and opposite
+    situations, and the point of the health line is to tell them apart.
+    """
+    rows = await sess.execute(select(QueueTask.status, func.count()).group_by(QueueTask.status))
+    return {status: count for status, count in rows.all()}
+
+
+#: The fetch succeeded and there are bytes to extract: the task moves on.
+TASK_FETCHED = frozenset({"success"})
+
+#: The conditional request paid off. There is nothing new to extract — the
+#: content is already in the corpus from the fetch that produced the validator —
+#: so the task is finished rather than passed down a pipeline with no body to
+#: work on.
+TASK_UNCHANGED = frozenset({"not_modified"})
+
+#: Nothing came back, but asking again later could plausibly change that.
+TASK_RETRY = frozenset({"timeout", "connection_error"})
+
+#: A refusal, not a failure. Every member is deterministic in the retry window:
+#: robots.txt and the block list will say the same thing in five seconds, the
+#: page is still the size it is, the body still will not decompress, and the
+#: address is still the address ``netguard`` refused. Retrying spends the
+#: crawl's politeness budget to be told the same thing three times.
+#:
+#: ``too_many_redirects`` and ``decompression_bomb`` sit here while
+#: :data:`~meridian_core.policy.DOMAIN_UNREACHABLE` counts them against the
+#: domain — deliberately. "Should this domain be backed off" and "should this
+#: URL be asked again" are different questions, and a hostile or misconfigured
+#: response answers yes to the first and no to the second.
+TASK_ABANDON = frozenset(
+    {
+        "robots_denied",
+        "blocked",
+        "unsafe_target",
+        "content_type_rejected",
+        "too_large",
+        "decompression_bomb",
+        "parse_error",
+        "too_many_redirects",
+    }
+)
+
+
+def queue_disposition(outcome: str, status_code: int | None = None) -> str:
+    """What one fetch outcome means for the task: the next status, or how to end it.
+
+    Returns ``"fetched"``, ``"done"``, ``"retry"`` or ``"abandon"``.
+
+    The question here is not the one :func:`~meridian_core.policy.domain_signal`
+    asks. That one decides whether a domain is worth continuing to fetch from;
+    this one decides whether *this URL* is worth asking for again. A 404 is the
+    domain working perfectly and the URL being permanently gone, and the two
+    functions disagree about it for that reason.
+    """
+    if outcome in TASK_FETCHED:
+        return "fetched"
+    if outcome in TASK_UNCHANGED:
+        return "done"
+    if outcome in TASK_RETRY:
+        return "retry"
+    if outcome in TASK_ABANDON:
+        return "abandon"
+    if outcome == "http_error":
+        # 5xx is the server having a bad minute and 429 is it asking for one;
+        # both are worth a backed-off retry. Every other 4xx is a correct
+        # answer about a URL that is not coming back.
+        if status_code is None or status_code >= 500 or status_code == BACKOFF_STATUS:
+            return "retry"
+        return "abandon"
+    # As in domain_signal: an outcome nobody classified must not take the worker
+    # down at 3am. Retry is the forgiving default — it is bounded by
+    # ``max_retries`` either way, where abandoning would silently drop the URL.
+    log.warning("unclassified fetch outcome; retrying by default", extra={"outcome": outcome})
+    return "retry"

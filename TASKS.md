@@ -16,18 +16,18 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. Fetching is complete, polite, and now
-records itself: `P1-01`, `P1-02`, `P1-03`, `P1-04`, `P1-05`, `P1-12`, `P1-17`,
-`P1-18`, `P1-19`, `P1-20`, `P1-21` and `P1-24` are done, at 434 tests. Verified
-live — arxiv.org's `Crawl-delay: 15` is honoured, and an unchanged page comes
-back 304. The only open phase-0 item is `P0-15`, deferred until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. The crawl now runs unattended:
+`P1-01`, `P1-02`, `P1-03`, `P1-04`, `P1-05`, `P1-12`, `P1-15`, `P1-17`, `P1-18`,
+`P1-19`, `P1-20`, `P1-21` and `P1-24` are done, at 519 tests. Verified live —
+`python -m worker.main` drained the seeded frontier against real government
+sites, honoured their robots.txt and delays, abandoned a 403 instead of retrying
+it, printed §12.5's health line, and finished its in-flight fetches on `SIGTERM`.
+The only open phase-0 item is `P0-15`, deferred until phase 2 needs it.
 
-Next: `P1-15`, the worker main loop. Everything it composes now exists —
-`claim_next`/`fail`/`advance`, `Crawler.fetch`, and the attempt log that makes an
-unattended run legible — and nothing runs unattended until it does. `P1-06`
-(prefilter) and `P1-28` (sitemaps from robots.txt) are both cheap and both feed
-it. After that, extraction: `P1-07` through `P1-10`, with `P1-23` (injection
-pre-screen) landing alongside.
+Next: extraction — `P1-07` through `P1-11` — because the loop currently fetches
+bytes and drops them. `P1-06` (prefilter) and `P1-28` (sitemaps from robots.txt)
+are still cheap and now have a loop to feed. `P1-23`'s injection pre-screen lands
+alongside extraction rather than after it.
 
 ---
 
@@ -133,11 +133,16 @@ pre-screen) landing alongside.
       pattern → default, seeded into the DB with the global fetch policy
 - [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
 - [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
-- [ ] `P1-15` Worker main loop, supervision, graceful restart. Everything it
-      composes exists: `claim_next`/`fail`/`advance` (`P1-01`), `Crawler.fetch`
-      (`P1-04`), and the attempt log (`P1-19`). Pass `task.attempts + 1` as
-      `attempt_number`, and call `prune_attempts()` on whatever housekeeping tick
-      the loop grows
+- [x] `P1-15` Worker main loop, supervision, graceful restart —
+      `services/worker/worker/main.py`. N claim-fetch-settle lanes over one
+      shared `Crawler`; the database is the queue and `SKIP LOCKED` is the
+      dispatcher, so the loop needs no scheduler of its own. `queue_disposition()`
+      decides whether an outcome is a failure to retry or a refusal to abandon —
+      a different question from `domain_signal()`'s, and they disagree in both
+      directions. Everything is caught except cancellation, which is the
+      shutdown path. `SIGTERM` finishes the fetches in flight and hands the
+      leases back; a second signal cancels. Housekeeping gives `prune_attempts()`
+      somewhere to run and logs §12.5's health line
 - [ ] `P1-25` **Egress restriction — the defence that survives an application bug.**
       Everything in `netguard` is one mistake from failing open. Give the fetching
       process no route to RFC1918 at all: a network namespace without a LAN route, or
@@ -162,6 +167,12 @@ pre-screen) landing alongside.
       worker restart re-fetches robots.txt for every origin it touches. Harmless at
       current scale and wasteful at corpus scale; revisit when the crawl is wide
       rather than deep
+- [ ] `P1-30` **Supervision the loop deliberately does not provide.** `worker/main.py`
+      handles `SIGTERM` gracefully and dies on anything it cannot handle, on the
+      assumption that something restarts it — §13.4's `Restart=always`. Nothing in
+      this repo provides that: there is no systemd unit, and `docker-compose.yml`
+      sets no `restart:` policy. Also needs a `services/worker/Dockerfile`, which
+      the compose file references and which does not exist
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

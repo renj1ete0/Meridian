@@ -8,6 +8,72 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-09-07
+
+**Nothing ran unattended until now.** Every piece of the fetch path has existed
+and been tested since `0.11.0`, and none of it had a caller: `claim_next` handed
+out tasks nobody claimed, `Crawler.fetch` fetched URLs nobody asked for, and
+`prune_attempts()` bounded a table nothing was filling. This release is the loop
+that runs them — which is the whole difference between a crawler and a library
+that could crawl.
+
+Verified against the real web, not only against doubles: seven Singapore
+government and standards sites fetched under their own robots.txt and delays, a
+403 abandoned rather than retried three times, the health line printed with
+§12.5's queue depth and fetch success rate, and `SIGTERM` finishing the two
+requests in flight before stopping.
+
+### Added
+
+- `P1-15` `services/worker/worker/main.py` — the worker loop. Concurrency is N
+  independent claim-fetch-settle lanes over one shared `Crawler`, with no
+  dispatcher and no in-process queue: the database is the queue and
+  `FOR UPDATE SKIP LOCKED` is the dispatcher, so four lanes in one process and
+  two processes of two behave identically and scaling out needs no coordination
+  invented for it. Politeness stays where it already was — `DomainLimiter` is
+  what stops four lanes becoming four simultaneous requests to one host
+- `queue_disposition()` in `queueing.py` — what a fetch outcome means for the
+  *task*, which is a different question from what `domain_signal()` asks about
+  the domain, and the two disagree in both directions. A 404 is a healthy domain
+  and a dead URL; a decompression bomb counts against the domain and is never
+  requested again. Refusals that are deterministic in the retry window — robots,
+  the block list, a rejected media type, an address `netguard` refused — are
+  abandoned on the first attempt instead of spending three requests to be told
+  the same thing
+- `abandon()` in `queueing.py` — fail a task now, with no retry, while still
+  counting the attempt that happened
+- `release_worker_claims()` — a clean shutdown hands its leases back rather than
+  leaving them to expire, so a restart is not fifteen minutes of a queue that
+  looks busy and is doing nothing
+- `queue_depth()` — counts by status, not one number: 4,000 pending and 4,000
+  failed are the same depth and opposite situations, and the health line exists
+  to tell them apart
+- `task_types` filter on `claim_next()`. The queue holds `query`, `doi` and
+  `sitemap` rows whose handlers are still unwritten (`P1-14`, `P1-28`), and a
+  loop that claims one has only two ways out — fail a task that is not broken,
+  or hand it back and claim it again forever
+- A housekeeping tick inside the loop: `prune_attempts()` finally has somewhere
+  to run, and §12.5's health line — queue depth, fetch attempts, success rate,
+  breakdown by outcome — is logged hourly. Nothing else in the system is awake
+  often enough to bound a table that gains a row per request
+- `MERIDIAN_WORKER_*` environment settings (id, concurrency, idle sleep, lease,
+  topics, housekeeping interval, max tasks), validated at startup so a
+  misconfigured worker fails loudly instead of quietly running one lane
+
+### Notes
+
+- The loop catches everything except cancellation. A lane that hits an
+  unexpected exception logs it, hands the task back with a backoff and goes on;
+  a database that has gone away backs the lane off along a capped schedule
+  rather than ending the run. Cancellation is deliberately not caught — that is
+  the shutdown path, and swallowing it turns `SIGTERM` into a process that has
+  to be killed
+- `attempt_number` is `task.attempts + 1`. The counter on the row is how many
+  attempts have *finished*, so passing it straight through would file every
+  retry in the attempt log as a first try — and telling a URL that failed once
+  from one that has been failing all week is the single question that log exists
+  to answer
+
 ## [0.11.0] — 2026-09-07
 
 **The crawl now keeps a record of itself.** Every fetch has always returned a

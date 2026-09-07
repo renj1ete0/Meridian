@@ -13,12 +13,13 @@ add it here.
 
 ## 1. Where the build actually is
 
-Phase 0 is closed. Phase 1 has its fetch path complete: a URL goes in, bytes come out,
-politely, without becoming a route into the network, and leaving a record of itself.
-As of `v0.11.0`, 434 tests pass with a real Postgres.
+Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
+bytes come out, politely, without becoming a route into the network, leaving a record
+of itself — and now with nobody watching. As of `v0.12.0`, 519 tests pass with a real
+Postgres.
 
 ```
-queue ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
+worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
                                         │
                     ┌───────────────────┼────────────────────┐
                     ▼                   ▼                    ▼
@@ -45,15 +46,20 @@ queue ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
    (attempts.py)         (policy.py) → blocked?
    one fetch_attempts    → limiter.forget(domain)
    row, every path
+                    │
+                    ▼
+        worker.main settles the task
+        queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** There is no worker main loop (`P1-15`), so nothing calls
-`Crawler.fetch` in production. No extraction, no embeddings, no API, no frontend.
-`fetch_health()` computes §12.5's success rate and nothing displays it yet;
-`prune_attempts()` exists and nothing schedules it — both are waiting on `P1-15`.
+**What does not exist yet.** No extraction, no embeddings, no API, no frontend. The
+loop fetches bytes and drops them — nothing writes a `sources` row or a raw file
+(`P1-07`–`P1-11`), which has one visible consequence today: `conditional_requests` is
+on and `not_modified` can never fire, because nothing stores the ETag that would make
+a request conditional. The 304 path is tested and correct and will stay unreachable
+until `P1-11` lands.
 
-The README's "Getting started" lists `uv run python -m worker.main` — that module is
-still `P1-15` and does not exist.
+`fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
 
 ---
 
@@ -77,6 +83,24 @@ tested almost nothing; read the skip count, not just the colour.
 
 Crawl4AI is a 6GB image that runs a browser pool. Start it only when you are actually
 exercising the browser path, and `make dev-down` when you stop.
+
+**Running the worker by hand.** `make test` exports `.env.dev`; nothing else does, so
+the worker needs it sourced:
+
+```bash
+set -a; . ./.env.dev; set +a
+MERIDIAN_WORKER_MAX_TASKS=4 uv run python -m worker.main
+```
+
+Without `MERIDIAN_WORKER_MAX_TASKS` it runs until signalled, which is correct and not
+what you want at a prompt. It crawls the real web — the seeded frontier is real
+Singapore government sites — so a run leaves real `queue` and `fetch_attempts` rows
+behind in the dev database. Reset the statuses afterwards if the next thing you do
+depends on the frontier still being `pending`.
+
+To exercise the shutdown path, `timeout -s TERM 5 uv run python -m worker.main` works
+— `uv run` forwards the signal — but pipe it to a file rather than to `grep`, or the
+signal takes the pipeline with it and you lose the last lines.
 
 ---
 
@@ -137,6 +161,31 @@ pytest with a bare `KeyError` on a stash key rather than anything that names the
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
 
+### An integration test that does not filter by topic claims the seeded frontier
+
+This dev database holds the 13 real seeded queue rows, all `pending` and all priority
+100. A test that enqueues its own task and then runs anything built on `claim_next`
+without a `topics` filter gets one of *those* rows instead, fetches it, and leaves the
+test's own task untouched — which reads as "the loop never ran" and is actually the
+loop working correctly. Every test in `tests/integration/test_worker_run.py` takes a
+`run_topic` fixture for this reason. `test_queueing.py` documents the same trap from
+the other side.
+
+### A test asserting on an INFO log passes or fails depending on test order
+
+`configure_logging()` sets the root logger to INFO, and once *any* test has called it
+the level sticks for the process. A test that attaches a handler to a module logger
+and expects an INFO record therefore passes in a full run and fails on its own, with
+nothing to suggest why. Set the level explicitly in the test and restore it — see
+`test_housekeeping_prunes_and_logs_the_health_line`. WARNING assertions are unaffected,
+which is why `test_fetch_signals.py` never hit this.
+
+### `asyncio_mode = "auto"` makes an explicit `pytestmark` counterproductive
+
+Adding `pytestmark = pytest.mark.asyncio` to a mixed sync/async test module marks the
+sync tests too, and pytest warns once per sync test. Auto mode already handles the
+async ones; leave the mark off.
+
 ### Crawl4AI 0.9.2 binds loopback *inside* its container
 
 Without `CRAWL4AI_API_TOKEN` set, its entrypoint binds gunicorn to `127.0.0.1` inside
@@ -163,8 +212,19 @@ not doubles:
 | `Crawl-delay` honoured | arxiv.org publishes 15s; observed 15s gaps |
 | Conditional request | iana.org returned a real `304`, zero bytes |
 
+And as of `v0.12.0`, with the loop driving instead of a script:
+
+| Behaviour | Evidence |
+|---|---|
+| Unattended drain of the seeded frontier | 7 tasks claimed, fetched and settled; queue statuses and `fetch_attempts` rows written and committed |
+| A 403 abandoned, not retried | unece.org → `http_error` 403 → `failed` at `attempts=1` |
+| Health line (§12.5) | `{"message": "health", "queue_depth": {...}, "fetch_success_rate": 0.857, "by_outcome": {...}}` |
+| Graceful `SIGTERM` | two fetches in flight both finished and settled; process exited 0 |
+| Two lanes not stampeding one host | per-domain `waited_ms` of 1000–1500 across concurrent lanes |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
-local socket serving a synthetic bomb), and the 5xx-robots refusal path.
+local socket serving a synthetic bomb), the 5xx-robots refusal path, and — because
+nothing stores an ETag yet — the loop's `not_modified` → `done` disposition.
 
 ---
 
@@ -172,17 +232,25 @@ local socket serving a synthetic bomb), and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**`P1-15`, the worker main loop.** Everything it composes now exists and is unused:
-`claim_next`/`fail`/`advance` in `queueing.py`, `Crawler.fetch`, and the attempt log
-that makes an unattended run legible. Two things it must not forget — pass
-`task.attempts + 1` as `attempt_number` (the default of 1 would make every retry look
-like a first try), and give `prune_attempts()` somewhere to run, since nothing else
-bounds a table with one row per request.
+**Extraction (`P1-07`–`P1-11`), because the loop currently throws the bytes away.**
+The worker fetches successfully and then does nothing with the body: no `sources` row,
+no raw file, no chunks. Two consequences worth knowing before starting. First, a
+re-run refetches everything in full — `conditional_requests` is on and works, but
+nothing has ever stored an ETag for it to send. Second, `Crawler.fetch` returns the
+body in memory and the loop drops it, so whatever writes the raw store has to be
+called from `Worker._process` before the settle, or the bytes are gone.
 
-**`P1-06` and `P1-28` are both cheap and both feed it.** The prefilter keeps
+`P1-11` (the raw store writer) is the one that unblocks the others, and it is what
+makes the 304 path reachable for the first time.
+
+**`P1-06` and `P1-28` are both cheap and now have a loop to feed.** The prefilter keeps
 already-seen URLs out of the queue; sitemap discovery enqueues the sitemaps
 `RobotsRules.sitemaps` already parses and throws away — Wikipedia's robots.txt lists
-one today.
+one today. `P1-28` also needs `HANDLED_TASK_TYPES` in `worker/main.py` extended, or
+the `sitemap` rows it enqueues will sit in the queue unclaimed forever.
 
-**Then extraction** (`P1-07`–`P1-11`), with `P1-23`'s injection pre-screen landing
-alongside rather than after.
+**`P1-23`'s injection pre-screen lands alongside extraction** rather than after.
+
+**One thing the loop does not do yet:** there is no systemd unit in the repo. §13.4's
+`Restart=always` is the supervision the process deliberately does not implement for
+itself, and nothing currently provides it.

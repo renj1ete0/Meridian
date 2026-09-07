@@ -132,11 +132,17 @@ cd web && npm run dev                               # UI on :21115
 Production runs the whole stack in containers behind `cloudflared`
 (`docker compose up -d`). Full sequence: [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
 
-> `packages/meridian_core` and the worker's fetch path are built and tested, so
-> `make migrate`, `make seed` and `make test` work today. The worker's main loop
-> (`P1-15`) is not written yet, so `python -m worker.main` is still a phase-1 target;
-> the API and web commands are phase 2 and 3. See [docs/handover.md](docs/handover.md)
-> for what runs today and what does not.
+> `packages/meridian_core` and the worker are built and tested, so `make migrate`,
+> `make seed`, `make test` and `python -m worker.main` all work today — the worker
+> drains the queue, fetches politely and records every attempt, but nothing yet
+> extracts the bytes it retrieves (`P1-07`–`P1-11`). The API and web commands are
+> phase 2 and 3. See [docs/handover.md](docs/handover.md) for what runs today and
+> what does not.
+>
+> The loop is configured entirely from the environment — `MERIDIAN_WORKER_CONCURRENCY`,
+> `MERIDIAN_WORKER_TOPICS`, `MERIDIAN_WORKER_MAX_TASKS` and friends, all listed in
+> `.env.example`. `MERIDIAN_WORKER_MAX_TASKS=5` gives a bounded run, which is the
+> way to try it without leaving a crawler going.
 
 Host ports sit in a distinctive `211xx` block — `21111` postgres, `21112` searxng,
 `21113` crawl4ai, `21114` api, `21115` web — so a fresh clone doesn't collide with
