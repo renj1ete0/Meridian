@@ -74,7 +74,7 @@ sources:
 
   - url: https://www.mot.gov.sg
     task_type: url
-    topic: av-deployment
+    topic: autonomous-vehicle
     source_tier: government
     note: Ministry of Transport — AV policy sits here rather than with LTA
 
@@ -97,13 +97,13 @@ sources:
   # --- AV: standards and regulation ----------------------------------------
   - url: https://www.sae.org
     task_type: url
-    topic: av-deployment
+    topic: autonomous-vehicle
     source_tier: institutional
     note: J3016 driving-automation taxonomy — the ODD vocabulary the graph uses
 
   - url: https://unece.org/transport/vehicle-regulations
     task_type: url
-    topic: av-deployment
+    topic: autonomous-vehicle
     source_tier: government
     note: WP.29 — binding vehicle regulation, distinct from voluntary standards
 
@@ -122,12 +122,12 @@ sources:
 
   - url: "autonomous vehicle deployment operational design domain public road"
     task_type: query
-    topic: av-deployment
+    topic: autonomous-vehicle
     source_tier: peer_reviewed
 
   - url: "autonomous shuttle minibus pilot evaluation ridership"
     task_type: query
-    topic: av-deployment
+    topic: autonomous-vehicle
     source_tier: peer_reviewed
 
   - url: "fare elasticity public transport ridership price sensitivity"

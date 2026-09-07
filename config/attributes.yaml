@@ -17,7 +17,7 @@ global:
     description: Existing split across walking, transit, private vehicle, etc.
 
 topic_local:
-  av-deployment:
+  autonomous-vehicle:
     - name: odd
       description: Operational Design Domain — where the AV is permitted to operate
     - name: fleet_size

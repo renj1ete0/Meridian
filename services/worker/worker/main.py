@@ -68,6 +68,7 @@ from meridian_core.queueing import (
     DEFAULT_MAX_RETRIES,
     abandon,
     advance,
+    already_queued,
     claim_next,
     enqueue,
     fail,
@@ -92,6 +93,8 @@ from .ocr_queue import enqueue_ocr, mark_scanned
 from .prefilter import Prefilter
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
+from .sitemaps import ParsedSitemap, SitemapError, parse_sitemap
+from .topicmatch import TopicVocabulary, load_topic_vocabulary
 
 log = get_logger(__name__)
 
@@ -108,16 +111,40 @@ class NotKept(RuntimeError):
     """
 
 
-#: Task types this loop can actually process. `query`, `doi` and `sitemap` rows
-#: belong to handlers that do not exist yet (P1-14, P1-28); claiming one would
-#: mean either failing a task that is not broken or handing it back forever.
-HANDLED_TASK_TYPES = ["url"]
+#: Task types this loop can actually process. `query` and `doi` rows belong to
+#: handlers that do not exist yet (P1-14); claiming one would mean either failing
+#: a task that is not broken or handing it back forever.
+HANDLED_TASK_TYPES = ["url", "sitemap"]
 
 #: §6.6's format routing table, as far as it is built. Everything not listed is
 #: fetched, stored and left metadata-only until its extractor exists —
 #: MarkItDown for Office formats is `P1-08`.
 HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 PDF_MEDIA_TYPES = frozenset({"application/pdf"})
+
+#: What a sitemap fetch overrides on its domain's resolved policy (`P1-28`).
+#:
+#: The content-type allowlist goes for the same reason `RobotsCache` drops it:
+#: it is the corpus's list of what can be *read as a document*, and a sitemap is
+#: not one. `text/xml` is not on it — which is what most sitemaps are served as —
+#: so leaving the allowlist in place would refuse the majority of them while
+#: looking like a network problem. `parse_sitemap` is the real gate here, and it
+#: refuses anything whose root element is not a urlset or a sitemapindex.
+#:
+#: `render_js` goes because a sitemap is XML and a browser would only add a
+#: rendering pass to a document with nothing to render.
+#: Where a sitemap URL that matched no topic goes in the queue.
+#:
+#: Below every tier — the lowest is `informal` at 5 — so these are drained only
+#: when nothing else is pending, and never at the expense of a URL something
+#: actually pointed at. Negative rather than zero so that a future tier of 0
+#: still outranks them.
+UNMATCHED_SITEMAP_PRIORITY = -10
+
+SITEMAP_POLICY_OVERRIDES = {
+    "allowed_content_types": [],
+    "render_js": "never",
+}
 
 DEFAULT_CONCURRENCY = 4
 DEFAULT_IDLE_SLEEP_S = 5.0
@@ -219,6 +246,10 @@ class Claim:
     url: str
     attempts: int
     topic: str | None
+    #: `url` or `sitemap`. The loop dispatches on it, because a sitemap is not a
+    #: page — it is neither stored, extracted, chunked nor embedded, and putting
+    #: one through the page path would file XML in the corpus as a document.
+    task_type: str = "url"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -290,6 +321,7 @@ class Worker:
         settings: WorkerSettings | None = None,
         session_factory: SessionFactory = session,
         prefilter: Prefilter | None = None,
+        topics: TopicVocabulary | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
@@ -298,6 +330,10 @@ class Worker:
         # refetch or a test of the fetch path wants — and is a different thing
         # from a prefilter that drops everything.
         self._prefilter = prefilter
+        # Empty rather than None when absent: an unmatched URL is the normal
+        # case, so "no vocabulary" and "nothing matched" take the same path and
+        # there is no second branch to get wrong.
+        self._topics = topics or TopicVocabulary()
         self._stopping = asyncio.Event()
         self._stats = WorkerStats()
         self._reserved = 0
@@ -422,6 +458,7 @@ class Worker:
                 url=task.url_or_query,
                 attempts=task.attempts,
                 topic=task.topic,
+                task_type=task.task_type,
             )
 
     async def _process(self, claim: Claim) -> None:
@@ -433,6 +470,10 @@ class Worker:
         the log's whole purpose is telling a URL that failed once from one that
         has been failing all week.
         """
+        if claim.task_type == "sitemap":
+            await self._process_sitemap(claim)
+            return
+
         result = await self._crawler.fetch(
             claim.url, task_id=claim.task_id, attempt_number=claim.attempts + 1
         )
@@ -460,6 +501,42 @@ class Worker:
         elif disposition == "done":
             await self._record_freshness(claim)
 
+        await self._settle(claim, disposition, detail)
+
+        log.info(
+            "task settled",
+            extra={
+                "task_id": claim.task_id,
+                "url": claim.url,
+                "topic": claim.topic,
+                "outcome": result.outcome,
+                "status": result.status_code,
+                "disposition": disposition,
+                "attempt_number": claim.attempts + 1,
+                "stored": kept.stored.path if kept else None,
+                "content_changed": kept.changed if kept else None,
+                "chars": kept.document.char_count if kept and kept.document else None,
+                "chunks": kept.chunks if kept else None,
+                "queued": kept.queued if kept else None,
+            },
+        )
+
+    async def _settle(
+        self,
+        claim: Claim,
+        disposition: str,
+        detail: str,
+        *,
+        fetched_status: str = "fetched",
+    ) -> None:
+        """Apply one disposition to the queue row and drop the lease.
+
+        ``fetched_status`` is where a successful fetch leaves the task. A page
+        stops at ``fetched`` because extraction and embedding are still ahead of
+        it in the status flow; a sitemap goes straight to ``done``, because
+        reading it *is* the whole of its work and leaving it at ``fetched`` would
+        advertise a source row that will never exist.
+        """
         async with self._session_factory() as sess:
             task = await sess.get(QueueTask, claim.task_id)
             if task is None:
@@ -473,7 +550,7 @@ class Worker:
                 return
 
             if disposition == "fetched":
-                await advance(sess, task, "fetched")
+                await advance(sess, task, fetched_status)
                 self._stats.fetched += 1
             elif disposition == "done":
                 await advance(sess, task, "done")
@@ -494,8 +571,43 @@ class Worker:
                 await abandon(sess, task, detail)
                 self._stats.abandoned += 1
 
+    async def _process_sitemap(self, claim: Claim) -> None:
+        """Read one sitemap and turn it into queue rows (`P1-28`, §6.4).
+
+        Nothing here is stored, extracted, chunked or embedded. A sitemap is not
+        a source — it carries no claim anything could cite — so it produces queue
+        rows and a `fetch_attempts` row and nothing else.
+        """
+        result = await self._crawler.fetch(
+            claim.url,
+            task_id=claim.task_id,
+            attempt_number=claim.attempts + 1,
+            policy_overrides=SITEMAP_POLICY_OVERRIDES,
+        )
+        self._stats.outcomes[result.outcome] += 1
+        disposition = queue_disposition(result.outcome, result.status_code)
+        detail = f"{result.outcome}: {result.detail}" if result.detail else result.outcome
+
+        parsed = None
+        queued = 0
+        if disposition == "fetched":
+            base = result.final_url or claim.url
+            try:
+                parsed = parse_sitemap(result.content, base_url=base)
+            except SitemapError as exc:
+                # Unreadable is a refusal, not a failure: re-fetching an HTML
+                # error page or a document with a DTD three more times gets the
+                # same answer, and `queue_disposition` reserves retries for
+                # things that might succeed later.
+                disposition = "abandon"
+                detail = f"sitemap_unreadable: {exc}"
+            else:
+                queued = await self._queue_sitemap_entries(claim, parsed, base)
+
+        await self._settle(claim, disposition, detail, fetched_status="done")
+
         log.info(
-            "task settled",
+            "sitemap settled",
             extra={
                 "task_id": claim.task_id,
                 "url": claim.url,
@@ -504,13 +616,96 @@ class Worker:
                 "status": result.status_code,
                 "disposition": disposition,
                 "attempt_number": claim.attempts + 1,
-                "stored": kept.stored.path if kept else None,
-                "content_changed": kept.changed if kept else None,
-                "chars": kept.document.char_count if kept and kept.document else None,
-                "chunks": kept.chunks if kept else None,
-                "queued": kept.queued if kept else None,
+                "kind": parsed.kind if parsed else None,
+                "entries": len(parsed.urls) if parsed else 0,
+                "truncated": parsed.truncated if parsed else False,
+                "dropped": dict(parsed.dropped) if parsed else {},
+                "queued": queued,
             },
         )
+
+    async def _queue_sitemap_entries(
+        self, claim: Claim, parsed: ParsedSitemap, base: str
+    ) -> int:
+        """Turn a parsed sitemap's URLs into queue rows.
+
+        An index's entries become further `sitemap` tasks and a urlset's become
+        `url` tasks. The prefilter runs over the urlset case for the same reason
+        it runs over frontier links — a sitemap lists every page a site has,
+        including the several thousand already in the corpus — but *not* over the
+        index case, because `SKIP_EXTENSIONS` drops `.gz` and most large sites
+        publish `sitemap.xml.gz`, so filtering there would discard exactly the
+        indexes worth following.
+        """
+        if not parsed.urls:
+            return 0
+
+        async with self._session_factory() as sess:
+            if parsed.is_index:
+                # Deduplicated against the queue by hand, since the prefilter is
+                # the wrong tool here and re-enqueueing an index on every crawl
+                # of the domain would multiply it.
+                known = await already_queued(sess, list(parsed.urls))
+                candidates = [url for url in parsed.urls if url not in known]
+                task_type = "sitemap"
+            elif self._prefilter is None:
+                return 0
+            else:
+                verdict = await self._prefilter.keep(sess, parsed.urls)
+                candidates = list(verdict.kept)
+                task_type = "url"
+
+            if not candidates:
+                return 0
+
+            tiers = await source_tier_map(sess)
+            matched = 0
+            for url in candidates:
+                if task_type == "sitemap":
+                    # An index is not a page. Its topic is irrelevant — nothing
+                    # reads it — so it keeps the claim's and is fetched promptly,
+                    # because it is the thing that reveals the actual URLs.
+                    topic, priority = claim.topic, priority_for_domain(url, tiers)
+                else:
+                    topic = self._topics.best_topic(url)
+                    if topic is not None:
+                        matched += 1
+                        priority = priority_for_domain(url, tiers)
+                    else:
+                        # Not dropped. A sitemap URL that matches no topic is
+                        # not known to be irrelevant — the path may simply be
+                        # opaque, and §7.4 warns that a corpus which only ever
+                        # confirms its own vocabulary is its own bias. It is
+                        # queued below every tier so it is crawled when the
+                        # frontier has nothing better, which is exactly when
+                        # incidental discovery is worth paying for.
+                        priority = UNMATCHED_SITEMAP_PRIORITY
+
+                await enqueue(
+                    sess,
+                    url,
+                    topic=topic,
+                    # Distinguishable from `frontier` on purpose: "how did this
+                    # URL get here" is the question §5.2's seed provenance exists
+                    # to answer, and a sitemap is a different kind of answer from
+                    # a link someone chose to place on a page.
+                    seed_source="sitemap",
+                    task_type=task_type,
+                    priority=priority,
+                )
+            await sess.commit()
+
+        if task_type == "url":
+            log.info(
+                "sitemap entries queued",
+                extra={
+                    "url": claim.url,
+                    "queued": len(candidates),
+                    "topic_matched": matched,
+                    "unmatched": len(candidates) - matched,
+                },
+            )
+        return len(candidates)
 
     def _screen(
         self, claim: Claim, result: FetchResult, document: ExtractedDocument | None
@@ -668,8 +863,8 @@ class Worker:
         a queue row, not a column.
 
         The topic is inherited from the page that linked here. It is the only
-        signal available without a model, it is usually right — a page about
-        walkability links to pages about walkability — and §10's steering acts
+        signal available without a model, it is usually right — a page about a
+        subject tends to link to pages about that subject — and §10's steering acts
         on topics, so a frontier that produced untopiced rows would be a
         frontier steering cannot reach.
         """
@@ -976,6 +1171,25 @@ async def build_prefilter() -> Prefilter:
     return Prefilter(blocked)
 
 
+async def build_topic_vocabulary() -> TopicVocabulary:
+    """Read the topic vocabulary once, at startup (`P1-28`).
+
+    Degrades the same way the prefilter does, and for the same reason: a worker
+    that cannot read its vocabulary should crawl with none — every sitemap URL
+    lands unmatched and deprioritised — rather than refuse to start. Crawling
+    with worse topic labels is a bad day; not crawling is an outage.
+    """
+    try:
+        async with session() as sess:
+            vocabulary = await load_topic_vocabulary(sess)
+    except Exception:
+        log.exception("could not read the topic vocabulary; sitemap URLs will be untopiced")
+        return TopicVocabulary()
+
+    log.info("topic vocabulary ready", extra={"phrases": len(vocabulary.phrases)})
+    return vocabulary
+
+
 async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
     """Build the whole fetch stack from the environment and run it."""
     settings = settings or WorkerSettings.from_env()
@@ -987,10 +1201,11 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
         log.warning("no CRAWL4AI_URL; JS-dependent pages will be fetched statically only")
 
     prefilter = await build_prefilter()
+    topics = await build_topic_vocabulary()
 
     async with Fetcher(browser=browser) as fetcher:
         crawler = Crawler(session, fetcher=fetcher, limiter=DomainLimiter())
-        worker = Worker(crawler, settings=settings, prefilter=prefilter)
+        worker = Worker(crawler, settings=settings, prefilter=prefilter, topics=topics)
         install_signal_handlers(worker)
         try:
             return await worker.run()

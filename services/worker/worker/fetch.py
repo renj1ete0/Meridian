@@ -82,6 +82,57 @@ _INFLATE_STEP_BYTES = 1 << 20
 # (§6.4 `conditional_requests`), and for extraction to know what it is holding.
 _KEPT_HEADERS = ("content-type", "etag", "last-modified", "content-length", "content-encoding")
 
+#: Headers that say *why* a 4xx happened, when the status code does not.
+#:
+#: `P1-19` records every attempt so the health line can tell one failure from
+#: another, and "HTTP 403" defeats that: a bot challenge, a geo-block, a
+#: genuinely forbidden path and an expired credential are four different
+#: problems with four different responses, and they arrive as the same three
+#: digits. These headers are what separate them, and they cost nothing to read.
+_DIAGNOSTIC_HEADERS = (
+    "cf-mitigated",
+    "cf-ray",
+    "retry-after",
+    "x-blocked-by",
+    "x-error",
+    "server",
+)
+
+
+def describe_http_error(status_code: int, headers: Mapping[str, str] | None = None) -> str:
+    """``HTTP 403`` plus whatever the response said about the reason.
+
+    Deliberately mechanical — it reports the headers the origin sent rather than
+    concluding anything from them. The one interpretation it does make is
+    naming Cloudflare's managed challenge, because ``cf-mitigated: challenge``
+    means exactly one thing and it is the single most common reason a public
+    page refuses a crawler that is behaving itself.
+
+    A challenge is worth distinguishing because the response to it is not
+    "retry later" — it will 403 forever until something renders JavaScript. An
+    operator reading a wall of `HTTP 403` has no way to know that.
+    """
+    base = f"HTTP {status_code}"
+    if not headers:
+        return base
+
+    lowered = {k.lower(): v for k, v in headers.items()}
+    notes: list[str] = []
+
+    if lowered.get("cf-mitigated", "").strip().lower() == "challenge":
+        notes.append("cloudflare bot challenge")
+
+    for name in _DIAGNOSTIC_HEADERS:
+        value = lowered.get(name)
+        if not value:
+            continue
+        if name == "server" and "cloudflare" in value.lower() and notes:
+            # Already said, and saying it twice makes the line harder to read.
+            continue
+        notes.append(f"{name}={value.strip()[:80]}")
+
+    return f"{base} ({'; '.join(notes)})" if notes else base
+
 
 @dataclasses.dataclass(frozen=True)
 class FetchResult:
@@ -107,6 +158,11 @@ class FetchResult:
     # through so extraction (P1-07) and frontier expansion (P5-01) can use them
     # rather than crawling the page a second time to get them.
     browser_payload: dict[str, Any] | None = None
+    # Whatever this domain's robots.txt advertised (P1-28, §6.4). Carried on the
+    # result rather than enqueued by the fetcher: `Crawler` reads robots.txt on
+    # the way past and the loop owns the queue, and a fetcher that wrote frontier
+    # rows would make every liveness probe and ad-hoc refetch expand the crawl.
+    sitemaps: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -525,7 +581,9 @@ class Fetcher:
 
                     if response.status_code >= 400:
                         return refuse(
-                            "http_error", f"HTTP {response.status_code}", response.status_code
+                            "http_error",
+                            describe_http_error(response.status_code, response.headers),
+                            response.status_code,
                         )
 
                     if not content_type_allowed(media, policy.allowed_content_types):
@@ -647,9 +705,16 @@ class Fetcher:
             return refuse(outcome, str(exc), final=final)
 
         if not result.get("success"):
+            # The browser path gets the same diagnosis as the static one: a
+            # rendered page refused by a bot challenge looks identical to one
+            # refused for any other reason, and Crawl4AI's error_message says
+            # nothing about which.
+            detail = result.get("error_message") or "crawl4ai reported failure"
+            if status and status >= 400:
+                detail = f"{describe_http_error(status, result.get('response_headers') or {})}: {detail}"
             return refuse(
                 "http_error" if status else "connection_error",
-                result.get("error_message") or "crawl4ai reported failure",
+                detail,
                 final=final,
             )
 

@@ -26,8 +26,10 @@ nobody thought about.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,17 +109,32 @@ class Crawler:
             return await self._fetcher.fetch_static(url, policy)
 
     async def fetch(
-        self, url: str, *, task_id: int | None = None, attempt_number: int = 1
+        self,
+        url: str,
+        *,
+        task_id: int | None = None,
+        attempt_number: int = 1,
+        policy_overrides: Mapping[str, Any] | None = None,
     ) -> FetchResult:
         """Fetch ``url`` under its domain's policy, or say why it was not.
 
         Whatever happens, the attempt is recorded and its consequence applied
         before the result is handed back.
+
+        ``policy_overrides`` narrows or widens the resolved policy for this one
+        request. It exists for fetches that are not corpus content — `P1-28`'s
+        sitemaps, the way ``RobotsCache`` already does it for robots.txt — where
+        the media allowlist is asking the wrong question. Everything that makes
+        a fetch *safe* rather than *selective* (robots, the rate limit, netguard,
+        the size and decompression caps) still comes from the resolved policy,
+        so an override cannot turn a fetch into one the policy would refuse.
         """
         domain = registrable_domain(url)
 
         async with self._session_factory() as sess:
             policy = await resolve_policy(sess, domain)
+            if policy_overrides:
+                policy = policy.model_copy(update=dict(policy_overrides))
             source = await sess.scalar(select(Source).where(Source.url == url))
             conditional = conditional_headers(source, enabled=policy.conditional_requests)
 
@@ -140,15 +157,24 @@ class Crawler:
             return _refused(url, "blocked", f"domain is {policy.status}")
 
         delay_ms = policy.next_delay_ms()
+        sitemaps: tuple[str, ...] = ()
 
         if policy.respect_robots:
             rules = await self._robots.rules_for(url, policy)
+            # Read whether or not this path is allowed, but only carried on a
+            # result the caller will act on. A domain that disallows one path
+            # still advertises its sitemap, and the file is the site's own
+            # statement of what it wants crawled.
+            sitemaps = rules.sitemaps
             if not rules.allows(url):
                 log.info(
                     "robots.txt refuses this path",
                     extra={"url": url, "domain": domain, "task_id": task_id},
                 )
-                return _refused(url, "robots_denied", "disallowed by robots.txt")
+                return dataclasses.replace(
+                    _refused(url, "robots_denied", "disallowed by robots.txt"),
+                    sitemaps=sitemaps,
+                )
             if policy.respect_crawl_delay and rules.crawl_delay_s:
                 # The site's own figure wins when it is the slower of the two.
                 # Taking it as an instruction to speed *up* would be reading a
@@ -159,6 +185,8 @@ class Crawler:
             domain, concurrency=policy.concurrency_per_domain, delay_ms=delay_ms
         ) as waited_ms:
             result = await self._fetcher.fetch(url, policy, extra_headers=conditional)
+
+        result = dataclasses.replace(result, sitemaps=sitemaps)
 
         log.info(
             "fetched",

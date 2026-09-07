@@ -4,22 +4,51 @@
 
 topics:
   - topic: walkability
-    weight: 0.40
-    floor: 0.10      # minimum share so nothing fully stalls (spec §10)
+    weight: 0.22
+    floor: 0.05      # minimum share so nothing fully stalls (spec §10)
     ceiling: 0.60
     pinned: false
     status: active
 
   - topic: on-demand-bus
-    weight: 0.35
-    floor: 0.10
+    weight: 0.20
+    floor: 0.05
     ceiling: 0.60
     pinned: false
     status: active
 
-  - topic: av-deployment
-    weight: 0.25
-    floor: 0.10
+  - topic: autonomous-vehicle
+    weight: 0.13
+    floor: 0.05
+    ceiling: 0.60
+    pinned: false
+    status: active
+
+  # ── Added 2026-09-07 ───────────────────────────────────────────────────
+  # These three widen the corpus beyond transport. They are inert until two
+  # other things exist for each: gazetteer terms carrying the topic label
+  # (§5.6 — without them nothing matches, and `worker/topicmatch.py` cannot
+  # assign the topic to a URL), and cold-start seed sources (§6.2 — without
+  # them nothing is ever fetched to match against). Seeding the topic alone
+  # creates a row that steering can weight and coverage can score, and no
+  # crawl to fill it.
+  - topic: robotics
+    weight: 0.15
+    floor: 0.05
+    ceiling: 0.60
+    pinned: false
+    status: active
+
+  - topic: biology
+    weight: 0.15
+    floor: 0.05
+    ceiling: 0.60
+    pinned: false
+    status: active
+
+  - topic: economics
+    weight: 0.15
+    floor: 0.05
     ceiling: 0.60
     pinned: false
     status: active

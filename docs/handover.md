@@ -166,6 +166,29 @@ Test it by inserting through **raw SQL**, not the ORM. SQLAlchemy's
 passes whether or not the database constraint exists at all — which is exactly how
 Phase 0 shipped unchecked VARCHAR columns while its tests were green.
 
+### A Cloudflare *managed* challenge is not beatable, and it is worth knowing why
+
+One of the cold-start seed domains returns 403 on every URL including
+`/robots.txt` and `/`. It is behind Cloudflare, and the response carries
+`cf-mitigated: challenge`.
+
+This was tested properly rather than assumed, because the obvious hypothesis
+(wait for the JS challenge to auto-solve) is *usually right*. It is not here:
+`UndetectedAdapter` + `enable_stealth` + `magic` + `simulate_user` +
+`override_navigator`, run natively inside the crawl4ai container with no API
+restrictions, with waits of 28s and 41s across `networkidle` and `load`, still
+returns 403 with `just a moment`, `cf-chl` and `turnstile` in the body.
+
+The distinguishing signal is the status code over time. An auto-solving JS
+challenge serves 503 and then 200 within about five seconds. An interactive
+Turnstile serves 403 and stays there. Only the first is worth waiting for.
+
+Note also that the Docker REST API forbids `proxy_config`, `magic`,
+`simulate_user` and `override_navigator` from untrusted bodies (0.9.x
+hardening), but that is *not* what blocks this — the same flags set natively
+fail identically. Do not spend a day building a custom image to route around
+the API restriction expecting a different answer.
+
 ### `urllib.robotparser` is version-dependent
 
 Wildcards and longest-match arrived in Python 3.13. This project declares `>=3.12`, and
@@ -396,7 +419,7 @@ And as of `v0.12.0`, with the loop driving instead of a script:
 | Behaviour | Evidence |
 |---|---|
 | Unattended drain of the seeded frontier | 7 tasks claimed, fetched and settled; queue statuses and `fetch_attempts` rows written and committed |
-| A 403 abandoned, not retried | unece.org → `http_error` 403 → `failed` at `attempts=1` |
+| A 403 abandoned, not retried | a challenged domain → `http_error` 403 → `failed` at `attempts=1` |
 | Health line (§12.5) | `{"message": "health", "queue_depth": {...}, "fetch_success_rate": 0.857, "by_outcome": {...}}` |
 | Graceful `SIGTERM` | two fetches in flight both finished and settled; process exited 0 |
 | Two lanes not stampeding one host | per-domain `waited_ms` of 1000–1500 across concurrent lanes |

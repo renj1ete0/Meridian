@@ -131,7 +131,7 @@ async def test_edge_valid_period_defaults_to_open_ended(session_for) -> None:
 
 
 async def test_bare_comparison_edge_is_rejected(session_for) -> None:
-    """``ck_edges_comparison_states_its_limits``: "Singapore is equatorial,
+    """``ck_edges_comparison_states_its_limits``: "the primary jurisdiction is equatorial,
     therefore Jakarta's findings apply" is the shallow inference this guards
     against. A ``comparable_to`` edge with no stated axis or limit must not
     reach the database, however the prompt that produced it was worded.

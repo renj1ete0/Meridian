@@ -24,7 +24,7 @@ terms:
     entity_type: agency
     jurisdiction: SG
     ambiguous: true
-    topic_labels: [walkability, on-demand-bus, av-deployment]
+    topic_labels: [walkability, on-demand-bus, autonomous-vehicle]
   - canonical: Urban Redevelopment Authority
     aliases: ["URA"]
     entity_type: agency
@@ -56,7 +56,7 @@ terms:
     aliases: ["MOT", "MOT Singapore"]
     entity_type: agency
     jurisdiction: SG
-    topic_labels: [av-deployment, on-demand-bus]
+    topic_labels: [autonomous-vehicle, on-demand-bus]
   - canonical: Singapore Land Authority
     aliases: ["SLA"]
     entity_type: agency
@@ -73,7 +73,7 @@ terms:
     entity_type: agency
     jurisdiction: SG
     ambiguous: true
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
 
   # ── Singapore: operators ───────────────────────────────────────────────
   - canonical: SMRT Corporation
@@ -103,7 +103,7 @@ terms:
     entity_type: scheme
     jurisdiction: SG
     ambiguous: true
-    topic_labels: [av-deployment, on-demand-bus]
+    topic_labels: [autonomous-vehicle, on-demand-bus]
   - canonical: Certificate of Entitlement
     aliases: ["COE"]
     entity_type: scheme
@@ -115,7 +115,7 @@ terms:
     entity_type: scheme
     jurisdiction: SG
     ambiguous: true
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Bus Service Enhancement Programme
     aliases: ["BSEP"]
     entity_type: scheme
@@ -200,46 +200,46 @@ terms:
   - canonical: Operational Design Domain
     aliases: ["ODD", "ODDs"]
     entity_type: concept
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Automated Driving System
     aliases: ["ADS"]
     entity_type: concept
     ambiguous: true
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Dynamic Driving Task
     aliases: ["DDT"]
     entity_type: concept
     ambiguous: true
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Minimal Risk Condition
     aliases: ["MRC", "minimal risk manoeuvre", "MRM"]
     entity_type: concept
     ambiguous: true
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: SAE J3016
     aliases: ["J3016", "SAE levels", "levels of driving automation"]
     entity_type: concept
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Safety Driver
     aliases: ["safety operator", "test driver"]
     entity_type: concept
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Teleoperation
     aliases: ["remote operation", "remote assistance"]
     entity_type: concept
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Disengagement
     aliases: ["disengagements", "takeover"]
     entity_type: metric
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Robotaxi
     aliases: ["robo-taxi", "driverless taxi"]
     entity_type: concept
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
   - canonical: Platooning
     aliases: ["truck platooning"]
     entity_type: concept
-    topic_labels: [av-deployment]
+    topic_labels: [autonomous-vehicle]
 
   # ── On-demand transit ──────────────────────────────────────────────────
   - canonical: Demand Responsive Transport
@@ -294,7 +294,7 @@ terms:
   - canonical: Mode Share
     aliases: ["modal share", "modal split"]
     entity_type: metric
-    topic_labels: [walkability, on-demand-bus, av-deployment]
+    topic_labels: [walkability, on-demand-bus, autonomous-vehicle]
   - canonical: Farebox Recovery Ratio
     aliases: ["farebox recovery", "cost recovery ratio"]
     entity_type: metric
@@ -302,7 +302,7 @@ terms:
   - canonical: Vehicle Kilometres Travelled
     aliases: ["VKT", "vehicle miles travelled", "VMT"]
     entity_type: metric
-    topic_labels: [av-deployment, on-demand-bus]
+    topic_labels: [autonomous-vehicle, on-demand-bus]
   - canonical: Headway
     aliases: ["service headway"]
     entity_type: metric

@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.21.0"
+version = "0.22.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,11 @@ dependencies = [
     # access — an HTTP client has no business in that dependency closure.
     "httpx>=0.28",
     "trafilatura>=2.2.0",
+    # Sitemap parsing (P1-28). trafilatura already pulls lxml in, and P1-30
+    # learned what an undeclared transitive dependency costs: a container built
+    # with `uv sync --package meridian-worker` gets only what is declared, and
+    # meridian_core's undeclared pyyaml died on ModuleNotFoundError at import.
+    "lxml>=5.0",
     "markitdown[docx,outlook,pptx,xlsx]>=0.1.7",
     "onnxruntime>=1.29",
 ]

@@ -27,8 +27,7 @@ Phase 1's checkpoint (`P1-16`, the 48h run) is the gate on phase 2's go/no-go
 (`P2-09`), because a search quality judgement over 17 sources and 28 chunks
 measures nothing. The agreed sequence:
 
-1. `P1-28` sitemaps — the cheapest frontier widener, and it decides what the
-   long run is worth. `RobotsRules.sitemaps` is already parsed and unused
+1. ~~`P1-28` sitemaps~~ — **done in v0.22.0**, with topic matching
 2. `P1-22` network topology, then `P1-26` Crawl4AI's image and health check —
    what stands between a worker image that runs and a *stack* that does
 3. A short bounded run (`MERIDIAN_WORKER_MAX_TASKS`, not a timer) as a **stack**
@@ -217,10 +216,18 @@ extraction work and neither blocks the checkpoint.
       fetcher degrades to static — correct, but silent. A worker that has quietly
       lost its browser for a week should say so on the health line (§12.5), not just
       extract worse
-- [ ] `P1-28` **Sitemap discovery from robots.txt.** `RobotsRules.sitemaps` is parsed
-      and returned already — Wikipedia's lists one, and §6.4 names `AsyncUrlSeeder` for
-      sitemap-based discovery — but nothing enqueues them. Cheap frontier expansion
-      that needs no model
+- [x] `P1-28` **Sitemap discovery from robots.txt.** `worker/sitemaps.py` parses
+      urlsets and indexes; the loop grows a `sitemap` handler so the rows are
+      claimed rather than orphaned. Two independent defences against XML entity
+      expansion, because lxml expands by default — measured, not assumed. A
+      sitemap may not name another site, since a hostile robots.txt would
+      otherwise write to the frontier at its target's tier priority. Verified
+      against the real seed list: most advertise one, the largest runs to
+      several thousand URLs, and all are served as `text/xml` — which is *not* in
+      `allowed_content_types`, so `policy_overrides` is what makes the feature
+      work at all. Paired with `worker/topicmatch.py`: a sitemap URL gets the
+      topic its path implies, not the one the triggering page happened to carry,
+      and an unmatched URL is deprioritised to -10 rather than dropped
 - [ ] `P1-29` **Persist the robots cache across restarts.** It is in-process, so a
       worker restart re-fetches robots.txt for every origin it touches. Harmless at
       current scale and wasteful at corpus scale; revisit when the crawl is wide

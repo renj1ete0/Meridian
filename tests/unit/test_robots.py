@@ -102,7 +102,7 @@ def test_an_empty_disallow_forbids_nothing() -> None:
 def test_an_html_soft_404_yields_no_rules() -> None:
     """Sites serve their 404 page at /robots.txt with a 200, and it must be harmless.
 
-    www.lta.gov.sg does exactly this, so it is not a hypothetical. Markup has
+    www.example-org.test does exactly this, so it is not a hypothetical. Markup has
     no lines shaped like a robots directive, so nothing is extracted and the
     origin ends up permitted — which is the same answer a real 404 gives.
     """

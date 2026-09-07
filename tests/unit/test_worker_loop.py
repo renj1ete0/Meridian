@@ -21,6 +21,7 @@ import pytest
 from worker.fetch import FetchResult
 from worker.main import (
     ERROR_BACKOFF_S,
+    HANDLED_TASK_TYPES,
     Claim,
     NotKept,
     Worker,
@@ -66,6 +67,7 @@ class FakeTask:
     url_or_query: str = "https://example.test/a"
     attempts: int = 0
     topic: str | None = None
+    task_type: str = "url"
     status: str = "pending"
     error: str | None = None
     next_attempt_at: object = None
@@ -498,12 +500,16 @@ async def test_lanes_run_concurrently(monkeypatch) -> None:
     assert peak > 1
 
 
-async def test_only_url_tasks_are_claimed(monkeypatch) -> None:
+async def test_the_claim_is_narrowed_to_the_types_the_loop_handles(monkeypatch) -> None:
     """A `query` or `doi` row belongs to a handler that does not exist yet.
 
     Claiming one would leave two bad options — fail a task that is not broken,
     or hand it back and claim it again forever — so the filter goes in the
     query. This asserts the loop actually passes it.
+
+    Compared against `HANDLED_TASK_TYPES` rather than a literal, so adding a
+    handler does not require editing this test into passing. What it still
+    catches is the filter being dropped or diverging from the constant.
     """
     store = FakeStore()
     worker = build(store, FakeCrawler(), monkeypatch)
@@ -518,7 +524,28 @@ async def test_only_url_tasks_are_claimed(monkeypatch) -> None:
 
     await asyncio.wait_for(worker.run(), timeout=5)
 
-    assert seen["task_types"] == ["url"]
+    assert seen["task_types"] == HANDLED_TASK_TYPES
+
+
+def test_every_handled_task_type_has_somewhere_to_go() -> None:
+    """The constant and the dispatch must not drift apart.
+
+    Adding a type to `HANDLED_TASK_TYPES` without a branch in `_process` is the
+    failure this exists for: the loop would claim those rows and put every one
+    of them through the page path, storing XML as a document and never saying
+    anything was wrong.
+    """
+    dispatchable = {"url", "sitemap"}
+    assert set(HANDLED_TASK_TYPES) <= dispatchable
+    # And the types that still have no handler stay out of the claim.
+    assert not {"query", "doi"} & set(HANDLED_TASK_TYPES)
+
+
+def test_handled_task_types_are_real_task_types() -> None:
+    """A typo here claims nothing and looks like an empty queue."""
+    from meridian_core.models.queue import TASK_TYPE
+
+    assert set(HANDLED_TASK_TYPES) <= set(TASK_TYPE.enums)
 
 
 async def test_topics_are_passed_through_when_configured(monkeypatch) -> None:

@@ -8,6 +8,92 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-09-07
+
+**Sitemaps become frontier, and a URL's topic stops being inherited.** Measured
+against the real seed list: most of the seed domains advertise a sitemap, the
+largest runs to several thousand URLs, and every one of them is served as
+`text/xml`.
+
+### Added
+
+- `P1-28` `worker/sitemaps.py` — sitemap and sitemap-index parsing.
+  `RobotsRules.sitemaps` has been parsed since `P1-04` and thrown away ever
+  since; this is what finally reads it. `FetchResult.sitemaps` carries what
+  robots.txt advertised, the loop enqueues it, and `HANDLED_TASK_TYPES` grows a
+  `sitemap` handler so those rows are not claimed by nothing forever
+- **Two independent defences against XML entity expansion.** lxml expands
+  internal entities by default — measured, not assumed: four levels of nesting
+  turn ten bytes into ten thousand, and each further level multiplies by ten.
+  A byte pre-scan refuses a DTD *before* parsing, which is the defence that
+  matters because the allocation is the attack; `resolve_entities=False` is the
+  second, tested directly against the parser configuration
+- **A sitemap may not write to another site's frontier.** sitemaps.org permits
+  cross-submission when robots.txt authorises it; we refuse it, because a
+  hostile robots.txt would otherwise inject unbounded URLs at whatever priority
+  the target domain's tier grants. Same-site is suffix-matched in both
+  directions, since `registrable_domain` keeps subdomains and equality would
+  discard a legitimate sitemap's entire contents
+- Nesting is handled by the queue, not by recursion: a `<sitemapindex>` becomes
+  further `sitemap` tasks rather than being followed inline, so one task cannot
+  fetch an unbounded tree while holding a lease
+- `P1-28` `worker/topicmatch.py` — a URL's topic from its path, mechanically.
+  Frontier expansion inherits the linking page's topic and that is a fair guess
+  for a link; for a site's whole index it is wrong about nearly every row, and
+  wrong in a way that *spreads*, since every crawled page passes its topic to
+  the links it discovers. Matching is against the gazetteer, which already
+  carries `topic_labels`, **plus the topic names themselves** — without the latter a
+  newly added topic could never be assigned, so nothing would be crawled for it,
+  so nothing would be harvested to populate it: a loop with no way in
+- **Ambiguous gazetteer terms are excluded**, which is what the flag exists
+  for. A short acronym routinely expands to two unrelated things; §5.5 resolves
+  that from document context, and a URL path has none. Matching is on whole
+  tokens, so `bus` does not match `business`
+- **An unmatched sitemap URL is deprioritised, not dropped.** Priority `-10`,
+  below `informal`'s 5, so it is crawled when the frontier has nothing better —
+  which is exactly when incidental discovery is worth paying for. Dropping it
+  would assume the path is evidence of irrelevance, and §7.4 warns against a
+  corpus that only ever confirms its own vocabulary
+- `Crawler.fetch(policy_overrides=...)`, following the seam `RobotsCache`
+  already uses for robots.txt. Sitemaps need it because `text/xml` is not in
+  `allowed_content_types` — every real sitemap checked is served as exactly
+  that, so without the override the feature would refuse the majority of its own
+  input while looking like a network problem
+- Three further topics seeded, with weights renormalised to 1.0 across the set,
+  and one existing topic renamed across config and the four tables that
+  referenced it
+
+### Fixed
+
+- `P1-19` A 4xx is no longer recorded as a bare `HTTP 403`. `describe_http_error`
+  reads the headers that say *why* — `cf-mitigated`, `retry-after`, `server` —
+  and names a Cloudflare bot challenge in words. The case that motivated it was
+  repeated attempts against one seed domain, all recorded identically, with
+  nothing in the database saying the cause was a challenge that will never
+  succeed however often it is retried
+- `lxml` declared explicitly on `meridian-worker`. It arrives transitively
+  through trafilatura, and `P1-30` already paid for that lesson once with
+  `meridian_core`'s undeclared `pyyaml` dying on `ModuleNotFoundError` in a
+  container built with `uv sync --package`
+
+### Notes
+
+- **Undetected browser mode was investigated and does not work**, tested rather
+  than assumed. Crawl4AI 0.9.2 forbids `proxy_config`, `magic`, `simulate_user`
+  and `override_navigator` from remote request bodies, but that turned out not
+  to be the obstacle: running `UndetectedAdapter` + `enable_stealth` + all three
+  forbidden flags *natively inside the container*, with waits of 28s and 41s
+  across `networkidle` and `load`, still returns 403 with `cf-chl` and
+  `turnstile` in the body. It is an interactive Turnstile challenge, which
+  undetected browsing does not solve — only a CAPTCHA-solving service would.
+  §6.4's "skip stealth mode" stands, now on evidence rather than on principle
+- One seed domain is consequently unfetchable, including its robots.txt and
+  root. A 4xx on robots.txt maps to `ALLOW_ALL` per RFC 9309, so nothing else
+  about the domain is confused by it — it simply fails, three attempts at a
+  time, and `domain_signal` correctly declines to mark it blocked because a 403
+  means the server answered
+
+
 ## [0.21.0] — 2026-09-08
 
 **Phase 2 opens: the corpus becomes searchable by meaning.** Verified against

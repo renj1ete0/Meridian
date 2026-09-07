@@ -73,7 +73,7 @@ def test_the_same_text_always_embeds_identically() -> None:
 
 def test_different_text_embeds_differently() -> None:
     """A fake that returned a constant would make every downstream test vacuous."""
-    a, b = FakeEmbedder().embed(["walkability in dense cities", "autonomous vehicle regulation"])
+    a, b = FakeEmbedder().embed(["alpha in dense cities", "autonomous vehicle regulation"])
 
     assert a != b
     assert cosine(a, b) < 0.9

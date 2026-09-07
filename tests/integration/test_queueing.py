@@ -398,7 +398,7 @@ async def test_reclaim_expired_clears_only_expired_leases_and_returns_the_count(
 
 
 async def test_a_claim_can_be_narrowed_to_the_task_types_a_caller_handles(session_for) -> None:
-    """The worker fetches URLs; `query`, `doi` and `sitemap` have no handler yet.
+    """The worker fetches URLs and reads sitemaps; `query` and `doi` do not.
 
     Without the filter the loop's only options for a `doi` row are to fail a
     task that is not broken or to claim it, release it and claim it again

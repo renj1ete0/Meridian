@@ -31,7 +31,7 @@ from worker.rawstore import (
     store,
 )
 
-GOV = "https://www.lta.gov.sg/report.pdf"
+GOV = "https://www.example-org.test/report.pdf"
 BLOG = "https://someone.blogspot.com/post"
 
 
@@ -50,22 +50,22 @@ def test_the_path_is_derived_from_the_url_not_the_content() -> None:
     first = path_for(GOV, "application/pdf")
     second = path_for(GOV, "application/pdf")
     assert first == second
-    assert path_for("https://www.lta.gov.sg/other.pdf", "application/pdf") != first
+    assert path_for("https://www.example-org.test/other.pdf", "application/pdf") != first
 
 
 def test_the_path_carries_the_domain_the_shard_and_the_digest() -> None:
     digest = hashlib.sha256(GOV.encode()).hexdigest()
-    assert path_for(GOV, "application/pdf") == Path("lta.gov.sg") / digest[:2] / f"{digest}.pdf"
+    assert path_for(GOV, "application/pdf") == Path("example-org.test") / digest[:2] / f"{digest}.pdf"
 
 
 def test_the_domain_leads_so_one_site_is_one_directory() -> None:
     """What a takedown and a retention sweep both actually need."""
-    assert path_for(GOV).parts[0] == "lta.gov.sg"
-    assert path_for("https://datamall.lta.gov.sg/x").parts[0] == "datamall.lta.gov.sg"
+    assert path_for(GOV).parts[0] == "example-org.test"
+    assert path_for("https://data.example-org.test/x").parts[0] == "data.example-org.test"
 
 
 def test_a_busy_domain_is_sharded_rather_than_one_huge_directory() -> None:
-    urls = [f"https://lta.gov.sg/page-{i}" for i in range(200)]
+    urls = [f"https://example-org.test/page-{i}" for i in range(200)]
     shards = {path_for(u).parts[1] for u in urls}
     assert len(shards) > 50, "the hex shard is not spreading files out"
 
