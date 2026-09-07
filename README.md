@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.18" src="https://img.shields.io/badge/version-0.18-0D6F7C">
+  <img alt="Version 0.19" src="https://img.shields.io/badge/version-0.19-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -138,10 +138,10 @@ Production runs the whole stack in containers behind `cloudflared`
 > `packages/meridian_core` and the worker are built and tested, so `make migrate`,
 > `make seed`, `make test` and `python -m worker.main` all work today — the worker
 > drains the queue, fetches politely, records every attempt, keeps what it fetched
-> as a `sources` row plus (for primary sources) a local copy, extracts HTML and PDFs
-> to text, bibliographic metadata and citations, and cuts it into citable chunks —
-> page-accurate for PDFs. Office documents are stored and left metadata-only until
-> `P1-08`, scanned PDFs are detected and filed for OCR rather than read, every page
+> as a `sources` row plus (for primary sources) a local copy, extracts HTML, PDFs and
+> Office documents to text, bibliographic metadata and citations, and cuts it into
+> citable chunks — page-accurate for PDFs. Scanned PDFs are detected and filed for
+> OCR rather than read, every page
 > is screened for prompt injection on the way past, nothing
 > embeds or searches yet (`P2-*`). Frontier expansion is on: a fetched page's links
 > are filtered and queued, so the crawl keeps going past its seed list. The API and

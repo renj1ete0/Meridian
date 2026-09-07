@@ -8,6 +8,55 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-09-08
+
+**The last format gap closes.** §6.6 routes Office documents to MarkItDown, and
+government and consultancy sources arrive as them far more often than expected.
+
+### Added
+
+- `P1-08` `services/worker/worker/extract/document.py` — `.docx`, `.xlsx`,
+  `.pptx` and CSV, each verified against a real file built in its tests
+- **`convert_stream()` on already-fetched bytes only.** Never `convert()` on a
+  URL, never `convert_local()` — §6.6 is explicit that MarkItDown's `convert()`
+  "is intentionally permissive across local files, remote URIs and byte
+  streams", and it performs that I/O with the calling process's privileges
+- **An explicit converter allowlist**, which turned out to matter more than the
+  invariant above. MarkItDown ignores the declared media type as a gate: it
+  sniffs the bytes with magika and tries *every* converter that accepts any
+  guess, including a final pass where converters see no type at all. Its default
+  registry contains converters that fetch URLs (YouTube, Wikipedia, Bing), shell
+  out to `exiftool` on untrusted bytes, and a `ZipConverter` that extracts an
+  archive to a temp directory and re-dispatches its members by extension — and a
+  `.docx` *is* a zip, so hostile input reaches that path through sniffing
+  whatever the `Content-Type` said. `enable_builtins=False` plus four registered
+  converters closes it, and two tests fail if the registry is widened
+- Metadata from the OOXML `docProps/core.xml`, because MarkItDown returns only
+  markdown and a title that is always `None` for these formats — every Office
+  source in the corpus would otherwise have a NULL title and cite as a bare URL.
+  Read with entity resolution and network access off, and size-capped: verified
+  against a 200MB decompression bomb, refused both with an honest header and
+  with a forged one
+- The injection pre-screen now runs its **text half on every format**, not just
+  HTML. A tool directive in a spreadsheet reaches a model exactly as well as one
+  in a web page; the DOM half stays HTML-only because a `.docx` hides text by
+  other means and deserves its own screen rather than a pretend one
+
+### Notes
+
+- No wall-clock timeout on conversion, deliberately. `asyncio.to_thread` cannot
+  cancel a running thread, so a `wait_for` would free the lane while leaking a
+  worker from a bounded pool — a handful of pathological documents would then
+  stall the loop permanently. The fetcher's `max_page_bytes` is the enforceable
+  bound
+- `.doc`, `.xls`, EPub and ZIP are outside the allowlist on purpose. Converting
+  an EPub as a zip of HTML is exactly §6.6's "silent degradation"; they are
+  stored and left metadata-only, and the raw file is what lets §11.12 recover
+  them if a converter appears
+- `markitdown` needs an explicit `onnxruntime>=1.29` on Python 3.14. It pins
+  `magika~=0.6.1`, which uv resolves to an `onnxruntime` with no cp314 wheel, and
+  the failure names Python ABI tags without mentioning markitdown at all
+
 ## [0.18.0] — 2026-09-08
 
 **A tripwire for prompt injection, before anything reaches a model.** The slow

@@ -139,7 +139,8 @@ def supports(media_type: str) -> bool:
     """Whether this module can convert that media type.
 
     The caller routes on this rather than on a guess about file extensions, so
-    a format that is added below becomes routable in one place.
+    a format added to :data:`SUPPORTED_MEDIA_TYPES` becomes routable in one
+    place, and a format that is not listed there is never handed any bytes.
     """
     return _normalise(media_type) in SUPPORTED_MEDIA_TYPES
 

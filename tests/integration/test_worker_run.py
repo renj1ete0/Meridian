@@ -13,6 +13,7 @@ subject, not this one's.
 from __future__ import annotations
 
 import datetime as dt
+import importlib.util
 import uuid
 from contextlib import asynccontextmanager
 
@@ -1538,3 +1539,96 @@ async def test_citations_and_an_injection_flag_coexist_in_extra(
     assert source.extra["injection"]["suspicious"] is True
     assert {c["value"] for c in source.extra["citations"]} == {"10.5555/method-paper"}
     assert source.extra["media_type"] == "text/html"
+
+
+# --------------------------------------------------------------------------
+# Office documents (P1-08)
+# --------------------------------------------------------------------------
+
+
+needs_xlsxwriter = pytest.mark.skipif(
+    importlib.util.find_spec("xlsxwriter") is None,
+    reason="needs xlsxwriter to build a real .xlsx",
+)
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@needs_xlsxwriter
+async def test_a_spreadsheet_is_extracted_and_chunked(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, tmp_path
+) -> None:
+    """§6.6 routes Office formats to MarkItDown, and government sources arrive
+    as them far more often than expected.
+
+    A real .xlsx, because a byte string starting with `PK` exercises the error
+    path and nothing else.
+    """
+    import io
+
+    import xlsxwriter
+
+    buffer = io.BytesIO()
+    book = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    sheet = book.add_worksheet("Ridership")
+    for row, line in enumerate(ARTICLE.split(". ")):
+        sheet.write(row, 0, line)
+        sheet.write(row, 1, row * 11)
+    book.close()
+    content = buffer.getvalue()
+
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic, path="/data.xlsx")
+
+    def serve(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": XLSX}, chunks=[content])
+
+    worker, _ = build_worker(sess, serve, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/data.xlsx")
+    assert stats.extracted == 1 and stats.stored == 1
+    assert source.text_available is True
+    assert source.raw_file_path.endswith(".xlsx")
+    assert rows, "a spreadsheet with content produced no chunks"
+    assert all(r.page_or_offset is not None for r in rows)
+    # Not paginated: `page_or_offset` is a character offset here (§5.3), so the
+    # first chunk starts at 0 rather than at page 1.
+    assert rows[0].page_or_offset == 0
+
+
+async def test_a_format_with_no_converter_is_still_stored(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Legacy `.doc` is fetchable and has no converter, deliberately.
+
+    MarkItDown ships none for it, and converting it as something else would be
+    §6.6's "silent degradation". So it is stored and left metadata-only, and the
+    bytes are what let §11.12 recover it if a converter ever appears.
+
+    `.doc` rather than EPub because the fetch policy's `allowed_content_types`
+    admits the first and refuses the second — an EPub never reaches extraction
+    at all, which is a different (and also correct) refusal.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    task = await enqueue(sess, run_domain, run_topic, path="/legacy.doc")
+
+    def serve(request: httpx.Request) -> httpx.Response:
+        return streamed(
+            200,
+            headers={"content-type": "application/msword"},
+            chunks=[b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"ole2 body" * 40],
+        )
+
+    worker, _ = build_worker(sess, serve, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "fetched"
+    assert stats.extracted == 0 and stats.stored == 1
+    source = await get_source(sess, f"https://{run_domain}/legacy.doc")
+    assert source.text_available is False
+    assert source.raw_file_path is not None

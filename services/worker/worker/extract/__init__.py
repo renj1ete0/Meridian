@@ -9,6 +9,16 @@ ingestion keeps working with every reasoning model offline, and extraction is
 the last stage where that is easy to break.
 """
 
-from .html import Citation, ExtractedDocument, extract_html
+from .base import Citation, ExtractedDocument, Page
+from .document import extract_document
+from .html import extract_html
+from .pdf import extract_pdf
 
-__all__ = ["Citation", "ExtractedDocument", "extract_html"]
+__all__ = [
+    "Citation",
+    "ExtractedDocument",
+    "Page",
+    "extract_document",
+    "extract_html",
+    "extract_pdf",
+]

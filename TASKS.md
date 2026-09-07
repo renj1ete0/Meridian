@@ -17,17 +17,18 @@ something went wrong.
 - Add new tasks freely; don't renumber existing ones.
 
 **Current phase: 1.** Phase 0 is closed. The crawl runs unattended, expands its
-own frontier, and reads HTML and PDFs: `P1-01`–`P1-07`, `P1-09`, `P1-11`–`P1-13`,
+own frontier, and reads HTML, PDFs and Office documents: `P1-01`–`P1-09`, `P1-11`–`P1-13`,
 `P1-15`, `P1-17`–`P1-21`, `P1-23`, `P1-24` and (pulled forward) `P2-02` are done,
-at 884 tests. Verified live — real LTA PDFs extracted with page-accurate chunks,
-and the injection screen clean across every page crawled so far. The only open phase-0 item is `P0-15`,
+at 929 tests, and `P1-07`–`P1-09` now cover HTML, PDF and Office formats. Verified
+live — real LTA PDFs extracted with page-accurate chunks, and the injection screen
+clean across every page crawled so far. The only open phase-0 item is `P0-15`,
 deferred until phase 2 needs it.
 
-Next: `P1-08` (MarkItDown) closes the last format gap. `P1-28` (sitemaps) is
-still cheap. Then `P1-30` (supervision, worker Dockerfile — which must also
-install `poppler-utils`), because `P1-16`'s 48-hour acceptance run needs
-something that restarts the process, and with breadth and depth both real it is
-finally a meaningful test.
+Next: `P1-30` (supervision, worker Dockerfile — which must also install
+`poppler-utils`), because `P1-16`'s 48-hour acceptance run needs something that
+restarts the process, and with every format now readable it is finally a
+meaningful test. `P1-28` (sitemaps) is still cheap. `P1-10` (figures) and
+`P1-14` (DOI resolution) are the remaining phase-1 extraction work.
 
 ---
 
@@ -144,7 +145,13 @@ finally a meaningful test.
       handle) and read from the text *and* the links; the page's own identifiers
       are kept out of them, with arXiv's DOI derived from its URL because it
       publishes no `citation_doi` tag
-- [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
+- [x] `P1-08` `extract/document.py` — MarkItDown, `convert_stream` on fetched
+      bytes only. The load-bearing part turned out to be an **explicit converter
+      allowlist**: MarkItDown sniffs bytes with magika and ignores the declared
+      media type, and its default registry fetches URLs, shells out to
+      `exiftool`, and re-dispatches zip members — which a `.docx` reaches by
+      being a zip. `enable_builtins=False` plus four registered converters.
+      OOXML `core.xml` supplies the metadata MarkItDown does not return
 - [x] `P1-09` `extract/pdf.py` — `pdftotext` over stdin, page boundaries from the
       form feed poppler already writes (exact, not reconstructed). Scan detection
       at ~100 chars/page is §6.6's fork: below it the document is queued for OCR

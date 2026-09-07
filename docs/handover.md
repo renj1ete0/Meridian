@@ -17,8 +17,8 @@ Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes
 bytes come out, politely, without becoming a route into the network, leaving a record
 of itself, keeping what it read, reading it, cutting it into citable chunks, and
 following its links onward — and all of it with nobody watching. HTML and PDFs are
-both read, and every page is screened for prompt injection on the way past. As of
-`v0.18.0`, 884 tests pass with a real Postgres.
+both read, Office documents too, and every page is screened for prompt injection on
+the way past. As of `v0.19.0`, 929 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -74,9 +74,9 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
         queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** No embeddings, no search, no API, no frontend. HTML and
-PDFs are read; Office documents are fetched, stored, and left metadata-only until
-`P1-08`. Scanned PDFs are detected and filed in `enrichment_queue`, and **nothing
+**What does not exist yet.** No embeddings, no search, no API, no frontend. HTML,
+PDFs and OOXML Office documents are read; `.doc`, `.xls` and EPub are deliberately
+outside the converter allowlist and stay metadata-only. Scanned PDFs are detected and filed in `enrichment_queue`, and **nothing
 ever runs that queue** — §6.6 makes OCR explicitly user-triggered, so the rows sit
 there until a UI exists to spend against them. The frontier is the link half of
 `P5-01` only: no citation-driven seeding, no spaCy NER, no TF-IDF.
@@ -201,6 +201,21 @@ tests parse. The fixture is gone with the plugin, and asking for it fails deep i
 pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
+
+### MarkItDown's declared media type is a hint, not a gate
+
+It runs magika over the bytes and then tries *every* converter that accepts any
+guess, plus a final pass where converters see no type at all. So
+`application/vnd.ms-excel` with `b"x"` converts as plain text, and a `.docx` labelled
+`application/epub+zip` converts as a `.docx`. The gate has to be ours.
+
+That matters because the default registry is not something to point at untrusted
+bytes: it contains converters that fetch URLs (YouTube, Wikipedia, Bing), shell out
+to `exiftool`, and a `ZipConverter` that extracts an archive to a temp directory and
+re-dispatches its members by extension — and a `.docx` *is* a zip, so hostile input
+reaches that path through sniffing however the `Content-Type` was set.
+`extract/document.py` uses `enable_builtins=False` plus four explicitly registered
+converters, and two tests fail if that is widened.
 
 ### An injection flag that fires on every article about injection protects nothing
 
@@ -429,6 +444,14 @@ And `v0.18.0`, where the number that matters is the one that stayed at zero:
 | Hidden instructions caught | `display:none`, `hidden`, `aria-hidden`, white-on-white, offscreen, zero-size all detected in tests |
 | An article *about* injection not caught | visible "ignore all previous instructions" → recorded, not suspicious |
 
+And `v0.19.0`:
+
+| Behaviour | Evidence |
+|---|---|
+| Office extraction | a real `.xlsx` built with xlsxwriter → text, chunks, character offsets |
+| The converter allowlist holds | a plain zip and an HTML page mislabelled `.docx` → `markitdown-failed`, not converted |
+| OOXML metadata is bomb-proof | a 200MB decompression bomb in `docProps/core.xml` → refused with an honest header *and* a forged one, 0MB RSS |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -437,13 +460,6 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 ## 5. What to build next
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
-
-**`P1-08` (MarkItDown) closes the last format gap.** `Worker._extract` dispatches on
-`result.media_type` against `HTML_MEDIA_TYPES` and `PDF_MEDIA_TYPES`; adding a format
-is a branch there plus a module under `worker/extract/` returning the same
-`ExtractedDocument`. The one constraint carried from AGENTS.md and §6.6: MarkItDown
-gets `convert_local()` or `convert_stream()` on already-fetched bytes, never
-`convert()` on a URL.
 
 **`P1-30` before `P1-16`.** The 48-hour acceptance run needs something that restarts
 the worker, and there is no systemd unit and no worker Dockerfile. The Dockerfile now

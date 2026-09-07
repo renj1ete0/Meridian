@@ -51,6 +51,8 @@ import uuid
 from collections import Counter
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from pathlib import PurePosixPath
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,6 +83,8 @@ from . import rawstore
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
 from .extract.chunk import chunk_pages, chunk_text
+from .extract.document import extract_document
+from .extract.document import supports as supports_document
 from .extract.injection import Screening, screen
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
@@ -517,16 +521,20 @@ class Worker:
         halves: hiddenness is a DOM property extraction has already discarded,
         and what survived extraction is what a model would actually read.
 
-        Only HTML. A PDF has no DOM to hide text in the same way, and the
-        text-layer tricks that are its equivalent need a different screen than
-        this one — worth having, and not worth pretending this is it.
+        The DOM half is HTML-only — a PDF or a .docx hides text by other means,
+        and the equivalents need a different screen than this one, worth having
+        and not worth pretending this is it. But the *text* half runs on
+        anything that extracted, because a tool directive in a spreadsheet
+        reaches a model exactly as well as one in a web page.
         """
-        if result.media_type not in HTML_MEDIA_TYPES:
+        is_html = result.media_type in HTML_MEDIA_TYPES
+        text = document.text if document else ""
+        if not is_html and not text:
             return None
         try:
             screening = screen(
-                result.content.decode("utf-8", "replace"),
-                document.text if document else "",
+                result.content.decode("utf-8", "replace") if is_html else "",
+                text,
             )
         except Exception:
             log.exception("injection screening failed", extra={"url": claim.url})
@@ -765,6 +773,15 @@ class Worker:
                 document = extract_html(result.content, url, browser_payload=result.browser_payload)
             elif result.media_type in PDF_MEDIA_TYPES:
                 document = await extract_pdf(result.content)
+            elif supports_document(result.media_type):
+                # Asked rather than matched against a set of our own: the
+                # module's `_normalise` already handles `; charset=…` and
+                # casing, and a second copy of that list here would drift.
+                document = await extract_document(
+                    result.content,
+                    media_type=result.media_type,
+                    filename_hint=PurePosixPath(urlsplit(url).path).name or None,
+                )
             else:
                 return None
         except PdftotextMissing:

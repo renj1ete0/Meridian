@@ -793,7 +793,7 @@ wheels = [
 
 [[package]]
 name = "meridian"
-version = "0.18.0"
+version = "0.19.0"
 source = { virtual = "." }
 dependencies = [
     { name = "meridian-core" },
@@ -826,7 +826,7 @@ dev = [
 
 [[package]]
 name = "meridian-core"
-version = "0.18.0"
+version = "0.19.0"
 source = { editable = "packages/meridian_core" }
 dependencies = [
     { name = "asyncpg" },
@@ -845,7 +845,7 @@ requires-dist = [
 
 [[package]]
 name = "meridian-worker"
-version = "0.18.0"
+version = "0.19.0"
 source = { editable = "services/worker" }
 dependencies = [
     { name = "httpx" },
