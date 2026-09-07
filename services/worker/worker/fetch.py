@@ -383,6 +383,34 @@ class Crawl4aiClient:
             self._client = httpx.AsyncClient(timeout=timeout_s)
         return self._client
 
+    async def healthy(self, timeout_s: float = 5.0) -> bool:
+        """Is the browser service actually answering? (`P1-26`)
+
+        The fetcher degrades to static when the browser is missing, which is
+        correct and silent — and a worker that quietly lost its browser a week
+        ago is not obviously different from one that never needed it. §12.5's
+        health line is where that difference has to show up, so something has
+        to ask.
+
+        Never raises. An unreachable browser is the condition being reported,
+        not an error in reporting it, and a health probe that can take the
+        housekeeping tick down with it is worse than no probe.
+        """
+        headers = {}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        try:
+            response = await self._http(timeout_s).get(
+                f"{self.base_url}/health", headers=headers, timeout=timeout_s
+            )
+        except Exception as exc:
+            log.warning(
+                "browser health probe failed",
+                extra={"url": self.base_url, "error": str(exc)[:200]},
+            )
+            return False
+        return response.status_code == 200
+
     async def crawl(
         self, url: str, policy: ResolvedPolicy, *, settle_s: float = 0.0
     ) -> dict[str, Any]:
@@ -504,6 +532,16 @@ class Fetcher:
         return headers
 
     # -- public API --------------------------------------------------------
+
+    @property
+    def browser(self) -> Crawl4aiClient | None:
+        """The browser client, or None when none is configured.
+
+        Exposed so the loop can report on it (`P1-26`). Read-only: whether the
+        browser is used for a given fetch is this class's decision, not its
+        caller's.
+        """
+        return self._browser
 
     async def fetch(
         self,

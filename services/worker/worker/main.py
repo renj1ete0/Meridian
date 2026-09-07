@@ -1056,6 +1056,21 @@ class Worker:
             except Exception:
                 log.exception("housekeeping tick failed")
 
+    async def browser_health(self) -> str:
+        """`configured` / `unreachable` / `absent` — for the health line (`P1-26`).
+
+        Three states, not two, because they need different responses. `absent`
+        means no `CRAWL4AI_URL`, which is a deployment that never intended to
+        render and is fine. `unreachable` means one was configured and is not
+        answering, which is the silent failure this exists to surface: the
+        fetcher degrades to static and keeps working, so nothing else in the
+        system ever notices that JS-dependent pages stopped being rendered.
+        """
+        browser = self._crawler.fetcher.browser
+        if browser is None:
+            return "absent"
+        return "configured" if await browser.healthy() else "unreachable"
+
     async def housekeep(self) -> None:
         """One housekeeping pass. Public so a test — or an operator — can run it."""
         async with self._session_factory() as sess:
@@ -1064,6 +1079,17 @@ class Worker:
             )
             health = await fetch_health(sess)
             depth = await queue_depth(sess)
+
+        browser = await self.browser_health()
+        if browser == "unreachable":
+            # WARNING rather than INFO: this is the one health-line value that
+            # means something is wrong right now and is invisible everywhere
+            # else, since the crawl carries on and simply extracts worse.
+            log.warning(
+                "browser configured but not answering; pages needing JS are being "
+                "fetched statically",
+                extra={"browser": browser},
+            )
 
         log.info(
             "health",
@@ -1078,6 +1104,7 @@ class Worker:
                 "by_outcome": health.by_outcome,
                 "attempts_pruned": pruned,
                 "tracked_domains": self._crawler.limiter.tracked_domains,
+                "browser": browser,
             },
         )
 

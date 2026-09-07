@@ -146,6 +146,39 @@ signal takes the pipeline with it and you lose the last lines.
 
 ---
 
+### The compose networks are a boundary, not organisation
+
+`internal` is `internal: true`, so Docker installs no default route and nothing
+on it reaches the open web. `egress` is an ordinary bridge. `worker` is the only
+service on both, because it is the only one that fetches hostile content and
+writes it to the database.
+
+`crawl4ai` is on `egress` alone and that is the point of the whole split: it
+drives a real browser against pages this crawler found by following links, so it
+is the most likely thing in the stack to be compromised, and it has no route to
+Postgres by construction rather than by policy.
+
+It also receives no `env_file`. That is why `x-common` carries neither
+`env_file` nor `networks` — a shared default for either is precisely how the
+browser sandbox came to hold every database password in `.env`, which it did
+until `v0.24.0`. `tests/unit/test_compose_topology.py` fails if any of this is
+undone.
+
+Note `internal: true` is not `P1-25`. It stops a container reaching the
+*internet*; it does not stop `worker`, which must have a default route, from
+reaching the LAN.
+
+### A missing browser is silent, so the health line has to say so
+
+`Crawl4aiClient.from_env()` returns None when `CRAWL4AI_URL` is unset and the
+fetcher degrades to static — correct, and invisible. The health line carries
+`browser: configured | unreachable | absent`, and `unreachable` logs at WARNING,
+because a worker that lost its browser a week ago otherwise looks exactly like
+one that never had it and simply extracts worse.
+
+`/health` is unauthenticated on 0.9.2: a wrong token still returns 200, while
+`/schema` and `/crawl` refuse. The probe sends the token anyway.
+
 ## 3. Traps that have already cost time
 
 ### Alembic does not see CHECK constraints on existing tables

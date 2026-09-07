@@ -38,6 +38,7 @@ class FakeCrawler:
         self._results = list(results or [])
         self.calls: list[dict[str, object]] = []
         self.limiter = _NoLimiter()
+        self.fetcher = _NoFetcher()
 
     async def fetch(self, url, *, task_id=None, attempt_number=1):
         self.calls.append({"url": url, "task_id": task_id, "attempt_number": attempt_number})
@@ -49,6 +50,13 @@ class FakeCrawler:
 
 class _NoLimiter:
     tracked_domains = 0
+
+
+class _NoFetcher:
+    """A fetch stack with no browser, which is `browser: absent` on the health
+    line — the ordinary state for a worker that renders nothing."""
+
+    browser = None
 
 
 def ok(url: str = "https://example.test/a") -> FetchResult:

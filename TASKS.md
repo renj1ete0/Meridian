@@ -28,8 +28,9 @@ Phase 1's checkpoint (`P1-16`, the 48h run) is the gate on phase 2's go/no-go
 measures nothing. The agreed sequence:
 
 1. ~~`P1-28` sitemaps~~ — **done in v0.22.0**, with topic matching
-2. `P1-22` network topology, then `P1-26` Crawl4AI's image and health check —
-   what stands between a worker image that runs and a *stack* that does
+2. ~~`P1-22` network topology, then `P1-26`~~ — **done in v0.24.0**. The stack
+   has a topology, the browser has an image, and the health line says whether
+   it is actually there
 3. A short bounded run (`MERIDIAN_WORKER_MAX_TASKS`, not a timer) as a **stack**
    smoke test, deployed to the server rather than run from a checkout
 4. `P2-03` novelty gate, then `P2-05`/`P2-04`/`P2-06` search, built against that
@@ -204,14 +205,14 @@ extraction work and neither blocks the checkpoint.
       Everything in `netguard` is one mistake from failing open. Give the fetching
       process no route to RFC1918 at all: a network namespace without a LAN route, or
       an egress proxy that refuses private destinations
-- [ ] `P1-22` **Network topology.** `internal: true` blocks outbound, but worker,
+- [x] `P1-22` **Network topology.** `internal: true` blocks outbound, but worker,
       crawl4ai and searxng all need it — the compose file admits this in a comment
       and never resolves it. Split into `internal` (postgres, api, web) and `egress`
       (worker, crawl4ai, searxng, orchestrator, cloudflared), with worker on both.
       crawl4ai drives a browser against hostile content and must hold no credentials
       and have no route to postgres
 - [ ] `P1-16` 48h unattended acceptance run → `make snapshot-corpus`
-- [ ] `P1-26` **Crawl4AI needs a Dockerfile and a health check the worker trusts.**
+- [x] `P1-26` **Crawl4AI needs a Dockerfile and a health check the worker trusts.**
       `Crawl4aiClient.from_env()` returns None when `CRAWL4AI_URL` is unset and the
       fetcher degrades to static — correct, but silent. A worker that has quietly
       lost its browser for a week should say so on the health line (§12.5), not just

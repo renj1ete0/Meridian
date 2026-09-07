@@ -1,24 +1,47 @@
 # Meridian — production (Pi). See docs/spec/meridian-project-scaffold.md §3.
 #
 # Only `cloudflared` is exposed to the internet. Everything else is internal
-# or loopback-only. Application images (worker/orchestrator/api/web) are not
-# built yet — this file documents the target topology; `docker compose up`
-# will fail until services/*/Dockerfile exist (scaffold §8, phase 1+).
+# or loopback-only.
+#
+# Two networks, and which services sit on which is a security boundary rather
+# than a convenience (`P1-22`):
+#
+#   internal  — `internal: true`, so Docker installs no default route. Nothing
+#               here can reach the internet at all, whatever the application
+#               does. Postgres lives here and only here.
+#   egress    — an ordinary bridge, outbound allowed. Everything that must
+#               reach the open web sits here.
+#
+# `worker` is the only service that needs both, because it is the only one that
+# fetches hostile content *and* writes it to the database. `crawl4ai` drives a
+# real browser against that content and is therefore the most likely thing in
+# the stack to be compromised: it is on `egress` alone, so it has no route to
+# Postgres, and it is given no credentials — note that it does not inherit
+# `env_file`, which would hand a browser sandbox every password in `.env`.
+#
+# Note `internal: true` is not a substitute for `P1-25`. It stops a container
+# reaching the *internet*; it does not stop `worker`, which must have a default
+# route, from reaching the LAN. That is what the egress restriction is for.
 
 name: meridian
 
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+# The base every service shares. Deliberately carries neither `networks` nor
+# `env_file`: both are per-service decisions here, and a shared default for
+# either is how a browser container ends up holding database credentials.
 x-common: &common
   restart: unless-stopped
-  env_file: .env
-  networks: [internal]
-  logging:
-    driver: json-file
-    options: { max-size: "10m", max-file: "3" }
+  logging: *logging
 
 services:
   postgres:
     <<: *common
     image: pgvector/pgvector:pg17          # TODO: pin by digest before production
+    env_file: .env
+    networks: [internal]                   # no egress, ever
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/pgdata:/var/lib/postgresql/data
       - ./scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
@@ -42,25 +65,46 @@ services:
   searxng:
     <<: *common
     image: searxng/searxng:latest          # TODO: pin
+    networks: [egress]                     # scrapes upstream engines
     volumes:
       - ./config/searxng:/etc/searxng:ro
     environment:
       SEARXNG_BASE_URL: http://searxng:8080/
+    # No env_file: it needs none of it, and a search proxy holding database
+    # passwords is the same mistake as crawl4ai holding them.
 
   crawl4ai:
     <<: *common
-    image: unclecode/crawl4ai:0.9.2        # PIN — see spec §6.4 security note
+    build: { context: ./deploy/crawl4ai }  # pinned base + hardened config (P1-26)
+    image: meridian/crawl4ai:0.9.2
     shm_size: 1g
+    networks: [egress]                     # NO route to postgres, by construction
     environment:
+      # Named explicitly rather than inherited. Compose still interpolates this
+      # from `.env`, so the value is configured in one place — but only this one
+      # variable crosses into the container.
       CRAWL4AI_API_TOKEN: ${CRAWL4AI_TOKEN}
-      CRAWL4AI_HOOKS_ENABLED: "false"
-    # NO ports: — internal network only, never exposed
+      CRAWL4AI_HOOKS_ENABLED: "false"      # hooks are RCE by design
+    # NO ports: — internal to the compose network, never published
+    healthcheck:
+      # `P1-26`: the worker degrades silently to static fetching when the
+      # browser is gone, so the browser has to say whether it is there.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:11235/health', timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s                    # a browser pool is slow to warm
 
   worker:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    env_file: .env
+    # The only service on both: it fetches the open web and writes the results
+    # to Postgres, and nothing else in the stack does both.
+    networks: [internal, egress]
     depends_on:
       postgres: { condition: service_healthy }
+      crawl4ai: { condition: service_healthy }
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
@@ -75,17 +119,22 @@ services:
   orchestrator:
     <<: *common
     build: { context: ., dockerfile: services/orchestrator/Dockerfile }
+    env_file: .env
+    # `network_mode` and `networks` are mutually exclusive and compose refuses a
+    # file setting both; this used to set `network_mode: bridge` *and* a network
+    # list. `lan` is the one that carries the llama.cpp and wake-on-LAN traffic.
+    networks: [internal, egress, lan]
     depends_on:
       postgres: { condition: service_healthy }
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
-    network_mode: bridge          # needs LAN access to llama.cpp + WoL
-    networks: [internal, lan]
     cap_add: [NET_RAW]            # wake-on-LAN magic packets
 
   api:
     <<: *common
     build: { context: ., dockerfile: services/api/Dockerfile }
+    env_file: .env
+    networks: [internal]          # cloudflared fronts it; it needs no egress
     depends_on:
       postgres: { condition: service_healthy }
     volumes:
@@ -96,20 +145,24 @@ services:
   web:
     <<: *common
     build: { context: ./web }
+    networks: [internal]
     depends_on: [api]
 
   cloudflared:
     <<: *common
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run
+    # Both, and unavoidably so: it dials out to Cloudflare and proxies inward to
+    # `api`. It holds one credential and terminates no database connection.
+    networks: [internal, egress]
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
 
 networks:
   internal:
     driver: bridge
-    internal: true          # blocks outbound internet; worker needs a second,
-                             # non-internal network for fetching — wire this up
-                             # when services/worker is implemented (scaffold §3)
+    internal: true          # no default route: nothing here reaches the internet
+  egress:
+    driver: bridge
   lan:
     driver: bridge

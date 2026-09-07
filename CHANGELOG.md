@@ -8,6 +8,59 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-09-07
+
+**The stack gets a topology, and the browser stops being invisible.** Closes the
+two items standing between a worker image that runs and a stack that does.
+
+### Added
+
+- `P1-22` Two networks instead of one. `internal` keeps `internal: true` and now
+  contains only what must never reach the open web; `egress` is an ordinary
+  bridge for everything that must. `worker` is the only service on both, because
+  it is the only one that fetches hostile content *and* writes it to the
+  database. The comment admitting this was unresolved has been in the compose
+  file since `P0-01`
+- `P1-26` `deploy/crawl4ai/` — a Dockerfile and a server-side config. Thin on
+  purpose: the upstream image is a 6GB browser pool, so this pins the version
+  §6.4 requires pinned and supplies the configuration, rather than rebuilding it
+- `P1-26` A health check the worker trusts. `Crawl4aiClient.healthy()` probes
+  `/health`, and the §12.5 health line now carries `browser:
+  configured | unreachable | absent`. Three states because they need different
+  responses — `absent` is a deployment that never intended to render, while
+  `unreachable` is the silent failure this exists for: the fetcher degrades to
+  static and keeps working, so nothing else ever notices that JS-dependent pages
+  stopped being rendered. `unreachable` logs at WARNING
+- A compose healthcheck on the browser, with a 60s `start_period` because a
+  browser pool is slow to warm, so `worker` can `depends_on` it meaningfully
+- `tests/unit/test_compose_topology.py` — drift tests over the compose file.
+  The topology is a security boundary edited by hand, and its failure mode is
+  silent: a service keeps working perfectly while sitting on the wrong network
+
+### Fixed
+
+- **The browser held every credential in `.env`.** `x-common` carried
+  `env_file: .env`, so `crawl4ai` — the one process whose job is rendering
+  hostile pages — inherited the database passwords and the tunnel token. It now
+  receives exactly two variables, both named explicitly, and `x-common` carries
+  no `env_file` or `networks` at all, since a shared default for either is how
+  this happened
+- **`orchestrator` set both `network_mode` and `networks`.** Compose rejects a
+  file that does, so the production stack would have failed to start
+
+### Notes
+
+- Verified rather than assumed: the compose file resolves, the image builds and
+  starts, `/health` answers 200 in about ten seconds, and the worker's own probe
+  returns True against it and False against a dead address
+- `/health` is unauthenticated on 0.9.2 — a wrong token still returns 200, while
+  `/schema` and `/crawl` refuse. The probe sends the token regardless
+- `internal: true` is **not** `P1-25`. It stops a container reaching the
+  internet; it does not stop `worker`, which must have a default route, from
+  reaching the LAN. The egress restriction is still the defence that survives an
+  application bug
+
+
 ## [0.23.0] — 2026-09-07
 
 **A challenge interstitial gets one bounded chance to clear itself.**

@@ -99,6 +99,11 @@ class Crawler:
     def robots(self) -> RobotsCache:
         return self._robots
 
+    @property
+    def fetcher(self) -> Fetcher:
+        """The fetcher underneath. The loop reads it to report browser health."""
+        return self._fetcher
+
     async def _fetch_in_slot(self, url: str, policy: ResolvedPolicy) -> FetchResult:
         """Fetch statically, holding the domain's rate-limit slot."""
         async with self._limiter.slot(

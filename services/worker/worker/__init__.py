@@ -4,4 +4,4 @@ Runs 23h/day on the ingestion node and **never calls an LLM** — the invariant
 that lets ingestion keep working with every reasoning model offline (§2.1).
 """
 
-__version__ = "0.23.0"
+__version__ = "0.24.0"
