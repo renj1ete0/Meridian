@@ -18,17 +18,16 @@ something went wrong.
 
 **Current phase: 1.** Phase 0 is closed. The crawl runs unattended, expands its
 own frontier, and reads HTML and PDFs: `P1-01`–`P1-07`, `P1-09`, `P1-11`–`P1-13`,
-`P1-15`, `P1-17`–`P1-21`, `P1-24` and (pulled forward) `P2-02` are done, at 832
-tests. Verified live — real LTA PDFs extracted with page-accurate chunks and a
-title read from the document itself. The only open phase-0 item is `P0-15`,
+`P1-15`, `P1-17`–`P1-21`, `P1-23`, `P1-24` and (pulled forward) `P2-02` are done,
+at 884 tests. Verified live — real LTA PDFs extracted with page-accurate chunks,
+and the injection screen clean across every page crawled so far. The only open phase-0 item is `P0-15`,
 deferred until phase 2 needs it.
 
-Next: `P1-23`'s injection pre-screen is the overdue one — the frontier follows
-links off untrusted pages at volume now, so the pages reaching extraction are no
-longer a curated list. `P1-08` (MarkItDown) closes the last format gap. `P1-28`
-(sitemaps) is still cheap. And with both breadth and depth real, `P1-16`'s
-48-hour acceptance run is finally a meaningful test — but `P1-30` (supervision,
-worker Dockerfile) has to land first, since nothing restarts the process.
+Next: `P1-08` (MarkItDown) closes the last format gap. `P1-28` (sitemaps) is
+still cheap. Then `P1-30` (supervision, worker Dockerfile — which must also
+install `poppler-utils`), because `P1-16`'s 48-hour acceptance run needs
+something that restarts the process, and with breadth and depth both real it is
+finally a meaningful test.
 
 ---
 
@@ -117,10 +116,15 @@ worker Dockerfile) has to land first, since nothing restarts the process.
       decompression is driven by hand through `zlib` in bounded steps — letting
       httpx decode meant a 64KB read arrived as one 67MB object, so the cap was
       checked after the allocation it existed to prevent
-- [ ] `P1-23` **Injection pre-screen, mechanical (no LLM).** At extraction time flag
-      hidden text (`display:none`, `visibility:hidden`, white-on-white, 0px fonts,
-      offscreen), imperative HTML comments, and instruction-like phrasing addressed
-      to a model. Regex and DOM work only, so the fast loop stays model-free
+- [x] `P1-23` **Injection pre-screen, mechanical (no LLM)** —
+      `worker/extract/injection.py`. Hidden text (seven techniques, each named in
+      the finding), imperative HTML comments, and instruction-like phrasing, on
+      the raw HTML *and* the extracted text. The design turns on one distinction:
+      **hidden is the signal, imperative is not** — an article *about* prompt
+      injection quotes the phrases and must not be flagged, or the flag becomes
+      one people ignore. Flags only; §2.5 keeps the page stored, extracted and
+      chunked, and `P4-06` is what eventually quarantines. 0 false positives
+      across the 11 real pages crawled so far
 - [x] `P1-17` Tier-derived queue priority — `priority_for_domain()`. Wiring it into
       enqueue happens with the fetcher in `P1-03`
 - [x] `P1-18` Randomised per-domain delay — `jittered_delay_ms()`. Wiring it into the

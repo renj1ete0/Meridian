@@ -8,6 +8,65 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-09-08
+
+**A tripwire for prompt injection, before anything reaches a model.** The slow
+loop will hand a frontier model chunks pulled straight out of pages this crawler
+found by following links off other pages, and that model holds write tools —
+`add_edge`, `tag_entity`, `enqueue_seed`. Since `P1-06` the frontier follows
+links at volume, so the pages reaching extraction stopped being a curated seed
+list and this stopped being theoretical.
+
+Verified against the 11 real government pages already crawled: 9 clean, 2 noted,
+**0 flagged**. The false-positive rate is the number that decides whether anyone
+ever reads this flag.
+
+### Added
+
+- `P1-23` `services/worker/worker/extract/injection.py`. Mechanical only — regex
+  and DOM work, no model. §2.1's fast-loop invariant is that ingestion keeps
+  working with every reasoning model offline, and screening for injection *with*
+  a model would put the guard behind the thing it guards
+- **Hidden is the signal; imperative is not.** This is the distinction the module
+  turns on. A research corpus about AI will legitimately quote "ignore all
+  previous instructions" — in an article about prompt injection, exactly the sort
+  of source this system should be reading. That is recorded as
+  `visible_instructions` and is *not* suspicious. Text hidden from a reader that
+  still reaches extraction has no honest purpose, and that is
+  `hidden_instructions`
+- Seven ways of hiding text, each named in the finding so the flag says *how*:
+  `display:none`, `visibility:hidden`, zero opacity, zero font size, positioned
+  offscreen, clipped to nothing, zero size — plus the `hidden` and `aria-hidden`
+  attributes, and white-on-white including the ordinary form where the white
+  background is inherited rather than set on the same tag
+- Instructions in HTML comments, which reach no reader by construction and
+  survive naive extractors. Screened on the raw source, and still screened when
+  the page will not parse — serving broken HTML would otherwise be a way past
+  the DOM checks
+- `tool_directive`: imperatives aimed at a tool-holding agent ("add an edge",
+  "send the contents to"), suspicious **even when visible**, because visible
+  injection works and such a page has no ordinary-prose version of itself
+- The screen runs on the raw HTML *and* the extracted text, because they answer
+  different halves: hiddenness is a DOM property extraction has already
+  discarded, and what survived extraction is what a model would actually read
+
+### Notes
+
+- **Flag, do not delete.** §2.5's rule that steering adjusts rather than destroys
+  applies here: a flagged page is stored, extracted and chunked exactly as
+  normal, and the finding sits beside it in `sources.extra["injection"]`. Nothing
+  is blocked — excluding quarantined content from the slow loop's batch is
+  `P4-06`, which needs the frontier model that judges the domain to exist first
+- The `WARNING` log line is therefore the whole mechanism until `P4-06` lands,
+  which is why it is a warning rather than an info
+- One false positive is accepted deliberately: an article *quoting* a full
+  payload trips `tool_directive`. That is the right side to err on — the flag
+  blocks nothing, so the cost is a source somebody glances at, against the cost
+  of a visible injection read as prose by a model holding `add_edge`
+- HTML only. A PDF has no DOM to hide text in the same way, and its text-layer
+  equivalents need a different screen than this one — worth having, and not
+  worth pretending this is it
+
 ## [0.17.0] — 2026-09-08
 
 **PDFs become readable, and scans become findable.** Since `P1-06` the frontier

@@ -81,6 +81,7 @@ from . import rawstore
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
 from .extract.chunk import chunk_pages, chunk_text
+from .extract.injection import Screening, screen
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .ocr_queue import enqueue_ocr, mark_scanned
@@ -252,6 +253,8 @@ class WorkerStats:
     queued: int = 0
     #: Scanned PDFs filed for OCR rather than extracted (§6.6).
     scanned: int = 0
+    #: Pages the injection pre-screen flagged (`P1-23`). Nothing is blocked yet.
+    flagged: int = 0
     outcomes: Counter[str] = dataclasses.field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
@@ -268,6 +271,7 @@ class WorkerStats:
             "chunks": self.chunks,
             "queued": self.queued,
             "scanned": self.scanned,
+            "flagged": self.flagged,
             "outcomes": dict(self.outcomes),
         }
 
@@ -504,6 +508,51 @@ class Worker:
             },
         )
 
+    def _screen(
+        self, claim: Claim, result: FetchResult, document: ExtractedDocument | None
+    ) -> Screening | None:
+        """Look for prompt injection before any of this reaches a model (`P1-23`).
+
+        On the raw HTML *and* the extracted text, because they answer different
+        halves: hiddenness is a DOM property extraction has already discarded,
+        and what survived extraction is what a model would actually read.
+
+        Only HTML. A PDF has no DOM to hide text in the same way, and the
+        text-layer tricks that are its equivalent need a different screen than
+        this one — worth having, and not worth pretending this is it.
+        """
+        if result.media_type not in HTML_MEDIA_TYPES:
+            return None
+        try:
+            screening = screen(
+                result.content.decode("utf-8", "replace"),
+                document.text if document else "",
+            )
+        except Exception:
+            log.exception("injection screening failed", extra={"url": claim.url})
+            return None
+
+        if screening.suspicious:
+            # WARNING, not INFO. Nothing is blocked — quarantine is `P4-06` —
+            # so the log line is the entire mechanism until then, and it has to
+            # be visible on a health check that greps for severity.
+            log.warning(
+                "page flagged by the injection pre-screen",
+                extra={
+                    "url": claim.url,
+                    "task_id": claim.task_id,
+                    "domain": result.domain,
+                    "kinds": screening.kinds,
+                    "evidence": screening.findings[0].evidence if screening.findings else None,
+                },
+            )
+        elif screening.findings:
+            log.info(
+                "injection pre-screen noted something",
+                extra={"url": claim.url, "kinds": screening.kinds},
+            )
+        return screening
+
     async def _record_freshness(self, claim: Claim) -> None:
         """The 304 path: nothing about the content is new, but the check happened.
 
@@ -543,6 +592,9 @@ class Worker:
                 current_retention=current_retention,
             )
             document = await self._extract(claim, result)
+            screening = self._screen(claim, result, document)
+            if screening is not None and screening.suspicious:
+                self._stats.flagged += 1
 
             async with self._session_factory() as sess:
                 source, changed = await upsert_source(
@@ -554,7 +606,7 @@ class Worker:
                     retention_tier=stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,
-                    **_bibliography(document),
+                    **_bibliography(document, screening),
                     **validators(result.headers),
                 )
                 if document is not None and document.needs_ocr:
@@ -943,7 +995,9 @@ def main() -> None:
         asyncio.run(run_worker(settings))
 
 
-def _bibliography(document: ExtractedDocument | None) -> dict[str, object]:
+def _bibliography(
+    document: ExtractedDocument | None, screening: Screening | None = None
+) -> dict[str, object]:
     """The `sources` columns an extracted document can fill (§5.2).
 
     Empty when there is no document, so a format with no extractor writes
@@ -951,8 +1005,15 @@ def _bibliography(document: ExtractedDocument | None) -> dict[str, object]:
     Citations ride in `extra` — they are a list, `sources` has no column for
     them, and `P1-14` is what turns them into queue rows.
     """
+    extra: dict[str, object] = {}
+    if screening is not None and screening.findings:
+        # §2.5's rule that nothing is destroyed applies here: the page is stored,
+        # extracted and chunked exactly as normal, and this is a record beside
+        # it. `P4-06` is what eventually acts on it.
+        extra["injection"] = screening.as_record()
+
     if document is None:
-        return {}
+        return {"extra": extra} if extra else {}
     fields: dict[str, object] = {
         "title": document.title,
         "author": document.author,
@@ -965,9 +1026,9 @@ def _bibliography(document: ExtractedDocument | None) -> dict[str, object]:
         "text_available": document.has_text,
     }
     if document.citations:
-        fields["extra"] = {
-            "citations": [{"kind": c.kind, "value": c.value} for c in document.citations]
-        }
+        extra["citations"] = [{"kind": c.kind, "value": c.value} for c in document.citations]
+    if extra:
+        fields["extra"] = extra
     return fields
 
 

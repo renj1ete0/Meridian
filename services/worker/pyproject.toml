@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.17.0"
+version = "0.18.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,8 @@ dependencies = [
     # access — an HTTP client has no business in that dependency closure.
     "httpx>=0.28",
     "trafilatura>=2.2.0",
+    "markitdown[docx,outlook,pptx,xlsx]>=0.1.7",
+    "onnxruntime>=1.29",
 ]
 
 [build-system]

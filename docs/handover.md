@@ -17,7 +17,8 @@ Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes
 bytes come out, politely, without becoming a route into the network, leaving a record
 of itself, keeping what it read, reading it, cutting it into citable chunks, and
 following its links onward — and all of it with nobody watching. HTML and PDFs are
-both read. As of `v0.17.0`, 832 tests pass with a real Postgres.
+both read, and every page is screened for prompt injection on the way past. As of
+`v0.18.0`, 884 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -200,6 +201,29 @@ tests parse. The fixture is gone with the plugin, and asking for it fails deep i
 pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
+
+### An injection flag that fires on every article about injection protects nothing
+
+`P1-23`'s hardest constraint is the false positive, not the false negative. A
+research corpus about AI legitimately quotes "ignore all previous instructions" — in
+an article about prompt injection, exactly the kind of source this system should be
+reading — and a flag that fires on those is one someone learns to ignore. The rule
+`worker/extract/injection.py` turns on is that **hiddenness** promotes a finding from
+noise to signal: visible imperative phrasing is recorded and not escalated; the same
+words in a `display:none` div are. Measured at 0 flagged across the 11 real
+government pages crawled so far.
+
+Two exceptions worth knowing before changing it: `tool_directive` ("add an edge",
+"send the contents to") *is* suspicious when visible, and `markitdown`'s Python 3.14
+problem below is unrelated but sits in the same module tree.
+
+### `markitdown` needs an explicit `onnxruntime>=1.29` on Python 3.14
+
+`markitdown` pins `magika~=0.6.1`, which requires `onnxruntime>=1.17.0` with no upper
+bound — and uv resolves that to 1.20.1, which has no cp314 wheel. The install fails
+with a message about Python ABI tags that does not name markitdown at all. Adding
+`onnxruntime>=1.29` as a direct worker dependency fixes it; magika 1.x drops the
+requirement entirely on ≥3.13, so this can come out when markitdown loosens its pin.
 
 ### A scanned PDF is not an empty one, and the difference is invisible
 
@@ -397,6 +421,14 @@ And `v0.17.0`, against real government PDFs the crawl had queued for itself:
 | Title from the PDF's own Info dictionary | Land Transport ITM → `"20230301 Land Transport ITM e1"` |
 | robots.txt still honoured on PDFs | two datamall user guides → `robots_denied`, abandoned |
 
+And `v0.18.0`, where the number that matters is the one that stayed at zero:
+
+| Behaviour | Evidence |
+|---|---|
+| Injection screen on real pages | 11 crawled government pages → 9 clean, 2 `hidden_text` noted, **0 flagged** |
+| Hidden instructions caught | `display:none`, `hidden`, `aria-hidden`, white-on-white, offscreen, zero-size all detected in tests |
+| An article *about* injection not caught | visible "ignore all previous instructions" → recorded, not suspicious |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -405,11 +437,6 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 ## 5. What to build next
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
-
-**`P1-23`, the injection pre-screen, is the overdue one.** The frontier follows
-links off untrusted pages at volume now, so the pages reaching extraction are no
-longer a curated seed list. Nothing is feeding a model yet, which is the only reason
-this has been survivable.
 
 **`P1-08` (MarkItDown) closes the last format gap.** `Worker._extract` dispatches on
 `result.media_type` against `HTML_MEDIA_TYPES` and `PDF_MEDIA_TYPES`; adding a format

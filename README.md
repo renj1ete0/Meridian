@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.17" src="https://img.shields.io/badge/version-0.17-0D6F7C">
+  <img alt="Version 0.18" src="https://img.shields.io/badge/version-0.18-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -141,7 +141,8 @@ Production runs the whole stack in containers behind `cloudflared`
 > as a `sources` row plus (for primary sources) a local copy, extracts HTML and PDFs
 > to text, bibliographic metadata and citations, and cuts it into citable chunks —
 > page-accurate for PDFs. Office documents are stored and left metadata-only until
-> `P1-08`, scanned PDFs are detected and filed for OCR rather than read, nothing
+> `P1-08`, scanned PDFs are detected and filed for OCR rather than read, every page
+> is screened for prompt injection on the way past, nothing
 > embeds or searches yet (`P2-*`). Frontier expansion is on: a fetched page's links
 > are filtered and queued, so the crawl keeps going past its seed list. The API and
 > web commands are phase 2 and 3. See
