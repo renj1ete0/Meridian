@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
 from .models import FetchPolicy as FetchPolicyRow
-from .tiering import jittered_delay_ms, registrable_domain
+from .tiering import jittered_delay_ms, registrable_domain, resolve_tier
 
 _FILE_DEFAULTS_PATH = Path(__file__).resolve().parents[3] / "config" / "fetch_policy.yaml"
 _file_defaults_cache: dict[str, Any] | None = None
@@ -135,6 +135,33 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
     # because blocking '*' would silently stop the entire crawl.
     status = specific.status if specific else "active"
     return ResolvedPolicy(domain=host, status=status, **settings)
+
+
+async def source_tier_map(sess: AsyncSession) -> dict[str, Any]:
+    """The domain → tier mapping, from the global fetch policy row (§5.2, §13.1).
+
+    It rides in `fetch_policy['*'].settings` rather than in a table of its own —
+    one global blob of domain policy, seeded from `config/source_tiers.yaml` at
+    first boot and authoritative in the database thereafter. `resolve_policy`
+    strips it out because it is not a fetch setting; this is where it is read
+    back.
+    """
+    glob = await sess.scalar(select(FetchPolicyRow).where(FetchPolicyRow.domain == GLOBAL_DOMAIN))
+    if glob is None or not glob.settings:
+        return {}
+    return glob.settings.get("source_tiers") or {}
+
+
+async def resolve_source_tier(sess: AsyncSession, domain: str) -> str:
+    """The source tier for ``domain``, from the seeded mapping.
+
+    Mechanical and deterministic (§5.2) — never a model judgement — so this is a
+    lookup and nothing more. A separate query from :func:`resolve_policy` on
+    purpose: the tier is a property of a *source*, not of a request, and folding
+    a global mapping into a per-domain policy object to save one indexed read on
+    a tiny table would be paying in clarity for something free.
+    """
+    return resolve_tier(domain, await source_tier_map(sess))
 
 
 async def record_failure(

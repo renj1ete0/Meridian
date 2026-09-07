@@ -43,12 +43,24 @@ async def test_seed_loads_no_content(session_for) -> None:
 
     If this fails, someone added a fixture-loading path, and a research corpus
     would start life containing material nobody crawled.
+
+    Measured as a *delta* across the seed run, not as "the content tables are
+    empty". The two were the same thing right up until the worker started
+    writing `sources` rows, and then the absolute version began failing on any
+    development database that had actually crawled — which is every one worth
+    having, since §6 asks for real crawl snapshots rather than fixtures. The
+    delta is what the docstring above has always meant.
     """
-    _run_seed()
     sess = await session_for("rw")
-    for table in CONTENT_TABLES:
-        count = await sess.scalar(text(f"SELECT count(*) FROM {table}"))
-        assert count == 0, f"{table} contains {count} rows — seeding loaded content"
+    before = {t: await sess.scalar(text(f"SELECT count(*) FROM {t}")) for t in CONTENT_TABLES}
+    await sess.rollback()
+
+    _run_seed()
+
+    sess2 = await session_for("rw")
+    after = {t: await sess2.scalar(text(f"SELECT count(*) FROM {t}")) for t in CONTENT_TABLES}
+    added = {t: after[t] - before[t] for t in CONTENT_TABLES if after[t] != before[t]}
+    assert not added, f"seeding added content rows: {added}"
 
 
 async def test_seed_is_idempotent(session_for) -> None:

@@ -8,6 +8,72 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-09-07
+
+**The crawl stops throwing away what it fetched.** Until now the loop got the
+bytes, recorded that it got them, and dropped them — no source record, no local
+copy, and a `conditional_requests` setting that was on, correct, tested and
+unreachable because nothing had ever stored an ETag for it to send.
+
+Verified live, and the second crawl is where it shows: a first pass fetched five
+seeded sites and kept four (the fifth is a blog, and §5.4 says background sources
+keep their text and not their bytes). The second pass over the same five returned
+`304 Not Modified` four times and zero bytes, and the one server that answered
+`200` returned content whose checksum was unchanged — so both halves of "has this
+page changed" now work, the cheap one and the common one.
+
+### Added
+
+- `P1-11` `services/worker/worker/rawstore.py` — the raw store. Path is
+  `<domain>/<hex shard>/<sha256(url)><ext>`: derived from the URL so a re-fetch
+  lands on the file the last fetch wrote, domain-first because "everything from
+  this site" is what a takedown and a retention sweep both need, sharded so one
+  busy domain is not one directory with a hundred thousand entries. The URL is
+  attacker-influenced, so a host that cannot be a directory name is refused
+  rather than sanitised into something plausible, and the extension comes from
+  an allowlist rather than from anything the server claimed its file was called
+- Atomic writes. Content goes to a temporary name in the destination's own
+  directory, is fsynced, and is then `os.replace`d into place. A crash halfway
+  through a 20MB PDF must not leave a truncated file that the checksum beside it
+  swears is complete — that is a corruption you discover years later, when the
+  citation is the thing you needed
+- **Retention tiers actually split** (§5.4). Government, peer-reviewed and
+  institutional sources keep the file; press and informal ones keep their
+  checksum and metadata and nothing else. A Pi's NVMe cannot hold the HTML of
+  every page the frontier wanders into, and `raw_file_path IS NULL` now means
+  *deliberately not kept* rather than *missing*. `junk` is unreachable from
+  here on purpose: it is the novelty gate's verdict on a near-duplicate, and
+  nothing at fetch time has seen enough of the corpus to make it
+- `meridian_core/sources.py` — `upsert_source()`, `touch_source()`,
+  `get_source()`. Every field is optional and `None` means "nothing new", never
+  "clear it": a response that came back without an ETag must not erase the one
+  from last week, because the next request would silently stop being
+  conditional and nothing would notice except the bandwidth graph. Returns
+  whether the checksum changed, which is what lets a re-crawl skip extraction
+- `resolve_source_tier()` / `source_tier_map()` in `policy.py`. The domain → tier
+  mapping has been seeded into the global `fetch_policy` row since `P1-12` and
+  read by nothing; this reads it back. Mechanical and deterministic (§5.2),
+  never a model judgement
+- The loop persists before it settles, and a fetch it could not keep is retried
+  rather than advanced. Advancing anyway would lose the URL permanently — the
+  queue saying `fetched`, no source row, and nothing left that would ever ask
+  for it again. A full disk now looks like a backoff and then a `failed` row
+  carrying `storage_error:`, which is a problem somebody can see
+- Checksums are stored as `sha256:<hex>`. A bare hex string is a checksum nobody
+  can verify in five years without first working out what produced it, and being
+  checkable then is the entire point
+
+### Notes
+
+- Source and retention tier both refuse to move *down* automatically, the same
+  rule §11.12 states for quality tier. Tiering is deterministic so the mechanical
+  answer and the stored one normally agree; they stop agreeing the moment someone
+  corrects a domain by hand in Admin, and a correction the next crawl reverts is
+  worse than no correction at all
+- `sources.raw_file_path` is relative to the store root. An absolute path would
+  bake in `/data/raw` — the container's mount point, not the host's — and a store
+  moved to a bigger disk would invalidate every row that recorded one
+
 ## [0.12.0] — 2026-09-07
 
 **Nothing ran unattended until now.** Every piece of the fetch path has existed

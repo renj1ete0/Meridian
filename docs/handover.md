@@ -15,8 +15,8 @@ add it here.
 
 Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
 bytes come out, politely, without becoming a route into the network, leaving a record
-of itself — and now with nobody watching. As of `v0.12.0`, 519 tests pass with a real
-Postgres.
+of itself, and keeping what it read — and now with nobody watching. As of `v0.13.0`,
+598 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -48,18 +48,26 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
    row, every path
                     │
                     ▼
+        worker.main._keep — the bytes, before the settle
+                    │
+        ┌───────────┴────────────┐
+        ▼                        ▼
+   rawstore.store()       upsert_source()
+   path from the URL      checksum, etag,
+   primary only (§5.4)    tier, raw path
+                    │
+                    ▼
         worker.main settles the task
         queue_disposition() → fetched | done | retry | abandon
 ```
 
 **What does not exist yet.** No extraction, no embeddings, no API, no frontend. The
-loop fetches bytes and drops them — nothing writes a `sources` row or a raw file
-(`P1-07`–`P1-11`), which has one visible consequence today: `conditional_requests` is
-on and `not_modified` can never fire, because nothing stores the ETag that would make
-a request conditional. The 304 path is tested and correct and will stay unreachable
-until `P1-11` lands.
+bytes now land on disk and in `sources`, and nothing turns them into chunks
+(`P1-07`–`P1-10`).
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
+Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
+gate, which is phase 2 (`P1-31`).
 
 ---
 
@@ -89,8 +97,14 @@ the worker needs it sourced:
 
 ```bash
 set -a; . ./.env.dev; set +a
-MERIDIAN_WORKER_MAX_TASKS=4 uv run python -m worker.main
+MERIDIAN_RAW_ROOT="$PWD/.devdata/raw" MERIDIAN_WORKER_MAX_TASKS=4 uv run python -m worker.main
 ```
+
+**Set `MERIDIAN_RAW_ROOT` or the worker writes to `/data/raw`,** which is the
+container's bind-mount target and almost certainly not writable natively. It will not
+crash — a fetch it cannot keep is retried and then failed with `storage_error:` — but
+a run where every task retried three times and nothing was stored is this, not a bug.
+`.devdata/` is gitignored and is the natural place for it.
 
 Without `MERIDIAN_WORKER_MAX_TASKS` it runs until signalled, which is correct and not
 what you want at a prompt. It crawls the real web — the seeded frontier is real
@@ -161,6 +175,36 @@ pytest with a bare `KeyError` on a stash key rather than anything that names the
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
 
+### A dev database that has actually crawled breaks absolute-count assertions
+
+`test_seed_loads_no_content` asserted the content tables were *empty* after seeding,
+which was the same thing as "seeding loaded no content" right up until the worker
+started writing `sources` rows — and then it began failing on any development database
+that had crawled, which is every one worth having (§6 asks for real crawl snapshots
+rather than fixtures). It now measures the delta across the seed run. Expect the same
+trap in anything that counts `chunks` or `edges` once those stages exist.
+
+### The seeded source-tier map is `{tier: [domains]}`, not `{domain: tier}`
+
+`config/source_tiers.yaml` groups domains *under* a tier — `exact: {government:
+[lta.gov.sg, ...]}` — and `resolve_tier` iterates it that way. A test or fixture that
+writes `exact[domain] = tier` produces a mapping that parses, resolves to the default
+for everything, and fails nothing.
+
+The map lives in the global `fetch_policy` row's `settings` blob, seeded once, and
+`resolve_policy` deliberately strips it out because it is not a fetch setting.
+`resolve_source_tier()` in `policy.py` is what reads it back.
+
+### SQLAlchemy does not track in-place changes to a JSONB column
+
+`row.extra["k"] = v` and `row.settings["k"] = v` are writes that never reach Postgres.
+They fail by doing nothing, which nothing catches — an assertion against the in-memory
+object passes, because the in-memory object *did* change. Always reassign the whole
+dict (`row.extra = {**row.extra, "k": v}`), and force a real read with
+`await sess.refresh(row)` in the test that proves it landed. `sess.expire(row)` is not
+the tool: touching an expired attribute in async SQLAlchemy raises `MissingGreenlet`
+rather than reloading.
+
 ### An integration test that does not filter by topic claims the seeded frontier
 
 This dev database holds the 13 real seeded queue rows, all `pending` and all priority
@@ -222,9 +266,18 @@ And as of `v0.12.0`, with the loop driving instead of a script:
 | Graceful `SIGTERM` | two fetches in flight both finished and settled; process exited 0 |
 | Two lanes not stampeding one host | per-domain `waited_ms` of 1000–1500 across concurrent lanes |
 
+And `v0.13.0`, where the *second* run is the evidence:
+
+| Behaviour | Evidence |
+|---|---|
+| Raw store, primary sources | 4 `.gov.sg` pages written to `<domain>/<shard>/<sha256>.html`, 956KB |
+| Retention split (§5.4) | landtransportguru.net → `informal` → `background` → `"stored": null`, checksum recorded |
+| Source tier from the seeded map | `lta.gov.sg` → `government` with no per-test override |
+| Conditional requests, finally live | second pass: 4 of 5 returned a real `304`, zero bytes |
+| Checksum change detection | the fifth answered `200` with `"content_changed": false` |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
-local socket serving a synthetic bomb), the 5xx-robots refusal path, and — because
-nothing stores an ETag yet — the loop's `not_modified` → `done` disposition.
+local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 ---
 
@@ -232,16 +285,22 @@ nothing stores an ETag yet — the loop's `not_modified` → `done` disposition.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**Extraction (`P1-07`–`P1-11`), because the loop currently throws the bytes away.**
-The worker fetches successfully and then does nothing with the body: no `sources` row,
-no raw file, no chunks. Two consequences worth knowing before starting. First, a
-re-run refetches everything in full — `conditional_requests` is on and works, but
-nothing has ever stored an ETag for it to send. Second, `Crawler.fetch` returns the
-body in memory and the loop drops it, so whatever writes the raw store has to be
-called from `Worker._process` before the settle, or the bytes are gone.
+**Extraction (`P1-07`–`P1-10`).** The bytes are now on disk and in `sources`; nothing
+turns them into chunks. Three things to know before starting:
 
-`P1-11` (the raw store writer) is the one that unblocks the others, and it is what
-makes the 304 path reachable for the first time.
+- **Read from the store, not from memory.** `Worker._keep` already has the bytes and
+  could hand them straight on, but a background source has no file behind it and a
+  re-extraction pass has no fetch at all. Extraction should take a `sources` row and
+  read `raw_file_path` through `rawstore.resolve()`, which is what makes reprocessing
+  (§11.12) possible later. `sources.extra["media_type"]` is what says which parser.
+- **`upsert_source` already tells you when not to bother.** It returns `changed`, and
+  a re-crawl of an unchanged page should skip extraction and embedding entirely.
+  Wire that in from the start; retrofitting it means a pass that re-derives the whole
+  corpus every night.
+- **Background sources have a checksum and no file.** `raw_file_path IS NULL` means
+  deliberately not kept, not missing, so extraction has to happen *in the same pass*
+  as the fetch for them or it never happens at all. That asymmetry is the one thing
+  in §5.4 that will bite.
 
 **`P1-06` and `P1-28` are both cheap and now have a loop to feed.** The prefilter keeps
 already-seen URLs out of the queue; sitemap discovery enqueues the sitemaps

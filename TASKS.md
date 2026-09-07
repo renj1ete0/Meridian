@@ -16,18 +16,18 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. The crawl now runs unattended:
-`P1-01`, `P1-02`, `P1-03`, `P1-04`, `P1-05`, `P1-12`, `P1-15`, `P1-17`, `P1-18`,
-`P1-19`, `P1-20`, `P1-21` and `P1-24` are done, at 519 tests. Verified live —
-`python -m worker.main` drained the seeded frontier against real government
-sites, honoured their robots.txt and delays, abandoned a 403 instead of retrying
-it, printed §12.5's health line, and finished its in-flight fetches on `SIGTERM`.
-The only open phase-0 item is `P0-15`, deferred until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. The crawl runs unattended and keeps
+what it fetches: `P1-01`–`P1-05`, `P1-11`, `P1-12`, `P1-15`, `P1-17`–`P1-21` and
+`P1-24` are done, at 598 tests. Verified live — a first pass over the seeded
+frontier stored four government sites and deliberately kept no bytes for a blog
+(§5.4), and the *second* pass came back `304` four times out of five with the
+fifth unchanged by checksum. The only open phase-0 item is `P0-15`, deferred
+until phase 2 needs it.
 
-Next: extraction — `P1-07` through `P1-11` — because the loop currently fetches
-bytes and drops them. `P1-06` (prefilter) and `P1-28` (sitemaps from robots.txt)
-are still cheap and now have a loop to feed. `P1-23`'s injection pre-screen lands
-alongside extraction rather than after it.
+Next: extraction — `P1-07` through `P1-10`. The bytes are now on disk and in
+`sources`, and nothing turns them into chunks. `P1-06` (prefilter) and `P1-28`
+(sitemaps from robots.txt) are still cheap and now have a loop to feed.
+`P1-23`'s injection pre-screen lands alongside extraction rather than after it.
 
 ---
 
@@ -128,7 +128,16 @@ alongside extraction rather than after it.
 - [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
 - [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
 - [ ] `P1-10` `extract/figures.py` — figure extraction with captions
-- [ ] `P1-11` Raw store writer: path scheme, checksum, retention tiers
+- [x] `P1-11` Raw store writer — `worker/rawstore.py` plus
+      `meridian_core/sources.py`. Path is `<domain>/<hex shard>/<sha256(url)><ext>`,
+      derived from the URL so a re-fetch overwrites rather than accumulating, and
+      refused outright for a host that cannot safely be a directory name. Writes
+      are atomic (temp file in the destination directory, fsync, `os.replace`).
+      Retention actually splits per §5.4 — primary keeps the file, background
+      keeps the checksum and metadata only. `upsert_source()` stores the
+      validators that make `conditional_requests` real for the first time, and
+      returns whether the checksum changed. A fetch the store could not keep is
+      retried, never advanced
 - [x] `P1-12` Source tier assignment — `meridian_core/tiering.py`, exact → longest
       pattern → default, seeded into the DB with the global fetch policy
 - [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
@@ -167,6 +176,12 @@ alongside extraction rather than after it.
       worker restart re-fetches robots.txt for every origin it touches. Harmless at
       current scale and wasteful at corpus scale; revisit when the crawl is wide
       rather than deep
+- [ ] `P1-31` **Nothing ever deletes from the raw store.** `P1-11` decides what
+      gets written; §5.4 also says junk and near-duplicates are dropped *after*
+      the novelty gate, and background sources get a snapshot only if cited.
+      Both are deletions, and there is no sweep. Needs the novelty gate (`P2-*`)
+      to exist first, so this is a phase-2 follow-up — but the disk fills at
+      phase-1 speed, so watch `du` before then
 - [ ] `P1-30` **Supervision the loop deliberately does not provide.** `worker/main.py`
       handles `SIGTERM` gracefully and dies on anything it cannot handle, on the
       assumption that something restarts it — §13.4's `Restart=always`. Nothing in

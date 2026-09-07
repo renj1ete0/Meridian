@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.2" src="https://img.shields.io/badge/version-0.2-0D6F7C">
+  <img alt="Version 0.13" src="https://img.shields.io/badge/version-0.13-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -22,8 +22,9 @@ and relationships into a knowledge graph, and records where every single claim c
 from. You explore that graph, annotate it, and ask questions of it — and it tells you
 not just what it knows, but where the evidence is thin, stale, or contradictory.
 
-> **Status: phase 1 of 7.** The design, the shared core, the database schema and its
-> migrations are in place and tested. The crawler is next — nothing ingests yet.
+> **Status: phase 1 of 7.** The design, the shared core and the schema are in place,
+> and the crawler now runs: it drains a queue unattended, fetches politely, and keeps
+> what it fetched. Extraction is next — nothing turns those bytes into a graph yet.
 > See the [roadmap](docs/roadmap.md) and [TASKS.md](TASKS.md).
 
 ## Why it exists
@@ -134,15 +135,18 @@ Production runs the whole stack in containers behind `cloudflared`
 
 > `packages/meridian_core` and the worker are built and tested, so `make migrate`,
 > `make seed`, `make test` and `python -m worker.main` all work today — the worker
-> drains the queue, fetches politely and records every attempt, but nothing yet
-> extracts the bytes it retrieves (`P1-07`–`P1-11`). The API and web commands are
+> drains the queue, fetches politely, records every attempt, and keeps what it
+> fetched as a `sources` row plus (for primary sources) a local copy. Nothing yet
+> turns those bytes into text (`P1-07`–`P1-10`). The API and web commands are
 > phase 2 and 3. See [docs/handover.md](docs/handover.md) for what runs today and
 > what does not.
 >
 > The loop is configured entirely from the environment — `MERIDIAN_WORKER_CONCURRENCY`,
 > `MERIDIAN_WORKER_TOPICS`, `MERIDIAN_WORKER_MAX_TASKS` and friends, all listed in
 > `.env.example`. `MERIDIAN_WORKER_MAX_TASKS=5` gives a bounded run, which is the
-> way to try it without leaving a crawler going.
+> way to try it without leaving a crawler going. Set `MERIDIAN_RAW_ROOT` when
+> running natively — it defaults to the container's `/data/raw` mount, and the
+> raw store is where fetched primary sources land (spec §5.4).
 
 Host ports sit in a distinctive `211xx` block — `21111` postgres, `21112` searxng,
 `21113` crawl4ai, `21114` api, `21115` web — so a fresh clone doesn't collide with

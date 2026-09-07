@@ -58,6 +58,7 @@ from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_a
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask
+from meridian_core.policy import resolve_source_tier
 from meridian_core.queueing import (
     DEFAULT_BACKOFF_BASE_S,
     DEFAULT_LEASE_SECONDS,
@@ -71,14 +72,28 @@ from meridian_core.queueing import (
     reclaim_expired,
     release_worker_claims,
 )
+from meridian_core.sources import get_source, touch_source, upsert_source
 
-from .crawl import Crawler
-from .fetch import Crawl4aiClient, Fetcher
+from . import rawstore
+from .crawl import Crawler, validators
+from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .ratelimit import DomainLimiter
+from .rawstore import StoredRaw
 
 log = get_logger(__name__)
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+
+class NotKept(RuntimeError):
+    """A fetch succeeded and could not be persisted.
+
+    Its own type so `_process` can tell it from any other failure and settle the
+    task as a retry rather than as a success — the fetch is not the thing that
+    went wrong, but advancing anyway would drop the URL out of the corpus with
+    the queue insisting it had been fetched.
+    """
+
 
 #: Task types this loop can actually process. `query`, `doi` and `sitemap` rows
 #: belong to handlers that do not exist yet (P1-14, P1-28); claiming one would
@@ -187,6 +202,21 @@ class Claim:
     topic: str | None
 
 
+@dataclasses.dataclass(frozen=True)
+class Kept:
+    """What persisting one fetch produced.
+
+    ``changed`` is whether the checksum differs from the one already on the
+    source row. A 200 that returns byte-identical content is a page that has not
+    changed — a cheaper and more common fact than a 304, since most origins do
+    not implement conditional requests — and it is what lets extraction and
+    embedding be skipped on a re-crawl.
+    """
+
+    stored: StoredRaw
+    changed: bool
+
+
 @dataclasses.dataclass
 class WorkerStats:
     """What one run of the loop did. Logged on the way out."""
@@ -197,6 +227,8 @@ class WorkerStats:
     retried: int = 0
     abandoned: int = 0
     errored: int = 0
+    stored: int = 0
+    bytes_stored: int = 0
     outcomes: Counter[str] = dataclasses.field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
@@ -207,6 +239,8 @@ class WorkerStats:
             "retried": self.retried,
             "abandoned": self.abandoned,
             "errored": self.errored,
+            "stored": self.stored,
+            "bytes_stored": self.bytes_stored,
             "outcomes": dict(self.outcomes),
         }
 
@@ -366,6 +400,26 @@ class Worker:
         disposition = queue_disposition(result.outcome, result.status_code)
         detail = f"{result.outcome}: {result.detail}" if result.detail else result.outcome
 
+        # Before the settle, because `result.content` lives only in memory and
+        # the settle is the last thing that happens to this fetch. The attempt
+        # log is written inside `Crawler.fetch` for the opposite reason — every
+        # caller wants an attempt recorded, and a log with holes in the paths
+        # nobody thought about is worthless — but the corpus is not something a
+        # liveness probe or an ad-hoc refetch should write to. So this lives in
+        # the loop, which is the caller whose job is keeping what it fetched.
+        kept = None
+        if disposition == "fetched":
+            try:
+                kept = await self._keep(claim, result)
+            except NotKept as exc:
+                # The fetch worked; keeping it did not. Retrying is right — the
+                # cause is almost always local and transient (a full disk,
+                # Postgres restarting) and the alternative is a URL the queue
+                # believes was fetched and the corpus has never heard of.
+                disposition, detail = "retry", f"storage_error: {exc}"
+        elif disposition == "done":
+            await self._record_freshness(claim)
+
         async with self._session_factory() as sess:
             task = await sess.get(QueueTask, claim.task_id)
             if task is None:
@@ -410,8 +464,74 @@ class Worker:
                 "status": result.status_code,
                 "disposition": disposition,
                 "attempt_number": claim.attempts + 1,
+                "stored": kept.stored.path if kept else None,
+                "content_changed": kept.changed if kept else None,
             },
         )
+
+    async def _record_freshness(self, claim: Claim) -> None:
+        """The 304 path: nothing about the content is new, but the check happened.
+
+        Failures here are swallowed, unlike in :meth:`_keep`. There is no
+        content at risk — a revalidation that succeeded is not worth throwing
+        away in order to record a timestamp about it.
+        """
+        try:
+            async with self._session_factory() as sess:
+                await touch_source(sess, claim.url)
+                await sess.commit()
+        except Exception:
+            log.exception("could not record a freshness check", extra={"url": claim.url})
+
+    async def _keep(self, claim: Claim, result: FetchResult) -> Kept:
+        """Keep what came back: the bytes, the checksum, and the validators.
+
+        Raises :class:`NotKept` if it could not, and the raise is the point. A
+        full disk that let the task advance to `fetched` anyway would lose the
+        URL from the corpus permanently: the queue would say the page was
+        fetched, no source row would exist, and nothing would ever ask for it
+        again. Failing the task instead means a backoff, two more tries, and —
+        if the disk is still full — a `failed` row carrying the reason, which is
+        a problem somebody can see.
+        """
+        try:
+            async with self._session_factory() as sess:
+                tier = await resolve_source_tier(sess, result.domain)
+                existing = await get_source(sess, claim.url)
+                current_retention = existing.retention_tier if existing else None
+
+            stored = rawstore.store(
+                claim.url,
+                result.content,
+                source_tier=tier,
+                media_type=result.media_type,
+                current_retention=current_retention,
+            )
+
+            async with self._session_factory() as sess:
+                _, changed = await upsert_source(
+                    sess,
+                    claim.url,
+                    checksum=stored.checksum,
+                    raw_file_path=stored.path,
+                    source_tier=tier,
+                    retention_tier=stored.retention_tier,
+                    media_type=result.media_type,
+                    final_url=result.final_url,
+                    **validators(result.headers),
+                )
+                await sess.commit()
+        except Exception as exc:
+            log.exception(
+                "could not keep what was fetched",
+                extra={"url": claim.url, "task_id": claim.task_id, "bytes": len(result.content)},
+            )
+            raise NotKept(f"{type(exc).__name__}: {exc}") from exc
+
+        self._stats.stored += 1
+        if stored.kept:
+            self._stats.bytes_stored += stored.bytes_written
+        return Kept(stored=stored, changed=changed)
 
     async def _settle_error(self, claim: Claim) -> None:
         """Give a task back after an exception the loop did not expect.

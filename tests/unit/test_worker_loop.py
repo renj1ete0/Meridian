@@ -22,6 +22,7 @@ from worker.fetch import FetchResult
 from worker.main import (
     ERROR_BACKOFF_S,
     Claim,
+    NotKept,
     Worker,
     WorkerSettings,
     _backoff_for,
@@ -98,6 +99,7 @@ class FakeStore:
         self.claim_error: Exception | None = None
         self.claim_calls = 0
         self.sessions_opened = 0
+        self.persisted: list[tuple[int, str]] = []
 
     @asynccontextmanager
     async def factory(self):
@@ -131,9 +133,25 @@ def build(store: FakeStore, crawler, monkeypatch, **overrides) -> Worker:
     async def noop(*args, **kwargs):
         return 0
 
+    async def fake_keep(claim, result):
+        """Keeping the bytes needs a real database and a real filesystem.
+
+        Stubbed out rather than faked, so a loop test cannot pass by silently
+        taking the failure path — which is what happened when the fake session
+        was asked for a method it did not have. `test_worker_run.py` covers the
+        real thing, and the tests below cover what the loop does when it raises.
+        """
+        store.persisted.append((claim.task_id, "fetched"))
+        return None
+
+    async def fake_freshness(claim):
+        store.persisted.append((claim.task_id, "done"))
+
     monkeypatch.setattr("worker.main.claim_next", fake_claim)
     monkeypatch.setattr("worker.main.reclaim_expired", noop)
     monkeypatch.setattr("worker.main.release_worker_claims", noop)
+    monkeypatch.setattr(worker, "_keep", fake_keep)
+    monkeypatch.setattr(worker, "_record_freshness", fake_freshness)
     return worker
 
 
@@ -743,3 +761,80 @@ async def test_a_lane_that_raises_takes_the_other_lanes_down_with_it(monkeypatch
         await asyncio.wait_for(worker.run(), timeout=5)
 
     assert running == set(), "run() returned with lanes still going"
+
+
+# --------------------------------------------------------------------------
+# Keeping what was fetched
+# --------------------------------------------------------------------------
+
+
+async def test_a_successful_fetch_is_offered_to_the_store(monkeypatch) -> None:
+    store = FakeStore([FakeTask(task_id=9)])
+    worker = build(store, FakeCrawler(), monkeypatch, max_tasks=1)
+
+    await worker.run()
+
+    assert store.persisted == [(9, "fetched")]
+
+
+async def test_a_304_is_offered_too_so_the_freshness_check_is_recorded(monkeypatch) -> None:
+    store = FakeStore([FakeTask(task_id=9)])
+    worker = build(store, FakeCrawler([outcome("not_modified", 304)]), monkeypatch, max_tasks=1)
+
+    await worker.run()
+
+    assert store.persisted == [(9, "done")]
+
+
+async def test_a_fetch_that_could_not_be_kept_is_retried_not_advanced(monkeypatch) -> None:
+    """The failure mode this branch exists for.
+
+    Advancing anyway would lose the URL permanently: the queue would say the
+    page was fetched, no source row would exist, and nothing would ever ask for
+    it again. A full disk has to look like a retry, and then like a `failed`
+    row somebody can see — not like a success.
+    """
+    task = FakeTask(task_id=9)
+    store = FakeStore([task])
+    worker = build(store, FakeCrawler(), monkeypatch, max_tasks=1)
+
+    async def cannot_keep(claim, result):
+        raise NotKept("OSError: [Errno 28] No space left on device")
+
+    monkeypatch.setattr(worker, "_keep", cannot_keep)
+
+    stats = await worker.run()
+
+    assert task.status == "pending", "a fetch we could not keep must not read as fetched"
+    assert task.next_attempt_at is not None
+    assert task.error.startswith("storage_error:")
+    assert "No space left" in task.error
+    assert stats.retried == 1 and stats.fetched == 0
+
+
+async def test_a_storage_failure_still_leaves_the_lane_running(monkeypatch) -> None:
+    """A full disk is a bad hour, not the end of the crawl."""
+    store = FakeStore([FakeTask(task_id=1), FakeTask(task_id=2)])
+    crawler = FakeCrawler()
+    worker = build(store, crawler, monkeypatch, max_tasks=2)
+
+    async def cannot_keep(claim, result):
+        raise NotKept("OSError: [Errno 28] No space left on device")
+
+    monkeypatch.setattr(worker, "_keep", cannot_keep)
+
+    stats = await worker.run()
+
+    assert len(crawler.calls) == 2
+    assert stats.errored == 0, "a storage failure is a known outcome, not an unexpected one"
+    assert stats.retried == 2
+
+
+async def test_a_refusal_is_never_offered_to_the_store(monkeypatch) -> None:
+    """There are no bytes behind a robots denial to keep."""
+    store = FakeStore([FakeTask(task_id=9)])
+    worker = build(store, FakeCrawler([outcome("robots_denied")]), monkeypatch, max_tasks=1)
+
+    await worker.run()
+
+    assert store.persisted == []
