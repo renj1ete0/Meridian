@@ -8,6 +8,65 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-09-07
+
+**The bytes become text.** §6.6's routing table sends HTML to Crawl4AI and
+§6.4's first operational constraint says not to render every page — both right,
+and together they mean extraction has two inputs, not one. Crawl4AI's
+`PruningContentFilter` output is used where the browser actually ran; everything
+else, which is most of the corpus, is extracted locally.
+
+Verified live: seven seeded sites crawled and six extracted, with sae.org
+correctly landing metadata-only because it is a 62-visible-character JS shell.
+A real arXiv abstract page yields its title, its 2024-01-05 publication date,
+its abstract, and its own DataCite DOI — with no self-citation in its reference
+list.
+
+### Added
+
+- `P1-07` `services/worker/worker/extract/html.py`. `trafilatura` for the static
+  path, configured `favor_precision`: a research corpus would rather lose a
+  sentence of body text than gain a navigation menu, because boilerplate becomes
+  entities, entities become edges, and a graph full of "Skip to main content" is
+  expensive to unpick. Crawl4AI's `fit_markdown` wins where a browser payload
+  exists — re-extracting from the HTML it returned would throw away a filter that
+  ran on a rendered DOM this process never had
+- Bibliographic metadata into `sources`: title, author, publisher,
+  `publication_date`, language, `doi`, `text_available`. Never guessed — a
+  partial date is discarded rather than completed, because `publication_date` is
+  a DATE that citations are built from and a fabricated day is worse than a
+  missing one
+- Mechanical citation extraction: DOIs, arXiv identifiers (both the 2007 and the
+  pre-2007 schemes), PubMed IDs and handles, from the text *and* the links. Both,
+  because a reference list writes DOIs as text while a "view on arXiv" button
+  carries the identifier only in an `href` — taking one and not the other misses
+  a predictable population of papers rather than a random sample. Feeds `P1-14`
+- The page's own DOI is kept apart from the ones it cites. `sources.doi` is what
+  makes a source resolvable; a cited DOI is a pointer to something else to fetch.
+  arXiv publishes no `citation_doi` tag at all, so its DOI is derived from the
+  identifier already in the URL — its own mechanical mapping, not a guess — and
+  its own identifiers are excluded from its citation list
+- `text_available` now means something. §6.5 makes metadata-only an explicit
+  resting state, and it is a *threshold*, not `text != ""` — a page whose only
+  extractable content is a cookie banner has text in the strict sense and nothing
+  a graph can be built from
+
+### Notes
+
+- New dependency: `trafilatura` (Apache-2.0), in the worker only. It wins the
+  extraction benchmarks by a wide margin, and boilerplate removal is the one part
+  of this pipeline where the quality difference compounds downstream
+- Links are anchors, not `iterlinks()`. That yields every URL in the document —
+  favicons, stylesheets, apple-touch-icons — and on a real government home page
+  the assets outnumber the documents several times over. A frontier fed from that
+  list spends its budget fetching 180-byte PNGs
+- Extraction failing does **not** retry the fetch, unlike a storage failure. The
+  bytes are already stored and re-extractable (§11.12); going back to the network
+  would spend a request to solve a local problem
+- A format with no extractor yet — PDFs (`P1-09`), Office documents (`P1-08`) —
+  is stored and left metadata-only rather than failed. The raw file is what makes
+  that recoverable the day its extractor lands
+
 ## [0.13.0] — 2026-09-07
 
 **The crawl stops throwing away what it fetched.** Until now the loop got the

@@ -16,18 +16,19 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. The crawl runs unattended and keeps
-what it fetches: `P1-01`–`P1-05`, `P1-11`, `P1-12`, `P1-15`, `P1-17`–`P1-21` and
-`P1-24` are done, at 598 tests. Verified live — a first pass over the seeded
-frontier stored four government sites and deliberately kept no bytes for a blog
-(§5.4), and the *second* pass came back `304` four times out of five with the
-fifth unchanged by checksum. The only open phase-0 item is `P0-15`, deferred
-until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. The crawl runs unattended, keeps what
+it fetches, and reads it: `P1-01`–`P1-05`, `P1-07`, `P1-11`, `P1-12`, `P1-15`,
+`P1-17`–`P1-21` and `P1-24` are done, at 663 tests. Verified live — the seeded
+frontier crawled, stored under §5.4's retention split, re-crawled to four real
+`304`s, and extracted to titles, dates and text. The only open phase-0 item is
+`P0-15`, deferred until phase 2 needs it.
 
-Next: extraction — `P1-07` through `P1-10`. The bytes are now on disk and in
-`sources`, and nothing turns them into chunks. `P1-06` (prefilter) and `P1-28`
-(sitemaps from robots.txt) are still cheap and now have a loop to feed.
-`P1-23`'s injection pre-screen lands alongside extraction rather than after it.
+Next: the other extractors — `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10`
+(figures). Government sources arrive as Office documents and PDFs far more often
+than expected, and today both are stored and left metadata-only. `P1-06`
+(prefilter) and `P1-28` (sitemaps from robots.txt) are still cheap and now have
+both a loop to feed and a link list to feed it from. `P1-23`'s injection
+pre-screen belongs with extraction and is now overdue rather than early.
 
 ---
 
@@ -124,7 +125,14 @@ Next: extraction — `P1-07` through `P1-10`. The bytes are now on disk and in
       breakdown by outcome — the rate says something is wrong and only the breakdown
       says what) and `prune_attempts()`. Written by `Crawler.fetch` itself rather
       than by its callers, in the same transaction as the policy consequence
-- [ ] `P1-07` `extract/html.py` — Crawl4AI markdown, `PruningContentFilter`, citation extraction
+- [x] `P1-07` `extract/html.py` — two inputs, not one. Crawl4AI's `fit_markdown`
+      where the browser ran, `trafilatura` (`favor_precision`) for everything
+      that took the static path, which is most of the corpus. Fills the §5.2
+      bibliographic columns, never guessing — a partial date is discarded rather
+      than completed. Citations are mechanical (DOI, arXiv both schemes, PMID,
+      handle) and read from the text *and* the links; the page's own identifiers
+      are kept out of them, with arXiv's DOI derived from its URL because it
+      publishes no `citation_doi` tag
 - [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
 - [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
 - [ ] `P1-10` `extract/figures.py` — figure extraction with captions

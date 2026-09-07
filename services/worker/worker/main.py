@@ -76,6 +76,7 @@ from meridian_core.sources import get_source, touch_source, upsert_source
 
 from . import rawstore
 from .crawl import Crawler, validators
+from .extract import ExtractedDocument, extract_html
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
@@ -99,6 +100,11 @@ class NotKept(RuntimeError):
 #: belong to handlers that do not exist yet (P1-14, P1-28); claiming one would
 #: mean either failing a task that is not broken or handing it back forever.
 HANDLED_TASK_TYPES = ["url"]
+
+#: Media types `extract/html.py` handles. Everything else is metadata-only until
+#: its extractor exists — MarkItDown for Office formats (`P1-08`), PDFs
+#: (`P1-09`).
+HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 
 DEFAULT_CONCURRENCY = 4
 DEFAULT_IDLE_SLEEP_S = 5.0
@@ -215,6 +221,8 @@ class Kept:
 
     stored: StoredRaw
     changed: bool
+    #: None when the format has no extractor yet (`P1-08`, `P1-09`).
+    document: ExtractedDocument | None = None
 
 
 @dataclasses.dataclass
@@ -229,6 +237,7 @@ class WorkerStats:
     errored: int = 0
     stored: int = 0
     bytes_stored: int = 0
+    extracted: int = 0
     outcomes: Counter[str] = dataclasses.field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
@@ -241,6 +250,7 @@ class WorkerStats:
             "errored": self.errored,
             "stored": self.stored,
             "bytes_stored": self.bytes_stored,
+            "extracted": self.extracted,
             "outcomes": dict(self.outcomes),
         }
 
@@ -466,6 +476,7 @@ class Worker:
                 "attempt_number": claim.attempts + 1,
                 "stored": kept.stored.path if kept else None,
                 "content_changed": kept.changed if kept else None,
+                "chars": kept.document.char_count if kept and kept.document else None,
             },
         )
 
@@ -507,6 +518,7 @@ class Worker:
                 media_type=result.media_type,
                 current_retention=current_retention,
             )
+            document = self._extract(claim, result)
 
             async with self._session_factory() as sess:
                 _, changed = await upsert_source(
@@ -518,6 +530,7 @@ class Worker:
                     retention_tier=stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,
+                    **_bibliography(document),
                     **validators(result.headers),
                 )
                 await sess.commit()
@@ -531,7 +544,48 @@ class Worker:
         self._stats.stored += 1
         if stored.kept:
             self._stats.bytes_stored += stored.bytes_written
-        return Kept(stored=stored, changed=changed)
+        if document is not None and document.has_text:
+            self._stats.extracted += 1
+        return Kept(stored=stored, changed=changed, document=document)
+
+    def _extract(self, claim: Claim, result: FetchResult) -> ExtractedDocument | None:
+        """Turn the bytes into text, for the formats that have an extractor.
+
+        Returns None when the format has none yet — `P1-08` brings MarkItDown
+        for Office documents and `P1-09` brings PDFs — rather than raising. A
+        source with no extractor is metadata-only (§6.5), which is a resting
+        state the schema already has a word for, not a failure.
+
+        Extraction failing is not `NotKept`. The bytes are safely stored and can
+        be re-extracted whenever the extractor improves (§11.12); refetching the
+        page to try again would be spending a request to solve a local problem.
+        """
+        if result.media_type not in HTML_MEDIA_TYPES:
+            return None
+        try:
+            document = extract_html(
+                result.content,
+                result.final_url or claim.url,
+                browser_payload=result.browser_payload,
+            )
+        except Exception:
+            log.exception("extraction failed", extra={"url": claim.url, "task_id": claim.task_id})
+            return None
+
+        log.info(
+            "extracted",
+            extra={
+                "url": claim.url,
+                "task_id": claim.task_id,
+                "extractor": document.extractor,
+                "chars": document.char_count,
+                "has_text": document.has_text,
+                "links": len(document.links),
+                "citations": len(document.citations),
+                "title": document.title,
+            },
+        )
+        return document
 
     async def _settle_error(self, claim: Claim) -> None:
         """Give a task back after an exception the loop did not expect.
@@ -706,6 +760,32 @@ def main() -> None:
     quiet_exits = (KeyboardInterrupt, asyncio.CancelledError)
     with bind_run_id(f"worker-{settings.worker_id}"), contextlib.suppress(*quiet_exits):
         asyncio.run(run_worker(settings))
+
+
+def _bibliography(document: ExtractedDocument | None) -> dict[str, object]:
+    """The `sources` columns an extracted document can fill (§5.2).
+
+    Empty when there is no document, so a format with no extractor writes
+    nothing rather than writing nulls over what a previous fetch established.
+    Citations ride in `extra` — they are a list, `sources` has no column for
+    them, and `P1-14` is what turns them into queue rows.
+    """
+    if document is None:
+        return {}
+    fields: dict[str, object] = {
+        "title": document.title,
+        "author": document.author,
+        "publisher": document.publisher,
+        "publication_date": document.publication_date,
+        "language": document.language,
+        "doi": document.doi,
+        "text_available": document.has_text,
+    }
+    if document.citations:
+        fields["extra"] = {
+            "citations": [{"kind": c.kind, "value": c.value} for c in document.citations]
+        }
+    return fields
 
 
 def _backoff_for(consecutive_errors: int) -> float:

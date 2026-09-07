@@ -71,6 +71,13 @@ async def upsert_source(
     media_type: str | None = None,
     final_url: str | None = None,
     accessed_at: dt.datetime | None = None,
+    title: str | None = None,
+    author: str | None = None,
+    publisher: str | None = None,
+    publication_date: dt.date | None = None,
+    language: str | None = None,
+    doi: str | None = None,
+    text_available: bool | None = None,
     extra: dict[str, Any] | None = None,
 ) -> tuple[Source, bool]:
     """Create or update the source row for ``url``. Flushes; does not commit.
@@ -103,6 +110,30 @@ async def upsert_source(
         row.source_tier = _not_lower(row.source_tier if not created else None, source_tier)
     if retention_tier is not None:
         row.retention_tier = retention_tier
+
+    # Bibliographic metadata, from whatever the extractor could read off the
+    # page (§5.2). Same rule as the validators: None is "the page did not say",
+    # so a re-fetch of a page that dropped its `<meta>` tags does not erase the
+    # title a previous fetch found.
+    if title is not None:
+        row.title = title
+    if author is not None:
+        row.author = author
+    if publisher is not None:
+        row.publisher = publisher
+    if publication_date is not None:
+        row.publication_date = publication_date
+    if language is not None:
+        row.language = language
+    if doi is not None:
+        row.doi = doi
+    if text_available is not None:
+        # This one *does* overwrite in both directions. A page that used to
+        # extract and now does not is a real change — a paywall going up, a
+        # redesign — and leaving it True would leave the corpus claiming text it
+        # cannot produce.
+        row.text_available = text_available
+
     row.accessed_at = accessed_at or _now()
 
     # Media type and the URL actually served are not columns — `sources` predates

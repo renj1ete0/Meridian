@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.13.0"
+version = "0.14.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [
@@ -9,6 +9,7 @@ dependencies = [
     # the core package is what the API and orchestrator import for database
     # access — an HTTP client has no business in that dependency closure.
     "httpx>=0.28",
+    "trafilatura>=2.2.0",
 ]
 
 [build-system]

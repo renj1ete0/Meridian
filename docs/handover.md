@@ -15,8 +15,8 @@ add it here.
 
 Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
 bytes come out, politely, without becoming a route into the network, leaving a record
-of itself, and keeping what it read — and now with nobody watching. As of `v0.13.0`,
-598 tests pass with a real Postgres.
+of itself, keeping what it read, and reading it — and now with nobody watching. As
+of `v0.14.0`, 663 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -50,20 +50,26 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
                     ▼
         worker.main._keep — the bytes, before the settle
                     │
-        ┌───────────┴────────────┐
-        ▼                        ▼
-   rawstore.store()       upsert_source()
-   path from the URL      checksum, etag,
-   primary only (§5.4)    tier, raw path
+        ┌───────────┬────────────┐
+        ▼           ▼            ▼
+   rawstore     extract/     upsert_source()
+   .store()     html.py      checksum, etag, tier,
+   path from    trafilatura  raw path, title, date,
+   the URL,     or crawl4ai  language, doi,
+   primary      fit_markdown text_available
+   only (§5.4)
                     │
                     ▼
         worker.main settles the task
         queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** No extraction, no embeddings, no API, no frontend. The
-bytes now land on disk and in `sources`, and nothing turns them into chunks
-(`P1-07`–`P1-10`).
+**What does not exist yet.** No chunking, no embeddings, no API, no frontend. HTML
+is extracted; PDFs and Office documents are stored and left metadata-only until
+`P1-09` and `P1-08`. **The extracted text is not persisted anywhere** — chunking is
+`P2-02`, so today extraction fills the `sources` metadata columns and the text
+itself is discarded. That is fine for a primary source, whose raw file can be
+re-extracted, and lossy for a `background` one, which has no file (see §5.4 below).
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
 Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
@@ -175,6 +181,20 @@ pytest with a bare `KeyError` on a stash key rather than anything that names the
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
 
+### `iterlinks()` is not a link list
+
+lxml's `iterlinks()` yields every URL in a document — favicons, stylesheets, scripts,
+`apple-touch-icon` at six sizes. On www.lta.gov.sg that was 145 "links", of which 77
+were documents. A frontier fed from it spends its budget fetching PNGs.
+`extract/html.py` takes `//a/@href | //area/@href` instead.
+
+### trafilatura wants bytes, not a decoded string
+
+It does its own encoding detection, which is the entire point of handing it the raw
+response body: a page that declares UTF-8 and serves Latin-1 is common, and decoding
+here first turns a recoverable document into replacement characters. `extract_html`
+accepts both and passes bytes straight through.
+
 ### A dev database that has actually crawled breaks absolute-count assertions
 
 `test_seed_loads_no_content` asserted the content tables were *empty* after seeding,
@@ -276,6 +296,15 @@ And `v0.13.0`, where the *second* run is the evidence:
 | Conditional requests, finally live | second pass: 4 of 5 returned a real `304`, zero bytes |
 | Checksum change detection | the fifth answered `200` with `"content_changed": false` |
 
+And `v0.14.0`:
+
+| Behaviour | Evidence |
+|---|---|
+| HTML extraction over the seeded frontier | 7 fetched, 6 extracted, 265–987 chars each, titles and dates on every one |
+| Metadata-only is a real resting state | www.sae.org → 62 visible chars, a JS shell → `text_available=False`, still a source row |
+| Real bibliographic metadata | arxiv.org/abs/2401.02777 → title, `2024-01-05`, abstract, `10.48550/arxiv.2401.02777` |
+| A paper does not cite itself | the same arXiv page → `citations == ()` after self-identifier exclusion |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -285,22 +314,32 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**Extraction (`P1-07`–`P1-10`).** The bytes are now on disk and in `sources`; nothing
-turns them into chunks. Three things to know before starting:
+**The remaining extractors: `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10` (figures).**
+`Worker._extract` dispatches on `result.media_type` against `HTML_MEDIA_TYPES`; adding
+a format is a branch there plus a module under `worker/extract/`. Two constraints
+carried from AGENTS.md and §6.6: MarkItDown gets `convert_local()` or
+`convert_stream()` on already-fetched bytes, never `convert()` on a URL; and OCR never
+runs inline — a scanned PDF is enqueued and the source stays metadata-only.
 
-- **Read from the store, not from memory.** `Worker._keep` already has the bytes and
-  could hand them straight on, but a background source has no file behind it and a
-  re-extraction pass has no fetch at all. Extraction should take a `sources` row and
-  read `raw_file_path` through `rawstore.resolve()`, which is what makes reprocessing
-  (§11.12) possible later. `sources.extra["media_type"]` is what says which parser.
-- **`upsert_source` already tells you when not to bother.** It returns `changed`, and
-  a re-crawl of an unchanged page should skip extraction and embedding entirely.
-  Wire that in from the start; retrofitting it means a pass that re-derives the whole
-  corpus every night.
-- **Background sources have a checksum and no file.** `raw_file_path IS NULL` means
-  deliberately not kept, not missing, so extraction has to happen *in the same pass*
-  as the fetch for them or it never happens at all. That asymmetry is the one thing
-  in §5.4 that will bite.
+**The gap worth closing next, though, may be `P2-02` (chunking) rather than either.**
+Extraction currently produces text and throws it away, because `chunks` is the only
+home the schema has for it and chunking is a phase-2 task. Two consequences:
+
+- A **primary** source is fine — its raw file is kept, so §11.12's reprocessing can
+  re-derive the text whenever it is wanted.
+- A **background** source is not. It has a checksum and no file, so text not chunked
+  during the fetch pass is gone until the page is fetched again. That asymmetry is
+  the one thing in §5.4 that will bite, and it is already live.
+
+**`upsert_source` already tells you when not to bother.** It returns `changed`, and a
+re-crawl of an unchanged page should skip re-extraction and re-embedding entirely.
+Wire that in when chunking lands; retrofitting it means a pass that re-derives the
+whole corpus every night.
+
+**Links go nowhere yet.** `ExtractedDocument.links` is populated, logged, and dropped
+— the frontier is `P1-06`/`P1-28`/`P5-01`. They are deliberately *not* stored in
+`sources.extra`: 500 URLs per source is ~40KB of JSONB, which is 2GB across a 50k
+corpus, and the right destination is queue rows rather than a column.
 
 **`P1-06` and `P1-28` are both cheap and now have a loop to feed.** The prefilter keeps
 already-seen URLs out of the queue; sitemap discovery enqueues the sitemaps

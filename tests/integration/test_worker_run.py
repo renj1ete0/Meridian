@@ -12,6 +12,7 @@ subject, not this one's.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from contextlib import asynccontextmanager
 
@@ -382,7 +383,6 @@ async def test_a_task_still_backing_off_is_not_claimed(
     session_for, resolve, raw_store, run_domain, run_topic, cleanup
 ) -> None:
     """A dead domain must cost one attempt per backoff window, not one per loop."""
-    import datetime as dt
 
     sess = await session_for("rw")
     task = await enqueue(
@@ -438,7 +438,6 @@ async def test_shutdown_releases_the_lease_on_an_unfinished_task(
     worker_id = f"test-{uuid.uuid4().hex[:8]}"
     task = await enqueue(sess, run_domain, run_topic)
     task.claimed_by = worker_id
-    import datetime as dt
 
     task.claimed_at = dt.datetime.now(dt.UTC)
     await sess.flush()
@@ -637,7 +636,6 @@ async def test_a_304_advances_the_access_time_and_nothing_else(
     session_for, resolve, raw_store, run_domain, run_topic, cleanup
 ) -> None:
     """The freshness check, which had no observable effect before this task."""
-    import datetime as dt
 
     sess = await session_for("rw")
     url = f"https://{run_domain}/a"
@@ -693,3 +691,169 @@ async def test_a_store_that_cannot_be_written_retries_instead_of_advancing(
     # record: the network was fine and the disk was not.
     rows = await attempts_for(sess, task.task_id)
     assert rows[0].outcome == "success"
+
+
+# --------------------------------------------------------------------------
+# Extraction (P1-07)
+# --------------------------------------------------------------------------
+
+
+ARTICLE = (
+    "Ridership on the Downtown Line rose by eleven per cent over the period, "
+    "against a network average of four. The report attributes the gap to feeder "
+    "bus reallocation rather than to the line itself. "
+) * 3
+
+
+async def test_a_fetched_page_fills_in_the_bibliographic_columns(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§5.2's source record, populated from the page rather than left null.
+
+    Written against the database because these are the columns a citation is
+    built from — a title that only ever existed in a dataclass is not a citation.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+
+    body = (
+        '<!doctype html><html lang="en"><head><title>Rail Ridership 2026</title>'
+        '<meta property="article:published_time" content="2026-04-02T00:00:00Z">'
+        '<meta name="citation_doi" content="10.9999/ridership.2026">'
+        "</head><body><nav>Skip to main content</nav>"
+        f"<article><h1>Rail Ridership 2026</h1><p>{ARTICLE}</p>"
+        "<p>Method follows doi:10.5555/method-paper.</p>"
+        '<a href="/deeper/report.pdf">full report</a></article>'
+        "<footer>All rights reserved.</footer></body></html>"
+    ).encode()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    assert stats.extracted == 1
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source.title == "Rail Ridership 2026"
+    assert source.publication_date == dt.date(2026, 4, 2)
+    assert source.language == "en"
+    assert source.doi == "10.9999/ridership.2026"
+    assert source.text_available is True
+    assert {c["value"] for c in source.extra["citations"]} == {"10.5555/method-paper"}
+
+
+async def test_a_page_with_nothing_extractable_stays_metadata_only(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§6.5: a source with no text is still a citable graph participant.
+
+    `text_available` is what makes the difference findable — the alternative is
+    a source that looks identical to one nobody has tried to extract yet.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+
+    def shell(request: httpx.Request) -> httpx.Response:
+        return streamed(
+            200,
+            headers={"content-type": "text/html"},
+            chunks=[b"<html><body><nav>menu</nav></body></html>"],
+        )
+
+    worker, _ = build_worker(sess, shell, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source is not None, "a page with no text is still a source"
+    assert source.text_available is False
+    assert stats.stored == 1 and stats.extracted == 0
+    assert stats.fetched == 1, "nothing to extract is not a failed fetch"
+
+
+async def test_a_format_with_no_extractor_yet_is_not_a_failure(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """PDFs are `P1-09`. Until then they are stored and left metadata-only.
+
+    The raw file is what makes that recoverable: §11.12's reprocessing re-derives
+    from it, so a PDF fetched today gains its text the day the extractor lands.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    task = await enqueue(sess, run_domain, run_topic)
+
+    def pdf(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "application/pdf"}, chunks=[b"%PDF-1.7 body"])
+
+    worker, _ = build_worker(sess, pdf, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "fetched"
+    assert stats.extracted == 0 and stats.stored == 1
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source.text_available is False
+    assert source.raw_file_path.endswith(".pdf"), "the bytes are kept so P1-09 can re-derive"
+
+
+async def test_extraction_failing_does_not_lose_the_fetch(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    """Unlike a storage failure, a bad extractor must not retry the fetch.
+
+    The bytes are already safely stored and re-extractable (§11.12); going back
+    to the network would spend a request to solve a local problem.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    task = await enqueue(sess, run_domain, run_topic)
+    worker, _ = build_worker(sess, ok_html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("the extractor fell over")
+
+    monkeypatch.setattr("worker.main.extract_html", explode)
+
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "fetched", "the fetch worked; only extraction did not"
+    assert stats.stored == 1 and stats.extracted == 0
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source.checksum is not None
+    assert source.raw_file_path is not None
+
+
+async def test_a_title_found_once_is_not_erased_by_a_later_fetch(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A redesign that drops the `<title>` must not blank the citation.
+
+    Same rule as the ETag: None means "the page did not say", never "clear it".
+    """
+    sess = await session_for("rw")
+    url = f"https://{run_domain}/a"
+    await upsert_source(sess, url, checksum="sha256:old", title="The Original Title")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+
+    def untitled(request: httpx.Request) -> httpx.Response:
+        return streamed(
+            200,
+            headers={"content-type": "text/html"},
+            chunks=[f"<html><body><article><p>{ARTICLE}</p></article></body></html>".encode()],
+        )
+
+    worker, _ = build_worker(sess, untitled, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    await worker.run()
+
+    source = await get_source(sess, url)
+    assert source.title == "The Original Title"
+    assert source.text_available is True, "the new fetch did extract text"
