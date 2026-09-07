@@ -25,7 +25,7 @@ than deleting has to be worked out, and which needs the graph to exist first.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,3 +118,66 @@ def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
         )
         for chunk in chunks
     ]
+
+
+async def chunks_without_embeddings(
+    sess: AsyncSession, *, limit: int = 256, after_id: int = 0
+) -> list[Chunk]:
+    """The next batch of chunks that have no vector yet (task `P2-01`).
+
+    Ordered by id and resumable through ``after_id`` rather than by offset. A
+    backfill that pages with OFFSET re-scans everything it has already read on
+    every page, and worse, shifts under its own feet as the crawl writes new
+    chunks in the middle of the run.
+
+    `embedding IS NULL` is the whole queue. `P2-02` writes chunks with no vector
+    by design — embedding is a separate pass so the fetch loop never waits on a
+    model — so a NULL here means "not embedded yet" and nothing else.
+    """
+    rows = await sess.execute(
+        select(Chunk)
+        .where(Chunk.embedding.is_(None), Chunk.chunk_id > after_id)
+        .order_by(Chunk.chunk_id)
+        .limit(limit)
+    )
+    return list(rows.scalars())
+
+
+async def store_embeddings(sess: AsyncSession, vectors: Mapping[int, Sequence[float]]) -> int:
+    """Attach vectors to chunks by id. Returns how many landed. Flushes.
+
+    Skips a chunk that has vanished rather than failing the batch: a source
+    re-crawled between the read and the write has had its chunks replaced
+    (`replace_chunks`), and the new ones are already in the queue behind this
+    batch. Losing the batch over one deleted row would make a long backfill
+    fragile in exactly the situation it is most likely to meet.
+    """
+    if not vectors:
+        return 0
+
+    rows = await sess.execute(select(Chunk).where(Chunk.chunk_id.in_(list(vectors))))
+    written = 0
+    for chunk in rows.scalars():
+        chunk.embedding = list(vectors[chunk.chunk_id])
+        written += 1
+
+    await sess.flush()
+    if written != len(vectors):
+        log.info(
+            "some chunks vanished before their vectors were stored",
+            extra={"requested": len(vectors), "written": written},
+        )
+    return written
+
+
+async def embedding_backlog(sess: AsyncSession) -> int:
+    """How many chunks are still waiting for a vector.
+
+    The number §12.5's health line wants: a backlog that only grows means the
+    embedder has stopped, which is otherwise invisible — the crawl keeps
+    working and the corpus keeps growing and none of it becomes searchable.
+    """
+    return (
+        await sess.scalar(select(func.count()).select_from(Chunk).where(Chunk.embedding.is_(None)))
+        or 0
+    )

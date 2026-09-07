@@ -224,8 +224,8 @@ class Prefilter:
         """True if this URL's host is on the seeded blocklist, or under one.
 
         Suffix matching, not equality. `registrable_domain` keeps subdomains —
-        correctly, since `datamall.lta.gov.sg` is a distinct source from
-        `lta.gov.sg` and tiering depends on telling them apart — so an exact
+        correctly, since a subdomain is a distinct source from its apex and
+        tiering depends on telling them apart — so an exact
         match would block `facebook.com` and wave `m.facebook.com` through,
         which is the same site and the whole reason the entry is there.
         """

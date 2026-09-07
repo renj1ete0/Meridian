@@ -36,8 +36,8 @@ def resolve_tier(domain: str, mapping: dict[str, Any]) -> str:
 
     Resolution order is exact match, then the **longest** matching suffix
     pattern, then the default. Longest-wins matters: ``*.gov.sg`` and ``*.sg``
-    can both match, and the specific one has to win or every Singapore domain
-    collapses into one tier.
+    can both match, and the specific one has to win or every domain under the
+    broader suffix collapses into one tier.
     """
     host = registrable_domain(domain)
 

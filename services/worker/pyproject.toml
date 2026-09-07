@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.20.0"
+version = "0.21.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [
@@ -12,6 +12,11 @@ dependencies = [
     "trafilatura>=2.2.0",
     "markitdown[docx,outlook,pptx,xlsx]>=0.1.7",
     "onnxruntime>=1.29",
+]
+
+[project.optional-dependencies]
+embed = [
+    "sentence-transformers>=3.0",
 ]
 
 [build-system]

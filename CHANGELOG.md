@@ -8,6 +8,60 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-09-08
+
+**Phase 2 opens: the corpus becomes searchable by meaning.** Verified against
+the real crawl — a natural-language query returns the relevant agency page and
+its annual report, neither of which shares a word with the query.
+
+### Added
+
+- `P2-01` `worker/embeddings.py` — bge-m3 through sentence-transformers. §4
+  chose a multilingual model because serious literature for the comparison set is
+  substantially non-English, and an English-only model would bias the corpus
+  toward Western sources while every measurement of it looked fine
+- **Nothing loads until something asks for a vector.** `worker.main` imports the
+  package tree and never embeds; a 2.3GB load at import would sit in the
+  crawler's memory budget for work it does not do. The runtime is imported
+  inside the loader too, so a worker built without the `embed` extra starts,
+  crawls, and reports the absence rather than dying at startup
+- **The dimension is checked at load, not discovered at insert.** A model
+  returning 768 would otherwise surface as a pgvector error a thousand chunks
+  later, pointing at the write rather than at the misconfiguration
+- `worker/embed.py` — the backfill. §6.1 draws embedding inside the fast loop
+  and this runs it as a separate pass: the fetch path never touches the model,
+  the worker image stays at 729MB, and a slow encode cannot stall a fetch that
+  had nothing to do with it. The schema was already built for the split, since
+  `chunks.embedding` is nullable and `P2-02` writes vectors as NULL by design
+- **Resumable by construction.** The queue is `embedding IS NULL` — there is no
+  cursor to corrupt and no state outside the table — and one batch is one
+  transaction, so an interrupted four-hour backfill keeps everything up to its
+  last commit
+- `chunks_without_embeddings()`, `store_embeddings()` and `embedding_backlog()`
+  in `meridian_core/chunks.py`. Paging is by id rather than OFFSET: a backfill
+  that pages by offset re-scans what it has read on every page and shifts under
+  its own feet as the crawl writes new chunks in the middle of the run
+- `FakeEmbedder` — deterministic unit vectors from a hash, not a mock. Identical
+  text embeds identically and cosine behaves, which is what lets `P2-03`'s
+  novelty gate and `P2-06`'s search be built and tested without a 2.3GB download
+  in CI
+
+### Fixed
+
+- `httpx`, `huggingface_hub`, `transformers` and friends quieted to WARNING.
+  Loading bge-m3 emitted around forty INFO lines of Hub HEAD requests into a
+  JSON log stream before saying anything useful
+
+### Notes
+
+- `sentence-transformers` is an **optional extra** (`meridian-worker[embed]`),
+  so the worker image does not carry torch. Whatever runs the backfill installs
+  it; the crawler does not need to
+- Measured on this x86 machine at ~1.1 chunks/second on CPU with a batch of 8.
+  The arm64 figure is what `P1-16` will actually reveal, and the batch size is
+  deliberately small — §3's node is a 16GB board shared with Postgres, and a
+  batch that swaps is far slower than two that do not
+
 ## [0.20.0] — 2026-09-08
 
 **The worker becomes deployable.** It has been production-shaped for five
@@ -176,9 +230,10 @@ ever reads this flag.
 had been queueing PDFs faster than anything could read them, and on a government
 corpus that is a large share of the substance rather than an edge case.
 
-Verified live against real LTA documents: `MTM.pdf` extracted across 2 pages,
-the Land Transport ITM extracted with its own title read out of the PDF's Info
-dictionary, and every chunk carrying the page number a citation resolves to.
+Verified live against real government documents: a short PDF extracted across
+2 pages, a long transport master plan extracted with its own title read out of
+the PDF's Info dictionary, and every chunk carrying the page number a citation
+resolves to.
 
 ### Added
 
@@ -476,8 +531,8 @@ out tasks nobody claimed, `Crawler.fetch` fetched URLs nobody asked for, and
 that runs them — which is the whole difference between a crawler and a library
 that could crawl.
 
-Verified against the real web, not only against doubles: seven Singapore
-government and standards sites fetched under their own robots.txt and delays, a
+Verified against the real web, not only against doubles: seven government and
+standards sites fetched under their own robots.txt and delays, a
 403 abandoned rather than retried three times, the health line printed with
 §12.5's queue depth and fetch success rate, and `SIGTERM` finishing the two
 requests in flight before stopping.

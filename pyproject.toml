@@ -1,6 +1,6 @@
 [project]
 name = "meridian"
-version = "0.20.0"
+version = "0.21.0"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"

@@ -41,16 +41,15 @@ class GazetteerTerm(Base, TimestampMixin):
     topic_labels: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
     # Which country this expansion belongs to; NULL for genuinely global terms.
-    # LTA is the Land Transport Authority in Singapore and a Local Transport
-    # Authority in the UK.
+    # The same three-letter agency acronym routinely expands to different bodies
+    # in different countries.
     jurisdiction: Mapped[str | None] = mapped_column(Text, index=True)
 
     # True when the surface form collides — with a common word, with another
     # domain, or with another term in the SAME country. Jurisdiction alone does
-    # not settle it: in one Singapore transport document ERP is Electronic Road
-    # Pricing or Enterprise Resource Planning, COE is Certificate of Entitlement
-    # or Centre of Excellence, and PC is park connector, pedestrian crossing or
-    # personal computer.
+    # not settle it: within a single document a three-letter acronym can be a
+    # domain term or an unrelated piece of business vocabulary, and a two-letter
+    # one can have three readings at once.
     #
     # An ambiguous surface form therefore maps to SEVERAL rows here, and this
     # table can only offer candidates — it cannot decide. The resolver picks

@@ -72,6 +72,17 @@ _DEFAULT_LEVEL: Final[str] = "INFO"
 _NOISY_DEFAULTS: Final[dict[str, int]] = {
     "sqlalchemy.engine": logging.WARNING,
     "asyncpg": logging.WARNING,
+    # One `httpx` line per request would double the crawl log, and the fetcher
+    # already logs every fetch with the fields that matter.
+    "httpx": logging.WARNING,
+    "httpcore": logging.WARNING,
+    # Loading bge-m3 emits ~40 INFO lines of HEAD requests against the Hub
+    # before it says anything useful. That is a model load, not an event.
+    "huggingface_hub": logging.WARNING,
+    "sentence_transformers": logging.WARNING,
+    "transformers": logging.WARNING,
+    "urllib3": logging.WARNING,
+    "filelock": logging.WARNING,
 }
 
 

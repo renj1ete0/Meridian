@@ -16,20 +16,32 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. The crawl runs unattended, expands its
-own frontier, and reads HTML, PDFs and Office documents: `P1-01`–`P1-09`, `P1-11`–`P1-13`,
-`P1-15`, `P1-17`–`P1-21`, `P1-23`, `P1-24` and (pulled forward) `P2-02` are done,
-at 929 tests, and `P1-07`–`P1-09` now cover HTML, PDF and Office formats. Verified
-live — real LTA PDFs extracted with page-accurate chunks, and the injection screen
-clean across every page crawled so far. The only open phase-0 item is `P0-15`,
-deferred until phase 2 needs it.
+**Current phase: 2 opening, phase 1 not yet closed.** The crawl runs unattended,
+expands its own frontier, and reads HTML, PDFs and Office documents: `P1-01`–`P1-09`,
+`P1-11`–`P1-13`, `P1-15`, `P1-17`–`P1-21`, `P1-23`, `P1-24`, `P1-30` and (pulled
+forward) `P2-02` are done, at 964 tests. `P2-01` adds embeddings, so chunks now
+carry vectors. Verified live — real government PDFs extracted with page-accurate chunks,
+and the injection screen clean across every page crawled so far.
 
-Next: `P1-16`, the 48-hour acceptance run, is now actually attemptable — but
-`P1-22` (network topology) and `P1-26` (Crawl4AI's own image and health check)
-are what stand between a worker image that runs and a *stack* that does.
-`P1-28` (sitemaps) is still cheap; `P1-10` (figures) and `P1-14` (DOI
-resolution) are the remaining phase-1 extraction work. Or skip to phase 2 and
-reach the go/no-go sooner.
+Phase 1's checkpoint (`P1-16`, the 48h run) is the gate on phase 2's go/no-go
+(`P2-09`), because a search quality judgement over 17 sources and 28 chunks
+measures nothing. The agreed sequence:
+
+1. `P1-28` sitemaps — the cheapest frontier widener, and it decides what the
+   long run is worth. `RobotsRules.sitemaps` is already parsed and unused
+2. `P1-22` network topology, then `P1-26` Crawl4AI's image and health check —
+   what stands between a worker image that runs and a *stack* that does
+3. A short bounded run (`MERIDIAN_WORKER_MAX_TASKS`, not a timer) as a **stack**
+   smoke test, deployed to the server rather than run from a checkout
+4. `P2-03` novelty gate, then `P2-05`/`P2-04`/`P2-06` search, built against that
+   real output. The novelty gate goes before the long run deliberately: nothing
+   deletes from the raw store (`P1-31`), so an ungated 48h run keeps every
+   near-duplicate it finds
+5. `P1-16` the 48h run, then `P0-15` held-out questions — which must be written
+   before `P2-06` is judged, not after — and `P2-09`, the call
+
+`P1-10` (figures) and `P1-14` (DOI resolution) are the remaining phase-1
+extraction work and neither blocks the checkpoint.
 
 ---
 
@@ -245,7 +257,14 @@ reach the go/no-go sooner.
 
 *Checkpoint: is searching the corpus already useful with no model involved?*
 
-- [ ] `P2-01` `embeddings.py` — bge-m3 wrapper, batching, arm64 sanity check
+- [x] `P2-01` `embeddings.py` — bge-m3 through sentence-transformers, lazy-loaded
+      and dimension-checked at load rather than at insert. Runs as a **separate
+      backfill pass** (`python -m worker.embed`) over `embedding IS NULL` rather
+      than inside the fetch loop: the crawler never carries a 2.3GB model, and
+      the queue is a predicate so the pass is resumable with no state outside
+      the table. `FakeEmbedder` gives `P2-03` and `P2-06` something to build
+      against without the download. `sentence-transformers` is an optional
+      extra, so the worker image stays lean
 - [x] `P2-02` Chunking with `page_or_offset` captured at extraction time —
       **built in phase 1** (`v0.15.0`), because `P1-07` was discarding the text
       it extracted and a `background` source keeps no raw file to re-derive from.

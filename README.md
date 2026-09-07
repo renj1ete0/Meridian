@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.20" src="https://img.shields.io/badge/version-0.20-0D6F7C">
+  <img alt="Version 0.21" src="https://img.shields.io/badge/version-0.21-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -218,9 +218,8 @@ and a monthly ceiling are enforced server-side, because the seed→crawl→synth
 compounds if left uncapped.
 
 **Can I use it for my own topics?**
-Yes. Topics are configuration, not code — the shipped set (walkability, on-demand buses,
-AV deployment) is just the author's. Topics can be added, weighted, paused, and archived
-at runtime.
+Yes. Topics are configuration, not code — the set in `config/topics.yaml` is just the
+author's. Topics can be added, weighted, paused, and archived at runtime.
 
 **Why "Meridian"?**
 A meridian is the reference line a position is measured against — and the sun's zenith,

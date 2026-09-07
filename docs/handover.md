@@ -136,7 +136,7 @@ a run where every task retried three times and nothing was stored is this, not a
 
 Without `MERIDIAN_WORKER_MAX_TASKS` it runs until signalled, which is correct and not
 what you want at a prompt. It crawls the real web — the seeded frontier is real
-Singapore government sites — so a run leaves real `queue` and `fetch_attempts` rows
+real government sites — so a run leaves real `queue` and `fetch_attempts` rows
 behind in the dev database. Reset the statuses afterwards if the next thing you do
 depends on the frontier still being `pending`.
 

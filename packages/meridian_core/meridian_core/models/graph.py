@@ -105,9 +105,8 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
 
     # ISO country code, or NULL for genuinely global concepts. Part of the
     # uniqueness key, because the same name is routinely a different thing in a
-    # different country: "Light Rail Transit" is a rubber-tyred automated feeder
-    # in Singapore, a metro-like system in Kuala Lumpur, and a street-running
-    # tram in Calgary. Alias matching and string matching both succeed on those,
+    # different country: one term can name three unrelated systems in three
+    # jurisdictions. Alias matching and string matching both succeed on those,
     # so without this the graph is *forced* to conflate them — and §5.5's rule
     # that a bad merge is worse than a duplicate applies exactly here.
     jurisdiction: Mapped[str | None] = mapped_column(Text, index=True)
@@ -163,10 +162,10 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
     # Analogical expansion (§7.2) decomposes a context into attributes and
     # searches each axis independently, so a comparison is only meaningful
     # alongside the axis it runs on and the point where it breaks down.
-    # "Singapore is equatorial, therefore Jakarta's findings apply" is the
-    # shallow inference this guards against: the two share climate and almost
-    # nothing on governance capacity or income. Comparisons without stated
-    # limits are how bad policy papers get written.
+    # "these two places share one attribute, therefore findings transfer" is
+    # the shallow inference this guards against: two cases can match on one
+    # axis and diverge completely on the ones that decide the outcome.
+    # Comparisons without stated limits are how bad policy papers get written.
     similarity_dimension: Mapped[str | None] = mapped_column(Text)
     disanalogy: Mapped[str | None] = mapped_column(Text)
 
