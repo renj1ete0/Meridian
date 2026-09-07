@@ -18,7 +18,8 @@ bytes come out, politely, without becoming a route into the network, leaving a r
 of itself, keeping what it read, reading it, cutting it into citable chunks, and
 following its links onward — and all of it with nobody watching. HTML and PDFs are
 both read, Office documents too, and every page is screened for prompt injection on
-the way past. As of `v0.19.0`, 929 tests pass with a real Postgres.
+the way past — and as of `v0.20.0` it does all of that from a container image, not
+just from a checkout. 929 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -201,6 +202,15 @@ tests parse. The fixture is gone with the plugin, and asking for it fails deep i
 pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
+
+### A workspace package must declare its own dependencies, or only the container finds out
+
+`meridian_core.policy` imports `yaml`, and `pyyaml` was declared on the *root*
+project. Development never noticed, because the root install provides it to
+everything. A container built with `uv sync --package meridian-worker` gets
+`meridian_core` and nothing the root happens to also depend on, and died on
+`ModuleNotFoundError` at import. Building the image did not catch it; *running* it
+did. Worth remembering when `services/api` and `services/orchestrator` get images.
 
 ### MarkItDown's declared media type is a hint, not a gate
 
@@ -452,6 +462,14 @@ And `v0.19.0`:
 | The converter allowlist holds | a plain zip and an HTML page mislabelled `.docx` → `markitdown-failed`, not converted |
 | OOXML metadata is bomb-proof | a 200MB decompression bomb in `docProps/core.xml` → refused with an honest header *and* a forged one, 0MB RSS |
 
+And `v0.20.0`, from inside the container rather than from a checkout:
+
+| Behaviour | Evidence |
+|---|---|
+| The worker image runs the whole pipeline | `--read-only --cap-drop ALL`, unprivileged: 3 pages fetched, stored, extracted, chunked, 175 links queued |
+| poppler is present and found | `HEALTHCHECK` and `pdf.available()` both true inside the image |
+| The raw store works through a bind mount | files written to the host through the container's uid |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -461,10 +479,10 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**`P1-30` before `P1-16`.** The 48-hour acceptance run needs something that restarts
-the worker, and there is no systemd unit and no worker Dockerfile. The Dockerfile now
-also has to install **poppler-utils**, or every PDF in production fails the loud way
-`extract_pdf` was written to fail.
+**`P1-22` and `P1-26` before `P1-16`.** The worker image exists and runs, but the
+*stack* does not: `docker-compose.yml` still admits in a comment that `internal: true`
+blocks the outbound access worker, crawl4ai and searxng all need, and Crawl4AI has no
+image and no health check the worker trusts. The 48-hour acceptance run needs both.
 
 **Decide `P1-32` before the first real edges land.** `replace_chunks()` deletes a
 source's chunks when its content changes, and `edges.supporting_chunk_ids` is an

@@ -12,7 +12,7 @@
 export
 
 .PHONY: dev-up dev-down up down logs migrate seed \
-        snapshot-corpus restore-corpus backup test build-push
+        snapshot-corpus restore-corpus backup test build-push build-worker
 
 # --- Local development (infra only) -----------------------------------------
 dev-up:
@@ -61,3 +61,9 @@ test:
 
 build-push:
 	./scripts/build_and_push.sh
+
+# Build the worker image locally, for the host's own architecture. The build
+# context is the repo root because the services share a uv workspace; multi-arch
+# release builds go through `build-push` (scaffold §5).
+build-worker:
+	docker build -f services/worker/Dockerfile -t meridian-worker:dev .

@@ -1,0 +1,14 @@
+# The build context is the repo root (services depend on the uv workspace), so
+# this is what keeps that from meaning "the whole working tree".
+.git/
+.venv/
+.devdata/
+.env
+.env.*
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+tests/
+web/node_modules/
+docs/design/assets/

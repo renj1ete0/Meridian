@@ -8,6 +8,60 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-09-08
+
+**The worker becomes deployable.** It has been production-shaped for five
+releases — read-only, unprivileged, graceful on `SIGTERM` — and there was still
+no way to run it anywhere but a laptop, because the `services/worker/Dockerfile`
+that `docker-compose.yml` has referenced since `P0-01` did not exist.
+
+### Added
+
+- `P1-30` `services/worker/Dockerfile`. Multi-stage uv build on
+  `python:3.12-slim-bookworm`, pinned to the floor every `pyproject` declares so
+  a wheel that exists only for a newer interpreter fails at build time rather
+  than on the Pi at 3am. Built from the repository root, because the services
+  share a uv workspace and a context narrowed to `services/worker` cannot see
+  `meridian_core`
+- **`poppler-utils` in the runtime image.** Not optional: `extract_pdf` raises
+  rather than degrading, so an image without it is one where every PDF fails
+  loudly on the first crawl
+- `deploy/meridian.service`. The scaffold is specific that compose's
+  `restart: unless-stopped` **or** systemd supervises, not both — two
+  supervisors racing to restart one container is how a crash loop becomes
+  invisible — so the unit is `oneshot` and owns only the stack. `TimeoutStopSec`
+  is 300 because `P1-15` drains rather than drops on `SIGTERM`, and killing it
+  early throws the work away and strands the leases for their full expiry
+- `make build-worker`, a `.dockerignore`, and a `HEALTHCHECK` that fails while
+  poppler is missing or the package tree is broken — the two faults that would
+  otherwise surface only as a corpus that quietly stopped growing
+
+### Fixed
+
+- **`meridian_core` never declared its dependency on `pyyaml`.** `policy.py`
+  imports it to read `config/fetch_policy.yaml` as the floor under every fetch
+  policy, and it was declared on the *root* project instead. Development never
+  noticed because the root install provides it; a container built with
+  `--package meridian-worker` gets `meridian_core` and nothing the root happens
+  to also depend on, and died on `ModuleNotFoundError: No module named 'yaml'`
+  at import. Found by running the image rather than by building it
+- `HOME=/tmp` in the image. The filesystem is read-only apart from the tmpfs,
+  and onnxruntime — pulled in by MarkItDown's file sniffing — prints a
+  plain-text warning to stderr when it cannot persist a telemetry id. That
+  landed in the middle of a JSON log stream a health check greps by severity
+
+### Notes
+
+- Verified by running the built image against the real database with
+  `--read-only --cap-drop ALL` as an unprivileged user: three real government
+  pages fetched, stored, extracted, chunked, and 175 links queued, to a
+  bind-mounted raw store. Building it proves nothing; §13.4 is about what
+  happens when nobody is watching
+- This does **not** close phase 1's checkpoint. `P1-22` (the compose file still
+  admits in a comment that `internal: true` blocks the outbound access the
+  worker needs) and `P1-26` (Crawl4AI has no image and no health check the
+  worker trusts) are what stand between a worker that runs and a stack that does
+
 ## [0.19.0] — 2026-09-08
 
 **The last format gap closes.** §6.6 routes Office documents to MarkItDown, and

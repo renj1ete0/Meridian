@@ -24,11 +24,12 @@ live — real LTA PDFs extracted with page-accurate chunks, and the injection sc
 clean across every page crawled so far. The only open phase-0 item is `P0-15`,
 deferred until phase 2 needs it.
 
-Next: `P1-30` (supervision, worker Dockerfile — which must also install
-`poppler-utils`), because `P1-16`'s 48-hour acceptance run needs something that
-restarts the process, and with every format now readable it is finally a
-meaningful test. `P1-28` (sitemaps) is still cheap. `P1-10` (figures) and
-`P1-14` (DOI resolution) are the remaining phase-1 extraction work.
+Next: `P1-16`, the 48-hour acceptance run, is now actually attemptable — but
+`P1-22` (network topology) and `P1-26` (Crawl4AI's own image and health check)
+are what stand between a worker image that runs and a *stack* that does.
+`P1-28` (sitemaps) is still cheap; `P1-10` (figures) and `P1-14` (DOI
+resolution) are the remaining phase-1 extraction work. Or skip to phase 2 and
+reach the go/no-go sooner.
 
 ---
 
@@ -225,13 +226,15 @@ meaningful test. `P1-28` (sitemaps) is still cheap. `P1-10` (figures) and
       Both are deletions, and there is no sweep. Needs the novelty gate (`P2-*`)
       to exist first, so this is a phase-2 follow-up — but the disk fills at
       phase-1 speed, so watch `du` before then
-- [ ] `P1-30` **Supervision the loop deliberately does not provide.** `worker/main.py`
-      handles `SIGTERM` gracefully and dies on anything it cannot handle, on the
-      assumption that something restarts it — §13.4's `Restart=always`. Nothing in
-      this repo provides that: there is no systemd unit, and `docker-compose.yml`
-      sets no `restart:` policy. Also needs a `services/worker/Dockerfile`, which
-      the compose file references and which does not exist — and which must
-      install `poppler-utils`, or `P1-09` fails loudly on every PDF in production
+- [x] `P1-30` **Supervision the loop deliberately does not provide.**
+      `services/worker/Dockerfile` (multi-stage uv build on `python:3.12-slim`,
+      `poppler-utils` for `P1-09`, unprivileged, runs read-only with `cap_drop:
+      ALL`) plus `deploy/meridian.service`. The scaffold is specific that
+      compose's `restart: unless-stopped` **or** systemd supervises, not both —
+      two supervisors racing to restart one container is how a crash loop goes
+      invisible — so the unit is `oneshot` and owns only the stack. Verified by
+      running the image against the real database: fetched, stored, extracted,
+      chunked and expanded the frontier, read-only, as an unprivileged user
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.19.0"
+version = "0.20.0"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 dependencies = [
@@ -8,6 +8,12 @@ dependencies = [
     "asyncpg>=0.30",
     "pgvector>=0.3.6",
     "pydantic>=2.10",
+    # `policy.file_defaults()` reads config/fetch_policy.yaml as the floor under
+    # every fetch policy (§13.1). Declared here rather than on the root project:
+    # a service installed with `--package meridian-worker` gets meridian_core and
+    # nothing the root happens to also depend on, which is exactly how the
+    # container found this missing and dev never did.
+    "pyyaml>=6.0",
 ]
 
 [build-system]

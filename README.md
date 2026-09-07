@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.19" src="https://img.shields.io/badge/version-0.19-0D6F7C">
+  <img alt="Version 0.20" src="https://img.shields.io/badge/version-0.20-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -133,7 +133,9 @@ cd web && npm run dev                               # UI on :21115
 ```
 
 Production runs the whole stack in containers behind `cloudflared`
-(`docker compose up -d`). Full sequence: [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
+(`docker compose up -d`), supervised by [`deploy/meridian.service`](deploy/meridian.service).
+`make build-worker` builds the ingestion image locally. Full sequence:
+[scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
 
 > `packages/meridian_core` and the worker are built and tested, so `make migrate`,
 > `make seed`, `make test` and `python -m worker.main` all work today — the worker

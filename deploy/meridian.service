@@ -1,0 +1,38 @@
+# Supervision for the whole stack (task P1-30, spec §13.4, scaffold §5).
+#
+# §13.4 asks for `Restart=always` so the ingestion node survives crashes and
+# reboots unattended. The scaffold is specific about *where* that lives: use
+# Docker's `restart: unless-stopped` **or** systemd, not both — two supervisors
+# racing to restart the same container is how a crash loop becomes invisible.
+#
+# So compose owns the per-service restarts (`x-common` already sets
+# `restart: unless-stopped`) and this unit owns only the stack: bring it up at
+# boot, take it down on shutdown. That is why it is `oneshot` rather than a
+# long-running service — there is no process for systemd to watch, and claiming
+# otherwise would have it restart `docker compose up` in a loop.
+#
+# Install:
+#   sudo cp deploy/meridian.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now meridian
+
+[Unit]
+Description=Meridian — autonomous research system
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/meridian/app
+# Pull before up so a deploy is `systemctl restart meridian` and nothing else.
+ExecStartPre=/usr/bin/docker compose pull --quiet
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+# Long enough for the worker to finish the fetches it has in flight: `P1-15`
+# handles SIGTERM by draining rather than dropping, and killing it early throws
+# away the work and strands the leases for their full 15 minutes.
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target
