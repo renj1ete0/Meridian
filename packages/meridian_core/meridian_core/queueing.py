@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime as dt
 import random
+from collections.abc import Sequence
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -305,3 +306,49 @@ def queue_disposition(outcome: str, status_code: int | None = None) -> str:
     # ``max_retries`` either way, where abandoning would silently drop the URL.
     log.warning("unclassified fetch outcome; retrying by default", extra={"outcome": outcome})
     return "retry"
+
+
+async def enqueue(
+    sess: AsyncSession,
+    url: str,
+    *,
+    topic: str | None = None,
+    seed_source: str = "frontier",
+    task_type: str = "url",
+    priority: int = 0,
+) -> QueueTask:
+    """Add one task to the queue. Flushes; does not commit.
+
+    Deliberately does no filtering. Whether a URL is worth fetching is a
+    question about blocklists, what has already been seen and what the domain's
+    policy says — all of which need more than the queue table, and all of which
+    belong to `worker/prefilter.py`. A queueing function that also decided
+    policy would be impossible to test and impossible to reuse from Admin.
+    """
+    task = QueueTask(
+        url_or_query=url,
+        topic=topic,
+        seed_source=seed_source,
+        task_type=task_type,
+        priority=priority,
+    )
+    sess.add(task)
+    await sess.flush()
+    return task
+
+
+async def already_queued(sess: AsyncSession, urls: Sequence[str]) -> set[str]:
+    """Which of ``urls`` already have a queue row, in any status.
+
+    Any status on purpose. A URL that failed is not worth immediately retrying
+    under a different task id — that is what `next_attempt_at` is for — and one
+    that is `done` is not worth re-fetching just because another page links to
+    it. Re-crawl scheduling is a separate decision from frontier expansion, and
+    conflating them would make every page's link list resurrect the whole corpus.
+    """
+    if not urls:
+        return set()
+    rows = await sess.execute(
+        select(QueueTask.url_or_query).where(QueueTask.url_or_query.in_(list(urls)))
+    )
+    return set(rows.scalars())

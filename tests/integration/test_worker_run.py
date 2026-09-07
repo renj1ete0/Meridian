@@ -27,6 +27,7 @@ from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
 from worker.fetch import Fetcher
 from worker.main import Worker, WorkerSettings
+from worker.prefilter import Prefilter
 from worker.ratelimit import DomainLimiter
 from worker.rawstore import checksum_for
 from worker.robots import ALLOW_ALL, RobotsRules, parse
@@ -143,6 +144,13 @@ def status(code: int):
 
 
 async def enqueue(sess, domain: str, topic: str, path: str = "/a", **fields) -> QueueTask:
+    """Seed one task by hand.
+
+    `seed_source="user"` so the frontier tests can tell what the crawl put in
+    the queue from what the test did — the seed row would otherwise be
+    indistinguishable from a link the page produced.
+    """
+    fields.setdefault("seed_source", "user")
     task = QueueTask(url_or_query=f"https://{domain}{path}", topic=topic, **fields)
     sess.add(task)
     await sess.flush()
@@ -1032,3 +1040,221 @@ async def test_a_page_with_no_text_writes_no_chunks(
     assert rows == []
     assert stats.chunks == 0
     assert source.text_available is False
+
+
+# --------------------------------------------------------------------------
+# Frontier expansion (P1-06)
+# --------------------------------------------------------------------------
+
+
+def linking_page(*paths: str, external: str = "") -> bytes:
+    anchors = "".join(f'<a href="{p}">link</a>' for p in paths)
+    if external:
+        anchors += f'<a href="{external}">out</a>'
+    return (
+        f'<!doctype html><html lang="en"><head><title>Hub</title></head>'
+        f"<body><article><p>{ARTICLE}</p>{anchors}</article></body></html>"
+    ).encode()
+
+
+async def queued_urls(sess, topic: str) -> list[str]:
+    rows = await sess.execute(
+        select(QueueTask.url_or_query)
+        .where(QueueTask.topic == topic, QueueTask.seed_source == "frontier")
+        .order_by(QueueTask.task_id)
+    )
+    return list(rows.scalars())
+
+
+def with_frontier(sess, handler, domain, topic, *, resolver, blocked=(), **overrides):
+    """A worker whose frontier expansion is switched on."""
+    worker, rec = build_worker(sess, handler, domain, topic, resolver=resolver, **overrides)
+    worker._prefilter = Prefilter(blocked)
+    return worker, rec
+
+
+async def test_a_fetched_page_puts_its_links_in_the_queue(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The difference between a crawler and a fetcher.
+
+    Without this the worker drains its seed list once and then idles forever,
+    which is what it had been doing since `P1-15`.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/reports/2026", "/about")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    assert stats.queued == 2
+    assert set(await queued_urls(sess, run_topic)) == {
+        f"https://{run_domain}/reports/2026",
+        f"https://{run_domain}/about",
+    }
+
+
+async def test_a_queued_link_inherits_the_topic_of_the_page_that_linked_it(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The only signal available without a model, and usually right.
+
+    §10's steering acts on topics, so a frontier producing untopiced rows would
+    be a frontier steering cannot reach.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/deeper")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    rows = await sess.execute(
+        select(QueueTask).where(QueueTask.url_or_query == f"https://{run_domain}/deeper")
+    )
+    task = rows.scalar_one()
+    assert task.topic == run_topic
+    assert task.seed_source == "frontier"
+
+
+async def test_a_link_to_an_already_seen_page_is_not_queued(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A page linking back to itself must not resurrect its own task."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/a", "/new")  # /a is the page being fetched
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    assert stats.queued == 1
+    assert await queued_urls(sess, run_topic) == [f"https://{run_domain}/new"]
+
+
+async def test_blocked_domains_never_reach_the_queue(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """They are on nearly every government page and lead nowhere citable."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/real", external="https://www.facebook.com/share")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(
+        sess, html, run_domain, run_topic, resolver=resolve, blocked=["facebook.com"], max_tasks=1
+    )
+
+    stats = await worker.run()
+
+    assert stats.queued == 1
+    assert await queued_urls(sess, run_topic) == [f"https://{run_domain}/real"]
+
+
+async def test_assets_are_not_queued(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Queueing a `.png` buys a `content_type_rejected` for the price of a request."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/logo.png", "/style.css", "/report.pdf")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    assert stats.queued == 1
+    assert await queued_urls(sess, run_topic) == [f"https://{run_domain}/report.pdf"]
+
+
+async def test_the_crawl_actually_continues_past_its_seed(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The property this task exists for, end to end.
+
+    One seed row, and the worker keeps finding work: page one links to page two,
+    page two links to page three, and the loop claims each in turn without
+    anything else putting them there.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+
+    def chain(request: httpx.Request) -> httpx.Response:
+        depth = request.url.path.count("/")
+        return streamed(
+            200,
+            headers={"content-type": "text/html"},
+            chunks=[linking_page(f"{request.url.path}/deeper{depth}")],
+        )
+
+    worker, rec = with_frontier(sess, chain, run_domain, run_topic, resolver=resolve, max_tasks=4)
+
+    stats = await worker.run()
+
+    assert stats.claimed == 4, "the loop ran out of work despite frontier expansion"
+    assert stats.queued >= 3
+    assert len(rec.requests) == 4
+
+
+async def test_frontier_expansion_is_off_when_no_prefilter_is_given(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A one-shot refetch or a test of the fetch path wants no queue growth.
+
+    Distinct from a prefilter that drops everything — this is "do not expand",
+    and conflating the two would make a fetch-only run silently crawl.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/would-be-queued")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    assert stats.queued == 0
+    assert await queued_urls(sess, run_topic) == []
+
+
+async def test_a_page_with_no_text_still_contributes_its_links(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A link hub is a real and useful shape.
+
+    An index page whose only content is a list of links extracts to nothing and
+    is exactly the page most worth following out of.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = b'<html><body><nav><a href="/one">1</a><a href="/two">2</a></nav></body></html>'
+
+    def hub(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, hub, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    stats = await worker.run()
+
+    assert stats.extracted == 0, "the page genuinely had no extractable text"
+    assert stats.queued == 2

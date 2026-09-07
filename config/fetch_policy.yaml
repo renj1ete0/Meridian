@@ -59,5 +59,40 @@ max_decompression_ratio: 100              # zip/gzip bomb guard
 
 blocked_after_failures: 5         # consecutive; then mark domain blocked
 prefetch_filter:        true      # domain blocklist + already-seen check
+
 render_js:              auto      # auto | always | never
 max_page_bytes:         20000000
+
+# --- Frontier expansion (P1-06) ----------------------------------------------
+# Domains never worth following a link to. Not a moral judgement — these are
+# places a *research corpus* cannot cite: platforms whose content is behind an
+# interaction wall, link shorteners that only ever redirect, and search engines
+# whose result pages are not documents. They appear on nearly every government
+# and institutional page, so without this the frontier spends its first hour
+# discovering that Facebook exists.
+#
+# Blocked *domains* belong in the fetch_policy table, one row each, where the
+# consecutive-failure counter can also write them (§6.4). This list is the
+# seeded floor for links nobody should ever have followed in the first place.
+frontier:
+  blocked_domains:
+    - facebook.com
+    - instagram.com
+    - twitter.com
+    - x.com
+    - tiktok.com
+    - linkedin.com
+    - pinterest.com
+    - reddit.com
+    - youtube.com
+    - youtu.be
+    - whatsapp.com
+    - telegram.me
+    - t.me
+    - bit.ly
+    - tinyurl.com
+    - goo.gl
+    - ow.ly
+    - google.com
+    - bing.com
+    - duckduckgo.com

@@ -17,20 +17,19 @@ something went wrong.
 - Add new tasks freely; don't renumber existing ones.
 
 **Current phase: 1.** Phase 0 is closed. The crawl runs unattended, keeps what
-it fetches, reads it, and chunks it: `P1-01`–`P1-05`, `P1-07`, `P1-11`, `P1-12`,
-`P1-15`, `P1-17`–`P1-21`, `P1-24` and (pulled forward) `P2-02` are done, at 711
-tests. Verified live — the frontier crawled and chunked with every stored offset
-round-tripping from the raw file on disk, then re-crawled to five `304`s and one
-byte-identical `200`, rewriting nothing. The only open phase-0 item is `P0-15`,
-deferred until phase 2 needs it.
+it fetches, reads it, chunks it, and now *expands*: `P1-01`–`P1-07`, `P1-11`,
+`P1-12`, `P1-15`, `P1-17`–`P1-21`, `P1-24` and (pulled forward) `P2-02` are
+done, at 793 tests. Verified live — 13 seeds became 334 pending rows in one run,
+sorted by tier priority, with no blocked domain or asset URL reaching the queue.
+The only open phase-0 item is `P0-15`, deferred until phase 2 needs it.
 
-Next: the other extractors — `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10`
-(figures). Government sources arrive as Office documents and PDFs far more often
-than expected, and today both are stored and left metadata-only. `P1-06`
-(prefilter) and `P1-28` (sitemaps from robots.txt) are still cheap and now have
-both a loop to feed and a link list to feed it from — without them the crawl
-only ever fetches the 13 seeded rows. `P1-23`'s injection pre-screen belongs
-with extraction and is now overdue rather than early.
+Next: the crawl can now outrun what it can read. `P1-09` (PDF) and `P1-08`
+(MarkItDown) are the gap — government sources arrive as PDFs and Office
+documents constantly, and today both are fetched, stored, and left
+metadata-only. `P1-23`'s injection pre-screen is overdue: the frontier now
+follows links off untrusted pages at volume. `P1-28` (sitemaps) is still cheap.
+And with breadth real, `P1-16`'s 48-hour acceptance run is finally a meaningful
+test rather than a 13-row one.
 
 ---
 
@@ -102,7 +101,14 @@ with extraction and is now overdue rather than early.
       redirect loop, decompression bomb, refused address), or no request went out
       (robots denial, already-blocked domain, so no evidence either way). A newly
       blocked domain is dropped from the limiter
-- [ ] `P1-06` `prefilter.py` — domain blocklist + already-seen check before fetching
+- [x] `P1-06` `prefilter.py` — four gates, cheapest first: normalise, shape
+      (scheme/host/extension), blocklists, then one batched query each against
+      `queue` and `sources`. Normalisation is conservative — fragment, tracking
+      params, credentials and default ports go, trailing slashes and query order
+      stay, because anything that changes *which* resource is requested trades a
+      visible duplicate for an invisible missing page. Wired into the loop as
+      frontier expansion, which is what turns the fetcher into a crawler, and it
+      finally gives `priority_for_domain()` (`P1-17`) a caller
 - [x] `P1-20` **SSRF guard** — `meridian_core/netguard.py`. Post-DNS address
       classification, per-hop redirect revalidation, scheme allowlist, DNS-rebinding
       rejection, integer-encoded host normalisation, https-final enforcement

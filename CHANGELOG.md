@@ -8,6 +8,65 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-09-07
+
+**The crawler starts crawling.** Since `P1-15` the worker had drained the same
+13 seeded rows on every run and then idled forever, which is a fetcher.
+`ExtractedDocument.links` had been populated and dropped on the floor since
+`P1-07`. This connects the two, through the gate that makes connecting them
+safe.
+
+Verified live: 13 seeds in, **334 pending out**, with the crawl claiming
+frontier-discovered pages within the same run. Tier priority sorts them without
+anyone curating a list — `.edu.sg` at 60, `.gov.sg` at 50, blogs below — and no
+blocked domain or asset URL reached the queue.
+
+### Added
+
+- `P1-06` `services/worker/worker/prefilter.py`. Four gates, cheapest first, and
+  the order is the design: normalise, then shape (scheme, host, extension), then
+  blocklists, then one batched query each against `queue` and `sources`. A page
+  with 500 links reaches the database as a batch of 40, because §6.4's reason
+  for the prefilter is that *not fetching* a duplicate is cheaper than fetching
+  it and discovering it later
+- **Conservative URL normalisation.** Fragment, tracking parameters, credentials
+  and default ports go; host is lowercased. Trailing slashes, path case and
+  query order stay — anything that changes *which resource is requested* trades
+  a duplicate for a page that silently never enters the corpus, and the two
+  errors are not symmetric
+- Frontier expansion in the loop: a fetched page's links become queue rows in
+  the same transaction as its source row and chunks. In the fetch pass, not a
+  later sweep, because the link list lives only in memory — and deliberately not
+  stored on the source row, where 500 URLs would be ~40KB of JSONB and ~2GB
+  across a 50k corpus
+- `enqueue()` and `already_queued()` in `queueing.py`. `enqueue` deliberately
+  does no filtering: whether a URL is worth fetching needs blocklists, the
+  already-seen check and the domain's policy, none of which belong in a function
+  that inserts a row, and all of which Admin would have to work around when
+  injecting a seed by hand (§13.2)
+- A seeded `frontier.blocked_domains` list in `config/fetch_policy.yaml` —
+  social platforms, link shorteners, search engines. Not a judgement: these are
+  places a research corpus cannot cite, they appear on nearly every government
+  page, and without the list the frontier spends its first hour discovering that
+  Facebook exists. Matched by suffix, so one entry covers `m.` and `www.`
+- Tier-derived queue priority is finally wired. `priority_for_domain()` has
+  existed since `P1-17` with no caller; a government link now outranks a blog
+  with nobody curating a seed list (§5.2)
+
+### Notes
+
+- Any queue status counts as seen. A URL that failed is not worth retrying under
+  a new task id — `next_attempt_at` is for that — and one that is `done` is not
+  worth re-fetching because another page links to it. Re-crawl scheduling is a
+  separate decision, and conflating them would have every page's link list
+  resurrect the whole corpus
+- Frontier expansion is off when the `Worker` is built without a prefilter,
+  which is distinct from a prefilter that drops everything. A one-shot refetch
+  should not silently start crawling
+- A link hub with no extractable text still contributes its links. An index page
+  whose only content is a list of links is exactly the page most worth following
+  out of, and gating expansion on `has_text` would skip it
+
 ## [0.15.0] — 2026-09-07
 
 **Extracted text stops being discarded.** `P1-07` produced text and dropped it,

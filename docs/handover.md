@@ -15,8 +15,9 @@ add it here.
 
 Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
 bytes come out, politely, without becoming a route into the network, leaving a record
-of itself, keeping what it read, reading it, and cutting it into citable chunks —
-and now with nobody watching. As of `v0.15.0`, 711 tests pass with a real Postgres.
+of itself, keeping what it read, reading it, cutting it into citable chunks, and
+following its links onward — and all of it with nobody watching. As of `v0.16.0`,
+793 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -59,10 +60,13 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
    primary      fit_markdown text_available
    only (§5.4)       │              │
                      ▼              ▼
-                chunk_text()   replace_chunks()
-                verbatim       same transaction
-                slices +       as the source row
-                offsets
+                chunk_text()   replace_chunks()   Prefilter.keep()
+                verbatim       same transaction   normalise, shape,
+                slices +       as the source row  blocklist, seen
+                offsets                                 │
+                                                        ▼
+                                                   enqueue() at
+                                                   tier priority
                     │
                     ▼
         worker.main settles the task
@@ -70,11 +74,10 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
 ```
 
 **What does not exist yet.** No embeddings, no search, no API, no frontend. HTML is
-extracted and chunked; PDFs and Office documents are stored and left metadata-only
-until `P1-09` and `P1-08`. **Nothing enqueues anything** — the crawl only ever
-fetches the 13 seeded rows, because the prefilter (`P1-06`), sitemap discovery
-(`P1-28`) and frontier expansion (`P5-01`) are all unbuilt, and the link list
-`ExtractedDocument` produces is logged and dropped.
+extracted and chunked; PDFs and Office documents are fetched, stored, and left
+metadata-only until `P1-09` and `P1-08` — which is now the binding gap, because the
+frontier finds far more of them than the crawler can read. The frontier is the
+link half of `P5-01` only: no citation-driven seeding, no spaCy NER, no TF-IDF.
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
 Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
@@ -102,6 +105,12 @@ tested almost nothing; read the skip count, not just the colour.
 
 Crawl4AI is a 6GB image that runs a browser pool. Start it only when you are actually
 exercising the browser path, and `make dev-down` when you stop.
+
+**The dev database now holds a real crawl.** After `v0.16.0` a single run leaves a
+few hundred pending frontier rows behind, which is the point — §6 asks for real
+crawl snapshots rather than fixtures, and this is one. It also means a bare
+`python -m worker.main` with no `MERIDIAN_WORKER_MAX_TASKS` will keep going for a
+very long time. That is correct behaviour, not a runaway.
 
 **Running the worker by hand.** `make test` exports `.env.dev`; nothing else does, so
 the worker needs it sourced:
@@ -185,6 +194,19 @@ tests parse. The fixture is gone with the plugin, and asking for it fails deep i
 pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
+
+### `registrable_domain` keeps subdomains, so a blocklist needs suffix matching
+
+It strips a leading `www.` and nothing else — correctly, because
+`datamall.lta.gov.sg` is a different source from `lta.gov.sg` and tiering depends on
+telling them apart. But an exact-match blocklist then blocks `facebook.com` and waves
+`m.facebook.com` straight through. `Prefilter.is_blocked` matches on suffix.
+
+### A test that seeds a URL must not use `seed_source="frontier"`
+
+It is the default on `enqueue`, so a test seeding a row and then asserting on what
+frontier expansion queued cannot tell the two apart. The seed is a hand injection —
+`seed_source="user"` — which is also what it actually is.
 
 ### An offset recovered by searching for the text cites the wrong copy
 
@@ -334,6 +356,15 @@ And `v0.15.0`, where the round-trip is the claim worth checking:
 | Offsets locate their passage | every stored `page_or_offset` re-extracted from the raw file on disk and matched exactly |
 | A re-crawl rewrites nothing | 5 real `304`s plus one byte-identical `200` → `chunks: 0` across the run |
 
+And `v0.16.0`, the run where the crawl stopped being a fetcher:
+
+| Behaviour | Evidence |
+|---|---|
+| Frontier expansion | 13 seeds → 334 pending in one 12-task run, claiming frontier-discovered pages within the same run |
+| Tier priority, unwired since `P1-17` | `.edu.sg` queued at 60, `.gov.sg` at 50, blogs below — nobody curated a list |
+| Blocklist and shape gates | 45 blocked-domain drops across 8 pages; no social link, shortener or asset URL in the queue |
+| Already-seen dedup | one deep `lta.gov.sg` page: 62 links considered, 43 already seen, 12 queued |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -343,16 +374,16 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**`P1-06` and `P1-28`, because nothing enqueues anything.** The crawl has drained
-the same 13 seeded rows on every run since `P1-15`. `ExtractedDocument.links` is
-already populated (anchors only, absolute, deduped, capped at 500) and already
-dropped on the floor — the prefilter and sitemap discovery are what turn it into
-queue rows. This is the difference between a crawler and a fetcher.
+**`P1-09` (PDF) and `P1-08` (MarkItDown), because the crawl now outruns what it can
+read.** Frontier expansion queues every `.pdf` it finds and the fetcher stores them
+faithfully, and nothing turns any of them into text. On a government corpus that is
+not an edge case — it is a large share of the substance. The raw files are kept, so
+the day the extractor lands §11.12's reprocessing recovers everything already
+fetched; until then the corpus is thinner than the queue suggests.
 
-Links are deliberately *not* stored in `sources.extra`: 500 URLs per source is ~40KB
-of JSONB, which is ~2GB across a 50k corpus, and the right destination is queue rows
-rather than a column. That means frontier expansion has to consume them in the same
-pass as the fetch, exactly as chunking does.
+**`P1-23` is now overdue rather than early.** The frontier follows links off
+untrusted pages at volume, so the pages reaching extraction are no longer a curated
+seed list.
 
 **The remaining extractors: `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10` (figures).**
 `Worker._extract` dispatches on `result.media_type` against `HTML_MEDIA_TYPES`; adding

@@ -59,7 +59,7 @@ from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
-from meridian_core.policy import resolve_source_tier
+from meridian_core.policy import frontier_settings, resolve_source_tier, source_tier_map
 from meridian_core.queueing import (
     DEFAULT_BACKOFF_BASE_S,
     DEFAULT_LEASE_SECONDS,
@@ -67,6 +67,7 @@ from meridian_core.queueing import (
     abandon,
     advance,
     claim_next,
+    enqueue,
     fail,
     queue_depth,
     queue_disposition,
@@ -74,12 +75,14 @@ from meridian_core.queueing import (
     release_worker_claims,
 )
 from meridian_core.sources import get_source, touch_source, upsert_source
+from meridian_core.tiering import priority_for_domain
 
 from . import rawstore
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
 from .extract.chunk import chunk_text
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
+from .prefilter import Prefilter
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
 
@@ -226,6 +229,7 @@ class Kept:
     #: None when the format has no extractor yet (`P1-08`, `P1-09`).
     document: ExtractedDocument | None = None
     chunks: int = 0
+    queued: int = 0
 
 
 @dataclasses.dataclass
@@ -242,6 +246,7 @@ class WorkerStats:
     bytes_stored: int = 0
     extracted: int = 0
     chunks: int = 0
+    queued: int = 0
     outcomes: Counter[str] = dataclasses.field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
@@ -256,6 +261,7 @@ class WorkerStats:
             "bytes_stored": self.bytes_stored,
             "extracted": self.extracted,
             "chunks": self.chunks,
+            "queued": self.queued,
             "outcomes": dict(self.outcomes),
         }
 
@@ -269,10 +275,15 @@ class Worker:
         *,
         settings: WorkerSettings | None = None,
         session_factory: SessionFactory = session,
+        prefilter: Prefilter | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
         self._session_factory = session_factory
+        # None disables frontier expansion entirely, which is what a one-shot
+        # refetch or a test of the fetch path wants — and is a different thing
+        # from a prefilter that drops everything.
+        self._prefilter = prefilter
         self._stopping = asyncio.Event()
         self._stats = WorkerStats()
         self._reserved = 0
@@ -483,6 +494,7 @@ class Worker:
                 "content_changed": kept.changed if kept else None,
                 "chars": kept.document.char_count if kept and kept.document else None,
                 "chunks": kept.chunks if kept else None,
+                "queued": kept.queued if kept else None,
             },
         )
 
@@ -543,6 +555,7 @@ class Worker:
                 # checksum says one thing and whose chunks were cut from another
                 # is a corpus that cites text it does not hold.
                 chunks_written = await self._chunk(sess, source, document, changed=changed)
+                queued = await self._expand_frontier(sess, claim, document)
                 await sess.commit()
         except Exception as exc:
             log.exception(
@@ -557,7 +570,70 @@ class Worker:
         if document is not None and document.has_text:
             self._stats.extracted += 1
         self._stats.chunks += chunks_written
-        return Kept(stored=stored, changed=changed, document=document, chunks=chunks_written)
+        self._stats.queued += queued
+        return Kept(
+            stored=stored,
+            changed=changed,
+            document=document,
+            chunks=chunks_written,
+            queued=queued,
+        )
+
+    async def _expand_frontier(
+        self, sess: AsyncSession, claim: Claim, document: ExtractedDocument | None
+    ) -> int:
+        """Turn this page's outbound links into queue rows (`P1-06`, §6.1).
+
+        This is what makes the crawl a crawl. Without it the worker drains its
+        seed list once and then idles forever, which is a fetcher.
+
+        In the same pass as the fetch, not a later sweep, and for the same
+        reason chunking is: the link list lives only in memory. It is
+        deliberately not stored on the source row — 500 URLs is ~40KB of JSONB,
+        ~2GB across a 50k corpus, and the right home for a URL worth fetching is
+        a queue row, not a column.
+
+        The topic is inherited from the page that linked here. It is the only
+        signal available without a model, it is usually right — a page about
+        walkability links to pages about walkability — and §10's steering acts
+        on topics, so a frontier that produced untopiced rows would be a
+        frontier steering cannot reach.
+        """
+        if document is None or not document.links or self._prefilter is None:
+            return 0
+
+        verdict = await self._prefilter.keep(sess, document.links)
+        if not verdict.kept:
+            log.debug(
+                "frontier expansion queued nothing",
+                extra={"url": claim.url, "dropped": verdict.dropped},
+            )
+            return 0
+
+        tiers = await source_tier_map(sess)
+        for url in verdict.kept:
+            await enqueue(
+                sess,
+                url,
+                topic=claim.topic,
+                seed_source="frontier",
+                # §5.2: a government link outranks a blog without anyone
+                # curating a seed list. `priority_for_domain` has existed since
+                # P1-17 with no caller; this is it.
+                priority=priority_for_domain(url, tiers),
+            )
+
+        log.info(
+            "frontier expanded",
+            extra={
+                "url": claim.url,
+                "task_id": claim.task_id,
+                "considered": verdict.considered,
+                "queued": len(verdict.kept),
+                "dropped": verdict.dropped,
+            },
+        )
+        return len(verdict.kept)
 
     async def _chunk(
         self,
@@ -782,6 +858,26 @@ def install_signal_handlers(worker: Worker) -> None:
             loop.add_signal_handler(getattr(signal, signame), handle, signame)
 
 
+async def build_prefilter() -> Prefilter:
+    """Read the seeded frontier blocklist once, at startup (§13.1).
+
+    Config, so it lives in the database and changes when someone edits it in
+    Admin — not between two pages of one crawl. A worker that could not read it
+    starts with an empty blocklist rather than refusing to run: crawling a few
+    social links is a waste, and not crawling at all is an outage.
+    """
+    try:
+        async with session() as sess:
+            frontier = await frontier_settings(sess)
+    except Exception:
+        log.exception("could not read the frontier blocklist; continuing without one")
+        return Prefilter()
+
+    blocked = frontier.get("blocked_domains") or []
+    log.info("frontier prefilter ready", extra={"blocked_domains": len(blocked)})
+    return Prefilter(blocked)
+
+
 async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
     """Build the whole fetch stack from the environment and run it."""
     settings = settings or WorkerSettings.from_env()
@@ -792,9 +888,11 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
         # extracts worse and reports nothing (P1-26).
         log.warning("no CRAWL4AI_URL; JS-dependent pages will be fetched statically only")
 
+    prefilter = await build_prefilter()
+
     async with Fetcher(browser=browser) as fetcher:
         crawler = Crawler(session, fetcher=fetcher, limiter=DomainLimiter())
-        worker = Worker(crawler, settings=settings)
+        worker = Worker(crawler, settings=settings, prefilter=prefilter)
         install_signal_handlers(worker)
         try:
             return await worker.run()

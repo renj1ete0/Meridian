@@ -130,6 +130,10 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
     )
     # The tier map rides in the global row but is not a fetch setting.
     settings.pop("source_tiers", None)
+    # Likewise the frontier block: it decides what enters the queue, not how a
+    # request is made, and a ResolvedPolicy carrying it would invite callers to
+    # treat "should this be crawled" as a per-request setting.
+    settings.pop("frontier", None)
 
     # A per-domain row carries status; the global row's status is not inherited,
     # because blocking '*' would silently stop the entire crawl.
@@ -150,6 +154,19 @@ async def source_tier_map(sess: AsyncSession) -> dict[str, Any]:
     if glob is None or not glob.settings:
         return {}
     return glob.settings.get("source_tiers") or {}
+
+
+async def frontier_settings(sess: AsyncSession) -> dict[str, Any]:
+    """The `frontier` block from the global fetch policy row (`P1-06`).
+
+    Rides in the same global settings blob as `source_tiers`, and is stripped
+    out of `ResolvedPolicy` for the same reason: it governs what goes *into* the
+    queue, not how a request is made.
+    """
+    glob = await sess.scalar(select(FetchPolicyRow).where(FetchPolicyRow.domain == GLOBAL_DOMAIN))
+    if glob is None or not glob.settings:
+        return {}
+    return glob.settings.get("frontier") or {}
 
 
 async def resolve_source_tier(sess: AsyncSession, domain: str) -> str:
