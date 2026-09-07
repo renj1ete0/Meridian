@@ -46,12 +46,9 @@ from lxml import html as lxml_html
 
 from meridian_core.logging import get_logger
 
-log = get_logger(__name__)
+from .base import Citation, ExtractedDocument
 
-#: Below this many characters a page is treated as having no usable text. A real
-#: article clears it in its first paragraph; a cookie banner and a menu do not,
-#: and admitting those as "content" is how a corpus fills with boilerplate.
-TEXT_FLOOR = 200
+log = get_logger(__name__)
 
 #: Link schemes worth following or recording. Everything else — `mailto:`,
 #: `javascript:`, `tel:`, `data:` — is either not a document or not fetchable,
@@ -97,62 +94,6 @@ _DOI_META_NAMES = ("citation_doi", "dc.identifier", "dc.identifier.doi", "prism.
 _ARXIV_DOI_PREFIX = "10.48550/arxiv."
 
 _WS_RE = re.compile(r"[ \t]*\n[ \t]*")
-
-
-@dataclasses.dataclass(frozen=True)
-class Citation:
-    """One reference this document makes to an identifiable work.
-
-    Kept as a normalised identifier plus its kind rather than as a resolved URL,
-    because the resolution chain (`P1-14`: Unpaywall → OpenAlex → CORE →
-    preprint) has opinions about where to look that this module should not
-    pre-empt.
-    """
-
-    kind: str  # doi | arxiv | pmid | handle
-    value: str
-
-    def __str__(self) -> str:  # pragma: no cover - display only
-        return f"{self.kind}:{self.value}"
-
-
-@dataclasses.dataclass(frozen=True)
-class ExtractedDocument:
-    """What one HTML document yielded.
-
-    ``text`` is markdown. ``links`` are absolute and same-scheme-filtered, ready
-    for the frontier to judge. Metadata fields are None when the page did not
-    say — never guessed, because a fabricated publication date is worse than a
-    missing one for a corpus whose whole job is being checkable.
-    """
-
-    text: str = ""
-    title: str | None = None
-    author: str | None = None
-    publisher: str | None = None
-    publication_date: dt.date | None = None
-    language: str | None = None
-    excerpt: str | None = None
-    #: This document's *own* identifier, from its meta tags — not one it cites.
-    doi: str | None = None
-    links: tuple[str, ...] = ()
-    citations: tuple[Citation, ...] = ()
-    extractor: str = "trafilatura"
-
-    @property
-    def char_count(self) -> int:
-        return len(self.text)
-
-    @property
-    def has_text(self) -> bool:
-        """Whether this yielded enough text to be worth chunking.
-
-        The threshold, not `text != ""`. A page whose only extractable content
-        is a cookie banner has text in the strict sense and nothing a graph can
-        be built from, and calling that `text_available` would make §6.5's
-        metadata-only state indistinguishable from a successful extraction.
-        """
-        return len(self.text) >= TEXT_FLOOR
 
 
 def extract_html(
@@ -257,7 +198,10 @@ def _from_html(content: bytes | str, url: str) -> ExtractedDocument:
         return ExtractedDocument(extractor="failed")
 
     if not extracted:
-        return ExtractedDocument()
+        # trafilatura ran and found nothing worth keeping. Named, not blank:
+        # "nothing to extract" and "the extractor fell over" need different
+        # follow-ups and `extractor` is where the difference is recorded.
+        return ExtractedDocument(extractor="trafilatura")
 
     try:
         fields = json.loads(extracted)
@@ -266,6 +210,7 @@ def _from_html(content: bytes | str, url: str) -> ExtractedDocument:
         return ExtractedDocument(extractor="failed")
 
     return ExtractedDocument(
+        extractor="trafilatura",
         text=_normalise(fields.get("text") or ""),
         title=_clean(fields.get("title")),
         author=_clean(fields.get("author")),

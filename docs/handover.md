@@ -16,8 +16,8 @@ add it here.
 Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
 bytes come out, politely, without becoming a route into the network, leaving a record
 of itself, keeping what it read, reading it, cutting it into citable chunks, and
-following its links onward — and all of it with nobody watching. As of `v0.16.0`,
-793 tests pass with a real Postgres.
+following its links onward — and all of it with nobody watching. HTML and PDFs are
+both read. As of `v0.17.0`, 832 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -54,10 +54,10 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
         ┌───────────┬────────────┐
         ▼           ▼            ▼
    rawstore     extract/     upsert_source()
-   .store()     html.py      checksum, etag, tier,
-   path from    trafilatura  raw path, title, date,
-   the URL,     or crawl4ai  language, doi,
-   primary      fit_markdown text_available
+   .store()     by media     checksum, etag, tier,
+   path from    type (§6.6): raw path, title, date,
+   the URL,     html.py or   language, doi,
+   primary      pdf.py       text_available
    only (§5.4)       │              │
                      ▼              ▼
                 chunk_text()   replace_chunks()   Prefilter.keep()
@@ -73,11 +73,12 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
         queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** No embeddings, no search, no API, no frontend. HTML is
-extracted and chunked; PDFs and Office documents are fetched, stored, and left
-metadata-only until `P1-09` and `P1-08` — which is now the binding gap, because the
-frontier finds far more of them than the crawler can read. The frontier is the
-link half of `P5-01` only: no citation-driven seeding, no spaCy NER, no TF-IDF.
+**What does not exist yet.** No embeddings, no search, no API, no frontend. HTML and
+PDFs are read; Office documents are fetched, stored, and left metadata-only until
+`P1-08`. Scanned PDFs are detected and filed in `enrichment_queue`, and **nothing
+ever runs that queue** — §6.6 makes OCR explicitly user-triggered, so the rows sit
+there until a UI exists to spend against them. The frontier is the link half of
+`P5-01` only: no citation-driven seeding, no spaCy NER, no TF-IDF.
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
 Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
@@ -93,6 +94,11 @@ make migrate
 make seed
 make test
 ```
+
+**`pdftotext` and `pdfinfo` must be on PATH** (Fedora: `poppler-utils`). They are
+the PDF extractor (`P1-09`), and their absence raises rather than degrading — a
+worker that had quietly lost poppler would store every PDF and extract none of them.
+The PDF *tests* additionally need `ghostscript` for `ps2pdf`, and skip without it.
 
 **Use `make test`, never a bare `uv run pytest`.** The Makefile does `-include .env.dev`
 and exports it. Some tests shell out to subprocesses — `alembic check`, `scripts/seed.py` —
@@ -194,6 +200,23 @@ tests parse. The fixture is gone with the plugin, and asking for it fails deep i
 pytest with a bare `KeyError` on a stash key rather than anything that names the cause.
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
+
+### A scanned PDF is not an empty one, and the difference is invisible
+
+Run a scan through a text extractor and you get a page number and a running header —
+which clears no threshold and reads exactly like a page with no content. Without
+§6.6's chars-per-page check, a scanned planning report enters the corpus as
+"extracted, nothing found" and nobody ever looks again. `extract_pdf` sets
+`needs_ocr` instead, and drops the stray text layer rather than admitting it as
+content.
+
+### `%%Title` in PostScript never reaches the PDF
+
+It is a DSC comment for the print spooler. Ghostscript writes the Info dictionary
+from a `pdfmark` — `[ /Title (…) /DOCINFO pdfmark` — and `ps2pdf` has no
+`-dDOCINFO=` flag despite it looking like it should. Relevant when building real
+PDFs for tests, which is worth doing: a byte string starting with `%PDF-` exercises
+the error path and nothing else.
 
 ### `registrable_domain` keeps subdomains, so a blocklist needs suffix matching
 
@@ -365,6 +388,15 @@ And `v0.16.0`, the run where the crawl stopped being a fetcher:
 | Blocklist and shape gates | 45 blocked-domain drops across 8 pages; no social link, shortener or asset URL in the queue |
 | Already-seen dedup | one deep `lta.gov.sg` page: 62 links considered, 43 already seen, 12 queued |
 
+And `v0.17.0`, against real government PDFs the crawl had queued for itself:
+
+| Behaviour | Evidence |
+|---|---|
+| PDF native-text extraction | `lta.gov.sg/.../MTM.pdf` → 1,367 chars across 2 pages |
+| Page-accurate chunks (§5.3) | `chunks.page_or_offset` = 1, 2 — the page a citation opens at |
+| Title from the PDF's own Info dictionary | Land Transport ITM → `"20230301 Land Transport ITM e1"` |
+| robots.txt still honoured on PDFs | two datamall user guides → `robots_denied`, abandoned |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -374,25 +406,22 @@ local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
 `TASKS.md` is authoritative; this is just the reasoning behind the ordering.
 
-**`P1-09` (PDF) and `P1-08` (MarkItDown), because the crawl now outruns what it can
-read.** Frontier expansion queues every `.pdf` it finds and the fetcher stores them
-faithfully, and nothing turns any of them into text. On a government corpus that is
-not an edge case — it is a large share of the substance. The raw files are kept, so
-the day the extractor lands §11.12's reprocessing recovers everything already
-fetched; until then the corpus is thinner than the queue suggests.
+**`P1-23`, the injection pre-screen, is the overdue one.** The frontier follows
+links off untrusted pages at volume now, so the pages reaching extraction are no
+longer a curated seed list. Nothing is feeding a model yet, which is the only reason
+this has been survivable.
 
-**`P1-23` is now overdue rather than early.** The frontier follows links off
-untrusted pages at volume, so the pages reaching extraction are no longer a curated
-seed list.
+**`P1-08` (MarkItDown) closes the last format gap.** `Worker._extract` dispatches on
+`result.media_type` against `HTML_MEDIA_TYPES` and `PDF_MEDIA_TYPES`; adding a format
+is a branch there plus a module under `worker/extract/` returning the same
+`ExtractedDocument`. The one constraint carried from AGENTS.md and §6.6: MarkItDown
+gets `convert_local()` or `convert_stream()` on already-fetched bytes, never
+`convert()` on a URL.
 
-**The remaining extractors: `P1-08` (MarkItDown), `P1-09` (PDF), `P1-10` (figures).**
-`Worker._extract` dispatches on `result.media_type` against `HTML_MEDIA_TYPES`; adding
-a format is a branch there plus a module under `worker/extract/`. Two constraints
-carried from AGENTS.md and §6.6: MarkItDown gets `convert_local()` or
-`convert_stream()` on already-fetched bytes, never `convert()` on a URL; and OCR never
-runs inline — a scanned PDF is enqueued and the source stays metadata-only. For PDFs,
-`page_or_offset` is a **page number** rather than a character offset (§5.3), so
-`chunk_text` is the wrong tool there and a page-aware sibling is needed.
+**`P1-30` before `P1-16`.** The 48-hour acceptance run needs something that restarts
+the worker, and there is no systemd unit and no worker Dockerfile. The Dockerfile now
+also has to install **poppler-utils**, or every PDF in production fails the loud way
+`extract_pdf` was written to fail.
 
 **Decide `P1-32` before the first real edges land.** `replace_chunks()` deletes a
 source's chunks when its content changes, and `edges.supporting_chunk_ids` is an

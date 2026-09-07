@@ -16,20 +16,19 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 1.** Phase 0 is closed. The crawl runs unattended, keeps what
-it fetches, reads it, chunks it, and now *expands*: `P1-01`–`P1-07`, `P1-11`,
-`P1-12`, `P1-15`, `P1-17`–`P1-21`, `P1-24` and (pulled forward) `P2-02` are
-done, at 793 tests. Verified live — 13 seeds became 334 pending rows in one run,
-sorted by tier priority, with no blocked domain or asset URL reaching the queue.
-The only open phase-0 item is `P0-15`, deferred until phase 2 needs it.
+**Current phase: 1.** Phase 0 is closed. The crawl runs unattended, expands its
+own frontier, and reads HTML and PDFs: `P1-01`–`P1-07`, `P1-09`, `P1-11`–`P1-13`,
+`P1-15`, `P1-17`–`P1-21`, `P1-24` and (pulled forward) `P2-02` are done, at 832
+tests. Verified live — real LTA PDFs extracted with page-accurate chunks and a
+title read from the document itself. The only open phase-0 item is `P0-15`,
+deferred until phase 2 needs it.
 
-Next: the crawl can now outrun what it can read. `P1-09` (PDF) and `P1-08`
-(MarkItDown) are the gap — government sources arrive as PDFs and Office
-documents constantly, and today both are fetched, stored, and left
-metadata-only. `P1-23`'s injection pre-screen is overdue: the frontier now
-follows links off untrusted pages at volume. `P1-28` (sitemaps) is still cheap.
-And with breadth real, `P1-16`'s 48-hour acceptance run is finally a meaningful
-test rather than a 13-row one.
+Next: `P1-23`'s injection pre-screen is the overdue one — the frontier follows
+links off untrusted pages at volume now, so the pages reaching extraction are no
+longer a curated list. `P1-08` (MarkItDown) closes the last format gap. `P1-28`
+(sitemaps) is still cheap. And with both breadth and depth real, `P1-16`'s
+48-hour acceptance run is finally a meaningful test — but `P1-30` (supervision,
+worker Dockerfile) has to land first, since nothing restarts the process.
 
 ---
 
@@ -142,7 +141,13 @@ test rather than a 13-row one.
       are kept out of them, with arXiv's DOI derived from its URL because it
       publishes no `citation_doi` tag
 - [ ] `P1-08` `extract/document.py` — MarkItDown, `convert_local`/`convert_stream` **only**
-- [ ] `P1-09` `extract/pdf.py` — native-text detection (chars/page), page offsets preserved
+- [x] `P1-09` `extract/pdf.py` — `pdftotext` over stdin, page boundaries from the
+      form feed poppler already writes (exact, not reconstructed). Scan detection
+      at ~100 chars/page is §6.6's fork: below it the document is queued for OCR
+      and stays metadata-only, and its stray text layer is dropped rather than
+      admitted as content. A missing poppler raises loudly — a worker that had
+      quietly lost it would store every PDF and extract none of them. Title and
+      creation date come from `pdfinfo`
 - [ ] `P1-10` `extract/figures.py` — figure extraction with captions
 - [x] `P1-11` Raw store writer — `worker/rawstore.py` plus
       `meridian_core/sources.py`. Path is `<domain>/<hex shard>/<sha256(url)><ext>`,
@@ -156,7 +161,11 @@ test rather than a 13-row one.
       retried, never advanced
 - [x] `P1-12` Source tier assignment — `meridian_core/tiering.py`, exact → longest
       pattern → default, seeded into the DB with the global fetch policy
-- [ ] `P1-13` `ocr_queue.py` — enqueue scanned PDFs, never OCR inline
+- [x] `P1-13` `ocr_queue.py` — a scan becomes a source record plus one
+      `enrichment_queue` row, idempotent so a re-crawl does not inflate the
+      pending count an operator makes a spending decision from. `ocr_applied`
+      and `ocr_tier` written explicitly so a skipped document is findable rather
+      than inferred from an absence (§6.6)
 - [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
 - [x] `P1-15` Worker main loop, supervision, graceful restart —
       `services/worker/worker/main.py`. N claim-fetch-settle lanes over one
@@ -210,7 +219,8 @@ test rather than a 13-row one.
       assumption that something restarts it — §13.4's `Restart=always`. Nothing in
       this repo provides that: there is no systemd unit, and `docker-compose.yml`
       sets no `restart:` policy. Also needs a `services/worker/Dockerfile`, which
-      the compose file references and which does not exist
+      the compose file references and which does not exist — and which must
+      install `poppler-utils`, or `P1-09` fails loudly on every PDF in production
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

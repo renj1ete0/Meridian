@@ -80,8 +80,10 @@ from meridian_core.tiering import priority_for_domain
 from . import rawstore
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
-from .extract.chunk import chunk_text
+from .extract.chunk import chunk_pages, chunk_text
+from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
+from .ocr_queue import enqueue_ocr, mark_scanned
 from .prefilter import Prefilter
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
@@ -106,10 +108,11 @@ class NotKept(RuntimeError):
 #: mean either failing a task that is not broken or handing it back forever.
 HANDLED_TASK_TYPES = ["url"]
 
-#: Media types `extract/html.py` handles. Everything else is metadata-only until
-#: its extractor exists — MarkItDown for Office formats (`P1-08`), PDFs
-#: (`P1-09`).
+#: §6.6's format routing table, as far as it is built. Everything not listed is
+#: fetched, stored and left metadata-only until its extractor exists —
+#: MarkItDown for Office formats is `P1-08`.
 HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
+PDF_MEDIA_TYPES = frozenset({"application/pdf"})
 
 DEFAULT_CONCURRENCY = 4
 DEFAULT_IDLE_SLEEP_S = 5.0
@@ -226,7 +229,7 @@ class Kept:
 
     stored: StoredRaw
     changed: bool
-    #: None when the format has no extractor yet (`P1-08`, `P1-09`).
+    #: None when the format has no extractor yet — Office documents (`P1-08`).
     document: ExtractedDocument | None = None
     chunks: int = 0
     queued: int = 0
@@ -247,6 +250,8 @@ class WorkerStats:
     extracted: int = 0
     chunks: int = 0
     queued: int = 0
+    #: Scanned PDFs filed for OCR rather than extracted (§6.6).
+    scanned: int = 0
     outcomes: Counter[str] = dataclasses.field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
@@ -262,6 +267,7 @@ class WorkerStats:
             "extracted": self.extracted,
             "chunks": self.chunks,
             "queued": self.queued,
+            "scanned": self.scanned,
             "outcomes": dict(self.outcomes),
         }
 
@@ -536,7 +542,7 @@ class Worker:
                 media_type=result.media_type,
                 current_retention=current_retention,
             )
-            document = self._extract(claim, result)
+            document = await self._extract(claim, result)
 
             async with self._session_factory() as sess:
                 source, changed = await upsert_source(
@@ -551,6 +557,14 @@ class Worker:
                     **_bibliography(document),
                     **validators(result.headers),
                 )
+                if document is not None and document.needs_ocr:
+                    # After the upsert, so `text_available=False` and the OCR
+                    # columns survive `_bibliography`'s view that this document
+                    # simply had no text. It had none *because* it is a scan,
+                    # which is a different thing needing a different follow-up.
+                    await mark_scanned(sess, source)
+                    await enqueue_ocr(sess, source.source_id)
+                    self._stats.scanned += 1
                 # In the same transaction as the source row. A source whose
                 # checksum says one thing and whose chunks were cut from another
                 # is a corpus that cites text it does not hold.
@@ -663,9 +677,11 @@ class Worker:
             )
             return 0
 
-        written, deleted = await replace_chunks(
-            sess, source.source_id, as_writes(chunk_text(document.text))
-        )
+        # §5.3: page number for a paginated document, character offset otherwise.
+        # The two are the same column, and `is_paginated` is what says which
+        # reading applies — not which extractor happened to run.
+        cut = chunk_pages(document.pages) if document.is_paginated else chunk_text(document.text)
+        written, deleted = await replace_chunks(sess, source.source_id, as_writes(cut))
         log.info(
             "chunked",
             extra={
@@ -674,30 +690,41 @@ class Worker:
                 "chunks": written,
                 "replaced": deleted,
                 "chars": document.char_count,
+                "paginated": document.is_paginated,
             },
         )
         return written
 
-    def _extract(self, claim: Claim, result: FetchResult) -> ExtractedDocument | None:
-        """Turn the bytes into text, for the formats that have an extractor.
+    async def _extract(self, claim: Claim, result: FetchResult) -> ExtractedDocument | None:
+        """Turn the bytes into text, routed by media type (§6.6).
 
-        Returns None when the format has none yet — `P1-08` brings MarkItDown
-        for Office documents and `P1-09` brings PDFs — rather than raising. A
-        source with no extractor is metadata-only (§6.5), which is a resting
-        state the schema already has a word for, not a failure.
+        Returns None when the format has no extractor yet — `P1-08` brings
+        MarkItDown for Office documents — rather than raising. A source with no
+        extractor is metadata-only (§6.5), which is a resting state the schema
+        already has a word for, not a failure.
 
         Extraction failing is not `NotKept`. The bytes are safely stored and can
         be re-extracted whenever the extractor improves (§11.12); refetching the
         page to try again would be spending a request to solve a local problem.
         """
-        if result.media_type not in HTML_MEDIA_TYPES:
-            return None
+        url = result.final_url or claim.url
         try:
-            document = extract_html(
-                result.content,
-                result.final_url or claim.url,
-                browser_payload=result.browser_payload,
+            if result.media_type in HTML_MEDIA_TYPES:
+                document = extract_html(result.content, url, browser_payload=result.browser_payload)
+            elif result.media_type in PDF_MEDIA_TYPES:
+                document = await extract_pdf(result.content)
+            else:
+                return None
+        except PdftotextMissing:
+            # A deployment fault, not a property of this document: every PDF in
+            # the corpus is affected and none of them should read as "no text".
+            # Loud, and once per document, because a worker that has quietly
+            # lost poppler stops growing the corpus with no other symptom.
+            log.error(
+                "poppler is not installed; this PDF and every other one cannot be read",
+                extra={"url": claim.url, "task_id": claim.task_id},
             )
+            return None
         except Exception:
             log.exception("extraction failed", extra={"url": claim.url, "task_id": claim.task_id})
             return None
@@ -710,6 +737,8 @@ class Worker:
                 "extractor": document.extractor,
                 "chars": document.char_count,
                 "has_text": document.has_text,
+                "pages": len(document.pages) or None,
+                "needs_ocr": document.needs_ocr,
                 "links": len(document.links),
                 "citations": len(document.citations),
                 "title": document.title,
@@ -931,6 +960,8 @@ def _bibliography(document: ExtractedDocument | None) -> dict[str, object]:
         "publication_date": document.publication_date,
         "language": document.language,
         "doi": document.doi,
+        # A scan has no text and is not merely empty: `mark_scanned` records
+        # why and what would fix it, and must not be undone by this.
         "text_available": document.has_text,
     }
     if document.citations:

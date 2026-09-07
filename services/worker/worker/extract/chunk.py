@@ -33,6 +33,9 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import re
+from collections.abc import Sequence
+
+from .base import Page
 
 #: Target size in characters. Around 300 tokens for English prose — comfortably
 #: inside bge-m3's window (§4) and small enough that a retrieved chunk is a
@@ -238,3 +241,39 @@ def _trim(text: str, start: int, end: int) -> tuple[int, int] | None:
     while end > start and text[end - 1].isspace():
         end -= 1
     return (start, end) if end > start else None
+
+
+def chunk_pages(
+    pages: Sequence[Page],
+    *,
+    target_chars: int = TARGET_CHARS,
+    max_chars: int = MAX_CHARS,
+    min_chars: int = MIN_CHARS,
+) -> list[TextChunk]:
+    """Chunk a paginated document, carrying page numbers instead of offsets.
+
+    §5.3 makes `page_or_offset` mean one or the other, and for a PDF a citation
+    that cannot be opened at the right page is barely a citation. So
+    ``TextChunk.offset`` holds the page number here — the field is overloaded by
+    the schema, and :attr:`ExtractedDocument.is_paginated` is what says which
+    reading applies.
+
+    **Chunks never span a page break.** A chunk covering pages 4 and 5 has to be
+    cited as one of them, and it would send a reader to the wrong page for half
+    its content. Short pages therefore make short chunks, which is the honest
+    trade: a citation that lands is worth more than a chunk that is the ideal
+    size. Runt-merging is per page for the same reason.
+
+    ``chunk_index`` still runs across the whole document, because it is unique
+    per source and orders the document for reading.
+    """
+    out: list[TextChunk] = []
+    for page in pages:
+        for chunk in chunk_text(
+            page.text,
+            target_chars=target_chars,
+            max_chars=max_chars,
+            min_chars=min_chars,
+        ):
+            out.append(TextChunk(text=chunk.text, offset=page.number, index=len(out)))
+    return out

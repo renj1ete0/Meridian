@@ -14,14 +14,8 @@ import datetime as dt
 
 import pytest
 
-from worker.extract.html import (
-    MAX_LINKS,
-    TEXT_FLOOR,
-    Citation,
-    ExtractedDocument,
-    _own_doi,
-    extract_html,
-)
+from worker.extract.base import TEXT_FLOOR, Citation, ExtractedDocument
+from worker.extract.html import MAX_LINKS, _own_doi, extract_html
 
 BODY = "This is a real paragraph of prose about transit planning in dense cities. " * 6
 URL = "https://example.test/report"

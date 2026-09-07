@@ -25,6 +25,7 @@ from meridian_core.models import FetchAttempt, FetchPolicy, QueueTask, Source
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier
 from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
+from worker.extract.pdf import available as pdf_available
 from worker.fetch import Fetcher
 from worker.main import Worker, WorkerSettings
 from worker.prefilter import Prefilter
@@ -1258,3 +1259,161 @@ async def test_a_page_with_no_text_still_contributes_its_links(
 
     assert stats.extracted == 0, "the page genuinely had no extractable text"
     assert stats.queued == 2
+
+
+# --------------------------------------------------------------------------
+# PDFs and the OCR queue (P1-09, P1-13)
+# --------------------------------------------------------------------------
+
+
+def build_pdf(tmp_path, pages: list[str]) -> bytes:
+    """A real PDF, built here rather than checked in as a fixture.
+
+    A byte string starting with `%PDF-` exercises the error path and nothing
+    else, and what needs testing is that page boundaries reach `chunks` intact.
+    """
+    import subprocess
+
+    body = ""
+    for number, line in enumerate(pages, start=1):
+        body += (
+            f"%%Page: {number} {number}\n/Helvetica findfont 11 scalefont setfont\n"
+            f"72 720 moveto ({line}) show\n72 700 moveto ({line}) show\n"
+            f"72 680 moveto ({line}) show\nshowpage\n"
+        )
+    source = tmp_path / "in.ps"
+    source.write_text(f"%!PS-Adobe-3.0\n%%Pages: {len(pages)}\n{body}%%EOF\n")
+    out = tmp_path / "out.pdf"
+    subprocess.run(["ps2pdf", str(source), str(out)], check=True, capture_output=True)
+    return out.read_bytes()
+
+
+def serve_pdf(content: bytes):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "application/pdf"}, chunks=[content])
+
+    return handler
+
+
+needs_poppler = pytest.mark.skipif(
+    not pdf_available() or __import__("shutil").which("ps2pdf") is None,
+    reason="needs poppler and ghostscript",
+)
+
+
+@needs_poppler
+async def test_a_pdf_is_extracted_and_chunked_by_page(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, tmp_path
+) -> None:
+    """§6.6's native branch, end to end, and §5.3's page numbers landing in the
+    column citations are built from."""
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic, path="/report.pdf")
+    content = build_pdf(tmp_path, [f"Page {n}. {ARTICLE[:180]}" for n in range(1, 4)])
+
+    worker, _ = build_worker(
+        sess, serve_pdf(content), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+
+    stats = await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/report.pdf")
+    assert stats.extracted == 1 and stats.scanned == 0
+    assert source.text_available is True
+    assert source.raw_file_path.endswith(".pdf")
+    assert rows, "a PDF with a text layer produced no chunks"
+    assert {r.page_or_offset for r in rows} <= {1, 2, 3}
+    assert min(r.page_or_offset for r in rows) == 1, "page numbers must be 1-based"
+
+
+@needs_poppler
+async def test_a_scanned_pdf_is_queued_for_ocr_and_stays_metadata_only(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, tmp_path
+) -> None:
+    """§6.6's other branch. OCR never runs inline, so a scan must not block,
+    must not fail, and must not quietly vanish — it becomes a source record
+    plus a row saying what it is waiting for."""
+    from meridian_core.models import EnrichmentItem
+
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic, path="/scan.pdf")
+    # A scan's text layer: a page number and nothing else.
+    content = build_pdf(tmp_path, ["1", "2", "3"])
+
+    worker, _ = build_worker(
+        sess, serve_pdf(content), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+
+    stats = await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/scan.pdf")
+    assert stats.scanned == 1
+    assert stats.fetched == 1, "a scan is a successful fetch, not a failure"
+    assert source.text_available is False
+    assert source.ocr_applied is False
+    assert source.ocr_tier == "none"
+    assert source.raw_file_path is not None, "OCR later needs the bytes"
+
+    rows = await sess.execute(
+        select(EnrichmentItem).where(EnrichmentItem.target_id == source.source_id)
+    )
+    item = rows.scalar_one()
+    assert item.item_type == "ocr_quality" and item.status == "pending"
+    await sess.execute(delete(EnrichmentItem).where(EnrichmentItem.target_id == source.source_id))
+
+
+@needs_poppler
+async def test_a_scan_is_not_queued_for_ocr_twice(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, tmp_path
+) -> None:
+    """The pending count is a number an operator makes a spending decision from,
+    and a re-crawl must not inflate it."""
+    from meridian_core.models import EnrichmentItem
+    from worker.ocr_queue import enqueue_ocr
+
+    sess = await session_for("rw")
+    source, _ = await upsert_source(sess, f"https://{run_domain}/scan.pdf", checksum="sha256:x")
+
+    first = await enqueue_ocr(sess, source.source_id)
+    second = await enqueue_ocr(sess, source.source_id)
+
+    assert first is not None and second is None
+    rows = await sess.execute(
+        select(EnrichmentItem).where(EnrichmentItem.target_id == source.source_id)
+    )
+    assert len(list(rows.scalars())) == 1
+    await sess.execute(delete(EnrichmentItem).where(EnrichmentItem.target_id == source.source_id))
+
+
+@needs_poppler
+async def test_a_pdf_that_cannot_be_read_is_stored_not_failed(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A HTML error page served as `application/pdf` is a real and common shape.
+
+    The fetch worked, so the task advances; the bytes are kept, so §11.12 can
+    re-derive if a later extractor manages what this one could not.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    task = await enqueue(sess, run_domain, run_topic, path="/broken.pdf")
+
+    worker, _ = build_worker(
+        sess,
+        serve_pdf(b"<html><body>404</body></html>"),
+        run_domain,
+        run_topic,
+        resolver=resolve,
+        max_tasks=1,
+    )
+
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "fetched"
+    assert stats.extracted == 0 and stats.scanned == 0 and stats.stored == 1
+    source = await get_source(sess, f"https://{run_domain}/broken.pdf")
+    assert source.text_available is False
+    assert source.raw_file_path is not None

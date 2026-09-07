@@ -8,6 +8,64 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-09-08
+
+**PDFs become readable, and scans become findable.** Since `P1-06` the frontier
+had been queueing PDFs faster than anything could read them, and on a government
+corpus that is a large share of the substance rather than an edge case.
+
+Verified live against real LTA documents: `MTM.pdf` extracted across 2 pages,
+the Land Transport ITM extracted with its own title read out of the PDF's Info
+dictionary, and every chunk carrying the page number a citation resolves to.
+
+### Added
+
+- `P1-09` `services/worker/worker/extract/pdf.py`. `pdftotext` over stdin — the
+  bytes are already in memory, and `-` means nothing this crawler downloaded
+  ever lands on disk under a name another process could reach. Page boundaries
+  come from the form feed poppler already writes, so they are exact rather than
+  reconstructed, which §6.6 warns is the first thing these pipelines flatten
+- **Scan detection**, §6.6's fork. Below ~100 characters per page a document is
+  a scan, and this is the check that stops a scanned planning report entering
+  the corpus as "extracted, nothing found" — the failure mode where nobody ever
+  looks again. Its stray text layer (a page number, a running header) is dropped
+  rather than kept, or the novelty gate would be left telling two scans apart by
+  their headers
+- `P1-13` `worker/ocr_queue.py`. OCR never runs inline — it would stall the
+  23-hour loop for one document — so a scan becomes a source record plus one
+  `enrichment_queue` row. Idempotent, because the pending count is a number an
+  operator makes a spending decision from and a re-crawl must not inflate it.
+  `ocr_applied` and `ocr_tier` are written explicitly so a skipped document is
+  findable rather than inferred from an absence
+- `chunk_pages()` — chunks carrying page numbers instead of character offsets
+  (§5.3). **A chunk never spans a page break**: one covering pages 4 and 5 has
+  to be cited as one of them and would send a reader to the wrong page for half
+  its content. Short pages therefore make short chunks, which is the honest
+  trade
+- `worker/extract/base.py` — the document shape every extractor returns. §6.6
+  routes each format to a different tool and the pipeline behind them is
+  identical, so the answer's shape has to be identical too, or the loop grows a
+  branch per format and each one is where a field gets forgotten
+- Title, author and creation date from `pdfinfo`. A PDF with no title in
+  `sources` is a citation that renders as a URL, and government reports set the
+  field far more often than they are given credit for
+
+### Notes
+
+- A missing poppler **raises**, and is logged as the deployment fault it is.
+  §6.6's own lesson about `markitdown-ocr` silently skipping applies exactly: a
+  worker that has quietly lost poppler would store every PDF and extract none of
+  them, and the only symptom would be a corpus that stopped growing
+- Everything else about an unreadable document is returned rather than raised —
+  an encrypted file, a truncated download, a HTML error page served as
+  `application/pdf`. Those are documents this crawler cannot read, and §6.5
+  already has a resting state for them. The raw file is kept either way, so
+  §11.12 recovers them the day a better extractor lands
+- The PDF tests build **real PDFs** with ghostscript rather than checking in
+  fixtures. A byte string starting with `%PDF-` exercises the error path and
+  nothing else, and both things worth testing — surviving page boundaries, and
+  recognising a scan — only exist inside a file a real extractor can read
+
 ## [0.16.0] — 2026-09-07
 
 **The crawler starts crawling.** Since `P1-15` the worker had drained the same

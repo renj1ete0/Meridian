@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.16" src="https://img.shields.io/badge/version-0.16-0D6F7C">
+  <img alt="Version 0.17" src="https://img.shields.io/badge/version-0.17-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -102,6 +102,7 @@ picky about which one.
 | Memory | 8 GB | 16 GB or more |
 | Storage | 100 GB SSD | 500 GB+ NVMe |
 | Runtime | Docker + Compose v2 | same |
+| Native dev extras | `poppler-utils` (PDF extraction) | + `ghostscript` to run the PDF tests |
 | Network | Outbound HTTPS | + Cloudflare Tunnel for remote access |
 
 Storage is the figure that grows: extracted text, embeddings, and the graph together
@@ -137,9 +138,10 @@ Production runs the whole stack in containers behind `cloudflared`
 > `packages/meridian_core` and the worker are built and tested, so `make migrate`,
 > `make seed`, `make test` and `python -m worker.main` all work today — the worker
 > drains the queue, fetches politely, records every attempt, keeps what it fetched
-> as a `sources` row plus (for primary sources) a local copy, extracts HTML to text,
-> bibliographic metadata and citations, and cuts it into citable chunks. PDFs and
-> Office documents are stored and left metadata-only until `P1-08`/`P1-09`, nothing
+> as a `sources` row plus (for primary sources) a local copy, extracts HTML and PDFs
+> to text, bibliographic metadata and citations, and cuts it into citable chunks —
+> page-accurate for PDFs. Office documents are stored and left metadata-only until
+> `P1-08`, scanned PDFs are detected and filed for OCR rather than read, nothing
 > embeds or searches yet (`P2-*`). Frontier expansion is on: a fetched page's links
 > are filtered and queued, so the crawl keeps going past its seed list. The API and
 > web commands are phase 2 and 3. See
