@@ -37,12 +37,21 @@ TASK_TYPE = constrained("url", "query", "doi", "sitemap", name="task_type")
 # Who put this in the queue. Frontier expansion is model-independent and
 # accounts for most of the queue; model-emitted seeds are capped per run (§11.4).
 #
-# `sitemap` and `search` are distinguishable from `frontier` on purpose. "How
-# did this URL get here" is the question §5.2's seed provenance exists to
-# answer, and a site's own index of itself, a search engine's ranking, and a
-# link a person chose to place on a page are three different answers.
+# Everything below `frontier` is distinguishable from it on purpose. "How did
+# this URL get here" is the question §5.2's seed provenance exists to answer,
+# and a link a person placed on a page, a site's own index of itself, a search
+# engine's ranking, a work another paper cited, and an open-access copy found
+# by resolving that citation are five different answers.
 SEED_SOURCE = constrained(
-    "frontier", "sitemap", "search", "model", "user", "diversity", name="seed_source"
+    "frontier",
+    "sitemap",
+    "search",
+    "citation",
+    "doi",
+    "model",
+    "user",
+    "diversity",
+    name="seed_source",
 )
 
 

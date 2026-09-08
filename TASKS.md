@@ -18,9 +18,9 @@ something went wrong.
 
 **Current phase: 2 opening, phase 1 not yet closed.** The crawl runs unattended,
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
-documents: `P1-01`–`P1-09`, `P1-11`–`P1-13`, `P1-15`, `P1-17`–`P1-24`, `P1-26`,
+documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1158 tests.
+1210 tests.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -53,8 +53,10 @@ nothing. The agreed sequence:
 5. `P1-16` the 48h run, then `P0-15` held-out questions — which must be written
    before `P2-06` is judged, not after — and `P2-09`, the call
 
-`P1-10` (figures) and `P1-14` (DOI resolution) are the remaining phase-1
-extraction work and neither blocks the checkpoint. `P1-25` (egress restriction)
+`P1-10` (figures) is the remaining phase-1 extraction work and does not block
+the checkpoint. `P1-14` is done: it moved up because `P1-34` wired an academic
+search feed into the frontier, and roughly a third of what that returns are
+publisher landing pages — an abstract, a paywall, nothing to extract. `P1-25` (egress restriction)
 is **not** closed by `P1-22`: `internal: true` stops a container reaching the
 internet, and does nothing about the worker — which must have a default route —
 reaching the LAN.
@@ -213,7 +215,17 @@ when its queue drained.
       pending count an operator makes a spending decision from. `ocr_applied`
       and `ocr_tier` written explicitly so a skipped document is findable rather
       than inferred from an absence (§6.6)
-- [ ] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain
+- [x] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain,
+      stopping at the first **legally available** copy. Plus the two ends that
+      make it reachable: citations become `doi` rows (§6.1 lists them beside
+      links; they were extracted and never queued, capped at 30 per page so one
+      review article cannot flood the frontier) and a `doi` row resolves to an
+      ordinary `url` row that goes through the whole fetch stack. Three
+      outcomes settle three ways — a provider erroring is routine, "no copy
+      anywhere" is an answer and settles `done`, and no provider answering is
+      transient and retries. A provider with no credential is skipped, not
+      failed, so a bare deployment still gets OpenAlex and preprints. Verified
+      live against real Unpaywall and OpenAlex across all four outcomes
 - [x] `P1-15` Worker main loop, supervision, graceful restart —
       `services/worker/worker/main.py`. N claim-fetch-settle lanes over one
       shared `Crawler`; the database is the queue and `SKIP LOCKED` is the

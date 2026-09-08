@@ -28,10 +28,11 @@ from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
 from worker.extract.pdf import available as pdf_available
 from worker.fetch import Fetcher
-from worker.main import Worker, WorkerSettings
+from worker.main import MAX_CITATIONS_PER_PAGE, Worker, WorkerSettings
 from worker.prefilter import Prefilter
 from worker.ratelimit import DomainLimiter
 from worker.rawstore import checksum_for
+from worker.resolve_doi import DoiError, OpenAccessCopy, ResolutionUnavailable
 from worker.robots import ALLOW_ALL, RobotsRules, parse
 from worker.search import SearchError, SearchResults
 
@@ -2006,3 +2007,254 @@ async def test_a_worker_with_no_backend_leaves_the_query_alone(
     assert query.status == "pending"
     assert query.attempts == 0
     assert query.claimed_by is None
+
+
+# --------------------------------------------------------------------------
+# Citations become `doi` rows, and `doi` rows become papers (`P1-14`)
+# --------------------------------------------------------------------------
+
+
+class FakeResolver:
+    """A resolution chain that answers from a script.
+
+    `test_resolve_doi.py` asserts the chain's own behaviour against a mock
+    transport; what these tests are about is what the *loop* does with each of
+    its three possible answers.
+    """
+
+    def __init__(self, copy=None, error: Exception | None = None) -> None:
+        self._copy = copy
+        self._error = error
+        self.asked: list[str] = []
+
+    async def resolve(self, doi: str):
+        self.asked.append(doi)
+        if self._error is not None:
+            raise self._error
+        return self._copy
+
+
+def with_resolver(sess, handler, domain, topic, resolver_chain, *, resolver, **overrides):
+    worker, rec = build_worker(sess, handler, domain, topic, resolver=resolver, **overrides)
+    worker._prefilter = Prefilter()
+    worker._resolver = resolver_chain
+    return worker, rec
+
+
+def citing_page(*dois: str) -> bytes:
+    """A page whose body lists DOIs the extractor will pick up as citations."""
+    references = "".join(f"<li>Someone et al. https://doi.org/{d}</li>" for d in dois)
+    return (
+        '<!doctype html><html lang="en"><head><title>Review</title></head>'
+        f"<body><article><p>{ARTICLE}</p><ol>{references}</ol></article></body></html>"
+    ).encode()
+
+
+async def enqueue_doi(sess, doi: str, topic: str) -> QueueTask:
+    task = QueueTask(url_or_query=doi, topic=topic, task_type="doi", seed_source="citation")
+    sess.add(task)
+    await sess.flush()
+    return task
+
+
+async def test_a_pages_citations_become_doi_rows(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§6.1 lists citations beside outbound links as frontier expansion, and
+    §6.4 says the citation graph alone sustains a full queue for weeks.
+
+    Until now they were extracted, written to `sources.extra`, and never queued.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = citing_page("10.1016/j.trd.2021.103013", "10.1080/01441647.2019.1611666")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    rows = await sess.execute(
+        select(QueueTask).where(QueueTask.topic == run_topic, QueueTask.seed_source == "citation")
+    )
+    queued = list(rows.scalars())
+    assert {row.url_or_query for row in queued} == {
+        "10.1016/j.trd.2021.103013",
+        "10.1080/01441647.2019.1611666",
+    }
+    assert all(row.task_type == "doi" for row in queued)
+
+
+async def test_the_same_citation_twice_is_one_row(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A reference list repeats, and two spellings of one DOI would otherwise be
+    two rows, two resolutions and two fetches of the same paper."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = citing_page("10.1016/j.trd.2021.103013", "10.1016/J.TRD.2021.103013")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    rows = await sess.execute(
+        select(QueueTask).where(QueueTask.url_or_query == "10.1016/j.trd.2021.103013")
+    )
+    assert len(list(rows.scalars())) == 1
+
+
+async def test_one_review_article_cannot_flood_the_queue(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A review cites hundreds of works, and letting one page put hundreds of
+    rows in ahead of everything waiting is how a crawl goes depth-first through
+    a single literature."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = citing_page(*[f"10.1016/j.test.2021.{i:06d}" for i in range(80)])
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    rows = await sess.execute(
+        select(QueueTask).where(QueueTask.topic == run_topic, QueueTask.seed_source == "citation")
+    )
+    assert len(list(rows.scalars())) == MAX_CITATIONS_PER_PAGE
+
+
+async def test_a_resolved_doi_becomes_a_fetchable_url(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The point of the whole task. A DOI is not fetchable; the open-access copy
+    it resolves to is an ordinary `url` row that goes through the whole fetch
+    stack, robots and `netguard` included."""
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+    chain = FakeResolver(
+        OpenAccessCopy(
+            url=f"https://{run_domain}/oa/paper.pdf",
+            provider="unpaywall",
+            version="publishedVersion",
+        )
+    )
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "done", f"the DOI did not settle cleanly: {task.error}"
+    assert chain.asked == ["10.1016/j.trd.2021.103013"]
+    assert stats.queued == 1
+    queued = await rows_for(sess, run_domain, "doi")
+    assert [row.url_or_query for row in queued] == [f"https://{run_domain}/oa/paper.pdf"]
+    assert queued[0].task_type == "url"
+    assert queued[0].topic == run_topic
+
+
+async def test_a_paper_with_no_open_access_copy_is_done_not_retried(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§6.5: a metadata-only work still participates in the graph. The paper is
+    paywalled today and will be paywalled tomorrow, so retrying spends the queue
+    slot for the same answer."""
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, FakeResolver(None), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "done"
+    assert task.attempts == 0
+
+
+async def test_an_unreachable_resolver_retries(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The other half of that distinction: nothing was asked, so nothing is
+    known, and abandoning would lose the citation over an API outage."""
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+    chain = FakeResolver(error=ResolutionUnavailable("no provider answered"))
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "pending"
+    assert task.attempts == 1
+    assert "resolution_unavailable" in (task.error or "")
+
+
+async def test_a_malformed_doi_is_abandoned_not_retried(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Re-parsing the same string gives the same error. `queue_disposition`
+    reserves retries for things that might succeed later."""
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, "not-a-doi-at-all", run_topic)
+    chain = FakeResolver(error=DoiError("not a DOI"))
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "failed"
+    assert "invalid_doi" in (task.error or "")
+
+
+async def test_a_doi_is_not_stored_as_a_source(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`url_or_query` holds a DOI, not a URL. The page path would create a
+    `sources` row whose `url` is an identifier."""
+    sess = await session_for("rw")
+    await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+    chain = FakeResolver(OpenAccessCopy(url=f"https://{run_domain}/oa.pdf", provider="openalex"))
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    assert await get_source(sess, "10.1016/j.trd.2021.103013") is None
+
+
+async def test_a_worker_with_no_resolver_leaves_doi_rows_alone(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Unclaimed, not failed — the same rule `query` rows follow."""
+    sess = await session_for("rw")
+    doi_task = await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+    url_task = await enqueue(sess, run_domain, run_topic)
+
+    worker, _ = build_worker(sess, ok_html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._prefilter = Prefilter()
+    await worker.run()
+
+    await sess.refresh(doi_task)
+    await sess.refresh(url_task)
+    assert url_task.status == "fetched", "the worker did not claim the row it could do"
+    assert doi_task.status == "pending"
+    assert doi_task.claimed_by is None

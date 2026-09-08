@@ -23,6 +23,56 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.27.0] — 2026-09-08
+
+**A paywalled landing page stops being a dead end.** `P1-14`'s resolution chain,
+and the citation seeding that gives it something to resolve.
+
+### Added
+
+- `P1-14` `worker/resolve_doi.py` — §6.5's chain: Unpaywall → OpenAlex → CORE →
+  preprint, stopping at the first **legally available** copy. That word is the
+  design constraint: a corpus whose promise is checkable citations cannot be
+  built on copies its readers cannot legally follow
+- `P1-14` The `doi` task handler. A DOI is not fetchable, so what the handler
+  produces is one ordinary `url` row pointing at the open-access copy — which
+  then goes through the whole fetch stack, robots and `netguard` included. That
+  is what makes it safe for a hostile page to put any DOI it likes in its
+  reference list: nothing here fetches the answer, it only queues it
+- `P1-14` Citation seeding. §6.1 lists citations beside outbound links as
+  frontier expansion and §6.4 says the citation graph alone sustains a full
+  queue for weeks; until now they were extracted, written to `sources.extra`
+  and never queued. Capped at 30 per page — a review article cites hundreds,
+  and letting one page put hundreds of rows in ahead of everything waiting is
+  how a crawl goes depth-first through a single literature
+- `seed_source` gains `citation` and `doi`: a work another paper cited, and the
+  copy found by resolving it, are two more answers to §5.2's provenance question
+- `MERIDIAN_CONTACT_EMAIL` and `CORE_API_KEY`, both from the environment
+  (§11.11). A provider with no credential is **skipped, not failed** — a
+  deployment with neither still gets OpenAlex and the preprint rule
+
+### Notes
+
+- Three outcomes, three dispositions, the same distinction the search backend
+  needs: one provider erroring is routine and the chain continues; every
+  provider answering "no copy" is an *answer*, so the task is `done` rather than
+  retried against a paywall that will still be there tomorrow; no provider
+  answering at all is transient, so it retries. A malformed DOI is abandoned —
+  re-parsing the same string gives the same error
+- An arXiv DOI is resolved from the DOI itself, before any request. It deviates
+  from §6.5's literal order and lands on §6.5's answer, since Unpaywall would
+  send us to arXiv anyway
+- Verified live against real Unpaywall and OpenAlex, across all four outcomes: a
+  paywalled publisher paper resolved to an institutional repository copy, an
+  arXiv DOI resolved with no request at all, two open-access papers resolved to
+  direct PDFs, and one genuinely closed paper returned no copy — settling `done`
+  rather than retrying
+- `_claimable_task_types` now covers both conditional types through one table,
+  and the loop's drift tests read the dispatch out of the source rather than
+  listing the types, so the next conditional type cannot be added to the claim
+  without a branch to receive it
+
+
 ## [0.26.0] — 2026-09-08
 
 **The frontier can widen again — and a discovery channel that never worked

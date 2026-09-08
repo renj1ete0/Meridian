@@ -21,7 +21,7 @@ both read, Office documents too, and every page is screened for prompt injection
 the way past. As of `v0.20.0` it does that from a container image rather than a
 checkout, and as of `v0.24.0` the whole stack has a topology rather than one flat
 network. Chunks carry vectors (`v0.22.0` reads sitemaps too) and, as of `v0.25.0`,
-a verdict on what they duplicate. 1122 tests pass with a real Postgres.
+a verdict on what they duplicate. 1210 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -104,9 +104,10 @@ detected and filed in `enrichment_queue`, and **nothing ever runs that queue** �
 makes OCR explicitly user-triggered, so the rows sit there until a UI exists to spend
 against them.
 
-The frontier is links, sitemaps (`P1-28`) and search (`P1-34`), with topics assigned
-from the URL path for sitemap entries and from the query for search results. It is
-still not the rest of `P5-01`: no citation-driven seeding, no spaCy NER, no TF-IDF.
+The frontier is links, sitemaps (`P1-28`), search (`P1-34`) and citations (`P1-14`),
+with topics assigned from the URL path for sitemap entries and inherited from the
+query or citing page otherwise. It is still not the rest of `P5-01`: no spaCy NER, no
+TF-IDF.
 
 Both of the non-link channels were broken or missing until `v0.26.0`, and they were
 broken in the same direction — the frontier could only ever narrow. `P1-34` had no
@@ -607,6 +608,15 @@ And `v0.26.0`, against a real SearXNG rather than a mock transport:
 | §6.4's routine engine failure | one upstream engine unresponsive throughout; the query succeeded and nothing retried |
 | Sitemaps enqueue at all | four loop-level tests, all of which fail against the pre-`v0.26.0` enum |
 
+And `v0.27.0`, against real Unpaywall and OpenAlex:
+
+| Behaviour | Evidence |
+|---|---|
+| A paywalled publisher paper resolves | an Elsevier transport paper → an institutional repository copy, `submittedVersion` |
+| Open-access papers resolve to a PDF | two publishers → direct PDF links, `publishedVersion` |
+| An arXiv DOI costs no request | resolved from the DOI itself, network handler asserted untouched |
+| A genuinely closed paper is an *answer* | one publisher DOI → no copy anywhere → `done`, not retried |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -655,7 +665,15 @@ drains. Building it is also what surfaced that `P1-28` had never enqueued anythi
 so both non-link discovery channels were dead, and the long run would have been a
 long run over a queue that could only shrink.
 
+**`P1-14` is done too (`v0.27.0`)**, and it went next for the same reason: `P1-34`
+wired an academic search feed into the frontier, and roughly a third of what that
+returns are publisher landing pages — an abstract, a paywall, nothing to extract.
+Resolution turns those into the open-access copy the same paper is already sitting in
+somewhere else. It also closed the last task type with no handler, so `HANDLED_TASK_TYPES`
+is now every value in the enum.
+
 **What is still worth checking before the long run.** Every handler that ends in a
-write should have a test that reads the row back (§3). `P1-14`'s DOI handler does not
-exist yet, so `doi` rows sit unclaimed the way `query` rows did — harmless today
-because nothing enqueues them, and worth remembering before something does.
+write should have a test that reads the row back (§3) — that rule is what all three of
+these tasks kept running into. Citation seeding is capped at 30 DOIs per page, which
+is a guess: a real run is what says whether that is too tight for a literature review
+or too loose for the queue.

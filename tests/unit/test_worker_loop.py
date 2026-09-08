@@ -20,6 +20,7 @@ import pytest
 
 from worker.fetch import FetchResult
 from worker.main import (
+    CONDITIONAL_TASK_TYPES,
     ERROR_BACKOFF_S,
     HANDLED_TASK_TYPES,
     Claim,
@@ -532,9 +533,9 @@ async def test_the_claim_is_narrowed_to_the_types_the_loop_handles(monkeypatch) 
 
     await asyncio.wait_for(worker.run(), timeout=5)
 
-    # No search backend on this worker, so `query` is not claimable — see
-    # `test_a_worker_without_search_does_not_claim_query_rows`.
-    assert seen["task_types"] == [t for t in HANDLED_TASK_TYPES if t != "query"]
+    # This worker has none of the conditional dependencies, so it claims only
+    # the unconditional types — see the conditional-claim tests below.
+    assert seen["task_types"] == [t for t in HANDLED_TASK_TYPES if t not in CONDITIONAL_TASK_TYPES]
 
 
 def test_every_handled_task_type_has_somewhere_to_go() -> None:
@@ -542,53 +543,66 @@ def test_every_handled_task_type_has_somewhere_to_go() -> None:
 
     Adding a type to `HANDLED_TASK_TYPES` without a branch in `_process` is the
     failure this exists for: the loop would claim those rows and put every one
-    of them through the page path, storing XML as a document and never saying
-    anything was wrong.
+    of them through the page path — storing XML as a document, or a DOI string
+    as a source URL — and never say anything was wrong.
+
+    Read out of the source rather than listed here on purpose. A hardcoded set
+    would have to be edited every time a type is legitimately added, and the
+    edit that makes it pass is the same edit that hides the bug.
     """
-    dispatchable = {"url", "sitemap", "query"}
-    assert set(HANDLED_TASK_TYPES) <= dispatchable
-    # And the types that still have no handler stay out of the claim.
-    assert "doi" not in HANDLED_TASK_TYPES
+    import inspect
+
+    dispatch = inspect.getsource(Worker._process)
+    # `url` is the fall-through path and has no branch of its own.
+    missing = [t for t in HANDLED_TASK_TYPES if t != "url" and f'== "{t}"' not in dispatch]
+    assert not missing, f"claimed but never dispatched: {missing}"
 
 
-async def test_a_worker_without_search_does_not_claim_query_rows(monkeypatch) -> None:
+def test_every_conditional_type_names_a_real_attribute() -> None:
+    """A typo in `CONDITIONAL_TASK_TYPES` would make `getattr` raise inside the
+    claim — on every pass, for a worker that was otherwise fine."""
+    worker = Worker(FakeCrawler())
+    for task_type, attribute in CONDITIONAL_TASK_TYPES.items():
+        assert task_type in HANDLED_TASK_TYPES, f"{task_type} is conditional but never claimed"
+        assert hasattr(worker, attribute), f"{task_type} names a missing attribute {attribute}"
+
+
+async def claimed_types(worker, monkeypatch) -> list[str]:
+    seen: dict[str, object] = {}
+
+    async def capture(sess, **kwargs):
+        seen.update(kwargs)
+        worker.stop()
+        return None
+
+    monkeypatch.setattr("worker.main.claim_next", capture)
+    await asyncio.wait_for(worker.run(), timeout=5)
+    return list(seen["task_types"])
+
+
+@pytest.mark.parametrize("task_type,attribute", sorted(CONDITIONAL_TASK_TYPES.items()))
+async def test_a_missing_dependency_leaves_its_rows_unclaimed(
+    monkeypatch, task_type: str, attribute: str
+) -> None:
     """A row this process cannot answer is better left for one that can.
 
-    Claiming it would fail a task that is not broken — the query is fine, the
-    worker just has no backend — and on a stack whose SearXNG is briefly down
-    that means every seed query burns its retries and is abandoned before the
-    service comes back.
+    Claiming it would fail a task that is not broken — the row is fine, the
+    worker just has no backend — so on a stack whose SearXNG is briefly down
+    every seed query would burn its retries and be abandoned before the service
+    came back.
     """
-    store = FakeStore()
-    worker = build(store, FakeCrawler(), monkeypatch)
-    seen: dict[str, object] = {}
+    worker = build(FakeStore(), FakeCrawler(), monkeypatch)
+    setattr(worker, attribute, None)
 
-    async def capture(sess, **kwargs):
-        seen.update(kwargs)
-        worker.stop()
-        return None
-
-    monkeypatch.setattr("worker.main.claim_next", capture)
-    await asyncio.wait_for(worker.run(), timeout=5)
-
-    assert "query" not in seen["task_types"]
+    assert task_type not in await claimed_types(worker, monkeypatch)
 
 
-async def test_a_worker_with_search_claims_query_rows(monkeypatch) -> None:
-    store = FakeStore()
-    worker = build(store, FakeCrawler(), monkeypatch)
-    worker._search = object()  # presence is the whole condition
-    seen: dict[str, object] = {}
+async def test_a_fully_equipped_worker_claims_everything(monkeypatch) -> None:
+    worker = build(FakeStore(), FakeCrawler(), monkeypatch)
+    for attribute in CONDITIONAL_TASK_TYPES.values():
+        setattr(worker, attribute, object())  # presence is the whole condition
 
-    async def capture(sess, **kwargs):
-        seen.update(kwargs)
-        worker.stop()
-        return None
-
-    monkeypatch.setattr("worker.main.claim_next", capture)
-    await asyncio.wait_for(worker.run(), timeout=5)
-
-    assert seen["task_types"] == HANDLED_TASK_TYPES
+    assert await claimed_types(worker, monkeypatch) == HANDLED_TASK_TYPES
 
 
 def test_handled_task_types_are_real_task_types() -> None:

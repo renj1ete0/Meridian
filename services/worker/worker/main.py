@@ -94,6 +94,14 @@ from .ocr_queue import enqueue_ocr, mark_scanned
 from .prefilter import Prefilter
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
+from .resolve_doi import (
+    DoiError,
+    DoiResolver,
+    OpenAccessCopy,
+    ResolutionUnavailable,
+    ResolverSettings,
+    normalise_doi,
+)
 from .search import SearchError, SearchResults, SearxClient
 from .sitemaps import ParsedSitemap, SitemapError, parse_sitemap
 from .topicmatch import TopicVocabulary, load_topic_vocabulary
@@ -113,15 +121,17 @@ class NotKept(RuntimeError):
     """
 
 
-#: Task types this loop can actually process. `doi` rows belong to a handler that
-#: does not exist yet (P1-14); claiming one would mean either failing a task that
-#: is not broken or handing it back forever.
+#: Task types this loop can actually process.
 #:
-#: `query` is here as of `P1-34`, and it is conditional at claim time rather
-#: than in this list: a worker with no search backend must not claim query rows
-#: it cannot answer, or a stack deployed without SearXNG would fail every seed
-#: query once and abandon it. See `_claimable_task_types`.
-HANDLED_TASK_TYPES = ["url", "sitemap", "query"]
+#: `query` (`P1-34`) and `doi` (`P1-14`) are conditional at claim time rather
+#: than absent from this list: a worker with no search backend, or no way to
+#: reach the resolution APIs, must not claim rows it cannot answer, or a stack
+#: whose SearXNG is briefly down would fail every seed query once and abandon
+#: it. See `_claimable_task_types`.
+HANDLED_TASK_TYPES = ["url", "sitemap", "query", "doi"]
+
+#: Which dependency each conditional task type needs, by attribute name.
+CONDITIONAL_TASK_TYPES = {"query": "_search", "doi": "_resolver"}
 
 #: §6.6's format routing table, as far as it is built. Everything not listed is
 #: fetched, stored and left metadata-only until its extractor exists —
@@ -147,6 +157,23 @@ PDF_MEDIA_TYPES = frozenset({"application/pdf"})
 #: actually pointed at. Negative rather than zero so that a future tier of 0
 #: still outranks them.
 UNMATCHED_SITEMAP_PRIORITY = -10
+
+#: How many of one page's citations become `doi` rows (`P1-14`, §6.1).
+#:
+#: A reference list is the densest frontier signal there is — §6.4 notes the
+#: citation graph alone sustains a full queue for weeks — but a review article
+#: cites three hundred works, and letting one page put three hundred rows in
+#: ahead of everything already waiting is how a crawl ends up depth-first
+#: through one literature. Capped, in the order the document listed them.
+MAX_CITATIONS_PER_PAGE = 30
+
+#: Where a resolved paper goes in the queue.
+#:
+#: Above the frontier's default of 0 and below the tier ranking: an
+#: open-access copy of a work something already cited is more likely to be
+#: worth reading than an arbitrary outbound link, and less likely than a
+#: government publication.
+RESOLVED_PAPER_PRIORITY = 3
 
 SITEMAP_POLICY_OVERRIDES = {
     "allowed_content_types": [],
@@ -330,6 +357,7 @@ class Worker:
         prefilter: Prefilter | None = None,
         topics: TopicVocabulary | None = None,
         search: SearxClient | None = None,
+        resolver: DoiResolver | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
@@ -346,6 +374,9 @@ class Worker:
         # supported state and not an error — the loop simply stops claiming
         # `query` rows so they wait for a worker that can answer them.
         self._search = search
+        # As with `search`: absent is a supported state, and the loop simply
+        # stops claiming the rows it could not answer.
+        self._resolver = resolver
         self._stopping = asyncio.Event()
         self._stats = WorkerStats()
         self._reserved = 0
@@ -463,9 +494,12 @@ class Worker:
         that can, which on a single-worker stack means it waits for SearXNG to
         come back rather than being abandoned while it is down.
         """
-        if self._search is not None:
-            return list(HANDLED_TASK_TYPES)
-        return [name for name in HANDLED_TASK_TYPES if name != "query"]
+        return [
+            name
+            for name in HANDLED_TASK_TYPES
+            if name not in CONDITIONAL_TASK_TYPES
+            or getattr(self, CONDITIONAL_TASK_TYPES[name]) is not None
+        ]
 
     async def _claim(self) -> Claim | None:
         async with self._session_factory() as sess:
@@ -500,6 +534,9 @@ class Worker:
             return
         if claim.task_type == "query":
             await self._process_query(claim)
+            return
+        if claim.task_type == "doi":
+            await self._process_doi(claim)
             return
 
         result = await self._crawler.fetch(
@@ -793,6 +830,81 @@ class Worker:
             },
         )
 
+    async def _process_doi(self, claim: Claim) -> None:
+        """Resolve one DOI to a legally available copy and queue it (`P1-14`, §6.5).
+
+        The row's `url_or_query` is a DOI, not a URL. What this produces is one
+        ordinary `url` task pointing at an open-access copy — which then goes
+        through the whole fetch stack, robots and `netguard` included. That is
+        what makes it safe for a hostile page to put any DOI it likes in its
+        reference list: nothing here fetches the answer, it only queues it.
+        """
+        if self._resolver is None:  # pragma: no cover - _claimable_task_types prevents it
+            log.warning("claimed a DOI with no resolver", extra={"task_id": claim.task_id})
+            await self._settle(claim, "retry", "no_doi_resolver")
+            return
+
+        copy = None
+        queued = 0
+        try:
+            copy = await self._resolver.resolve(claim.url)
+        except DoiError as exc:
+            # The row is bad, not the network. Retrying re-parses the same
+            # string to the same error, so it is abandoned rather than retried.
+            disposition, detail = "abandon", f"invalid_doi: {exc}"
+        except ResolutionUnavailable as exc:
+            disposition, detail = "retry", f"resolution_unavailable: {exc}"
+        else:
+            # Including "no open-access copy exists", which is an answer. §6.5
+            # is explicit that a metadata-only work still participates in the
+            # graph — the paper is paywalled today and will be tomorrow, so the
+            # task is done rather than retried forever.
+            disposition = "done"
+            detail = f"resolved_by: {copy.provider}" if copy else "no_open_access_copy"
+            if copy is not None:
+                queued = await self._queue_resolved_copy(claim, copy)
+                self._stats.queued += queued
+
+        await self._settle(claim, disposition, detail)
+
+        log.info(
+            "doi settled",
+            extra={
+                "task_id": claim.task_id,
+                "doi": claim.url,
+                "topic": claim.topic,
+                "disposition": disposition,
+                "detail": detail,
+                "provider": copy.provider if copy else None,
+                "version": copy.version if copy else None,
+                "license": copy.license if copy else None,
+                "queued": queued,
+            },
+        )
+
+    async def _queue_resolved_copy(self, claim: Claim, copy: OpenAccessCopy) -> int:
+        """Put the open-access copy in the queue, if it is not already there."""
+        if self._prefilter is None:
+            return 0
+
+        async with self._session_factory() as sess:
+            verdict = await self._prefilter.keep(sess, [copy.url])
+            if not verdict.kept:
+                log.debug(
+                    "a resolved copy was not worth queueing",
+                    extra={"doi": claim.url, "url": copy.url, "dropped": verdict.dropped},
+                )
+                return 0
+            await enqueue(
+                sess,
+                verdict.kept[0],
+                topic=claim.topic,
+                seed_source="doi",
+                priority=RESOLVED_PAPER_PRIORITY,
+            )
+            await sess.commit()
+        return 1
+
     async def _queue_search_results(self, claim: Claim, results: SearchResults) -> int:
         """Prefilter a query's results and enqueue what survives.
 
@@ -955,6 +1067,7 @@ class Worker:
                 # is a corpus that cites text it does not hold.
                 chunks_written = await self._chunk(sess, source, document, changed=changed)
                 queued = await self._expand_frontier(sess, claim, document)
+                queued += await self._seed_citations(sess, claim, document)
                 await sess.commit()
         except Exception as exc:
             log.exception(
@@ -1033,6 +1146,71 @@ class Worker:
             },
         )
         return len(verdict.kept)
+
+    async def _seed_citations(
+        self, sess: AsyncSession, claim: Claim, document: ExtractedDocument | None
+    ) -> int:
+        """Turn this page's reference list into `doi` rows (`P1-14`, §6.1).
+
+        §6.1 lists citations beside outbound links as frontier expansion, and
+        §6.4 says the citation graph alone sustains a full queue for weeks. It
+        is also a better signal than a link: a reference is a claim that this
+        work matters to that one, which is exactly the judgement a link in a
+        navigation bar is not making.
+
+        Only `doi` citations, for now. `arxiv`, `pmid` and `handle` identifiers
+        are extracted (`extract/base.py`) and each needs its own resolution
+        route — a `pmid` is not a DOI, and guessing a URL for one would queue
+        rows that 404. They stay in `sources.extra` until there is somewhere
+        for them to go.
+
+        The prefilter deliberately does not run here. It answers "is this URL
+        worth a request", and a DOI is not a URL — `already_queued` is the part
+        of it that applies, and it is applied directly.
+        """
+        if document is None or not document.citations or self._resolver is None:
+            return 0
+
+        dois: dict[str, None] = {}
+        for citation in document.citations:
+            if citation.kind != "doi":
+                continue
+            try:
+                dois[normalise_doi(citation.value)] = None
+            except DoiError:
+                # A reference list is OCR'd, hand-typed and frequently wrong.
+                # One malformed DOI is not worth a log line per page.
+                continue
+            if len(dois) >= MAX_CITATIONS_PER_PAGE:
+                break
+
+        if not dois:
+            return 0
+
+        known = await already_queued(sess, list(dois))
+        fresh = [doi for doi in dois if doi not in known]
+        for doi in fresh:
+            await enqueue(
+                sess,
+                doi,
+                topic=claim.topic,
+                seed_source="citation",
+                task_type="doi",
+                priority=RESOLVED_PAPER_PRIORITY,
+            )
+
+        if fresh:
+            log.info(
+                "citations queued for resolution",
+                extra={
+                    "url": claim.url,
+                    "task_id": claim.task_id,
+                    "cited": len(document.citations),
+                    "queued": len(fresh),
+                    "already_known": len(dois) - len(fresh),
+                },
+            )
+        return len(fresh)
 
     async def _chunk(
         self,
@@ -1394,10 +1572,26 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
         # crawler looks exactly like a finished one (`P1-34`, §6.4).
         log.warning("no SEARXNG_URL; query rows will not be claimed and the frontier cannot widen")
 
+    resolver_settings = ResolverSettings.from_env()
+    if not resolver_settings.contact_email:
+        # Unpaywall requires a contact address and refuses requests without
+        # one, so this is not cosmetic: the chain drops to OpenAlex and the
+        # preprint rule, which is materially worse coverage (`P1-14`, §6.5).
+        log.warning(
+            "no MERIDIAN_CONTACT_EMAIL; Unpaywall will be skipped and DOI "
+            "resolution will find fewer open-access copies"
+        )
+    resolver = DoiResolver(resolver_settings)
+
     async with Fetcher(browser=browser) as fetcher:
         crawler = Crawler(session, fetcher=fetcher, limiter=DomainLimiter())
         worker = Worker(
-            crawler, settings=settings, prefilter=prefilter, topics=topics, search=search
+            crawler,
+            settings=settings,
+            prefilter=prefilter,
+            topics=topics,
+            search=search,
+            resolver=resolver,
         )
         install_signal_handlers(worker)
         try:
@@ -1406,6 +1600,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
             await dispose_engines()
             if search is not None:
                 await search.aclose()
+            await resolver.aclose()
 
 
 def main() -> None:
