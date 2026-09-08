@@ -105,6 +105,10 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       crawl4ai: { condition: service_healthy }
+      # `service_started`, not `service_healthy`: searxng ships no healthcheck,
+      # and the worker does not need it to start — a missing backend means
+      # `query` rows go unclaimed, not that the crawl stops (P1-34).
+      searxng: { condition: service_started }
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures

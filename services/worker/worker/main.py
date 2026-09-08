@@ -94,6 +94,7 @@ from .ocr_queue import enqueue_ocr, mark_scanned
 from .prefilter import Prefilter
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
+from .search import SearchError, SearchResults, SearxClient
 from .sitemaps import ParsedSitemap, SitemapError, parse_sitemap
 from .topicmatch import TopicVocabulary, load_topic_vocabulary
 
@@ -112,10 +113,15 @@ class NotKept(RuntimeError):
     """
 
 
-#: Task types this loop can actually process. `query` and `doi` rows belong to
-#: handlers that do not exist yet (P1-14); claiming one would mean either failing
-#: a task that is not broken or handing it back forever.
-HANDLED_TASK_TYPES = ["url", "sitemap"]
+#: Task types this loop can actually process. `doi` rows belong to a handler that
+#: does not exist yet (P1-14); claiming one would mean either failing a task that
+#: is not broken or handing it back forever.
+#:
+#: `query` is here as of `P1-34`, and it is conditional at claim time rather
+#: than in this list: a worker with no search backend must not claim query rows
+#: it cannot answer, or a stack deployed without SearXNG would fail every seed
+#: query once and abandon it. See `_claimable_task_types`.
+HANDLED_TASK_TYPES = ["url", "sitemap", "query"]
 
 #: §6.6's format routing table, as far as it is built. Everything not listed is
 #: fetched, stored and left metadata-only until its extractor exists —
@@ -323,6 +329,7 @@ class Worker:
         session_factory: SessionFactory = session,
         prefilter: Prefilter | None = None,
         topics: TopicVocabulary | None = None,
+        search: SearxClient | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
@@ -335,6 +342,10 @@ class Worker:
         # case, so "no vocabulary" and "nothing matched" take the same path and
         # there is no second branch to get wrong.
         self._topics = topics or TopicVocabulary()
+        # None means "this deployment has no search backend", which is a
+        # supported state and not an error — the loop simply stops claiming
+        # `query` rows so they wait for a worker that can answer them.
+        self._search = search
         self._stopping = asyncio.Event()
         self._stats = WorkerStats()
         self._reserved = 0
@@ -443,6 +454,19 @@ class Worker:
                 )
                 await self._settle_error(claim)
 
+    def _claimable_task_types(self) -> list[str]:
+        """What this particular worker can answer, not what the loop supports.
+
+        A `query` row needs a search backend, and a worker without one that
+        claimed it would fail a task that is not broken — the row is fine, this
+        process just cannot do it. Leaving it unclaimed hands it to a worker
+        that can, which on a single-worker stack means it waits for SearXNG to
+        come back rather than being abandoned while it is down.
+        """
+        if self._search is not None:
+            return list(HANDLED_TASK_TYPES)
+        return [name for name in HANDLED_TASK_TYPES if name != "query"]
+
     async def _claim(self) -> Claim | None:
         async with self._session_factory() as sess:
             task = await claim_next(
@@ -450,7 +474,7 @@ class Worker:
                 worker_id=self._settings.worker_id,
                 lease_seconds=self._settings.lease_seconds,
                 topics=list(self._settings.topics) if self._settings.topics else None,
-                task_types=HANDLED_TASK_TYPES,
+                task_types=self._claimable_task_types(),
             )
             if task is None:
                 return None
@@ -473,6 +497,9 @@ class Worker:
         """
         if claim.task_type == "sitemap":
             await self._process_sitemap(claim)
+            return
+        if claim.task_type == "query":
+            await self._process_query(claim)
             return
 
         result = await self._crawler.fetch(
@@ -604,6 +631,7 @@ class Worker:
                 detail = f"sitemap_unreadable: {exc}"
             else:
                 queued = await self._queue_sitemap_entries(claim, parsed, base)
+                self._stats.queued += queued
 
         await self._settle(claim, disposition, detail, fetched_status="done")
 
@@ -705,6 +733,109 @@ class Worker:
                 },
             )
         return len(candidates)
+
+    async def _process_query(self, claim: Claim) -> None:
+        """Run one search and turn its results into queue rows (`P1-34`, §6.4).
+
+        Nothing is fetched, stored or extracted here. A query is not a document
+        — `url_or_query` holds the query text, not a URL — so it produces queue
+        rows and nothing else, and it settles to ``done`` because running it
+        *is* the whole of its work.
+
+        No `fetch_attempts` row either, and that is not an oversight. The log is
+        keyed by domain and answers "is this host refusing us"; a search asks
+        one internal service about many hosts, so a row there would file
+        SearXNG's availability under a domain nobody crawled.
+        """
+        if self._search is None:  # pragma: no cover - _claimable_task_types prevents it
+            log.warning("claimed a query with no search backend", extra={"task_id": claim.task_id})
+            await self._settle(claim, "retry", "no_search_backend")
+            return
+
+        results = None
+        queued = 0
+        try:
+            results = await self._search.search(claim.url)
+        except SearchError as exc:
+            # Transient and local: the backend is down or misconfigured, and the
+            # query itself is fine. Retrying is right, and the backoff is what
+            # stops a dead backend from spinning the queue.
+            disposition, detail = "retry", f"search_unavailable: {exc}"
+        else:
+            # Answered — including answered with nothing. §6.4 says engine
+            # failure is routine, so a query that returns no usable results is
+            # done rather than retried: the same engines will be just as broken
+            # tomorrow, and the queue slot is better spent elsewhere.
+            disposition, detail = "done", "search_ok"
+            queued = await self._queue_search_results(claim, results)
+            # `queued` counts rows this run added to the frontier, wherever they
+            # came from. A discovery channel missing from it would make the run
+            # summary understate exactly the thing the run was for.
+            self._stats.queued += queued
+
+        await self._settle(claim, disposition, detail)
+
+        log.info(
+            "query settled",
+            extra={
+                "task_id": claim.task_id,
+                "query": claim.url,
+                "topic": claim.topic,
+                "disposition": disposition,
+                "detail": detail,
+                "results": len(results.urls) if results else 0,
+                "dropped": dict(results.dropped) if results else {},
+                # §6.4 expects individual engines to break constantly. Logged
+                # rather than acted on: it is what explains a thin result set
+                # to whoever reads this line a week later.
+                "unresponsive_engines": list(results.unresponsive) if results else [],
+                "queued": queued,
+            },
+        )
+
+    async def _queue_search_results(self, claim: Claim, results: SearchResults) -> int:
+        """Prefilter a query's results and enqueue what survives.
+
+        The prefilter is not optional here the way it is for frontier links.
+        §6.4 is explicit that SearXNG returns a lot of content-farm and SEO
+        junk, and a search result is a URL nobody chose — no page pointed at it
+        and no site listed it — so it is the *least* trustworthy way a URL can
+        reach this queue and the one most worth filtering.
+        """
+        if not results.urls or self._prefilter is None:
+            return 0
+
+        async with self._session_factory() as sess:
+            verdict = await self._prefilter.keep(sess, list(results.urls))
+            if not verdict.kept:
+                return 0
+
+            tiers = await source_tier_map(sess)
+            for url in verdict.kept:
+                await enqueue(
+                    sess,
+                    url,
+                    # The query's topic, not the URL's path. Unlike a sitemap
+                    # entry — where the triggering page's topic says nothing
+                    # about what the site lists — a query was written *for* a
+                    # topic by a person, so every result is an answer to that
+                    # question and carries it.
+                    topic=claim.topic,
+                    seed_source="search",
+                    priority=priority_for_domain(url, tiers),
+                )
+            await sess.commit()
+
+        log.info(
+            "search results queued",
+            extra={
+                "query": claim.url,
+                "considered": verdict.considered,
+                "queued": len(verdict.kept),
+                "dropped": dict(verdict.dropped),
+            },
+        )
+        return len(verdict.kept)
 
     def _screen(
         self, claim: Claim, result: FetchResult, document: ExtractedDocument | None
@@ -1055,6 +1186,19 @@ class Worker:
             except Exception:
                 log.exception("housekeeping tick failed")
 
+    async def search_health(self) -> str:
+        """`configured` / `unreachable` / `absent` — for the health line (`P1-34`).
+
+        Three states for the reason `browser_health` has three. `absent` is a
+        deployment that never intended to search and is fine. `unreachable` is
+        the one worth waking up for: query rows stop being claimed, the frontier
+        stops widening, and the crawl winds down to an idle that reads as
+        success on every other number on this line.
+        """
+        if self._search is None:
+            return "absent"
+        return "configured" if await self._search.healthy() else "unreachable"
+
     async def browser_health(self) -> str:
         """`configured` / `unreachable` / `absent` — for the health line (`P1-26`).
 
@@ -1081,6 +1225,13 @@ class Worker:
             novelty = await novelty_health(sess)
 
         browser = await self.browser_health()
+        search = await self.search_health()
+        if search == "unreachable":
+            log.warning(
+                "search backend configured but not answering; query rows are not being "
+                "claimed and the frontier cannot widen",
+                extra={"search": search},
+            )
         if browser == "unreachable":
             # WARNING rather than INFO: this is the one health-line value that
             # means something is wrong right now and is invisible everywhere
@@ -1108,6 +1259,7 @@ class Worker:
                 "attempts_pruned": pruned,
                 "tracked_domains": self._crawler.limiter.tracked_domains,
                 "browser": browser,
+                "search": search,
                 **novelty.as_dict(),
             },
         )
@@ -1234,14 +1386,26 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
     prefilter = await build_prefilter()
     topics = await build_topic_vocabulary()
 
+    search = SearxClient.from_env()
+    if search is None:
+        # Louder than the browser's equivalent, because the consequence is
+        # worse. Without a browser the crawl extracts JS-heavy pages badly;
+        # without search it drains its frontier and then idles, and an idle
+        # crawler looks exactly like a finished one (`P1-34`, §6.4).
+        log.warning("no SEARXNG_URL; query rows will not be claimed and the frontier cannot widen")
+
     async with Fetcher(browser=browser) as fetcher:
         crawler = Crawler(session, fetcher=fetcher, limiter=DomainLimiter())
-        worker = Worker(crawler, settings=settings, prefilter=prefilter, topics=topics)
+        worker = Worker(
+            crawler, settings=settings, prefilter=prefilter, topics=topics, search=search
+        )
         install_signal_handlers(worker)
         try:
             return await worker.run()
         finally:
             await dispose_engines()
+            if search is not None:
+                await search.aclose()
 
 
 def main() -> None:

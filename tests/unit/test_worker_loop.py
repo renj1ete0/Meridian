@@ -532,7 +532,9 @@ async def test_the_claim_is_narrowed_to_the_types_the_loop_handles(monkeypatch) 
 
     await asyncio.wait_for(worker.run(), timeout=5)
 
-    assert seen["task_types"] == HANDLED_TASK_TYPES
+    # No search backend on this worker, so `query` is not claimable — see
+    # `test_a_worker_without_search_does_not_claim_query_rows`.
+    assert seen["task_types"] == [t for t in HANDLED_TASK_TYPES if t != "query"]
 
 
 def test_every_handled_task_type_has_somewhere_to_go() -> None:
@@ -543,10 +545,50 @@ def test_every_handled_task_type_has_somewhere_to_go() -> None:
     of them through the page path, storing XML as a document and never saying
     anything was wrong.
     """
-    dispatchable = {"url", "sitemap"}
+    dispatchable = {"url", "sitemap", "query"}
     assert set(HANDLED_TASK_TYPES) <= dispatchable
     # And the types that still have no handler stay out of the claim.
-    assert not {"query", "doi"} & set(HANDLED_TASK_TYPES)
+    assert "doi" not in HANDLED_TASK_TYPES
+
+
+async def test_a_worker_without_search_does_not_claim_query_rows(monkeypatch) -> None:
+    """A row this process cannot answer is better left for one that can.
+
+    Claiming it would fail a task that is not broken — the query is fine, the
+    worker just has no backend — and on a stack whose SearXNG is briefly down
+    that means every seed query burns its retries and is abandoned before the
+    service comes back.
+    """
+    store = FakeStore()
+    worker = build(store, FakeCrawler(), monkeypatch)
+    seen: dict[str, object] = {}
+
+    async def capture(sess, **kwargs):
+        seen.update(kwargs)
+        worker.stop()
+        return None
+
+    monkeypatch.setattr("worker.main.claim_next", capture)
+    await asyncio.wait_for(worker.run(), timeout=5)
+
+    assert "query" not in seen["task_types"]
+
+
+async def test_a_worker_with_search_claims_query_rows(monkeypatch) -> None:
+    store = FakeStore()
+    worker = build(store, FakeCrawler(), monkeypatch)
+    worker._search = object()  # presence is the whole condition
+    seen: dict[str, object] = {}
+
+    async def capture(sess, **kwargs):
+        seen.update(kwargs)
+        worker.stop()
+        return None
+
+    monkeypatch.setattr("worker.main.claim_next", capture)
+    await asyncio.wait_for(worker.run(), timeout=5)
+
+    assert seen["task_types"] == HANDLED_TASK_TYPES
 
 
 def test_handled_task_types_are_real_task_types() -> None:

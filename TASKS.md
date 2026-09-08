@@ -19,7 +19,8 @@ something went wrong.
 **Current phase: 2 opening, phase 1 not yet closed.** The crawl runs unattended,
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-13`, `P1-15`, `P1-17`–`P1-24`, `P1-26`,
-`P1-28`, `P1-30`, `P1-33` and (pulled forward) `P2-02` are done, at 1122 tests.
+`P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
+1158 tests.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -44,6 +45,11 @@ nothing. The agreed sequence:
    went before the long run deliberately: nothing deletes from the raw store
    (`P1-31`), so an ungated 48h run keeps every near-duplicate it finds — it
    now at least *knows* which ones they are
+4b. ~~`P1-34` query handler~~ — **done in v0.26.0**, and it moved ahead of the
+   long run for a reason worth keeping: a 48h window is only worth paying for
+   if the frontier can widen when it drains. Building it surfaced that `P1-28`
+   had never enqueued anything either, which would have made the same window
+   much narrower than anyone expected
 5. `P1-16` the 48h run, then `P0-15` held-out questions — which must be written
    before `P2-06` is judged, not after — and `P2-09`, the call
 
@@ -53,10 +59,12 @@ is **not** closed by `P1-22`: `internal: true` stops a container reaching the
 internet, and does nothing about the worker — which must have a default route —
 reaching the LAN.
 
-Worth knowing before the run: **`query` rows have no handler.** SearXNG is in
-compose and the cold-start seeds include search queries, but nothing consumes
-them, so when the frontier empties the crawl idles rather than searching for
-more. Tracked as `P1-34`.
+Worth knowing before the run: **`P1-28`'s sitemap handler had never enqueued a
+URL** — `seed_source="sitemap"` was missing from the enum, so every sitemap
+fetched, parsed, and then raised at the insert while the logs said it worked.
+Fixed in `v0.26.0`, along with `P1-34`, which was the other reason the frontier
+could only narrow. Both were found by asking what a 48h run would actually do
+when its queue drained.
 
 ---
 
@@ -232,7 +240,10 @@ more. Tracked as `P1-34`.
       fetcher degrades to static — correct, but silent. A worker that has quietly
       lost its browser for a week should say so on the health line (§12.5), not just
       extract worse
-- [x] `P1-28` **Sitemap discovery from robots.txt.** `worker/sitemaps.py` parses
+- [x] `P1-28` **Sitemap discovery from robots.txt.** (Enqueueing was broken until
+      `v0.26.0` — `seed_source="sitemap"` was never added to the enum, so every
+      sitemap parsed and then raised at the insert. Fetch, parse and settle all
+      succeeded, which is why nothing noticed.) `worker/sitemaps.py` parses
       urlsets and indexes; the loop grows a `sitemap` handler so the rows are
       claimed rather than orphaned. Two independent defences against XML entity
       expansion, because lxml expands by default — measured, not assumed. A
@@ -277,14 +288,18 @@ more. Tracked as `P1-34`.
       (default 15s, 0 disables). The non-interactive kind clears itself; the
       interactive kind never does, so it is bounded and tried once. Detection is
       narrow on purpose — the costly error is re-fetching ordinary 403s
-- [ ] `P1-34` **Nothing handles `query` rows.** `task_type: query` exists, SearXNG
-      runs in compose with its JSON API enabled, and `config/seed_sources.yaml`
-      ships query seeds — but no handler claims them, so search-driven discovery
-      never happens and an empty frontier means an idle crawler rather than a
-      wider one. Needs the same shape as `P1-28`'s handler: claim, call the
-      backend, prefilter the results, enqueue at tier priority. Note §6.4 warns
-      that individual engines break and rate-limit routinely, so a dead engine
-      must not stall the queue
+- [x] `P1-34` **Nothing handles `query` rows.** Now `worker/search.py` (a
+      SearXNG client) plus a `query` branch in the loop: claim, search,
+      prefilter, enqueue at tier priority carrying the query's topic. §6.4's
+      failure model is the design — an unresponsive engine is routine, a query
+      answered with nothing is `done` rather than retried forever, and only the
+      backend itself being unreachable is a retry. `query` is claimable only by
+      a worker that has a backend, so a stack whose SearXNG is briefly down
+      leaves the rows alone instead of burning their retries. `search:
+      configured | unreachable | absent` is on the §12.5 health line. Verified
+      live: a seed query that had been pending since `make seed` returned 47
+      real results, 44 survived the prefilter, one engine was unresponsive
+      throughout and it changed nothing
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

@@ -104,14 +104,19 @@ detected and filed in `enrichment_queue`, and **nothing ever runs that queue** �
 makes OCR explicitly user-triggered, so the rows sit there until a UI exists to spend
 against them.
 
-The frontier is now links plus sitemaps (`P1-28`), with topics assigned from the URL
-path rather than inherited. It is still not the rest of `P5-01`: no citation-driven
-seeding, no spaCy NER, no TF-IDF. **`query` rows still have no handler** — SearXNG
-runs in compose and the cold-start seeds include search queries, but nothing consumes
-them, so when the frontier empties the crawl simply idles.
+The frontier is links, sitemaps (`P1-28`) and search (`P1-34`), with topics assigned
+from the URL path for sitemap entries and from the query for search results. It is
+still not the rest of `P5-01`: no citation-driven seeding, no spaCy NER, no TF-IDF.
+
+Both of the non-link channels were broken or missing until `v0.26.0`, and they were
+broken in the same direction — the frontier could only ever narrow. `P1-34` had no
+handler at all, and `P1-28`'s handler had never enqueued a single URL (see §3). If
+you are about to run something long, that is the class of bug to look for first: a
+crawl that drains its queue and idles reports the same numbers as one that finished.
 
 `fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI);
-the novelty pass rate rides on the same line as of `v0.25.0`. Nothing ever *deletes*
+the novelty pass rate rides on the same line as of `v0.25.0`, and
+`search: configured | unreachable | absent` as of `v0.26.0`. Nothing ever *deletes*
 from the raw store — but §5.4's junk drop is no longer blocked on anything, because
 `P2-03` gave it `chunks.duplicate_of` and `sources.retention_tier = 'junk'` to act
 on. `P1-31` is now a sweep somebody has to write, not a decision somebody has to
@@ -229,6 +234,28 @@ Test it by inserting through **raw SQL**, not the ORM. SQLAlchemy's
 `validate_strings=True` rejects bad values in Python, so an ORM-based rejection test
 passes whether or not the database constraint exists at all — which is exactly how
 Phase 0 shipped unchecked VARCHAR columns while its tests were green.
+
+### A value used in code but absent from the enum fails at the insert, not at import
+
+`P1-28` shipped a sitemap handler that passed `seed_source="sitemap"` to
+`enqueue()`, and that value was in neither the model's `constrained()` set nor
+the database's CHECK. Every sitemap it fetched parsed cleanly, and then raised
+`LookupError` on the insert — caught by the lane's outer handler, filed as
+"task failed unexpectedly", and queueing nothing. The fetch succeeded, the parse
+succeeded, `fetch_attempts` recorded a 200, and the log line said the sitemap
+had been read. **The feature had never worked, and nothing said so.**
+
+This is the `P0-21` trap in its worst form. `P0-21` is "the model was widened
+and the migration was not"; drift tests catch that, because there are two
+sources of truth to compare. Here there was only one place the value existed —
+the code that used it — and nothing compares a string literal against an enum.
+
+What actually catches it is an integration test that drives the feature to a
+**committed row**. `tests/unit/test_sitemaps.py` covers the parser exhaustively
+and passed throughout, because the parser was never the problem. So: for any
+handler that ends in a write, the test that matters is the one that reads the
+row back, and it belongs in `test_worker_run.py` rather than beside the unit
+tests for the parsing.
 
 ### A Cloudflare *managed* challenge is not beatable, and it is worth knowing why
 
@@ -571,6 +598,15 @@ That last row is the one to re-check at scale: the nearest-neighbour scan is
 sequential until `P2-04` adds the HNSW index, and "fast" here means "fast on a
 corpus small enough that nothing is fast or slow".
 
+And `v0.26.0`, against a real SearXNG rather than a mock transport:
+
+| Behaviour | Evidence |
+|---|---|
+| A seed query becomes frontier | a query pending since `make seed` → 47 results → 44 queued at tier priority, task `done` |
+| The prefilter earns its place here | 3 of 47 were blocked domains, dropped before a request was spent |
+| §6.4's routine engine failure | one upstream engine unresponsive throughout; the query succeeded and nothing retried |
+| Sitemaps enqueue at all | four loop-level tests, all of which fail against the pre-`v0.26.0` enum |
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -613,7 +649,13 @@ exist. That stops being true the moment the orchestrator writes one.
 pointing at nothing. `edges.supporting_chunk_ids` is the same relationship written as
 a bare array, and that is precisely the difference `P1-32` has to close.
 
-**`P1-34` before `P1-16`, probably.** The 48-hour run needs a frontier that does not
-empty, and `query` rows have no handler — SearXNG is in compose and the seeds ship
-queries, but nothing claims them, so an exhausted frontier means an idle crawler for
-the rest of the window rather than a wider one.
+**`P1-34` is done (`v0.26.0`)**, and it went before `P1-16` for a reason worth
+keeping: a 48-hour window is only worth paying for if the frontier can widen when it
+drains. Building it is also what surfaced that `P1-28` had never enqueued anything —
+so both non-link discovery channels were dead, and the long run would have been a
+long run over a queue that could only shrink.
+
+**What is still worth checking before the long run.** Every handler that ends in a
+write should have a test that reads the row back (§3). `P1-14`'s DOI handler does not
+exist yet, so `doi` rows sit unclaimed the way `query` rows did — harmless today
+because nothing enqueues them, and worth remembering before something does.

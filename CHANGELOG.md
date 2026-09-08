@@ -23,6 +23,76 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.26.0] — 2026-09-08
+
+**The frontier can widen again — and a discovery channel that never worked
+starts working.** `P1-34`'s query handler, plus the `P1-28` bug found while
+building it.
+
+### Fixed
+
+- **`P1-28`'s sitemap handler had never enqueued a single URL.** It passes
+  `seed_source="sitemap"` to `enqueue()` and the value was not in the
+  `seed_source` enum, so every sitemap that fetched and parsed cleanly then
+  raised at the insert and queued nothing. Fetch, parse and settle all
+  succeeded, so the logs, `fetch_attempts` and every existing test agreed the
+  feature worked
+- The reason it shipped: `test_sitemaps.py` covers the parser thoroughly and the
+  parser was never the problem — nothing drove a sitemap through the loop to a
+  committed row. Four tests in `test_worker_run.py` now do, and all four fail
+  against the old enum
+- This is `P0-21`'s trap for the third time, in its worst form: not a value
+  widened in the model and missed in the migration, but a value that existed
+  only in the code that used it. See the migration's docstring
+
+### Added
+
+- `P1-34` `worker/search.py` — a SearXNG client. §6.4's failure model is the
+  whole design: an unresponsive engine is routine and the other engines' results
+  are the answer; every engine returning nothing is an *answer*, so the query is
+  `done` rather than retried forever; SearXNG itself being unreachable is
+  transient, so the query retries with the ordinary backoff. Collapsing any two
+  of those means either a query stuck in a retry loop or a good seed abandoned
+  over a five-minute restart
+- `P1-34` The `query` handler in the loop. Results go through the prefilter —
+  §6.4 warns SearXNG returns content-farm and SEO junk, and a search result is
+  the least trustworthy way a URL can reach the queue, since no page pointed at
+  it and no site listed it — and are enqueued at tier priority carrying the
+  query's topic. Unlike a sitemap entry, a query was written *for* a topic by a
+  person, so its results answer that question
+- `P1-34` `query` is claimable only by a worker that has a backend. A worker
+  without one leaves the row for a worker that has one, rather than failing a
+  task that is not broken and burning its retries while SearXNG is down
+- `P1-34` `search: configured | unreachable | absent` on the §12.5 health line,
+  and a startup warning when `SEARXNG_URL` is unset. Louder than the browser's
+  equivalent because the consequence is worse: without a browser the crawl
+  extracts JS-heavy pages badly, and without search it drains its frontier and
+  idles — and an idle crawler looks exactly like a finished one
+- `seed_source` gains `sitemap` and `search`. §5.2's seed provenance asks how a
+  URL got here, and a link someone placed, a site's own index of itself and a
+  search ranking are three different answers
+
+### Fixed (smaller)
+
+- `stats.queued` now counts sitemap and search rows, not only frontier links. A
+  discovery channel missing from the run summary understates exactly the thing
+  the run was for
+
+### Notes
+
+- Verified live against a real SearXNG, not only a mock transport: a seed query
+  that had been sitting `pending` since `make seed` was claimed, answered with
+  47 real results, prefiltered to 44, and queued at tier priority — with one
+  upstream engine unresponsive throughout, which is the routine case §6.4
+  describes and which changed nothing
+- A search does **not** go through `Crawler.fetch`, and must not. The crawler
+  pins every request to a validated public address and `netguard` refuses
+  RFC1918 — correct for the open web and exactly wrong for an internal service
+  on the compose network. It writes no `fetch_attempts` row either: that log is
+  keyed by domain and answers "is this host refusing us", and a search asks one
+  internal service about many hosts
+
+
 ## [0.25.0] — 2026-09-08
 
 **The corpus stops keeping every copy of everything.** §6.1's one-line novelty

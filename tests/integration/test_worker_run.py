@@ -33,6 +33,7 @@ from worker.prefilter import Prefilter
 from worker.ratelimit import DomainLimiter
 from worker.rawstore import checksum_for
 from worker.robots import ALLOW_ALL, RobotsRules, parse
+from worker.search import SearchError, SearchResults
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -84,6 +85,13 @@ async def cleanup(session_for, run_domain, run_topic):
     await sess.execute(delete(FetchPolicy).where(FetchPolicy.domain == run_domain))
     await sess.execute(delete(Source).where(Source.url.like(f"https://{run_domain}%")))
     await sess.execute(delete(QueueTask).where(QueueTask.topic == run_topic))
+    # By URL as well as by topic. A sitemap's URLs get the topic their *path*
+    # implies rather than the triggering task's (`P1-28`), so on a `.test`
+    # domain that matches no vocabulary they are untopiced — and a cleanup that
+    # only knew about `run_topic` would leave them in the dev database.
+    await sess.execute(
+        delete(QueueTask).where(QueueTask.url_or_query.like(f"https://{run_domain}%"))
+    )
     await sess.commit()
 
 
@@ -1632,3 +1640,369 @@ async def test_a_format_with_no_converter_is_still_stored(
     source = await get_source(sess, f"https://{run_domain}/legacy.doc")
     assert source.text_available is False
     assert source.raw_file_path is not None
+
+
+# --------------------------------------------------------------------------
+# A sitemap becomes queue rows (`P1-28`)
+# --------------------------------------------------------------------------
+#
+# These exist because `P1-28` shipped without them and was broken from the day
+# it landed: the handler passed `seed_source="sitemap"`, the enum did not have
+# it, and every sitemap that parsed raised at the insert and queued nothing.
+# `test_sitemaps.py` covers the parser and passed throughout — the parser was
+# never the problem. Nothing drove a sitemap through the loop to a committed
+# row, which is the only place the bug was visible.
+
+
+def urlset(domain: str, *paths: str) -> bytes:
+    entries = "".join(f"<url><loc>https://{domain}{p}</loc></url>" for p in paths)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entries}</urlset>"
+    ).encode()
+
+
+def sitemap_index(domain: str, *paths: str) -> bytes:
+    entries = "".join(f"<sitemap><loc>https://{domain}{p}</loc></sitemap>" for p in paths)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entries}</sitemapindex>"
+    ).encode()
+
+
+def serve_xml(body: bytes):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/xml"}, chunks=[body])
+
+    return handler
+
+
+async def rows_for(sess, domain: str, seed_source: str) -> list[QueueTask]:
+    """By domain, not by topic.
+
+    A sitemap's URLs are topiced from their own path (`P1-28`), so on a `.test`
+    domain that matches no vocabulary they come back untopiced — and a query
+    filtering on the triggering task's topic finds nothing while the feature
+    works perfectly.
+    """
+    rows = await sess.execute(
+        select(QueueTask)
+        .where(
+            QueueTask.url_or_query.like(f"https://{domain}%"),
+            QueueTask.seed_source == seed_source,
+        )
+        .order_by(QueueTask.task_id)
+    )
+    return list(rows.scalars())
+
+
+async def test_a_sitemaps_urls_reach_the_queue(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The whole point of `P1-28`, and the assertion it never had.
+
+    A sitemap that is fetched, parsed and then silently queues nothing is
+    indistinguishable — in the logs, in `fetch_attempts`, and in every test that
+    existed before this one — from a sitemap that worked.
+    """
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    task = await enqueue(sess, run_domain, run_topic, path="/sitemap.xml", task_type="sitemap")
+    body = urlset(run_domain, "/reports/2026", "/about")
+
+    worker, _ = with_frontier(
+        sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "done", f"the sitemap task did not settle cleanly: {task.error}"
+    assert stats.queued == 2
+    queued = await rows_for(sess, run_domain, "sitemap")
+    assert {row.url_or_query for row in queued} == {
+        f"https://{run_domain}/reports/2026",
+        f"https://{run_domain}/about",
+    }
+    assert all(row.task_type == "url" for row in queued)
+
+
+async def test_a_sitemap_index_queues_further_sitemaps(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """An index's entries are sitemaps, not pages — a different task type, and
+    the prefilter deliberately does not run over them (`SKIP_EXTENSIONS` drops
+    `.gz`, which is how most large sites publish their indexes)."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic, path="/sitemap.xml", task_type="sitemap")
+    body = sitemap_index(run_domain, "/sitemap-1.xml", "/sitemap-2.xml")
+
+    worker, _ = with_frontier(
+        sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    queued = await rows_for(sess, run_domain, "sitemap")
+    assert {row.url_or_query for row in queued} == {
+        f"https://{run_domain}/sitemap-1.xml",
+        f"https://{run_domain}/sitemap-2.xml",
+    }
+    assert all(row.task_type == "sitemap" for row in queued)
+
+
+async def test_a_sitemap_row_says_it_came_from_a_sitemap(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§5.2's seed provenance: "how did this URL get here" has three different
+    answers — a link someone placed, a site's own index of itself, and a search
+    ranking — and `frontier` is only the first of them."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic, path="/sitemap.xml", task_type="sitemap")
+
+    worker, _ = with_frontier(
+        sess,
+        serve_xml(urlset(run_domain, "/only")),
+        run_domain,
+        run_topic,
+        resolver=resolve,
+        max_tasks=1,
+    )
+    await worker.run()
+
+    rows = await sess.execute(
+        select(QueueTask).where(QueueTask.url_or_query == f"https://{run_domain}/only")
+    )
+    assert rows.scalar_one().seed_source == "sitemap"
+
+
+async def test_a_sitemap_is_not_stored_as_a_source(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """A sitemap carries no claim anything could cite, so it produces queue rows
+    and an attempt row and nothing else."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic, path="/sitemap.xml", task_type="sitemap")
+
+    worker, _ = with_frontier(
+        sess,
+        serve_xml(urlset(run_domain, "/a-page")),
+        run_domain,
+        run_topic,
+        resolver=resolve,
+        max_tasks=1,
+    )
+    await worker.run()
+
+    assert await get_source(sess, f"https://{run_domain}/sitemap.xml") is None
+
+
+# --------------------------------------------------------------------------
+# A query becomes queue rows (`P1-34`)
+# --------------------------------------------------------------------------
+#
+# Through the loop and into committed rows, for the reason the sitemap tests
+# above exist: a handler that fetches, parses and then queues nothing is
+# indistinguishable from one that works, in the logs and in every test that
+# does not look at the queue afterwards.
+
+
+class FakeSearx:
+    """A search backend that answers from a script.
+
+    Not `SearxClient` with a mock transport — `test_search.py` is where the
+    client's own behaviour is asserted, and what these tests are about is what
+    the *loop* does with an answer.
+    """
+
+    def __init__(self, results=None, error: Exception | None = None, healthy: bool = True) -> None:
+        self._results = results
+        self._error = error
+        self._healthy = healthy
+        self.queries: list[str] = []
+
+    async def search(self, query: str):
+        self.queries.append(query)
+        if self._error is not None:
+            raise self._error
+        return self._results
+
+    async def healthy(self, timeout_s: float = 5.0) -> bool:
+        return self._healthy
+
+
+def with_search(sess, domain, topic, backend, *, resolver, **overrides):
+    """A worker that can answer query rows. No transport is exercised: a query
+    is not a fetch, so nothing reaches the network at all."""
+    worker, rec = build_worker(sess, ok_html, domain, topic, resolver=resolver, **overrides)
+    worker._prefilter = Prefilter()
+    worker._search = backend
+    return worker, rec
+
+
+async def enqueue_query(sess, text: str, topic: str) -> QueueTask:
+    task = QueueTask(url_or_query=text, topic=topic, task_type="query", seed_source="user")
+    sess.add(task)
+    await sess.flush()
+    return task
+
+
+async def test_a_query_puts_its_results_in_the_queue(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`P1-34`: `task_type: query` has existed since `P0-05` and the cold-start
+    seeds ship queries, but nothing claimed them — so an exhausted frontier
+    meant an idle crawler rather than a wider one."""
+    sess = await session_for("rw")
+    task = await enqueue_query(sess, "walkability thermal comfort", run_topic)
+    backend = FakeSearx(
+        SearchResults(
+            query="walkability thermal comfort",
+            urls=(f"https://{run_domain}/paper-1", f"https://{run_domain}/paper-2"),
+        )
+    )
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    stats = await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "done", f"the query did not settle cleanly: {task.error}"
+    assert backend.queries == ["walkability thermal comfort"]
+    # A discovery channel missing from `queued` makes the run summary understate
+    # exactly the thing the run was for.
+    assert stats.queued == 2
+    queued = await rows_for(sess, run_domain, "search")
+    assert {row.url_or_query for row in queued} == {
+        f"https://{run_domain}/paper-1",
+        f"https://{run_domain}/paper-2",
+    }
+    assert all(row.task_type == "url" for row in queued)
+
+
+async def test_a_search_result_carries_the_querys_topic(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Unlike a sitemap entry, whose topic comes from its own path: a query was
+    written *for* a topic by a person, so every result answers that question.
+
+    §10's steering acts on topics, so untopiced results would be a whole
+    discovery channel steering cannot reach.
+    """
+    sess = await session_for("rw")
+    await enqueue_query(sess, "on-demand bus evaluation", run_topic)
+    backend = FakeSearx(SearchResults(query="q", urls=(f"https://{run_domain}/study",)))
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    rows = await sess.execute(
+        select(QueueTask).where(QueueTask.url_or_query == f"https://{run_domain}/study")
+    )
+    row = rows.scalar_one()
+    assert (row.topic, row.seed_source) == (run_topic, "search")
+
+
+async def test_search_results_go_through_the_prefilter(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§6.4: SearXNG returns a lot of content-farm and SEO junk, and a search
+    result is the least trustworthy way a URL can reach this queue — no page
+    pointed at it and no site listed it."""
+    sess = await session_for("rw")
+    await enqueue_query(sess, "q", run_topic)
+    backend = FakeSearx(
+        SearchResults(
+            query="q",
+            urls=(
+                f"https://{run_domain}/good",
+                f"https://{run_domain}/chart.png",
+                "ftp://elsewhere.test/file",
+            ),
+        )
+    )
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    queued = await rows_for(sess, run_domain, "search")
+    assert [row.url_or_query for row in queued] == [f"https://{run_domain}/good"]
+
+
+async def test_a_query_that_finds_nothing_is_done_not_retried(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """§6.4 says engine failure is routine. The same engines will be just as
+    broken tomorrow, so re-running the query burns the queue slot again — and a
+    query stuck in a retry loop is exactly the stalled queue §6.4 forbids."""
+    sess = await session_for("rw")
+    task = await enqueue_query(sess, "no results for this", run_topic)
+    backend = FakeSearx(SearchResults(query="no results for this", urls=()))
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "done"
+    assert task.attempts == 0
+
+
+async def test_an_unreachable_backend_retries_rather_than_abandoning(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The other half of the distinction. The backend being down is transient
+    and local, and the query itself is perfectly good — abandoning it would
+    mean a five-minute SearXNG restart permanently costing the seed queries."""
+    sess = await session_for("rw")
+    task = await enqueue_query(sess, "a good query", run_topic)
+    backend = FakeSearx(error=SearchError("ConnectError: connection refused"))
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "pending", "a backend outage abandoned the query"
+    assert task.attempts == 1
+    assert task.next_attempt_at is not None
+    assert "search_unavailable" in (task.error or "")
+
+
+async def test_a_query_is_not_stored_as_a_source(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`url_or_query` holds query text, not a URL. Putting it through the page
+    path would create a `sources` row whose `url` is a sentence."""
+    sess = await session_for("rw")
+    await enqueue_query(sess, "walkability thermal comfort", run_topic)
+    backend = FakeSearx(SearchResults(query="q", urls=(f"https://{run_domain}/a",)))
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    assert await get_source(sess, "walkability thermal comfort") is None
+
+
+async def test_a_worker_with_no_backend_leaves_the_query_alone(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Unclaimed, not failed. The row is fine; this process cannot do it.
+
+    A worker that claimed and failed it would spend the query's retries while
+    SearXNG was down, and abandon a perfectly good seed before it came back.
+    """
+    sess = await session_for("rw")
+    # A URL row beside it, so the claim has something to take. Without one the
+    # worker never spends its budget and the test hangs rather than failing —
+    # and it would prove nothing about *which* row was skipped.
+    query = await enqueue_query(sess, "a query nobody can run", run_topic)
+    url_task = await enqueue(sess, run_domain, run_topic)
+
+    worker, _ = build_worker(sess, ok_html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._prefilter = Prefilter()
+    await worker.run()
+
+    await sess.refresh(query)
+    await sess.refresh(url_task)
+    assert url_task.status == "fetched", "the worker did not claim the row it could do"
+    assert query.status == "pending"
+    assert query.attempts == 0
+    assert query.claimed_by is None
