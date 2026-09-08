@@ -17,7 +17,6 @@ import pytest
 
 from worker.fetch import is_challenge
 
-
 # --------------------------------------------------------------------------
 # Detection — and specifically, not over-detecting
 

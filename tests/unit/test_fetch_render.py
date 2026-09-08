@@ -354,9 +354,7 @@ async def test_a_crawl_that_reports_failure_is_not_treated_as_a_page(policy, res
 CHALLENGE_HEADERS = {"content-type": "text/html", "cf-mitigated": "challenge"}
 
 
-async def test_a_challenge_is_re_fetched_through_the_browser(
-    policy, resolver, recorder
-) -> None:
+async def test_a_challenge_is_re_fetched_through_the_browser(policy, resolver, recorder) -> None:
     """The static path refuses it; the browser is given a bounded chance.
 
     `Fetcher.fetch` used to return any failed static result immediately, so a
@@ -380,7 +378,9 @@ async def test_an_ordinary_refusal_is_not_re_fetched(policy, resolver, recorder)
     """The expensive false positive: a browser launch per forbidden URL."""
     browser = FakeBrowser()
     rec = recorder(
-        lambda r: streamed(403, headers={"content-type": "text/html"}, chunks=[b"<h1>Forbidden</h1>"])
+        lambda r: streamed(
+            403, headers={"content-type": "text/html"}, chunks=[b"<h1>Forbidden</h1>"]
+        )
     )
     async with Fetcher(
         client=rec.client(), resolver=resolver({"example.test": [PUBLIC]}), browser=browser

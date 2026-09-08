@@ -35,8 +35,7 @@ def urlset(*locs: str, ns: str | None = NS) -> bytes:
 def sitemapindex(*locs: str) -> bytes:
     body = "".join(f"<sitemap><loc>{loc}</loc></sitemap>" for loc in locs)
     return (
-        f'<?xml version="1.0" encoding="UTF-8"?>'
-        f'<sitemapindex xmlns="{NS}">{body}</sitemapindex>'
+        f'<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="{NS}">{body}</sitemapindex>'
     ).encode()
 
 
@@ -60,7 +59,8 @@ def test_sitemapindex_is_distinguished_from_urlset() -> None:
     XML to the HTML extractor — a failure that looks like bad extraction rather
     than like the routing bug it is.
     """
-    parsed = parse_sitemap(sitemapindex("https://www.example-org.test/sitemap-1.xml"), base_url=BASE)
+    index = sitemapindex("https://www.example-org.test/sitemap-1.xml")
+    parsed = parse_sitemap(index, base_url=BASE)
     assert parsed.kind == "sitemapindex"
     assert parsed.is_index is True
     assert parsed.urls == ("https://www.example-org.test/sitemap-1.xml",)
@@ -188,13 +188,13 @@ def test_subdomains_are_same_site_in_both_directions() -> None:
     """
     assert same_site("https://data.example-org.test/x", "https://www.example-org.test/s.xml")
     assert same_site("https://www.example-org.test/x", "https://data.example-org.test/s.xml")
-    assert not same_site("https://example-org.test.evil.test/x", "https://www.example-org.test/s.xml")
+    assert not same_site(
+        "https://example-org.test.evil.test/x", "https://www.example-org.test/s.xml"
+    )
 
 
 def test_cross_site_restriction_can_be_lifted_deliberately() -> None:
-    parsed = parse_sitemap(
-        urlset("https://evil.test/pwn"), base_url=BASE, same_site_only=False
-    )
+    parsed = parse_sitemap(urlset("https://evil.test/pwn"), base_url=BASE, same_site_only=False)
     assert parsed.urls == ("https://evil.test/pwn",)
 
 
@@ -221,9 +221,7 @@ def test_unfetchable_locs_are_dropped_not_queued(loc: str) -> None:
 
 
 def test_overlong_loc_is_dropped() -> None:
-    parsed = parse_sitemap(
-        urlset("https://www.example-org.test/" + "a" * 5000), base_url=BASE
-    )
+    parsed = parse_sitemap(urlset("https://www.example-org.test/" + "a" * 5000), base_url=BASE)
     assert parsed.urls == ()
     assert parsed.dropped["unusable"] == 1
 
@@ -244,9 +242,7 @@ def test_whitespace_around_loc_is_stripped() -> None:
 
 def test_escaped_ampersand_survives() -> None:
     """Sitemaps escape query separators; a regex over <loc> would not decode."""
-    parsed = parse_sitemap(
-        urlset("https://www.example-org.test/s?a=1&amp;b=2"), base_url=BASE
-    )
+    parsed = parse_sitemap(urlset("https://www.example-org.test/s?a=1&amp;b=2"), base_url=BASE)
     assert parsed.urls == ("https://www.example-org.test/s?a=1&b=2",)
 
 
@@ -343,4 +339,3 @@ def test_parsed_sitemap_is_frozen() -> None:
     parsed = ParsedSitemap(kind="urlset")
     with pytest.raises(FrozenInstanceError):
         parsed.kind = "sitemapindex"  # type: ignore[misc]
-

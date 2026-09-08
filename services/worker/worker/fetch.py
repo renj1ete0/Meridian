@@ -863,7 +863,8 @@ class Fetcher:
             # nothing about which.
             detail = result.get("error_message") or "crawl4ai reported failure"
             if status and status >= 400:
-                detail = f"{describe_http_error(status, result.get('response_headers') or {})}: {detail}"
+                headers = result.get("response_headers") or {}
+                detail = f"{describe_http_error(status, headers)}: {detail}"
             return refuse(
                 "http_error" if status else "connection_error",
                 detail,

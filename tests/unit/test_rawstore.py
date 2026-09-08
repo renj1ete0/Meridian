@@ -55,7 +55,8 @@ def test_the_path_is_derived_from_the_url_not_the_content() -> None:
 
 def test_the_path_carries_the_domain_the_shard_and_the_digest() -> None:
     digest = hashlib.sha256(GOV.encode()).hexdigest()
-    assert path_for(GOV, "application/pdf") == Path("example-org.test") / digest[:2] / f"{digest}.pdf"
+    expected = Path("example-org.test") / digest[:2] / f"{digest}.pdf"
+    assert path_for(GOV, "application/pdf") == expected
 
 
 def test_the_domain_leads_so_one_site_is_one_directory() -> None:

@@ -13,6 +13,10 @@ design-only changes do not require a version bump, but may be listed under Unrel
   embeddings, and its build-state and test counts were four releases stale
 - Docs: `README.md` status block and version badge refreshed. The FAQ still said
   "nothing crawls yet", which stopped being true five releases ago
+- Lint: `ruff check .` is green again. Six errors had accumulated in files
+  nobody was touching — a long f-string in `fetch.py`, a `try`/`except`/`pass`
+  in `topicmatch.py`, and four long lines in tests. No behaviour change; the
+  point is that the next real error is visible rather than sixth in a list
 - New task `P1-34`: nothing handles `query` rows. SearXNG runs in compose with
   its JSON API enabled and the cold-start seeds ship query seeds, but no handler
   claims them — so when the frontier empties the crawl idles rather than

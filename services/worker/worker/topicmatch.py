@@ -32,6 +32,7 @@ middle band applied to a path.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import re
 from collections.abc import Iterable, Sequence
@@ -74,10 +75,8 @@ def normalise_path(url: str) -> str:
     path written as ``%2Dbus`` matches the same way ``-bus`` does.
     """
     path = urlsplit(url).path
-    try:
+    with contextlib.suppress(UnicodeDecodeError, ValueError):
         path = unquote(path)
-    except (UnicodeDecodeError, ValueError):
-        pass
     tokens = [t for t in _NON_ALNUM.sub(" ", path.lower()).split() if t]
     return " ".join(t for t in tokens if t not in _STRUCTURAL_SEGMENTS)
 
