@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.24.0"
+version = "0.25.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [

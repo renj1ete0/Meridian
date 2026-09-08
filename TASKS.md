@@ -19,10 +19,11 @@ something went wrong.
 **Current phase: 2 opening, phase 1 not yet closed.** The crawl runs unattended,
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-13`, `P1-15`, `P1-17`–`P1-24`, `P1-26`,
-`P1-28`, `P1-30`, `P1-33` and (pulled forward) `P2-02` are done, at 1080 tests.
+`P1-28`, `P1-30`, `P1-33` and (pulled forward) `P2-02` are done, at 1122 tests.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
-pass, not by the fetch loop. `P1-22` gave the stack a topology, so it is now a
-stack rather than an image. Verified live — real government PDFs extracted with
+pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
+it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
+than an image. Verified live — real government PDFs extracted with
 page-accurate chunks, and the injection screen clean across every page crawled.
 
 Phase 1's checkpoint (`P1-16`, the 48h run) is the gate on phase 2's go/no-go
@@ -37,10 +38,12 @@ nothing. The agreed sequence:
    a **stack** smoke test, deployed to the server rather than run from a
    checkout. Its purpose is "do the containers come up and talk to each other",
    not corpus volume
-4. `P2-03` novelty gate, then `P2-05`/`P2-04`/`P2-06` search, built against that
-   real output. The novelty gate goes before the long run deliberately: nothing
-   deletes from the raw store (`P1-31`), so an ungated 48h run keeps every
-   near-duplicate it finds
+4. ~~`P2-03` novelty gate~~ — **done in v0.25.0**, ahead of the smoke run
+   because it needed neither the stack nor the server. Then
+   `P2-05`/`P2-04`/`P2-06` search, built against real crawl output. The gate
+   went before the long run deliberately: nothing deletes from the raw store
+   (`P1-31`), so an ungated 48h run keeps every near-duplicate it finds — it
+   now at least *knows* which ones they are
 5. `P1-16` the 48h run, then `P0-15` held-out questions — which must be written
    before `P2-06` is judged, not after — and `P2-09`, the call
 
@@ -255,9 +258,11 @@ more. Tracked as `P1-34`.
 - [ ] `P1-31` **Nothing ever deletes from the raw store.** `P1-11` decides what
       gets written; §5.4 also says junk and near-duplicates are dropped *after*
       the novelty gate, and background sources get a snapshot only if cited.
-      Both are deletions, and there is no sweep. Needs the novelty gate (`P2-*`)
-      to exist first, so this is a phase-2 follow-up — but the disk fills at
-      phase-1 speed, so watch `du` before then
+      Both are deletions, and there is no sweep. **The gate it was waiting for
+      exists** as of `P2-03`: `chunks.duplicate_of` says which chunks are
+      near-duplicates and `sources.retention_tier = 'junk'` says which sources
+      are made of them, so the sweep now has something to act on. Still nothing
+      deletes — watch `du` until it does
 - [x] `P1-30` **Supervision the loop deliberately does not provide.**
       `services/worker/Dockerfile` (multi-stage uv build on `python:3.12-slim`,
       `poppler-utils` for `P1-09`, unprivileged, runs read-only with `cap_drop:
@@ -307,7 +312,21 @@ more. Tracked as `P1-34`.
       transaction as the source row. Unchanged content is left alone; changed
       content is replaced, and the new ids are what make §6.3's high-water mark
       re-read the page
-- [ ] `P2-03` `novelty.py` — cosine gate, drop above 0.95
+- [x] `P2-03` `novelty.py` — cosine gate, drop above 0.95. Built as a **mark, not
+      a delete**: `meridian_core/novelty.py` records `novelty_checked_at`,
+      `nearest_similarity` and `duplicate_of` on the chunk, and `P1-31`'s sweep
+      is what spends the verdict. A gate that deleted could report no pass rate
+      (§12.5), could not be re-tuned against the corpus it collected, and would
+      leave nothing to audit. A chunk is only compared against chunks written
+      *before* it — otherwise two identical chunks are each other's nearest
+      neighbour, both clear the threshold, and the text is lost rather than
+      deduplicated. `worker/novelty.py` is the pass
+      (`python -m worker.novelty`): its own process, because the gate is
+      Postgres and arithmetic and needs no model at all. Source-level demotion
+      follows §5.4 — `background` → `junk` at ≥90% duplicate chunks, and
+      **never** `primary`. Verified against a real crawled corpus: it found the
+      boilerplate a site repeats under every URL, at similarity 1.0, and
+      demoted nothing
 - [ ] `P2-04` pgvector HNSW index; measure recall and latency at corpus size
 - [ ] `P2-05` `tsvector` index and trigger
 - [ ] `P2-06` `search.py` — hybrid retrieval, RRF fusion, **filters before vector search**

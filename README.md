@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.24" src="https://img.shields.io/badge/version-0.24-0D6F7C">
+  <img alt="Version 0.25" src="https://img.shields.io/badge/version-0.25-0D6F7C">
   <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
 </p>
 
@@ -26,7 +26,8 @@ not just what it knows, but where the evidence is thin, stale, or contradictory.
 > and the crawler runs: it drains a queue unattended, fetches politely, keeps what it
 > fetched, reads it, chunks it, and widens its own frontier from both links and
 > sitemaps — supervised, in containers, on a network topology that keeps the browser
-> away from the database. Chunks carry embeddings. **Nothing searches them yet**, and
+> away from the database. Chunks carry embeddings, and a novelty gate marks the ones
+> that duplicate something already collected. **Nothing searches them yet**, and
 > that is the next thing: phase 2 asks whether searching this corpus is useful with no
 > model involved, and it is a real go/no-go.
 > See the [roadmap](docs/roadmap.md) and [TASKS.md](TASKS.md).
@@ -147,8 +148,10 @@ Production runs the whole stack in containers behind `cloudflared`
 > Office documents to text, bibliographic metadata and citations, and cuts it into
 > citable chunks — page-accurate for PDFs. Scanned PDFs are detected and filed for
 > OCR rather than read, every page
-> is screened for prompt injection on the way past, nothing
-> embeds or searches yet (`P2-*`). Frontier expansion is on: a fetched page's links
+> is screened for prompt injection on the way past. Two further passes run on demand
+> rather than in the loop: `python -m worker.embed` gives chunks their vectors and
+> `python -m worker.novelty` marks the near-duplicates among them. Nothing searches
+> them yet (`P2-04`–`P2-06`). Frontier expansion is on: a fetched page's links
 > are filtered and queued, so the crawl keeps going past its seed list. The API and
 > web commands are phase 2 and 3. See
 > [docs/handover.md](docs/handover.md) for what runs today and what does not.

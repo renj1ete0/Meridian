@@ -87,6 +87,13 @@ class ChunkRead(BaseModel):
     text: str
     page_or_offset: int | None
     chunk_index: int
+    # The novelty gate's verdict (§6.1). Exposed because Explore has to be able
+    # to say *why* a chunk is missing from a result set — a near-duplicate that
+    # was silently filtered is indistinguishable from one that was never
+    # crawled, and only one of those is worth investigating.
+    novelty_checked_at: dt.datetime | None = None
+    nearest_similarity: float | None = None
+    duplicate_of: int | None = None
     created_at: dt.datetime
 
 

@@ -19,6 +19,64 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.25.0] — 2026-09-08
+
+**The corpus stops keeping every copy of everything.** §6.1's one-line novelty
+gate, built as a pass rather than a stage — and, deliberately, as a mark rather
+than a delete.
+
+### Added
+
+- `P2-03` `meridian_core/novelty.py` — the gate. For each embedded chunk it
+  finds the nearest chunk written *before* it and, above `0.95` cosine, records
+  which one it duplicates. Compared naively, two identical chunks are each
+  other's nearest neighbour, both clear the threshold, and the corpus loses the
+  text entirely rather than deduplicating it; `chunk_id <` is what makes the
+  first copy the survivor, and makes the answer independent of the order a
+  batch happened to be read in
+- `P2-03` Three columns on `chunks` rather than a `DELETE`. §6.1 says "drop" and
+  §5.4 says a near-duplicate loses its raw file, but a gate that deleted could
+  report no pass rate, could not be re-tuned against the corpus it collected,
+  and would leave nothing to audit. `novelty_checked_at` is the queue,
+  `nearest_similarity` is the score whether or not it cleared the bar, and
+  `duplicate_of` is the verdict. The retention sweep (`P1-31`) is what spends it
+- `P2-03` `worker/novelty.py` — the pass (`python -m worker.novelty`). Its own
+  process, not a stage of the fetch loop (the vector arrives a pass later) and
+  not a stage of the embedding backfill either: the gate is Postgres and
+  arithmetic, so binding it to the one process carrying 2.3GB of weights would
+  mean a corpus could only be deduplicated on a machine that could embed it.
+  Resumable by predicate, one batch per transaction, `--once` and
+  `--max-batches` for a bounded first run
+- `P2-03` Source-level demotion (§5.4). A source whose chunks are ≥90% duplicates
+  and fully judged moves `background` → `junk`. **Never `primary`**: §5.4 keeps
+  the raw file for government documents and papers precisely because link rot
+  makes them unrecoverable, and a mirror crawled second is still the citable
+  copy of a real document
+- `P2-03` §12.5's novelty pass rate on the health line. The comment saying it
+  belonged to the orchestrator was true until the gate became a worker pass. A
+  rate that collapses means the crawl has found a mirror, a paginated view of
+  one document, or a site serving the same boilerplate under every URL — all of
+  which read as a healthy crawl in every other number on the line
+
+### Notes
+
+- `duplicate_of` is self-referential and `ON DELETE SET NULL`, not CASCADE. A
+  re-crawl replaces a source's chunks, so a survivor can vanish under a verdict
+  naming it — and the duplicate is then the only copy of that text left
+- A duplicate never points at another duplicate: marked chunks are excluded from
+  the candidate set, and a verdict landing on one marked in the same batch is
+  followed through to the survivor. So `duplicate_of` is "the surviving copy",
+  not the head of a chain every consumer has to walk
+- Verified against a real crawled corpus, not only against tests: the pass found
+  the boilerplate blocks a site repeats under every URL, at similarity 1.0, and
+  demoted no source — the pages carrying them are otherwise distinct. Unrelated
+  chunks from real bge-m3 sit far below the threshold, so `0.95` is not close to
+  the noise floor
+- The `chunk_id <` filter is applied after the vector scan, so `P2-04`'s HNSW
+  index will make this faster without making it exact. Acceptable: a missed
+  near-duplicate is a chunk that stays, not one wrongly dropped
+
+
 ## [0.24.0] — 2026-09-07
 
 **The stack gets a topology, and the browser stops being invisible.** Closes the

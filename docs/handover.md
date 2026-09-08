@@ -20,8 +20,8 @@ following its links onward — and all of it with nobody watching. HTML and PDFs
 both read, Office documents too, and every page is screened for prompt injection on
 the way past. As of `v0.20.0` it does that from a container image rather than a
 checkout, and as of `v0.24.0` the whole stack has a topology rather than one flat
-network. Chunks carry vectors (`v0.22.0` reads sitemaps too). 1080 tests pass with a
-real Postgres.
+network. Chunks carry vectors (`v0.22.0` reads sitemaps too) and, as of `v0.25.0`,
+a verdict on what they duplicate. 1122 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -79,8 +79,24 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
 
 **What does not exist yet.** No search, no API, no frontend. Embeddings exist as of
 `P2-01`, but only as a **separate backfill pass** (`python -m worker.embed`) — the
-fetch loop never touches the model — and nothing queries them yet: there is no
-novelty gate (`P2-03`), no index (`P2-04`/`P2-05`) and no retrieval (`P2-06`).
+fetch loop never touches the model. The novelty gate (`P2-03`) is a second such
+pass (`python -m worker.novelty`) and is the only thing that reads the vectors so
+far: there is still no index (`P2-04`/`P2-05`) and no retrieval (`P2-06`).
+
+**Three passes, not one loop.** Worth holding in your head, because §6.1 draws all
+of it as a single pipeline and it is not one:
+
+```
+worker.main     fetch → extract → chunk        (24/7, no model, no vectors)
+worker.embed    embedding IS NULL → vector     (needs 2.3GB of weights)
+worker.novelty  novelty_checked_at IS NULL     (needs Postgres and nothing else)
+                → duplicate_of, retention_tier
+```
+
+Each queue is a predicate on a column, so each pass is resumable with no state
+outside the table and any of them can be behind the others without anything
+breaking. What it costs is a window where a chunk exists, is not searchable, and
+is not yet known to be a duplicate.
 
 HTML, PDFs and OOXML Office documents are read; `.doc`, `.xls` and EPub are
 deliberately outside the converter allowlist and stay metadata-only. Scanned PDFs are
@@ -94,9 +110,12 @@ seeding, no spaCy NER, no TF-IDF. **`query` rows still have no handler** — Sea
 runs in compose and the cold-start seeds include search queries, but nothing consumes
 them, so when the frontier empties the crawl simply idles.
 
-`fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI).
-Nothing ever *deletes* from the raw store either — §5.4's junk drop needs the novelty
-gate, which is phase 2 (`P1-31`).
+`fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI);
+the novelty pass rate rides on the same line as of `v0.25.0`. Nothing ever *deletes*
+from the raw store — but §5.4's junk drop is no longer blocked on anything, because
+`P2-03` gave it `chunks.duplicate_of` and `sources.retention_tier = 'junk'` to act
+on. `P1-31` is now a sweep somebody has to write, not a decision somebody has to
+make.
 
 ---
 
@@ -538,6 +557,20 @@ And `v0.20.0`, from inside the container rather than from a checkout:
 | poppler is present and found | `HEALTHCHECK` and `pdf.available()` both true inside the image |
 | The raw store works through a bind mount | files written to the host through the container's uid |
 
+And `v0.25.0`, against the chunks a real crawl had already produced rather than
+against constructed vectors:
+
+| Behaviour | Evidence |
+|---|---|
+| The gate finds real duplicates | the boilerplate block a site repeats under every URL, caught at cosine 1.0 |
+| It does not find false ones | every genuinely distinct page kept; nothing demoted to `junk` |
+| `0.95` is nowhere near the noise floor | unrelated real bge-m3 chunks cluster around 0.71 and bottom out near 0.55 — the threshold has real headroom, which is *not* what a hash-based `FakeEmbedder` would have told you |
+| The pass is cheap | the whole corpus judged in well under a second, with no index yet |
+
+That last row is the one to re-check at scale: the nearest-neighbour scan is
+sequential until `P2-04` adds the HNSW index, and "fast" here means "fast on a
+corpus small enough that nothing is fast or slow".
+
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
@@ -557,24 +590,30 @@ Its purpose is to smoke-test the **stack**, not to build a corpus: do the contai
 come up, does egress work, does the browser answer its health check, do the logs land.
 Corpus volume is what `P1-16` is for.
 
-**`P2-03` before `P1-16`, not after.** Nothing deletes from the raw store (`P1-31`),
-so a 48-hour run with no novelty gate keeps every near-duplicate it finds and the disk
-fills at phase-1 speed. Build the gate first and the long run produces a corpus that
-is already gated.
+**`P2-03` is done (`v0.25.0`), and it went before the smoke run** because it needed
+neither the stack nor the server — the gate is Postgres and arithmetic. What it does
+*not* do is delete: the 48-hour run will still fill the disk at phase-1 speed, it will
+just know which chunks it could drop. `P1-31` is the sweep that spends that, and it is
+now unblocked.
+
+**Two things to know before running the gate on a large corpus.** The nearest-neighbour
+scan is sequential until `P2-04`, so the cost is quadratic in corpus size — run it
+incrementally beside the embedder rather than as one pass at the end. And when `P2-04`
+does land, its index makes the scan approximate: the `chunk_id <` filter is applied
+after the vector search, so some near-duplicates will be missed. That is the right way
+round — a missed duplicate is a chunk that stays.
 
 **Decide `P1-32` before the first real edges land.** `replace_chunks()` deletes a
 source's chunks when its content changes, and `edges.supporting_chunk_ids` is an
 array with no foreign key behind it. Nothing is orphaned today because no edges
 exist. That stops being true the moment the orchestrator writes one.
 
-**`P1-06` and `P1-28` are both cheap and now have a loop to feed.** The prefilter keeps
-already-seen URLs out of the queue; sitemap discovery enqueues the sitemaps
-`RobotsRules.sitemaps` already parses and throws away — Wikipedia's robots.txt lists
-one today. `P1-28` also needs `HANDLED_TASK_TYPES` in `worker/main.py` extended, or
-the `sitemap` rows it enqueues will sit in the queue unclaimed forever.
+`P2-03` is worth copying here: `chunks.duplicate_of` is a real foreign key with
+`ON DELETE SET NULL`, so a re-crawl that deletes a survivor cannot leave a verdict
+pointing at nothing. `edges.supporting_chunk_ids` is the same relationship written as
+a bare array, and that is precisely the difference `P1-32` has to close.
 
-**`P1-23`'s injection pre-screen lands alongside extraction** rather than after.
-
-**One thing the loop does not do yet:** there is no systemd unit in the repo. §13.4's
-`Restart=always` is the supervision the process deliberately does not implement for
-itself, and nothing currently provides it.
+**`P1-34` before `P1-16`, probably.** The 48-hour run needs a frontier that does not
+empty, and `query` rows have no handler — SearXNG is in compose and the seeds ship
+queries, but nothing claims them, so an exhausted frontier means an idle crawler for
+the rest of the window rather than a wider one.

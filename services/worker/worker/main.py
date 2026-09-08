@@ -61,6 +61,7 @@ from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
+from meridian_core.novelty import novelty_health
 from meridian_core.policy import frontier_settings, resolve_source_tier, source_tier_map
 from meridian_core.queueing import (
     DEFAULT_BACKOFF_BASE_S,
@@ -624,9 +625,7 @@ class Worker:
             },
         )
 
-    async def _queue_sitemap_entries(
-        self, claim: Claim, parsed: ParsedSitemap, base: str
-    ) -> int:
+    async def _queue_sitemap_entries(self, claim: Claim, parsed: ParsedSitemap, base: str) -> int:
         """Turn a parsed sitemap's URLs into queue rows.
 
         An index's entries become further `sitemap` tasks and a urlset's become
@@ -1079,6 +1078,7 @@ class Worker:
             )
             health = await fetch_health(sess)
             depth = await queue_depth(sess)
+            novelty = await novelty_health(sess)
 
         browser = await self.browser_health()
         if browser == "unreachable":
@@ -1094,9 +1094,12 @@ class Worker:
         log.info(
             "health",
             extra={
-                # §12.5's daily health line, or the fetch and queue half of it.
-                # Novelty pass rate and edges added belong to the orchestrator
-                # and are not this process's to report.
+                # §12.5's daily health line, less `edges added` — that one
+                # belongs to the orchestrator and is not this process's to
+                # report. The novelty pass rate is, since `P2-03` made the gate
+                # a worker pass: a rate that collapses means the crawl has
+                # found a mirror or a site that serves one page under every
+                # URL, which looks healthy in every other number here.
                 "queue_depth": depth,
                 "pending": depth.get("pending", 0),
                 "fetch_attempts": health.attempts,
@@ -1105,6 +1108,7 @@ class Worker:
                 "attempts_pruned": pruned,
                 "tracked_domains": self._crawler.limiter.tracked_domains,
                 "browser": browser,
+                **novelty.as_dict(),
             },
         )
 

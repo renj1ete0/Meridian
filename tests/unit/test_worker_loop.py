@@ -600,9 +600,15 @@ async def test_housekeeping_prunes_and_logs_the_health_line(monkeypatch) -> None
     async def fake_depth(sess):
         return {"pending": 12, "failed": 3}
 
+    async def fake_novelty(sess):
+        from meridian_core.novelty import NoveltyHealth
+
+        return NoveltyHealth(judged=80, duplicates=20, pending=5)
+
     monkeypatch.setattr("worker.main.prune_attempts", fake_prune)
     monkeypatch.setattr("worker.main.fetch_health", fake_health)
     monkeypatch.setattr("worker.main.queue_depth", fake_depth)
+    monkeypatch.setattr("worker.main.novelty_health", fake_novelty)
 
     records: list[logging.LogRecord] = []
     handler = logging.Handler()
@@ -627,6 +633,12 @@ async def test_housekeeping_prunes_and_logs_the_health_line(monkeypatch) -> None
     assert line.fetch_success_rate == 0.9
     assert line.attempts_pruned == 41
     assert line.by_outcome == {"success": 90, "timeout": 10}
+    # §12.5 names the novelty pass rate on the same line as the fetch numbers,
+    # and `P2-03` made the gate a worker pass — so this process reports it. A
+    # rate that collapses means the crawl found a mirror, which every other
+    # number here reads as a healthy crawl.
+    assert line.novelty_pass_rate == 0.75
+    assert line.novelty_pending == 5
 
 
 async def test_a_failing_housekeeping_tick_does_not_end_the_worker(monkeypatch) -> None:

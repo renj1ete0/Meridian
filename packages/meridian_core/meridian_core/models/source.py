@@ -26,6 +26,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy import text as sql_text  # `Chunk.text` shadows the name in that class body
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -132,12 +133,47 @@ class Chunk(Base, TimestampMixin):
     page_or_offset: Mapped[int | None] = mapped_column(Integer)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # --- the novelty gate's verdict (§6.1, task P2-03) ---------------------
+    #
+    # Recorded rather than acted on. §6.1 says "drop if >0.95" and §5.4 says a
+    # near-duplicate loses its raw file, but a gate that deletes leaves nothing
+    # to audit, nothing to re-judge when the threshold moves, and no way to
+    # compute §12.5's novelty pass rate. So the gate writes a verdict and the
+    # retention sweep (`P1-31`) is what spends it.
+
+    #: When the gate judged this chunk. NULL is the whole queue, the same way
+    #: NULL ``embedding`` is the embedder's. One-shot on purpose: a chunk can
+    #: only become a duplicate of something *older*, and the older one is
+    #: already here, so a second judgement would find the same answer.
+    novelty_checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: Cosine similarity to the nearest chunk written before this one, judged or
+    #: not. NULL means there was nothing to compare against — the first chunk in
+    #: an empty corpus is not "similarity 0", it is unjudgeable, and a sentinel
+    #: would be indistinguishable from a real orthogonal neighbour.
+    nearest_similarity: Mapped[float | None] = mapped_column()
+
+    #: The chunk this one duplicates, when the similarity cleared the threshold.
+    #: Self-referential, and ``ON DELETE SET NULL`` rather than CASCADE: if the
+    #: survivor is deleted by a re-crawl, this chunk is now the only copy of
+    #: that text and deleting it too would lose the content entirely.
+    duplicate_of: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("chunks.chunk_id", ondelete="SET NULL"), index=True
+    )
+
     source: Mapped[Source] = relationship(back_populates="chunks")
 
     __table_args__ = (
         UniqueConstraint("source_id", "chunk_index", name="uq_chunks_source_id_chunk_index"),
         # The high-water mark scan: everything after the last consumed chunk (§6.3).
         Index("ix_chunks_id_created", "chunk_id", "created_at"),
+        # The novelty gate's queue. Partial, because the rows it wants are the
+        # shrinking minority: everything embedded and not yet judged.
+        Index(
+            "ix_chunks_novelty_pending",
+            "chunk_id",
+            postgresql_where=sql_text("embedding IS NOT NULL AND novelty_checked_at IS NULL"),
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
