@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1210 tests.
+1227 tests.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -225,7 +225,11 @@ when its queue drained.
       anywhere" is an answer and settles `done`, and no provider answering is
       transient and retries. A provider with no credential is skipped, not
       failed, so a bare deployment still gets OpenAlex and preprints. Verified
-      live against real Unpaywall and OpenAlex across all four outcomes
+      live against real Unpaywall and OpenAlex across all four outcomes.
+      Extended in `v0.28.0` with Europe PMC and Semantic Scholar below §6.5's
+      four, and with the bug that finding them exposed: a rate-limited provider
+      read as "no copy exists", which settled the task `done` and lost the
+      paper — see the handover's §3 entry before adding a provider anywhere
 - [x] `P1-15` Worker main loop, supervision, graceful restart —
       `services/worker/worker/main.py`. N claim-fetch-settle lanes over one
       shared `Crawler`; the database is the queue and `SKIP LOCKED` is the
@@ -312,6 +316,13 @@ when its queue drained.
       live: a seed query that had been pending since `make seed` returned 47
       real results, 44 survived the prefilter, one engine was unresponsive
       throughout and it changed nothing
+- [ ] `P1-35` **Get a Semantic Scholar API key, or accept the retries.** The
+      anonymous quota throttles hard and the penalty outlasts the burst by
+      minutes, so under a real crawl a share of `doi` rows will retry rather
+      than resolve on the first pass. Correct behaviour — nothing is lost — but
+      it spends queue slots. `SEMANTIC_SCHOLAR_API_KEY` is free to request and
+      is read already; this is a registration, not code. Measure the retry rate
+      during `P1-16` before deciding it matters. ⚑ human
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

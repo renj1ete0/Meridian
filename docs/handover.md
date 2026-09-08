@@ -21,7 +21,7 @@ both read, Office documents too, and every page is screened for prompt injection
 the way past. As of `v0.20.0` it does that from a container image rather than a
 checkout, and as of `v0.24.0` the whole stack has a topology rather than one flat
 network. Chunks carry vectors (`v0.22.0` reads sitemaps too) and, as of `v0.25.0`,
-a verdict on what they duplicate. 1210 tests pass with a real Postgres.
+a verdict on what they duplicate. 1227 tests pass with a real Postgres.
 
 ```
 worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
@@ -616,6 +616,45 @@ And `v0.27.0`, against real Unpaywall and OpenAlex:
 | Open-access papers resolve to a PDF | two publishers → direct PDF links, `publishedVersion` |
 | An arXiv DOI costs no request | resolved from the DOI itself, network handler asserted untouched |
 | A genuinely closed paper is an *answer* | one publisher DOI → no copy anywhere → `done`, not retried |
+| Semantic Scholar earns its place | 12 of 12 DOIs that OpenAlex could not resolve → an open-access PDF, asked one per second |
+| Europe PMC does not, for this corpus | 0 hits across a transport-research sample; it is a biomedical index and will matter for health-adjacent work, not this |
+
+### A rate-limited API looks exactly like an API with no answer
+
+`v0.28.0`, and worth reading before adding any provider to any chain in this
+codebase. Semantic Scholar's anonymous quota is strict. Resolving 75 real DOIs
+back to back returned an open-access copy from it for **none** of them; the same
+DOIs asked one per second returned a PDF for **every one** of the twelve
+sampled. The first measurement read as "this provider adds nothing" and would
+have justified deleting it.
+
+The cause was a 429 folded in with connection errors — both "this provider could
+not be asked", both skipped, chain continues. So the resolver reported *no
+open-access copy exists*, the task settled `done`, and the paper was never looked
+for again. A false negative indistinguishable from a true one, produced by the
+system's own throughput.
+
+**The penalty outlasts the burst, which is the part that will waste your
+afternoon.** After the 75-DOI runs, the same provider returned nothing even at
+one request per *three* seconds; twelve seconds apart it answered 200 with a PDF
+every time. So a paced re-measurement taken straight after an unpaced one
+reproduces the unpaced result and looks like confirmation. Wait it out, or use a
+key.
+
+Three rules came out of it:
+
+- **A provider that refused because you asked too fast has not answered.** A
+  resolution that found nothing while being throttled is incomplete and must
+  retry rather than settle.
+- **Any "provider X adds nothing" measurement taken at full speed is worthless.**
+  Re-run it paced, from a cold start, before believing it — and note that the
+  first paced re-run may still be inside the penalty window.
+- **Per-process pacing is a floor, not a quota solution.** The queue's own
+  exponential backoff is the right timescale for waiting out a quota; the
+  interval only stops the worker throttling itself.
+
+The same shape applies to SearXNG's engines — §6.4 already says engine failure is
+routine — and to anything else this codebase queries in a loop.
 
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.

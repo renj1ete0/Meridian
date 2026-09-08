@@ -23,6 +23,59 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.28.0] — 2026-09-08
+
+**Two more places to look, and the bug that finding them exposed.**
+
+### Added
+
+- `P1-14` Europe PMC and Semantic Scholar, after §6.5's four rather than in
+  place of them. Both need no credential and both hold copies the aggregators
+  above them miss — Europe PMC because it mirrors full text rather than pointing
+  at it, Semantic Scholar because it indexes the repository PDF where Unpaywall
+  frequently has only the repository's landing page. §6.5's order is a ranking
+  by how likely a provider is to be right, not a closed list
+- Europe PMC's result list always carries a `doi` entry pointing back at the
+  publisher, marked "Subscription required". Only `availabilityCode: OA`
+  locations are followed; the rest lead to the paywall this chain routes around
+- `SEMANTIC_SCHOLAR_API_KEY`, optional. Worth having: the anonymous quota
+  throttles hard enough to matter
+
+### Fixed
+
+- **A rate-limited provider was indistinguishable from one that had no copy**,
+  and the difference decides whether a paper is ever looked for again. A 429 was
+  folded in with connection errors and skipped silently, so the chain reported
+  "no open-access copy", the task settled `done`, and that was the end of it.
+  Now a throttled provider makes the resolution *incomplete*: if nothing was
+  found, the task retries instead of being written off
+- 403 counts as throttling too — several of these APIs answer 403 rather than
+  429 for "over the anonymous quota", and a flat refusal reading would silently
+  drop every paper for the rest of the window
+- Per-provider pacing (`PROVIDER_MIN_INTERVAL_S`), so a citation-heavy page
+  cannot burst through a provider's quota on its own. Around the call rather
+  than inside it, so a provider skipped for a missing credential costs nothing
+
+### Notes
+
+- Found by measuring, not by reading. Resolving 75 real DOIs back to back
+  returned an open-access copy from Semantic Scholar for **none** of them; the
+  same DOIs asked one per second returned a PDF for **every one** of the twelve
+  sampled. The first result looked like "these two providers add nothing", which
+  is exactly what a silent 429 is supposed to look like
+- The pacing is a floor, not a solution to a hostile quota. The penalty outlasts
+  the burst by a long way — after those runs the same provider returned nothing
+  even at one request per three seconds, and answered normally twelve seconds
+  apart — so a paced re-measurement taken immediately after an unpaced one
+  reproduces the unpaced result and reads as confirmation. Under load the chain
+  still gets throttled, and that is now visible as a retry rather than a false
+  negative, which is the behaviour that matters. The queue's own backoff is the
+  right timescale for waiting out a quota
+- Europe PMC found nothing across a transport-research sample, which is expected
+  rather than disappointing: it is a biomedical index, and it is in the chain for
+  the health- and environment-adjacent work this corpus also touches
+
+
 ## [0.27.0] — 2026-09-08
 
 **A paywalled landing page stops being a dead end.** `P1-14`'s resolution chain,

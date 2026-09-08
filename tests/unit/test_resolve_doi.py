@@ -258,30 +258,55 @@ async def test_an_unknown_doi_is_an_answer_not_an_outage() -> None:
     assert await resolver.resolve(DOI) is None
 
 
-async def test_no_provider_answering_at_all_raises() -> None:
-    """The transient case, and the only one that should retry."""
-    resolver = resolver_for(
-        {
-            "api.unpaywall.org": httpx.ConnectError("refused"),
-            "api.openalex.org": httpx.ConnectError("refused"),
-        }
+def all_down(**settings) -> DoiResolver:
+    """A resolver whose every provider is unreachable, whatever the list is.
+
+    Not a host routing table: a test that named the hosts would start passing
+    for the wrong reason the moment a provider was added, because the unnamed
+    one would answer 404 and count as an answer.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    kwargs = {"contact_email": "ops@example.test", **settings}
+    return DoiResolver(
+        ResolverSettings(**kwargs),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
 
+
+async def test_no_provider_answering_at_all_raises() -> None:
+    """The transient case, and the only one that should retry."""
     with pytest.raises(ResolutionUnavailable):
-        await resolver.resolve(DOI)
+        await all_down().resolve(DOI)
 
 
 async def test_a_chain_with_nothing_configured_and_nothing_reachable_raises() -> None:
     """Every provider skipped is not the same as every provider saying no —
     nothing was asked, so nothing is known."""
-    resolver = resolver_for(
-        {"api.openalex.org": httpx.ConnectError("refused")},
-        contact_email=None,
-        core_api_key=None,
+    with pytest.raises(ResolutionUnavailable):
+        await all_down(contact_email=None, core_api_key=None).resolve(DOI)
+
+
+async def test_one_provider_still_answering_is_enough_to_avoid_a_retry() -> None:
+    """The boundary between the two: as long as *something* answered, "no copy"
+    is a real answer and the task is done rather than retried."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host)
+        if request.url.host == "api.semanticscholar.org":
+            return httpx.Response(200, json={})
+        raise httpx.ConnectError("refused")
+
+    resolver = DoiResolver(
+        ResolverSettings(contact_email="ops@example.test"),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
 
-    with pytest.raises(ResolutionUnavailable):
-        await resolver.resolve(DOI)
+    assert await resolver.resolve(DOI) is None
+    assert "api.semanticscholar.org" in calls
 
 
 # --------------------------------------------------------------------------
@@ -396,3 +421,254 @@ def test_a_nonsense_timeout_fails_loudly(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="MERIDIAN_DOI_TIMEOUT_S"):
         ResolverSettings.from_env()
+
+
+# --------------------------------------------------------------------------
+# Beyond §6.5's four
+# --------------------------------------------------------------------------
+
+
+def europepmc(*locations: dict, license: str | None = None) -> dict:
+    entry = {"fullTextUrlList": {"fullTextUrl": list(locations)}}
+    if license:
+        entry["license"] = license
+    return {"resultList": {"result": [entry]}}
+
+
+def oa(url: str, style: str = "pdf") -> dict:
+    return {"availabilityCode": "OA", "documentStyle": style, "url": url, "site": "Europe_PMC"}
+
+
+def subscription(url: str) -> dict:
+    return {"availabilityCode": "S", "documentStyle": "doi", "url": url, "site": "DOI"}
+
+
+def exhausted() -> dict:
+    """Everything above Europe PMC in the chain, answering "no copy"."""
+    return {"api.unpaywall.org": unpaywall(None), "api.openalex.org": openalex(None)}
+
+
+async def test_europepmc_answers_when_the_aggregators_have_nothing() -> None:
+    """It mirrors full text rather than pointing at it, so a copy here is one
+    hop rather than two — and it holds work the general aggregators miss."""
+    resolver = resolver_for(
+        {**exhausted(), "www.ebi.ac.uk": europepmc(oa(OA_PDF), license="cc-by")}
+    )
+
+    copy = await resolver.resolve(DOI)
+
+    assert copy is not None
+    assert (copy.url, copy.provider, copy.license) == (OA_PDF, "europepmc", "cc-by")
+
+
+async def test_europepmcs_publisher_link_is_never_followed() -> None:
+    """Its result list always carries a `doi` entry pointing back at the
+    publisher, marked "Subscription required". Following it lands on exactly
+    the paywall this chain exists to route around.
+    """
+    resolver = resolver_for(
+        {
+            **exhausted(),
+            "www.ebi.ac.uk": europepmc(subscription("https://publisher.test/paywalled")),
+        }
+    )
+
+    assert await resolver.resolve(DOI) is None
+
+
+async def test_europepmc_prefers_the_pdf_over_the_html_rendering() -> None:
+    resolver = resolver_for(
+        {
+            **exhausted(),
+            "www.ebi.ac.uk": europepmc(
+                oa("https://europepmc.test/article", style="html"),
+                oa(OA_PDF, style="pdf"),
+            ),
+        }
+    )
+
+    copy = await resolver.resolve(DOI)
+
+    assert copy is not None and copy.url == OA_PDF
+
+
+async def test_europepmc_falls_back_to_html_when_there_is_no_pdf() -> None:
+    """An HTML rendering still extracts. Refusing it would discard a copy over
+    a format the pipeline reads perfectly well."""
+    html_url = "https://europepmc.test/article"
+    resolver = resolver_for({**exhausted(), "www.ebi.ac.uk": europepmc(oa(html_url, style="html"))})
+
+    copy = await resolver.resolve(DOI)
+
+    assert copy is not None and copy.url == html_url
+
+
+async def test_a_doi_europepmc_has_never_heard_of_is_not_an_error() -> None:
+    """It answers 200 with an empty result list rather than 404."""
+    resolver = resolver_for({**exhausted(), "www.ebi.ac.uk": {"resultList": {"result": []}}})
+
+    assert await resolver.resolve(DOI) is None
+
+
+async def test_semantic_scholar_is_the_last_net() -> None:
+    """It indexes the repository PDF where Unpaywall often has only the
+    repository's landing page."""
+    resolver = resolver_for(
+        {
+            **exhausted(),
+            "www.ebi.ac.uk": {"resultList": {"result": []}},
+            "api.semanticscholar.org": {
+                "openAccessPdf": {"url": OA_PDF, "status": "GREEN", "license": "CCBYNCND"}
+            },
+        }
+    )
+
+    copy = await resolver.resolve(DOI)
+
+    assert copy is not None
+    assert (copy.url, copy.provider, copy.license) == (OA_PDF, "semanticscholar", "CCBYNCND")
+
+
+async def test_semantic_scholar_with_no_pdf_is_no_copy() -> None:
+    """`isOpenAccess` without an `openAccessPdf` means it knows the paper is
+    open somewhere and does not know where — which is not a URL to queue."""
+    resolver = resolver_for(
+        {
+            **exhausted(),
+            "www.ebi.ac.uk": {"resultList": {"result": []}},
+            "api.semanticscholar.org": {"isOpenAccess": True, "openAccessPdf": None},
+        }
+    )
+
+    assert await resolver.resolve(DOI) is None
+
+
+async def test_the_api_key_rides_in_the_header_when_there_is_one() -> None:
+    """Unauthenticated Semantic Scholar is rate-limited hard enough to matter
+    for anything more than a DOI at a time."""
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.semanticscholar.org":
+            seen["key"] = request.headers.get("x-api-key")
+            return httpx.Response(200, json={"openAccessPdf": {"url": OA_PDF}})
+        return httpx.Response(404, json={})
+
+    resolver = DoiResolver(
+        ResolverSettings(contact_email="ops@example.test", semantic_scholar_key="s2-key"),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    await resolver.resolve(DOI)
+
+    assert seen["key"] == "s2-key"
+
+
+async def test_the_spec_order_still_wins() -> None:
+    """The two additions sit *below* §6.5's four, not in place of them.
+
+    Unpaywall's answer is authoritative about licence and version, and a
+    reordering that quietly preferred a later provider would change what the
+    corpus records about every paper it cites.
+    """
+    resolver = resolver_for(
+        {
+            "api.unpaywall.org": unpaywall(OA_PDF, version="publishedVersion"),
+            "www.ebi.ac.uk": europepmc(oa("https://europepmc.test/other.pdf")),
+            "api.semanticscholar.org": {"openAccessPdf": {"url": "https://s2.test/other.pdf"}},
+        }
+    )
+
+    copy = await resolver.resolve(DOI)
+
+    assert copy is not None and copy.provider == "unpaywall"
+
+
+# --------------------------------------------------------------------------
+# Rate limiting: the failure that looks like an answer
+# --------------------------------------------------------------------------
+#
+# Found by measurement, not by reading. Resolving 75 real DOIs back to back
+# returned no copy from Semantic Scholar; the same DOIs asked one per second
+# returned an open-access PDF for every one. A 429 folded in with connection
+# errors is skipped silently, so the chain reports "no open-access copy", the
+# task settles `done`, and the paper is never looked for again.
+
+
+@pytest.mark.parametrize("status", [429, 403])
+async def test_being_throttled_is_not_an_answer(status: int) -> None:
+    """`None` here would settle the task `done` and lose the paper for good.
+    Nothing was learned, so the task has to come back."""
+    resolver = resolver_for({**exhausted(), "api.semanticscholar.org": status})
+
+    with pytest.raises(ResolutionUnavailable, match="rate-limited"):
+        await resolver.resolve(DOI)
+
+
+async def test_a_copy_found_before_the_throttling_still_wins() -> None:
+    """The chain stops at the first copy, so a later provider's quota never
+    matters — being throttled only counts when nothing was found."""
+    resolver = resolver_for(
+        {"api.unpaywall.org": unpaywall(OA_PDF), "api.semanticscholar.org": 429}
+    )
+
+    copy = await resolver.resolve(DOI)
+
+    assert copy is not None and copy.provider == "unpaywall"
+
+
+async def test_a_throttled_provider_is_distinguishable_from_a_dead_one() -> None:
+    """Both raise `ResolutionUnavailable` and both retry — but the messages have
+    to differ, because one is fixed by waiting and the other by an API key."""
+    dead = all_down()
+    throttled = resolver_for({**exhausted(), "api.semanticscholar.org": 429})
+
+    with pytest.raises(ResolutionUnavailable) as first:
+        await dead.resolve(DOI)
+    with pytest.raises(ResolutionUnavailable) as second:
+        await throttled.resolve(DOI)
+
+    assert "rate-limited" not in str(first.value)
+    assert "rate-limited" in str(second.value)
+
+
+async def test_calls_to_one_provider_are_paced() -> None:
+    """Retrying into the same wall is not a fix. The interval is what makes the
+    retry land somewhere different."""
+    import time as _time
+
+    resolver = resolver_for(
+        {**exhausted(), "api.semanticscholar.org": {"openAccessPdf": {"url": OA_PDF}}}
+    )
+    resolver._last_call["semanticscholar"] = _time.monotonic()
+
+    started = _time.monotonic()
+    await resolver.resolve(DOI)
+    elapsed = _time.monotonic() - started
+
+    assert elapsed >= 1.0, "the second call to a rate-limited provider was not paced"
+
+
+async def test_a_skipped_provider_costs_no_delay() -> None:
+    """Pacing wraps the call, not the decision to make one. A deployment with no
+    CORE key must not pay CORE's interval on every DOI."""
+    import time as _time
+
+    resolver = resolver_for({"api.unpaywall.org": unpaywall(OA_PDF)}, core_api_key=None)
+    resolver._last_call["core"] = _time.monotonic()
+
+    started = _time.monotonic()
+    await resolver.resolve(DOI)
+
+    assert _time.monotonic() - started < 0.2
+
+
+def test_every_paced_provider_is_one_the_chain_actually_calls() -> None:
+    """A typo in `PROVIDER_MIN_INTERVAL_S` is a limit that silently never
+    applies — which is exactly the bug this table was added to fix."""
+    import inspect
+
+    from worker.resolve_doi import PROVIDER_MIN_INTERVAL_S
+
+    chain = inspect.getsource(DoiResolver.resolve)
+    unused = [name for name in PROVIDER_MIN_INTERVAL_S if f'"{name}"' not in chain]
+    assert not unused, f"paced but never called: {unused}"
