@@ -147,6 +147,23 @@ services:
     tmpfs: [/tmp]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+    # `P5-08`. `restart: unless-stopped` handles a worker that *exits*; it does
+    # nothing for one still running and no longer working — a wedged fetch, a
+    # pool that never recovers, a lane stuck on a lock. From outside, that is
+    # indistinguishable from a healthy worker that happens to be busy.
+    #
+    # The loop touches a file each iteration and this asks how old it is. The
+    # file lives in the tmpfs above, so it cannot survive a restart and be
+    # mistaken for a fresh one.
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker.liveness"]
+      interval: 60s
+      timeout: 10s
+      # A first iteration includes connecting to Postgres and loading the
+      # prefilter and topic vocabulary. Shorter, and the supervisor kills it
+      # while it is doing exactly what it should.
+      start_period: 120s
+      retries: 3
     deploy:
       resources:
         limits: { memory: 4G }

@@ -221,7 +221,19 @@ make snapshot-corpus                                       # the run's deliverab
 
 ```bash
 MERIDIAN_BACKUP_ROOT=/mnt/elsewhere/meridian make backup
+
+# then on a timer, on the host (P5-08)
+sudo cp deploy/meridian-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now meridian-backup.timer
+systemctl list-timers meridian-backup     # confirm it is actually scheduled
 ```
+
+A systemd timer rather than a row in the scheduler, and the reason is worth
+knowing: `backup.sh` needs `docker compose exec postgres pg_dump`, so it needs
+the Docker socket — and giving the worker container that socket would hand the
+process that fetches hostile web pages control of the host's container runtime.
+The timetable runs what belongs in the container; the host runs what belongs on
+the host.
 
 Point it at **a different device**. The script warns if it shares a filesystem
 with `DATA_ROOT`, because a backup on the disk it protects survives an

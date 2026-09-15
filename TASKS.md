@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1593 backend tests and 165 frontend.
+1601 backend tests and 165 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -675,7 +675,17 @@ when its queue drained.
       and change steering, so the single-chat restriction and the command
       authorisation have to exist before the first command does — and most
       commands need steering (`P5-06`) or the orchestrator (phase 4) anyway
-- [ ] `P5-08` Health endpoint, watchdog, off-device snapshot job
+- [x] `P5-08` Health endpoint, watchdog, off-device snapshot job — `v0.62.0`.
+      `/health` shipped with `P2-07`; this adds the two that were missing. A
+      liveness heartbeat the worker touches each iteration **before** the work,
+      so a lane wedged inside a fetch stops beating — `restart: unless-stopped`
+      only ever covered a worker that *exits*, and a wedged one looks exactly
+      like a busy one. And systemd units for the off-device backup, which is a
+      timer rather than a `scheduled_jobs` row because `backup.sh` needs the
+      Docker socket, and giving that to the container that fetches hostile pages
+      is not a trade worth making. §13.4's remaining item — "no successful
+      synthesis run in N days" — waits for runs to exist (phase 4);
+      `check_no_recent_success` already covers the fetch half
 
 ## Phase 6 · Interface — the payoff layer
 

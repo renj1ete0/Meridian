@@ -91,6 +91,7 @@ from .extract.document import supports as supports_document
 from .extract.injection import Screening, screen
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
+from .liveness import beat
 from .ocr_queue import enqueue_ocr, mark_scanned
 from .prefilter import Prefilter
 from .ratelimit import DomainLimiter
@@ -452,6 +453,10 @@ class Worker:
         """One claim-fetch-settle loop. Ends only when stopped or out of budget."""
         consecutive_errors = 0
         while not self._stopping.is_set():
+            # `P5-08`. Every iteration, before the work rather than after: a
+            # lane that wedges *inside* a fetch should stop beating, and a beat
+            # at the end of the loop would only stop once the wedge cleared.
+            beat()
             if not self._reserve():
                 return
             try:

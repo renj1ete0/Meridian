@@ -48,6 +48,52 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.62.0] — 2026-09-15
+
+**A wedged worker can be told from a busy one.**
+
+### Added
+
+- `P5-08` a liveness heartbeat, a container healthcheck for the worker, and the
+  systemd units for off-device backups
+- **`restart: unless-stopped` only covers a worker that exits.** It does nothing
+  for one still running and no longer working — a wedged fetch, a pool that
+  never recovers, a lane stuck on a lock. From outside, that is
+  indistinguishable from a healthy worker that happens to be busy, which is why
+  the restart that would fix it never fires
+- The loop touches a file each iteration, **before** the work rather than after:
+  a lane that wedges *inside* a fetch should stop beating, and a beat at the end
+  of the loop would only stop once the wedge cleared
+- A file rather than a port. The worker serves no HTTP and should not start to
+  be observable, and the check needs no credentials. It lives in the container's
+  tmpfs, so it cannot survive a restart and be mistaken for a fresh one
+- A **missing** heartbeat is not alive. `start_period` covers startup;
+  afterwards it means the loop never reached its first iteration, which is
+  exactly the state worth restarting
+
+### The backup is a systemd timer, not a scheduled job
+
+- It looks like an inconsistency with `P5-06` and is not. `backup.sh` needs
+  `docker compose exec postgres pg_dump`, so it needs the Docker socket — and
+  giving the worker container that socket would hand the process that fetches
+  hostile web pages control of the host's container runtime. The timetable runs
+  what belongs in the container; the host runs what belongs on the host
+- `Persistent=true`, so a backup missed because the machine was off runs on the
+  next boot. That is the backup you wanted
+- `RandomizedDelaySec=1h`, because several machines backing up at exactly 00:00
+  is a thundering herd against whatever holds the volume
+
+### Testing
+
+- That a stale heartbeat is *not* alive. A liveness probe that passes on a dead
+  process is worse than no probe, because it also suppresses the restart
+- That an unwritable path does not take the crawl down — monitoring that causes
+  the outage it exists to detect
+- That the healthcheck reports by exit code, since Docker reads that and not the
+  output: a check that printed a problem and exited 0 always passes
+- Compose drift tests for the worker's healthcheck and for every long-running
+  service being probeable
+
 ## [0.61.0] — 2026-09-15
 
 **What arrived while you were away.**

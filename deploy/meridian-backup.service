@@ -1,0 +1,42 @@
+# Off-device snapshots on a schedule (task P5-08, spec §13.4).
+#
+# §13.4 asks for "automatic snapshots off-device on a schedule", and this is a
+# systemd timer rather than a row in `scheduled_jobs` for a reason worth stating
+# because it looks like an inconsistency.
+#
+# `P5-06`'s scheduler runs `python -m <module>` inside the worker container,
+# with no shell — deliberately, since a timetable row is editable from the UI
+# and a row that could name a shell command would make that table a remote
+# execution surface. `backup.sh` needs `docker compose exec postgres pg_dump`,
+# so it needs the Docker socket, and giving the worker container that socket
+# would hand the process that fetches hostile web pages control of the host's
+# container runtime. That trade is not close.
+#
+# So: the timetable runs what belongs in the container, and the host runs what
+# belongs on the host.
+#
+# Install:
+#   sudo cp deploy/meridian-backup.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now meridian-backup.timer
+#   systemctl list-timers meridian-backup     # confirm it is actually scheduled
+
+[Unit]
+Description=Meridian — off-device backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/meridian/app
+# Point this at a different device. `backup.sh` warns when it shares a
+# filesystem with DATA_ROOT, because a backup on the disk it protects survives
+# an accidental delete and nothing else.
+Environment=MERIDIAN_BACKUP_ROOT=/mnt/backup/meridian
+ExecStart=/srv/meridian/app/scripts/backup.sh
+# A dump of a large corpus takes a while, and killing it halfway leaves a
+# truncated file that `restore_corpus.sh` will refuse — correctly, but the
+# backup is still missing.
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target

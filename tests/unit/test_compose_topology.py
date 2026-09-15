@@ -174,3 +174,21 @@ def test_the_pinned_subnets_are_inside_the_range_the_rules_cover(compose: dict) 
             f"network {name} ({subnet}) is outside {supernet}, which the firewall rules "
             "treat as Meridian's own — it would be blocked, or worse, exempted"
         )
+
+
+def test_the_worker_has_a_health_check(compose: dict) -> None:
+    """`P5-08`. `restart: unless-stopped` covers a worker that exits and does
+    nothing for one still running and no longer working — a wedged fetch, a
+    pool that never recovers. Without a healthcheck, Docker cannot tell that
+    from a worker that happens to be busy, and the restart that would fix it
+    never fires."""
+    assert compose["services"]["worker"].get("healthcheck")
+
+
+def test_every_long_running_service_can_be_probed(compose: dict) -> None:
+    """A service with no healthcheck is one the supervisor can only restart when
+    it crashes. Listed explicitly rather than "all services", because `api` is
+    probed through its own HTTP `/health` and the one-shot passes are not
+    long-running at all."""
+    for name in ("postgres", "crawl4ai", "worker", "embedder"):
+        assert compose["services"][name].get("healthcheck"), f"{name} cannot be probed"

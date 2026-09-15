@@ -1,0 +1,16 @@
+# See meridian-backup.service for why this is a timer and not a scheduled job.
+
+[Unit]
+Description=Meridian — off-device backup, daily
+
+[Timer]
+OnCalendar=daily
+# Spread across an hour. Several machines backing up at exactly 00:00 is a
+# thundering herd against whatever holds the backup volume.
+RandomizedDelaySec=1h
+# Run on the next boot if the machine was off when it was due. A backup skipped
+# because of a power cut is the backup you wanted.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
