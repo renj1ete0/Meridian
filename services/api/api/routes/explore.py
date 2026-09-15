@@ -182,7 +182,10 @@ async def explore_source_chunks(
     rows = (
         await sess.execute(
             select(Chunk)
-            .where(Chunk.source_id == source_id)
+            # Live chunks only (`P1-32`). A source page showing retired text
+            # would present passages the document no longer contains, in
+            # document order, as though it did.
+            .where(Chunk.source_id == source_id, Chunk.superseded_at.is_(None))
             .order_by(Chunk.chunk_index)
             .offset(offset)
             .limit(limit + 1)
@@ -261,7 +264,11 @@ async def explore_export_markdown(
         await sess.execute(
             select(Chunk, Source)
             .join(Source, Source.source_id == Chunk.source_id)
-            .where(Chunk.source_id.in_(source_id), Chunk.duplicate_of.is_(None))
+            .where(
+                Chunk.source_id.in_(source_id),
+                Chunk.duplicate_of.is_(None),
+                Chunk.superseded_at.is_(None),
+            )
             .order_by(Chunk.source_id, Chunk.chunk_index)
         )
     ).all()

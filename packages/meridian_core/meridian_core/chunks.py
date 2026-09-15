@@ -15,19 +15,33 @@ last `chunk_id` the slow loop consumed, so a replaced chunk is naturally picked
 up again on the next pass — which is exactly what should happen to a page whose
 content changed. Nothing has to notice the change or schedule the re-read.
 
-**But replacement is not free, and the schema does not yet say so.**
-`edges.supporting_chunk_ids` is an array of ids with no foreign key behind it,
-so an edge whose evidence is deleted keeps pointing at nothing. Today no edges
-exist, so nothing is orphaned — see `P1-32`, which is where superseding rather
-than deleting has to be worked out, and which needs the graph to exist first.
+**Replacement supersedes; it does not delete (`P1-32`).**
+`edges.supporting_chunk_ids` is an array of ids with no foreign key behind it —
+Postgres cannot enforce one on array elements — so deleting a chunk left every
+edge citing it pointing at nothing. That failure is silent in the worst way:
+§2.3 makes provenance mandatory, and an orphaned edge still *has* provenance. It
+carries a list of ids, passes every check, and only following the citation
+reveals there is nothing there. Nothing in the system follows.
+
+So the old rows are stamped with `superseded_at` and stay. Citations keep
+resolving; an edge keeps the text it was actually derived from, which matters
+because the page has since changed and §2.4 re-derives from source chunks; and
+the sweep can reclaim the ones nothing cites, as a decision a person makes
+rather than one a crawl makes at write time.
+
+Everything that serves the corpus filters on ``superseded_at IS NULL``. A
+superseded chunk is text that is no longer on the page, and serving it would
+have the corpus quote a document as saying something it no longer says.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 from collections.abc import Iterable, Mapping, Sequence
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
@@ -51,16 +65,16 @@ class ChunkWrite:
 
 
 async def replace_chunks(
-    sess: AsyncSession, source_id: int, chunks: Sequence[ChunkWrite]
+    sess: AsyncSession, source_id: int, chunks: Sequence[ChunkWrite], *, now=None
 ) -> tuple[int, int]:
-    """Make ``chunks`` the complete set for ``source_id``. Returns (written, deleted).
+    """Make ``chunks`` the live set for ``source_id``. Returns (written, superseded).
 
-    Flushes; does not commit. The delete and the insert belong to the caller's
-    transaction on purpose — they are one change, and a crash between them
-    leaves a source with no chunks at all, which reads as "never extracted"
-    rather than as "half replaced".
+    Flushes; does not commit. The supersede and the insert belong to the
+    caller's transaction on purpose — they are one change, and a crash between
+    them leaves a source with no live chunks at all, which reads as "never
+    extracted" rather than as "half replaced".
     """
-    deleted = await delete_chunks(sess, source_id)
+    superseded = await supersede_chunks(sess, source_id, now=now)
 
     for chunk in chunks:
         if not chunk.text.strip():
@@ -79,27 +93,110 @@ async def replace_chunks(
 
     await sess.flush()
     written = sum(1 for chunk in chunks if chunk.text.strip())
-    if deleted:
+    if superseded:
         log.info(
             "chunks replaced",
-            extra={"source_id": source_id, "written": written, "deleted": deleted},
+            extra={"source_id": source_id, "written": written, "superseded": superseded},
         )
-    return written, deleted
+    return written, superseded
+
+
+async def supersede_chunks(sess: AsyncSession, source_id: int, *, now=None) -> int:
+    """Retire this source's live chunks without removing them. Flushes.
+
+    Only the live ones. A source re-crawled twice has two generations of
+    superseded chunks, and re-stamping the older set would move its timestamp
+    forward — which is the one thing the column is for, and would make the
+    sweep's "superseded more than N days ago" mean nothing.
+    """
+    stamp = now or dt.datetime.now(dt.UTC)
+    result = await sess.execute(
+        update(Chunk)
+        .where(Chunk.source_id == source_id, Chunk.superseded_at.is_(None))
+        .values(superseded_at=stamp)
+    )
+    await sess.flush()
+    return result.rowcount or 0
 
 
 async def delete_chunks(sess: AsyncSession, source_id: int) -> int:
-    """Remove every chunk for a source. Returns how many. Flushes."""
+    """Remove every chunk for a source, superseded ones included. Returns how many.
+
+    Not what a re-crawl does — see :func:`supersede_chunks`. This is for the
+    caller that means it: a source being removed entirely, where leaving its
+    chunks would leave rows referring to a source that no longer exists.
+    """
     result = await sess.execute(delete(Chunk).where(Chunk.source_id == source_id))
     await sess.flush()
     return result.rowcount or 0
 
 
-async def chunk_count(sess: AsyncSession, source_id: int | None = None) -> int:
-    """How many chunks exist, for one source or for the whole corpus."""
+async def chunk_count(
+    sess: AsyncSession, source_id: int | None = None, *, live_only: bool = True
+) -> int:
+    """How many chunks exist, for one source or for the whole corpus.
+
+    Live by default. Every caller asking "how big is the corpus" means the text
+    that is on the pages now, and a count that silently included retired
+    generations would grow every time a page changed.
+    """
     query = select(func.count()).select_from(Chunk)
     if source_id is not None:
         query = query.where(Chunk.source_id == source_id)
+    if live_only:
+        query = query.where(Chunk.superseded_at.is_(None))
     return await sess.scalar(query) or 0
+
+
+async def superseded_uncited(sess: AsyncSession, *, before=None) -> int:
+    """How many retired chunks no edge cites — what the sweep could reclaim.
+
+    The "cited" half is the same EXISTS the retention sweep uses on raw files
+    (§5.4), and for the same reason: an edge's evidence is not reclaimable
+    space, it is the thing that makes the edge checkable.
+    """
+    return await sess.scalar(select(func.count()).select_from(_reclaimable(before).subquery())) or 0
+
+
+async def purge_superseded(sess: AsyncSession, *, before=None) -> int:
+    """Delete retired chunks that no edge cites. Returns how many. Commits.
+
+    Deliberately not called by anything on a timer. A superseded chunk is the
+    text an edge *would* have been derived from if one had been written, and a
+    crawl that reclaimed it automatically would be making a retention decision
+    at the moment it is least able to judge it. The sweep reports the number and
+    a person passes ``--apply``, exactly as for raw files.
+    """
+    ids = select(_reclaimable(before).subquery().c.chunk_id)
+    result = await sess.execute(delete(Chunk).where(Chunk.chunk_id.in_(ids)))
+    await sess.commit()
+    return result.rowcount or 0
+
+
+#: Every table whose provenance is an array of chunk ids. All three carry
+#: `supporting_chunk_ids` (§2.3), and all three are reasons a retired chunk must
+#: stay: an edge's evidence is not reclaimable space, it is the thing that makes
+#: the edge checkable.
+#:
+#: Written as SQL rather than built with `~exists()` because the clause is
+#: negated, and SQLAlchemy cannot negate a text fragment — which is how the
+#: first version of this failed, loudly and immediately, rather than by quietly
+#: matching everything.
+_UNCITED = (
+    "NOT EXISTS (SELECT 1 FROM edges e WHERE chunks.chunk_id = ANY(e.supporting_chunk_ids))"
+    " AND NOT EXISTS (SELECT 1 FROM observations o"
+    " WHERE chunks.chunk_id = ANY(o.supporting_chunk_ids))"
+    " AND NOT EXISTS (SELECT 1 FROM attribute_values a"
+    " WHERE chunks.chunk_id = ANY(a.supporting_chunk_ids))"
+)
+
+
+def _reclaimable(before=None):
+    """Superseded chunks that no edge, observation or attribute value cites."""
+    query = select(Chunk.chunk_id).where(Chunk.superseded_at.is_not(None), sql_text(_UNCITED))
+    if before is not None:
+        query = query.where(Chunk.superseded_at < before)
+    return query
 
 
 def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
@@ -136,7 +233,13 @@ async def chunks_without_embeddings(
     """
     rows = await sess.execute(
         select(Chunk)
-        .where(Chunk.embedding.is_(None), Chunk.chunk_id > after_id)
+        # Superseded chunks are excluded: embedding text that is no longer on
+        # the page spends the model's time producing a vector nothing may search.
+        .where(
+            Chunk.embedding.is_(None),
+            Chunk.superseded_at.is_(None),
+            Chunk.chunk_id > after_id,
+        )
         .order_by(Chunk.chunk_id)
         .limit(limit)
     )
@@ -178,6 +281,10 @@ async def embedding_backlog(sess: AsyncSession) -> int:
     working and the corpus keeps growing and none of it becomes searchable.
     """
     return (
-        await sess.scalar(select(func.count()).select_from(Chunk).where(Chunk.embedding.is_(None)))
+        await sess.scalar(
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.embedding.is_(None), Chunk.superseded_at.is_(None))
+        )
         or 0
     )

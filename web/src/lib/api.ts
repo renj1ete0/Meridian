@@ -190,6 +190,8 @@ export interface Chunk {
   novelty_checked_at: string | null
   nearest_similarity: number | null
   duplicate_of: number | null
+  /** When a re-crawl retired this chunk (`P1-32`). Null is the live set. */
+  superseded_at: string | null
   created_at: string
 }
 
@@ -202,6 +204,7 @@ export const CHUNK_FIELDS = [
   'novelty_checked_at',
   'nearest_similarity',
   'duplicate_of',
+  'superseded_at',
   'created_at',
 ] as const
 

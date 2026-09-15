@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1792 backend tests and 205 frontend.
+1807 backend tests and 205 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -277,13 +277,20 @@ when its queue drained.
       restart into one that granted permission. Plus a per-origin lock, since a
       lane claims many URLs from one domain at once and every one of them used to
       miss the empty cache
-- [ ] `P1-32` **Replacing chunks orphans the edges that cite them.**
-      `edges.supporting_chunk_ids` is an array of ids with no foreign key behind
-      it, and `replace_chunks()` deletes the old set when a page's content
-      changes. Nothing is orphaned today because no edges exist, and the fix is
-      not obvious — superseding rather than deleting, a `superseded_by` column,
-      or re-deriving affected edges — so it needs the graph to exist first. Do
-      not let the first real edges land before this is decided
+- [x] `P1-32` **Replacing chunks orphans the edges that cite them** —
+      `v0.67.0`. Decided: **supersede, never delete.** Re-deriving affected edges
+      needs the slow loop and produces a different edge anyway, so the old one
+      would have to be invalidated regardless; a foreign key is impossible,
+      since Postgres cannot enforce one on array elements. Stamping
+      `superseded_at` keeps every citation resolvable, keeps the text an edge was
+      actually derived from (§2.4 re-derives from source chunks, and the page has
+      changed), and leaves reclamation to the sweep — a decision a person makes
+      rather than one a crawl makes at write time. The unique constraint on
+      `(source_id, chunk_index)` became partial over the live set, or the
+      replacement it exists to allow would be refused at write time. Every query
+      that serves the corpus filters on it, the novelty gate included: without
+      that, a changed page's new chunks are all marked duplicates of the
+      generation they replaced
 - [x] `P1-31` **The retention sweep exists** (`v0.35.0`).
       `meridian_core/retention.py` plus `python -m worker.sweep`. Measuring the
       real corpus before writing it changed what it is: there was nothing to

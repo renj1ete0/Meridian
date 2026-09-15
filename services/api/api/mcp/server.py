@@ -227,7 +227,14 @@ def build_mcp(
                 await sess.execute(
                     select(Chunk, Source)
                     .join(Source, Source.source_id == Chunk.source_id)
-                    .where(Chunk.chunk_id > mark, Chunk.duplicate_of.is_(None))
+                    .where(
+                        Chunk.chunk_id > mark,
+                        Chunk.duplicate_of.is_(None),
+                        # Live only (`P1-32`). An agent walking the corpus
+                        # forward must not be handed text a page no longer
+                        # carries and then cite it.
+                        Chunk.superseded_at.is_(None),
+                    )
                     .order_by(Chunk.chunk_id)
                     .limit(min(limit, 200))
                 )

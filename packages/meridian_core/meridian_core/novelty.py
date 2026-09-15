@@ -139,10 +139,21 @@ class NoveltyHealth:
 
 
 def _pending() -> Select:
-    """Embedded and not yet judged, in id order."""
+    """Embedded, not yet judged, and still live, in id order.
+
+    Superseded chunks are excluded (`P1-32`). Judging text that is no longer on
+    the page spends the gate on a verdict nothing will read, and worse: a chunk
+    written by the *new* crawl of the same page would be marked a duplicate of
+    the old generation it replaced, which is true and useless — the surviving
+    copy is the one that was just retired.
+    """
     return (
         select(Chunk.chunk_id, Chunk.source_id)
-        .where(Chunk.embedding.is_not(None), Chunk.novelty_checked_at.is_(None))
+        .where(
+            Chunk.embedding.is_not(None),
+            Chunk.novelty_checked_at.is_(None),
+            Chunk.superseded_at.is_(None),
+        )
         .order_by(Chunk.chunk_id)
     )
 
@@ -229,6 +240,11 @@ async def nearest_earlier_neighbours(
         .where(
             candidate.embedding.is_not(None),
             candidate.duplicate_of.is_(None),
+            # Retired text is not a surviving copy (`P1-32`). Without this, a
+            # re-crawl of a changed page marks every one of its new chunks a
+            # duplicate of the generation it just replaced — true, and exactly
+            # backwards: the copy being pointed at is the one that is gone.
+            candidate.superseded_at.is_(None),
             candidate.chunk_id < subject.chunk_id,
         )
         .order_by(distance)

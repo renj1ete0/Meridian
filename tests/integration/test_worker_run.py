@@ -932,13 +932,15 @@ def long_page(marker: str = "one") -> bytes:
     ).encode()
 
 
-async def chunks_of(sess, url: str):
+async def chunks_of(sess, url: str, *, live_only: bool = True):
+    """This source's chunks. Live by default — what every consumer sees (`P1-32`)."""
     from meridian_core.models import Chunk
 
     source = await get_source(sess, url)
-    rows = await sess.execute(
-        select(Chunk).where(Chunk.source_id == source.source_id).order_by(Chunk.chunk_index)
-    )
+    query = select(Chunk).where(Chunk.source_id == source.source_id)
+    if live_only:
+        query = query.where(Chunk.superseded_at.is_(None))
+    rows = await sess.execute(query.order_by(Chunk.chunk_index))
     return source, list(rows.scalars())
 
 
@@ -1063,9 +1065,17 @@ async def test_changed_content_replaces_the_chunks(
 
     _, after = await chunks_of(sess, url)
     after_ids = {r.chunk_id for r in after}
-    assert before_ids.isdisjoint(after_ids), "the old chunks survived a content change"
+    assert before_ids.isdisjoint(after_ids), "the old chunks are still live after a change"
     assert any("(two)" in r.text for r in after)
     assert not any("(one)" in r.text for r in after)
+
+    # And the old rows are retired rather than gone (`P1-32`), so any edge that
+    # cited them through a full crawl still resolves to the text it was
+    # derived from.
+    _, every = await chunks_of(sess, url, live_only=False)
+    retired = [r for r in every if r.superseded_at is not None]
+    assert retired, "the old chunks were deleted rather than superseded"
+    assert any("(one)" in r.text for r in retired)
     await sess.refresh(task2)
 
 

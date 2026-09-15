@@ -23,6 +23,7 @@ import contextlib
 import os
 import time
 
+from meridian_core.chunks import purge_superseded, superseded_uncited
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.retention import RetentionPlan, apply_sweep, plan_sweep
@@ -30,6 +31,22 @@ from meridian_core.retention import RetentionPlan, apply_sweep, plan_sweep
 from .rawstore import raw_root
 
 log = get_logger(__name__)
+
+
+def render_chunks(superseded: int, apply: bool) -> None:
+    """The other thing a re-crawl leaves behind (`P1-32`).
+
+    Reported here rather than reclaimed by the crawl, for the same reason raw
+    files are: a superseded chunk is the text an edge *would* have been derived
+    from, and the crawl is the process least able to judge whether anything
+    needs it. It reads a page, sees the content changed, and has no idea what
+    the graph has been built on.
+    """
+    if not superseded:
+        return
+    print(f"\n  superseded chunks  {superseded}  (retired by a re-crawl, cited by nothing)")
+    if not apply:
+        print("  These are rows, not files. Pass --apply to delete them too.")
 
 
 def render(plan: RetentionPlan, root: str) -> None:
@@ -83,8 +100,16 @@ async def run_sweep(*, apply: bool = False, root: str | None = None) -> Retentio
     resolved = str(raw_root(root))
     async with session() as sess:
         plan = await plan_sweep(sess, resolved)
+        superseded = await superseded_uncited(sess)
 
     render(plan, resolved)
+    render_chunks(superseded, apply)
+
+    if apply and superseded:
+        async with session() as sess:
+            removed = await purge_superseded(sess)
+        print(f"  APPLIED — {removed} superseded chunks deleted.")
+        log.info("superseded chunks purged", extra={"rows": removed})
 
     if apply and not plan.is_empty:
         reclaimed = apply_sweep(plan, resolved, dry_run=False)

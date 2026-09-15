@@ -235,18 +235,59 @@ class Chunk(Base, TimestampMixin):
         nullable=False,
     )
 
+    # --- superseded rather than deleted (§2.3, task P1-32) ----------------
+    #
+    # A re-crawl of a changed page used to DELETE this source's chunks and write
+    # new ones. `edges.supporting_chunk_ids` is an array of ids with no foreign
+    # key behind it — Postgres cannot enforce one on array elements — so a
+    # deleted chunk left every edge citing it pointing at nothing. §2.3 makes
+    # provenance mandatory on every edge, and an edge whose evidence row is gone
+    # does not fail any check: it reads as an edge with provenance, and the
+    # citation simply does not resolve.
+    #
+    # So nothing is deleted. The old chunks are stamped here, which keeps every
+    # citation resolvable, keeps the *text an edge was actually derived from*
+    # (§2.4 re-derives from source chunks, and the page has since changed), and
+    # leaves the sweep free to reclaim the ones nothing cites.
+    #
+    # NULL is the live set, and every query that serves the corpus filters on
+    # it: a superseded chunk is text that is no longer on the page, and serving
+    # it would make the corpus quote a document as saying something it no longer
+    # says.
+    superseded_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
     source: Mapped[Source] = relationship(back_populates="chunks")
 
     __table_args__ = (
-        UniqueConstraint("source_id", "chunk_index", name="uq_chunks_source_id_chunk_index"),
+        # Unique among the *live* chunks only. The old set keeps its indices, so
+        # a plain constraint over (source_id, chunk_index) would refuse the
+        # replacement it exists to make possible.
+        Index(
+            "uq_chunks_live_index",
+            "source_id",
+            "chunk_index",
+            unique=True,
+            postgresql_where=sql_text("superseded_at IS NULL"),
+        ),
         # The high-water mark scan: everything after the last consumed chunk (§6.3).
         Index("ix_chunks_id_created", "chunk_id", "created_at"),
         # The novelty gate's queue. Partial, because the rows it wants are the
-        # shrinking minority: everything embedded and not yet judged.
+        # shrinking minority: everything embedded and not yet judged. Superseded
+        # chunks are excluded — judging text that is no longer on the page
+        # spends the gate's budget on a verdict nothing will ever read.
         Index(
             "ix_chunks_novelty_pending",
             "chunk_id",
-            postgresql_where=sql_text("embedding IS NOT NULL AND novelty_checked_at IS NULL"),
+            postgresql_where=sql_text(
+                "embedding IS NOT NULL AND novelty_checked_at IS NULL AND superseded_at IS NULL"
+            ),
+        ),
+        # What the sweep reclaims: superseded, and cited by nothing. Kept
+        # partial so it stays small — the live corpus is not in it at all.
+        Index(
+            "ix_chunks_superseded",
+            "superseded_at",
+            postgresql_where=sql_text("superseded_at IS NOT NULL"),
         ),
         # GIN rather than GiST: this index is read constantly and written once
         # per chunk, which is the tradeoff GIN is built for. GiST would be the

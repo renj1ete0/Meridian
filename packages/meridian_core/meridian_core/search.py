@@ -182,7 +182,12 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
     populations — and the arm that drifted would be the one silently returning
     material the caller excluded.
     """
-    where: list[ColumnElement[bool]] = []
+    # Superseded chunks are never searchable, and this is not a filter a caller
+    # may turn off (`P1-32`). They are the text a page used to carry: retrieving
+    # one would have the corpus quote a document as saying something it no
+    # longer says, with a citation that opens the current page and does not
+    # contain the passage.
+    where: list[ColumnElement[bool]] = [Chunk.superseded_at.is_(None)]
 
     if filters.source_tiers:
         where.append(Source.source_tier.in_(list(filters.source_tiers)))

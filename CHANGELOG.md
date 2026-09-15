@@ -48,6 +48,65 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.67.0] — 2026-09-15
+
+**Chunks are superseded, not deleted, so a citation keeps resolving.**
+
+### Fixed
+
+- `P1-32` a re-crawl of a changed page deleted the source's chunks and wrote new
+  ones. `edges.supporting_chunk_ids` is an array of ids with no foreign key
+  behind it — Postgres cannot enforce one on array elements — so every edge
+  citing a deleted chunk was left pointing at nothing
+- **The failure was silent in the worst available way.** §2.3 makes provenance
+  mandatory on every edge, and an orphaned edge still *has* provenance: it
+  carries a list of ids, passes every check, and only following the citation
+  reveals there is nothing there. Nothing in the system follows
+- Now the old rows are stamped `superseded_at` and stay. Citations keep
+  resolving; an edge keeps the text it was actually **derived from**, which
+  matters because §2.4 re-derives from source chunks and the page has since
+  changed; and the sweep can reclaim what nothing cites, as a decision a person
+  makes rather than one a crawl makes at write time
+
+### Every query that serves the corpus filters on it
+
+- Search, both arms — via `_conditions`, which is the single filter source, so
+  the two cannot drift. Not a filter a caller may turn off: `include_duplicates`
+  exists because a near-duplicate is a *verdict* worth re-examining, and a
+  superseded chunk is not a verdict, it is text the page no longer has
+- The source page, `/stats`, the MCP walk, the embedding queue and the novelty
+  gate. The gate mattered more than it looks: without the filter, every chunk
+  from the new crawl of a changed page would be marked a duplicate of the
+  generation it just replaced — true, and exactly backwards, since the copy
+  being pointed at is the one that is gone
+
+### Schema
+
+- The unique constraint on `(source_id, chunk_index)` becomes a **partial**
+  unique index over the live set. The old chunks keep their indices, so a plain
+  constraint would refuse exactly the replacement this exists to allow — at
+  write time, on a re-crawl, at whatever hour the page changed
+- `superseded_at` is exposed on `ChunkRead`, so a caller holding an id from an
+  edge's provenance can tell "the text this was derived from" from "what the
+  page says now"
+- `purge_superseded` reclaims retired chunks nothing cites, reported by
+  `worker.sweep` and applied only with `--apply` — the same shape raw files
+  already use, for the same reason
+
+### Testing
+
+- That a **cited** superseded chunk is not reclaimable, which is the half that
+  matters: if it were wrong the sweep would delete exactly the chunks an edge
+  depends on, which is the orphaning this task exists to prevent arriving
+  through the mechanism meant to prevent it
+- That a second re-crawl does not re-stamp the first generation — the timestamp
+  is the one thing the column is for
+- That two *live* chunks still cannot share an index, so the partial index is
+  permissive only where intended
+- Search exclusion tested per arm, plus the converse that the replacement is
+  found in its place — without which both would pass against a search that had
+  stopped returning anything
+
 ## [0.66.0] — 2026-09-15
 
 **The robots cache survives a restart.**

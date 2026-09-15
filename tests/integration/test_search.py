@@ -324,3 +324,75 @@ async def test_limit_bounds_the_result_not_the_candidate_pool(
 
     assert len(result.hits) == 2
     assert result.lexical_candidates == 5, "the arm was truncated to the result size"
+
+
+# --------------------------------------------------------------------------
+# Superseded chunks are never retrieved (task P1-32)
+# --------------------------------------------------------------------------
+#
+# A superseded chunk is text a page used to carry. Retrieving one would have the
+# corpus quote a document as saying something it no longer says, with a citation
+# that opens the current page and does not contain the passage — which is the
+# one failure a corpus built on "nothing is assertable without a citation you
+# can follow" cannot afford.
+
+
+async def test_a_superseded_chunk_is_not_found_lexically(
+    session_for, scope, term, cleanup
+) -> None:
+    sess = await session_for("rw")
+    source = await a_source(sess, scope, [f"The {term} programme was reviewed."], [at(0.2, 5)])
+    await replace_chunks(
+        sess, source.source_id, [ChunkWrite(text="Something else.", chunk_index=0)]
+    )
+
+    result = await search(sess, term, filters=only(scope))
+
+    assert result.hits == []
+
+
+async def test_a_superseded_chunk_is_not_found_by_vector(session_for, scope, cleanup) -> None:
+    # The second arm, separately: `_conditions` is the single filter source for
+    # both, and a filter that reached only the lexical query would leave the
+    # vector arm serving retired text — visible only on queries that happened to
+    # match by meaning rather than by words.
+    sess = await session_for("rw")
+    source = await a_source(sess, scope, ["Entirely unrelated wording."], [at(0.99, 3)])
+    await replace_chunks(sess, source.source_id, [ChunkWrite(text="Replaced.", chunk_index=0)])
+
+    result = await search(sess, "", query_vector=QUERY, filters=only(scope))
+
+    assert [h.text for h in result.hits] == []
+
+
+async def test_the_replacement_is_found_in_its_place(session_for, scope, term, cleanup) -> None:
+    # The converse, without which the two tests above would pass against a
+    # search that had stopped returning anything at all.
+    sess = await session_for("rw")
+    source = await a_source(sess, scope, ["Original wording."], [at(0.2, 5)])
+    await replace_chunks(
+        sess, source.source_id, [ChunkWrite(text=f"The {term} programme.", chunk_index=0)]
+    )
+
+    result = await search(sess, term, filters=only(scope))
+
+    assert [h.text for h in result.hits] == [f"The {term} programme."]
+
+
+async def test_a_caller_cannot_ask_for_superseded_chunks(
+    session_for, scope, term, cleanup
+) -> None:
+    # Not a filter a caller may turn off. `include_duplicates` exists because a
+    # near-duplicate is a *verdict* worth re-examining; a superseded chunk is
+    # not a verdict, it is text the page no longer has.
+    sess = await session_for("rw")
+    source = await a_source(sess, scope, [f"The {term} programme was reviewed."], [at(0.2, 5)])
+    await replace_chunks(
+        sess, source.source_id, [ChunkWrite(text="Something else.", chunk_index=0)]
+    )
+
+    result = await search(
+        sess, term, filters=only(scope, include_duplicates=True, include_junk=True)
+    )
+
+    assert result.hits == []

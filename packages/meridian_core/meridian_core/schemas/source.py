@@ -104,6 +104,12 @@ class ChunkRead(BaseModel):
     novelty_checked_at: dt.datetime | None = None
     nearest_similarity: float | None = None
     duplicate_of: int | None = None
+    # When a re-crawl retired this chunk (`P1-32`). NULL is the live set, and
+    # every route that serves the corpus filters on it — exposed so a caller
+    # holding a chunk id from an edge's provenance can tell "this is the text
+    # the edge was derived from, and the page has since changed" from "this is
+    # what the page says now".
+    superseded_at: dt.datetime | None = None
     created_at: dt.datetime
 
 

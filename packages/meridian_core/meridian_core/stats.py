@@ -80,7 +80,9 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
             select(func.count()).select_from(Source).where(Source.created_at > since)
         )
         new_chunks = await count(
-            select(func.count()).select_from(Chunk).where(Chunk.created_at > since)
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.created_at > since, Chunk.superseded_at.is_(None))
         )
 
     return CorpusStats(
@@ -91,12 +93,21 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
         new_sources=new_sources,
         new_chunks=new_chunks,
         sources=await count(select(func.count()).select_from(Source)),
-        chunks=await count(select(func.count()).select_from(Chunk)),
+        # Live chunks only (`P1-32`). "How much is in here" means the text on the
+        # pages now; counting retired generations would make the corpus appear
+        # to grow every time a page changed.
+        chunks=await count(
+            select(func.count()).select_from(Chunk).where(Chunk.superseded_at.is_(None))
+        ),
         embedded_chunks=await count(
-            select(func.count()).select_from(Chunk).where(Chunk.embedding.is_not(None))
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.embedding.is_not(None), Chunk.superseded_at.is_(None))
         ),
         duplicate_chunks=await count(
-            select(func.count()).select_from(Chunk).where(Chunk.duplicate_of.is_not(None))
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.duplicate_of.is_not(None), Chunk.superseded_at.is_(None))
         ),
         entities=await count(select(func.count()).select_from(Entity)),
         edges=await count(select(func.count()).select_from(Edge)),

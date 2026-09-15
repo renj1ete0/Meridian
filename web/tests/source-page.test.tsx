@@ -65,6 +65,7 @@ beforeEach(() => {
         novelty_checked_at: null,
         nearest_similarity: null,
         duplicate_of: null,
+        superseded_at: null,
         created_at: '2026-09-01T00:00:00Z',
       },
     ],
