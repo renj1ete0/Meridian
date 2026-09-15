@@ -30,6 +30,9 @@ import {
   CHUNK_FIELDS,
   GAZETTEER_QUEUE_FIELDS,
   GAZETTEER_ROW_FIELDS,
+  FETCH_POLICY_FIELDS,
+  FETCH_POLICY_PAGE_FIELDS,
+  FETCH_POLICY_ROW_FIELDS,
   GAZETTEER_TERM_FIELDS,
   STEERING_ENTRY_FIELDS,
   STEERING_LOG_FIELDS,
@@ -93,6 +96,9 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['SteeringLogPage', 'admin.py', STEERING_LOG_FIELDS],
     ['TopicConfigRead', 'config.py', TOPIC_CONFIG_FIELDS],
     ['SteeringLogRead', 'config.py', STEERING_ENTRY_FIELDS],
+    ['FetchPolicyRead', 'config.py', FETCH_POLICY_FIELDS],
+    ['FetchPolicyRowRead', 'admin.py', FETCH_POLICY_ROW_FIELDS],
+    ['FetchPolicyPage', 'admin.py', FETCH_POLICY_PAGE_FIELDS],
     ['ChunkRead', 'source.py', CHUNK_FIELDS],
   ] as const
 

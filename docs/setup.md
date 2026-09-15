@@ -254,6 +254,24 @@ ceilings and boosts apply. The row says which one did it. Every change is
 written to `steering_log`, including the weights that moved because you steered
 a *different* topic — which is the question you will have in a month.
 
+**Admin → Domains** (`P6-22`) is per-domain fetch policy: how long the crawler
+waits between requests, how many it makes at once, and whether a site needs a
+browser. Three layers are kept separate on each row — what is set *there*, what
+it *resolves* to once the global defaults merge underneath, and what the crawl
+*learned* by watching (`P1-27`). A value marked `*` is set on that domain; an
+unmarked one is inherited.
+
+Two things that screen is for: a domain §6.4 auto-blocked after repeated
+failures — it produces no sources and no errors, so nothing else tells you — and
+a site that dropped its JavaScript shell, where "Check again now" discards what
+the crawler learned instead of waiting a week for it to re-probe.
+
+The safety guards are deliberately **not** editable there. `respect_robots`, the
+private-address and cloud-metadata blocks, the scheme and redirect rules and the
+crawler's user agent are deployment settings. A web form that could switch one
+off would be one click from controls about politeness; change them in `.env` or
+`config/fetch_policy.yaml` and re-seed.
+
 `/api/admin/*` is the only part of the API that changes anything, and it **fails
 closed**. Without a way to identify callers it refuses everything with a 503
 naming the fix. On an exposed instance that means configuring Access (§8b);

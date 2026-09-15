@@ -830,3 +830,111 @@ export type AssertSteeringEntry = Expect<
 export type AssertSteeringLog = Expect<
   Equal<keyof SteeringLog, (typeof STEERING_LOG_FIELDS)[number]>
 >
+
+// --------------------------------------------------------------------------
+// Fetch policy (task P6-22, spec §6.4)
+// --------------------------------------------------------------------------
+
+/** `DOMAIN_STATUS` in `models/config.py`. */
+export type DomainStatus = 'active' | 'blocked' | 'paused'
+
+/** Mirrors `FetchPolicyRead`. */
+export interface FetchPolicy {
+  domain: string
+  settings: Record<string, unknown> | null
+  status: DomainStatus
+  note: string | null
+  consecutive_failures: number
+  render_js_escalations: number
+  render_js_learned_at: string | null
+  updated_at: string | null
+  updated_by: string | null
+}
+
+export const FETCH_POLICY_FIELDS = [
+  'domain',
+  'settings',
+  'status',
+  'note',
+  'consecutive_failures',
+  'render_js_escalations',
+  'render_js_learned_at',
+  'updated_at',
+  'updated_by',
+] as const
+
+/** Mirrors `FetchPolicyRowRead`. */
+export interface FetchPolicyRow {
+  policy: FetchPolicy
+  resolved: Record<string, unknown>
+  overridden: string[]
+}
+
+export const FETCH_POLICY_ROW_FIELDS = ['policy', 'resolved', 'overridden'] as const
+
+/** Mirrors `FetchPolicyPage`. */
+export interface FetchPolicyPage {
+  rows: FetchPolicyRow[]
+  limit: number
+  offset: number
+  has_more: boolean
+  active: number
+  paused: number
+  blocked: number
+}
+
+export const FETCH_POLICY_PAGE_FIELDS = [
+  'rows',
+  'limit',
+  'offset',
+  'has_more',
+  'active',
+  'paused',
+  'blocked',
+] as const
+
+export function getFetchPolicy(
+  params: { status?: DomainStatus; q?: string; limit?: number } = {},
+  init?: RequestInit,
+): Promise<FetchPolicyPage> {
+  const query = new URLSearchParams()
+  if (params.status) query.set('status', params.status)
+  if (params.q) query.set('q', params.q)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  const suffix = query.toString()
+  return request<FetchPolicyPage>(`/api/admin/fetch-policy${suffix ? `?${suffix}` : ''}`, init)
+}
+
+export function editFetchPolicy(
+  domain: string,
+  edit: { settings?: Record<string, unknown>; status?: DomainStatus; note?: string; confirm?: boolean },
+  init?: RequestInit,
+): Promise<FetchPolicyRow> {
+  return request<FetchPolicyRow>(`/api/admin/fetch-policy/${encodeURIComponent(domain)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(edit),
+    ...init,
+  })
+}
+
+export function actOnFetchPolicy(
+  domain: string,
+  action: 'unblock' | 'forget-render',
+  init?: RequestInit,
+): Promise<FetchPolicyRow> {
+  return request<FetchPolicyRow>(
+    `/api/admin/fetch-policy/${encodeURIComponent(domain)}/${action}`,
+    { method: 'POST', ...init },
+  )
+}
+
+export type AssertFetchPolicy = Expect<
+  Equal<keyof FetchPolicy, (typeof FETCH_POLICY_FIELDS)[number]>
+>
+export type AssertFetchPolicyRow = Expect<
+  Equal<keyof FetchPolicyRow, (typeof FETCH_POLICY_ROW_FIELDS)[number]>
+>
+export type AssertFetchPolicyPage = Expect<
+  Equal<keyof FetchPolicyPage, (typeof FETCH_POLICY_PAGE_FIELDS)[number]>
+>

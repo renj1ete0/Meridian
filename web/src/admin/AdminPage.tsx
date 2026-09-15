@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { GazetteerQueue } from './GazetteerQueue'
 import { TopicPanel } from './TopicPanel'
 import {
   ApiError,
+  actOnFetchPolicy,
   decideGazetteerTerm,
   editGazetteerTerm,
   editTopic,
+  getFetchPolicy,
   getGazetteerQueue,
   getSteeringLog,
   getTopics,
   type GazetteerEntityType,
   type GazetteerQueue as Queue,
+  type DomainStatus,
+  type FetchPolicyPage,
   type GazetteerState,
   type SteeringEntry,
   type TopicStatus,
@@ -43,11 +48,12 @@ import {
 
 type Phase = 'loading' | 'ready' | 'failed'
 
-type Section = 'gazetteer' | 'topics'
+type Section = 'gazetteer' | 'topics' | 'domains'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'gazetteer', label: 'Gazetteer' },
   { key: 'topics', label: 'Topics' },
+  { key: 'domains', label: 'Domains' },
 ]
 
 export function AdminPage() {
@@ -61,6 +67,9 @@ export function AdminPage() {
   const [topics, setTopics] = useState<Topics | null>(null)
   const [entries, setEntries] = useState<readonly SteeringEntry[]>([])
   const [steering, setSteering] = useState<string | null>(null)
+
+  const [policy, setPolicy] = useState<FetchPolicyPage | null>(null)
+  const [domainStatus, setDomainStatus] = useState<DomainStatus | null>(null)
 
   const load = useCallback(
     (next: GazetteerState, signal?: AbortSignal) => {
@@ -95,12 +104,25 @@ export function AdminPage() {
       })
   }, [])
 
+  const loadPolicy = useCallback((next: DomainStatus | null, signal?: AbortSignal) => {
+    return getFetchPolicy({ status: next ?? undefined, limit: 200 }, { signal })
+      .then((page) => {
+        setPolicy(page)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'Domain policy could not be loaded.')
+      })
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
     if (section === 'gazetteer') void load(state, controller.signal)
-    else void loadTopics(controller.signal)
+    else if (section === 'topics') void loadTopics(controller.signal)
+    else void loadPolicy(domainStatus, controller.signal)
     return () => controller.abort()
-  }, [load, loadTopics, section, state])
+  }, [domainStatus, load, loadPolicy, loadTopics, section, state])
 
   async function act(termId: number, run: () => Promise<unknown>) {
     setBusy(termId)
@@ -114,11 +136,14 @@ export function AdminPage() {
     }
   }
 
-  async function steer(topic: string, run: () => Promise<Topics>) {
-    setSteering(topic)
+  // Shared by both write surfaces: one in-flight key, one error, and the list
+  // refetched by the caller. Both have the same property — a row's state is
+  // computed from the others — so patching in place would leave the screen
+  // stating something that stopped being true the moment it was clicked.
+  async function steer(key: string, run: () => Promise<unknown>) {
+    setSteering(key)
     try {
       await run()
-      await loadTopics()
     } catch (cause: unknown) {
       // A refused steering change names the bound that refused it. Replacing
       // that with a generic line throws away the only thing that says what to
@@ -156,6 +181,32 @@ export function AdminPage() {
         </p>
       ) : null}
 
+      {section === 'domains' ? (
+        policy ? (
+          <FetchPolicyPanel
+            rows={policy.rows}
+            counts={{ active: policy.active, paused: policy.paused, blocked: policy.blocked }}
+            status={domainStatus}
+            busy={steering}
+            onStatusFilter={setDomainStatus}
+            onUnblock={(domain) =>
+              void steer(domain, async () => {
+                await actOnFetchPolicy(domain, 'unblock')
+                await loadPolicy(domainStatus)
+              })
+            }
+            onForgetRender={(domain) =>
+              void steer(domain, async () => {
+                await actOnFetchPolicy(domain, 'forget-render')
+                await loadPolicy(domainStatus)
+              })
+            }
+          />
+        ) : (
+          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
+        )
+      ) : null}
+
       {section === 'topics' ? (
         topics ? (
           <TopicPanel
@@ -163,9 +214,17 @@ export function AdminPage() {
             sumsTo={topics.sums_to}
             entries={entries}
             busy={steering}
-            onWeight={(topic, weight) => void steer(topic, () => editTopic(topic, { weight }))}
+            onWeight={(topic, weight) =>
+              void steer(topic, async () => {
+                await editTopic(topic, { weight })
+                await loadTopics()
+              })
+            }
             onStatus={(topic, status: TopicStatus) =>
-              void steer(topic, () => editTopic(topic, { status }))
+              void steer(topic, async () => {
+                await editTopic(topic, { status })
+                await loadTopics()
+              })
             }
           />
         ) : (

@@ -23,8 +23,8 @@ import datetime as dt
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .config import SteeringLogRead, TopicConfigRead
-from .enums import GazetteerEntityType, TopicStatus
+from .config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
+from .enums import DomainStatus, GazetteerEntityType, TopicStatus
 from .gazetteer import GazetteerTermRead
 
 
@@ -167,3 +167,65 @@ class SteeringLogPage(BaseModel):
     entries: list[SteeringLogRead]
     limit: int
     has_more: bool
+
+
+# ---------------------------------------------------------------------------
+# Fetch policy (task P6-22, spec §6.4, §13.2)
+# ---------------------------------------------------------------------------
+
+
+class FetchPolicyRowRead(BaseModel):
+    """One domain's row, what it resolves to, and what the crawl learned.
+
+    Three layers shown separately on purpose. `settings` is what somebody set
+    *here*; `resolved` is what a fetch actually gets after the global row and the
+    file defaults are merged under it; and the learned fields are neither — they
+    are observations. An operator looking at a domain going through a browser
+    needs to know which of the three put it there, because only one of them is
+    something they can change on this screen.
+    """
+
+    policy: FetchPolicyRead
+
+    #: The effective policy, merged. Every key, including the ones this screen
+    #: refuses to edit — showing only the editable ones would misrepresent what
+    #: the crawler is actually doing.
+    resolved: dict
+
+    #: Keys set on this row rather than inherited. What a UI needs to show the
+    #: difference between "this domain is slow" and "everything is slow".
+    overridden: list[str]
+
+
+class FetchPolicyPage(BaseModel):
+    rows: list[FetchPolicyRowRead]
+    limit: int
+    offset: int
+    has_more: bool
+
+    #: Counts by status, unfiltered — `P6-08`'s rule: a filtered list whose
+    #: counts are also filtered cannot tell an operator that the blocked domain
+    #: they came for is one tab over.
+    active: int
+    paused: int
+    blocked: int
+
+
+class FetchPolicyEdit(BaseModel):
+    """Changes to one domain's row.
+
+    `settings` is merged into what is there rather than replacing it, so an edit
+    to one field cannot silently drop the rest — a full-replacement PATCH from a
+    form that rendered only some keys is how a delay somebody tuned disappears.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    settings: dict | None = None
+    status: DomainStatus | None = None
+    note: str | None = None
+
+    #: Required when editing the global `*` row, which changes every domain the
+    #: crawl touches. Not a dialog — a dialog is a client's promise, and this is
+    #: the one edit on this surface whose blast radius is the whole crawl.
+    confirm: bool = False

@@ -48,6 +48,58 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.71.0] — 2026-09-15
+
+**Per-domain fetch policy, and the guards that are deliberately not on it.**
+
+### Added
+
+- `P6-22` `/api/admin/fetch-policy` and Admin → Domains: delay, concurrency,
+  timeouts, render mode and status, per domain
+
+### Only some keys are editable, and the list is short
+
+- `ResolvedPolicy` carries the SSRF guards — `block_private_addresses`,
+  `block_cloud_metadata`, `allowed_schemes`, `require_https_final`,
+  `block_mixed_dns`, `revalidate_each_redirect` — and none belongs behind a form
+  field. **A browser form that could switch off private-address blocking is the
+  single worst change available in this system**, and it would sit one click from
+  controls about politeness
+- `respect_robots` and `user_agent` are excluded for a different reason: a
+  crawler that can stop honouring robots.txt, or change who it says it is, from a
+  web form is a crawler whose operator did not decide that
+- The refusal names where they belong, because "not allowed" alone sends
+  somebody looking for a permission they do not have
+
+### Editing the global row needs a confirmation the server checks
+
+- It is the only edit here whose blast radius is the entire crawl, and a
+  client-side dialog is a promise rather than a check
+
+### Three layers, kept visibly separate
+
+- What is set on the row, what it **resolves** to once the global row and file
+  defaults merge underneath, and what the crawl **learned** (`P1-27`). A value a
+  reader cannot find anywhere to change is the failure this screen is most prone
+  to, so a learned render mode is explained in words with its count, and gets a
+  *Check again now* button rather than a setting — clearing an observation and
+  setting a policy are different acts
+- Values set on the row are marked; inherited ones are not. "Everything is slow"
+  and "this site is slow" call for different actions
+
+### Also
+
+- Settings merge rather than replace. A full-replacement PATCH from a form that
+  rendered only some keys is how a delay somebody tuned disappears
+- Every edit is validated by building a `ResolvedPolicy` from the merged result,
+  so the bounds that already exist are the ones enforced (§2.6)
+- Unblocking clears the failure count too. Either alone is a trap: the status
+  without the counter leaves the domain one failure from being blocked again,
+  and the counter without the status leaves it blocked with nothing explaining
+  why
+- Blocked domains sort first. §6.4 auto-blocks, so one appears without anybody
+  choosing it — producing no sources and no errors
+
 ## [0.70.0] — 2026-09-15
 
 **A domain that always needs the browser stops being asked twice.**

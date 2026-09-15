@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1853 backend tests and 207 frontend.
+1876 backend tests and 224 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -772,9 +772,16 @@ when its queue drained.
       re-reads the same documents and would re-create the row. `/api/admin/*`
       fails closed: 503 unless Access is configured or
       `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` says the instance is not exposed
-- [ ] `P6-22` Admin: fetch policy per domain — rate limits, `render_js`,
-      `seed_allowed`. The one admin surface with an immediate effect on the
-      crawl, so it wants a confirmation step the gazetteer queue does not
+- [x] `P6-22` Admin: fetch policy per domain — `v0.71.0`. Delay, concurrency,
+      timeouts, render mode and status. The editable set is an **allowlist**, and
+      what it excludes is the point: the SSRF guards and `respect_robots` and
+      `user_agent` are deployment settings, because a form that could switch off
+      private-address blocking would sit one click from controls about
+      politeness. Editing the global row needs a server-checked `confirm`, since
+      a client-side dialog is a promise. Three layers shown separately — set,
+      resolved, learned — because a value a reader cannot find anywhere to change
+      is this screen's characteristic failure. `seed_allowed` is `P4-12`'s column
+      and is not built yet
 - [ ] `P6-23` Admin: agent registry and run history. Both tables exist and both
       are empty until phase 4 has run something, so this is worth building
       *after* there is a run to show — an empty screen teaches nothing about what

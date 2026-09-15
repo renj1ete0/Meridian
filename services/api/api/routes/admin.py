@@ -27,13 +27,24 @@ import datetime as dt
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
 from meridian_core import steering
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
-from meridian_core.models import GazetteerTerm, SteeringLog
+from meridian_core.models import FetchPolicy, GazetteerTerm, SteeringLog
+from meridian_core.policy import (
+    GLOBAL_DOMAIN,
+    ResolvedPolicy,
+    file_defaults,
+    learned_render_js,
+    merge_layers,
+)
 from meridian_core.schemas.admin import (
+    FetchPolicyEdit,
+    FetchPolicyPage,
+    FetchPolicyRowRead,
     GazetteerQueueRead,
     GazetteerRowRead,
     GazetteerTermEdit,
@@ -43,7 +54,8 @@ from meridian_core.schemas.admin import (
     TopicRowRead,
     TopicsRead,
 )
-from meridian_core.schemas.config import SteeringLogRead, TopicConfigRead
+from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
+from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
 
 from ..deps import AdminAllowed, WriteSession
@@ -414,3 +426,252 @@ async def steering_log(
         limit=limit,
         has_more=len(found) > limit,
     )
+
+
+# ---------------------------------------------------------------------------
+# Fetch policy (task P6-22, spec §6.4, §13.2)
+# ---------------------------------------------------------------------------
+#
+# The one admin surface whose changes reach the outside world. Everything else
+# here rearranges rows; this decides how a machine behaves towards somebody
+# else's server, so two things are stricter than they are elsewhere.
+#
+# **Only some keys are editable, and the list is short.** `ResolvedPolicy`
+# carries the SSRF guards — `block_private_addresses`, `block_cloud_metadata`,
+# `allowed_schemes`, `require_https_final`, `block_mixed_dns`,
+# `revalidate_each_redirect` — and none of them belongs behind a form field. A
+# browser form that could turn off private-address blocking is the single worst
+# change available in this system, and it would be one click on a screen whose
+# other controls are about politeness. `respect_robots` and `user_agent` are out
+# for a different reason: a crawler that can stop honouring robots.txt, or change
+# who it says it is, from a web form is a crawler whose operator did not decide
+# that. Those are deployment decisions and they stay in the deployment.
+#
+# **Editing the global row needs `confirm`.** It is the only edit here whose
+# blast radius is the entire crawl, and a client-side dialog is a promise rather
+# than a check.
+
+#: What Admin may change: politeness, patience, and how a page is fetched.
+#: Everything absent is either a safety guard or an identity claim.
+EDITABLE = frozenset(
+    {
+        "concurrency_per_domain",
+        "delay_per_domain_ms",
+        "delay_jitter_ms",
+        "respect_crawl_delay",
+        "timeout_s",
+        "max_retries",
+        "backoff_base_s",
+        "blocked_after_failures",
+        "conditional_requests",
+        "prefetch_filter",
+        "render_js",
+        "challenge_wait_s",
+        "max_page_bytes",
+    }
+)
+
+
+def _resolved(row: FetchPolicy, glob: FetchPolicy | None) -> dict:
+    """What a fetch to this domain actually gets, without a query per row.
+
+    The same merge `resolve_policy` does, minus the round trip — a page of fifty
+    domains would otherwise be fifty identical reads of the global row.
+    """
+    merged = merge_layers(
+        row.settings if row.domain != GLOBAL_DOMAIN else None,
+        glob.settings if glob else None,
+        file_defaults(),
+    )
+    for key in NOT_FETCH_SETTINGS:
+        merged.pop(key, None)
+    status = row.status if row.domain != GLOBAL_DOMAIN else "active"
+    resolved = ResolvedPolicy(domain=row.domain, status=status, **merged)
+    if row.domain != GLOBAL_DOMAIN and resolved.render_js == "auto" and learned_render_js(row):
+        # Shown as what the crawler will do, not as what is configured — the
+        # row's own `render_js` is still absent, and the learned columns beside
+        # it are what say why.
+        resolved = resolved.model_copy(update={"render_js": "always"})
+    return resolved.model_dump()
+
+
+#: In the settings blob and not fetch settings. `source_tiers` is the domain →
+#: tier map and `frontier` decides what enters the queue; both ride in the
+#: global row (§13.1) and neither is something a fetch reads.
+NOT_FETCH_SETTINGS = frozenset({"source_tiers", "frontier"})
+
+
+def _row_read(row: FetchPolicy, glob: FetchPolicy | None) -> FetchPolicyRowRead:
+    return FetchPolicyRowRead(
+        policy=FetchPolicyRead.model_validate(row),
+        resolved=_resolved(row, glob),
+        overridden=sorted(set(row.settings or {}) - NOT_FETCH_SETTINGS),
+    )
+
+
+@router.get("/fetch-policy", response_model=FetchPolicyPage)
+async def list_fetch_policy(
+    _: AdminAllowed,
+    sess: WriteSession,
+    status: Annotated[DomainStatus | None, Query()] = None,
+    q: Annotated[str | None, Query(description="Substring of the domain.")] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> FetchPolicyPage:
+    """Every domain with a row, and what it resolves to.
+
+    Blocked first, then by domain. A blocked domain is the one an operator came
+    to find — it is consuming no crawl budget and producing no sources, and
+    §6.4's auto-blocking means one can appear without anybody choosing it.
+    """
+    glob = await sess.get(FetchPolicy, GLOBAL_DOMAIN)
+
+    statement = select(FetchPolicy)
+    if status:
+        statement = statement.where(FetchPolicy.status == status)
+    if q:
+        statement = statement.where(FetchPolicy.domain.ilike(f"%{q}%"))
+
+    found = list(
+        await sess.scalars(
+            statement.order_by(
+                (FetchPolicy.status != "blocked"), FetchPolicy.domain
+            ).limit(limit + 1).offset(offset)
+        )
+    )
+
+    counts = (
+        await sess.execute(
+            select(
+                func.count().filter(FetchPolicy.status == "active"),
+                func.count().filter(FetchPolicy.status == "paused"),
+                func.count().filter(FetchPolicy.status == "blocked"),
+            )
+        )
+    ).one()
+
+    return FetchPolicyPage(
+        rows=[_row_read(row, glob) for row in found[:limit]],
+        limit=limit,
+        offset=offset,
+        has_more=len(found) > limit,
+        active=int(counts[0]),
+        paused=int(counts[1]),
+        blocked=int(counts[2]),
+    )
+
+
+async def _policy_row(sess, domain: str) -> FetchPolicy:
+    row = await sess.get(FetchPolicy, domain)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No fetch policy for {domain!r}.")
+    return row
+
+
+@router.patch("/fetch-policy/{domain}", response_model=FetchPolicyRowRead)
+async def edit_fetch_policy(
+    domain: str, edit: FetchPolicyEdit, _: AdminAllowed, sess: WriteSession
+) -> FetchPolicyRowRead:
+    """Change one domain's politeness, patience, or render mode.
+
+    The edit is applied to a copy and validated by building a `ResolvedPolicy`
+    from it, so the field bounds that already exist — a delay may not be
+    negative, a timeout may not be zero — are the same ones enforced here. §2.6:
+    all writes validate server-side, and a value that reached the crawler
+    unchecked would fail at whatever hour the domain came up next.
+    """
+    row = await _policy_row(sess, domain)
+
+    if domain == GLOBAL_DOMAIN and not edit.confirm:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Editing the global policy changes every domain the crawl touches. "
+                "Re-send with confirm: true."
+            ),
+        )
+
+    changes = edit.model_dump(exclude_unset=True)
+    if edit.settings is not None:
+        rejected = sorted(set(edit.settings) - EDITABLE)
+        if rejected:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{', '.join(rejected)} cannot be changed here. Safety guards and the "
+                    "crawler's identity are deployment settings, not form fields."
+                ),
+            )
+        merged = {**(row.settings or {}), **edit.settings}
+        glob = await sess.get(FetchPolicy, GLOBAL_DOMAIN)
+        try:
+            ResolvedPolicy(
+                domain=domain,
+                **merge_layers(
+                    merged,
+                    glob.settings if glob and domain != GLOBAL_DOMAIN else None,
+                    file_defaults(),
+                ),
+            )
+        except PydanticValidationError as exc:
+            raise HTTPException(status_code=422, detail=_first_error(exc)) from exc
+        row.settings = merged
+
+    if "status" in changes:
+        row.status = changes["status"]
+    if "note" in changes:
+        row.note = changes["note"]
+
+    row.updated_at = _now()
+    row.updated_by = ACTOR
+    await sess.commit()
+    await sess.refresh(row)
+    log.info("fetch policy changed", extra={"domain": domain, "fields": sorted(changes)})
+    return _row_read(row, await sess.get(FetchPolicy, GLOBAL_DOMAIN))
+
+
+def _first_error(exc: PydanticValidationError) -> str:
+    """One sentence a person can act on, rather than a list of dicts."""
+    for error in exc.errors():
+        field = ".".join(str(part) for part in error.get("loc", ()))
+        return f"{field}: {error.get('msg', 'invalid')}" if field else str(error.get("msg"))
+    return "invalid settings"
+
+
+@router.post("/fetch-policy/{domain}/unblock", response_model=FetchPolicyRowRead)
+async def unblock_domain(domain: str, _: AdminAllowed, sess: WriteSession) -> FetchPolicyRowRead:
+    """Put an auto-blocked domain back in the crawl, and clear the count.
+
+    Both, because either alone is a trap. Clearing the status without the
+    counter leaves the domain one failure from being blocked again, which reads
+    as the unblock not having worked; clearing the counter without the status
+    leaves it blocked with nothing explaining why.
+    """
+    row = await _policy_row(sess, domain)
+    row.status = "active"
+    row.consecutive_failures = 0
+    row.updated_at = _now()
+    row.updated_by = ACTOR
+    await sess.commit()
+    await sess.refresh(row)
+    log.info("domain unblocked", extra={"domain": domain})
+    return _row_read(row, await sess.get(FetchPolicy, GLOBAL_DOMAIN))
+
+
+@router.post("/fetch-policy/{domain}/forget-render", response_model=FetchPolicyRowRead)
+async def forget_render_learning(
+    domain: str, _: AdminAllowed, sess: WriteSession
+) -> FetchPolicyRowRead:
+    """Discard what the crawl learned about needing a browser (`P1-27`).
+
+    For the case the expiry is too slow for: a site that dropped its JavaScript
+    shell today, where waiting a week to re-probe means a week of browser
+    launches that were not needed. It clears the observation rather than setting
+    a policy, so the domain goes back to deciding for itself.
+    """
+    row = await _policy_row(sess, domain)
+    row.render_js_escalations = 0
+    row.render_js_learned_at = None
+    await sess.commit()
+    await sess.refresh(row)
+    return _row_read(row, await sess.get(FetchPolicy, GLOBAL_DOMAIN))
