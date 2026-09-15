@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1262 backend tests and 19 frontend.
+1262 backend tests and 50 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -652,8 +652,16 @@ cover the operator's own access; these cover everyone else's.*
 - [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
 - [ ] `P6-14` Figures panel with page-accurate raw file links
 - [ ] `P6-15` Export: Markdown and BibTeX
-- [ ] `P6-16` Shared UI primitives from the design system: the 17-icon set, source-tier
-      and contested (dagger) badges, node chips, the top-right status/notification cluster
+- [x] `P6-16` Shared UI primitives from the design system — `v0.33.0`. The
+      17-icon set on §7's grid (11 interface icons, 6 node glyphs), source-tier
+      and data chips, and the contested mark in its three forms. `Icon` owns
+      every shared attribute rather than repeating it per icon, including §7's
+      optical-size rule that drops interior detail below 20px. Tier chips take
+      no variant, tone or colour prop on purpose: §2 says the palette has no
+      green and no red and that colour must not imply a verdict, so there is
+      nowhere for one to go. The drawings follow the published grid and are a
+      first pass — the geometry is right, the draughtsmanship is where a
+      designer should still put hands on
 - [x] `P6-17` Theme switching, honouring the system preference by default —
       `v0.32.0`. Three states, not two: `system` is the default and is expressed
       by the *absence* of `data-theme`, so the `prefers-color-scheme` block

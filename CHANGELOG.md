@@ -43,6 +43,51 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.33.0] — 2026-09-15
+
+**The primitives every later screen is made of.**
+
+### Added
+
+- `P6-16` Shared UI primitives from the design system: the icon set on §7's
+  grid, source-tier and data chips, and the contested mark in its three forms.
+  No API dependency — these are the atoms `P2-08` and everything in phase 6 are
+  assembled from
+- `Icon` owns every shared attribute — the 24-unit grid, the two stroke weights,
+  the round terminals — rather than repeating them per icon. An icon carrying
+  its own could quietly stop matching the others, and a set whose strokes
+  disagree reads as amateurish long before anyone can say why
+- The optical-size rule from §7: interior detail is dropped below 20px and the
+  silhouette carries alone. At glyph size a 1.35-unit stroke on a 24-unit grid
+  is under half a pixel — it renders as a smudge that makes the silhouette look
+  blurry rather than as detail
+- Tier chips take no variant, tone or colour prop, because there is nowhere for
+  a verdict to go. §2 is explicit that the palette has no green and no red and
+  that colour must not imply a verdict, so every tier is drawn identically and
+  differs only in its text. A chip that coloured peer-reviewed differently from
+  informal would be the interface asserting a credibility judgement §8
+  explicitly refuses to make
+
+### Testing
+
+- §6 states the contested mark's rule and its test in the same breath — "strip
+  the colour and the reading must survive — that is the test" — so it is written
+  as one, across all three forms. It matters beyond appearance: §9 makes
+  contested nodes the highest-value ones in the graph, and a reader who cannot
+  see which those are loses the finding, not the decoration
+- A cross-language drift test: the frontend's tier list is compared against
+  `SOURCE_TIER` parsed out of the Python model. A tier added to Postgres and not
+  to the UI renders as a raw enum value, underscore and all, and nothing catches
+  that until it is in front of someone
+- That all tier chips render identical markup, which is the enforceable form of
+  "colour must not imply a verdict", paired with its converse — that their text
+  still differs, or the chip says nothing at all
+- Accessibility as a rule rather than a nicety: a titleless icon must be hidden
+  from screen readers, because an icon repeating adjacent text announced as
+  "graphic" beside every control trains people to ignore the announcements that
+  matter
+- 50 frontend tests, 1262 backend
+
 ## [0.32.0] — 2026-09-15
 
 **The theme follows the machine until someone says otherwise.**
