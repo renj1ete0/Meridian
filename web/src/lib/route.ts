@@ -14,24 +14,36 @@
  */
 import { useEffect, useState } from 'react'
 
-export type Route = { name: 'explore' } | { name: 'source'; sourceId: number } | { name: 'admin' }
+export type Route =
+  | { name: 'explore' }
+  | { name: 'source'; sourceId: number }
+  | { name: 'node'; entityId: number }
+  | { name: 'admin' }
 
 const SOURCE = /^\/sources\/(\d+)\/?$/
 
 // A prefix, not an exact match: §12.6's Admin is several screens and they share
 // the section. Matching only `/admin` would drop a reader on a sub-path back
 // onto Explore, which reads as the link being wrong rather than unbuilt.
+const NODE = /^\/nodes\/(\d+)\/?$/
+
 const ADMIN = /^\/admin(\/|$)/
 
 export function parseRoute(pathname: string): Route {
   const match = SOURCE.exec(pathname)
   if (match) return { name: 'source', sourceId: Number(match[1]) }
+  const node = NODE.exec(pathname)
+  if (node) return { name: 'node', entityId: Number(node[1]) }
   if (ADMIN.test(pathname)) return { name: 'admin' }
   return { name: 'explore' }
 }
 
 export function hrefForSource(sourceId: number): string {
   return `/sources/${sourceId}`
+}
+
+export function hrefForNode(entityId: number): string {
+  return `/nodes/${entityId}`
 }
 
 /** Push a new URL without reloading, and tell React about it. */

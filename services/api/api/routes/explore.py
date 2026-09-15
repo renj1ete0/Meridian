@@ -22,22 +22,35 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from meridian_core.export import to_bibtex, to_markdown
-from meridian_core.models import Chunk, Figure, Notification, Source
+from meridian_core.models import (
+    AttributeDefinition,
+    AttributeValue,
+    Chunk,
+    Edge,
+    Entity,
+    Figure,
+    Notification,
+    Source,
+)
 from meridian_core.schemas.enums import SourceTier
+from meridian_core.schemas.graph import EntityRead
 from meridian_core.schemas.runs import NotificationRead
 from meridian_core.schemas.search import (
     CorpusStatsRead,
     FigureRefRead,
+    NodeAttributeRead,
+    NodeDetailRead,
     NotificationsRead,
+    SearchHitRead,
     SearchResponse,
     SourceChunksRead,
     SourceFiguresRead,
 )
 from meridian_core.schemas.source import ChunkRead, SourceRead
-from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters
+from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for
 from meridian_core.stats import corpus_stats
 
 from ..deps import ReadSession
@@ -55,6 +68,11 @@ MAX_EXPORT_SOURCES = 200
 #: text and a response nobody renders.
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 20
+
+#: How many supporting chunks one node panel carries. An entity with a dozen
+#: attributes can cite a hundred chunks, and a panel that returned all of them
+#: would be a page of prose where §12.5 asked for evidence a reader can follow.
+MAX_SUPPORTING_CHUNKS = 40
 
 
 # `Annotated[...]` rather than `= Query(...)` defaults throughout. Both work;
@@ -417,3 +435,118 @@ async def explore_notifications(
         counts_by_type=counts,
         unread=sum(1 for row in rows if row.read_at is None),
     )
+
+
+@router.get("/nodes/{entity_id}", response_model=NodeDetailRead)
+async def explore_node(entity_id: int, sess: ReadSession) -> NodeDetailRead:
+    """One node, with what is claimed about it and what justified each claim.
+
+    §12.5's node detail panel, assembled in one request: description, attribute
+    tags with confidence, the supporting chunks with their source and tier, and
+    how many of this node's edges §9 marked contested.
+
+    **Superseded chunks are still shown here**, and that is the one place in the
+    read surface where they are. Everywhere else a superseded chunk is text the
+    page no longer carries and serving it would misquote a document (`P1-32`).
+    Here it is the evidence an attribute was actually derived from, and §2.4
+    re-derives from source chunks — so a tag whose chunk has since been replaced
+    must still be followable, or the tag becomes an assertion with a citation
+    that resolves to nothing.
+    """
+    entity = await sess.get(Entity, entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail=f"No entity {entity_id}.")
+
+    rows = (
+        await sess.execute(
+            select(AttributeValue, AttributeDefinition)
+            .join(
+                AttributeDefinition,
+                AttributeDefinition.attribute_id == AttributeValue.attribute_id,
+            )
+            .where(AttributeValue.entity_id == entity_id)
+        )
+    ).all()
+
+    attributes = [
+        NodeAttributeRead(
+            value_id=value.value_id,
+            name=definition.name,
+            scope=definition.scope,
+            topic=definition.topic,
+            value=value.value,
+            value_numeric=value.value_numeric,
+            confidence=value.confidence,
+            quality_tier=value.quality_tier,
+            supporting_chunk_ids=list(value.supporting_chunk_ids or ()),
+        )
+        for value, definition in rows
+    ]
+    # Confidence first, then name. Insertion order would put whatever was tagged
+    # first at the top, which is a fact about the crawl and not about the node.
+    attributes.sort(key=lambda a: (-(a.confidence or 0.0), a.name))
+
+    cited = sorted({chunk_id for a in attributes for chunk_id in a.supporting_chunk_ids})
+    supporting = await _hydrate_chunks(sess, cited[:MAX_SUPPORTING_CHUNKS])
+
+    contested = await sess.scalar(
+        select(func.count())
+        .select_from(Edge)
+        .where(
+            or_(Edge.from_node == entity_id, Edge.to_node == entity_id),
+            Edge.contested_with.is_not(None),
+        )
+    )
+
+    return NodeDetailRead(
+        entity=EntityRead.model_validate(entity),
+        attributes=attributes,
+        supporting=supporting,
+        contested_edges=int(contested or 0),
+    )
+
+
+async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
+    """Chunks with the source fields that make them citable.
+
+    The same shape a search hit has, deliberately: a reader following evidence
+    from a node and a reader following it from a result list are doing the same
+    thing, and two shapes for it would mean two renderers that can drift.
+    """
+    if not chunk_ids:
+        return []
+
+    rows = (
+        await sess.execute(
+            select(Chunk, Source)
+            .join(Source, Source.source_id == Chunk.source_id)
+            .where(Chunk.chunk_id.in_(chunk_ids))
+            .order_by(Chunk.source_id, Chunk.chunk_index)
+        )
+    ).all()
+
+    return [
+        SearchHitRead(
+            chunk_id=chunk.chunk_id,
+            source_id=chunk.source_id,
+            text=chunk.text,
+            page_or_offset=chunk.page_or_offset,
+            chunk_index=chunk.chunk_index,
+            url=source.url,
+            title=source.title,
+            source_tier=source.source_tier,
+            publication_date=source.publication_date,
+            language=source.language,
+            topic_labels=source.topic_labels,
+            page_unit=page_unit_for((source.extra or {}).get("media_type")),
+            media_type=(source.extra or {}).get("media_type"),
+            duplicate_of=chunk.duplicate_of,
+            # Not a ranked result: nothing scored these, and a score of 0 beside
+            # a search hit's 0.016 would read as a very bad match rather than as
+            # a different kind of thing.
+            score=0.0,
+            lexical_rank=None,
+            vector_rank=None,
+        )
+        for chunk, source in rows
+    ]

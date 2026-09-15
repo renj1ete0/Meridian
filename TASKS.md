@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1879 backend tests and 233 frontend.
+1892 backend tests and 255 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -736,7 +736,15 @@ when its queue drained.
 - [ ] `P6-01` Sigma.js canvas, focus + expand, depth-1 neighbours capped and ranked
 - [ ] `P6-02` Canvas filters: topic, attribute, source tier, date, contested-only
 - [ ] `P6-03` Path mode between two nodes
-- [ ] `P6-04` Node detail panel: grouped tags with overflow, attribute list with confidence
+- [x] `P6-04` Node detail panel: grouped tags with overflow, attribute list with
+      confidence — `v0.73.0`. Built before the graph on purpose: the hard parts
+      are about how a claim is presented, and waiting for rows does not make them
+      easier. Tags group by §7.1's scope, because a flat row asserts that a
+      corpus-wide dimension and a topic-local one are the same kind of claim.
+      Confidence is a number on the tag, since rounding to "high" throws away the
+      difference between 0.61 and 0.94. And this is the **only** read path that
+      shows superseded chunks — the tag was derived from that text, so the
+      citation has to resolve even after the page changed
 - [ ] `P6-05` Annotation as first-class nodes
 - [ ] `P6-06` Synthesis panel: collapsible toggle, thread, node chips, inline citations
 - [ ] `P6-07` Conversation history within the synthesis panel

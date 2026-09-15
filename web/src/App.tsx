@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { AdminPage } from './admin/AdminPage'
 import { ExplorePage } from './explore/ExplorePage'
 import { onInternalClick, useRoute } from './lib/route'
+import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
 import { applyTheme, nextTheme, readTheme, writeTheme, type Theme } from './lib/theme'
 import { Lockup } from './ui/Mark'
@@ -86,6 +87,7 @@ export function App() {
             would be a corpus insisting everything be checkable while making its
             own documents unaddressable. */}
         {route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
+        {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
         {route.name === 'admin' ? <AdminPage /> : null}
         {route.name === 'explore' ? <ExplorePage /> : null}
       </main>

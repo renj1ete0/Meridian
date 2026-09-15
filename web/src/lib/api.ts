@@ -947,3 +947,100 @@ export type AssertFetchPolicyRow = Expect<
 export type AssertFetchPolicyPage = Expect<
   Equal<keyof FetchPolicyPage, (typeof FETCH_POLICY_PAGE_FIELDS)[number]>
 >
+
+// --------------------------------------------------------------------------
+// The node detail panel (task P6-04, spec §12.5)
+// --------------------------------------------------------------------------
+
+/** Mirrors `NodeAttributeRead`. */
+export interface NodeAttribute {
+  value_id: number
+  name: string
+  scope: string
+  topic: string | null
+  value: string | null
+  value_numeric: number | null
+  confidence: number | null
+  quality_tier: number | null
+  supporting_chunk_ids: number[]
+}
+
+export const NODE_ATTRIBUTE_FIELDS = [
+  'value_id',
+  'name',
+  'scope',
+  'topic',
+  'value',
+  'value_numeric',
+  'confidence',
+  'quality_tier',
+  'supporting_chunk_ids',
+] as const
+
+/** Mirrors `EntityRead`. */
+export interface Entity {
+  entity_id: number
+  canonical_name: string
+  node_type: string
+  jurisdiction: string | null
+  aliases: string[] | null
+  topic_labels: string[] | null
+  description: string | null
+  confidence: string | null
+  merged_from: number[] | null
+  redirects_to: number | null
+  is_annotation: boolean
+  produced_by: string | null
+  model: string | null
+  quality_tier: number | null
+  produced_at: string | null
+  schema_version: number
+  created_at: string
+}
+
+export const ENTITY_FIELDS = [
+  'entity_id',
+  'canonical_name',
+  'node_type',
+  'jurisdiction',
+  'aliases',
+  'topic_labels',
+  'description',
+  'confidence',
+  'merged_from',
+  'redirects_to',
+  'is_annotation',
+  'produced_by',
+  'model',
+  'quality_tier',
+  'produced_at',
+  'schema_version',
+  'created_at',
+] as const
+
+/** Mirrors `NodeDetailRead`. */
+export interface NodeDetail {
+  entity: Entity
+  attributes: NodeAttribute[]
+  supporting: SearchHit[]
+  contested_edges: number
+}
+
+export const NODE_DETAIL_FIELDS = [
+  'entity',
+  'attributes',
+  'supporting',
+  'contested_edges',
+] as const
+
+export function getNode(entityId: number, init?: RequestInit): Promise<NodeDetail> {
+  return request<NodeDetail>(`/api/explore/nodes/${entityId}`, init)
+}
+
+export type AssertNodeAttribute = Expect<
+  Equal<keyof NodeAttribute, (typeof NODE_ATTRIBUTE_FIELDS)[number]>
+>
+export type AssertEntity = Expect<Equal<keyof Entity, (typeof ENTITY_FIELDS)[number]>>
+export type AssertNodeDetail = Expect<
+  Equal<keyof NodeDetail, (typeof NODE_DETAIL_FIELDS)[number]>
+>

@@ -48,6 +48,59 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.73.0] — 2026-09-15
+
+**The node detail panel, built before there are nodes.**
+
+### Added
+
+- `P6-04` `GET /api/explore/nodes/{id}` and the panel: description, attribute
+  tags with confidence, the supporting chunks with source and tier, and a count
+  of contested edges (§12.5). Nodes get a URL — `/nodes/{id}`
+- Built ahead of the graph deliberately. The hard parts of this panel are about
+  *how a claim is presented*, and those do not get easier by waiting for rows
+
+### Tags are grouped by what they can be compared against
+
+- §7.1 splits attributes into ones that apply across the corpus and ones that
+  only mean something inside a topic. A flat row of tags asserts they are the
+  same kind of claim — and comparing a topic-local dimension across topics is a
+  comparison nobody made
+- The groups are labelled in words, not by the enum value. `topic_local` is a
+  column; "only meaningful inside its topic" is the thing a reader needs
+
+### Confidence is on the tag, and it is a number
+
+- §7 makes confidence first-class. A tag whose confidence a reader must hover for
+  is a claim rendered as a fact
+- A number rather than "high" / "low": rounding throws away the difference
+  between 0.61 and 0.94, which is most of what a reader weighing two
+  contradictory tags has to go on
+- A tag with no supporting chunk is marked. The schema requires the array, so an
+  empty one is a defect — and §2 principle 3 makes an unsupported tag an
+  assertion
+
+### Superseded chunks appear here and nowhere else
+
+- `P1-32` excludes them everywhere in the read surface, because a superseded
+  chunk is text the page no longer carries. Here it is the text the attribute was
+  **derived from**, and §2.4 re-derives from source chunks — so a tag whose chunk
+  was replaced by a re-crawl must still resolve, or the citation goes nowhere
+- The panel says so: "as they read when they were read. A page may have changed
+  since."
+
+### Also
+
+- Attributes sort by confidence. Insertion order puts whatever was tagged first
+  at the top, which is a fact about the crawl rather than about the node
+- Overflow uses `<details>`, so the folded tags stay in the document and reach by
+  keyboard. A "+7 more" that drops the tags is truncation wearing a disclosure's
+  clothes
+- One request rather than four. Four is four chances at a partly-rendered panel
+  that looks like a node with no attributes
+- The first tests in this repository to write `entities`, `attribute_values` and
+  `edges` rows, so they exercise those tables' provenance constraints too
+
 ## [0.72.0] — 2026-09-15
 
 **Explore can narrow to a topic, and says what narrowing hides.**

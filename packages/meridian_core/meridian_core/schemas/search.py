@@ -19,6 +19,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .enums import PageUnit, SearchArm, SourceTier
+from .graph import EntityRead
 from .runs import NotificationRead
 from .source import ChunkRead
 
@@ -204,3 +205,62 @@ class NotificationsRead(BaseModel):
     #: thing the reader came for.
     counts_by_type: dict[str, int]
     unread: int
+
+
+# ---------------------------------------------------------------------------
+# The node detail panel (task P6-04, spec §12.5)
+# ---------------------------------------------------------------------------
+
+
+class NodeAttributeRead(BaseModel):
+    """One attribute assigned to one entity, with what justified it.
+
+    Flattened across `attribute_values` and `attribute_definitions`, because a
+    panel showing `attribute_id: 7` would be asking the reader to resolve a
+    foreign key. The definition's `name` and `scope` are what the tag says.
+    """
+
+    value_id: int
+    name: str
+    #: `global` or `topic_local` (§7.1). What groups the tags: a comparison
+    #: dimension that applies everywhere and one that applies inside one topic
+    #: mean different things, and mixing them in one row implies they do not.
+    scope: str
+    topic: str | None
+
+    value: str | None
+    value_numeric: float | None
+
+    #: §7 makes confidence first-class, so it rides with the tag rather than
+    #: behind a hover: a tag whose confidence a reader cannot see is a claim
+    #: presented as a fact.
+    confidence: float | None
+    quality_tier: int | None
+    supporting_chunk_ids: list[int]
+
+
+class NodeDetailRead(BaseModel):
+    """Everything §12.5 asks the node panel to show, in one request.
+
+    One request rather than four, because every part of this panel is about the
+    same node and a reader opening it wants all of it — and because four
+    requests is four chances for a partly-rendered panel that looks like a node
+    with no attributes.
+    """
+
+    entity: EntityRead
+
+    #: Sorted by confidence, highest first, then by name. An attribute list in
+    #: insertion order puts whatever was tagged first at the top, which is a
+    #: fact about the crawl rather than about the entity.
+    attributes: list[NodeAttributeRead]
+
+    #: The chunks those attributes cite, hydrated with their source (§12.5:
+    #: "supporting chunks with source and tier"). §2 principle 3 — a tag whose
+    #: evidence cannot be followed is an assertion.
+    supporting: list[SearchHitRead]
+
+    #: Edges from or to this node that §9 marked contested. Counted rather than
+    #: listed: the list needs the *other* node's name to be worth reading, and
+    #: that is the canvas's job (`P6-02`).
+    contested_edges: int

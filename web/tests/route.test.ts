@@ -10,7 +10,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 
-import { hrefForSource, parseRoute } from '../src/lib/route'
+import { hrefForNode, hrefForSource, parseRoute } from '../src/lib/route'
 
 describe('parsing', () => {
   it('reads a source id out of the path', () => {
@@ -62,5 +62,25 @@ describe('the admin section (task P6-13)', () => {
     // `/administration` is not Admin. A bare `startsWith` would claim it, and
     // the bug only shows up once some other screen takes that name.
     expect(parseRoute('/administration')).toEqual({ name: 'explore' })
+  })
+})
+
+describe('nodes are addressable too (task P6-04)', () => {
+  it('parses a node path', () => {
+    // §12.3 puts the panel beside a canvas that does not exist yet. Giving the
+    // node a URL now is the same decision source pages made: a corpus that
+    // insists everything be checkable cannot have its own nodes be
+    // unaddressable.
+    expect(parseRoute('/nodes/42')).toEqual({ name: 'node', entityId: 42 })
+    expect(parseRoute('/nodes/42/')).toEqual({ name: 'node', entityId: 42 })
+  })
+
+  it('refuses a non-numeric id rather than coercing it', () => {
+    expect(parseRoute('/nodes/../../etc/passwd')).toEqual({ name: 'explore' })
+    expect(parseRoute('/nodes/abc')).toEqual({ name: 'explore' })
+  })
+
+  it('round-trips through the href builder', () => {
+    expect(parseRoute(hrefForNode(7))).toEqual({ name: 'node', entityId: 7 })
   })
 })
