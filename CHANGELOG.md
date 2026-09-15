@@ -43,6 +43,52 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.37.0] — 2026-09-15
+
+**Which failures may be handed to someone else.**
+
+### Added
+
+- `P1-38` `meridian_core/consignment.py` — §3 of
+  `docs/spec/external-acquisition.md` and deliberately nothing else: no table,
+  no lease, no API. It is the part of that design with a security argument
+  behind it, it needs none of the rest to be correct, and it is worth having
+  tested before anything can call it
+- The question is not "did this fail". `queue_disposition` abandons eight
+  outcomes and they are not interchangeable. What the consignable ones share is
+  that the content exists and *this* fetcher cannot have it — a bot wall on a
+  public page, a login the operator legitimately holds, a format or size this
+  crawler refuses. Everything else abandoned is a correct answer about a URL,
+  and asking a third party to try harder produces nothing
+- Two outcomes are never eligible, checked before every other branch so no
+  argument can reach past them. `robots_denied`: routing a refused request
+  through a third party is the same crawl with the conduct removed, and §14.2's
+  commitment to honouring robots would be decorative if this path could launder
+  one. `unsafe_target`: publishing an address `netguard` rejected asks an
+  external service to fetch the operator's own network and post the result back
+- Unknown outcomes are refused — the opposite of `queue_disposition`, which
+  retries what it cannot classify. There the forgiving default is bounded by
+  `max_retries`; here it publishes a URL to somebody outside this system
+
+### Testing
+
+- Fifty tests, mostly rejections, because the failure that matters is not a URL
+  that should have been consigned and was not. It is one published to a third
+  party that should never have left, and nothing downstream would notice
+- The absolute refusals are checked under every combination of every argument.
+  "Absolute" means there is no way to configure past it, and the only way to
+  show that is to try
+- A drift test over the database's `FETCH_OUTCOME` enum: every outcome must get
+  a verdict. A new one will be added for a reason, and "is this publishable to a
+  third party" is not a question whose answer should be inherited from whichever
+  branch happens to catch it
+- That the one opt-in widens exactly one outcome and nothing else. A single
+  boolean that grows into "consign more, generally" is how the absolute refusals
+  would eventually become reachable
+- That nothing eligible is outside `TASK_ABANDON`. A URL still being retried has
+  not finished failing, and consigning one would race the retry that was going
+  to succeed
+
 ## [0.36.0] — 2026-09-15
 
 **A read role that cannot read the token table.**

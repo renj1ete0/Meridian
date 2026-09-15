@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1292 backend tests and 50 frontend.
+1342 backend tests and 50 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -426,13 +426,15 @@ when its queue drained.
 comes back is processed by the ordinary pipeline while the corpus records,
 permanently, that Meridian did not fetch it.*
 
-- [ ] `P1-38` **`consignment_eligible()` — the allowlist and the two absolute
-      refusals.** Deliberately standalone: no table, no API, no external actor.
-      It is the part of that spec with a security argument behind it —
-      `robots_denied` must be unreachable rather than merely off by default,
-      because consigning one is the same crawl with the conduct removed, and
-      `unsafe_target` must be unreachable because publishing it asks a third
-      party to fetch the LAN and post the result back. Tests pin both
+- [x] `P1-38` **`consignment_eligible()`** — `v0.37.0`.
+      `meridian_core/consignment.py`, and deliberately nothing else: no table,
+      no lease, no API. `robots_denied` and `unsafe_target` are refused before
+      every other branch, so no argument reaches past them, and a test tries
+      every combination of every argument to show it. Unknown outcomes are
+      refused — the opposite of `queue_disposition`, because there the forgiving
+      default is bounded by `max_retries` and here it publishes a URL outside
+      this system. A drift test over `FETCH_OUTCOME` makes a new outcome a
+      decision rather than an inheritance
 - [ ] `P1-39` Schema: `consignments`, `sources.acquired_via`/`acquired_by`,
       `queue.consignment_attempts`, `fetch_policy.consignment_allowed`, and
       `external_supplied` on `FETCH_OUTCOME`. Hand-written CHECK migration
