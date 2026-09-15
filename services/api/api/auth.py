@@ -54,7 +54,18 @@ class MeridianTokenVerifier(TokenVerifier):
     The scopes it reports are the token's `allowed_tools`, so the SDK's own
     machinery and :func:`require_tool` are reading one source rather than two
     that can disagree.
+
+    It also stamps the resource these tokens are for. Meridian's own credentials
+    are rows in this database and are issued for this server and no other, so
+    naming it is simply true — and it lets `validate_token_resource` be turned
+    on, which refuses a token issued for a *different* resource. Without that
+    the surface would accept an otherwise-valid token minted for another service
+    on the same issuer, which is the same mistake as verifying an Access
+    assertion without checking its audience (`P3-08`).
     """
+
+    def __init__(self, resource: str | None = None) -> None:
+        self._resource = resource
 
     async def verify_token(self, token: str) -> AccessToken | None:
         async with session_ro() as sess:
@@ -73,6 +84,7 @@ class MeridianTokenVerifier(TokenVerifier):
             token=token,
             client_id=scope.agent_id,
             scopes=sorted(scope.allowed_tools),
+            resource=self._resource,
         )
 
 

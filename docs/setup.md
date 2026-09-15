@@ -263,10 +263,82 @@ What is missing, and why it blocks:
   `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`; without both, the middleware is
   not installed and says so at startup
 
-| Missing | Task | Why it blocks |
-|---|---|---|
-| Cloudflare Tunnel + Access | `P3-05` | Nothing reaches the machine from outside. **Needs your Cloudflare account** |
-| OAuth flow | `P3-09` | A phone app pastes a URL — there is nowhere to put a service-token header |
+- ✅ `P3-09` server half — the MCP surface advertises where to authenticate at
+  `/.well-known/oauth-protected-resource/mcp`. A hosted client is handed a URL
+  and nothing else, so it has to *discover* the authorization server; without
+  this a phone assistant given the URL can only fail
+- ✅ Tokens are refused if issued for a **different resource** on the same
+  issuer — the same check as an Access assertion's audience
+
+**What is left is configuration on your side.** Follow it in this order:
+
+### 8a. Point a tunnel at the API
+
+`cloudflared` is already in `docker-compose.yml` and needs a token.
+
+1. Cloudflare Zero Trust → **Networks → Tunnels** → create a tunnel, copy the
+   token into `CLOUDFLARE_TUNNEL_TOKEN` in `.env`
+2. Add a **public hostname** on that tunnel: your hostname → `http://api:8000`
+3. `docker compose up -d cloudflared api`
+
+### 8b. Put Access in front of it
+
+4. Zero Trust → **Access → Applications** → add a *self-hosted* application for
+   that hostname
+5. Add a policy — email-based is enough to start; one-time PIN needs no identity
+   provider
+6. Copy the application's **AUD tag** (Overview tab)
+
+### 8c. Tell Meridian
+
+```bash
+# .env — Access assertion verification (P3-08)
+CF_ACCESS_TEAM_DOMAIN=<your-team>.cloudflareaccess.com
+CF_ACCESS_AUD=<the AUD tag from step 6>
+
+# The MCP surface. Do NOT set MERIDIAN_MCP_ALLOW_ANONYMOUS here.
+MERIDIAN_MCP_ISSUER_URL=https://<your-team>.cloudflareaccess.com
+MERIDIAN_MCP_RESOURCE_URL=https://<your-hostname>/mcp
+
+# DNS-rebinding protection defaults to loopback, so the tunnel is refused
+# until the real hostname is named — deliberately, so exposure is a decision.
+MERIDIAN_MCP_ALLOWED_HOSTS=<your-hostname>
+MERIDIAN_MCP_ALLOWED_ORIGINS=https://<your-hostname>
+```
+
+`docker compose up -d api` and check the startup log says
+`cloudflare access verification enabled`. If it says *not configured*, both
+`CF_ACCESS_*` values are not set and **every request is unauthenticated** —
+stop and fix it before going further.
+
+### 8d. Verify before you trust it
+
+```bash
+# Must FAIL with 401 — no Access assertion
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-hostname>/api/explore/stats
+
+# Must SUCCEED — health bypasses Access so the watchdog can reach it
+curl -s https://<your-hostname>/health
+
+# Must FAIL — a forged identity header must not be believed
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H 'Cf-Access-Authenticated-User-Email: attacker@example.test' \
+  https://<your-hostname>/api/explore/stats
+```
+
+### 8e. Connect the assistant
+
+Add `https://<your-hostname>/mcp` as a remote MCP server. It will discover the
+authorization endpoint, send you through Cloudflare Access to log in, and then
+present the token it receives.
+
+Then issue it a Meridian credential (see the snippet above) — Access decides
+*who got in*, the scoped token decides *what they may read*.
+
+| Still open | Task |
+|---|---|
+| Mapping an Access identity to a grant | `P3-06`, `P3-10` |
+| Per-token rate limiting and an audit log | `P3-11` |
 
 **Do not set `MERIDIAN_MCP_ALLOW_ANONYMOUS` on anything reachable.** It is for a
 loopback development machine. With it set on an exposed host, every tool answers

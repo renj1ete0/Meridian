@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1477 backend tests and 127 frontend.
+1480 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -551,14 +551,13 @@ when its queue drained.
       tool* — at the transport, the tool asked for is the only thing separating
       a read session from a write one. Rate limiting is `P3-11`
 - [ ] `P3-04` `run_readonly_query` behind the read-only role, statement timeout, row cap
-- [ ] `P3-05` Cloudflare Tunnel + Access in front of the API
-
-### Sharing it with other people — see [docs/spec/shared-read-access.md](docs/spec/shared-read-access.md)
-
-*Two questions answered by two systems: Cloudflare decides whether a request
-reaches the machine, Meridian decides what it may read once there. `P3-01`–`P3-05`
-cover the operator's own access; these cover everyone else's.*
-
+- [~] `P3-05` Cloudflare Tunnel + Access in front of the API — the code side
+      is done and the rest is **your Cloudflare account**. `cloudflared` is in
+      compose, `P3-08` verifies assertions, `P3-03` enforces scopes, and
+      transport security defaults to loopback so a tunnel is refused until the
+      real hostname is named. `docs/setup.md` §8a–8e is the runbook: tunnel,
+      Access application, the four environment values, and the verification
+      that must be done before trusting any of it
 - [x] `P3-07` **`meridian_guest` role** — `v0.36.0`. SELECT on the corpus and
       the graph (eight tables), nothing else. `meridian_ro` can read every table
       including `agent_tokens`, whose `token_hash` is the one secret in the
@@ -583,14 +582,14 @@ cover the operator's own access; these cover everyone else's.*
       from the verified claims, never from the unsigned
       `Cf-Access-Authenticated-User-Email` header Cloudflare also sends.
       Mapping identity → grant is `P3-06`
-- [ ] `P3-09` **OAuth is the path for a hosted client, not service tokens.**
-      A phone assistant adds a remote MCP server by pasting a URL — there is
-      nowhere to put a `CF-Access-Client-Id` header, so the machine-to-machine
-      mechanism cannot serve the case this surface is for. MCP's authorization
-      flow is OAuth 2.1 with PKCE, and Cloudflare Access can be the
-      authorization server. Keep service tokens for CLI agents doing §11.1a
-      synthesis — they run somewhere you control and can hold headers. Support
-      both; build the one that works from a phone first
+- [~] `P3-09` **OAuth is the path for a hosted client, not service tokens** —
+      server half done in `v0.52.0`. The surface advertises
+      `/.well-known/oauth-protected-resource/mcp` when authentication is on, so
+      a client handed only a URL can discover where to authenticate; anonymous
+      mode advertises nothing, since offering an endpoint that is not enforced
+      sends a client through a flow for no reason. Tokens issued for another
+      resource are refused. The Cloudflare side is `P3-05`'s configuration.
+      Service tokens for CLI agents (§11.1a) are still unbuilt
 - [ ] `P3-10` Grant scoping in the tool layer: `topics[]`, `max_source_tier`,
       `raw_files` (default **false** — serving raw files to other people is
       redistribution, not sharing), and annotation exclusion

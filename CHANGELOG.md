@@ -48,6 +48,42 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.52.0] — 2026-09-15
+
+**A hosted client can find out how to authenticate.**
+
+### Added
+
+- `P3-09` server half. The MCP surface advertises
+  `/.well-known/oauth-protected-resource/mcp` when authentication is on. A
+  hosted assistant is handed a URL and nothing else — no config file, nowhere
+  to put a header — so it has to *discover* the authorization server, and
+  without this a phone given the URL can only fail
+- Anonymous mode advertises nothing, which is not cosmetic: a server offering an
+  authorization endpoint it does not enforce sends a client through an OAuth
+  flow for no reason
+
+### Fixed
+
+- **Tokens issued for a different resource were accepted.** The SDK leaves
+  `validate_token_resource` off and defaults it on in 3.0; off, this surface
+  would take an otherwise-valid token minted for another service on the same
+  issuer. That is the same mistake as verifying an Access assertion without
+  checking its audience, and it was sitting in a deprecation warning. The
+  verifier now stamps the resource — truthfully, since Meridian's credentials
+  are rows in this database issued for this server and no other — and the
+  setting is on
+
+### Docs
+
+- `docs/setup.md` §8 is now a runbook rather than a list of blockers: point a
+  tunnel at the API, put Access in front, tell Meridian, **verify before
+  trusting it**, connect the assistant. The verification step includes sending a
+  forged `Cf-Access-Authenticated-User-Email` and confirming it is not believed
+- It warns that a startup line reading *not configured* means every request is
+  unauthenticated, because that is the failure someone would otherwise discover
+  by being asked why their corpus is public
+
 ## [0.51.0] — 2026-09-15
 
 **Figures become findable, without a model touching them.**

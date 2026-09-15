@@ -80,8 +80,17 @@ def mcp_auth() -> dict[str, object]:
         return {}
 
     return {
-        "token_verifier": MeridianTokenVerifier(),
-        "auth": AuthSettings(issuer_url=issuer, resource_server_url=resource),
+        "token_verifier": MeridianTokenVerifier(resource=resource),
+        "auth": AuthSettings(
+            issuer_url=issuer,
+            resource_server_url=resource,
+            # Refuse a token issued for a different resource. The SDK leaves
+            # this off today and defaults it on in 3.0; off, the surface accepts
+            # an otherwise-valid token minted for another service on the same
+            # issuer — the same mistake as verifying an Access assertion without
+            # checking its audience (`P3-08`).
+            validate_token_resource=True,
+        ),
     }
 
 

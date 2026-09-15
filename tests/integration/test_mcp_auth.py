@@ -234,3 +234,59 @@ async def test_no_tool_is_reachable_without_a_scope_check(anonymous, monkeypatch
         assert "access token" in str(caught.value), (
             f"{tool.name} failed, but not because of the missing credential"
         )
+
+
+# --------------------------------------------------------------------------
+# OAuth discovery, and the resource a token was issued for (P3-05, P3-09)
+# --------------------------------------------------------------------------
+
+
+async def test_the_verifier_stamps_the_resource_the_token_is_for(
+    session_for, agent, cleanup
+) -> None:
+    """Meridian's credentials are rows in this database, issued for this server
+    and no other, so naming the resource is simply true — and it is what lets
+    `validate_token_resource` refuse a token minted for a *different* resource
+    on the same issuer. Without it the surface would accept one, which is the
+    same mistake as verifying an Access assertion without its audience.
+    """
+    sess = await session_for("rw")
+    secret, _ = await issue_token(sess, agent_id=agent, allowed_tools=TOOLS)
+    await sess.commit()
+
+    resource = "https://meridian.example.test/mcp"
+    verified = await MeridianTokenVerifier(resource=resource).verify_token(secret)
+
+    assert verified is not None
+    assert verified.resource == resource
+
+
+def test_the_server_advertises_where_to_authenticate(monkeypatch) -> None:
+    """`P3-09`. A hosted client is given a URL and nothing else — no config file,
+    no place to put a header — so it has to *discover* how to authenticate.
+    That is what the protected-resource metadata is for, and without it a phone
+    assistant handed this URL can only fail.
+    """
+    from api.main import create_app
+
+    monkeypatch.setenv("MERIDIAN_MCP_ALLOW_ANONYMOUS", "")
+    monkeypatch.setenv("MERIDIAN_MCP_ISSUER_URL", "https://team.cloudflareaccess.com")
+    monkeypatch.setenv("MERIDIAN_MCP_RESOURCE_URL", "https://meridian.example.test/mcp")
+
+    app = create_app()
+    routes = [getattr(r, "path", "") for r in app.state.mcp.streamable_http_app().routes]
+
+    assert any(".well-known/oauth-protected-resource" in path for path in routes)
+
+
+def test_anonymous_mode_advertises_no_authentication(monkeypatch) -> None:
+    """The converse, and it is not cosmetic: a server advertising an
+    authorization endpoint it does not enforce would send a client through an
+    OAuth flow for nothing."""
+    from api.main import create_app
+
+    monkeypatch.setenv("MERIDIAN_MCP_ALLOW_ANONYMOUS", "true")
+    app = create_app()
+    routes = [getattr(r, "path", "") for r in app.state.mcp.streamable_http_app().routes]
+
+    assert not any(".well-known" in path for path in routes)
