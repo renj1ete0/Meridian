@@ -253,16 +253,45 @@ Do not attempt it yet.** The pieces that exist:
 
 What is missing, and why it blocks:
 
+- ✅ `P3-03` — the surface **refuses unauthenticated callers by default**, and
+  checks the scope per tool. Anonymous access is an explicit opt-out
+  (`MERIDIAN_MCP_ALLOW_ANONYMOUS`), which `.env.dev` sets for local use
+
 | Missing | Task | Why it blocks |
 |---|---|---|
-| The token verifier wired into `/mcp` | `P3-03` | **`/mcp` authenticates nobody today.** It is safe only because it is published to loopback |
 | Cloudflare Tunnel + Access | `P3-05` | Nothing reaches the machine from outside |
 | Access JWT verification | `P3-08` | Without it the app trusts a header, and a header is a string anyone can send |
 | OAuth flow | `P3-09` | A phone app pastes a URL — there is nowhere to put a service-token header |
 
-**Until all four land, `api` must stay on `internal` and published to loopback.**
-Putting the current `/mcp` behind a tunnel would expose an unauthenticated read
-surface over the corpus to the internet.
+**Do not set `MERIDIAN_MCP_ALLOW_ANONYMOUS` on anything reachable.** It is for a
+loopback development machine. With it set on an exposed host, every tool answers
+anyone who can reach the port.
+
+Issuing a credential, once the tunnel exists:
+
+```python
+# from a shell on the server: docker compose run --rm api python
+from meridian_core.db import session
+from meridian_core.tokens import issue_token
+import asyncio, datetime as dt
+
+async def mint():
+    async with session("rw") as s:
+        secret, row = await issue_token(
+            s,
+            agent_id="my-phone",
+            allowed_tools=["search_chunks", "get_source_metadata",
+                           "list_new_since", "corpus_overview"],
+            expires_at=dt.datetime.now(dt.UTC) + dt.timedelta(days=90),
+        )
+        await s.commit()
+        print("secret (shown once):", secret)
+
+asyncio.run(mint())
+```
+
+The secret is printed once and only its hash is stored. `allowed_tools` has no
+default — an unscoped token grants nothing, so name the tools.
 
 When they do land, the shape is: Cloudflare Access authenticates the person via
 OAuth; Meridian's scoped token decides what that person may read. Two layers,
