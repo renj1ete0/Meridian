@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1348 backend tests and 50 frontend.
+1348 backend tests and 87 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -680,6 +680,15 @@ cover the operator's own access; these cover everyone else's.*
       reader who never touches it. Restructured `tokens.css` into palettes
       (each published colour written once) and per-theme role mappings, which is
       what makes the mapping drift testable
+- [ ] `P6-19` **Three lockup values are inferred, not published.** §1 gives the
+      mark's geometry exactly and the lockup's gaps (22px) and wordmark weight,
+      but not the cap-height ratio the hairline rule sits at, nor the
+      mark-to-wordmark size ratio. Both were picked to look right in `Lockup`
+      and neither is a design decision anyone made. Also: §1 states "Bounding
+      box 76 × 86.2" immediately after the *compact* table, and it matches the
+      **full** mark's extents exactly — the compact variant computes to 76 × 88
+      because its zenith and base nodes are larger. Publish the values, or
+      confirm the inferences. ⚑ human
 - [ ] `P6-18` **Four light-theme roles are inferred, not decided.** The design
       system publishes nine light tokens against thirteen dark, and the four it
       omits are all canvas roles — its graph-canvas table is headed "Dark" and

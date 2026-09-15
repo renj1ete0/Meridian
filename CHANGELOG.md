@@ -43,6 +43,42 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.40.0] — 2026-09-15
+
+**The mark exists in the application, not only in the README.**
+
+### Added
+
+- `P6-16` `Mark` and `Lockup` — the globe, meridian, bearing edge and four nodes
+  from §1's coordinate table, plus the compact variant that drops the bearing
+  edge and thickens every stroke below 32px. The app had no mark at all; the
+  README uses PNGs
+- Both lockup orientations. §1 specifies horizontal as primary and stacked with
+  the mono descriptor, and the descriptor renders on stacked only — on
+  horizontal it competes with the wordmark it qualifies
+
+### Testing
+
+- **The bounding box is a drift test, not an opinion.** §1 publishes both a
+  coordinate table and a box (76 × 86.2), and the box is derivable from the
+  coordinates — so the test computes it from the exported geometry and compares.
+  A mistyped radius or centre moves the box, and nothing else in the drawing
+  would show it
+- "Single ink" written as the test §1 says it is: strip `class` and `fill`, and
+  every element must survive. The same shape as §6's test for the contested
+  dagger, and for the same reason — the mark is a stroke drawing, not a colour
+  composition
+- That the meridian stroke stays heavier than the globe (§1's stated principle;
+  equalise them and it becomes a globe with a line on it), that compact *drops*
+  the bearing edge rather than thinning it, and that the minimum sizes are
+  ordered so no band of sizes lacks a legal variant
+
+### Open
+
+- `P6-19`: three values §1 does not publish had to be inferred — the lockup's
+  cap-height ratio, the mark-to-wordmark size ratio, and whether the published
+  bounding box applies to the compact variant as well as the full mark
+
 ## [0.39.0] — 2026-09-15
 
 **The worker has no route to the LAN, and the host is what says so.**
