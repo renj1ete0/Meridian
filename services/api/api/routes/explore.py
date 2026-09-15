@@ -33,6 +33,7 @@ from meridian_core.models import (
     Entity,
     Figure,
     Notification,
+    SavedView,
     Source,
 )
 from meridian_core.schemas.enums import SourceTier
@@ -50,6 +51,7 @@ from meridian_core.schemas.search import (
     SourceFiguresRead,
 )
 from meridian_core.schemas.source import ChunkRead, SourceRead
+from meridian_core.schemas.views import SavedViewRead, SavedViewsRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for
 from meridian_core.stats import corpus_stats
 
@@ -550,3 +552,27 @@ async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
         )
         for chunk, source in rows
     ]
+
+
+@router.get("/views", response_model=SavedViewsRead)
+async def list_views(sess: ReadSession) -> SavedViewsRead:
+    """Saved views, most recently opened first (task P6-09, §12.5).
+
+    A **read** under `/api/explore`, while every write to them is under
+    `/api/admin` — which looks inconsistent for something a reader creates while
+    reading, and is not. §12.6 splits the prefixes by *mutation*, and the
+    consequence here is the one that matters: saved views are shared state with
+    no per-viewer scoping, so on an instance shared with somebody else
+    (`P3-06`'s grants) a guest must be able to open the owner's views and must
+    not be able to add to them.
+
+    A view never opened sorts last rather than being hidden. Somebody saved it
+    and did not come back; disappearing it would be the system deciding that was
+    a mistake.
+    """
+    rows = await sess.scalars(
+        select(SavedView).order_by(
+            SavedView.last_opened_at.desc().nullslast(), SavedView.created_at.desc()
+        )
+    )
+    return SavedViewsRead(views=[SavedViewRead.model_validate(row) for row in rows])

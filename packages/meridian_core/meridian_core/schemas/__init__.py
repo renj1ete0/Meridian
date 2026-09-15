@@ -95,6 +95,7 @@ from .search import (
     SourceChunksRead,
 )
 from .source import ChunkCreate, ChunkRead, FigureCreate, FigureRead, SourceCreate, SourceRead
+from .views import SavedViewCreate, SavedViewEdit, SavedViewRead, SavedViewsRead
 
 __all__ = [
     # common
@@ -152,6 +153,10 @@ __all__ = [
     # gazetteer
     "GazetteerTermCreate",
     "GazetteerTermRead",
+    "SavedViewCreate",
+    "SavedViewEdit",
+    "SavedViewRead",
+    "SavedViewsRead",
     # config
     "TopicConfigCreate",
     "TopicConfigRead",

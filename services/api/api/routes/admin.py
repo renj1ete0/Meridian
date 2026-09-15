@@ -33,7 +33,7 @@ from sqlalchemy import func, select
 from meridian_core import steering
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
-from meridian_core.models import FetchPolicy, GazetteerTerm, SteeringLog
+from meridian_core.models import FetchPolicy, GazetteerTerm, SavedView, SteeringLog
 from meridian_core.policy import (
     GLOBAL_DOMAIN,
     ResolvedPolicy,
@@ -57,6 +57,8 @@ from meridian_core.schemas.admin import (
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
+from meridian_core.schemas.views import SavedViewCreate, SavedViewEdit, SavedViewRead
+from meridian_core.search import SearchFilters
 
 from ..deps import AdminAllowed, WriteSession
 
@@ -675,3 +677,121 @@ async def forget_render_learning(
     await sess.commit()
     await sess.refresh(row)
     return _row_read(row, await sess.get(FetchPolicy, GLOBAL_DOMAIN))
+
+
+# ---------------------------------------------------------------------------
+# Saved views (task P6-09, spec §12.5)
+# ---------------------------------------------------------------------------
+#
+# Reading them is `/api/explore/views`; every write is here. That looks
+# inconsistent for something a reader creates while reading, and it is the
+# consequence of §12.6 splitting the prefixes by *mutation* rather than by
+# audience — which turns out to be the right split for this table specifically.
+# Saved views are shared state with no per-viewer scoping, so on an instance
+# shared with somebody else (`P3-06`'s grants) a guest should be able to open the
+# owner's views and should not be able to add to them.
+
+
+@router.post("/views", response_model=SavedViewRead, status_code=201)
+async def create_view(body: SavedViewCreate, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
+    """Save a filter set under a name.
+
+    The filters are validated against `SearchFilters` on the way in, so a view
+    cannot store something the search cannot apply. A view that silently drops a
+    filter when it is reopened is worse than one that refuses to save: the
+    reader gets a result set they believe is narrowed and is not.
+    """
+    _validated_filters(body.filters)
+
+    if await sess.scalar(select(SavedView).where(SavedView.name == body.name)):
+        raise HTTPException(
+            status_code=409,
+            detail=f"A view called {body.name!r} already exists. Rename it or update that one.",
+        )
+
+    view = SavedView(
+        name=body.name,
+        query=body.query,
+        filters=body.filters,
+        focus_entity_id=body.focus_entity_id,
+        note=body.note,
+    )
+    sess.add(view)
+    await sess.commit()
+    await sess.refresh(view)
+    log.info("view saved", extra={"view_id": view.view_id})
+    return SavedViewRead.model_validate(view)
+
+
+def _validated_filters(filters: dict) -> None:
+    """Refuse a filter set the search could not apply.
+
+    `SearchFilters` is a frozen dataclass, so an unknown key raises `TypeError`
+    and a bad value raises on use — both become a 422 naming the field rather
+    than a view that reopens narrower or wider than it was saved.
+    """
+    try:
+        SearchFilters(**filters)
+    except TypeError as exc:
+        raise HTTPException(status_code=422, detail=f"Unusable filter set: {exc}") from exc
+
+
+@router.patch("/views/{view_id}", response_model=SavedViewRead)
+async def edit_view(
+    view_id: int, edit: SavedViewEdit, _: AdminAllowed, sess: WriteSession
+) -> SavedViewRead:
+    """Rename a view, re-note it, or point it somewhere else."""
+    view = await sess.get(SavedView, view_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"No saved view {view_id}.")
+
+    changes = edit.model_dump(exclude_unset=True)
+    if "filters" in changes and changes["filters"] is not None:
+        _validated_filters(changes["filters"])
+    if "name" in changes:
+        clash = await sess.scalar(
+            select(SavedView).where(SavedView.name == changes["name"], SavedView.view_id != view_id)
+        )
+        if clash is not None:
+            raise HTTPException(status_code=409, detail=f"{changes['name']!r} is already taken.")
+
+    for field, value in changes.items():
+        setattr(view, field, value)
+    await sess.commit()
+    await sess.refresh(view)
+    return SavedViewRead.model_validate(view)
+
+
+@router.post("/views/{view_id}/opened", response_model=SavedViewRead)
+async def mark_view_opened(view_id: int, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
+    """Record that somebody returned to this view.
+
+    What orders the landing screen. A separate call rather than a side effect of
+    reading the list, because listing views is not returning to one — and a read
+    that wrote would also put `/api/explore` on the wrong side of §12.6's
+    boundary.
+    """
+    view = await sess.get(SavedView, view_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"No saved view {view_id}.")
+    view.last_opened_at = _now()
+    await sess.commit()
+    await sess.refresh(view)
+    return SavedViewRead.model_validate(view)
+
+
+@router.delete("/views/{view_id}", status_code=204)
+async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None:
+    """Remove a view.
+
+    The one delete on this surface, and it is right: a saved view holds no
+    evidence and cites nothing. Everything else here keeps its row because
+    something downstream depends on it — a view depends on nothing, and keeping a
+    tombstone would clutter the list it exists to be read from.
+    """
+    view = await sess.get(SavedView, view_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"No saved view {view_id}.")
+    await sess.delete(view)
+    await sess.commit()
+    log.info("view deleted", extra={"view_id": view_id})

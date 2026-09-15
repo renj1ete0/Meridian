@@ -18,6 +18,7 @@ from .queue import FetchAttempt, QueueTask
 from .robots import RobotsCacheEntry
 from .runs import EnrichmentItem, Notification, Report, Run
 from .source import EMBEDDING_DIM, Chunk, Figure, Source
+from .views import SavedView
 
 __all__ = [
     "CURRENT_SCHEMA_VERSION",
@@ -42,6 +43,7 @@ __all__ = [
     "QueueTask",
     "Report",
     "RobotsCacheEntry",
+    "SavedView",
     "Run",
     "Source",
     "ScheduledJob",

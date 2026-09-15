@@ -1044,3 +1044,71 @@ export type AssertEntity = Expect<Equal<keyof Entity, (typeof ENTITY_FIELDS)[num
 export type AssertNodeDetail = Expect<
   Equal<keyof NodeDetail, (typeof NODE_DETAIL_FIELDS)[number]>
 >
+
+// --------------------------------------------------------------------------
+// Saved views (task P6-09, spec §12.5)
+// --------------------------------------------------------------------------
+//
+// Reads are on `/api/explore` and every write is on `/api/admin`. That is not an
+// inconsistency: §12.6 splits the prefixes by mutation, and for this table the
+// consequence is the right one — saved views are shared state with no
+// per-viewer scoping, so a guest on a shared instance can open the owner's views
+// and cannot add to them.
+
+/** Mirrors `SavedViewRead`. */
+export interface SavedViewRecord {
+  view_id: number
+  name: string
+  query: string | null
+  filters: Record<string, unknown>
+  focus_entity_id: number | null
+  note: string | null
+  last_opened_at: string | null
+  created_at: string
+}
+
+export const SAVED_VIEW_FIELDS = [
+  'view_id',
+  'name',
+  'query',
+  'filters',
+  'focus_entity_id',
+  'note',
+  'last_opened_at',
+  'created_at',
+] as const
+
+/** Mirrors `SavedViewsRead`. */
+export interface SavedViews {
+  views: SavedViewRecord[]
+}
+
+export const SAVED_VIEWS_FIELDS = ['views'] as const
+
+export function getSavedViews(init?: RequestInit): Promise<SavedViews> {
+  return request<SavedViews>('/api/explore/views', init)
+}
+
+export function saveView(
+  body: { name: string; query?: string | null; filters?: Record<string, unknown>; note?: string },
+  init?: RequestInit,
+): Promise<SavedViewRecord> {
+  return request<SavedViewRecord>('/api/admin/views', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    ...init,
+  })
+}
+
+export function markViewOpened(viewId: number, init?: RequestInit): Promise<SavedViewRecord> {
+  return request<SavedViewRecord>(`/api/admin/views/${viewId}/opened`, {
+    method: 'POST',
+    ...init,
+  })
+}
+
+export type AssertSavedView = Expect<
+  Equal<keyof SavedViewRecord, (typeof SAVED_VIEW_FIELDS)[number]>
+>
+export type AssertSavedViews = Expect<Equal<keyof SavedViews, (typeof SAVED_VIEWS_FIELDS)[number]>>

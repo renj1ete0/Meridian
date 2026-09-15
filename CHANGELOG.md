@@ -48,6 +48,54 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.74.0] — 2026-09-15
+
+**Saved views: a filter set, named and re-openable.**
+
+### Added
+
+- `P6-09` `saved_views`, `GET /api/explore/views`, the writes under
+  `/api/admin/views`, and a *Save this view* control that appears while looking
+  at results
+- A table rather than `localStorage`. A saved view is a piece of research
+  method — the slice somebody decided was worth returning to — so it survives a
+  cleared cache, reaches a second device, and travels in the database snapshot
+  that is supposed to be the whole system. `P6-11`'s last-visit stamp stays in
+  `localStorage` for the opposite reason: it is per-reader, per-device, and
+  worthless to anybody else
+
+### Reads on Explore, writes on Admin
+
+- Which looks inconsistent for something a reader creates while reading, and is
+  the right split for this table. §12.6 divides the prefixes by **mutation**, and
+  the consequence here is exactly what is wanted: saved views are shared state
+  with no per-viewer scoping, so a guest on a shared instance (`P3-06`) can open
+  the owner's views and cannot add to them
+- Listing views does not count as opening one. Listing is not returning — and a
+  read that wrote would put `/api/explore` on the wrong side of the boundary
+
+### Filters are validated on the way in
+
+- Free-form in the column, because they mirror `SearchFilters` and §12.3's canvas
+  filters will add to it — but checked against that model before storing. **A
+  view that silently drops a filter when reopened is worse than one that refuses
+  to save**: the reader gets a result set they believe is narrowed and nothing
+  says otherwise
+
+### Also
+
+- A view never opened sorts last rather than being hidden. Somebody saved it and
+  did not come back; disappearing it would be the system deciding that was a
+  mistake
+- `focus_entity_id` is `ON DELETE SET NULL`: a merged or deleted entity costs the
+  view its focus, not the view
+- The suggested name carries the topics that narrowed the search, because two
+  views of the same words are otherwise indistinguishable in a list — which is
+  the one thing a name has to prevent
+- The only `DELETE` on the admin surface, and it is right: a view holds no
+  evidence and cites nothing, so a tombstone would clutter the list it exists to
+  be read from
+
 ## [0.73.0] — 2026-09-15
 
 **The node detail panel, built before there are nodes.**

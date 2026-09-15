@@ -4,6 +4,7 @@ import { openSession } from '../lib/lastVisit'
 import { CorpusCounts, type CorpusFigures } from './CorpusCounts'
 import { EntryPoints, type EntryPointName } from './EntryPoints'
 import { ResultList } from './ResultList'
+import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
 import { TopicFilter } from './TopicFilter'
@@ -11,8 +12,12 @@ import { WhereYouWere } from './WhereYouWere'
 import {
   ApiError,
   corpusStats,
+  getSavedViews,
+  markViewOpened,
+  saveView,
   searchCorpus,
   type CorpusStats,
+  type SavedViewRecord,
   type SearchResponse,
 } from '../lib/api'
 
@@ -59,6 +64,10 @@ export function ExplorePage() {
   // would show the top 20 of an unfiltered ranking with most of them removed,
   // which looks like a topic with almost nothing in it (`P6-24`).
   const [topics, setTopics] = useState<string[]>([])
+
+  const [views, setViews] = useState<readonly SavedViewRecord[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -86,6 +95,19 @@ export function ExplorePage() {
     return () => controller.abort()
     // `since` is captured once and never changes, so this runs on mount only.
   }, [since])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getSavedViews({ signal: controller.signal })
+      .then((body) => setViews(body.views))
+      .catch(() => {
+        // Saved views are a convenience, not the corpus. A landing page that
+        // failed to render because this list could not be fetched would spend
+        // the whole screen on the least important thing on it.
+        setViews([])
+      })
+    return () => controller.abort()
+  }, [])
 
   const run = useCallback((text: string, within: readonly string[] = []) => {
     const trimmed = text.trim()
@@ -177,7 +199,29 @@ export function ExplorePage() {
         ) : null}
 
         {phase === 'done' && results ? (
-          <SearchOutcome asked={asked} results={results} />
+          <>
+            <SearchOutcome asked={asked} results={results} />
+            <div className="mt-6">
+              <SaveView
+                query={asked}
+                filters={topics.length > 0 ? { topic: topics } : {}}
+                busy={saving}
+                error={saveError}
+                onSave={(name, text, filters) => {
+                  setSaving(true)
+                  setSaveError(null)
+                  saveView({ name, query: text, filters })
+                    .then((view) => setViews((current) => [view, ...current]))
+                    .catch((cause: unknown) => {
+                      setSaveError(
+                        cause instanceof ApiError ? cause.message : 'That view was not saved.',
+                      )
+                    })
+                    .finally(() => setSaving(false))
+                }}
+              />
+            </div>
+          </>
         ) : null}
       </section>
 
@@ -187,7 +231,24 @@ export function ExplorePage() {
             <EntryPoints onOpen={() => {}} unavailable={unavailable} />
           </div>
           <div className="mt-12">
-            <WhereYouWere savedViews={[]} recentNodes={[]} />
+            <WhereYouWere
+              savedViews={views.map((view) => ({ id: String(view.view_id), name: view.name }))}
+              recentNodes={[]}
+              onOpenView={(id) => {
+                const view = views.find((v) => String(v.view_id) === id)
+                if (!view) return
+                // Recorded as a write, and failing to record it must not stop
+                // the view from opening — the ordering of a list is not worth
+                // refusing somebody the thing they clicked.
+                void markViewOpened(view.view_id).catch(() => {})
+                const saved = Array.isArray(view.filters.topic)
+                  ? (view.filters.topic as string[])
+                  : []
+                setTopics(saved)
+                setQuery(view.query ?? '')
+                if (view.query) run(view.query, saved)
+              }}
+            />
           </div>
         </>
       ) : null}

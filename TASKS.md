@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1892 backend tests and 255 frontend.
+1908 backend tests and 267 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -754,7 +754,14 @@ when its queue drained.
       the model's own reasoning — a read/unread split turns findings into an
       inbox, and an inbox gets cleared without being read. Counts cover every
       type so the filter cannot hide what the reader came for
-- [ ] `P6-09` Saved views
+- [x] `P6-09` Saved views — `v0.74.0`. A table rather than `localStorage`: a
+      saved view is research method, so it survives a cleared cache, reaches a
+      second device and travels in the snapshot. Reads sit on `/api/explore` and
+      writes on `/api/admin`, which looks inconsistent and is the right split —
+      views are shared state with no per-viewer scoping, so a guest should open
+      the owner's and not add to them. Filters are validated against
+      `SearchFilters` before storing, because a view that silently drops a filter
+      when reopened hands back a result set the reader believes is narrowed
 - [ ] `P6-10` Coverage grid and contested list as entry points
 - [x] `P6-11` Explore landing state with since-last-visit delta — `v0.61.0`.
       `stats?since=` plus a `localStorage` stamp read once per session and
