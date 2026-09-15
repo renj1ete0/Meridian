@@ -628,6 +628,31 @@ the container, so any published port reaches nothing and the failure looks like 
 network problem. With the token set, every request needs
 `Authorization: Bearer <token>`. Both compose files now set it; `.env.dev` uses `dev`.
 
+### `uv.lock` goes stale on a version bump, and only the Docker build says so
+
+The lock records all four workspace versions. Both Dockerfiles use
+`uv sync --frozen`, which refuses when the lock disagrees with the pyprojects — so
+a release that bumps `VERSION` without `uv lock` leaves the images unbuildable.
+Nothing local notices, because `uv run` re-locks in place. It had been stale
+across a dozen commits before anyone looked. `tests/unit/test_lockfile.py` now
+catches it; **run `uv lock` in the same commit as the bump.**
+
+### Walking `app.routes` finds nothing in FastAPI 0.141
+
+`include_router` stores an `_IncludedRouter`, which exposes neither `path` nor
+`routes`. A test that walks `app.routes` looking for `/api/...` paths therefore
+finds none and asserts an empty list against an empty list — passing, forever,
+for the wrong reason. The handles are on `route.original_router.routes`. Any test
+that enumerates routes should first assert it found a known one.
+
+### Staging a whole file commits whatever else is in it
+
+Twice now: `git add <path>` on a file that had accumulated two separate changes
+put an unrelated addition into a fix commit whose message said nothing about it.
+The rule in AGENTS.md is one task per commit, and the way it is broken is never
+`git add -A` — it is a single path that happens to hold more than one thing.
+Check `git show --stat` against the message before moving on.
+
 ---
 
 ## 4. What is verified live, and what is only tested
