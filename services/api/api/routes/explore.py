@@ -16,16 +16,24 @@ that a second search sends them back through the ranking to find a neighbour.
 from __future__ import annotations
 
 import datetime as dt
+import os
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import select
 
 from meridian_core.export import to_bibtex, to_markdown
-from meridian_core.models import Chunk, Source
+from meridian_core.models import Chunk, Figure, Source
 from meridian_core.schemas.enums import SourceTier
-from meridian_core.schemas.search import CorpusStatsRead, SearchResponse, SourceChunksRead
+from meridian_core.schemas.search import (
+    CorpusStatsRead,
+    FigureRefRead,
+    SearchResponse,
+    SourceChunksRead,
+    SourceFiguresRead,
+)
 from meridian_core.schemas.source import ChunkRead, SourceRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters
 from meridian_core.stats import corpus_stats
@@ -250,3 +258,95 @@ async def explore_export_markdown(
         )
     ).all()
     return to_markdown([(chunk, source) for chunk, source in rows])
+
+
+def _raw_is_served() -> bool:
+    """Whether this deployment serves stored raw files (`P6-14`).
+
+    Off unless asked. §12.5 wants page-accurate links for the operator reading
+    their own corpus, and the raw store holds copies of third-party material —
+    serving it is redistribution, which is a decision rather than a default.
+    `P3-10`'s `grants.raw_files` is the finer-grained version for guests; this is
+    the deployment-level switch beneath it.
+    """
+    return os.environ.get("MERIDIAN_SERVE_RAW", "").strip().lower() in {"1", "true", "yes"}
+
+
+@router.get("/sources/{source_id}/figures", response_model=SourceFiguresRead)
+async def explore_source_figures(source_id: int, sess: ReadSession) -> SourceFiguresRead:
+    """Figures extracted from one source (`P6-14`, §6.6).
+
+    Captions and alt text, which is what ingestion extracts — §6.6's "start with
+    captions, not vision". `vlm_description` stays empty until somebody spends
+    against `P7-07`.
+    """
+    source = await sess.get(Source, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"No source {source_id}.")
+
+    rows = (
+        await sess.execute(
+            select(Figure).where(Figure.source_id == source_id).order_by(Figure.figure_id)
+        )
+    ).scalars()
+
+    served = _raw_is_served() and source.raw_file_path is not None
+    figures = []
+    for figure in rows:
+        raw_url = None
+        if served:
+            # `#page=N` is what a PDF viewer reads, and it is the whole of
+            # "page-accurate" — the alternative is a link to page one and a
+            # reader scrolling for the figure the caption promised.
+            fragment = f"#page={figure.page}" if figure.page else ""
+            raw_url = f"/api/explore/sources/{source_id}/raw{fragment}"
+        figures.append(
+            FigureRefRead(
+                figure_id=figure.figure_id,
+                source_id=figure.source_id,
+                caption=figure.caption,
+                alt_text=figure.alt_text,
+                image_url=figure.image_url,
+                page=figure.page,
+                source_title=source.title,
+                source_url=source.url,
+                raw_url=raw_url,
+            )
+        )
+
+    return SourceFiguresRead(source_id=source_id, figures=figures, raw_available=_raw_is_served())
+
+
+@router.get("/sources/{source_id}/raw")
+async def explore_source_raw(source_id: int, sess: ReadSession) -> FileResponse:
+    """The stored raw file for one source (`P6-14`, §5.4).
+
+    **The path comes from the database, never from the request.** The caller
+    supplies an integer; `raw_file_path` is read off the row. That is not a
+    hardened traversal check, it is the absence of anything to traverse — there
+    is no user-supplied path in this handler at all, which is a stronger
+    property than validating one would be.
+
+    Off unless `MERIDIAN_SERVE_RAW` says otherwise. The raw store holds copies of
+    third-party material kept as a research archive (§14.2), and serving it is a
+    different act from serving what was extracted from it.
+    """
+    if not _raw_is_served():
+        raise HTTPException(
+            status_code=404,
+            detail="This deployment does not serve raw files. Set MERIDIAN_SERVE_RAW to enable.",
+        )
+
+    source = await sess.get(Source, source_id)
+    if source is None or not source.raw_file_path:
+        raise HTTPException(status_code=404, detail=f"No stored file for source {source_id}.")
+
+    root = Path(os.environ.get("MERIDIAN_RAW_ROOT", "/data/raw")).resolve()
+    target = (root / source.raw_file_path).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        # Belt to the braces above: a `raw_file_path` written before `P1-11`'s
+        # containment check, or a corpus restored from elsewhere, must not be
+        # able to reach outside the store either.
+        raise HTTPException(status_code=404, detail=f"No stored file for source {source_id}.")
+
+    return FileResponse(target, media_type=(source.extra or {}).get("media_type"))

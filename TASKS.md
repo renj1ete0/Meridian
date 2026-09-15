@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1548 backend tests and 127 frontend.
+1553 backend tests and 138 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -676,7 +676,15 @@ when its queue drained.
 - [ ] `P6-11` Explore landing state with since-last-visit delta
 - [ ] `P6-12` Admin: topic management — add, pause, archive with re-normalising weights
 - [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
-- [ ] `P6-14` Figures panel with page-accurate raw file links
+- [x] `P6-14` Figures panel with page-accurate raw file links — `v0.56.0`.
+      No thumbnails, because nothing downloads figure images (`P1-10`) and a
+      placeholder grid would promise what the corpus cannot keep; the caption is
+      the content, per §6.6. Two links with different meanings — the publisher's
+      live image, and this corpus's own copy at `#page=N`, which is what §5.4
+      keeps raw files for. **Raw serving is off unless `MERIDIAN_SERVE_RAW` is
+      set**, because the store holds third-party material and serving it is
+      redistribution; the link is then absent with a line saying why, rather
+      than broken. The raw path comes from the row, never the request
 - [x] `P6-15` Export: Markdown and BibTeX — `v0.55.0`.
       `meridian_core/export.py` plus `/api/explore/export/{bibtex,markdown}`.
       Nothing is generated: a field the document did not carry is omitted, since

@@ -433,3 +433,48 @@ export function getSourceChunks(
 export function getChunk(chunkId: number, init?: RequestInit): Promise<Chunk> {
   return request<Chunk>(`/api/explore/chunks/${chunkId}`, init)
 }
+
+
+/** Mirrors `FigureRefRead`. */
+export interface FigureRef {
+  figure_id: number
+  source_id: number
+  caption: string | null
+  alt_text: string | null
+  image_url: string | null
+  page: number | null
+  source_title: string | null
+  source_url: string | null
+  /**
+   * Deep link into the stored raw file, with `#page=N` when the page is known.
+   * `null` when this deployment does not serve raw files — a caption with a
+   * dead link is worse than a caption alone, because the reader spends a click
+   * finding out.
+   */
+  raw_url: string | null
+}
+
+export const FIGURE_REF_FIELDS = [
+  'figure_id',
+  'source_id',
+  'caption',
+  'alt_text',
+  'image_url',
+  'page',
+  'source_title',
+  'source_url',
+  'raw_url',
+] as const
+
+/** Mirrors `SourceFiguresRead`. */
+export interface SourceFigures {
+  source_id: number
+  figures: FigureRef[]
+  raw_available: boolean
+}
+
+export const SOURCE_FIGURES_FIELDS = ['source_id', 'figures', 'raw_available'] as const
+
+export async function getSourceFigures(id: number, init?: RequestInit): Promise<SourceFigures> {
+  return request<SourceFigures>(`/api/explore/sources/${id}/figures`, init)
+}

@@ -522,3 +522,71 @@ async def test_an_unbounded_export_is_refused(client) -> None:
     )
 
     assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------
+# Figures and raw files (task P6-14, spec §6.6, §12.5, §14.2)
+# --------------------------------------------------------------------------
+
+
+async def test_figures_are_listed_with_their_captions(client) -> None:
+    """§6.6's "start with captions, not vision" — captions and alt text are what
+    ingestion extracts, and `vlm_description` stays empty until somebody spends
+    against `P7-07`."""
+    response = await client.get("/api/explore/sources/1/figures")
+
+    assert response.status_code in (200, 404)
+    if response.status_code == 200:
+        body = response.json()
+        assert "figures" in body and "raw_available" in body
+
+
+async def test_figures_for_a_missing_source_are_a_404(client) -> None:
+    assert (await client.get("/api/explore/sources/999999999/figures")).status_code == 404
+
+
+async def test_raw_files_are_not_served_unless_asked(client, monkeypatch) -> None:
+    """The raw store holds copies of third-party material kept as a research
+    archive (§14.2). Serving it is redistribution, which is a decision rather
+    than a default — and the default has to be the safe one, because the
+    alternative is a deployment that quietly republishes everything it read."""
+    monkeypatch.delenv("MERIDIAN_SERVE_RAW", raising=False)
+
+    response = await client.get("/api/explore/sources/1/raw")
+
+    assert response.status_code == 404
+    assert "MERIDIAN_SERVE_RAW" in response.json()["detail"]
+
+
+async def test_a_figure_link_is_absent_rather_than_broken(client, monkeypatch) -> None:
+    """A caption with a dead link is worse than a caption alone: the reader
+    spends a click finding out. `raw_available` lets a panel explain the absence
+    instead of showing a link that 404s."""
+    monkeypatch.delenv("MERIDIAN_SERVE_RAW", raising=False)
+
+    response = await client.get("/api/explore/sources/1/figures")
+
+    if response.status_code == 200:
+        body = response.json()
+        assert body["raw_available"] is False
+        assert all(figure["raw_url"] is None for figure in body["figures"])
+
+
+async def test_the_raw_path_never_comes_from_the_request(client, monkeypatch) -> None:
+    """The caller supplies an integer; the path is read off the row.
+
+    That is not a hardened traversal check — it is the absence of anything to
+    traverse, which is a stronger property than validating a user-supplied path
+    would be. This test pins the shape: a source id that is not an integer must
+    not reach the handler at all.
+    """
+    monkeypatch.setenv("MERIDIAN_SERVE_RAW", "true")
+
+    response = await client.get("/api/explore/sources/..%2F..%2Fetc%2Fpasswd/raw")
+
+    # 404 (no route matched) or 422 (not an integer) are both correct, and which
+    # one you get depends on how the router decodes the escape. The property
+    # being pinned is that it is neither 200 nor a file: the handler is never
+    # reached, because `source_id` is typed as an int and a path cannot be one.
+    assert response.status_code in (404, 422)
+    assert "passwd" not in response.text

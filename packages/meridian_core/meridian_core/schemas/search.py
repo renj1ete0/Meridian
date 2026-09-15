@@ -137,3 +137,39 @@ class SourceChunksRead(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class FigureRefRead(BaseModel):
+    """One figure, with what makes it openable (task P6-14, spec §6.6, §12.5).
+
+    `raw_url` is None unless this deployment serves raw files. §12.5 asks for
+    "page-accurate links to raw files", and a link is only page-accurate if
+    there is a file to point at — a caption with a dead link is worse than a
+    caption alone, because a reader spends a click finding out.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    figure_id: int
+    source_id: int
+    caption: str | None
+    alt_text: str | None
+    image_url: str | None
+    page: int | None
+
+    #: The source's own title and url, so the panel needs no second request to
+    #: say which document a figure came from.
+    source_title: str | None = None
+    source_url: str | None = None
+
+    #: Deep link into the stored raw file, `#page=N` when the page is known.
+    #: None when raw files are not served — see the class docstring.
+    raw_url: str | None = None
+
+
+class SourceFiguresRead(BaseModel):
+    source_id: int
+    figures: list[FigureRefRead]
+    #: Whether this deployment serves raw files at all, so a client can explain
+    #: an absent link rather than showing a broken one.
+    raw_available: bool

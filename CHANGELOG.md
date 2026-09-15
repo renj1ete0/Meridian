@@ -48,6 +48,49 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.56.0] — 2026-09-15
+
+**Figures become openable.**
+
+### Added
+
+- `P6-14` the figures panel: `GET /api/explore/sources/{id}/figures`, a raw-file
+  route, a typed client method and a `FiguresPanel` component
+- §12.5 asks for "thumbnails linked to the node". **There are no thumbnails** —
+  nothing downloads figure images (`P1-10`), so a placeholder grid would be a
+  promise the corpus cannot keep. What there is, is what §6.6 says carries most
+  of the value: the caption, *"often the most information-dense sentence about
+  the figure"*
+- Two links per figure, and the difference is the point. `image_url` is the
+  picture where the publisher has it — live, and liable to move. `raw_url` is
+  this corpus's own copy at the figure's page, which is what §5.4 keeps raw
+  files *for*: link rot is the binding reason, and `#page=N` is the whole of
+  "page-accurate"
+- **Raw files are not served unless `MERIDIAN_SERVE_RAW` says so.** The raw
+  store holds third-party material kept as a research archive (§14.2); serving
+  it is redistribution rather than reading, and the default has to be the safe
+  one. `P3-10`'s `grants.raw_files` is the per-person version beneath it
+- When raw serving is off the link is **absent with a line saying why**, not
+  broken. A caption with a dead link is worse than a caption alone — the reader
+  spends a click finding out
+
+### Security
+
+- **The raw path comes from the database, never the request.** The caller
+  supplies an integer and `raw_file_path` is read off the row. That is not a
+  hardened traversal check; it is the absence of anything to traverse, which is
+  a stronger property than validating a user-supplied path would be. A
+  containment check sits behind it anyway, for a corpus restored from elsewhere
+
+### Testing
+
+- That a path fragment cannot be a `source_id` — 404 or 422, never a file
+- That the link is absent rather than broken when raw serving is off, and that
+  a figure with no links at all still renders its caption: a PDF caption has no
+  addressable image, which is the ordinary case for the PDF path
+- Both new DTOs added to the cross-language drift pairs, so the contract is
+  protected rather than merely written
+
 ## [0.55.0] — 2026-09-15
 
 **Material can leave.**
