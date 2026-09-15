@@ -502,7 +502,24 @@ when its queue drained.
       into a second column and running both. Worth doing once, after `P1-16`,
       and only if `P2-09` is marginal — swapping the embedder is a full re-embed
       and a migration, so it needs a measured reason
-- [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
+- [x] `P2-07` `/api/explore/*` read endpoints on the read-only session —
+      `v0.43.0`. Five routes over `meridian_core.search`, plus `/health`. The
+      read-only guarantee is tested twice: through the session's
+      `SET TRANSACTION READ ONLY`, and against the catalogue — the first masks
+      the second, so a test that only saw the transaction error would keep
+      passing if the grants were widened. DTOs live in `meridian_core.schemas`,
+      not the API. **No embedder**: depending on `sentence-transformers` puts
+      gigabytes in an HTTP path and accepting a client-supplied vector puts an
+      unauthenticated float array into a distance operator, so `embed_query()`
+      is a seam returning None and every response reports `degraded`. `P2-17`
+      is the sidecar that closes it
+- [ ] `P2-17` **An embedding sidecar, so search stops being lexical-only.**
+      `P2-07` left `embed_query()` returning None deliberately — the API must
+      not carry the model and must not take a vector from a caller. The shape is
+      the one `docs/connectors.md` §4 describes: a container on `egress` with no
+      credentials, a client that returns None when it is absent, and a word on
+      the health line. Until it exists the vector half of `P2-06` is unreachable
+      over HTTP, which also means `P2-09` cannot judge hybrid retrieval
 - [x] `P2-16` **Explore landing components** — `v0.41.0`. §8's default state as
       components taking typed props: search field with the `hybrid` marker,
       the four counts, §12.5's three entry points as cards, and "where you

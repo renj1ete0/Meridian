@@ -43,6 +43,67 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.43.0] — 2026-09-15
+
+**The corpus becomes reachable over HTTP.**
+
+### Added
+
+- `P2-07` `services/api/` — the service, from zero. FastAPI over
+  `meridian_core.search`, with five `/api/explore/*` routes: search, corpus
+  stats, a source, a source's chunks in document order, and a chunk. Plus
+  `/health`, which says whether the process and the database are up and nothing
+  about the corpus
+- **Explore runs on the read-only role**, and that is tested twice on purpose.
+  Once through the session, which issues `SET TRANSACTION READ ONLY` so a
+  mistake is an error at the statement rather than a surprise at commit; and
+  once against the catalogue, asserting `meridian_ro` holds SELECT and not
+  INSERT, UPDATE or DELETE. The second exists because the transaction setting
+  *masks* the role — a test that only ever saw `ReadOnlySQLTransactionError`
+  would keep passing if the grants were widened
+- DTOs went into `meridian_core.schemas.search` and the corpus counts into
+  `meridian_core/stats.py`, not into the API. Core owns anything touching the
+  database; a service that defined its own would be the second definition of
+  the same rows
+- `services/api/Dockerfile` — 293MB, unprivileged, mirroring the worker's shape
+
+### Decisions worth reviewing
+
+- **No embedder, so search is lexical-only and every response says so.**
+  Depending on `sentence-transformers` puts gigabytes of weights and a cold
+  start in an HTTP request path; accepting a client-supplied vector puts a
+  1024-float array from an unauthenticated caller straight into a pgvector
+  distance operator. Neither is acceptable, so `embed_query()` is the seam and
+  returns `None` — the same shape as `Crawl4aiClient.from_env()`, where an
+  absent dependency degrades the service rather than stopping it. `degraded`
+  and a plain-language reason ride on every response
+- **Paging past the candidate pool is a 422, not an empty page.** RRF can only
+  order what the arms handed it, so an offset beyond `candidates` was never a
+  candidate. An empty page there is indistinguishable from "end of results", and
+  a client would stop paging believing it had seen everything
+- **No CORS middleware.** Same-origin in dev (the Vite proxy) and in production
+  (cloudflared). Permissive CORS on a service whose only auth is Cloudflare
+  Access would hand away exactly what Access protects
+
+### Fixed
+
+- Uvicorn's plain-text logs violated the one-JSON-object-per-line contract
+  `meridian_core/logging.py` is built on — the access log during operation, and
+  the startup banner before lifespan can intervene. `--no-access-log` plus a
+  `log_config.json`, with the app's own middleware logging each request
+  structurally under a per-request `run_id` and returning `x-request-id`
+
+### Testing
+
+- 37 new tests. Dataclass↔DTO drift in both directions, filters narrowing the
+  query (mutation-checked — the filter was broken to confirm the test fails),
+  pages that neither overlap nor skip, an empty query returning 200, an
+  oversized limit refused, a tier the database would reject refused at the
+  boundary, and `embedding` absent from chunk payloads
+- Verified running against the real dev corpus: `/health`, `/stats`, and a
+  search returning real government-tier hits with full provenance. Structured
+  logging confirmed at 8 lines, 0 non-JSON
+
 ## [0.42.0] — 2026-09-15
 
 **A backup script, before the run makes one necessary.**

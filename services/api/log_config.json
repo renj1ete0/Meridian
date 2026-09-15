@@ -1,0 +1,33 @@
+{
+  "//": [
+    "Uvicorn's logging config, passed with --log-config so it applies before",
+    "uvicorn writes its first line. Without it the startup banner ('Started",
+    "server process', 'Application startup complete') goes out as plain text",
+    "ahead of the app's lifespan, which is where configure_logging() runs —",
+    "so the very first lines of the stream would be unparseable to anything",
+    "reading it as one JSON object per line (meridian_core/logging.py).",
+    "",
+    "The access logger is disabled here as well as by --no-access-log, so the",
+    "format holds even if that flag is dropped from the CMD. The app's own",
+    "middleware logs each request structurally, with a run_id."
+  ],
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "json": {
+      "()": "meridian_core.logging.JsonFormatter"
+    }
+  },
+  "handlers": {
+    "json": {
+      "class": "logging.StreamHandler",
+      "formatter": "json",
+      "stream": "ext://sys.stdout"
+    }
+  },
+  "loggers": {
+    "uvicorn": { "handlers": ["json"], "level": "INFO", "propagate": false },
+    "uvicorn.error": { "handlers": ["json"], "level": "INFO", "propagate": false },
+    "uvicorn.access": { "handlers": [], "level": "WARNING", "propagate": false }
+  }
+}

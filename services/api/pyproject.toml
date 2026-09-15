@@ -1,0 +1,25 @@
+[project]
+name = "meridian-api"
+version = "0.43.0"
+description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
+requires-python = ">=3.12"
+dependencies = [
+    "meridian-core",
+    "fastapi>=0.115",
+    # ASGI server. Here rather than in a dev group: the container's CMD is
+    # `uvicorn`, so an image built with `--no-dev` must still have it.
+    "uvicorn[standard]>=0.34",
+]
+
+# Deliberately NOT depending on sentence-transformers, and this is a decision
+# rather than an omission. `meridian_core.search` takes the query vector from
+# its caller precisely so that the API does not pull 2.3GB of weights into a
+# service whose job is answering HTTP in milliseconds (see api/search_service.py
+# for what that costs and how it is reported).
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["api"]

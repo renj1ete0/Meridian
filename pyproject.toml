@@ -1,6 +1,6 @@
 [project]
 name = "meridian"
-version = "0.42.0"
+version = "0.43.0"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"
@@ -8,6 +8,7 @@ license = { file = "LICENSE" }
 dependencies = [
     "meridian-core",
     "meridian-worker",
+    "meridian-api",
     "pyyaml>=6.0",
 ]
 
@@ -15,11 +16,12 @@ dependencies = [
 # pytest, scripts). Add each service to `members` as it gains a pyproject.toml —
 # a bare glob over services/* fails for directories that don't have one yet.
 [tool.uv.workspace]
-members = ["packages/*", "services/worker"]
+members = ["packages/*", "services/worker", "services/api"]
 
 [tool.uv.sources]
 meridian-core = { workspace = true }
 meridian-worker = { workspace = true }
+meridian-api = { workspace = true }
 
 [dependency-groups]
 dev = [

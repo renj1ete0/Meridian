@@ -88,6 +88,12 @@ from .runs import (
     RunCreate,
     RunRead,
 )
+from .search import (
+    CorpusStatsRead,
+    SearchHitRead,
+    SearchResponse,
+    SourceChunksRead,
+)
 from .source import ChunkCreate, ChunkRead, FigureCreate, FigureRead, SourceCreate, SourceRead
 
 __all__ = [
@@ -122,6 +128,11 @@ __all__ = [
     # queue
     "QueueTaskCreate",
     "QueueTaskRead",
+    # retrieval (P2-07)
+    "SearchHitRead",
+    "SearchResponse",
+    "CorpusStatsRead",
+    "SourceChunksRead",
     # source / chunk / figure
     "SourceCreate",
     "SourceRead",
