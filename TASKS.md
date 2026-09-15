@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1601 backend tests and 165 frontend.
+1691 backend tests and 165 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -651,7 +651,20 @@ when its queue drained.
 *Checkpoint: it runs itself, and tells you when it can't.*
 
 - [ ] `P5-01` `frontier.py` — outbound links, citations, spaCy NER, TF-IDF co-occurrence
-- [ ] `P5-02` Gazetteer into `EntityRuler` at worker startup; acronym auto-harvest
+- [x] `P5-02` Gazetteer into `EntityRuler` at worker startup; acronym auto-harvest
+      — `v0.63.0`. §5.6's "do not hand-write it — bootstrap it", built as two
+      pure halves plus a pass. `compile_patterns` turns approved rows into
+      patterns; `python -m worker.harvest` reads documents nobody has read yet
+      and files each `Full Name Here (ACRONYM)`. Because the ruler *overrides*
+      statistical NER, three things do not load: unapproved rows, rows flagged
+      ambiguous, and any surface form two rows share — the last one observed at
+      compile time, because the flag is hand-maintained and will drift. Short
+      all-caps forms match case-sensitively, or a three-letter acronym becomes a
+      curated entity on every occurrence of the ordinary English word.
+      Corroboration is counted in documents, not occurrences. spaCy is the
+      optional `ner` extra rather than a dependency: `P5-01` is the task that
+      introduces NER, and the patterns are built in `meridian_core`, which needs
+      none of it
 - [ ] `P5-03` Coverage scoring, schema-aware, topic × dimension
 - [ ] `P5-04` Gap analysis and seed emission, capped and validated
 - [ ] `P5-05` Diversity seeding — stance-imbalance counter-seeds first (spec §7.4)

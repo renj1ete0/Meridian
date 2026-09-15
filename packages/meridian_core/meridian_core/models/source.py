@@ -130,6 +130,15 @@ class Source(Base, TimestampMixin):
     )
     ocr_confidence: Mapped[float | None] = mapped_column()
 
+    #: When §5.6's acronym harvest last read this document (task P5-02).
+    #:
+    #: NULL is the whole queue, exactly like ``chunks.novelty_checked_at``. A
+    #: timestamp rather than a boolean because the harvest's rules will change —
+    #: a better initialism check, a wider window — and a re-harvest then needs to
+    #: be targetable at everything read before a date. A boolean can only be
+    #: reset for the entire corpus at once.
+    acronyms_harvested_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
     extra: Mapped[dict | None] = mapped_column(JSONB)
 
     chunks: Mapped[list[Chunk]] = relationship(
@@ -142,6 +151,14 @@ class Source(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("url", name="uq_sources_url"),
         Index("ix_sources_tier_date", "source_tier", "publication_date"),
+        # The acronym harvest's queue (`P5-02`). Partial: everything with text
+        # and not yet read. A metadata-only source has nothing to harvest, and
+        # leaving it in the queue means re-skipping it on every pass forever.
+        Index(
+            "ix_sources_harvest_pending",
+            "source_id",
+            postgresql_where=text("acronyms_harvested_at IS NULL AND text_available"),
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

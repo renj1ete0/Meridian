@@ -212,7 +212,36 @@ Afterwards, three passes that are not part of the crawl loop:
 docker compose run --rm worker python -m worker.embed      # vectors
 docker compose run --rm worker python -m worker.novelty    # near-duplicate verdicts
 docker compose run --rm worker python -m worker.sweep      # retention report (add --apply to delete)
+docker compose run --rm worker python -m worker.harvest    # acronym definitions into the gazetteer
 make snapshot-corpus                                       # the run's deliverable
+```
+
+The harvest (`P5-02`) reads every document nobody has read yet and files each
+`Full Name Here (ACRONYM)` it finds. Nothing it finds is approved: a term needs a
+person, or three separate documents defining it the same way. Approved terms
+override statistical NER, so a regex with the final say over entity extraction is
+not a trade worth making.
+
+Look at what it proposed before approving anything:
+
+```bash
+docker compose exec postgres psql -U meridian -d meridian -c \
+  "SELECT canonical, aliases, occurrence_count, approved, ambiguous
+     FROM gazetteer WHERE source = 'auto_acronym' ORDER BY occurrence_count DESC LIMIT 40"
+```
+
+`ambiguous = true` means two documents gave the same acronym different
+expansions. Those are held out of the matcher on purpose — the resolver decides
+them from context, and a surface form that cannot be decided from the surface
+form should not be decided at all.
+
+Loading the gazetteer into spaCy needs the optional extra, which the image does
+not carry by default (nothing in the fast loop runs NER until `P5-01`):
+
+```bash
+uv sync --extra ner && python -m spacy download en_core_web_sm
+# or, to match curated terms with no statistical model at all:
+MERIDIAN_SPACY_MODEL=blank
 ```
 
 ---

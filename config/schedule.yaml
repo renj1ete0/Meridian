@@ -44,3 +44,11 @@ jobs:
     # should not do that on a timer without anybody reading the report first.
     interval_seconds: 86400
     enabled: true
+
+  - name: harvest
+    module: worker.harvest
+    # Daily. §5.6's acronym auto-harvest over documents nothing has read yet —
+    # one regex per document, and the queue is a partial index, so a run with
+    # nothing new to read costs an index scan that returns no rows.
+    interval_seconds: 86400
+    enabled: true

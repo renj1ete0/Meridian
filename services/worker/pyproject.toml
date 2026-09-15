@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.62.0"
+version = "0.63.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [
@@ -27,6 +27,15 @@ embed = [
     # and a second resident copy on a machine that has one of each.
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
+]
+
+# spaCy and a model, for `P5-02`'s EntityRuler and `P5-01`'s NER. An extra
+# rather than a dependency: the fast loop does not run NER yet, and thinc, blis
+# and a model file in the image that fetches web pages is disk and build time
+# the Pi spends on something nothing calls. The patterns themselves are built in
+# meridian_core, which needs none of it.
+ner = [
+    "spacy>=3.8",
 ]
 
 [build-system]

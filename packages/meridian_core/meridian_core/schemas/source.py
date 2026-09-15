@@ -65,6 +65,9 @@ class SourceRead(BaseModel):
     ocr_applied: bool
     ocr_tier: OcrTier
     ocr_confidence: float | None
+    #: When §5.6's acronym harvest last read this document (`P5-02`). NULL is the
+    #: queue, and the default keeps rows written before the column readable.
+    acronyms_harvested_at: dt.datetime | None = None
     extra: dict | None
     created_at: dt.datetime
 

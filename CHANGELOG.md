@@ -48,6 +48,96 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.63.0] — 2026-09-15
+
+**The gazetteer grows itself, and is not allowed to decide anything.**
+
+### Added
+
+- `P5-02` the gazetteer compiled into spaCy `EntityRuler` patterns, and §5.6's
+  acronym auto-harvest as a pass — `python -m worker.harvest`
+- §5.6 is blunt about where this table comes from: **"do not hand-write it —
+  bootstrap it."** Fifty terms seeded by a person, then the observation that
+  government and academic documents define their acronyms on first use. One
+  regex over text that has already been extracted
+- `sources.acronyms_harvested_at` plus a partial index — NULL is the whole queue,
+  the same shape the novelty gate uses on `chunks`. A timestamp rather than a
+  boolean, because the harvest's rules will change and a re-harvest then needs to
+  be targetable at everything read before a date
+- A document is rejoined from its chunks before being read. A definition split
+  across a chunk boundary is invisible to both halves, so a chunk-wise harvest
+  would lose a fixed fraction of every long document, silently
+
+### The ruler overrides the model, so three rules about what does not load
+
+- **Unapproved rows do not load.** That is where harvested and model-proposed
+  terms wait. Loading them would make the approval queue decorative and let a
+  regex's mistake take the model's say away on every document mentioning the term
+- **Rows flagged ambiguous do not load.** Where context is insufficient a mention
+  must be left *unresolved* rather than guessed: a wrong resolution corrupts the
+  graph invisibly, an unresolved one stays visible and fixable. A high-precedence
+  pattern is exactly a guess made without context
+- **Surface forms that collide are withheld even when nothing is flagged.** The
+  flag is hand-maintained and will drift; a collision is the same fact observed
+  rather than declared. Without this the ruler keeps whichever pattern it saw
+  first, and the choice between two readings is made by row order
+
+### The case rule
+
+- A short all-caps form is matched **case-sensitively**; everything else on
+  `LOWER`. "ODD" matched case-insensitively fires on the ordinary English word,
+  and every hit becomes a curated, high-precedence entity in a research corpus.
+  The mirror failure is much cheaper: it misses a long form in lower-cased prose,
+  and nobody writes a sentence that accidentally spells out a three-word agency
+- A single newline is **not** a sentence boundary. Extracted PDF text breaks
+  lines mid-sentence constantly, so treating every line break as a sentence end
+  would reject most real definitions in exactly the documents this pattern is
+  high-yield in. A blank line is a paragraph break and does count
+
+### What the harvest may and may not do
+
+- Nothing it finds is approved. A term needs a person, or `APPROVAL_THRESHOLD`
+  separate documents defining it the same way
+- Corroboration is counted in **documents, not occurrences**. A report that
+  defines a term in its glossary and again in each of forty sections has said one
+  thing forty times, and counting hits would auto-approve on one author's typo
+- It never edits an approved row beyond its count. An approved row is already
+  loaded into the ruler, so an alias appended by a regex would take effect with
+  nobody having agreed to it — the approval queue bypassed by the one mechanism
+  it exists to hold back
+- Two expansions for one acronym is the finding, not the failure: both rows are
+  flagged ambiguous, which keeps both out of the ruler and hands the mention to
+  the resolver, which can see the rest of the document
+
+### spaCy is an optional extra
+
+- `meridian-worker[ner]`, not a dependency. The fast loop does not run NER yet —
+  `P5-01` is the task that introduces it — and thinc, blis and a model file in
+  the image that fetches web pages is disk and build time the Pi spends on
+  something nothing calls. `MERIDIAN_SPACY_MODEL=blank` runs the curated terms
+  with no statistical model at all
+- The patterns are built in `meridian_core`, which needs none of it, so what
+  loads and what is withheld is testable without spaCy installed
+
+### Testing
+
+- Every bracket that matches `Full Name Here (ACRONYM)` on shape alone and must
+  be refused: `(PDF)`, `(see Figure 3)`, `(USD)`, `(ii)`, `(2026)`, `(Q3)`.
+  Admitting one is not a transient error — it is a permanent row in the table
+  entity resolution consults
+- That a term is not approved one document short of the threshold, that one
+  document repeating itself counts once, and that a curated `approved=false` row
+  is never auto-approved by corroboration
+- That an ambiguous term is withheld from the matcher *even once approved* — the
+  two mechanisms answer different questions and have to compose
+- Against real spaCy where the extra is installed: the ruler lands in front of
+  `ner`, a reload replaces rather than stacks, a match carries its row id, and an
+  acronym does not match its lower-case homograph
+- New drift tests over `config/schedule.yaml`: every module named there is
+  importable and has an entry point, intervals are positive, `args` is a list of
+  strings, and the sweep still has no `--apply`. Those names are strings in a
+  YAML file and nothing else in the toolchain looks at them
+
 ## [0.62.0] — 2026-09-15
 
 **A wedged worker can be told from a busy one.**
