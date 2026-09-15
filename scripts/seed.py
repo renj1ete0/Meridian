@@ -227,6 +227,37 @@ async def seed_cold_start_queue(sess) -> tuple[int, int]:
     return added, skipped
 
 
+async def seed_schedule(sess) -> tuple[int, int]:
+    """The timetable (§13.1, task P5-06).
+
+    First boot only. §13.1 makes the database authoritative for schedules and
+    §13.2 makes changing one a UI action, so re-reading this file on a later
+    seed would silently undo every change made through the interface — which is
+    exactly the failure "config lives in the database" exists to prevent.
+    """
+    from meridian_core.models import ScheduledJob
+
+    data = _load("schedule.yaml")
+    created = skipped = 0
+    for job in data.get("jobs", []):
+        existing = await sess.scalar(select(ScheduledJob).where(ScheduledJob.name == job["name"]))
+        if existing is not None:
+            skipped += 1
+            continue
+        sess.add(
+            ScheduledJob(
+                name=job["name"],
+                module=job["module"],
+                args=job.get("args"),
+                interval_seconds=int(job["interval_seconds"]),
+                enabled=bool(job.get("enabled", True)),
+            )
+        )
+        created += 1
+    await sess.flush()
+    return created, skipped
+
+
 async def main() -> int:
     configure_logging("seed")
     steps = {
@@ -236,6 +267,7 @@ async def main() -> int:
         "gazetteer": seed_gazetteer,
         "agents": seed_agents,
         "cold_start_queue": seed_cold_start_queue,
+        "schedule": seed_schedule,
     }
 
     totals: dict[str, tuple[int, int]] = {}

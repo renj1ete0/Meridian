@@ -287,6 +287,19 @@ Two consequences worth holding on to:
   (they come from the DOM, not the text) and a page's own identifier survives
   (meta tags), but a bare DOI in a sidebar does not.
 
+### `extra={"module": ...}` raises at runtime
+
+`logging` refuses to let an `extra` key shadow a `LogRecord` attribute, and it
+raises rather than dropping the key. `module` is one; so are `name`, `args`,
+`filename`, `levelname`, `process`, `message`, `lineno` and `funcName`.
+
+It fails **only on the line that logs it**, so a scheduler that logged
+`{"job": ..., "module": ...}` started fine, claimed a job fine, and died the
+moment it tried to say which module it was about to run. The traceback points at
+`logging/__init__.py` and names the key, which is the one mercy.
+
+Prefix them — `job_module`, not `module`.
+
 ### Two ways a benchmark lies on a small corpus
 
 Both were live in `scripts/benchmark_search.py` before its own output exposed

@@ -48,6 +48,59 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.59.0] — 2026-09-15
+
+**The timetable lives in the database.**
+
+### Added
+
+- `P5-06` `scheduled_jobs`, `meridian_core/schedule.py` and
+  `python -m worker.scheduler`. §13.1's corollary, implemented: *"no cron files.
+  The scheduler reads its timetable from the DB so schedule changes are a UI
+  action."* A crontab on the box is configuration nobody can see from the
+  interface, cannot change without SSH, and does not travel with a snapshot — a
+  corpus restored elsewhere arrives with no idea what was meant to be running
+- **The queue's shape, reused.** `FOR UPDATE SKIP LOCKED` picks a due job and a
+  *lease* holds it, so two schedulers running by accident — a systemd timer and
+  a container, a deploy overlapping a restart — get different jobs rather than
+  both running the same backup. A scheduler that dies mid-job leaves the claim
+  to expire; a status flip would leave it "running" forever
+- **Missed runs are run once, not caught up.** A machine off for a day leaves a
+  daily job overdue by 24 hours; rescheduling from *now* rather than from the
+  old `next_run_at` means one run and then the normal cadence. The alternative
+  is a burst of catch-up runs the moment the machine returns
+- **An interval, not a cron expression.** §13.2 wants these editable from a UI,
+  where "every 6 hours" is a number and `0 */6 * * *` is a support question —
+  and parsing one is a dependency
+- **`python -m <module>`, never a shell.** The module comes from a row a UI can
+  edit, and a row that could name a shell command would make the timetable a
+  remote execution surface for anyone who could write to that table
+- A repeatedly failing job backs off rather than being disabled: disabling needs
+  a person to notice and re-enable, backing off recovers on its own
+- `config/schedule.yaml` seeds four jobs at first boot — digest, embed, novelty
+  and sweep. **Sweep without `--apply`**: it is the only pass that destroys
+  something a re-crawl cannot reproduce, and it should not do that on a timer
+  without somebody reading the report
+
+### Fixed
+
+- `extra={"module": ...}` **raises**. `logging` refuses an `extra` key that
+  shadows a `LogRecord` attribute, and it fails only on the line that logs it —
+  so the scheduler started, claimed a job, and died as it tried to say which
+  module it was about to run. Recorded in the handover with the full reserved
+  list
+
+### Testing
+
+- Thirteen tests, against a real Postgres because the claim is `SKIP LOCKED` and
+  its whole point is what two concurrent schedulers see
+- That a held job is not claimed twice, that an expired claim is taken over, and
+  that shutdown hands claims back rather than making every job wait out its lease
+- That the next run is measured from **now** and not from the missed slot
+- That one success clears a backoff, so a transient failure does not become a
+  permanent slow cadence nobody remembers to reset
+- The drift test caught the new enum having no DTO alias, unprompted
+
 ## [0.58.0] — 2026-09-15
 
 **Sustained conditions, not events.**

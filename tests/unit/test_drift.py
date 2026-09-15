@@ -44,6 +44,7 @@ ENUM_PAIRS = [
     ("RunStage", models.runs.RUN_STAGE),
     ("RunStatus", models.runs.RUN_STATUS),
     ("JobStatus", models.runs.JOB_STATUS),
+    ("JobRunStatus", models.config.JOB_STATUS),
     ("EnrichmentType", models.runs.ENRICHMENT_TYPE),
     ("NotificationType", models.runs.NOTIFICATION_TYPE),
 ]

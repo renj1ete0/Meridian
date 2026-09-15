@@ -4,7 +4,7 @@ Importing this package registers every table on ``Base.metadata``, which is what
 Alembic autogenerate reflects against.
 """
 
-from .config import Agent, AgentToken, FetchPolicy, SteeringLog, TopicConfig
+from .config import Agent, AgentToken, FetchPolicy, ScheduledJob, SteeringLog, TopicConfig
 from .gazetteer import GazetteerTerm
 from .graph import AttributeDefinition, AttributeValue, Edge, Entity, Observation
 from .mixins import (
@@ -42,6 +42,7 @@ __all__ = [
     "Report",
     "Run",
     "Source",
+    "ScheduledJob",
     "SteeringLog",
     "TimestampMixin",
     "TopicConfig",

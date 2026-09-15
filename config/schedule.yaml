@@ -1,0 +1,46 @@
+# The timetable (task P5-06, spec §13.1).
+#
+# Seeded at first boot only. The database is authoritative afterwards — §13.1 is
+# explicit that schedule changes are a UI action, not a file edit, and a
+# scheduler that re-read this file would quietly undo every change made through
+# the interface.
+#
+# Intervals in seconds rather than cron expressions. "Every 6 hours" is a number
+# a UI can offer as a field; `0 */6 * * *` is a support question, and parsing it
+# is a dependency.
+#
+# `module` is run as `python -m <module>` with `args` as a list, never through a
+# shell. A timetable row is editable from the UI, and a row that could name a
+# shell command would make this table a remote execution surface.
+
+jobs:
+  - name: digest
+    module: worker.digest
+    interval_seconds: 86400        # daily — §12.5's health line, and §13.3's alerts
+    enabled: true
+
+  - name: embed
+    module: worker.embed
+    args: ["--once"]
+    # Hourly. The fetch loop never embeds (§6.1 draws one pipeline and it is
+    # three passes), so chunks are unsearchable by meaning until this runs.
+    interval_seconds: 3600
+    enabled: true
+
+  - name: novelty
+    module: worker.novelty
+    args: ["--once"]
+    # Behind `embed`, deliberately: the gate needs vectors. Running them at the
+    # same cadence means it is at most one interval behind, which is the window
+    # §6.1 accepts — a chunk that exists, is not yet searchable, and is not yet
+    # known to be a duplicate.
+    interval_seconds: 3600
+    enabled: true
+
+  - name: sweep
+    module: worker.sweep
+    # NO `--apply`. Reports what could be reclaimed and deletes nothing: this is
+    # the only pass that destroys something a re-crawl cannot reproduce, and it
+    # should not do that on a timer without anybody reading the report first.
+    interval_seconds: 86400
+    enabled: true

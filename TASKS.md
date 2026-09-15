@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1574 backend tests and 148 frontend.
+1588 backend tests and 148 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -655,7 +655,15 @@ when its queue drained.
 - [ ] `P5-03` Coverage scoring, schema-aware, topic × dimension
 - [ ] `P5-04` Gap analysis and seed emission, capped and validated
 - [ ] `P5-05` Diversity seeding — stance-imbalance counter-seeds first (spec §7.4)
-- [ ] `P5-06` Scheduler reads its timetable from the DB — no cron files
+- [x] `P5-06` Scheduler reads its timetable from the DB — no cron files,
+      `v0.59.0`. `scheduled_jobs` plus `python -m worker.scheduler`, reusing the
+      queue's `SKIP LOCKED` + lease so two schedulers cannot both run the same
+      backup and a dead one releases by expiry. Missed runs run **once**, not
+      caught up — rescheduled from now, or a machine that was off returns to a
+      burst. Intervals rather than cron, because §13.2 wants these editable from
+      a UI. `python -m <module>` with args as a list and no shell, so a row a UI
+      can write is not a remote execution surface. Four jobs seeded; sweep
+      without `--apply`
 - [~] `P5-07` Telegram digest, alerts on sustained conditions only, inbound
       commands — **outbound done in `v0.58.0`, inbound outstanding**.
       `python -m worker.digest`: §12.5's health line plus four sustained

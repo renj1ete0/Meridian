@@ -79,6 +79,11 @@ EnrichmentType = Literal[*ENRICHMENT_TYPE.enums]
 NotificationType = Literal[*NOTIFICATION_TYPE.enums]
 
 
+#: How a scheduled job's last run ended (`P5-06`). Distinct from `JobStatus`,
+#: which is an enrichment/report job's lifecycle — this one only ever describes
+#: a run that has already finished, so there is no `queued` or `running`.
+JobRunStatus = Literal["ok", "failed", "timeout"]
+
 #: Which retrieval arm produced a hit (`P2-06`, `P2-18`).
 #:
 #: A Literal rather than `str` so the value set crosses the API boundary the way

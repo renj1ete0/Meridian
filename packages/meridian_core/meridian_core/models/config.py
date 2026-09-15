@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Float, Index, Integer, Text, text
+from sqlalchemy import DateTime, Float, Index, Integer, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -192,3 +192,71 @@ class AgentToken(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<AgentToken {self.token_id} agent={self.agent_id} revoked={self.revoked}>"
+
+
+JOB_STATUS = constrained("ok", "failed", "timeout", name="job_run_status")
+
+
+class ScheduledJob(Base, TimestampMixin):
+    """One recurring job and when it next runs (task P5-06, spec §13.1).
+
+    §13.1's corollary, stated outright: **"no cron files. The scheduler reads its
+    timetable from the DB so schedule changes are a UI action."** A crontab on
+    the box is a configuration nobody can see from the interface, cannot change
+    without SSH, and does not travel with a database snapshot.
+
+    **An interval rather than a cron expression.** Cron's grammar is expressive
+    and needs a parser, and §13.2 wants these editable from a UI — where "every
+    6 hours" is a number and `0 */6 * * *` is a support question. A job that
+    must land at a particular time of day gets `next_run_at` set to that time
+    once; the interval keeps it there.
+    """
+
+    __tablename__ = "scheduled_jobs"
+
+    job_id: Mapped[int] = pk()
+
+    #: Stable identifier, used in logs and by the UI. Unique so a seed can be
+    #: re-run without duplicating the timetable.
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+
+    #: The module to run, as `python -m <module>`. Not a shell string: a
+    #: timetable row is editable from a UI, and a row that could name a shell
+    #: command would make the schedule table a remote execution surface for
+    #: anyone who could write to it.
+    module: Mapped[str] = mapped_column(Text, nullable=False)
+    args: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=True, server_default=text("true"), nullable=False)
+
+    #: When this is due. The queue's shape (`P1-01`): a timestamp the claimer
+    #: compares against, rather than a status somebody has to flip.
+    next_run_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    #: A lease, not a status — same reasoning as `queue`. A scheduler that dies
+    #: mid-job releases the job by expiry rather than leaving it claimed forever.
+    claimed_by: Mapped[str | None] = mapped_column(Text)
+    claimed_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    last_run_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status: Mapped[str | None] = mapped_column(JOB_STATUS)
+    last_duration_ms: Mapped[int | None] = mapped_column(Integer)
+    #: Truncated. A job that fails by printing a stack trace should not make the
+    #: timetable row unreadable in a UI that has to show it.
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+    #: Consecutive failures, for backing a broken job off rather than running it
+    #: on schedule forever.
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    __table_args__ = (
+        Index("ix_scheduled_jobs_due", "next_run_at", postgresql_where=text("enabled")),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<ScheduledJob {self.name} every {self.interval_seconds}s>"
