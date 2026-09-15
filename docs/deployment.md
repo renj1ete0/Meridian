@@ -181,6 +181,75 @@ compose file on the server is not the one in the repo.
 
 ---
 
+## 4b. Egress restriction (`P1-25`) — do this before the long run
+
+`netguard` refuses private addresses in the application and `P1-24` pins the
+validated address so a name cannot resolve to one thing and connect to another.
+Both are correct. Both are also code running inside the process that is
+deliberately fetching attacker-chosen URLs, and one mistake from failing open.
+
+This is the defence that survives that mistake, and it is the one thing on this
+page that is genuinely worth doing *before* leaving the crawler running for two
+days on a machine that can see your LAN.
+
+**`internal: true` is not this.** It stops a container reaching the internet. It
+does nothing about the worker — which must have a default route — reaching
+`192.168.0.0/16`.
+
+```bash
+sudo mkdir -p /etc/nftables.d
+sudo cp deploy/egress-restrict.nft /etc/nftables.d/meridian.nft
+sudo nft -f /etc/nftables.d/meridian.nft
+```
+
+Persist it the way this host persists nftables — on most systemd distributions
+that is an `include` line in `/etc/sysconfig/nftables.conf` or
+`/etc/nftables.conf`. A rule set that vanishes on reboot is worse than none,
+because you will believe it is there.
+
+### Verify it. Every time.
+
+This is not optional ceremony. A firewall rule that matches nothing behaves
+exactly like a rule that is working: no error, no log line, no difference until
+the day it mattered. The subnets are pinned in `docker-compose.yml` precisely so
+these rules have a stable target, and `tests/unit/test_compose_topology.py`
+fails if that pinning is removed — but neither of those proves the rules loaded.
+
+```bash
+# Must FAIL (and should hang until timeout, not refuse instantly — a drop,
+# not a reject). Point it at something real on your LAN.
+docker compose exec worker python -c \
+  "import socket; socket.create_connection(('192.168.1.1', 80), timeout=5)"
+
+# Must FAIL: the cloud metadata endpoint, which is the classic SSRF target.
+docker compose exec worker python -c \
+  "import socket; socket.create_connection(('169.254.169.254', 80), timeout=5)"
+
+# Must SUCCEED: the open web is the entire point.
+docker compose exec worker python -c \
+  "import socket; socket.create_connection(('example.org', 80), timeout=5)"
+
+# Must SUCCEED: the worker still has to reach Postgres, which lives on an
+# RFC1918 address itself. If this fails, the rules are blocking the stack from
+# itself — check the supernet accept rule comes before the drop.
+docker compose exec worker python -c \
+  "import socket; socket.create_connection(('postgres', 5432), timeout=5)"
+```
+
+All four have to behave as stated. Three passing and one wrong is the
+configuration that looks fine and is not.
+
+### What is not closed
+
+`P1-25` names two options — no LAN route, or an egress proxy that refuses
+private destinations — and this is the first. The proxy is **not** a drop-in
+alternative: a forward proxy resolves the hostname itself, which takes DNS away
+from the worker and undoes `P1-24`'s address pinning. Choosing it means
+deciding that the proxy's destination ACL replaces pinning, which is a real
+design decision and not a deployment one. Recorded on the task.
+
+---
+
 ## 5. The 48h run (`P1-16`)
 
 Only after §4 is clean. Hand the stack to systemd so it survives a reboot and

@@ -1,0 +1,51 @@
+#!/usr/sbin/nft -f
+#
+# Egress restriction — task P1-25, spec §6.4, §11.8.
+#
+# `netguard` refuses private addresses in the application, and `P1-24` pins the
+# validated address so a name cannot resolve to one thing and connect to
+# another. Both are correct and both are one mistake from failing open: they are
+# code in the process that is deliberately fetching attacker-chosen URLs.
+#
+# This is the defence that survives that mistake. It is not in the application,
+# not in the container, and not reachable from either — the worker has no route
+# to the LAN because the host will not forward one, whatever the worker asks
+# for.
+#
+# `internal: true` on the compose network is NOT this. It stops a container
+# reaching the internet; it does nothing about the worker, which must have a
+# default route, reaching 192.168.0.0/16.
+#
+# Install:
+#   sudo cp deploy/egress-restrict.nft /etc/nftables.d/meridian.nft
+#   sudo nft -f /etc/nftables.d/meridian.nft
+#   # make it survive a reboot however this host persists nftables
+#
+# VERIFY IT, every time. A rule that matches nothing looks identical to a rule
+# that is working — see the deployment runbook §7 for the command.
+
+table inet meridian {
+  chain forward {
+    # priority -10: ahead of Docker's own forward rules, which end in ACCEPT
+    # for anything they recognise. Sitting after them would mean this never runs.
+    type filter hook forward priority -10; policy accept;
+
+    # Meridian's own networks first, or the drop below would cut the worker off
+    # from Postgres: Docker allocates bridge subnets inside 172.16.0.0/12, which
+    # is RFC1918, so the stack would be blocking itself.
+    ip saddr 172.31.240.0/22 ip daddr 172.31.240.0/22 accept
+
+    # Everything else private, from anywhere in Meridian's networks.
+    ip saddr 172.31.240.0/22 ip daddr {
+      10.0.0.0/8,
+      172.16.0.0/12,
+      192.168.0.0/16,
+      127.0.0.0/8,
+      169.254.0.0/16,     # link-local, and 169.254.169.254 with it
+      100.64.0.0/10       # CGNAT — a plausible LAN on a tunnelled network
+    } drop
+
+    ip6 saddr fc00::/7 drop
+    ip6 daddr { fc00::/7, fe80::/10, ::1 } drop
+  }
+}

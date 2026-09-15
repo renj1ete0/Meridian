@@ -268,10 +268,23 @@ when its queue drained.
       shutdown path. `SIGTERM` finishes the fetches in flight and hands the
       leases back; a second signal cancels. Housekeeping gives `prune_attempts()`
       somewhere to run and logs §12.5's health line
-- [ ] `P1-25` **Egress restriction — the defence that survives an application bug.**
-      Everything in `netguard` is one mistake from failing open. Give the fetching
-      process no route to RFC1918 at all: a network namespace without a LAN route, or
-      an egress proxy that refuses private destinations
+- [~] `P1-25` **Egress restriction** — host-level control shipped in `v0.39.0`,
+      the proxy option still open. `deploy/egress-restrict.nft` gives the
+      fetching process no route to RFC1918: not in the application, not in the
+      container, and not reachable from either. Compose subnets are pinned so
+      the rules have a stable target — Docker reallocates them otherwise, and a
+      rule against a stale subnet matches nothing, protects nothing and looks
+      exactly like one that works. `tests/unit/test_compose_topology.py` fails
+      if the pinning is removed or a network moves outside the supernet the
+      rules cover, and `docs/deployment.md` §4b has the four verification
+      commands that have to behave as stated.
+      **Stays `[~]`**: the task names an egress proxy as the alternative, and it
+      is not a drop-in one. A forward proxy resolves the hostname itself, taking
+      DNS away from the worker and undoing `P1-24`'s address pinning — adopting
+      it means deciding the proxy's destination ACL *replaces* pinning, which is
+      a design decision rather than a deployment one. ⚑ human decides that;
+      until then the host rules are the defence and they are applied, not
+      merely written
 - [x] `P1-22` **Network topology.** `internal: true` blocks outbound, but worker,
       crawl4ai and searxng all need it — the compose file admits this in a comment
       and never resolves it. Split into `internal` (postgres, api, web) and `egress`

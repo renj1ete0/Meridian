@@ -162,11 +162,24 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
 
+# Subnets are pinned so that host firewall rules have a stable target (`P1-25`).
+#
+# Docker allocates these from a pool by default, and the allocation moves when
+# networks are recreated. A firewall rule written against last week's subnet
+# does not error — it matches nothing, silently protects nothing, and looks
+# exactly like a rule that is working. `tests/unit/test_compose_topology.py`
+# fails if a subnet is removed.
 networks:
   internal:
     driver: bridge
     internal: true          # no default route: nothing here reaches the internet
+    ipam:
+      config: [{ subnet: 172.31.240.0/24 }]
   egress:
     driver: bridge
+    ipam:
+      config: [{ subnet: 172.31.241.0/24 }]
   lan:
     driver: bridge
+    ipam:
+      config: [{ subnet: 172.31.242.0/24 }]

@@ -130,3 +130,49 @@ def test_every_service_declares_its_networks(compose: dict) -> None:
     service silently lands on compose's default network instead."""
     for name, service in compose["services"].items():
         assert service.get("networks"), f"{name} declares no networks"
+
+
+# --------------------------------------------------------------------------
+# Egress restriction (task P1-25)
+# --------------------------------------------------------------------------
+
+
+def test_every_network_pins_its_subnet(compose: dict) -> None:
+    """Host firewall rules need a target that does not move.
+
+    Docker allocates bridge subnets from a pool, and the allocation changes when
+    networks are recreated. A rule written against the old one does not error —
+    it matches nothing, protects nothing, and is indistinguishable from a rule
+    that works. That is the whole failure mode `P1-25` exists to close, so the
+    subnets being pinned is not a detail of this compose file, it is the thing
+    the defence rests on.
+    """
+    for name, network in compose["networks"].items():
+        config = (network.get("ipam") or {}).get("config") or []
+        assert config and config[0].get("subnet"), f"network {name} does not pin a subnet"
+
+
+def test_the_pinned_subnets_are_inside_the_range_the_rules_cover(compose: dict) -> None:
+    """Drift between the compose file and `deploy/egress-restrict.nft`.
+
+    The rules allow Meridian's own networks by a single supernet and drop the
+    rest of RFC1918. A network moved outside that supernet would be dropped by
+    its own firewall, which fails loudly — but a network moved outside it and
+    then *excluded* from the drop would be silently unprotected, and this is the
+    cheap check that keeps the two files describing the same topology.
+    """
+    import ipaddress
+    from pathlib import Path
+
+    rules = Path(__file__).resolve().parents[2] / "deploy/egress-restrict.nft"
+    text = rules.read_text()
+
+    supernet = ipaddress.ip_network("172.31.240.0/22")
+    assert str(supernet) in text, "the nft rules no longer name the supernet this test checks"
+
+    for name, network in compose["networks"].items():
+        subnet = ipaddress.ip_network(network["ipam"]["config"][0]["subnet"])
+        assert subnet.subnet_of(supernet), (
+            f"network {name} ({subnet}) is outside {supernet}, which the firewall rules "
+            "treat as Meridian's own — it would be blocked, or worse, exempted"
+        )

@@ -43,6 +43,47 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.39.0] — 2026-09-15
+
+**The worker has no route to the LAN, and the host is what says so.**
+
+### Added
+
+- `P1-25` `deploy/egress-restrict.nft` — the fetching process gets no route to
+  RFC1918. `netguard` refuses private addresses and `P1-24` pins the validated
+  one; both are correct, and both are code inside the process that is
+  deliberately fetching attacker-chosen URLs. This is the defence that survives
+  a mistake in either, because it is not in the application, not in the
+  container, and not reachable from either
+- `internal: true` was never this. It stops a container reaching the internet
+  and does nothing about the worker, which must have a default route, reaching
+  `192.168.0.0/16`
+- Compose subnets are pinned. Docker allocates bridge subnets from a pool and
+  reallocates them when networks are recreated, so a firewall rule written
+  against last week's subnet matches nothing, protects nothing, and is
+  indistinguishable from one that works
+- `docs/deployment.md` §4b: install, persist, and four verification commands
+  that must each behave as stated — LAN blocked, metadata endpoint blocked, open
+  web reachable, Postgres reachable. Three passing and one wrong is the
+  configuration that looks fine and is not
+
+### Testing
+
+- That every compose network pins a subnet. This is not a detail of the compose
+  file; it is the thing the firewall rules rest on
+- Cross-file drift between `docker-compose.yml` and the rules: every pinned
+  subnet must fall inside the supernet the rules treat as Meridian's own. A
+  network moved outside it would be blocked by its own firewall — loud, and
+  fine — but one moved outside it *and* exempted would be silently unprotected
+
+### Not closed
+
+- `P1-25` stays `[~]`. It names an egress proxy as the alternative and it is not
+  a drop-in one: a forward proxy resolves the hostname itself, which takes DNS
+  away from the worker and undoes `P1-24`'s address pinning. Adopting it means
+  deciding the proxy's destination ACL replaces pinning — a design decision, not
+  a deployment one
+
 ## [0.38.0] — 2026-09-15
 
 **"Missing" and "under a different root" stop being the same observation.**
