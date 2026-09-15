@@ -43,6 +43,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.45.0] — 2026-09-15
+
+**A typed client, checked against the server it talks to.**
+
+### Added
+
+- `P2-13` `web/src/lib/api.ts` — a typed client over `/api/explore/*`. Every
+  call takes `RequestInit`, so an `AbortSignal` flows through and a superseded
+  search is cancelled rather than left to land out of order
+- No base URL and no environment read, enforced rather than intended: a test
+  greps the source for `http(s)://`, `import.meta.env` and `process.env` and
+  fails on any of them
+
+### Testing
+
+- **The cross-language contract is tested in two links, and both were
+  mutation-checked.** TypeScript types are erased, so nothing can compare an
+  `interface` to a pydantic model directly. `tsc` ties each interface to a
+  runtime field list via a type-level equality; a vitest drift test ties each
+  list to the pydantic class parsed out of `meridian_core/schemas/`
+- The second link is the one that matters. Removing a field from *both* the
+  interface and its list leaves `tsc` green — the compiler happily asserting a
+  shape the server contradicts — and only the drift test catches it
+- The parser strips docstrings before scanning, because a prose line can begin
+  with four spaces and `word:`. A flake there is how a drift test gets deleted
+- Checked against the running server as well, which the tests cannot do without
+  Postgres: all six field lists compared to live response keys, exact match
+
 ## [0.44.0] — 2026-09-15
 
 **An external agent can pull evidence, with citations.**

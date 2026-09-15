@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1404 backend tests and 87 frontend.
+1404 backend tests and 124 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -549,8 +549,24 @@ when its queue drained.
       checks it both ways — every published colour defined at its published
       value, and no colour literal anywhere outside the token file. It caught
       two things on its first run, one of them in its own docstring
-- [ ] `P2-13` `web/src/lib/api.ts` — typed client over `/api/explore/*`, with the
-      request/response types kept in step with the pydantic DTOs
+- [x] `P2-13` `web/src/lib/api.ts` — typed client over `/api/explore/*`,
+      `v0.45.0`. No base URL and no environment read, enforced by a test that
+      greps for them. The cross-language contract is held by two links —
+      `tsc` ties each interface to a runtime field list, and a drift test ties
+      that list to the pydantic class — and the second is the one that matters:
+      drop a field from both the interface and the list and `tsc` stays green
+      while the server contradicts it
+- [ ] `P2-18` **Four things `P2-07`'s surface makes awkward to consume**, found
+      by writing the client against it. (a) `page_or_offset` cannot be
+      interpreted: §5.3 defines it as a page for paginated documents and an
+      offset otherwise, and a `SearchHit` carries nothing that says which — so
+      the UI has to label it "page/offset" or mislabel every HTML source.
+      (b) `arms` is `list[str]` rather than a `Literal`, so the frontend's
+      `'lexical' | 'vector'` is invented rather than derived and is the one type
+      the drift test cannot protect. (c) FastAPI's `detail` is a string from
+      `HTTPException` and an array from validation, so every client re-pays the
+      normalisation or renders `[object Object]`. (d) `/stats` carries no
+      timestamp, so a client cannot tell a cached count from a fresh one
 
 ## Phase 3 · MCP read surface
 
