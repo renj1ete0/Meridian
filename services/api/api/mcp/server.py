@@ -30,14 +30,17 @@ import dataclasses
 import datetime as dt
 from typing import Any
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy import select
 
-from meridian_core.db import session_ro
+from meridian_core.db import guest_configured, session_guest, session_ro
 from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
+from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
+from meridian_core.readonly_query import run_readonly_query as execute_readonly
 from meridian_core.search import SearchFilters, search
 from meridian_core.stats import corpus_stats
 
@@ -268,5 +271,58 @@ def build_mcp(
         async with session_ro() as sess:
             stats = await corpus_stats(sess)
         return dataclasses.asdict(stats)
+
+    # §12.4's escape hatch (`P3-04`). Registered only when a guest connection
+    # exists: a tool that is always going to fail is worse than an absent one,
+    # because the tool list is the model's entire view of what it can do, and it
+    # will spend a turn discovering the answer.
+    if guest_configured():
+
+        @mcp.tool()
+        async def run_readonly_query(query: str, limit: int = DEFAULT_MAX_ROWS) -> dict[str, Any]:
+            """Run one read-only SQL SELECT against the corpus and the graph.
+
+            The escape hatch for questions the other tools cannot answer. It
+            reaches the corpus and graph tables only — operational tables are not
+            visible — and is bounded by a statement timeout and a row cap.
+
+            Prefer the curated tools where they fit: they carry provenance and
+            the wording that keeps a result honest. Reach for this when they do
+            not, and say in your answer that you did.
+            """
+            require_tool("run_readonly_query")
+            token = get_access_token()
+
+            async with session_guest() as sess:
+                try:
+                    result = await execute_readonly(
+                        sess,
+                        query,
+                        limit=limit,
+                        agent=token.client_id if token else None,
+                    )
+                except QueryRefused as exc:
+                    # An answer, not an exception. A model handed a stack trace
+                    # will paste it at the reader; handed a sentence, it can fix
+                    # the query and try again.
+                    return {"error": str(exc)}
+
+            return {
+                "columns": result.columns,
+                "rows": result.rows,
+                "row_count": result.row_count,
+                "truncated": result.truncated,
+                "note": (
+                    "Rows from a direct SQL query. These carry no provenance "
+                    "wrapper — cite `url` and `page_or_offset` yourself if you "
+                    "selected them, and do not present a count as a finding "
+                    "without saying it came from a query you wrote."
+                )
+                if not result.truncated
+                else (
+                    f"Truncated at {result.row_count} rows; there were more. "
+                    "Narrow the query rather than assuming this is all of it."
+                ),
+            }
 
     return mcp

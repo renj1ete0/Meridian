@@ -205,6 +205,10 @@ MINIMAL_ARGS = {
     "get_source_metadata": {"source_id": 1},
     "list_new_since": {},
     "corpus_overview": {},
+    # Registered only when a guest connection exists (`P3-04`); absent
+    # otherwise, and the probe below reconciles the list against what is
+    # actually registered rather than assuming.
+    "run_readonly_query": {"query": "SELECT 1"},
 }
 
 

@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1501 backend tests and 127 frontend.
+1524 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -562,7 +562,15 @@ when its queue drained.
       credentials refuses rather than serves, and the scope is checked *per
       tool* — at the transport, the tool asked for is the only thing separating
       a read session from a write one. Rate limiting is `P3-11`
-- [ ] `P3-04` `run_readonly_query` behind the read-only role, statement timeout, row cap
+- [x] `P3-04` `run_readonly_query` behind the read-only role, statement timeout,
+      row cap — `v0.54.0`. Runs as `meridian_guest` (`P3-07`), not
+      `meridian_ro`, because the latter can read the table holding every token
+      hash. The role is the enforcement; the textual checks only make a refusal
+      legible. The timeout is what makes it exposable at all — the role stops a
+      query reading what it must not and does nothing about one that reads what
+      it may forever. Every query is logged either way, which is §12.4's actual
+      request: the queries an agent writes here are the next curated tools.
+      Registered only when `PG_GUEST_URL` is set
 - [~] `P3-05` Cloudflare Tunnel + Access in front of the API — the code side
       is done and the rest is **your Cloudflare account**. `cloudflared` is in
       compose, `P3-08` verifies assertions, `P3-03` enforces scopes, and

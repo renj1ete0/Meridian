@@ -48,6 +48,55 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.54.0] — 2026-09-15
+
+**The escape hatch, behind the narrowest role there is.**
+
+### Added
+
+- `P3-04` `run_readonly_query` — §12.4's escape hatch, as an MCP tool. One
+  SELECT, on a `meridian_guest` connection, bounded by a statement timeout and a
+  row cap
+- **The enforcement is the role, not the module.** `meridian_guest` (`P3-07`)
+  has SELECT on the corpus and the graph and nothing else — no `agent_tokens`,
+  whose `token_hash` is the one secret in the schema, and no `fetch_policy`.
+  Arbitrary SQL cannot talk its way past a privilege it does not hold, and the
+  textual checks are a courtesy that makes a refusal legible rather than the
+  thing keeping it safe
+- **The timeout is what makes it exposable.** The role stops a query reading
+  what it must not; it does nothing about one that reads what it may, forever —
+  a cartesian join across the corpus is a perfectly legal SELECT. `SET LOCAL`,
+  so it dies with the transaction rather than riding a pooled connection to its
+  next borrower
+- Every query is logged, succeeded or not, because §12.4 asks for exactly that:
+  *"watch which queries the agent writes there — those are the next curated
+  tools."* A query that timed out says as much about a missing tool as one that
+  worked
+- The tool is registered **only when a guest connection exists**. A tool that is
+  always going to fail is worse than an absent one: the tool list is a model's
+  entire view of what it can do, and it will spend a turn discovering otherwise
+- Truncation is reported rather than implied. Returning exactly the limit is
+  indistinguishable from "that was all of it", and an agent would report a
+  partial count as a finding
+
+### Fixed
+
+- A statement timeout surfaces as `DBAPIError`, which is the **parent** of the
+  `DatabaseError` this caught — so the one failure the design creates on purpose
+  escaped as a stack trace. Found by testing the timeout rather than reasoning
+  about it
+
+### Testing
+
+- 23 tests against a real Postgres, because the enforcement *is* Postgres. Tests
+  that only exercised the regexes would be testing the courtesy while the thing
+  that keeps this safe went unverified
+- That `agent_tokens` and the operational tables are unreachable — refused by a
+  privilege, not a pattern
+- That a slow query is cancelled, that the timeout does not leak onto the next
+  query, that the cap truncates *and says so*, and that a result which fits is
+  not marked truncated — a `truncated` flag that is always true says nothing
+
 ## [0.53.0] — 2026-09-15
 
 **Search stops being lexical-only.**

@@ -29,9 +29,18 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-Role = Literal["rw", "ro"]
+Role = Literal["rw", "ro", "guest"]
 
-_ENV_VAR: Final[dict[Role, str]] = {"rw": "PG_RW_URL", "ro": "PG_RO_URL"}
+# `guest` is `P3-07`'s narrow role: SELECT on the corpus and the graph, and
+# nothing on `agent_tokens` or `fetch_policy`. It is what `run_readonly_query`
+# (`P3-04`) runs as, because `meridian_ro` can read the table holding every
+# token hash and is therefore the wrong role to put behind a query tool an
+# external agent can reach.
+_ENV_VAR: Final[dict[Role, str]] = {
+    "rw": "PG_RW_URL",
+    "ro": "PG_RO_URL",
+    "guest": "PG_GUEST_URL",
+}
 
 # Postgres runs with max_connections=40 (scaffold §3) shared across the worker,
 # orchestrator, API (which holds both engines), migrations, and any psql session.
@@ -151,6 +160,34 @@ async def session(role: Role = "rw") -> AsyncIterator[AsyncSession]:
         except Exception:
             await sess.rollback()
             raise
+
+
+def guest_configured() -> bool:
+    """Whether this deployment has a guest connection at all.
+
+    A deployment that shares nothing leaves `PG_GUEST_URL` unset, and the tools
+    that depend on it are simply absent rather than failing at call time. Same
+    shape as every other optional dependency here: not configured degrades, it
+    does not break.
+    """
+    return bool(os.environ.get("PG_GUEST_URL", "").strip())
+
+
+@asynccontextmanager
+async def session_guest() -> AsyncIterator[AsyncSession]:
+    """A session on the narrowest role there is, for untrusted SQL.
+
+    Read-only at the transaction *and* at the role, like `session_ro` — but the
+    role here can see only the corpus and the graph. §12.4's escape hatch is
+    arbitrary SQL from an external agent, and "arbitrary" is the operative word:
+    the enforcement has to be something no query can talk its way past.
+    """
+    async with get_sessionmaker("guest")() as sess:
+        await sess.execute(text("SET TRANSACTION READ ONLY"))
+        try:
+            yield sess
+        finally:
+            await sess.rollback()
 
 
 @asynccontextmanager
