@@ -30,7 +30,10 @@ MAKEFILE = REPO / "Makefile"
 #: declared, with a reason, rather than quietly passing. When `P1-37` lands, the
 #: entry is removed and this test is what says so.
 UNWRITTEN = {
-    "scripts/backup.sh": "P1-37",
+    # `build_and_push.sh` is the multi-arch release path. A first deploy can
+    # build on the server instead, so it is not on the critical path — but it
+    # should exist before the stack is something anyone would rather not
+    # rebuild in place.
     "scripts/build_and_push.sh": "P1-37",
 }
 

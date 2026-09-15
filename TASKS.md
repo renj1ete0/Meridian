@@ -398,44 +398,15 @@ when its queue drained.
       `--replace` and then asks for the source count to be typed back, and
       afterwards samples `raw_file_path` to prove the two halves match.
       `tests/unit/test_scripts.py` stops the whole class recurring
-- [ ] `P1-37` **`make build-push` and `make backup` call scripts that do not
-      exist either.** Less urgent than `P1-36` — a first deploy can build on the
-      server, and `pg_dump` by hand is a backup — but `build-push` is the reason
-      the arm64 target is not a cross-compilation problem, and it should exist
-      before the stack is something you would rather not rebuild in place
-### External acquisition — see [docs/spec/external-acquisition.md](docs/spec/external-acquisition.md)
-
-*A URL the crawler cannot fetch becomes a question for something else, and what
-comes back is processed by the ordinary pipeline while the corpus records,
-permanently, that Meridian did not fetch it.*
-
-- [x] `P1-38` **`consignment_eligible()`** — `v0.37.0`.
-      `meridian_core/consignment.py`, and deliberately nothing else: no table,
-      no lease, no API. `robots_denied` and `unsafe_target` are refused before
-      every other branch, so no argument reaches past them, and a test tries
-      every combination of every argument to show it. Unknown outcomes are
-      refused — the opposite of `queue_disposition`, because there the forgiving
-      default is bounded by `max_retries` and here it publishes a URL outside
-      this system. A drift test over `FETCH_OUTCOME` makes a new outcome a
-      decision rather than an inheritance
-- [ ] `P1-39` Schema: `consignments`, `sources.acquired_via`/`acquired_by`,
-      `queue.consignment_attempts`, `fetch_policy.consignment_allowed`, and
-      `external_supplied` on `FETCH_OUTCOME`. Hand-written CHECK migration
-      (`P0-21`), and the value must reach the enum *and* the constraint before
-      anything uses the literal (`P1-28`'s trap)
-- [ ] `P1-40` Admission — size, media type, checksum, the injection screen
-      unconditionally, and attribution to the **consigned** URL rather than the
-      one the supplier names. Everything downstream is the existing
-      rawstore/extract/chunk path, unchanged, or the two pipelines drift
-- [ ] `P1-41` `/api/acquisition/*` — claim with a lease (reuse `claim_next()`'s,
-      do not invent a second), hand back, read status. Three outcomes that must
-      stay three: `supplied` → `fetched`, `unavailable` → `done`, `failed` →
-      re-consignable. Needs the API service to exist (`P2-07`)
-- [ ] `P1-42` `consignment: configured | stale | absent` on the §12.5 health
-      line, and open consignments visible in Admin. An external actor that
-      stopped collecting its feed three weeks ago otherwise looks exactly like a
-      crawl with no eligible failures
-
+- [~] `P1-37` **`make backup` works; `make build-push` still does not.**
+      `scripts/backup.sh` shipped in `v0.42.0` — unattended, asks nothing, fails
+      loudly, warns when the backup root shares a filesystem with the data root
+      (a backup on the disk it protects survives an accidental delete and
+      nothing else), checks the dump is non-empty because `pipefail` does not
+      reach across a redirect, and rotates only after the new one is written.
+      `build_and_push.sh` is outstanding: a first deploy can build on the
+      server, so it is not on the critical path, but it should exist before the
+      stack is something anyone would rather not rebuild in place
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and

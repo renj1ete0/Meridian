@@ -43,6 +43,41 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.42.0] — 2026-09-15
+
+**A backup script, before the run makes one necessary.**
+
+### Added
+
+- `P1-37` `scripts/backup.sh`, behind `make backup`. A different job from
+  `snapshot_corpus.sh`: a snapshot is a deliberate artefact somebody names and
+  restores on purpose, a backup runs unattended on a timer and nobody looks at
+  it until the day they need it — so it asks no questions and fails loudly
+- What it protects is not the database. Postgres rebuilds from migrations and
+  the config re-seeds; the crawl does not. A page fetched in March is not
+  re-fetchable, only re-visitable
+- It warns when the backup root is on the same filesystem as the data root. A
+  backup on the disk it protects survives an accidental delete and nothing else
+  — not the disk failing, not the filesystem corrupting, not the machine being
+  lost. Scaffold §5 says off-device, and that is the kind of instruction
+  followed on day one and quietly undone the first time someone is short of
+  space
+- The dump is checked for being non-empty, because `pipefail` does not reach
+  across a redirect: a `pg_dump` that died after printing a header leaves a
+  small, plausible file and a zero exit from the shell that wrote it
+- Rotation runs *after* the new backup is written and checksummed. Pruning first
+  means a failed backup costs the oldest good one too
+- `P1-45` carries through: it warns when sources reference a raw store the
+  backup does not include
+
+### Testing
+
+- `tests/unit/test_scripts.py`'s stale-exemption test did its job — it failed
+  the moment `backup.sh` existed while still being listed as unwritten, which is
+  exactly the state where the next real omission would hide
+- Verified against the real dev data: dump, raw archive, checksums, and the
+  same-filesystem warning firing
+
 ## [0.41.0] — 2026-09-15
 
 **The Explore landing, as components rather than as a page.**
