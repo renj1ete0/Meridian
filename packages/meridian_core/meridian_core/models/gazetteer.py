@@ -15,7 +15,9 @@ share one table rather than duplicating.
 
 from __future__ import annotations
 
-from sqlalchemy import Index, Integer, Text, UniqueConstraint, text
+import datetime as dt
+
+from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -75,6 +77,18 @@ class GazetteerTerm(Base, TimestampMixin):
         Integer, nullable=False, default=0, server_default=text("0")
     )
 
+    # The third state (`P6-13`). `approved` is a boolean and the queue has three
+    # answers: waiting, yes, and no. Without this, "no" can only mean deleting
+    # the row — and the next harvest reads the same documents, finds the same
+    # definition and files it again, so the queue refills with exactly the terms
+    # somebody already turned down.
+    #
+    # A timestamp rather than a second boolean, because "when was this decided"
+    # is the question asked of a rejection nobody remembers making. Clearing it
+    # returns the term to the queue: a judgement made on two occurrences is
+    # worth revisiting at twenty.
+    rejected_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
     __table_args__ = (
         # Not unique on canonical alone: one surface form legitimately has
         # several expansions across jurisdictions and contexts.
@@ -84,6 +98,14 @@ class GazetteerTerm(Base, TimestampMixin):
         ),
         # The EntityRuler load: approved terms only.
         Index("ix_gazetteer_approved_type", "approved", "entity_type"),
+        # The approval queue (`P6-13`): proposed, undecided, most corroborated
+        # first. Partial, because once the harvest has run for a week the
+        # undecided set is the minority and everything else has a verdict.
+        Index(
+            "ix_gazetteer_pending",
+            "occurrence_count",
+            postgresql_where=text("NOT approved AND rejected_at IS NULL"),
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

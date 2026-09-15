@@ -231,6 +231,8 @@ export interface Source {
   ocr_applied: boolean
   ocr_tier: OcrTier
   ocr_confidence: number | null
+  /** When the acronym harvest last read this document (`P5-02`). Null is the queue. */
+  acronyms_harvested_at: string | null
   extra: Record<string, unknown> | null
   created_at: string
 }
@@ -258,6 +260,7 @@ export const SOURCE_FIELDS = [
   'ocr_applied',
   'ocr_tier',
   'ocr_confidence',
+  'acronyms_harvested_at',
   'extra',
   'created_at',
 ] as const
@@ -537,3 +540,144 @@ export async function getNotifications(
   const suffix = query.toString()
   return request<Notifications>(`/api/explore/notifications${suffix ? `?${suffix}` : ''}`, init)
 }
+
+// --------------------------------------------------------------------------
+// `/api/admin/*` — the control surface (task P6-13)
+//
+// Separate from the explore client above only by prefix, because that prefix is
+// the role boundary (§12.6): everything below writes through `meridian_rw`, and
+// the API refuses the lot unless callers are identified. A 503 here is not an
+// outage — it is an instance that has not been told who is allowed to change
+// things, and the message says so.
+// --------------------------------------------------------------------------
+
+/** `GAZETTEER_ENTITY_TYPE` in `models/gazetteer.py`. */
+export type GazetteerEntityType = 'agency' | 'scheme' | 'infrastructure' | 'metric' | 'concept'
+
+/** `GAZETTEER_SOURCE` in `models/gazetteer.py`. */
+export type GazetteerSource = 'manual' | 'auto_acronym' | 'model_proposed'
+
+/** Mirrors `GazetteerTermRead`. */
+export interface GazetteerTerm {
+  term_id: number
+  canonical: string
+  aliases: string[] | null
+  entity_type: GazetteerEntityType
+  jurisdiction: string | null
+  ambiguous: boolean
+  topic_labels: string[] | null
+  source: GazetteerSource
+  approved: boolean
+  occurrence_count: number
+  rejected_at: string | null
+  created_at: string
+}
+
+export const GAZETTEER_TERM_FIELDS = [
+  'term_id',
+  'canonical',
+  'aliases',
+  'entity_type',
+  'jurisdiction',
+  'ambiguous',
+  'topic_labels',
+  'source',
+  'approved',
+  'occurrence_count',
+  'rejected_at',
+  'created_at',
+] as const
+
+/** Mirrors `GazetteerRowRead`. */
+export interface GazetteerRow {
+  term: GazetteerTerm
+  will_load: boolean
+  withheld_reason: string | null
+  collides_with: number[]
+}
+
+export const GAZETTEER_ROW_FIELDS = [
+  'term',
+  'will_load',
+  'withheld_reason',
+  'collides_with',
+] as const
+
+/** Mirrors `GazetteerQueueRead`. */
+export interface GazetteerQueue {
+  rows: GazetteerRow[]
+  limit: number
+  offset: number
+  has_more: boolean
+  pending: number
+  approved: number
+  rejected: number
+}
+
+export const GAZETTEER_QUEUE_FIELDS = [
+  'rows',
+  'limit',
+  'offset',
+  'has_more',
+  'pending',
+  'approved',
+  'rejected',
+] as const
+
+export type GazetteerState = 'pending' | 'approved' | 'rejected' | 'all'
+
+/** Mirrors `GazetteerTermEdit`. Omitted keys are left alone; `null` clears. */
+export interface GazetteerTermEdit {
+  canonical?: string
+  aliases?: string[] | null
+  entity_type?: GazetteerEntityType
+  jurisdiction?: string | null
+  ambiguous?: boolean
+}
+
+export function getGazetteerQueue(
+  params: { state?: GazetteerState; limit?: number; offset?: number } = {},
+  init?: RequestInit,
+): Promise<GazetteerQueue> {
+  const query = new URLSearchParams()
+  if (params.state) query.set('state', params.state)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
+  const suffix = query.toString()
+  return request<GazetteerQueue>(`/api/admin/gazetteer${suffix ? `?${suffix}` : ''}`, init)
+}
+
+/** `approve` | `reject` | `restore` — the three verdicts, as their own routes. */
+export function decideGazetteerTerm(
+  termId: number,
+  decision: 'approve' | 'reject' | 'restore',
+  init?: RequestInit,
+): Promise<GazetteerRow> {
+  return request<GazetteerRow>(`/api/admin/gazetteer/${termId}/${decision}`, {
+    method: 'POST',
+    ...init,
+  })
+}
+
+export function editGazetteerTerm(
+  termId: number,
+  edit: GazetteerTermEdit,
+  init?: RequestInit,
+): Promise<GazetteerRow> {
+  return request<GazetteerRow>(`/api/admin/gazetteer/${termId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(edit),
+    ...init,
+  })
+}
+
+export type AssertGazetteerTerm = Expect<
+  Equal<keyof GazetteerTerm, (typeof GAZETTEER_TERM_FIELDS)[number]>
+>
+export type AssertGazetteerRow = Expect<
+  Equal<keyof GazetteerRow, (typeof GAZETTEER_ROW_FIELDS)[number]>
+>
+export type AssertGazetteerQueue = Expect<
+  Equal<keyof GazetteerQueue, (typeof GAZETTEER_QUEUE_FIELDS)[number]>
+>

@@ -231,9 +231,26 @@ docker compose exec postgres psql -U meridian -d meridian -c \
 ```
 
 `ambiguous = true` means two documents gave the same acronym different
-expansions. Those are held out of the matcher on purpose — the resolver decides
-them from context, and a surface form that cannot be decided from the surface
-form should not be decided at all.
+expansions. The acronym is held out of the matcher on purpose — the resolver
+decides it from context — while the full expansion still matches.
+
+Better than psql: **Admin → Gazetteer** in the UI (`P6-13`) shows the same queue
+with an Approve / Turn down decision per term, and tells you for each row whether
+the matcher will actually load it. That last part is the reason to use the screen
+rather than SQL: a term can read `approved` and match nothing in any document,
+because another row already claims the same wording, and nothing else in the
+system reports it.
+
+`/api/admin/*` is the only part of the API that changes anything, and it **fails
+closed**. Without a way to identify callers it refuses everything with a 503
+naming the fix. On an exposed instance that means configuring Access (§8b);
+on a laptop or a LAN-only box, say so explicitly:
+
+```bash
+# .env — ONLY on an instance that is not reachable from outside.
+# It means "there is nobody to authenticate here", not "skip authentication".
+MERIDIAN_ADMIN_ALLOW_ANONYMOUS=true
+```
 
 Loading the gazetteer into spaCy needs the optional extra, which the image does
 not carry by default (nothing in the fast loop runs NER until `P5-01`):

@@ -48,6 +48,81 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.64.0] — 2026-09-15
+
+**Admin exists, and it can tell you when an approved term matches nothing.**
+
+### Added
+
+- `P6-13` the first half of Admin: `/api/admin/*`, the gazetteer approval queue,
+  and the nav the shell deliberately did not carry while Admin was unbuilt
+- §5.6 ends with "approve in the UI — a two-minute weekly task". The two minutes
+  are the design constraint: arrive with a list a regex proposed, leave with each
+  term decided
+- Every row reports **whether the matcher will actually load it**, computed
+  against the whole approved set. An approved term whose wording another row
+  already claims is withheld, so it reads approved and matches nothing in any
+  document — extraction runs, the row looks right, and the term is simply absent.
+  Nothing else in the system says so
+- A collision names the other rows. "This term is not used" alone is a dead end;
+  a curator cannot resolve a collision without being told what it collided with
+
+### A rejected term stays rejected
+
+- `gazetteer.rejected_at`. `approved` is a boolean and the queue has three
+  answers: waiting, yes, and no. Without the third, rejecting can only mean
+  deleting the row — and the harvest reads the same documents on every pass, so
+  the queue refills with exactly what somebody already turned down
+- The harvest reads the tombstone: a rejected term is not re-created, not
+  corroborated, and not pushed over the auto-approval threshold by a later
+  document agreeing with the one that was wrong
+- Reversible. Putting a term back returns it **undecided** rather than approved —
+  a second look should start from the question, not from the answer being
+  reconsidered
+
+### Admin fails closed
+
+- `/api/admin/*` is the only part of the API that changes anything, and it
+  refuses every request with 503 unless Cloudflare Access is configured or
+  `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` says this instance is not exposed
+- Open-unless-configured fails silently and in the wrong direction: the symptom
+  is nothing at all until somebody finds the hostname. The same opt-out shape the
+  MCP surface uses, for the same reason
+- The 503 names both variables, because "service unavailable" would send whoever
+  deployed it looking for an outage that is not happening
+
+### Interface
+
+- The header carries `Explore | Admin`. A source page marks Explore — marking
+  neither while a reader is two clicks into the corpus would say the header does
+  not know where they are
+- Approve and turn-down are rendered from one shared class, not merely both
+  uncoloured. §2 has no green and no red: any difference in weight reads as one
+  being the safe option, and here neither is
+- `/admin` matches as a prefix, since §12.6 has several more screens under it
+
+### Testing
+
+- A behavioural completeness probe that **every** admin route refuses when
+  nobody is identified, rather than a spot check on one
+- That no route under `/api/explore` accepts a write — §12.6's role boundary only
+  holds if nothing crosses it, and a writable session now exists in this service
+- The route walk it depends on asserts it found something first. It did not, at
+  first: FastAPI 0.141 wraps included routers in `_IncludedRouter`, which exposes
+  neither `path` nor `routes`, so the obvious traversal returned nothing and the
+  assertion passed for the wrong reason
+- PATCH semantics both ways: an omitted key is left alone, an explicit null
+  clears. Without the distinction, sending one field would silently null every
+  other column on the row a curator was about to approve
+- Cross-language drift on the five entity types, between the CHECK constraint and
+  the dropdown, and on three new DTOs through the existing `*_FIELDS` chain
+
+### Fixed
+
+- `SourceRead` gained `acronyms_harvested_at` in `0.63.0` and the TypeScript
+  client did not. The cross-language drift test caught it; it had not been run
+  in that commit
+
 ## [0.63.1] — 2026-09-15
 
 **Fix: an ambiguous term was contributing nothing at all.**

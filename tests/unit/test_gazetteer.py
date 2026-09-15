@@ -23,6 +23,7 @@ from meridian_core.gazetteer import (
     compile_patterns,
     find_acronyms,
     label_for,
+    loading_report,
     surfaces_of,
     tokenise,
 )
@@ -38,6 +39,7 @@ class Row:
     entity_type: str = "agency"
     approved: bool = True
     ambiguous: bool = False
+    rejected_at: object | None = None
 
 
 def surfaces(compiled) -> list[str]:
@@ -356,3 +358,68 @@ def test_definitions_keep_the_order_they_appear_in() -> None:
 
 def test_text_with_no_brackets_costs_nothing_and_finds_nothing() -> None:
     assert find_acronyms("A paragraph of ordinary prose with no definitions in it.") == []
+
+
+# --------------------------------------------------------------------------
+# Per-row verdicts — what the approval screen shows (task P6-13)
+# --------------------------------------------------------------------------
+
+
+def test_a_loading_term_reports_no_reason() -> None:
+    report = loading_report([Row(1, "Land Transport Authority")])
+
+    assert report[1].will_load is True
+    assert report[1].reason is None
+
+
+def test_an_unapproved_term_is_distinguished_from_a_rejected_one() -> None:
+    # Both are `approved=false` and both load nothing, and the two mean opposite
+    # things to a curator: one is waiting for a decision and one already had it.
+    report = loading_report(
+        [Row(1, "Waiting", approved=False), Row(2, "Turned down", approved=False, rejected_at=1)]
+    )
+
+    assert report[1].reason == "unapproved"
+    assert report[2].reason == "rejected"
+
+
+def test_a_collision_names_the_other_row_and_not_itself() -> None:
+    # A curator cannot resolve a collision without being told what it collided
+    # with, and being told it collides with itself would send them looking for a
+    # second row that does not exist.
+    report = loading_report([Row(1, "Alpha Board", ["AB"]), Row(2, "Beta Bureau", ["AB"])])
+
+    assert report[1].collides_with == (2,)
+    assert report[2].collides_with == (1,)
+
+
+def test_a_partly_withheld_term_reports_both_that_it_loads_and_why() -> None:
+    # The case a boolean would lose. The canonical of an ambiguous row matches
+    # and its aliases do not, so reporting only `will_load` would tell a curator
+    # everything is fine while the acronym they care about matches nothing.
+    report = loading_report([Row(1, "Operational Design Domain", ["ODD"], ambiguous=True)])
+
+    assert report[1].will_load is True
+    assert report[1].reason == "ambiguous"
+
+
+def test_an_approved_row_with_no_usable_wording_is_named_not_silent() -> None:
+    report = loading_report([Row(1, "   ", ["  "])])
+
+    assert report[1].will_load is False
+    assert report[1].reason == "no_patterns"
+
+
+def test_the_report_covers_every_row_it_was_given() -> None:
+    # A completeness probe: a screen that renders one row per term and reads its
+    # verdict from this mapping raises a KeyError on whichever row was missed,
+    # and the row it misses is the unusual one.
+    rows = [
+        Row(1, "Loads"),
+        Row(2, "Waiting", approved=False),
+        Row(3, "Ambiguous", ["AM"], ambiguous=True),
+        Row(4, "Alpha Board", ["AB"]),
+        Row(5, "Beta Bureau", ["AB"]),
+    ]
+
+    assert set(loading_report(rows)) == {1, 2, 3, 4, 5}

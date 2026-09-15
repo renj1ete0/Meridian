@@ -34,4 +34,9 @@ class GazetteerTermRead(BaseModel):
     source: GazetteerSource
     approved: bool
     occurrence_count: int
+    #: Set when somebody turned this term down (`P6-13`). Distinct from
+    #: `approved=false` with no timestamp, which means nobody has looked yet —
+    #: and the harvest reads the difference, so a rejected term is not re-created
+    #: by the next document that defines it.
+    rejected_at: dt.datetime | None = None
     created_at: dt.datetime

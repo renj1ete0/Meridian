@@ -14,13 +14,19 @@
  */
 import { useEffect, useState } from 'react'
 
-export type Route = { name: 'explore' } | { name: 'source'; sourceId: number }
+export type Route = { name: 'explore' } | { name: 'source'; sourceId: number } | { name: 'admin' }
 
 const SOURCE = /^\/sources\/(\d+)\/?$/
+
+// A prefix, not an exact match: §12.6's Admin is several screens and they share
+// the section. Matching only `/admin` would drop a reader on a sub-path back
+// onto Explore, which reads as the link being wrong rather than unbuilt.
+const ADMIN = /^\/admin(\/|$)/
 
 export function parseRoute(pathname: string): Route {
   const match = SOURCE.exec(pathname)
   if (match) return { name: 'source', sourceId: Number(match[1]) }
+  if (ADMIN.test(pathname)) return { name: 'admin' }
   return { name: 'explore' }
 }
 

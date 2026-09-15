@@ -233,6 +233,60 @@ def compile_patterns(terms) -> CompiledGazetteer:
     return CompiledGazetteer(tuple(patterns), tuple(withheld))
 
 
+@dataclasses.dataclass(frozen=True)
+class TermVerdict:
+    """What the matcher will do with one row (task P6-13).
+
+    Derived from the whole approved set, never from the row: a surface form two
+    rows share is withheld whichever row you are looking at, so "will this
+    load" is not a property a single row carries.
+    """
+
+    will_load: bool
+    #: `unapproved`, `rejected`, `ambiguous`, `collision`, `no_patterns` — or
+    #: None when nothing about this row was held back. Present even when
+    #: ``will_load`` is True, which is the partial case: a canonical that loads
+    #: while one of its aliases is withheld, where reporting only the verdict
+    #: would lose the alias silently.
+    reason: str | None = None
+    collides_with: tuple[int, ...] = ()
+
+
+def loading_report(terms) -> dict[int, TermVerdict]:
+    """Per-row verdicts for an approval screen.
+
+    Exists because approving a term that then never matches anything is the
+    failure this table's curation is most prone to and least able to notice: the
+    row says approved, extraction runs, and the term is simply absent from every
+    document. Nothing surfaces that except asking the compiler what it did.
+    """
+    compiled = compile_patterns(terms)
+    loaded = {int(pattern["id"]) for pattern in compiled.patterns}
+
+    held: dict[int, tuple[str, tuple[int, ...]]] = {}
+    for withheld in compiled.withheld:
+        for term_id in withheld.term_ids:
+            if term_id not in held:
+                others = tuple(other for other in withheld.term_ids if other != term_id)
+                held[term_id] = (withheld.reason, others)
+
+    report: dict[int, TermVerdict] = {}
+    for term in terms:
+        term_id = term.term_id
+        if not term.approved:
+            rejected = getattr(term, "rejected_at", None) is not None
+            report[term_id] = TermVerdict(False, "rejected" if rejected else "unapproved")
+            continue
+        reason, others = held.get(term_id, (None, ()))
+        if term_id not in loaded and reason is None:
+            # Approved, nothing withheld it, and it still produced no pattern:
+            # the row has no usable surface form at all. Rare, and worth naming
+            # rather than reporting as a silent False.
+            reason = "no_patterns"
+        report[term_id] = TermVerdict(term_id in loaded, reason, others)
+    return report
+
+
 # ---------------------------------------------------------------------------
 # The growth: text → acronym definitions
 # ---------------------------------------------------------------------------

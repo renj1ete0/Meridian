@@ -44,3 +44,23 @@ describe('links', () => {
     expect(parseRoute(hrefForSource(42))).toEqual({ name: 'source', sourceId: 42 })
   })
 })
+
+describe('the admin section (task P6-13)', () => {
+  it('matches the section root', () => {
+    expect(parseRoute('/admin')).toEqual({ name: 'admin' })
+    expect(parseRoute('/admin/')).toEqual({ name: 'admin' })
+  })
+
+  it('matches a sub-path, because Admin is several screens', () => {
+    // A prefix rather than an exact match. Dropping a reader on `/admin/topics`
+    // back onto Explore reads as the link being wrong rather than unbuilt, and
+    // §12.6 has half a dozen more screens under here.
+    expect(parseRoute('/admin/gazetteer')).toEqual({ name: 'admin' })
+  })
+
+  it('does not match a path that merely starts with the same letters', () => {
+    // `/administration` is not Admin. A bare `startsWith` would claim it, and
+    // the bug only shows up once some other screen takes that name.
+    expect(parseRoute('/administration')).toEqual({ name: 'explore' })
+  })
+})

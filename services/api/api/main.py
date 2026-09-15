@@ -34,7 +34,7 @@ from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
-from .routes import explore
+from .routes import admin, explore
 
 log = get_logger(__name__)
 
@@ -200,6 +200,13 @@ def create_app() -> FastAPI:
             extra={"fix": "set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD when behind a tunnel"},
         )
     app.include_router(explore.router)
+
+    # `/api/admin/*` — the only routes that change anything (`P6-13`). Mounted
+    # unconditionally, but every handler depends on `admin_is_allowed`, which
+    # refuses unless Access is configured or somebody has explicitly said this
+    # instance is not exposed. Mounting conditionally instead would make the
+    # symptom of a misconfiguration a 404, which reads as "not built yet".
+    app.include_router(admin.router)
 
     # §11.1's agent-initiated direction (`P3-01`). Mounted on the same app on
     # purpose: it is the same corpus, the same read-only role and the same

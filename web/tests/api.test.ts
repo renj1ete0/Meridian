@@ -28,6 +28,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   CHUNK_FIELDS,
+  GAZETTEER_QUEUE_FIELDS,
+  GAZETTEER_ROW_FIELDS,
+  GAZETTEER_TERM_FIELDS,
   CORPUS_STATS_FIELDS,
   FIGURE_REF_FIELDS,
   NOTIFICATIONS_FIELDS,
@@ -77,6 +80,9 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['NotificationsRead', 'search.py', NOTIFICATIONS_FIELDS],
     ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
+    ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],
+    ['GazetteerRowRead', 'admin.py', GAZETTEER_ROW_FIELDS],
+    ['GazetteerQueueRead', 'admin.py', GAZETTEER_QUEUE_FIELDS],
     ['ChunkRead', 'source.py', CHUNK_FIELDS],
   ] as const
 

@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1691 backend tests and 165 frontend.
+1723 backend tests and 185 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -726,7 +726,24 @@ when its queue drained.
       a first visit (no moment to measure from), `0` for nothing arrived (worth
       saying, or a silent panel reads as a failed load), and the delta itself
 - [ ] `P6-12` Admin: topic management — add, pause, archive with re-normalising weights
-- [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
+- [x] `P6-13` Admin: gazetteer approvals — `v0.64.0`. Split: this ID is now the
+      Admin shell plus §5.6's "approve in the UI", and the other three surfaces
+      it used to name are `P6-22` and `P6-23`. Every row reports whether the
+      matcher will **actually load it**, computed against the whole approved set
+      — an approved term whose wording another row claims is withheld, so it
+      reads approved and matches nothing, and nothing else in the system says
+      so. It found a real one on the first page, which is `v0.63.1`. Rejection
+      is a tombstone (`rejected_at`) rather than a delete, because the harvest
+      re-reads the same documents and would re-create the row. `/api/admin/*`
+      fails closed: 503 unless Access is configured or
+      `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` says the instance is not exposed
+- [ ] `P6-22` Admin: fetch policy per domain — rate limits, `render_js`,
+      `seed_allowed`. The one admin surface with an immediate effect on the
+      crawl, so it wants a confirmation step the gazetteer queue does not
+- [ ] `P6-23` Admin: agent registry and run history. Both tables exist and both
+      are empty until phase 4 has run something, so this is worth building
+      *after* there is a run to show — an empty screen teaches nothing about what
+      the full one should look like
 - [x] `P6-14` Figures panel with page-accurate raw file links — `v0.56.0`.
       No thumbnails, because nothing downloads figure images (`P1-10`) and a
       placeholder grid would promise what the corpus cannot keep; the caption is

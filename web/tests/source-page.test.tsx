@@ -40,6 +40,7 @@ const SOURCE = {
   ocr_applied: false,
   ocr_tier: 'none' as const,
   ocr_confidence: null,
+  acronyms_harvested_at: null,
   extra: null,
   created_at: '2026-09-01T00:00:00Z',
 }

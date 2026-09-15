@@ -75,6 +75,11 @@ class HarvestStats:
     corroborated: int = 0
     approved: int = 0
     ambiguous: int = 0
+    #: Definitions matching a term somebody already turned down (`P6-13`).
+    #: Counted rather than silent: a number that keeps climbing means a document
+    #: set keeps asserting something a curator keeps rejecting, and that is worth
+    #: seeing.
+    already_rejected: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return dataclasses.asdict(self)
@@ -138,6 +143,14 @@ async def record(
     )
     row = _canonical_match(existing, expansion)
 
+    if row is not None and row.rejected_at is not None:
+        # A rejected term is a tombstone, not a row to update. Bumping its count
+        # would let a later document push it over the auto-approval threshold —
+        # so the term somebody turned down would come back approved, which is
+        # worse than it never having been rejected at all.
+        stats.already_rejected += 1
+        return row
+
     if row is None:
         row = GazetteerTerm(
             canonical=expansion,
@@ -185,9 +198,16 @@ async def flag_ambiguous(sess: AsyncSession, acronym: str, stats: HarvestStats) 
     """
     rows = list(
         await sess.scalars(
-            select(GazetteerTerm).where(GazetteerTerm.aliases.any(acronym))  # type: ignore[attr-defined]
+            select(GazetteerTerm).where(
+                GazetteerTerm.aliases.any(acronym),  # type: ignore[attr-defined]
+                GazetteerTerm.rejected_at.is_(None),
+            )
         )
     )
+    # Rejected rows are excluded deliberately. "This expansion is wrong" is the
+    # opposite of evidence that the acronym is ambiguous, and counting a
+    # tombstone as a competing reading would hold the correct term out of the
+    # matcher on the strength of the one that was thrown away.
     if len({row.canonical.casefold() for row in rows}) < 2:
         return
     for row in rows:
@@ -248,6 +268,8 @@ def render(stats: HarvestStats) -> None:
     print(f"  corroborated       {stats.corroborated}")
     print(f"  auto-approved      {stats.approved}  (>= {APPROVAL_THRESHOLD} documents agreeing)")
     print(f"  flagged ambiguous  {stats.ambiguous}")
+    if stats.already_rejected:
+        print(f"  already rejected   {stats.already_rejected}  (left alone)")
     if stats.created or stats.corroborated:
         print("\n  New terms wait for approval. Approved ones override statistical NER.")
 
