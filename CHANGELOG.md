@@ -43,6 +43,40 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.41.0] — 2026-09-15
+
+**The Explore landing, as components rather than as a page.**
+
+### Added
+
+- `P2-16` §8's Explore default state, built as components taking typed props:
+  the search field with its `hybrid` marker and the "filters apply before the
+  vector search" note, the four counts in mono numerals, the three entry points
+  from §12.5 as parallel cards, and the "where you were" list
+- Deliberately **not** a page. `/api/explore/*` does not exist yet, so a page
+  would have to display fabricated numbers — and §12.5's whole first state is
+  about making absence visible, which a screen of invented figures inverts.
+  Components with props are the honest form of this work until there is
+  something to wire them to
+- `CorpusCounts` takes `counts: CorpusFigures | null` and renders em dashes for
+  null. Absence and zero are different findings — "nothing crawled yet" and "no
+  contested nodes" are not the same sentence
+
+### Testing
+
+- The counts component's substance is its absent state, and the test that makes
+  it mean anything is the converse: a real `{documents: 0}` must render `0` and
+  no em dash. Without that, the dash could simply be how this component draws
+  zero and the distinction would not exist
+- **A voice-guide drift test.** §4 ends with "Words this system does not use:
+  …". The test parses that list out of `design-system.md`, renders every Explore
+  component, strips tags, and asserts none appear — with a guard test on the
+  parse, because a regex that silently matched nothing is the usual way a rule
+  like this stops being enforced
+- `EntryPoints` takes an `unavailable` map rather than a boolean. A disabled
+  card showing its normal description tells the reader nothing about why it will
+  not open, and §4 asks an error to name the cause
+
 ## [0.40.0] — 2026-09-15
 
 **The mark exists in the application, not only in the README.**

@@ -532,7 +532,15 @@ permanently, that Meridian did not fetch it.*
       and only if `P2-09` is marginal — swapping the embedder is a full re-embed
       and a migration, so it needs a measured reason
 - [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
-- [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible
+- [x] `P2-16` **Explore landing components** — `v0.41.0`. §8's default state as
+      components taking typed props: search field with the `hybrid` marker,
+      the four counts, §12.5's three entry points as cards, and "where you
+      were". Deliberately not a page — `/api/explore/*` does not exist, and a
+      page would have to show fabricated numbers, which inverts the one thing
+      §12.5's first state is for. `P2-08` is the wiring
+- [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible.
+      The components exist (`P2-16`); this is wiring them to `/api/explore/*`
+      and adding the results list
 - [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
 - [x] `P2-10` ⚑ human — frontend framework chosen: **React + TypeScript + Tailwind CSS**,
       with Sigma.js v3 + graphology for the canvas
