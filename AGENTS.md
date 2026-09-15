@@ -92,6 +92,30 @@ already cost someone a session, and what has been verified against the real web
 rather than only against tests. Read it too at the start of a session, and add to it
 whenever you learn something the next person would rather not rediscover.
 
+## Commits
+
+**One task per commit, one version per commit.** A commit answers "what changed
+and why" for exactly one unit of work, and its message is the only place that
+answer survives — a diff shows what changed and never why.
+
+- **Never** batch several tasks into one commit. `P1-43` and `P1-44` may ship
+  together *only* because one exists to diagnose the other; two unrelated tasks
+  in one commit means neither can be reverted, and the message has to hedge
+  about both.
+- One version bump per commit, in the same commit as the change it describes
+  (see [Versioning](#versioning)). A commit that bumps `VERSION` without
+  changing behaviour, or changes behaviour without bumping, breaks the
+  correspondence the changelog depends on.
+- Documentation-only work is its own commit, and needs no bump.
+- **Title:** the task ID, a colon, and what changed in plain words — not a
+  restatement of the ID. `P2-06: the corpus becomes searchable (v0.30.0)`.
+  Multiple IDs only when they are genuinely one change.
+- **Body:** why, not what. The reasoning that is not recoverable from the diff —
+  what was considered and rejected, what premise turned out to be wrong, what
+  trade-off was accepted and at what cost. If the body only restates the diff,
+  it is not finished.
+- If a change is hard to describe in one title, it is usually two commits.
+
 ## Versioning
 
 `MAJOR.MINOR.PATCH`, no zero-padding. [`VERSION`](VERSION) at the repo root is the
