@@ -48,6 +48,35 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.64.1] — 2026-09-15
+
+**Fix: the lockfile had been stale for a dozen commits, so the images would not build.**
+
+### Fixed
+
+- `P1-37` `uv.lock` records all four workspace versions, and every release bumps
+  them. Both Dockerfiles build with `uv sync --frozen`, which **refuses** when the
+  lock disagrees with the `pyproject.toml` files — so every version bump
+  committed without re-locking made the image unbuildable
+- Silent in the worst way: nothing in the suite touched it, `uv run` re-locks in
+  place so local work was unaffected, and the failure surfaces at
+  `make build-push`. Which is to say at deploy time, from a commit that passed
+  everything
+
+### Added
+
+- `tests/unit/test_lockfile.py` — the workspace members are read from the
+  `members` glob rather than listed, so a service added and forgotten here is not
+  the one whose version goes stale
+- It checks version correspondence rather than shelling out to `uv lock --check`.
+  The full check is the stronger assertion and also the slow one that fails for
+  reasons unrelated to this repo; version drift is the failure this project
+  actually produces, and catching it costs a file read
+- Plus a test that both Dockerfiles still pass `--frozen`, since that premise is
+  the only reason the others are urgent
+- Verified by breaking it: reverting one locked version fails
+  `test_the_lockfile_agrees_with_the_pyprojects` and nothing else
+
 ## [0.64.0] — 2026-09-15
 
 **Admin exists, and it can tell you when an approved term matches nothing.**
