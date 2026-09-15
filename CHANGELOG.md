@@ -48,6 +48,52 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.50.0] — 2026-09-15
+
+**The Access header is never trusted.**
+
+### Added
+
+- `P3-08` `services/api/api/access.py` — Cloudflare Access assertions verified
+  cryptographically against the team's published keys, with the audience and
+  issuer checked, on every request
+- **This is the whole task.** A header is a string, and an application that
+  reads an identity out of one is a single misconfiguration from letting anyone
+  assert any identity by typing it — a direct port publish, a second ingress, a
+  reverse proxy added later for an unrelated reason. None of those looks like a
+  security change when it is made, which is why verification is unconditional
+  rather than a belt-and-braces extra
+- There is deliberately **no path where an unverifiable assertion is treated as
+  anonymous-but-allowed**. That path is the bug
+- A JWKS endpoint that cannot be reached refuses rather than bypasses. Letting
+  requests through when the keys are unfetchable converts a dependency outage
+  into an authentication bypass, at exactly the moment nobody is watching
+- Both `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` are required. A team domain
+  alone verifies that *some* Access application signed the token, including one
+  belonging to a different service on the same team
+- `/health` bypasses, because a watchdog cannot complete an SSO flow — and it
+  reports liveness and a database connection and nothing about the corpus, so
+  exempting it discloses nothing. The exempt set is explicit paths, not a
+  prefix: a prefix exempts every route added under it later, and nobody
+  revisits an exemption when adding a route
+- Not configured means not installed, with a startup line saying so. This is for
+  a service behind a tunnel, and demanding it locally would push everyone into
+  disabling it — `P3-03`'s token check does not depend on deployment shape and
+  fails closed on its own
+
+### Testing
+
+- Twenty tests against a locally-generated RSA key, so every branch is
+  reachable without a Cloudflare account
+- The attacks, individually: an assertion signed by a different valid key, an
+  `alg: none` forgery, one issued for another Access application, one from
+  another team, an expired one, and one with no expiry at all — a token that
+  never expires is a credential nobody can withdraw
+- **That the identity comes from the verified claims and not from the
+  headers.** Cloudflare also sends `Cf-Access-Authenticated-User-Email`
+  unsigned; a request carrying a genuine assertion for one address and that
+  header claiming another must resolve to the signed one
+
 ## [0.49.0] — 2026-09-15
 
 **A citation can say what its number counts.**

@@ -32,6 +32,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from meridian_core.db import check_connection, dispose_engines
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
+from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
 from .routes import explore
 
@@ -174,6 +175,21 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.middleware("http")(log_requests)
+
+    # `P3-08`. Installed only when a team domain is configured: this is for a
+    # service behind a tunnel, and demanding it on a loopback machine would push
+    # everyone into disabling it. `P3-03`'s token check does not depend on
+    # deployment shape and fails closed on its own, so an un-fronted deployment
+    # is not left open by this being absent.
+    access = AccessSettings.from_env()
+    if access is not None:
+        app.middleware("http")(access_middleware(AccessVerifier(access)))
+        log.info("cloudflare access verification enabled", extra={"team": access.team_domain})
+    else:
+        log.info(
+            "cloudflare access verification not configured",
+            extra={"fix": "set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD when behind a tunnel"},
+        )
     app.include_router(explore.router)
 
     # §11.1's agent-initiated direction (`P3-01`). Mounted on the same app on

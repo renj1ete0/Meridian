@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1432 backend tests and 127 frontend.
+1452 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -619,10 +619,16 @@ cover the operator's own access; these cover everyone else's.*
       person, not a credential — they will hold several — so revoking a grant
       must revoke every token beneath it in one statement, with a test that
       proves it
-- [ ] `P3-08` Access JWT verification: fetch the team keys, verify signature and
-      audience on every request, map identity → grant. **Never** trust
-      `Cf-Access-Jwt-Assertion` as a header; it is a string, and an app that
-      trusts it is one stray ingress away from letting anyone assert any identity
+- [x] `P3-08` Access JWT verification — `v0.50.0`. Verified against the team's
+      published keys with audience and issuer checked, on every request, and
+      **no path where an unverifiable assertion is treated as
+      anonymous-but-allowed**. An unreachable JWKS refuses rather than bypasses:
+      letting requests through when keys cannot be fetched turns a dependency
+      outage into an auth bypass. Both env vars required — a team domain alone
+      verifies that *some* application on the team signed it. Identity comes
+      from the verified claims, never from the unsigned
+      `Cf-Access-Authenticated-User-Email` header Cloudflare also sends.
+      Mapping identity → grant is `P3-06`
 - [ ] `P3-09` **OAuth is the path for a hosted client, not service tokens.**
       A phone assistant adds a remote MCP server by pasting a URL — there is
       nowhere to put a `CF-Access-Client-Id` header, so the machine-to-machine
