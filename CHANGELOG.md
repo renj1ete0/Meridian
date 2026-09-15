@@ -43,6 +43,67 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.35.0] — 2026-09-15
+
+**The retention sweep, and what measuring first changed about it.**
+
+### Added
+
+- `P1-31` `meridian_core/retention.py` and `python -m worker.sweep`. §5.4 splits
+  raw retention three ways and there was no sweep; `P2-03` supplied the verdict
+  it was waiting on, and this spends it
+- Measuring the dev corpus before writing it changed what it is. There was
+  nothing to reclaim and no orphans — and **three sources whose `raw_file_path`
+  pointed at nothing**. So the reclaim arm is correct, necessary and currently a
+  no-op *by construction*: `P1-11` never writes the files §5.4 says to drop, and
+  `retention_for` only ever moves a tier up, so a file that exists was written
+  under a tier that keeps files and cannot since have fallen below it. The sweep
+  prints that rather than reporting as though it did work
+- Three verdicts, and only one deletes. `droppable` and `orphaned` go with
+  `--apply`; `dangling` is reported and never acted on, because the row is the
+  only record that the fetch happened and the text extracted from it is still in
+  the corpus — deleting it to tidy the report destroys more than the missing
+  file did
+- Primary is refused twice: when the plan is built, and again when it is
+  applied. A plan is data and can be constructed or replayed by a caller that
+  did not build it, and §5.4 makes link rot the binding reason for raw retention
+  — a primary file is frequently the only remaining copy of what a citation
+  points at
+- §5.4's "background keeps a snapshot *if cited*" is a graph question, so
+  `cited_source_ids()` asks it. Empty until edges exist, and written now rather
+  than deferred because the day the first edges land is the day a sweep without
+  it starts deleting the evidence beneath them — and nobody would connect that
+  to a retention pass
+- Dry run is the default. This is the only operation in the system that destroys
+  something a re-crawl cannot reproduce: the web moves on, so a page fetched
+  last month is not re-fetchable, only re-visitable
+- A separate pass rather than housekeeping inside the fetch loop. An hourly
+  sweep would eventually run at the same moment as the mistake that made
+  something droppable, and the window between "wrongly demoted" and "file gone"
+  would be an hour rather than however long it takes someone to read a report
+
+### Found
+
+- New task `P1-45`: `raw_file_path` is stored relative to a root that nothing
+  records. The three dangling sources are not lost — their files are in
+  `.devdata/containerraw`, written by `P1-30`'s containerised verification
+  against its own bind mount. "The file is gone" and "you are looking in the
+  wrong place" are therefore the same observation. It also means
+  `make snapshot-corpus` tars one root and would silently omit them;
+  `restore_corpus.sh`'s sampling check is currently the only thing that notices
+
+### Testing
+
+- Nine tests against a real Postgres and a real temporary directory, because the
+  subject is the relationship between the two — a double for either half could
+  only confirm the agreement this code exists to check
+- Mostly rejection tests, deliberately: that a primary file is never droppable,
+  that `apply_sweep` refuses a primary candidate it is handed and refuses it
+  *before* deleting anything else, that a dry run deletes nothing, that a
+  dangling row survives, and that citing one source does not protect another —
+  a protection rule that is too broad silently turns the sweep off and looks
+  exactly like one that works
+
 ## [0.34.0] — 2026-09-15
 
 **The 48h run's output has somewhere to go.**

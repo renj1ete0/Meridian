@@ -310,14 +310,33 @@ when its queue drained.
       not obvious — superseding rather than deleting, a `superseded_by` column,
       or re-deriving affected edges — so it needs the graph to exist first. Do
       not let the first real edges land before this is decided
-- [ ] `P1-31` **Nothing ever deletes from the raw store.** `P1-11` decides what
-      gets written; §5.4 also says junk and near-duplicates are dropped *after*
-      the novelty gate, and background sources get a snapshot only if cited.
-      Both are deletions, and there is no sweep. **The gate it was waiting for
-      exists** as of `P2-03`: `chunks.duplicate_of` says which chunks are
-      near-duplicates and `sources.retention_tier = 'junk'` says which sources
-      are made of them, so the sweep now has something to act on. Still nothing
-      deletes — watch `du` until it does
+- [x] `P1-31` **The retention sweep exists** (`v0.35.0`).
+      `meridian_core/retention.py` plus `python -m worker.sweep`. Measuring the
+      real corpus before writing it changed what it is: there was nothing to
+      reclaim and no orphans, and **three sources whose `raw_file_path` pointed
+      at nothing**. The first is structural rather than lucky — `P1-11` never
+      writes the files §5.4 says to drop, and `retention_for` only moves a tier
+      *up*, so a file that exists was written under a tier that keeps files and
+      cannot have fallen below it. The sweep says that out loud rather than
+      reporting as though it did work. Three verdicts and only one deletes:
+      `droppable` and `orphaned` go with `--apply`, `dangling` is reported and
+      never touched — the row is the only record the fetch happened and its text
+      is still in the corpus. Primary is refused when the plan is built and
+      again when it is applied. Dry run is the default because a re-crawl
+      returns today's web, not the page that was fetched
+- [ ] `P1-45` **`raw_file_path` is relative to a root nothing records.** Found
+      by `P1-31` on the first run: three dev-corpus sources dangle against
+      `.devdata/raw` and their files are sitting safely in
+      `.devdata/containerraw`, written by `P1-30`'s containerised verification
+      against its own bind mount. So "the file is gone" and "you are looking in
+      the wrong place" are the same observation, and neither the sweep nor
+      anything else can tell them apart. Two consequences worth fixing together:
+      the sweep's dangling arm is noisy for any corpus that spans roots, and
+      **`make snapshot-corpus` tars one root**, so a snapshot taken here today
+      silently omits three sources' files — `restore_corpus.sh`'s sampling check
+      is currently the only thing that would notice. Either record the root on
+      the source, or make the path absolute-from-a-declared-base and have the
+      snapshot refuse when rows reference more than one
 - [x] `P1-30` **Supervision the loop deliberately does not provide.**
       `services/worker/Dockerfile` (multi-stage uv build on `python:3.12-slim`,
       `poppler-utils` for `P1-09`, unprivileged, runs read-only with `cap_drop:

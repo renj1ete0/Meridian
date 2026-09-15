@@ -239,6 +239,27 @@ Test it by inserting through **raw SQL**, not the ORM. SQLAlchemy's
 passes whether or not the database constraint exists at all — which is exactly how
 Phase 0 shipped unchecked VARCHAR columns while its tests were green.
 
+### The raw store can span more than one root, and nothing records which
+
+`sources.raw_file_path` is relative. To what is not written down anywhere, so a
+corpus is only interpretable if you already know the `MERIDIAN_RAW_ROOT` each
+row was written under.
+
+On this machine three sources dangle against `.devdata/raw` and their files are
+in `.devdata/containerraw`, put there by `P1-30`'s containerised verification
+writing to its own bind mount. Nothing is lost and nothing is broken; the
+corpus simply has two roots and no way to say so.
+
+Consequences, before assuming a missing file is a missing file:
+
+- `python -m worker.sweep`'s dangling arm lists every source whose file is under
+  a *different* root, so on a multi-root corpus it is noisy rather than wrong.
+- `make snapshot-corpus` tars one root. A snapshot taken here today omits those
+  three files silently — `restore_corpus.sh` samples `raw_file_path` after
+  restoring and is the only thing that would say so.
+
+`P1-45`. Check the root before concluding anything.
+
 ### The browser and static extraction paths were not equivalent
 
 Until `v0.31.0` the browser path used Crawl4AI's `fit_markdown` directly while
