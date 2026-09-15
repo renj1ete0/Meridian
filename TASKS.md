@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1480 backend tests and 127 frontend.
+1501 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -467,13 +467,16 @@ when its queue drained.
       unauthenticated float array into a distance operator, so `embed_query()`
       is a seam returning None and every response reports `degraded`. `P2-17`
       is the sidecar that closes it
-- [ ] `P2-17` **An embedding sidecar, so search stops being lexical-only.**
-      `P2-07` left `embed_query()` returning None deliberately — the API must
-      not carry the model and must not take a vector from a caller. The shape is
-      the one `docs/connectors.md` §4 describes: a container on `egress` with no
-      credentials, a client that returns None when it is absent, and a word on
-      the health line. Until it exists the vector half of `P2-06` is unreachable
-      over HTTP, which also means `P2-09` cannot judge hybrid retrieval
+- [x] `P2-17` **An embedding sidecar, so search stops being lexical-only** —
+      `v0.53.0`. `python -m worker.embedserver` from the worker's own image with
+      a different command, on `internal`, no credentials. The API must not carry
+      the model and must not take a vector from a caller — not mainly for
+      security, but because a vector from a different model is *meaningless*
+      against this corpus and compares without erroring, ranking nonsense
+      confidently. Verified end to end: both arms ran with `degraded: false`,
+      and killing the sidecar left the search answering on one arm. Fixed a real
+      bug found that way — an absent embedder and a broken one read identically.
+      `P2-19` is unifying the backfill onto the same service
 - [x] `P2-16` **Explore landing components** — `v0.41.0`. §8's default state as
       components taking typed props: search field with the `hybrid` marker,
       the four counts, §12.5's three entry points as cards, and "where you
@@ -521,6 +524,15 @@ when its queue drained.
       honest hedge. `arms` is a `Literal` so it crosses the boundary like
       `SourceTier`. `detail` is always a string, with the structured form kept
       under `errors`. `/stats` carries `as_of`
+
+- [ ] `P2-19` **The backfill still loads its own copy of the model.**
+      `P2-17` put one resident in the sidecar for the query path, and
+      `worker.embed` continues to construct a `BGEEmbedder` of its own — so a
+      stack running both holds two. `Embedder` is a Protocol whose docstring
+      already anticipates "a remote service", so this is a substitution rather
+      than a rewrite; what it needs is a sync-over-async shim or an async batch
+      path, and a decision about what the backfill does when the sidecar is down
+      (probably: load locally, since a backfill can afford the wait)
 
 ## Phase 3 · MCP read surface
 

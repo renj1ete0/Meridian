@@ -95,6 +95,37 @@ services:
       retries: 3
       start_period: 60s                    # a browser pool is slow to warm
 
+  # The embedding sidecar (`P2-17`). The worker's own image, started with a
+  # different command — it is the one image here that already carries the model,
+  # and a separate service would mean a second 2.3GB download and a second
+  # resident copy on a machine that has one of each.
+  #
+  # On `internal` and nothing else: it takes text and returns vectors, holds no
+  # database connection, and needs nothing from the internet once the weights
+  # are in the image. No `env_file`, for the same reason `crawl4ai` has none.
+  embedder:
+    <<: *common
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.embedserver"]
+    networks: [internal]
+    environment:
+      MERIDIAN_EMBEDDER_PORT: "8100"
+      # Where the weights live. Inside a read-only container the library's
+      # default cache is an unwritable layer, so it is named and mounted.
+      MERIDIAN_EMBEDDER_CACHE: /models
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=4).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      # A cold start loads 2.3GB from disk. Shorter and the supervisor kills it
+      # while it is doing exactly what it should.
+      start_period: 180s
+    deploy:
+      resources:
+        limits: { memory: 4G }
+
   worker:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }

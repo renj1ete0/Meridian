@@ -157,21 +157,31 @@ def test_the_refusal_names_both_remedies() -> None:
 
 
 def test_both_arms_running_is_not_degraded() -> None:
-    assert _degraded_reason(frozenset({"lexical", "vector"}), has_vector=True) is None
+    assert (
+        _degraded_reason(
+            frozenset({"lexical", "vector"}), has_vector=True, embedder_configured=True
+        )
+        is None
+    )
 
 
 def test_a_lexical_only_search_explains_the_missing_embedder() -> None:
     """§12.5 asks for hybrid search. A response that delivered half of one and
     said nothing would make the corpus look thinner than it is, and the reader
     would conclude something false about the corpus rather than about the API."""
-    assert _degraded_reason(frozenset({"lexical"}), has_vector=False) == NO_EMBEDDER
+    # `embedder_configured=False` is the "this deployment has none" case;
+    # `P2-17` added the other one, tested below.
+    assert (
+        _degraded_reason(frozenset({"lexical"}), has_vector=False, embedder_configured=False)
+        == NO_EMBEDDER
+    )
 
 
 def test_no_arms_at_all_says_so_separately() -> None:
     """ "Nothing was asked" and "half the search ran" are different answers and
     need different responses from the caller — one is its own empty search box,
     the other is a deployment limitation."""
-    assert _degraded_reason(frozenset(), has_vector=False) == NO_QUERY
+    assert _degraded_reason(frozenset(), has_vector=False, embedder_configured=False) == NO_QUERY
 
 
 # --------------------------------------------------------------------------
@@ -218,3 +228,40 @@ def test_the_log_config_silences_uvicorns_access_logger() -> None:
         (Path(__file__).resolve().parents[2] / "services/api/log_config.json").read_text()
     )
     assert config["loggers"]["uvicorn.access"]["handlers"] == []
+
+
+# --------------------------------------------------------------------------
+# Absent and broken are different answers (task P2-17)
+# --------------------------------------------------------------------------
+
+
+def test_a_missing_embedder_and_a_broken_one_read_differently() -> None:
+    """The distinction this field exists to make, one level down.
+
+    `degraded_reason` exists so an empty result set cannot be mistaken for an
+    empty corpus. The same discipline applies to *why* it is degraded: "this
+    deployment has no embedder" is a choice somebody made, and "the embedder is
+    down" is an outage somebody should fix. Reporting an outage as a deployment
+    choice is how a broken dependency goes unnoticed for a week.
+    """
+    from api.search_service import EMBEDDER_DOWN, NO_EMBEDDER, _degraded_reason
+
+    arms = frozenset({"lexical"})
+
+    absent = _degraded_reason(arms, False, embedder_configured=False)
+    broken = _degraded_reason(arms, False, embedder_configured=True)
+
+    assert absent == NO_EMBEDDER
+    assert broken == EMBEDDER_DOWN
+    assert absent != broken
+    assert "outage" in broken
+
+
+def test_a_working_hybrid_search_reports_no_degradation() -> None:
+    """The converse. A reason on every response would teach readers to skip it,
+    which is the failure mode of every warning that is always present."""
+    from api.search_service import _degraded_reason
+
+    both = frozenset({"lexical", "vector"})
+
+    assert _degraded_reason(both, True, embedder_configured=True) is None

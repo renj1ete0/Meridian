@@ -48,6 +48,7 @@ from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core.embedder import EmbeddingUnavailable, RemoteEmbedder
 from meridian_core.logging import get_logger
 from meridian_core.schemas.search import SearchHitRead, SearchResponse
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, search
@@ -63,6 +64,20 @@ NO_EMBEDDER = (
 
 #: Why nothing ran at all.
 NO_QUERY = "No query text and no vector, so neither arm ran."
+
+#: Configured and not answering. Deliberately different wording from
+#: `NO_EMBEDDER`, because the two are different facts and the reader acts on
+#: them differently: "this deployment has no embedder" is a choice somebody
+#: made, and "the embedder is down" is an outage somebody should fix. Reporting
+#: an outage as a deployment choice is how a broken dependency goes unnoticed
+#: for a week — and it is the exact mistake this field exists to prevent one
+#: level up, where an empty result set is not allowed to look like an empty
+#: corpus.
+EMBEDDER_DOWN = (
+    "The embedding service is configured but did not answer, so only the "
+    "lexical arm ran. Results are matched on words rather than meaning. This is "
+    "an outage, not a limitation of this deployment."
+)
 
 
 class WindowTooDeep(ValueError):
@@ -93,24 +108,49 @@ def check_window(limit: int, offset: int, candidates: int) -> None:
         )
 
 
-def _degraded_reason(arms: frozenset[str], has_vector: bool) -> str | None:
+def _degraded_reason(
+    arms: frozenset[str], has_vector: bool, *, embedder_configured: bool
+) -> str | None:
     """Which absence to report, or None when both arms ran."""
     if arms == {"lexical", "vector"}:
         return None
     if not arms:
         return NO_QUERY
-    return NO_EMBEDDER if not has_vector else None
+    if has_vector:
+        return None
+    # Absent and broken are not the same answer. See `EMBEDDER_DOWN`.
+    return EMBEDDER_DOWN if embedder_configured else NO_EMBEDDER
 
 
 async def embed_query(query: str) -> Sequence[float] | None:
     """The query vector, or None when this deployment cannot produce one.
 
-    The seam described in the module docstring. Returns None today, and
-    returning None is a supported state rather than a failure — the same shape
-    as `Crawl4aiClient.from_env()`, where an absent dependency degrades the
-    service instead of stopping it.
+    `P2-17` fills the seam: the vector comes from the embedding sidecar, which
+    runs the same model the corpus was embedded with. That sameness is the whole
+    requirement — a vector from a different model is not merely less accurate
+    against this corpus, it is meaningless, and comparing it computes without
+    erroring and ranks the result confidently.
+
+    None stays a supported state rather than becoming a failure. No sidecar
+    configured means lexical-only, reported through `degraded`; a sidecar that
+    is configured and *down* also returns None here, and the difference is in
+    the log rather than in a 500 — a search that still answers on one arm is
+    better for the caller than an error page, provided it says so.
     """
-    return None
+    embedder = RemoteEmbedder.from_env()
+    if embedder is None:
+        return None
+
+    try:
+        return await embedder.embed_one(query)
+    except EmbeddingUnavailable as exc:
+        # Configured and not answering is an outage, and it is logged as one.
+        # Reporting it to the caller as "no embedder" would hide a broken
+        # dependency behind what looks like a deployment choice.
+        log.warning("embedder unavailable; falling back to lexical", extra={"reason": str(exc)})
+        return None
+    finally:
+        await embedder.aclose()
 
 
 async def paged_search(
@@ -132,6 +172,9 @@ async def paged_search(
     """
     check_window(limit, offset, candidates)
     vector = await embed_query(query)
+    # Asked separately from the vector, because "no vector" has two causes and
+    # the caller is told which.
+    embedder_configured = RemoteEmbedder.from_env() is not None
 
     # One extra, to answer "is there another page" without a second query.
     window = offset + limit + 1
@@ -166,7 +209,9 @@ async def paged_search(
         # reshuffles between identical requests breaks caching and diffing.
         arms=sorted(result.arms),
         degraded=result.degraded,
-        degraded_reason=_degraded_reason(result.arms, vector is not None),
+        degraded_reason=_degraded_reason(
+            result.arms, vector is not None, embedder_configured=embedder_configured
+        ),
         limit=limit,
         offset=offset,
         has_more=has_more,

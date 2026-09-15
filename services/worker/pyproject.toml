@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.52.0"
+version = "0.53.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 dependencies = [
@@ -22,6 +22,11 @@ dependencies = [
 [project.optional-dependencies]
 embed = [
     "sentence-transformers>=3.0",
+    # `P2-17`'s sidecar serves the same model over HTTP, from this image rather
+    # than a second one — a separate service would mean a second 2.3GB download
+    # and a second resident copy on a machine that has one of each.
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
 ]
 
 [build-system]

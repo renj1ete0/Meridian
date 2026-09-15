@@ -48,6 +48,56 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.53.0] — 2026-09-15
+
+**Search stops being lexical-only.**
+
+### Added
+
+- `P2-17` the embedding sidecar. `python -m worker.embedserver` serves the same
+  model the corpus was embedded with, and `meridian_core.embedder.RemoteEmbedder`
+  is the client. `P2-07`'s `embed_query()` seam is filled
+- **Why a sidecar rather than either obvious alternative.** Depending on
+  `sentence-transformers` in the API puts 2.3GB of weights and a cold start in
+  an HTTP request path. Accepting a vector from the caller is worse than it
+  sounds: not mainly a security problem — `<=>` takes a vector, not SQL — but
+  that a vector from a *different model is meaningless against this corpus*.
+  Two models' embeddings of the same phrase are points in unrelated spaces, and
+  comparing them computes without erroring. The result is plausible, ranked,
+  confident nonsense
+- It runs from the **worker's image with a different command**, because that is
+  the one image here already carrying the model. A separate service would mean
+  a second download and a second resident copy on a machine that has one of
+  each. On `internal`, no credentials, no `env_file` — the reasoning that keeps
+  `crawl4ai` from holding database passwords
+- Every response names the model, so a caller can tell it is talking to the one
+  its corpus was built with
+
+### Fixed
+
+- **An absent embedder and a broken one reported identically.** Found by killing
+  the sidecar and reading what the API said: "This API has no embedder", when it
+  had one that was down. Those are different facts and a reader acts on them
+  differently — one is a choice somebody made, the other is an outage somebody
+  should fix — and reporting an outage as a deployment choice is how a broken
+  dependency goes unnoticed for a week. It is also the same mistake
+  `degraded_reason` exists to prevent one level up, where an empty result set is
+  not allowed to look like an empty corpus
+
+### Testing
+
+- The alignment check earns most of the client's tests: a sidecar returning
+  fewer vectors than texts would pair each with the wrong one, and every value
+  involved is a valid float of the right length. Nothing downstream can detect
+  it — a chunk would be searchable under someone else's meaning, permanently,
+  with no symptom but bad results
+- That an unavailable sidecar *raises* rather than returning nothing, so the
+  caller decides whether to degrade. A client that silently returned no vectors
+  would make an outage indistinguishable from a deployment that never had one
+- Verified end to end against the real corpus: both arms ran with
+  `degraded: false`, then the sidecar was killed and the same search still
+  answered on one arm — now saying so correctly
+
 ## [0.52.0] — 2026-09-15
 
 **A hosted client can find out how to authenticate.**
