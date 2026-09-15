@@ -18,8 +18,10 @@ web/dist/
 # Local dev data (bind-mount targets, never in the repo)
 .devdata/
 
-# Corpus snapshots and dumps (kept beside backups, not in git)
-fixtures/corpus_*.dump
+# Corpus snapshots and dumps (kept beside backups, not in git).
+# The whole directory: a snapshot is a directory of a dump, a tarball and a
+# manifest, and ignoring only `*.dump` would have committed the raw store.
+fixtures/
 *.dump
 
 # Editors / OS

@@ -43,6 +43,65 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.34.0] — 2026-09-15
+
+**The 48h run's output has somewhere to go.**
+
+### Added
+
+- `P1-36` `scripts/snapshot_corpus.sh` and `scripts/restore_corpus.sh`, behind
+  the `make snapshot-corpus` / `make restore-corpus` targets that have declared
+  them since `P0-01` and called nothing. `make snapshot-corpus` is `P1-16`'s
+  stated deliverable, so until now the 48h run's output had nowhere to go
+- The database and the raw store travel together or not at all. `sources` rows
+  carry `raw_file_path`, so a dump without the files it points at is a
+  catalogue rather than a corpus — every provenance link resolves to nothing,
+  and the failure surfaces much later as "why does no citation open"
+- `pg_dump` and `pg_restore` run *inside* the Postgres container rather than on
+  the host. Client and server versions have to match, and a host with an older
+  client fails with a version mismatch after you have waited for the dump
+- A manifest recording the Alembic revision, row counts and both checksums.
+  The revision matters because restoring a corpus dumped under a newer schema
+  into older code fails in ways that never mention the schema — a missing
+  column surfaces as an ORM attribute error three layers up
+- The restore verifies checksums **before** touching anything. A truncated dump
+  discovered halfway through has already dropped the tables it was replacing
+- It refuses a non-empty target outright unless `--replace`, and then asks for
+  the source count to be typed back. Refusing on non-empty rather than on "is
+  this production" is deliberate: environment detection is a guess, while "does
+  this database already hold a corpus" is a fact — and the thing worth
+  preventing is destroying crawl output that cannot be re-fetched, wherever it
+  lives. A re-crawl returns today's web, not the web the snapshot recorded
+- After restoring, it samples `raw_file_path` values and checks the files are
+  there. A restore where the rows landed and the files did not looks entirely
+  successful until someone follows a citation
+
+### Fixed
+
+- The scripts distinguish "Postgres is not running" from "the Docker daemon is
+  unreachable". They are identical from the caller's side and have nothing to
+  do with each other — one sends you to `make dev-up`, the other to
+  `DOCKER_HOST` — and the dev/production compose probe asks Docker a question,
+  so an unreachable daemon silently answered "not dev" and the error named the
+  production compose file on a dev machine
+- `.gitignore` now excludes `fixtures/` rather than only `fixtures/corpus_*.dump`.
+  A snapshot is a directory of a dump, a tarball and a manifest, so the old
+  pattern would have committed the raw store
+
+### Testing
+
+- `tests/unit/test_scripts.py` — every `./scripts/*.sh` the Makefile invokes
+  must exist, be executable, and parse. Nothing catches that class of bug by
+  reading code: the Makefile is valid and the target is declared, and the
+  failure only appears when someone runs it — which for these targets is once,
+  under time pressure, after a two-day crawl
+- The two still-unwritten scripts are listed with the task that writes them,
+  and a second test fails if one gets written while its exemption stays. A
+  stale exemption is where the next real omission hides
+- Verified against the real dev corpus: snapshot, both refusal paths with the
+  corpus intact afterwards, and a restore into a throwaway database that came
+  back with every source, chunk and vector
+
 ## [0.33.0] — 2026-09-15
 
 **The primitives every later screen is made of.**

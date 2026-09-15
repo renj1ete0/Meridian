@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1262 backend tests and 50 frontend.
+1271 backend tests and 50 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -387,14 +387,15 @@ when its queue drained.
       how `P1-43` was found, and it should not have needed detective work:
       `ExtractedDocument` already carries `extractor`, and it is dropped at
       `upsert_source`. One column, written at keep time~~
-- [ ] `P1-36` **`make snapshot-corpus` calls a script that does not exist.**
-      It is `P1-16`'s stated deliverable — the 48h run's output *becomes* the
-      dev corpus, and scaffold §6 asks for real crawl snapshots rather than
-      fixtures. `scripts/` holds only `init-roles.sh` and `seed.py`, so the
-      target fails at the shell. Finding that out after the run is a wasted 48
-      hours. Needs `snapshot_corpus.sh` and its `restore_corpus.sh` counterpart,
-      and both halves have to travel together: a dump whose `sources.raw_path`
-      values point at files nobody kept is a catalogue, not a corpus
+- [x] `P1-36` **`make snapshot-corpus` now calls a script that exists**
+      (`v0.34.0`). Snapshot and restore, with the database and the raw store
+      travelling together — a dump without the files its `raw_file_path` values
+      point at is a catalogue, not a corpus. `pg_dump` runs inside the container
+      so client and server versions cannot mismatch. The restore verifies
+      checksums before touching anything, refuses a non-empty target unless
+      `--replace` and then asks for the source count to be typed back, and
+      afterwards samples `raw_file_path` to prove the two halves match.
+      `tests/unit/test_scripts.py` stops the whole class recurring
 - [ ] `P1-37` **`make build-push` and `make backup` call scripts that do not
       exist either.** Less urgent than `P1-36` — a first deploy can build on the
       server, and `pg_dump` by hand is a backup — but `build-push` is the reason
