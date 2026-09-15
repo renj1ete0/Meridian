@@ -586,9 +586,14 @@ cover the operator's own access; these cover everyone else's.*
       audience on every request, map identity → grant. **Never** trust
       `Cf-Access-Jwt-Assertion` as a header; it is a string, and an app that
       trusts it is one stray ingress away from letting anyone assert any identity
-- [ ] `P3-09` Service tokens for MCP clients — an MCP client cannot complete an
-      SSO redirect — plus the runbook. The Cloudflare half and the Meridian half
-      are two steps and both are easy to half-do
+- [ ] `P3-09` **OAuth is the path for a hosted client, not service tokens.**
+      A phone assistant adds a remote MCP server by pasting a URL — there is
+      nowhere to put a `CF-Access-Client-Id` header, so the machine-to-machine
+      mechanism cannot serve the case this surface is for. MCP's authorization
+      flow is OAuth 2.1 with PKCE, and Cloudflare Access can be the
+      authorization server. Keep service tokens for CLI agents doing §11.1a
+      synthesis — they run somewhere you control and can hold headers. Support
+      both; build the one that works from a phone first
 - [ ] `P3-10` Grant scoping in the tool layer: `topics[]`, `max_source_tier`,
       `raw_files` (default **false** — serving raw files to other people is
       redistribution, not sharing), and annotation exclusion

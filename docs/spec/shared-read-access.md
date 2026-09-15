@@ -134,20 +134,42 @@ Meridian deciding what they may read.
 
 ### 4.2 A machine — the MCP client
 
-An MCP client is not a browser and cannot complete an SSO redirect. Cloudflare
-Access **service tokens** are the mechanism: a client id and secret sent as
-`CF-Access-Client-Id` / `CF-Access-Client-Secret`, with an Access policy that
-accepts that service token for this hostname.
+**Corrected.** An earlier draft of this section said Cloudflare Access *service
+tokens* were the mechanism. That is right for one kind of client and wrong for
+the kind that actually matters here, and the difference is worth stating because
+it is not obvious until you try it.
 
-So a third party's model presents two credentials:
+A service token is a client id and secret sent as `CF-Access-Client-Id` /
+`CF-Access-Client-Secret` headers. That works when you control a config file and
+can inject headers — a CLI agent, a script, a server-side integration.
+
+**It does not work from a phone.** In a hosted assistant app you add a remote
+MCP server by pasting a URL. There is nowhere to put a header. Since the
+intended use is exactly that — an assistant on a phone, on a mobile network,
+reaching a machine at home — service tokens are not the path.
+
+The path is **OAuth**. The MCP specification's authorization flow is OAuth 2.1
+with PKCE for remote servers intended for public use, and it is what a hosted
+client expects when it is handed a URL: it discovers the authorization endpoint,
+sends the human to log in, and receives a token. Cloudflare Access can act as
+that authorization server, and Cloudflare ships MCP-specific support for it.
+
+So the two layers survive, and only the first one changes shape:
 
 | Credential | Issued by | Answers |
 |---|---|---|
-| Access service token | Cloudflare | May this request reach the machine? |
-| Meridian bearer token | Meridian | What may it read once there? |
+| OAuth token, via an Access login | Cloudflare | May this request reach the machine? |
+| Meridian scoped token / grant | Meridian | What may it read once there? |
 
-Deliberately two. A leaked Meridian token is useless without the Cloudflare
-half, and a leaked service token reaches an API that will not answer it.
+Still deliberately two. Access is all-or-nothing at the hostname — it says *who
+got in*, never *what they may read* — so `P3-03`'s scoped tokens and §3's grants
+are not redundant with it. They are the half that can express "this person, this
+topic, no raw files".
+
+**Service tokens keep a use**, and it is worth not throwing away: a CLI agent
+doing §11.1a's synthesis sessions runs somewhere you control, can hold headers,
+and is a different subject kind (§3's `subject_kind: service`). Support both;
+just do not build only the one that cannot serve the phone.
 
 ### 4.3 Verify the assertion — never trust the header
 
