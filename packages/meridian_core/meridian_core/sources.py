@@ -66,6 +66,7 @@ async def upsert_source(
     etag: str | None = None,
     last_modified: str | None = None,
     raw_file_path: str | None = None,
+    raw_root: str | None = None,
     source_tier: str | None = None,
     retention_tier: str | None = None,
     media_type: str | None = None,
@@ -107,6 +108,10 @@ async def upsert_source(
         row.last_modified = last_modified
     if raw_file_path is not None:
         row.raw_file_path = raw_file_path
+    if raw_root is not None:
+        # Overwrites: it describes where the file that is there *now* was put,
+        # so a re-fetch into a different store must not leave the old answer.
+        row.raw_root = raw_root
     if source_tier is not None:
         row.source_tier = _not_lower(row.source_tier if not created else None, source_tier)
     if retention_tier is not None:

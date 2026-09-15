@@ -43,6 +43,48 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.38.0] — 2026-09-15
+
+**"Missing" and "under a different root" stop being the same observation.**
+
+### Added
+
+- `P1-45` `sources.raw_root` — which raw store `raw_file_path` is relative to.
+  Found by `P1-31`'s first real run: three sources dangled against
+  `.devdata/raw` and their files were in `.devdata/containerraw`, put there by
+  `P1-30`'s containerised verification writing to its own bind mount. Nothing
+  was lost, and no amount of care could have shown that
+- Provenance, not a lookup. `raw_file_path` stays relative and
+  `MERIDIAN_RAW_ROOT` still resolves it — an absolute path in the table would
+  bake in a container's mount point and break the moment the store moved. The
+  column answers "which store was this written into", which is a different
+  question and the one nothing could previously answer
+- The sweep now separates `elsewhere` from `dangling`. A row naming a different
+  store is not missing its file; it is a file that sweep is not looking at.
+  Folded together, a corpus written partly natively and partly in a container
+  produces a dangling list long enough that a real loss inside it would never be
+  noticed
+- `make snapshot-corpus` warns when sources reference a store it is not
+  archiving. It tars one root, so without the check a snapshot of a multi-root
+  corpus succeeds, is quietly incomplete, and is only caught by
+  `restore_corpus.sh`'s sampling — on another machine, later, too late to go
+  back for the files
+- Nullable with no backfill. Rows written before this genuinely do not record
+  their root, and guessing one would turn "unknown" into a confident wrong
+  answer for exactly the rows the column exists to explain. The sweep says so
+  rather than classifying them
+
+### Testing
+
+- That a row under another root is `elsewhere`, that a row missing from its
+  *own* root is still `dangling` — the excuse must not generalise — and that a
+  row with no recorded root stays dangling rather than being assumed either way
+- That nothing in `elsewhere` is ever deleted, since it sits between two lists
+  that are
+- That `store()` records the root while the path stays relative, and that a
+  source keeping no file records no root — naming one would claim a file exists
+  somewhere
+
 ## [0.37.0] — 2026-09-15
 
 **Which failures may be handed to someone else.**

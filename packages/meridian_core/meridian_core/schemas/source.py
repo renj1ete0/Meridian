@@ -53,6 +53,9 @@ class SourceRead(BaseModel):
     source_tier: SourceTier
     retention_tier: RetentionTier
     raw_file_path: str | None
+    #: Which raw store the file was written into (`P1-45`). Provenance — it is
+    #: not what resolves the path, and NULL means "written before the column".
+    raw_root: str | None = None
     language: str | None
     #: Which tool read this source's text (`P1-44`). NULL on rows extracted
     #: before the column existed — which is the truth, and distinguishable from

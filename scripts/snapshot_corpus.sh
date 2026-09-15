@@ -53,6 +53,28 @@ else
   : > "$OUT/raw.tar.gz"
 fi
 
+# --- does this corpus fit in one archive? ------------------------------------
+# `P1-45`. A corpus written partly natively and partly by a container spans two
+# raw stores, and this script tars one. Without the check the snapshot succeeds,
+# is quietly missing files, and only `restore_corpus.sh`'s sampling notices —
+# on another machine, later, when it is too late to go back for them.
+roots="$(meridian_psql -c "
+  SELECT DISTINCT raw_root FROM sources
+  WHERE raw_file_path IS NOT NULL AND raw_root IS NOT NULL AND raw_root <> '${RAW_ROOT}'")"
+if [ -n "$roots" ]; then
+  echo "meridian: WARNING — sources reference raw stores this snapshot does not include:" >&2
+  echo "$roots" | sed 's/^/    /' >&2
+  echo "  Their files are NOT in raw.tar.gz. Snapshot those roots too, or the" >&2
+  echo "  restored corpus will have citations that cannot open." >&2
+fi
+
+unrooted="$(meridian_psql -c "
+  SELECT count(*) FROM sources WHERE raw_file_path IS NOT NULL AND raw_root IS NULL")"
+if [ "${unrooted:-0}" -gt 0 ]; then
+  echo "meridian: note — $unrooted sources predate P1-45 and record no raw root." >&2
+  echo "  If any of their files are missing from this archive, nothing can say so." >&2
+fi
+
 # --- what is in it -----------------------------------------------------------
 revision="$(meridian_psql -c 'SELECT version_num FROM alembic_version' | tr -d '[:space:]')"
 counts="$(meridian_psql -c "

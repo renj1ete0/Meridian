@@ -83,6 +83,19 @@ class Source(Base, TimestampMixin):
         RETENTION_TIER, nullable=False, default="background", server_default="background"
     )
     raw_file_path: Mapped[str | None] = mapped_column(Text)
+
+    #: The raw store ``raw_file_path`` is relative to (task P1-45).
+    #:
+    #: Provenance, not a lookup. Resolution still goes through
+    #: ``MERIDIAN_RAW_ROOT``, because an absolute path in this table would bake
+    #: in a container's mount point and break the moment the store moved.
+    #:
+    #: It exists because without it a corpus that spans two roots — one worker
+    #: run natively, one in a container against its bind mount — produces rows
+    #: that dangle from either root's point of view, and nothing can tell that
+    #: from a file that was genuinely lost. NULL means "written before this
+    #: column existed", which is the truth and is not the same as "unknown root".
+    raw_root: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str | None] = mapped_column(Text, index=True)
 
     #: Which extractor produced this source's text (task P1-44, §6.6).

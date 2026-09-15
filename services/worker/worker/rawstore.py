@@ -126,6 +126,12 @@ class StoredRaw:
     retention_tier: str
     path: str | None = None
     bytes_written: int = 0
+    #: The base ``path`` is relative to (task P1-45). Provenance, never a
+    #: resolution mechanism — see `store` for why the stored path stays
+    #: relative. Recorded because without it "the file is missing" and "you are
+    #: looking under a different root" are the same observation, which cost a
+    #: session to work out on a corpus written partly by a container.
+    root: str | None = None
 
     @property
     def kept(self) -> bool:
@@ -243,11 +249,19 @@ def store(
     # The *relative* path is what goes in the database. An absolute one bakes in
     # `/data/raw` — the container's mount point, not the host's — and a store
     # moved to a bigger disk would invalidate every row that recorded one.
+    #
+    # `root` is recorded beside it and is *not* used to resolve anything, for
+    # exactly that reason. It answers "which store was this written into", which
+    # is a different question from "where is it now" and the one nothing could
+    # previously answer: a corpus written partly natively and partly by a
+    # container has rows that dangle from either root's point of view, and
+    # nothing could tell that from a file that had actually been lost.
     return StoredRaw(
         checksum=digest,
         retention_tier=retention,
         path=str(relative),
         bytes_written=len(content),
+        root=str(base),
     )
 
 

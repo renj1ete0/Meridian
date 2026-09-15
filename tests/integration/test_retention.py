@@ -265,3 +265,78 @@ async def test_citing_one_source_does_not_protect_another(
     plan = await plan_sweep(sess, root)
 
     assert [c.source_id for c in plan.droppable] == [other.source_id]
+
+
+# --------------------------------------------------------------------------
+# Which store the file went into (task P1-45)
+# --------------------------------------------------------------------------
+
+
+async def test_a_file_under_another_root_is_elsewhere_not_dangling(
+    session_for, marker, root, cleanup
+) -> None:
+    """The distinction this column exists to make.
+
+    A row naming a different store is not missing its file — it is a file this
+    sweep is not looking at. Folded together, a corpus written partly natively
+    and partly by a container produces a dangling list long enough that a real
+    loss inside it would never be noticed.
+    """
+    sess = await session_for("rw")
+    source = await a_source(sess, marker, root, PROTECTED_TIER, write=False)
+    source.raw_root = "/somewhere/else/raw"
+    await sess.flush()
+
+    plan = await plan_sweep(sess, root)
+
+    assert source.source_id in [d.source_id for d in plan.elsewhere]
+    assert source.source_id not in [d.source_id for d in plan.dangling]
+
+
+async def test_a_file_missing_from_its_own_root_is_dangling(
+    session_for, marker, root, cleanup
+) -> None:
+    """The converse. A row that names *this* store and has no file here is the
+    real thing, and must not be excused by the same mechanism."""
+    sess = await session_for("rw")
+    source = await a_source(sess, marker, root, PROTECTED_TIER, write=False)
+    source.raw_root = str(root)
+    await sess.flush()
+
+    plan = await plan_sweep(sess, root)
+
+    assert source.source_id in [d.source_id for d in plan.dangling]
+    assert source.source_id not in [d.source_id for d in plan.elsewhere]
+
+
+async def test_a_row_with_no_recorded_root_stays_dangling(
+    session_for, marker, root, cleanup
+) -> None:
+    """Rows written before `P1-45` record no root and genuinely cannot be told
+    apart from a loss. Guessing one — assuming it must be the root being swept,
+    or assuming it must be elsewhere — would turn "unknown" into a confident
+    wrong answer for exactly the rows the column exists to explain."""
+    sess = await session_for("rw")
+    source = await a_source(sess, marker, root, PROTECTED_TIER, write=False)
+    assert source.raw_root is None
+
+    plan = await plan_sweep(sess, root)
+
+    assert source.source_id in [d.source_id for d in plan.dangling]
+
+
+async def test_nothing_under_another_root_is_ever_deleted(
+    session_for, marker, root, cleanup
+) -> None:
+    """Belt and braces: `elsewhere` is a report, and must not have become a
+    deletion list by being adjacent to two of them."""
+    sess = await session_for("rw")
+    source = await a_source(sess, marker, root, "background", write=False)
+    source.raw_root = "/somewhere/else/raw"
+    await sess.flush()
+
+    plan = await plan_sweep(sess, root)
+    apply_sweep(plan, root, dry_run=False)
+
+    assert await sess.get(Source, source.source_id) is not None
+    assert all(c.source_id != source.source_id for c in plan.droppable)

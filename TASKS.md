@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1342 backend tests and 50 frontend.
+1348 backend tests and 50 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -324,45 +324,15 @@ when its queue drained.
       is still in the corpus. Primary is refused when the plan is built and
       again when it is applied. Dry run is the default because a re-crawl
       returns today's web, not the page that was fetched
-- [ ] `P1-45` **`raw_file_path` is relative to a root nothing records.** Found
-      by `P1-31` on the first run: three dev-corpus sources dangle against
-      `.devdata/raw` and their files are sitting safely in
-      `.devdata/containerraw`, written by `P1-30`'s containerised verification
-      against its own bind mount. So "the file is gone" and "you are looking in
-      the wrong place" are the same observation, and neither the sweep nor
-      anything else can tell them apart. Two consequences worth fixing together:
-      the sweep's dangling arm is noisy for any corpus that spans roots, and
-      **`make snapshot-corpus` tars one root**, so a snapshot taken here today
-      silently omits three sources' files — `restore_corpus.sh`'s sampling check
-      is currently the only thing that would notice. Either record the root on
-      the source, or make the path absolute-from-a-declared-base and have the
-      snapshot refuse when rows reference more than one
-- [x] `P1-30` **Supervision the loop deliberately does not provide.**
-      `services/worker/Dockerfile` (multi-stage uv build on `python:3.12-slim`,
-      `poppler-utils` for `P1-09`, unprivileged, runs read-only with `cap_drop:
-      ALL`) plus `deploy/meridian.service`. The scaffold is specific that
-      compose's `restart: unless-stopped` **or** systemd supervises, not both —
-      two supervisors racing to restart one container is how a crash loop goes
-      invisible — so the unit is `oneshot` and owns only the stack. Verified by
-      running the image against the real database: fetched, stored, extracted,
-      chunked and expanded the frontier, read-only, as an unprivileged user
-- [x] `P1-33` **Wait out a bot-challenge interstitial.** A static fetch that hits
-      one is re-fetched through the browser and held open for `challenge_wait_s`
-      (default 15s, 0 disables). The non-interactive kind clears itself; the
-      interactive kind never does, so it is bounded and tried once. Detection is
-      narrow on purpose — the costly error is re-fetching ordinary 403s
-- [x] `P1-34` **Nothing handles `query` rows.** Now `worker/search.py` (a
-      SearXNG client) plus a `query` branch in the loop: claim, search,
-      prefilter, enqueue at tier priority carrying the query's topic. §6.4's
-      failure model is the design — an unresponsive engine is routine, a query
-      answered with nothing is `done` rather than retried forever, and only the
-      backend itself being unreachable is a retry. `query` is claimable only by
-      a worker that has a backend, so a stack whose SearXNG is briefly down
-      leaves the rows alone instead of burning their retries. `search:
-      configured | unreachable | absent` is on the §12.5 health line. Verified
-      live: a seed query that had been pending since `make seed` returned 47
-      real results, 44 survived the prefilter, one engine was unresponsive
-      throughout and it changed nothing
+- [x] `P1-45` **`sources.raw_root`** — `v0.38.0`. Provenance, not a lookup:
+      `raw_file_path` stays relative and `MERIDIAN_RAW_ROOT` still resolves it,
+      because an absolute path would bake in a container's mount point. The
+      sweep now separates `elsewhere` from `dangling`, and `make
+      snapshot-corpus` warns when sources reference a store it is not
+      archiving — it tars one root, so a multi-root snapshot was silently
+      incomplete. Not backfilled: rows written before this do not record their
+      root, and guessing would turn "unknown" into a confident wrong answer for
+      exactly the rows the column explains
 - [ ] `P1-35` **Get a Semantic Scholar API key, or accept the retries.** The
       anonymous quota throttles hard and the penalty outlasts the burst by
       minutes, so under a real crawl a share of `doi` rows will retry rather

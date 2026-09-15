@@ -386,3 +386,34 @@ def test_stored_raw_reports_whether_anything_was_kept() -> None:
 
 def test_safe_domain_strips_the_parts_a_path_should_not_carry() -> None:
     assert safe_domain("https://WWW.Example.COM:8443/a/b?c=d") == "example.com"
+
+
+def test_the_store_records_which_root_it_wrote_into(tmp_path) -> None:
+    """Task P1-45. The stored path stays relative — an absolute one would bake
+    in a container's mount point — so the root is recorded beside it rather than
+    inside it, as provenance that resolution never consults."""
+    result = store(
+        "https://example.test/a",
+        b"x" * 32,
+        source_tier="government",
+        media_type="text/html",
+        root=tmp_path,
+    )
+
+    assert result.root == str(tmp_path)
+    assert not result.path.startswith("/"), "the path itself must stay relative"
+
+
+def test_a_source_that_keeps_no_file_records_no_root(tmp_path) -> None:
+    """Nothing was written, so there is no store to name. A root here would
+    claim a file exists somewhere."""
+    result = store(
+        "https://example.test/b",
+        b"y" * 32,
+        source_tier="informal",
+        media_type="text/html",
+        root=tmp_path,
+    )
+
+    assert result.kept is False
+    assert result.root is None

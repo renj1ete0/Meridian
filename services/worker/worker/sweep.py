@@ -40,6 +40,7 @@ def render(plan: RetentionPlan, root: str) -> None:
     print(f"  droppable          {len(plan.droppable)}")
     print(f"  orphaned           {len(plan.orphaned)}")
     print(f"  dangling           {len(plan.dangling)}  (rows with no file — never deleted)")
+    print(f"  elsewhere          {len(plan.elsewhere)}  (files under a different recorded root)")
 
     if plan.reclaimable_bytes:
         print(f"\n  reclaimable: {plan.reclaimable_bytes / 1024:.1f} KiB")
@@ -56,12 +57,19 @@ def render(plan: RetentionPlan, root: str) -> None:
         for row in plan.dangling[:20]:
             print(f"    ! source {row.source_id}  {row.path}")
             print(f"      {row.url[:90]}")
-        print("\n  Before assuming the files are lost, check MERIDIAN_RAW_ROOT.")
-        print("  `raw_file_path` is stored relative to a root that nothing records,")
-        print("  so a worker run against a different root — a container writing to")
-        print("  its bind mount, say — leaves rows that dangle from every other")
-        print("  root's point of view while the files sit safely under that one.")
-        print("  See P1-45.")
+        print("\n  These rows record no raw root, or record this one. A row with no")
+        print("  root predates `P1-45` and cannot be told apart from a real loss;")
+        print("  check the other stores by hand before concluding anything.")
+
+    if plan.elsewhere:
+        # Not a problem, and listed separately so it stops looking like one.
+        roots = sorted({d.raw_root for d in plan.elsewhere if d.raw_root})
+        print(f"\n  ELSEWHERE — {len(plan.elsewhere)} sources were written into another store:")
+        for other in roots:
+            count = sum(1 for d in plan.elsewhere if d.raw_root == other)
+            print(f"    {other}  ({count})")
+        print("  Nothing is missing. Sweep those roots separately, and note that")
+        print("  `make snapshot-corpus` archives one root at a time.")
 
     if plan.is_empty:
         print("\n  Nothing to reclaim.")

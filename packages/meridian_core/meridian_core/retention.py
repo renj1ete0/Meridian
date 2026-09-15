@@ -75,18 +75,31 @@ class DropCandidate:
 
 @dataclasses.dataclass(frozen=True)
 class Dangling:
-    """A source whose raw file is absent. Reported, never acted on."""
+    """A source whose raw file is absent from the root being swept.
+
+    ``raw_root`` is why this is two situations rather than one (`P1-45`). A row
+    that records a *different* root is not missing a file — it is a file this
+    sweep is not looking at. A row that records no root at all was written
+    before the column existed and genuinely cannot be told apart from a loss.
+    """
 
     source_id: int
     url: str
     path: str
+    raw_root: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
 class RetentionPlan:
     droppable: tuple[DropCandidate, ...] = ()
     orphaned: tuple[DropCandidate, ...] = ()
+    #: Rows whose file is absent and whose recorded root is this one, or unknown.
     dangling: tuple[Dangling, ...] = ()
+    #: Rows whose file is absent because it lives under a *different* recorded
+    #: root. Not a problem, and separated so that it stops being reported as
+    #: one — a multi-root corpus otherwise produces a dangling list long enough
+    #: that a real loss inside it would never be noticed.
+    elsewhere: tuple[Dangling, ...] = ()
     protected: int = 0
     files_seen: int = 0
 
@@ -132,9 +145,13 @@ async def plan_sweep(sess: AsyncSession, raw_root: str | os.PathLike[str]) -> Re
 
     rows = (
         await sess.execute(
-            select(Source.source_id, Source.url, Source.raw_file_path, Source.retention_tier).where(
-                Source.raw_file_path.is_not(None)
-            )
+            select(
+                Source.source_id,
+                Source.url,
+                Source.raw_file_path,
+                Source.retention_tier,
+                Source.raw_root,
+            ).where(Source.raw_file_path.is_not(None))
         )
     ).all()
     by_path = {row.raw_file_path: row for row in rows}
@@ -165,16 +182,25 @@ async def plan_sweep(sess: AsyncSession, raw_root: str | os.PathLike[str]) -> Re
         )
 
     on_disk = {relative for relative, _ in _walk(root)}
-    dangling = tuple(
-        Dangling(row.source_id, row.url, row.raw_file_path)
+    absent = [
+        Dangling(row.source_id, row.url, row.raw_file_path, row.raw_root)
         for row in rows
         if row.raw_file_path not in on_disk
-    )
+    ]
+
+    # The split `P1-45` exists for. A row that names a different store is not
+    # missing its file; it is a file this sweep is not looking at. Folding the
+    # two together is what made a multi-root corpus report a dangling list long
+    # enough to hide a real loss inside.
+    here = str(root)
+    elsewhere = tuple(d for d in absent if d.raw_root is not None and d.raw_root != here)
+    dangling = tuple(d for d in absent if d not in elsewhere)
 
     return RetentionPlan(
         droppable=tuple(droppable),
         orphaned=tuple(orphaned),
         dangling=dangling,
+        elsewhere=elsewhere,
         protected=protected,
         files_seen=seen,
     )

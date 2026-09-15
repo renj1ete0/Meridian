@@ -1047,6 +1047,7 @@ class Worker:
                     claim.url,
                     checksum=stored.checksum,
                     raw_file_path=stored.path,
+                    raw_root=stored.root,
                     source_tier=tier,
                     retention_tier=stored.retention_tier,
                     media_type=result.media_type,
