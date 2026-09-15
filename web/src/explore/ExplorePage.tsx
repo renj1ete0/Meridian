@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { openSession } from '../lib/lastVisit'
 import { CorpusCounts, type CorpusFigures } from './CorpusCounts'
 import { EntryPoints, type EntryPointName } from './EntryPoints'
 import { ResultList } from './ResultList'
 import { SearchField } from './SearchField'
+import { SinceLastVisit } from './SinceLastVisit'
 import { WhereYouWere } from './WhereYouWere'
 import {
   ApiError,
@@ -60,9 +62,14 @@ export function ExplorePage() {
 
   const inFlight = useRef<AbortController | null>(null)
 
+  // Read once, and the stamp advances immediately. Writing it later — on
+  // unmount, or after the fetch — is how the delta ends up always zero: the
+  // second render reads a stamp the first one just wrote. `P6-11`.
+  const [since] = useState<string | null>(() => openSession())
+
   useEffect(() => {
     const controller = new AbortController()
-    corpusStats({ signal: controller.signal })
+    corpusStats({ since }, { signal: controller.signal })
       .then(setStats)
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return
@@ -71,7 +78,8 @@ export function ExplorePage() {
         setStatsError(cause instanceof ApiError ? cause.message : 'The corpus counts are unavailable.')
       })
     return () => controller.abort()
-  }, [])
+    // `since` is captured once and never changes, so this runs on mount only.
+  }, [since])
 
   const run = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -112,6 +120,11 @@ export function ExplorePage() {
 
       <div className="mt-12">
         <CorpusCounts counts={stats ? figuresFrom(stats) : null} />
+        {stats ? (
+          <div className="mt-3 text-center">
+            <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} />
+          </div>
+        ) : null}
         {statsError ? (
           <p className="mt-3 text-center text-[length:var(--text-small)] text-accent-attention">
             {statsError}

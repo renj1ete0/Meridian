@@ -126,7 +126,13 @@ async def explore_search(
 
 
 @router.get("/stats", response_model=CorpusStatsRead)
-async def explore_stats(sess: ReadSession) -> CorpusStatsRead:
+async def explore_stats(
+    sess: ReadSession,
+    since: Annotated[
+        dt.datetime | None,
+        Query(description="Count what arrived after this instant (P6-11). ISO 8601."),
+    ] = None,
+) -> CorpusStatsRead:
     """What the corpus holds.
 
     Behind the Explore landing state's counts. `searchable_chunks` is
@@ -134,7 +140,7 @@ async def explore_stats(sess: ReadSession) -> CorpusStatsRead:
     tell "we never collected this" from "we collected it and filtered it", and
     one number for both erases exactly that.
     """
-    return CorpusStatsRead.model_validate(await corpus_stats(sess))
+    return CorpusStatsRead.model_validate(await corpus_stats(sess, since=since))
 
 
 @router.get("/sources/{source_id}", response_model=SourceRead)

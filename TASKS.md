@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1592 backend tests and 156 frontend.
+1593 backend tests and 165 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -696,7 +696,12 @@ when its queue drained.
       type so the filter cannot hide what the reader came for
 - [ ] `P6-09` Saved views
 - [ ] `P6-10` Coverage grid and contested list as entry points
-- [ ] `P6-11` Explore landing state with since-last-visit delta
+- [x] `P6-11` Explore landing state with since-last-visit delta — `v0.61.0`.
+      `stats?since=` plus a `localStorage` stamp read once per session and
+      advanced immediately, so the delta means "since you were last here" and
+      does not vanish as you look at it. Three states kept distinct: `null` for
+      a first visit (no moment to measure from), `0` for nothing arrived (worth
+      saying, or a silent panel reads as a failed load), and the delta itself
 - [ ] `P6-12` Admin: topic management — add, pause, archive with re-normalising weights
 - [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
 - [x] `P6-14` Figures panel with page-accurate raw file links — `v0.56.0`.

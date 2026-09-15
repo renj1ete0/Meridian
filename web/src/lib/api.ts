@@ -157,6 +157,13 @@ export interface CorpusStats {
   entities: number
   edges: number
   contested_edges: number
+  /**
+   * What arrived since the caller's `since` (`P6-11`). `null` means they did
+   * not ask; `0` means nothing arrived, and a landing page must not show the
+   * first as the second.
+   */
+  new_sources: number | null
+  new_chunks: number | null
 }
 
 export const CORPUS_STATS_FIELDS = [
@@ -169,6 +176,8 @@ export const CORPUS_STATS_FIELDS = [
   'entities',
   'edges',
   'contested_edges',
+  'new_sources',
+  'new_chunks',
 ] as const
 
 /** Mirrors `ChunkRead`. No `embedding` — a 1024-float vector is not a payload. */
@@ -410,8 +419,14 @@ export function searchCorpus(params: SearchParams, init?: RequestInit): Promise<
   return request<SearchResponse>(`/api/explore/search?${searchQuery(params)}`, init)
 }
 
-export function corpusStats(init?: RequestInit): Promise<CorpusStats> {
-  return request<CorpusStats>('/api/explore/stats', init)
+export function corpusStats(
+  params: { since?: string | null } = {},
+  init?: RequestInit,
+): Promise<CorpusStats> {
+  // Omitted entirely when absent, rather than sent empty: the API distinguishes
+  // "nobody asked" from "nothing arrived", and `?since=` would collapse them.
+  const suffix = params.since ? `?since=${encodeURIComponent(params.since)}` : ''
+  return request<CorpusStats>(`/api/explore/stats${suffix}`, init)
 }
 
 export function getSource(sourceId: number, init?: RequestInit): Promise<Source> {

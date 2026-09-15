@@ -41,6 +41,7 @@ class CorpusStats:
 
     #: When these numbers were counted (`P2-18`).
     as_of: dt.datetime
+
     sources: int
     chunks: int
     embedded_chunks: int
@@ -49,23 +50,46 @@ class CorpusStats:
     edges: int
     contested_edges: int
 
+    #: Counted only when a caller asked "what is new since X" (`P6-11`). None
+    #: means nobody asked — deliberately not 0, which is the answer to a
+    #: question about a moment when nothing had changed, and a returning reader
+    #: shown "0 new" would believe that.
+    new_sources: int | None = None
+    new_chunks: int | None = None
+
     @property
     def searchable_chunks(self) -> int:
         """Chunks a default search can return: everything not marked duplicate."""
         return self.chunks - self.duplicate_chunks
 
 
-async def corpus_stats(sess: AsyncSession) -> CorpusStats:
-    """Count what is in the corpus. Reads only."""
+async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) -> CorpusStats:
+    """Count what is in the corpus. Reads only.
+
+    ``since`` adds the delta a returning reader wants: §12.5 asks the landing
+    state to carry it, because "what arrived while I was away" is the question
+    somebody opens this with, and a total answers a different one.
+    """
 
     async def count(stmt) -> int:
         return int(await sess.scalar(stmt) or 0)
+
+    new_sources = new_chunks = None
+    if since is not None:
+        new_sources = await count(
+            select(func.count()).select_from(Source).where(Source.created_at > since)
+        )
+        new_chunks = await count(
+            select(func.count()).select_from(Chunk).where(Chunk.created_at > since)
+        )
 
     return CorpusStats(
         # `P2-18`: a client cannot otherwise tell a cached count from a fresh
         # one, and these are exactly the numbers someone quotes as "the corpus
         # has N documents" months later.
         as_of=dt.datetime.now(dt.UTC),
+        new_sources=new_sources,
+        new_chunks=new_chunks,
         sources=await count(select(func.count()).select_from(Source)),
         chunks=await count(select(func.count()).select_from(Chunk)),
         embedded_chunks=await count(

@@ -48,6 +48,40 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.61.0] — 2026-09-15
+
+**What arrived while you were away.**
+
+### Added
+
+- `P6-11` the since-last-visit delta. `GET /api/explore/stats?since=` returns
+  `new_sources` and `new_chunks`, and the landing state shows them. §12.5 asks
+  for it because "what is new *to me*" is the question somebody opens this with,
+  and a total answers a different one
+- **Three states, not two.** `null` means this reader has never been here, so
+  there is no "since" to speak of and claiming one would be inventing history.
+  `0` means they have and nothing arrived — worth stating, because a silent
+  panel reads as one that failed to load. Anything else is the delta
+- **When the stamp advances is the whole design.** It is read once per session
+  and written immediately, so the delta means "since you were last here" rather
+  than "since a second ago". Writing it on render would make the number vanish
+  as you looked at it; writing it later means the second render reads a stamp
+  the first one just wrote, and the delta is permanently zero — which looks
+  exactly like a corpus where nothing happened
+- Per viewer, per browser, and that is correct: two people looking at the same
+  Meridian have genuinely different answers to "what is new to me". It belongs
+  in `localStorage`, not in a table
+
+### Testing
+
+- Every `localStorage` access is guarded and tested: a stored value that is not
+  a timestamp (it would otherwise reach the API as a query parameter and come
+  back a 422 the reader cannot act on), storage that throws on read, and storage
+  that refuses to be written
+- That the stamp is read and advanced in a *single* call, because doing it in
+  two places is precisely how it ends up advanced before it was read
+- That one source is not called "sources"
+
 ## [0.60.0] — 2026-09-15
 
 **What happened while nobody was looking.**

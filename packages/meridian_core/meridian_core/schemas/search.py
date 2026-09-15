@@ -123,6 +123,12 @@ class CorpusStatsRead(BaseModel):
     edges: int
     contested_edges: int
 
+    #: The delta a returning reader asked for (`P6-11`). None means they did not
+    #: ask; 0 means nothing arrived, and a landing page must not show the first
+    #: as the second.
+    new_sources: int | None = None
+    new_chunks: int | None = None
+
 
 class SourceChunksRead(BaseModel):
     """A page of one source's chunks, in document order.

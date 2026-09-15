@@ -265,3 +265,34 @@ def test_a_working_hybrid_search_reports_no_degradation() -> None:
     both = frozenset({"lexical", "vector"})
 
     assert _degraded_reason(both, True, embedder_configured=True) is None
+
+
+# --------------------------------------------------------------------------
+# The since-last-visit delta (task P6-11)
+# --------------------------------------------------------------------------
+
+
+def test_nobody_asked_and_nothing_arrived_are_different_answers() -> None:
+    """`None` means the caller did not ask; `0` means they did and nothing came.
+
+    A landing page that showed the first as the second would tell a
+    first-time reader their corpus is idle — which is a claim about the corpus
+    made from a fact about the reader.
+    """
+    import datetime as dt
+
+    from meridian_core.stats import CorpusStats
+
+    never_asked = CorpusStats(
+        as_of=dt.datetime.now(dt.UTC),
+        sources=1,
+        chunks=1,
+        embedded_chunks=1,
+        duplicate_chunks=0,
+        entities=0,
+        edges=0,
+        contested_edges=0,
+    )
+
+    assert never_asked.new_sources is None
+    assert never_asked.new_chunks is None
