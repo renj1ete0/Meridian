@@ -241,6 +241,18 @@ rather than SQL: a term can read `approved` and match nothing in any document,
 because another row already claims the same wording, and nothing else in the
 system reports it.
 
+**Admin → Topics** is §10's weight vector: what fraction of seeds each topic
+draws, a share you can set, and four states — active, maintenance, paused,
+archived. Nothing there deletes. Archiving takes a topic out of the pool and
+leaves every source, chunk and figure it collected exactly where it is, so
+coming back is one click rather than a re-crawl.
+
+Two numbers per row, and they differ whenever something is acting on the topic:
+`weight` is what is stored, `share` is what actually gets drawn once floors,
+ceilings and boosts apply. The row says which one did it. Every change is
+written to `steering_log`, including the weights that moved because you steered
+a *different* topic — which is the question you will have in a month.
+
 `/api/admin/*` is the only part of the API that changes anything, and it **fails
 closed**. Without a way to identify callers it refuses everything with a 503
 naming the fix. On an exposed instance that means configuring Access (§8b);

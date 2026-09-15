@@ -19,9 +19,12 @@ claims the same string.
 
 from __future__ import annotations
 
+import datetime as dt
+
 from pydantic import BaseModel, ConfigDict, Field
 
-from .enums import GazetteerEntityType
+from .config import SteeringLogRead, TopicConfigRead
+from .enums import GazetteerEntityType, TopicStatus
 from .gazetteer import GazetteerTermRead
 
 
@@ -83,3 +86,84 @@ class GazetteerTermEdit(BaseModel):
     entity_type: GazetteerEntityType | None = None
     jurisdiction: str | None = None
     ambiguous: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Topics (task P6-12, spec §10)
+# ---------------------------------------------------------------------------
+
+
+class TopicRowRead(BaseModel):
+    """One topic, plus the two numbers that are not columns.
+
+    ``weight`` is what is stored. ``share`` is what a draw actually uses once a
+    boost and the floors and ceilings have been applied, and the two differ
+    exactly when something interesting is happening — which is why both are
+    shown rather than one being computed away.
+    """
+
+    topic: TopicConfigRead
+
+    #: ``weight × boost_factor`` while a boost is running, otherwise ``weight``.
+    #: The input to normalisation, not the output.
+    effective_weight: float
+
+    #: The fraction of seeds this topic draws. 0 for anything not `active`,
+    #: which is the honest answer rather than an absent field: a paused topic
+    #: keeps a weight and draws nothing, and showing only the weight would read
+    #: as it still competing.
+    share: float
+
+    #: Whether a boost is running *now*. Derived from the expiry rather than
+    #: from the factor being set, because an expired boost is left on the row on
+    #: purpose — it is the audit trail — and simply stops counting.
+    boost_active: bool
+
+
+class TopicsRead(BaseModel):
+    rows: list[TopicRowRead]
+
+    #: What the active shares add up to. Always 1.0 when any topic is active,
+    #: and published rather than assumed: it is one number, and it is the claim
+    #: the whole screen rests on.
+    sums_to: float
+
+
+class TopicEdit(BaseModel):
+    """A steering change. Every field optional; omitted means "leave it".
+
+    ``reason`` is optional here and never optional in the log — the server
+    writes a factual description when none is given. §10.1 requires a reason on
+    every change, and requiring a person to type one before moving a slider
+    produces a column full of the word "update".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    floor: float | None = Field(default=None, ge=0.0, le=1.0)
+    ceiling: float | None = Field(default=None, ge=0.0, le=1.0)
+    pinned: bool | None = None
+    status: TopicStatus | None = None
+    boost_factor: float | None = Field(default=None, gt=0.0)
+    boost_expires_at: dt.datetime | None = None
+    reason: str | None = None
+
+
+class TopicAdd(BaseModel):
+    """§10.2's `add_topic`: insert and re-normalise so the set still sums to 1.0."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(min_length=1, max_length=120)
+    floor: float = Field(default=0.05, ge=0.0, le=1.0)
+    ceiling: float = Field(default=0.60, ge=0.0, le=1.0)
+    reason: str | None = None
+
+
+class SteeringLogPage(BaseModel):
+    """Why the vector is where it is (§10.1)."""
+
+    entries: list[SteeringLogRead]
+    limit: int
+    has_more: bool

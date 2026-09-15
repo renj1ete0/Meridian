@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1729 backend tests and 185 frontend.
+1780 backend tests and 205 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -725,7 +725,17 @@ when its queue drained.
       does not vanish as you look at it. Three states kept distinct: `null` for
       a first visit (no moment to measure from), `0` for nothing arrived (worth
       saying, or a silent panel reads as a failed load), and the delta itself
-- [ ] `P6-12` Admin: topic management — add, pause, archive with re-normalising weights
+- [x] `P6-12` Admin: topic management — add, pause, archive with re-normalising
+      weights — `v0.65.0`. §10's vector, with the three places the obvious
+      implementation is wrong. Normalising is **not** dividing by the total: the
+      floor is a guarantee ("nothing fully stalls"), and a violated floor is the
+      guarantee not existing while the vector still sums to 1.0 and looks fine.
+      Bounds relax on read and are refused on write — pausing every topic but one
+      leaves a single topic with a 0.6 ceiling, and the seeds still have to come
+      from somewhere. A boost is applied at read time and never cleared, because
+      "steer back later without remembering" breaks the moment it depends on a
+      cleanup job. `steering_log` records the weights that moved because somebody
+      steered a *different* topic, which is the question §10.1 exists to answer
 - [x] `P6-13` Admin: gazetteer approvals — `v0.64.0`. Split: this ID is now the
       Admin shell plus §5.6's "approve in the UI", and the other three surfaces
       it used to name are `P6-22` and `P6-23`. Every row reports whether the

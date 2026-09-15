@@ -1,6 +1,6 @@
 [project]
 name = "meridian-api"
-version = "0.64.1"
+version = "0.65.0"
 description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
 requires-python = ">=3.12"
 dependencies = [

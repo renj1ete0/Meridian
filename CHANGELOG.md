@@ -48,6 +48,95 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.65.0] — 2026-09-15
+
+**Steering: the weight vector is editable, and the floor is a guarantee.**
+
+### Added
+
+- `P6-12` `meridian_core/steering.py`, `/api/admin/topics`, `/api/admin/steering-log`
+  and the Topics screen. §10's model — "attention is a weight vector over topics;
+  seeds are drawn proportionally" — with the three places the obvious
+  implementation is wrong
+
+### Normalising is not dividing by the total
+
+- Every active topic has a floor (§10's "5–10% minimum so nothing fully stalls")
+  and a ceiling. Proportional scaling violates both the moment one topic
+  dominates, and **a violated floor is the guarantee not existing**: the topic
+  stalls, which is exactly what the floor was written to prevent, and a vector
+  that sums to 1.0 looks correct from every angle
+- Clamp-and-redistribute instead: each pass scales the still-free topics into
+  what the clamped ones left, and anything landing outside its bounds is pinned
+  there. Settles in at most one pass per topic
+- Setting a weight holds that topic at exactly the value asked for and
+  redistributes the rest. Scaling it along with everything else would show the
+  person a different number from the one they typed
+
+### Bounds relax on read and are refused on write
+
+- Found by a test: pausing every topic but one leaves a single topic with a 0.6
+  ceiling, and the seeds still have to come from somewhere. A ceiling guards
+  against one topic crowding out the others; with no others it constrains
+  nothing, so it yields
+- Floors scale down together when they sum past 1.0 rather than raising on a
+  read — a stored configuration that has become infeasible must not take down the
+  screen that would let somebody fix it. The write paths still refuse to create
+  one, because the moment to report a mistake is while it is being made
+
+### A boost removes itself
+
+- Applied at read time from `boost_factor` × `weight` while the expiry is in the
+  future. §10 wants "steer back later without needing to remember", and the way
+  that promise breaks is a boost written into the stored weight and a cleanup job
+  that does not run
+- An expired boost is left on the row on purpose. It is the only trace a
+  temporary intervention leaves after it ends; it simply stops counting
+- A factor with no expiry is refused. That is a permanent multiplier wearing a
+  temporary one's clothes
+
+### Nothing deletes
+
+- Archiving and pausing drop a topic out of the pool and change nothing else.
+  §10.2: nodes, edges and tags stay untouched, so returning is a status change
+  rather than a rebuild — and the copy says so, because a reader who thinks
+  pausing discards the weight will not pause
+- `maintenance` is out of the draw too, per §10.2: it finishes its queue and
+  starts nothing new
+
+### The log explains weights nobody touched
+
+- §10.1 is explicit that `steering_log` is not optional: "with two writers, the
+  alternative is opening the UI in a month and not knowing why a weight is where
+  it is." So every consequent change is logged, not only the requested one — the
+  question is almost always about a topic somebody did *not* steer
+- `reason` is optional in the request and never null in the log. Requiring a
+  person to type one before moving a slider produces a column full of the word
+  "update", so the server writes what was actually done
+
+### Interface
+
+- Both numbers per row: `share` is what gets drawn, `weight` is what is stored,
+  and a note appears **only** when they disagree, naming the mechanism that did
+  it. A note on every row is noise, and then the rows that need one stop standing
+  out
+- The share slider commits on release. Each change renormalises the vector and
+  writes an audit row per topic that moved, so a drag would write hundreds
+- Admin gained a sub-nav; Gazetteer and Topics are its two screens
+
+### Testing
+
+- Floors hold as a property across the whole result, not on one topic: clamping
+  one can push the next under, and a spot check would not see it
+- Both infeasible directions, the exactly-satisfiable boundary, all-zero weights,
+  and a negative weight — which scaled proportionally would take share *away*
+  from the pool
+- Integration fixtures **restore rather than delete**: the dev database holds a
+  real steered vector and the app commits on its own connection, so a test that
+  left weights where it put them would re-steer a live crawl
+- Cross-language drift on the four topic statuses, between the CHECK constraint
+  and the dropdown
+
 ## [0.64.1] — 2026-09-15
 
 **Fix: the lockfile had been stale for a dozen commits, so the images would not build.**

@@ -31,6 +31,11 @@ import {
   GAZETTEER_QUEUE_FIELDS,
   GAZETTEER_ROW_FIELDS,
   GAZETTEER_TERM_FIELDS,
+  STEERING_ENTRY_FIELDS,
+  STEERING_LOG_FIELDS,
+  TOPICS_FIELDS,
+  TOPIC_CONFIG_FIELDS,
+  TOPIC_ROW_FIELDS,
   CORPUS_STATS_FIELDS,
   FIGURE_REF_FIELDS,
   NOTIFICATIONS_FIELDS,
@@ -83,6 +88,11 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],
     ['GazetteerRowRead', 'admin.py', GAZETTEER_ROW_FIELDS],
     ['GazetteerQueueRead', 'admin.py', GAZETTEER_QUEUE_FIELDS],
+    ['TopicRowRead', 'admin.py', TOPIC_ROW_FIELDS],
+    ['TopicsRead', 'admin.py', TOPICS_FIELDS],
+    ['SteeringLogPage', 'admin.py', STEERING_LOG_FIELDS],
+    ['TopicConfigRead', 'config.py', TOPIC_CONFIG_FIELDS],
+    ['SteeringLogRead', 'config.py', STEERING_ENTRY_FIELDS],
     ['ChunkRead', 'source.py', CHUNK_FIELDS],
   ] as const
 

@@ -29,14 +29,21 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
+from meridian_core import steering
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
-from meridian_core.models import GazetteerTerm
+from meridian_core.models import GazetteerTerm, SteeringLog
 from meridian_core.schemas.admin import (
     GazetteerQueueRead,
     GazetteerRowRead,
     GazetteerTermEdit,
+    SteeringLogPage,
+    TopicAdd,
+    TopicEdit,
+    TopicRowRead,
+    TopicsRead,
 )
+from meridian_core.schemas.config import SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.gazetteer import GazetteerTermRead
 
 from ..deps import AdminAllowed, WriteSession
@@ -241,3 +248,169 @@ async def edit_term(
         setattr(term, field, value)
 
     return await _decided(sess, term)
+
+
+# ---------------------------------------------------------------------------
+# Topics (task P6-12, spec §10, §10.1)
+# ---------------------------------------------------------------------------
+#
+# §10 is one sentence — "attention is a weight vector over topics; seeds are
+# drawn proportionally" — and these routes are the only place a person changes
+# it. Three things follow.
+#
+# **Every change is logged before it is applied**, actor and reason, because
+# §10.1 says so and because with two writers the alternative is opening this
+# screen in a month with no idea what moved anything.
+#
+# **Nothing here deletes.** Archiving is a status, not a DELETE: it drops the
+# topic out of the pool and leaves every node, edge and tag it produced
+# untouched, so coming back is a status change rather than a re-crawl.
+#
+# **An invalid steering change is refused, not clamped.** Silently adjusting a
+# number somebody typed shows them a different one and explains nothing — and
+# the bound they would need to change is exactly what the message names.
+
+#: Who the log records for a change made through this surface. The other actor
+#: §10.1 names is `orchestrator`, which writes the same tables from phase 4.
+ACTOR = "user"
+
+
+def _now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
+async def _topics_read(sess) -> TopicsRead:
+    now = _now()
+    rows = await steering.topics(sess)
+    shares = steering.draw_shares(rows, now=now)
+    return TopicsRead(
+        rows=[
+            TopicRowRead(
+                topic=TopicConfigRead.model_validate(row),
+                effective_weight=steering.effective_weight(row, now=now),
+                share=shares.get(row.topic, 0.0),
+                boost_active=steering.boost_is_active(row, now=now),
+            )
+            for row in rows
+        ],
+        sums_to=sum(shares.values()),
+    )
+
+
+@router.get("/topics", response_model=TopicsRead)
+async def list_topics(_: AdminAllowed, sess: WriteSession) -> TopicsRead:
+    """The vector, with what each topic is actually drawing beside what it stores."""
+    return await _topics_read(sess)
+
+
+def _refused(exc: Exception) -> HTTPException:
+    """Turn a steering rule into a 422 that names the rule.
+
+    422 rather than 400: these are semantically invalid changes, not malformed
+    requests, and the body carries a sentence a person can act on — which is the
+    whole reason the steering layer raises with bounds in the message instead of
+    clamping.
+    """
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+@router.patch("/topics/{topic}", response_model=TopicsRead)
+async def edit_topic(
+    topic: str, edit: TopicEdit, _: AdminAllowed, sess: WriteSession
+) -> TopicsRead:
+    """Steer one topic. Returns the whole vector, because changing one moves all.
+
+    The order matters. Status first, so pausing and re-weighting in one request
+    cannot try to set a share on a topic that is leaving the pool; bounds before
+    weight, so a weight sent alongside a raised ceiling is judged against the
+    new ceiling rather than refused by the old one.
+    """
+    now = _now()
+    changes = edit.model_dump(exclude_unset=True)
+    reason = changes.pop("reason", None) or f"changed through admin: {sorted(changes)}"
+    kwargs = {"actor": ACTOR, "reason": reason, "now": now}
+
+    try:
+        if "status" in changes:
+            await steering.set_status(sess, topic, changes["status"], **kwargs)
+        if "floor" in changes or "ceiling" in changes:
+            await steering.set_bounds(
+                sess,
+                topic,
+                floor=changes.get("floor"),
+                ceiling=changes.get("ceiling"),
+                **kwargs,
+            )
+        if "pinned" in changes:
+            await steering.set_pinned(sess, topic, changes["pinned"], **kwargs)
+        if "boost_factor" in changes or "boost_expires_at" in changes:
+            await steering.set_boost(
+                sess,
+                topic,
+                factor=changes.get("boost_factor"),
+                expires_at=changes.get("boost_expires_at"),
+                **kwargs,
+            )
+        if "weight" in changes:
+            await steering.set_weight(sess, topic, changes["weight"], **kwargs)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ValueError, steering.InfeasibleWeights) as exc:
+        # Nothing is committed, so a request that fails halfway leaves the
+        # vector as it was rather than partly steered.
+        await sess.rollback()
+        raise _refused(exc) from exc
+
+    await sess.commit()
+    log.info("topics steered", extra={"topic": topic, "fields": sorted(changes)})
+    return await _topics_read(sess)
+
+
+@router.post("/topics", response_model=TopicsRead, status_code=201)
+async def add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> TopicsRead:
+    """§10.2's `add_topic` — insert and re-normalise.
+
+    It starts at its floor rather than at a share somebody chose, because a new
+    topic has no hand-seeded sources yet (§10.2 calls this "a small repeat of
+    cold start") and a large share spent on a topic with nothing to crawl is
+    attention going nowhere.
+    """
+    try:
+        await steering.add_topic(
+            sess,
+            body.topic,
+            floor=body.floor,
+            ceiling=body.ceiling,
+            actor=ACTOR,
+            reason=body.reason or "added through admin",
+            now=_now(),
+        )
+    except (ValueError, steering.InfeasibleWeights) as exc:
+        await sess.rollback()
+        raise _refused(exc) from exc
+
+    await sess.commit()
+    log.info("topic added", extra={"topic": body.topic})
+    return await _topics_read(sess)
+
+
+@router.get("/steering-log", response_model=SteeringLogPage)
+async def steering_log(
+    _: AdminAllowed,
+    sess: WriteSession,
+    topic: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> SteeringLogPage:
+    """Why the vector is where it is (§10.1). Newest first."""
+    statement = select(SteeringLog).order_by(
+        SteeringLog.changed_at.desc(), SteeringLog.log_id.desc()
+    )
+    if topic:
+        statement = statement.where(SteeringLog.topic == topic)
+    found = list(await sess.scalars(statement.limit(limit + 1)))
+
+    return SteeringLogPage(
+        entries=[SteeringLogRead.model_validate(row) for row in found[:limit]],
+        limit=limit,
+        has_more=len(found) > limit,
+    )

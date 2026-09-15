@@ -681,3 +681,143 @@ export type AssertGazetteerRow = Expect<
 export type AssertGazetteerQueue = Expect<
   Equal<keyof GazetteerQueue, (typeof GAZETTEER_QUEUE_FIELDS)[number]>
 >
+
+// --------------------------------------------------------------------------
+// Steering (task P6-12, spec §10)
+// --------------------------------------------------------------------------
+
+/** `TOPIC_STATUS` in `models/config.py`. */
+export type TopicStatus = 'active' | 'maintenance' | 'paused' | 'archived'
+
+/** Mirrors `TopicConfigRead`. */
+export interface TopicConfig {
+  topic: string
+  weight: number
+  floor: number
+  ceiling: number
+  boost_factor: number | null
+  boost_expires_at: string | null
+  pinned: boolean
+  status: TopicStatus
+}
+
+export const TOPIC_CONFIG_FIELDS = [
+  'topic',
+  'weight',
+  'floor',
+  'ceiling',
+  'boost_factor',
+  'boost_expires_at',
+  'pinned',
+  'status',
+] as const
+
+/** Mirrors `TopicRowRead`. */
+export interface TopicRow {
+  topic: TopicConfig
+  effective_weight: number
+  share: number
+  boost_active: boolean
+}
+
+export const TOPIC_ROW_FIELDS = ['topic', 'effective_weight', 'share', 'boost_active'] as const
+
+/** Mirrors `TopicsRead`. */
+export interface Topics {
+  rows: TopicRow[]
+  sums_to: number
+}
+
+export const TOPICS_FIELDS = ['rows', 'sums_to'] as const
+
+/** Mirrors `SteeringLogRead`. */
+export interface SteeringEntry {
+  log_id: number
+  changed_at: string
+  actor: string
+  topic: string | null
+  field: string | null
+  old_value: string | null
+  new_value: string | null
+  reason: string | null
+}
+
+export const STEERING_ENTRY_FIELDS = [
+  'log_id',
+  'changed_at',
+  'actor',
+  'topic',
+  'field',
+  'old_value',
+  'new_value',
+  'reason',
+] as const
+
+/** Mirrors `SteeringLogPage`. */
+export interface SteeringLog {
+  entries: SteeringEntry[]
+  limit: number
+  has_more: boolean
+}
+
+export const STEERING_LOG_FIELDS = ['entries', 'limit', 'has_more'] as const
+
+/** Mirrors `TopicEdit`. Omitted keys are left alone. */
+export interface TopicEdit {
+  weight?: number
+  floor?: number
+  ceiling?: number
+  pinned?: boolean
+  status?: TopicStatus
+  boost_factor?: number | null
+  boost_expires_at?: string | null
+  reason?: string
+}
+
+export function getTopics(init?: RequestInit): Promise<Topics> {
+  return request<Topics>('/api/admin/topics', init)
+}
+
+export function editTopic(topic: string, edit: TopicEdit, init?: RequestInit): Promise<Topics> {
+  return request<Topics>(`/api/admin/topics/${encodeURIComponent(topic)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(edit),
+    ...init,
+  })
+}
+
+export function addTopic(
+  body: { topic: string; floor?: number; ceiling?: number; reason?: string },
+  init?: RequestInit,
+): Promise<Topics> {
+  return request<Topics>('/api/admin/topics', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    ...init,
+  })
+}
+
+export function getSteeringLog(
+  params: { topic?: string; limit?: number } = {},
+  init?: RequestInit,
+): Promise<SteeringLog> {
+  const query = new URLSearchParams()
+  if (params.topic) query.set('topic', params.topic)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  const suffix = query.toString()
+  return request<SteeringLog>(`/api/admin/steering-log${suffix ? `?${suffix}` : ''}`, init)
+}
+
+export type AssertTopicConfig = Expect<
+  Equal<keyof TopicConfig, (typeof TOPIC_CONFIG_FIELDS)[number]>
+>
+export type AssertTopicRow = Expect<Equal<keyof TopicRow, (typeof TOPIC_ROW_FIELDS)[number]>>
+export type AssertTopics = Expect<Equal<keyof Topics, (typeof TOPICS_FIELDS)[number]>>
+export type AssertSteeringEntry = Expect<
+  Equal<keyof SteeringEntry, (typeof STEERING_ENTRY_FIELDS)[number]>
+>
+export type AssertSteeringLog = Expect<
+  Equal<keyof SteeringLog, (typeof STEERING_LOG_FIELDS)[number]>
+>
