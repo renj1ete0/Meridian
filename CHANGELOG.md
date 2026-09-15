@@ -8,6 +8,11 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Docs: `docs/setup.md` — one document from a bare machine to a queryable
+  corpus, with a status column per section. Some of the path works and some is
+  not built, and instructions for something that does not exist are worse than
+  no instructions, so the split is stated rather than implied
+
 - Docs: `docs/deployment.md` — the runbook for putting the stack on the server,
   the bounded smoke run, and `P1-16`. Names four Makefile targets that call
   scripts which do not exist, one of which (`make snapshot-corpus`) is `P1-16`'s

@@ -30,7 +30,8 @@ not just what it knows, but where the evidence is thin, stale, or contradictory.
 > that duplicate something already collected. **Nothing searches them yet**, and
 > that is the next thing: phase 2 asks whether searching this corpus is useful with no
 > model involved, and it is a real go/no-go.
-> See the [roadmap](docs/roadmap.md) and [TASKS.md](TASKS.md).
+> See [docs/setup.md](docs/setup.md) to run it, the [roadmap](docs/roadmap.md)
+> for where it is going, and [TASKS.md](TASKS.md) for what is next.
 
 ## Why it exists
 
