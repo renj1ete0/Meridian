@@ -30,6 +30,8 @@ import {
   CHUNK_FIELDS,
   CORPUS_STATS_FIELDS,
   FIGURE_REF_FIELDS,
+  NOTIFICATIONS_FIELDS,
+  NOTIFICATION_FIELDS,
   SEARCH_HIT_FIELDS,
   SEARCH_RESPONSE_FIELDS,
   SOURCE_CHUNKS_FIELDS,
@@ -72,6 +74,8 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['SourceChunksRead', 'search.py', SOURCE_CHUNKS_FIELDS],
     ['FigureRefRead', 'search.py', FIGURE_REF_FIELDS],
     ['SourceFiguresRead', 'search.py', SOURCE_FIGURES_FIELDS],
+    ['NotificationsRead', 'search.py', NOTIFICATIONS_FIELDS],
+    ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
     ['ChunkRead', 'source.py', CHUNK_FIELDS],
   ] as const

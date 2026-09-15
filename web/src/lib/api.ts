@@ -478,3 +478,47 @@ export const SOURCE_FIGURES_FIELDS = ['source_id', 'figures', 'raw_available'] a
 export async function getSourceFigures(id: number, init?: RequestInit): Promise<SourceFigures> {
   return request<SourceFigures>(`/api/explore/sources/${id}/figures`, init)
 }
+
+
+/** Mirrors `NotificationRead`. */
+export interface Notification {
+  notification_id: number
+  notification_type: string
+  title: string
+  body: string | null
+  payload: Record<string, unknown> | null
+  surface: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export const NOTIFICATION_FIELDS = [
+  'notification_id',
+  'notification_type',
+  'title',
+  'body',
+  'payload',
+  'surface',
+  'read_at',
+  'created_at',
+] as const
+
+/** Mirrors `NotificationsRead`. */
+export interface Notifications {
+  notifications: Notification[]
+  counts_by_type: Record<string, number>
+  unread: number
+}
+
+export const NOTIFICATIONS_FIELDS = ['notifications', 'counts_by_type', 'unread'] as const
+
+export async function getNotifications(
+  params: { notification_type?: string[]; limit?: number } = {},
+  init?: RequestInit,
+): Promise<Notifications> {
+  const query = new URLSearchParams()
+  for (const type of params.notification_type ?? []) query.append('notification_type', type)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  const suffix = query.toString()
+  return request<Notifications>(`/api/explore/notifications${suffix ? `?${suffix}` : ''}`, init)
+}

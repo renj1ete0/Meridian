@@ -590,3 +590,54 @@ async def test_the_raw_path_never_comes_from_the_request(client, monkeypatch) ->
     # reached, because `source_id` is typed as an int and a path cannot be one.
     assert response.status_code in (404, 422)
     assert "passwd" not in response.text
+
+
+# --------------------------------------------------------------------------
+# Notifications (task P6-08, spec §12.5, §13.3)
+# --------------------------------------------------------------------------
+
+
+async def test_notifications_are_listed_newest_first(client) -> None:
+    """The in-app half of `P5-07`'s digest, reading the rows the alert pass
+    writes before it delivers anything."""
+    response = await client.get("/api/explore/notifications")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "notifications" in body and "counts_by_type" in body
+
+    stamps = [n["created_at"] for n in body["notifications"]]
+    assert stamps == sorted(stamps, reverse=True)
+
+
+async def test_the_counts_cover_every_type_not_the_filtered_ones(client) -> None:
+    """A panel reading "alerts (0)" while three seed proposals wait is the
+    filter hiding the thing the reader came for."""
+    unfiltered = (await client.get("/api/explore/notifications")).json()
+    filtered = (
+        await client.get(
+            "/api/explore/notifications", params={"notification_type": "seed_proposal"}
+        )
+    ).json()
+
+    assert filtered["counts_by_type"] == unfiltered["counts_by_type"]
+
+
+async def test_the_filter_narrows_the_list(client) -> None:
+    response = await client.get(
+        "/api/explore/notifications", params={"notification_type": "run_summary"}
+    )
+
+    assert response.status_code == 200
+    assert all(n["notification_type"] == "run_summary" for n in response.json()["notifications"])
+
+
+async def test_an_oversized_notification_limit_is_refused(client) -> None:
+    """A panel asking for everything is a client looping the table.
+
+    Named distinctly from the search version: a duplicate test name silently
+    shadows the earlier one, so the first never runs and nothing says so.
+    """
+    assert (
+        await client.get("/api/explore/notifications", params={"limit": 10_000})
+    ).status_code == 422

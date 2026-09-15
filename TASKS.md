@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1588 backend tests and 148 frontend.
+1592 backend tests and 156 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -688,7 +688,12 @@ when its queue drained.
 - [ ] `P6-05` Annotation as first-class nodes
 - [ ] `P6-06` Synthesis panel: collapsible toggle, thread, node chips, inline citations
 - [ ] `P6-07` Conversation history within the synthesis panel
-- [ ] `P6-08` Notifications panel, filterable by type
+- [x] `P6-08` Notifications panel, filterable by type — `v0.60.0`. Reads the
+      rows `P5-07` writes before it delivers, so a deployment with no bot token
+      still sees what would have been sent. By type rather than read state, per
+      the model's own reasoning — a read/unread split turns findings into an
+      inbox, and an inbox gets cleared without being read. Counts cover every
+      type so the filter cannot hide what the reader came for
 - [ ] `P6-09` Saved views
 - [ ] `P6-10` Coverage grid and contested list as entry points
 - [ ] `P6-11` Explore landing state with since-last-visit delta

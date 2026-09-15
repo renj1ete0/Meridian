@@ -22,14 +22,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from meridian_core.export import to_bibtex, to_markdown
-from meridian_core.models import Chunk, Figure, Source
+from meridian_core.models import Chunk, Figure, Notification, Source
 from meridian_core.schemas.enums import SourceTier
+from meridian_core.schemas.runs import NotificationRead
 from meridian_core.schemas.search import (
     CorpusStatsRead,
     FigureRefRead,
+    NotificationsRead,
     SearchResponse,
     SourceChunksRead,
     SourceFiguresRead,
@@ -350,3 +352,47 @@ async def explore_source_raw(source_id: int, sess: ReadSession) -> FileResponse:
         raise HTTPException(status_code=404, detail=f"No stored file for source {source_id}.")
 
     return FileResponse(target, media_type=(source.extra or {}).get("media_type"))
+
+
+@router.get("/notifications", response_model=NotificationsRead)
+async def explore_notifications(
+    sess: ReadSession,
+    notification_type: Annotated[
+        list[str] | None, Query(description="Filter by type. Repeat the key.")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> NotificationsRead:
+    """What happened while nobody was looking (`P6-08`, §12.5, §13.3).
+
+    The in-app counterpart to the Telegram digest, reading the same rows — an
+    alert is recorded before it is delivered (`P5-07`), so a deployment with no
+    bot token still has somewhere to see what would have been sent.
+
+    Filterable by type rather than by read state, per the model's own reasoning:
+    the useful question is "what finished" or "what needs a decision", not "what
+    have I glanced at".
+    """
+    query = select(Notification).order_by(Notification.created_at.desc()).limit(limit)
+    if notification_type:
+        query = query.where(Notification.notification_type.in_(notification_type))
+
+    rows = list((await sess.execute(query)).scalars())
+
+    # Counted across *all* types, not just the filtered ones. A panel showing
+    # "alerts (0)" while three seed proposals wait is the filter hiding the
+    # thing the reader came for.
+    counts = dict(
+        (
+            await sess.execute(
+                select(Notification.notification_type, func.count()).group_by(
+                    Notification.notification_type
+                )
+            )
+        ).all()
+    )
+
+    return NotificationsRead(
+        notifications=[NotificationRead.model_validate(row) for row in rows],
+        counts_by_type=counts,
+        unread=sum(1 for row in rows if row.read_at is None),
+    )

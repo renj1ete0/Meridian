@@ -19,6 +19,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict
 
 from .enums import PageUnit, SearchArm, SourceTier
+from .runs import NotificationRead
 from .source import ChunkRead
 
 
@@ -173,3 +174,14 @@ class SourceFiguresRead(BaseModel):
     #: Whether this deployment serves raw files at all, so a client can explain
     #: an absent link rather than showing a broken one.
     raw_available: bool
+
+
+class NotificationsRead(BaseModel):
+    """The notifications panel's payload (task P6-08, spec §12.5)."""
+
+    notifications: list[NotificationRead]
+    #: Across every type, not only the filtered ones — a panel reading
+    #: "alerts (0)" while three seed proposals wait is the filter hiding the
+    #: thing the reader came for.
+    counts_by_type: dict[str, int]
+    unread: int

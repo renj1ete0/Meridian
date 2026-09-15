@@ -48,6 +48,38 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.60.0] — 2026-09-15
+
+**What happened while nobody was looking.**
+
+### Added
+
+- `P6-08` the notifications panel: `GET /api/explore/notifications`, a typed
+  client method and a `NotificationsPanel` component
+- The in-app counterpart to `P5-07`'s digest, reading the same rows. An alert is
+  recorded *before* it is delivered, so a deployment with no bot token still has
+  somewhere to see what would have been sent
+- **Filterable by type, not by read state.** The model already said why and it
+  is right: the useful question is "what finished" or "what needs a decision",
+  not "what have I glanced at". A read/unread split turns a panel of findings
+  into an inbox, and an inbox gets cleared without being read
+- Counts cover **every** type, not the filtered set. A panel reading
+  "alerts (0)" while three seed proposals wait is the filter hiding the thing
+  the reader came for
+- An empty panel says *why* it is empty: alerts fire on sustained conditions, so
+  silence is a claim rather than an absence of data
+- Alerts carry a heavier border as well as the attention hue — §2's "state in
+  form, not only colour", so the distinction survives a colour-blind reader and
+  print
+
+### Testing
+
+- That the timestamp is not parsed into a `Date`: `new Date('2026-09-15')` is
+  UTC midnight and renders as the 14th in any negative offset, which is the same
+  trap the API client documents for publication dates
+- Ruff caught a duplicate test name — a second `test_an_oversized_limit_is_refused`
+  would have silently shadowed the first, so one of them would never have run
+
 ## [0.59.0] — 2026-09-15
 
 **The timetable lives in the database.**
