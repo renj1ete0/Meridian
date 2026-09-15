@@ -165,12 +165,20 @@ def compile_patterns(terms) -> CompiledGazetteer:
     and model-proposed terms wait (§5.6 steps 2–4). Loading them would make the
     approval queue decorative and let a regex's mistake become a curated entity.
 
-    **Rows flagged ambiguous do not load.** The column's own comment is explicit:
-    where context is insufficient a mention must be left *unresolved* rather than
-    guessed, because a wrong resolution corrupts the graph invisibly and an
-    unresolved mention stays visible and fixable. A high-precedence pattern is
-    precisely a guess made without context, so the flag has to mean "not here" —
-    these belong to §5.5's resolver, which can see the rest of the document.
+    **A row flagged ambiguous keeps its canonical and loses its aliases.** The
+    column's own comment is explicit: where context is insufficient a mention
+    must be left *unresolved* rather than guessed, because a wrong resolution
+    corrupts the graph invisibly and an unresolved mention stays visible and
+    fixable. That is an argument about the *short* ways of naming the thing —
+    "LTA", "the Authority" — and not about the full form a curator wrote down to
+    identify it. Withholding the canonical too costs the most reliable surface
+    form in the table and buys nothing: "Land Transport Authority" spelled out is
+    not a mention whose context is insufficient.
+
+    The flag therefore means "the short ways of saying this are not decidable",
+    not "this thing cannot be named". Where the canonical itself collides, the
+    collision rule below catches it — and does so from evidence rather than from
+    a flag somebody remembered to set.
 
     **Surface forms that collide are withheld even when nothing is flagged.**
     ``ambiguous`` is hand-maintained and will drift; two rows sharing a surface
@@ -184,8 +192,11 @@ def compile_patterns(terms) -> CompiledGazetteer:
     for term in terms:
         if not term.approved:
             continue
-        for surface in surfaces_of(term):
-            bucket = flagged if term.ambiguous else by_key
+        for position, surface in enumerate(surfaces_of(term)):
+            # Position 0 is the canonical — the form written to identify the
+            # term, as opposed to the short forms that are why the row was
+            # flagged in the first place.
+            bucket = flagged if (term.ambiguous and position > 0) else by_key
             bucket.setdefault(_key(surface), []).append((surface, term))
 
     withheld: list[Withheld] = []

@@ -48,6 +48,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.63.1] — 2026-09-15
+
+**Fix: an ambiguous term was contributing nothing at all.**
+
+### Fixed
+
+- `P5-02` a row flagged `ambiguous` now keeps its canonical and loses only its
+  aliases. It was withholding every surface form, so the one seeded term carrying
+  the flag produced no patterns — the full official name, which is the most
+  reliable string in the table, never matched anything
+- The flag means "the short ways of saying this are not decidable", not "this
+  thing cannot be named". An acronym or an anaphoric alias is a mention whose
+  context may be insufficient; the full form a curator wrote down to identify the
+  term is not one, and withholding it buys nothing
+- Where a canonical genuinely does collide, the collision rule already catches it
+  — from two rows claiming the same string, which is evidence, rather than from a
+  flag somebody remembered to set
+- Same fix makes the harvest's own output more useful: two documents disagreeing
+  about an acronym now withholds the acronym while the expansion each was found
+  beside still loads, which is what those documents actually established
+
+### How it was found
+
+- By building `P6-13`'s approval screen, which reports per row whether the
+  matcher will actually load it. The first page showed a term marked approved and
+  loading nothing. Nothing else in the system says that: extraction runs, the row
+  reads approved, and the term is simply absent from every document
+
 ## [0.63.0] — 2026-09-15
 
 **The gazetteer grows itself, and is not allowed to decide anything.**

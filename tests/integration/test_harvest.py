@@ -245,12 +245,15 @@ async def test_two_expansions_of_one_acronym_flag_both_ambiguous(clean, prefix) 
     assert (await terms_for(clean, other))[0].ambiguous is True
 
 
-async def test_an_ambiguous_term_is_withheld_even_once_approved(clean, prefix) -> None:
-    # The two mechanisms have to compose. A term can clear the corroboration
-    # threshold and *still* be undecidable from its surface form — several
+async def test_an_ambiguous_terms_acronym_is_withheld_but_its_expansion_is_not(
+    clean, prefix
+) -> None:
+    # The two mechanisms have to compose, and they compose on *surfaces*. Several
     # documents agreeing that PCB expands one way says nothing about the
-    # documents where it expands the other. Approval means "this term is real";
-    # ambiguity means "this string does not identify it".
+    # documents where it expands the other — so the acronym is undecidable while
+    # the expansion it was found beside is a perfectly ordinary term. Approval
+    # means "this term is real"; ambiguity means "the short form does not
+    # identify it".
     other = "Peripheral Component Board"
     ids = []
     for i in range(APPROVAL_THRESHOLD):
@@ -264,7 +267,9 @@ async def test_an_ambiguous_term_is_withheld_even_once_approved(clean, prefix) -
 
     assert term.approved is True
     assert term.ambiguous is True
-    assert compile_patterns([term]).patterns == ()
+    compiled = compile_patterns([term])
+    assert [w.surface for w in compiled.withheld] == [ACRONYM]
+    assert len(compiled.patterns) == 1
 
 
 async def test_a_single_expansion_is_not_flagged(clean, prefix) -> None:

@@ -114,14 +114,27 @@ def test_an_unapproved_row_loads_nothing() -> None:
     assert compiled.patterns == ()
 
 
-def test_a_row_flagged_ambiguous_is_withheld_with_its_reason() -> None:
+def test_a_row_flagged_ambiguous_loses_its_aliases() -> None:
     compiled = compile_patterns([Row(1, "Operational Design Domain", ["ODD"], ambiguous=True)])
 
-    assert compiled.patterns == ()
-    assert [(w.reason, w.term_ids) for w in compiled.withheld] == [
-        ("ambiguous", (1,)),
-        ("ambiguous", (1,)),
+    assert "ODD" not in surfaces(compiled)
+    assert [(w.surface, w.reason, w.term_ids) for w in compiled.withheld] == [
+        ("ODD", "ambiguous", (1,))
     ]
+
+
+def test_a_row_flagged_ambiguous_keeps_its_canonical() -> None:
+    # The flag means "the short ways of saying this are not decidable", not
+    # "this thing cannot be named". Withholding the canonical too costs the most
+    # reliable surface form in the table and buys nothing — "Operational Design
+    # Domain" spelled out is not a mention whose context is insufficient.
+    #
+    # Found by building the approval screen: of the seeded terms, the one flagged
+    # ambiguous was contributing no patterns at all, and nothing else in the
+    # system would ever have said so.
+    compiled = compile_patterns([Row(1, "Operational Design Domain", ["ODD"], ambiguous=True)])
+
+    assert surfaces(compiled) == ["operational design domain"]
 
 
 def test_two_rows_sharing_a_surface_are_withheld_though_neither_is_flagged() -> None:
