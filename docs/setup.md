@@ -171,6 +171,29 @@ Leave `MERIDIAN_WORKER_MAX_TASKS` unset. Do **not** add `Restart=` to the unit �
 compose owns per-service restarts, and two supervisors racing to restart one
 container is how a crash loop goes invisible.
 
+**Set up the digest before you walk away** (`P5-07`). Two days of unattended
+crawling with no channel means the only way to know how it went is SSH.
+
+```bash
+# .env — both or neither
+TELEGRAM_BOT_TOKEN=<from @BotFather>
+TELEGRAM_CHAT_ID=<your own chat id>
+
+# see what would be sent, without sending
+docker compose run --rm worker python -m worker.digest --no-send
+
+# then on a timer (systemd, or cron)
+docker compose run --rm worker python -m worker.digest
+```
+
+It sends the health line and alerts on **sustained** conditions only — fetch
+success low over a window, nothing fetched for hours, disk above 80%, and the
+frontier drained. That last one is the one to care about: a crawl that empties
+its queue and idles logs exactly what a healthy one logs.
+
+Without a token it still runs, still evaluates, and still records to
+`notifications` — it just delivers nothing.
+
 Check daily:
 
 ```bash
