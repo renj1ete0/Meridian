@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1524 backend tests and 127 frontend.
+1548 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -677,7 +677,15 @@ when its queue drained.
 - [ ] `P6-12` Admin: topic management — add, pause, archive with re-normalising weights
 - [ ] `P6-13` Admin: agent registry, run history, fetch policy per domain, gazetteer approvals
 - [ ] `P6-14` Figures panel with page-accurate raw file links
-- [ ] `P6-15` Export: Markdown and BibTeX
+- [x] `P6-15` Export: Markdown and BibTeX — `v0.55.0`.
+      `meridian_core/export.py` plus `/api/explore/export/{bibtex,markdown}`.
+      Nothing is generated: a field the document did not carry is omitted, since
+      a fabricated year is wrong in a file somebody pastes into a paper. TeX
+      escaping, because an unescaped `&` fails in *their* document rather than
+      here. Keys are stable across exports and carry the source id. The entry
+      type is a format decision and the tier rides verbatim in `note`, because a
+      bibliography is exactly where `@article` vs `@misc` would read as the
+      credibility verdict §8 refuses to compute. A UI action is still to come
 - [x] `P6-16` Shared UI primitives from the design system — `v0.33.0`. The
       17-icon set on §7's grid (11 interface icons, 6 node glyphs), source-tier
       and data chips, and the contested mark in its three forms. `Icon` owns

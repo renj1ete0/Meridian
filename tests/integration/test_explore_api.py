@@ -487,3 +487,38 @@ async def test_stats_separates_collected_from_searchable(client, corpus) -> None
     assert body["chunks"] >= body["searchable_chunks"]
     assert body["searchable_chunks"] == body["chunks"] - body["duplicate_chunks"]
     assert body["sources"] >= len(corpus)
+
+
+# --------------------------------------------------------------------------
+# Export (task P6-15, spec §12.5)
+# --------------------------------------------------------------------------
+
+
+async def test_bibtex_export_is_plain_text_not_json(client) -> None:
+    """A `.bib` file is what a reference manager imports. A JSON envelope would
+    put every consumer one `json.loads` and one unescape away from a file they
+    could have saved directly."""
+    response = await client.get("/api/explore/export/bibtex", params={"source_id": 1})
+
+    assert response.status_code in (200, 422)
+    if response.status_code == 200:
+        assert response.headers["content-type"].startswith("text/plain")
+
+
+async def test_an_export_must_name_its_sources(client) -> None:
+    """Explicit ids rather than a query, deliberately: a bibliography is what a
+    person kept after reading, and exporting a whole result set produces a file
+    whose contents depend on a ranking that moves as the corpus grows."""
+    response = await client.get("/api/explore/export/bibtex")
+
+    assert response.status_code == 422
+
+
+async def test_an_unbounded_export_is_refused(client) -> None:
+    """A request for a thousand sources is a client looping over the corpus,
+    which is what `list_new_since` is for."""
+    response = await client.get(
+        "/api/explore/export/bibtex", params={"source_id": list(range(1, 400))}
+    )
+
+    assert response.status_code == 422

@@ -48,6 +48,48 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.55.0] — 2026-09-15
+
+**Material can leave.**
+
+### Added
+
+- `P6-15` Export — BibTeX and Markdown, in `meridian_core/export.py` and behind
+  `/api/explore/export/{bibtex,markdown}`. §12.5: *"avoid trapping material in a
+  bespoke store"*
+- The requirement is about leaving, and it is not a courtesy. A corpus readable
+  only through its own interface is a bet that the interface outlives the
+  research, and that bet is usually lost
+- **Nothing is generated.** A field the document did not carry is omitted rather
+  than guessed: a fabricated author or year is wrong in a file somebody pastes
+  into a paper, where nothing will check it against the source again
+- TeX escaping, because an unescaped `&` in a title does not fail here — it
+  fails weeks later in the document it was pasted into, as an error nobody
+  traces back
+- Citation keys are stable across exports (a bibliography is re-exported and
+  diffed, and a moving key rewrites every citation referencing it) and carry the
+  source id (two reports from one body in one year is the ordinary case, and
+  colliding keys drop entries with no error in any tool involved)
+- **The entry type is a format decision, not a verdict.** §8 extracts structure
+  and scores nothing, and a bibliography is exactly where an implied ranking
+  would do damage — `@article` versus `@misc` reads as a judgement if allowed
+  to. The tier rides verbatim in `note` instead
+- Exports name their sources explicitly rather than taking a query. A
+  bibliography is what a person kept after reading; exporting a result set
+  produces a file whose contents depend on a ranking that moves as the corpus
+  grows
+
+### Testing
+
+- Twenty-one tests, mostly about what is *not* in the output, because both
+  failures this can have are invisible from here and surface in someone else's
+  tool
+- A completeness probe that every `SOURCE_TIER` value maps to an entry type — a
+  new tier would otherwise fall to the default silently and be mis-formatted in
+  every bibliography until somebody noticed
+- Verified against the real corpus: valid BibTeX with `%` and `_` escaped inside
+  URLs, and Markdown with page/offset labelled correctly per `P2-18`
+
 ## [0.54.0] — 2026-09-15
 
 **The escape hatch, behind the narrowest role there is.**

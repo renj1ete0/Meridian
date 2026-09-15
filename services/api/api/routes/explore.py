@@ -19,8 +19,10 @@ import datetime as dt
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 
+from meridian_core.export import to_bibtex, to_markdown
 from meridian_core.models import Chunk, Source
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.search import CorpusStatsRead, SearchResponse, SourceChunksRead
@@ -32,6 +34,11 @@ from ..deps import ReadSession
 from ..search_service import WindowTooDeep, paged_search
 
 router = APIRouter(prefix="/api/explore", tags=["explore"])
+
+#: How many sources one export may name. A bibliography is assembled by hand
+#: from results somebody read; a request for a thousand is a client looping over
+#: the corpus, which is what `list_new_since` is for.
+MAX_EXPORT_SOURCES = 200
 
 #: Caps on one page. The upper bound is not politeness — a chunk is up to 2000
 #: characters, so an uncapped limit is a request that can ask for megabytes of
@@ -189,3 +196,57 @@ async def explore_chunk(chunk_id: int, sess: ReadSession) -> ChunkRead:
     if chunk is None:
         raise HTTPException(status_code=404, detail=f"no chunk {chunk_id}")
     return ChunkRead.model_validate(chunk)
+
+
+@router.get("/export/bibtex", response_class=PlainTextResponse)
+async def explore_export_bibtex(
+    sess: ReadSession,
+    source_id: Annotated[list[int], Query(description="Sources to cite. Repeat the key.")],
+) -> str:
+    """A BibTeX bibliography for the given sources (`P6-15`, §12.5).
+
+    Explicit ids rather than a search query, deliberately. A bibliography is
+    something a person assembled — they read the results, kept some, and are
+    exporting *those*. Exporting a whole result set would produce a file whose
+    contents depend on a ranking that moves as the corpus grows, which is not a
+    citation list, it is a snapshot of an opinion.
+
+    Plain text, because that is what a `.bib` file is. A JSON envelope would put
+    every consumer one `json.loads` and one escape away from a file they could
+    have saved directly.
+    """
+    if not source_id:
+        raise HTTPException(status_code=422, detail="Name at least one source_id.")
+    if len(source_id) > MAX_EXPORT_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"At most {MAX_EXPORT_SOURCES} sources per export; asked for {len(source_id)}.",
+        )
+
+    rows = (await sess.execute(select(Source).where(Source.source_id.in_(source_id)))).scalars()
+    return to_bibtex(list(rows))
+
+
+@router.get("/export/markdown", response_class=PlainTextResponse)
+async def explore_export_markdown(
+    sess: ReadSession,
+    source_id: Annotated[list[int], Query(description="Sources to export. Repeat the key.")],
+) -> str:
+    """Passages as Markdown, grouped under their sources (`P6-15`, §12.5)."""
+    if not source_id:
+        raise HTTPException(status_code=422, detail="Name at least one source_id.")
+    if len(source_id) > MAX_EXPORT_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"At most {MAX_EXPORT_SOURCES} sources per export; asked for {len(source_id)}.",
+        )
+
+    rows = (
+        await sess.execute(
+            select(Chunk, Source)
+            .join(Source, Source.source_id == Chunk.source_id)
+            .where(Chunk.source_id.in_(source_id), Chunk.duplicate_of.is_(None))
+            .order_by(Chunk.source_id, Chunk.chunk_index)
+        )
+    ).all()
+    return to_markdown([(chunk, source) for chunk, source in rows])
