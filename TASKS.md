@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1553 backend tests and 148 frontend.
+1574 backend tests and 148 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -656,7 +656,17 @@ when its queue drained.
 - [ ] `P5-04` Gap analysis and seed emission, capped and validated
 - [ ] `P5-05` Diversity seeding — stance-imbalance counter-seeds first (spec §7.4)
 - [ ] `P5-06` Scheduler reads its timetable from the DB — no cron files
-- [ ] `P5-07` Telegram digest, alerts on sustained conditions only, inbound commands
+- [~] `P5-07` Telegram digest, alerts on sustained conditions only, inbound
+      commands — **outbound done in `v0.58.0`, inbound outstanding**.
+      `python -m worker.digest`: §12.5's health line plus four sustained
+      conditions, suppressed by a cooldown held in `notifications` (the digest
+      exits between runs, so in-memory suppression would forget and re-alert
+      every timer tick). Findings are recorded before they are sent, so a failed
+      delivery loses the message and not the evidence. **Inbound is deliberately
+      not built**: §13.3 makes the bot a control surface that can trigger runs
+      and change steering, so the single-chat restriction and the command
+      authorisation have to exist before the first command does — and most
+      commands need steering (`P5-06`) or the orchestrator (phase 4) anyway
 - [ ] `P5-08` Health endpoint, watchdog, off-device snapshot job
 
 ## Phase 6 · Interface — the payoff layer

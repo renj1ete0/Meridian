@@ -48,6 +48,61 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.58.0] — 2026-09-15
+
+**Sustained conditions, not events.**
+
+### Added
+
+- `P5-07` the digest and alert pass: `python -m worker.digest`. §12.5's health
+  line sent rather than logged, and §13.3's alerts underneath it
+- §13.3 names the failure mode and it shaped everything here: *"Single-event
+  alerting teaches me to ignore the channel, which is the real failure mode."*
+  Every condition is measured over a window, and every alert is suppressed for a
+  cooldown after firing
+- **Suppression lives in the database.** The digest runs on a timer and exits;
+  anything remembered in memory would be forgotten before the next run and the
+  same alert would arrive every time the timer fired — single-event alerting
+  wearing a different hat. `notifications` already existed for this, so the
+  in-app panel (`P6-08`) will show exactly what was sent
+- Four conditions, all derived from rows rather than counters: fetch success
+  below threshold over a window, nothing fetched for hours (a worker that died
+  has no failures to lower a rate with — the silence is the signal), disk above
+  80%, and **the frontier drained**. That last one is the failure that cost
+  `v0.26.0`: a crawl that empties its queue and idles logs exactly what a
+  healthy one logs, because there are no errors, there is simply no work
+- Findings are recorded *before* they are sent, so a send that fails loses the
+  delivery and not the evidence. A deployment with no bot token is not a
+  deployment with no monitoring
+- No Markdown parse mode. A digest interpolates URLs, titles and error strings
+  from crawled pages, and an unbalanced asterisk in somebody else's page title
+  would make Telegram reject the whole message — losing an alert to a formatting
+  character
+
+### Fixed
+
+- **The digest reported zeros for everything.** `fetch.total` and
+  `novelty.duplicate_rate` are neither of them real attributes, and
+  `getattr(..., default)` turned both into permanent, plausible zeros: it said
+  "nothing attempted, 0% duplicate" on a corpus with 28 judged chunks and 2
+  duplicates. Every field is now read directly, so a renamed attribute raises
+  instead of lying. A defaulted lookup in a monitoring tool makes the thing
+  whose job is reporting problems report none
+
+### Testing
+
+- Mostly about *not* alerting: too few attempts to judge (0% over three is
+  noise, over three hundred is an outage), a healthy rate, failures that fall
+  outside the window, and a condition already reported
+- That an alert names *what* went wrong and not just the rate — §12.5's point
+  that 40% `robots_denied` and 40% `timeout` need different people looking
+- That suppression expires, and is per condition, so one noisy condition cannot
+  silence a real one
+- The alert fixture clears by **condition key** rather than by title, because a
+  stale row *suppresses* the next alert rather than failing visibly — which made
+  the file pass alone and fail in a full run for a reason that looked nothing
+  like its cause
+
 ## [0.57.0] — 2026-09-15
 
 **A source reads as a document.**
