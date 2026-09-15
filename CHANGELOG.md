@@ -43,6 +43,57 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.32.0] — 2026-09-15
+
+**The theme follows the machine until someone says otherwise.**
+
+### Added
+
+- `P6-17` Theme switching with three states, not two: `system` (the default),
+  `light` and `dark`. "No explicit choice" now means *the system preference*
+  rather than *dark* — a reader whose machine is in light mode and who has never
+  touched the control gets light
+- `system` is expressed by the **absence** of `data-theme`, which is what lets
+  the `prefers-color-scheme` block apply. A `data-theme="system"` sentinel would
+  match neither the light block nor the dark one and would silently leave every
+  such reader on the flagship palette
+- The `:root:not([data-theme='dark'])` guard on the media query is what lets a
+  reader on a light-mode machine still choose dark. Without it the toggle
+  appears broken in one direction only, which is the kind of bug reported as
+  "the theme button doesn't work sometimes"
+- `color-scheme` moved into `tokens.css` beside each theme's role mapping. Split
+  across two files they drift, and the failure is a dark palette with light
+  scrollbars, date pickers and autofill — which reads as a rendering bug rather
+  than a missing declaration
+
+### Changed
+
+- `tokens.css` now separates **palettes** from **roles**. Each published colour
+  is written exactly once as `--dark-*` or `--light-*`; components use roles
+  (`--surface`, `--text`), and each theme state is nothing but a mapping between
+  them. Repeating hexes per theme meant a palette change was an edit in several
+  places with no way to notice when one was missed — a test now asserts no hex
+  appears twice in the file
+- Every `localStorage` access is guarded. It does not merely return null in a
+  private window or with site data blocked — reading the property throws, and
+  that happens during the first render. A theme preference must never be able to
+  stop the app loading
+
+### Testing
+
+- The structure makes a second class of drift testable, and three tests now
+  cover it: system-light and explicit-light must remap the same role set, or
+  two kinds of reader see different colours; explicit dark must be able to undo
+  everything light remapped, or switching back leaves one role stranded on the
+  light value; and the four roles light deliberately does not remap are pinned,
+  so one quietly dropped fails rather than inheriting
+- A completeness probe that every role is reachable as a Tailwind utility. A
+  role that exists in CSS and not in `@theme` cannot be used, and the component
+  that wants it reaches for a literal
+- Rejection tests for a stored value that is not a theme, storage that throws on
+  read, and storage that refuses to be written
+- 19 frontend tests, 1262 backend
+
 ## [0.31.0] — 2026-09-15
 
 **Both extraction paths now filter to the same standard.**

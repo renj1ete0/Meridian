@@ -26,13 +26,10 @@
   --radius-chip: var(--radius-chip);
 }
 
-html {
-  color-scheme: dark;
-}
-
-[data-theme='light'] {
-  color-scheme: light;
-}
+/* `color-scheme` is declared in tokens.css beside each theme's role mapping,
+ * not here. Split across two files they drift, and the failure is a dark
+ * palette with light form controls — scrollbars, date pickers, autofill — which
+ * reads as a rendering bug rather than a missing declaration. */
 
 body {
   margin: 0;

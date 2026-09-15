@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1262 backend tests and 5 frontend.
+1262 backend tests and 19 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -654,7 +654,15 @@ cover the operator's own access; these cover everyone else's.*
 - [ ] `P6-15` Export: Markdown and BibTeX
 - [ ] `P6-16` Shared UI primitives from the design system: the 17-icon set, source-tier
       and contested (dagger) badges, node chips, the top-right status/notification cluster
-- [ ] `P6-17` Theme switching, honouring the system preference by default
+- [x] `P6-17` Theme switching, honouring the system preference by default —
+      `v0.32.0`. Three states, not two: `system` is the default and is expressed
+      by the *absence* of `data-theme`, so the `prefers-color-scheme` block
+      applies. Two-state theming is the common bug and is invisible in the
+      working case — a toggle that only ever writes `light` or `dark` looks
+      correct to whoever built it and silently overrides the preference of every
+      reader who never touches it. Restructured `tokens.css` into palettes
+      (each published colour written once) and per-theme role mappings, which is
+      what makes the mapping drift testable
 - [ ] `P6-18` **Four light-theme roles are inferred, not decided.** The design
       system publishes nine light tokens against thirteen dark, and the four it
       omits are all canvas roles — its graph-canvas table is headed "Dark" and

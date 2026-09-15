@@ -1,39 +1,92 @@
 /*
- * Design tokens (task P2-12) — docs/design/design-system.md §2 and §3.
+ * Design tokens (tasks P2-12, P6-17) — docs/design/design-system.md §2, §3, §5.
  *
- * This file is the ONLY place a colour literal may appear in the frontend.
- * `tests/tokens.test.ts` enforces both halves of that: every token here must
- * match the hex the design system publishes, and no other source file may
- * contain a hex at all. Without the second half the palette silently becomes
- * "whatever was pasted into a className last", which is how a design system and
- * an application stop being the same thing.
+ * This file is the ONLY place a colour literal may appear in the frontend, and
+ * `tests/tokens.test.ts` enforces it in both directions: every colour the design
+ * system publishes is defined here at its published value, and no other source
+ * file contains a hex at all.
  *
- * Dark is the flagship and therefore `:root`. Light is `[data-theme="light"]`,
- * which is docs, Admin and print (§2). P6-17 adds the switch; the tokens must
- * already support it or the switch becomes a rewrite.
+ * ## Why palettes and roles are separate
+ *
+ * Each published colour is written exactly once, as `--dark-*` or `--light-*`.
+ * Components never touch those. They use *roles* — `--surface`, `--text` — and
+ * each theme block is nothing but a mapping from role to palette entry.
+ *
+ * The alternative is repeating the hexes per theme, and then a palette change is
+ * an edit in two or three places with no way to notice when one is missed. Here
+ * the hex appears once and the mapping blocks are short enough to compare, which
+ * `tests/tokens.test.ts` does: every theme block must map the same role set, so a
+ * role that exists in dark and not in light fails rather than silently
+ * inheriting.
+ *
+ * ## Three states, not two (P6-17)
+ *
+ * Dark is the flagship, so bare `:root` is dark. But "no explicit choice" must
+ * mean *the system preference*, not *dark* — a reader whose machine is in light
+ * mode and who has never touched the toggle should get light. So:
+ *
+ *   :root                                    dark, the default
+ *   @media (light) :root:not([data-theme=dark])   system preference, when unset
+ *   [data-theme='light']                     explicit light, wins over system
+ *   [data-theme='dark']                      explicit dark, wins over system
+ *
+ * The `:not([data-theme='dark'])` guard is the load-bearing part. Without it a
+ * reader on a light-mode machine could not choose dark: the media query would
+ * win on specificity grounds at the same level and the toggle would appear
+ * broken in one direction only, which is the kind of bug that gets reported as
+ * "the theme button doesn't work sometimes".
  */
 
 :root {
-  /* --- dark tokens, the flagship palette (design-system.md §2) ---------- */
-  --ground-deep: #070B14;
-  --ground: #0D1424;
-  --surface: #151E33;
-  --surface-raised: #1E2942;
-  --line: #2A3654;
-  --line-strong: #3E4D71;
-  --text: #E6EBF5;
-  --text-muted: #9BA8C4;
-  --text-faint: #7C8AAB;
-  --accent-graph: #49D0DA;
-  --accent-graph-deep: #0C646A;
-  --accent-attention: #E6B061;
-  --accent-attention-deep: #654617;
+  /* --- the dark palette, flagship (design-system.md §2) ----------------- */
+  --dark-ground-deep: #070B14;
+  --dark-ground: #0D1424;
+  --dark-surface: #151E33;
+  --dark-surface-raised: #1E2942;
+  --dark-line: #2A3654;
+  --dark-line-strong: #3E4D71;
+  --dark-text: #E6EBF5;
+  --dark-text-muted: #9BA8C4;
+  --dark-text-faint: #7C8AAB;
+  --dark-accent-graph: #49D0DA;
+  --dark-accent-graph-deep: #0C646A;
+  --dark-accent-attention: #E6B061;
+  --dark-accent-attention-deep: #654617;
+
+  /* --- the light palette (design-system.md §2) --------------------------
+   * Nine published tokens against dark's thirteen. The design system names
+   * light's ground `paper` where dark names it `ground`; they are one role
+   * under two names, and the role mapping below is where they meet.
+   */
+  --light-paper: #F1F3F7;
+  --light-surface: #FFFFFF;
+  --light-line: #DBE0EA;
+  --light-line-strong: #A9B4C6;
+  --light-text: #101A2E;
+  --light-text-muted: #4E5A73;
+  --light-text-faint: #5C6A85;
+  --light-accent-graph: #0D6F7C;
+  --light-accent-attention: #805A28;
+
+  /* --- roles: dark, the flagship default -------------------------------- */
+  --ground-deep: var(--dark-ground-deep);
+  --ground: var(--dark-ground);
+  --surface: var(--dark-surface);
+  --surface-raised: var(--dark-surface-raised);
+  --line: var(--dark-line);
+  --line-strong: var(--dark-line-strong);
+  --text: var(--dark-text);
+  --text-muted: var(--dark-text-muted);
+  --text-faint: var(--dark-text-faint);
+  --accent-graph: var(--dark-accent-graph);
+  --accent-graph-deep: var(--dark-accent-graph-deep);
+  --accent-attention: var(--dark-accent-attention);
+  --accent-attention-deep: var(--dark-accent-attention-deep);
 
   /* --- type scale (design-system.md §3) ---------------------------------
    * The split is strict: Archivo carries anything written for a reader, Plex
-   * Mono anything the system measured. Encoding that as two families rather
-   * than one sans and an ad-hoc `font-mono` keeps provenance recognisable
-   * before it is read.
+   * Mono anything the system measured. Two families rather than one sans plus
+   * an ad-hoc `font-mono` keeps provenance recognisable before it is read.
    */
   --font-sans: Archivo, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -63,42 +116,69 @@
    * scrimmed logo panel. Depth is a surface step plus a 1px line, never a
    * shadow — so there is deliberately no shadow token to reach for.
    */
+  color-scheme: dark;
+
   --radius: 0;
   --radius-chip: 3px;
   --control-height: 34px;
 }
 
-[data-theme='light'] {
-  /* --- light tokens (design-system.md §2) -------------------------------
-   * The design system names light's ground `paper` and dark's `ground`. They
-   * are one role under two names, and a component cannot reference two names,
-   * so the published name is declared and the role aliases to it. Components
-   * use the role; the drift test checks the published name.
-   */
-  --paper: #F1F3F7;
-  --ground: var(--paper);
-  --surface: #FFFFFF;
-  --line: #DBE0EA;
-  --line-strong: #A9B4C6;
-  --text: #101A2E;
-  --text-muted: #4E5A73;
-  --text-faint: #5C6A85;
-  --accent-graph: #0D6F7C;
-  --accent-attention: #805A28;
+/*
+ * The light role mapping, written once and applied from the three selectors
+ * below. Four roles have no published light value, and all four are canvas
+ * roles: §2's graph-canvas table is headed "Dark" and has no light column. They
+ * keep their dark values rather than being invented — recolouring outside the
+ * palette is an explicit Never. `P6-18` is the task to have that decided.
+ *
+ * `surface-raised` is the one genuine inversion: on dark, "raised" is lighter
+ * than the ground; on light, what lifts is white `surface` and the recessed
+ * fill for inputs and hover is `paper`.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --ground: var(--light-paper);
+    --surface: var(--light-surface);
+    --surface-raised: var(--light-paper);
+    --line: var(--light-line);
+    --line-strong: var(--light-line-strong);
+    --text: var(--light-text);
+    --text-muted: var(--light-text-muted);
+    --text-faint: var(--light-text-faint);
+    --accent-graph: var(--light-accent-graph);
+    --accent-attention: var(--light-accent-attention);
+  }
+}
 
-  /* The design system publishes nine light tokens against the dark
-   * thirteen, and the four it does not publish are all canvas roles: §2's
-   * graph-canvas table is headed "Dark" and has no light column. Rather than
-   * invent hexes — recolouring outside the palette is an explicit Never —
-   * each is mapped to a value the design system does define:
-   *
-   *   `ground-deep`, `accent-*-deep`  the canvas stays dark in both themes,
-   *                                   so these keep their dark values
-   *   `surface-raised`                inverted on light: what lifts is white
-   *                                   `surface`, so the recessed fill for
-   *                                   inputs and hover is `paper`
-   *
-   * `P6-18` is the task to have these decided rather than inferred.
-   */
-  --surface-raised: #F1F3F7;
+[data-theme='light'] {
+  color-scheme: light;
+  --ground: var(--light-paper);
+  --surface: var(--light-surface);
+  --surface-raised: var(--light-paper);
+  --line: var(--light-line);
+  --line-strong: var(--light-line-strong);
+  --text: var(--light-text);
+  --text-muted: var(--light-text-muted);
+  --text-faint: var(--light-text-faint);
+  --accent-graph: var(--light-accent-graph);
+  --accent-attention: var(--light-accent-attention);
+}
+
+/*
+ * Explicit dark. Restates the defaults rather than relying on them, because on
+ * a light-mode machine the media query above has already remapped the roles and
+ * `:root`'s originals are no longer what is in effect.
+ */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --ground: var(--dark-ground);
+  --surface: var(--dark-surface);
+  --surface-raised: var(--dark-surface-raised);
+  --line: var(--dark-line);
+  --line-strong: var(--dark-line-strong);
+  --text: var(--dark-text);
+  --text-muted: var(--dark-text-muted);
+  --text-faint: var(--dark-text-faint);
+  --accent-graph: var(--dark-accent-graph);
+  --accent-attention: var(--dark-accent-attention);
 }

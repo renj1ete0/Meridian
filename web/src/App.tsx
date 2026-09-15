@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+
+import { applyTheme, nextTheme, readTheme, writeTheme, type Theme } from './lib/theme'
+
+const LABEL: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
 /**
  * The application shell (task P2-11).
@@ -11,21 +15,32 @@ import { useState } from 'react'
  * It renders nothing from the API yet: `/api/explore/*` is `P2-07`.
  */
 export function App() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [theme, setTheme] = useState<Theme>(readTheme)
+
+  // On the root element, not on a wrapper div. The reader's preference has to
+  // reach `color-scheme`, which the browser reads from the document element to
+  // style scrollbars, form controls and autofill — none of which are inside
+  // this component's subtree.
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
+
+  function choose(next: Theme) {
+    setTheme(next)
+    writeTheme(next)
+  }
 
   return (
-    <div
-      data-theme={theme === 'light' ? 'light' : undefined}
-      className="min-h-screen bg-ground text-text"
-    >
+    <div className="min-h-screen bg-ground text-text">
       <header className="flex items-center justify-between border-b border-line px-6 py-4">
         <span className="font-sans text-[length:var(--text-subhead)] font-semibold">Meridian</span>
         <button
           type="button"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onClick={() => choose(nextTheme(theme))}
+          aria-label={`Theme: ${LABEL[theme]}. Change.`}
           className="h-[var(--control-height)] border border-line-strong bg-surface-raised px-3 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted"
         >
-          {theme === 'dark' ? 'Light' : 'Dark'}
+          {LABEL[theme]}
         </button>
       </header>
 
@@ -34,12 +49,12 @@ export function App() {
           Nothing is searchable yet.
         </h1>
         <p className="mt-4 max-w-prose text-text-muted">
-          The crawler collects and chunks; the chunks carry vectors and a novelty verdict. No
-          retrieval path exists — <code className="font-mono text-text">search.py</code> is P2-06
-          and the read endpoints are P2-07.
+          The crawler collects and chunks; the chunks carry vectors and a novelty verdict. Retrieval
+          exists as a library — <code className="font-mono text-text">meridian_core.search</code> —
+          and nothing serves it. The read endpoints are P2-07.
         </p>
         <p className="mt-6 font-mono text-[length:var(--text-data)] text-text-faint">
-          web scaffold · P2-11 · P2-12
+          web scaffold · P2-11 · P2-12 · P6-17
         </p>
       </main>
     </div>
