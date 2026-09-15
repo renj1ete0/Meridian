@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1416 backend tests and 124 frontend.
+1430 backend tests and 124 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -591,16 +591,15 @@ when its queue drained.
       the wording says what to *do* about it, since a client told only that a
       flag is true will not think to try synonyms. `list_new_since` is §11.1a's
       entry point and needs no embedder at all
-- [~] `P3-03` Scoped tokens: `allowed_tools`, rate limit, expiry (spec §11.4) —
-      **mechanism in `v0.47.0`, enforcement outstanding.**
-      `meridian_core/tokens.py` issues, resolves and revokes. Secrets are never
-      compared in code: the presented token is hashed and the hash looked up.
-      NULL `allowed_tools` grants *nothing* — the nullable column's empty state
-      has to be the safe one. Every rejection returns None, because telling an
-      unauthenticated caller which of unknown/revoked/expired applies confirms a
-      token exists or once existed. **Stays `[~]` until it is wired into `/mcp`
-      as a verifier**, which lands with `P3-05`; until then that surface
-      authenticates nobody and must not reach a tunnel
+- [x] `P3-03` Scoped tokens: `allowed_tools`, expiry (spec §11.4) — `v0.47.0`
+      mechanism, `v0.48.0` enforcement. Secrets are never compared in code: the
+      presented token is hashed and the hash looked up. NULL `allowed_tools`
+      grants nothing. Every rejection returns None, because naming which of
+      unknown/revoked/expired applies confirms a token exists. **Anonymous
+      access is an explicit opt-out**, so a deployment that forgets to configure
+      credentials refuses rather than serves, and the scope is checked *per
+      tool* — at the transport, the tool asked for is the only thing separating
+      a read session from a write one. Rate limiting is `P3-11`
 - [ ] `P3-04` `run_readonly_query` behind the read-only role, statement timeout, row cap
 - [ ] `P3-05` Cloudflare Tunnel + Access in front of the API
 

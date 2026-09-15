@@ -48,6 +48,47 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.48.0] — 2026-09-15
+
+**The MCP surface refuses by default.**
+
+### Added
+
+- `P3-03` enforcement. `services/api/api/auth.py` bridges a bearer token on the
+  wire to a refusal inside a tool: a `TokenVerifier` resolving against
+  `agent_tokens`, and a `require_tool` guard on every tool
+- **Anonymous access is an explicit opt-out, not a default.** The surface
+  refuses unauthenticated callers unless `MERIDIAN_MCP_ALLOW_ANONYMOUS` is set.
+  The alternative — open unless configured — is one forgotten environment
+  variable away from publishing the corpus, and the person who forgets is
+  deploying rather than reading the source
+- **Two checks, not one.** The transport verifies the token; each tool then
+  checks that *this* token was scoped to *it*. §11.4's point is that an
+  interactive session holds read tools while only the orchestrator carries write
+  ones, and that distinction cannot live at the transport — once a request is
+  authenticated, which tool it asked for is the only thing separating them
+- A refusal names the tool and never the credential. A caller with a valid token
+  is entitled to know which capability it lacks; it is not entitled to anything
+  about the token
+- `AuthSettings` is built only when authentication is on, because it needs
+  issuer and resource URLs a loopback machine has no answer for — demanding them
+  there would push everyone toward turning auth off to get started
+
+### Testing
+
+- Fourteen tests, refusal-first. A caller wrongly refused reports it; a caller
+  wrongly served does not
+- That a half-set opt-out does not read as permission: `""`, `"false"`, `"no"`,
+  `"0"` and `"maybe"` all keep the door shut. A template's empty value and
+  someone's attempt to turn it *off* must not turn it on
+- A completeness probe over every registered tool, because a tool added later
+  without the guard is reachable by anyone who reaches the transport and its
+  absence looks like nothing
+- The probe also turned up an ordering worth knowing: argument validation runs
+  *before* the tool body, so an unauthenticated call with bad arguments fails as
+  validation. Not a leak — a configured verifier rejects at the transport first,
+  and in anonymous mode the schema is public via `list_tools` anyway
+
 ## [0.47.0] — 2026-09-15
 
 **Scoped credentials, before anything is exposed.**

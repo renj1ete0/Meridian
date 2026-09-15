@@ -30,6 +30,8 @@ import dataclasses
 import datetime as dt
 from typing import Any
 
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy import select
 
@@ -38,6 +40,8 @@ from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.search import SearchFilters, search
 from meridian_core.stats import corpus_stats
+
+from ..auth import require_tool
 
 log = get_logger(__name__)
 
@@ -108,7 +112,12 @@ def _cite(chunk: Any) -> dict[str, Any]:
     }
 
 
-def build_mcp(*, version: str = "") -> MCPServer:
+def build_mcp(
+    *,
+    version: str = "",
+    token_verifier: TokenVerifier | None = None,
+    auth: AuthSettings | None = None,
+) -> MCPServer:
     """The server, assembled by a factory for the same reason the app is.
 
     A module-level instance would connect to the database at import, which makes
@@ -120,6 +129,12 @@ def build_mcp(*, version: str = "") -> MCPServer:
         title="Meridian research corpus",
         instructions=INSTRUCTIONS,
         version=version,
+        # Transport-level verification, when this deployment has credentials.
+        # `require_tool` is the second half and runs regardless: with no
+        # verifier configured no token is ever populated, so it refuses
+        # everything unless anonymous access was explicitly opted into.
+        token_verifier=token_verifier,
+        auth=auth,
     )
 
     @mcp.tool()
@@ -137,6 +152,8 @@ def build_mcp(*, version: str = "") -> MCPServer:
         When it says word-matching, absence of results is not evidence of
         absence, and you should retry with different wording.
         """
+        require_tool("search_chunks")
+
         filters = SearchFilters(
             source_tiers=source_tier or None,
             published_after=dt.date.fromisoformat(published_after) if published_after else None,
@@ -159,6 +176,8 @@ def build_mcp(*, version: str = "") -> MCPServer:
     @mcp.tool()
     async def get_source_metadata(source_id: int) -> dict[str, Any]:
         """Everything recorded about one source, for citing it properly."""
+        require_tool("get_source_metadata")
+
         async with session_ro() as sess:
             source = await sess.get(Source, source_id)
             if source is None:
@@ -194,6 +213,8 @@ def build_mcp(*, version: str = "") -> MCPServer:
         exact — it cannot skip a row that arrived while you were reading, and it
         cannot return one twice.
         """
+        require_tool("list_new_since")
+
         # Built *inside* the session. ORM instances detach when it closes, and
         # every attribute read afterwards raises `DetachedInstanceError` — which
         # surfaces as "error executing tool" with nothing to say it was a
@@ -242,6 +263,8 @@ def build_mcp(*, version: str = "") -> MCPServer:
         different claims, and nothing else here would tell you which you are
         talking to.
         """
+        require_tool("corpus_overview")
+
         async with session_ro() as sess:
             stats = await corpus_stats(sess)
         return dataclasses.asdict(stats)

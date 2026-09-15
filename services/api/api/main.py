@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 
 from meridian_core.db import check_connection, dispose_engines
@@ -37,6 +38,48 @@ log = get_logger(__name__)
 #: Where the MCP surface mounts. A client is given this path, so moving it
 #: breaks every configured client — it is API, not a detail.
 MCP_PATH = "/mcp"
+
+
+def mcp_auth() -> dict[str, object]:
+    """Whether the MCP surface verifies tokens, and against what.
+
+    Anonymous mode is deliberately the *opt-out*. The alternative — open unless
+    configured — is one forgotten environment variable away from publishing the
+    corpus, and the person who forgets is deploying rather than reading this.
+
+    `AuthSettings` is only constructed when authentication is on, because it
+    requires issuer and resource URLs that a loopback development machine has no
+    meaningful answer for, and demanding them there would push everybody towards
+    turning auth off to get started.
+    """
+    from .auth import MeridianTokenVerifier, allows_anonymous
+
+    if allows_anonymous():
+        log.warning(
+            "mcp surface allows anonymous access",
+            extra={"reason": "MERIDIAN_MCP_ALLOW_ANONYMOUS is set"},
+        )
+        return {}
+
+    issuer = os.environ.get("MERIDIAN_MCP_ISSUER_URL")
+    resource = os.environ.get("MERIDIAN_MCP_RESOURCE_URL")
+    if not (issuer and resource):
+        # No credentials configured and no opt-out: the tools will refuse
+        # everything. Said loudly, because the symptom is every call failing
+        # and the cause is an absent environment variable.
+        log.warning(
+            "mcp surface has no verifier; every tool will refuse",
+            extra={
+                "fix": "set MERIDIAN_MCP_ISSUER_URL and MERIDIAN_MCP_RESOURCE_URL, "
+                "or MERIDIAN_MCP_ALLOW_ANONYMOUS for local use"
+            },
+        )
+        return {}
+
+    return {
+        "token_verifier": MeridianTokenVerifier(),
+        "auth": AuthSettings(issuer_url=issuer, resource_server_url=resource),
+    }
 
 
 def transport_security() -> TransportSecuritySettings:
@@ -137,12 +180,12 @@ def create_app() -> FastAPI:
     # hit one validation layer with none privileged. A separate service would
     # be a second place for that to drift.
     #
-    # It carries no authentication of its own yet. Today that is survivable
-    # because nothing is exposed — `api` is on `internal` and published to
-    # loopback only — but it is exactly what `P3-03` (scoped tokens) and
-    # `P3-05` (Cloudflare Access) exist to close, and it must not reach a
-    # tunnel before they do.
-    mcp = build_mcp(version=os.environ.get("MERIDIAN_VERSION", "0"))
+    # Authentication is `P3-03`: a bearer token resolved against `agent_tokens`,
+    # plus a per-tool scope check that runs whether or not a verifier is
+    # configured. Anonymous access is an explicit opt-out, so a deployment that
+    # simply forgets to configure credentials refuses callers rather than
+    # serving them. `P3-05` (Cloudflare Access) is the layer in front.
+    mcp = build_mcp(version=os.environ.get("MERIDIAN_VERSION", "0"), **mcp_auth())
     app.state.mcp = mcp
     app.mount(
         MCP_PATH,
