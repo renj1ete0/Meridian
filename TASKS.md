@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1841 backend tests and 207 frontend.
+1853 backend tests and 207 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -375,11 +375,15 @@ when its queue drained.
       `build_and_push.sh` is outstanding: a first deploy can build on the
       server, so it is not on the critical path, but it should exist before the
       stack is something anyone would rather not rebuild in place
-- [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
-      the browser every time it sees one, so a JS-only domain pays two requests per
-      page forever. Record the escalation on `fetch_policy` after N confirmations and
-      go straight to the browser. Cheap, and only worth doing once real crawl data
-      shows which domains actually do this
+- [x] `P1-27` **Per-domain `render_js` learning** — `v0.70.0`. Built before
+      `P1-16` rather than after, because the mechanism is self-tuning: the 48h
+      run both benefits from it and produces its evidence, where waiting means
+      paying double for two days first. Consecutive escalations, reset by a
+      single static success; only ever upgrades `auto` to `always`, so an
+      operator's `never` stands; and the conclusion **expires** after a week —
+      without that, a domain skipping the static fetch produces no evidence about
+      itself, so the first correct conclusion becomes permanent and a redesign is
+      invisible
 
 ## Phase 2 · Embeddings and search — the go/no-go
 

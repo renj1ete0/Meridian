@@ -48,6 +48,52 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.70.0] — 2026-09-15
+
+**A domain that always needs the browser stops being asked twice.**
+
+### Added
+
+- `P1-27` `fetch_policy.render_js_escalations` and `render_js_learned_at`.
+  `render_js: auto` fetched statically and re-fetched through the browser when
+  the HTML turned out to be a shell — right for a corpus of mostly-static pages,
+  and with no memory, so a JS-only domain paid both requests on every page
+  forever
+- The cost is not bandwidth. Both requests queue in the same per-domain
+  rate-limit slot the pages do, so it is crawl throughput, on exactly the domains
+  that are already slowest
+
+### Three rules, and the third is what makes it safe unattended
+
+- **Consecutive, not cumulative.** One static fetch that turned out to be enough
+  puts the domain back to zero — the same shape as `consecutive_failures`, for
+  the same reason: a domain that changes behaviour should stop being treated as
+  though it had not
+- **Only ever `auto` → `always`.** Learning gives `auto` a memory; it cannot
+  overrule an operator who turned the browser off for a domain or demanded it for
+  one. Keyed off the merged value rather than the row's own keys, because the
+  global row ships `render_js: auto` as the default and treating that as a
+  decision about every domain would make the feature dead on arrival
+- **The conclusion expires** after a week. This is the trap the obvious version
+  falls into, and it is silent: a domain skipping the static fetch produces no
+  evidence about itself, so the first correct conclusion becomes permanent and a
+  redesign can never be noticed — the crawl keeps working, on the expensive path,
+  forever. Three double-fetches per domain per week is nothing against a crawl,
+  and it buys the property that this cannot be permanently wrong
+
+### Also
+
+- Only `auto` fetches are recorded as evidence. A domain already going straight
+  to the browser renders every time by construction, and counting that would be
+  the conclusion feeding itself
+- A domain with no `fetch_policy` row is not given one. Otherwise the table fills
+  with a row per domain the frontier ever touched — configuration nobody wrote,
+  in the screen where an operator looks for the configuration they did
+- Recorded in the same transaction as the attempt row, so a log saying a domain
+  escalated five times cannot sit beside a policy row that counted none
+- Both columns are on `FetchPolicyRead`: a learned value that looked like a
+  setting would be one somebody tried to change and could not find
+
 ## [0.69.0] — 2026-09-15
 
 **One copy of the model, not two.**

@@ -34,6 +34,19 @@ log = get_logger(__name__)
 
 GLOBAL_DOMAIN = "*"
 
+#: How many consecutive escalations before a domain skips the static fetch
+#: (`P1-27`). Three, because two is a coincidence and ten is a day of paying
+#: double on a domain that already told you. The count is consecutive, so a
+#: single static success puts it back to zero.
+RENDER_JS_THRESHOLD = 3
+
+#: How long the conclusion holds before the domain is re-probed. A domain going
+#: straight to the browser produces no evidence about itself, so without an
+#: expiry the first correct conclusion becomes permanent and a redesign is
+#: invisible. Three double-fetches per domain per week is nothing against a
+#: crawl, and it buys the property that this cannot be permanently wrong.
+RENDER_JS_TTL = dt.timedelta(days=7)
+
 
 class ResolvedPolicy(BaseModel):
     """The effective policy for one domain, after all layers are merged."""
@@ -143,7 +156,42 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
     # A per-domain row carries status; the global row's status is not inherited,
     # because blocking '*' would silently stop the entire crawl.
     status = specific.status if specific else "active"
+
+    # What the crawl learned about this domain (`P1-27`).
+    #
+    # Only ever `auto` → `always`, which is the whole rule and is what makes it
+    # safe: learning gives `auto` a memory, and it cannot overrule an operator
+    # who turned the browser off for a domain or demanded it for one. Keyed off
+    # the *merged* value rather than the row's own keys, because the global row
+    # carries `render_js: auto` as the shipped default — treating that as a
+    # decision about every domain would make this feature dead on arrival.
+    unconfigured = settings.get("render_js", "auto") == "auto"
+    if specific is not None and unconfigured and learned_render_js(specific):
+        settings["render_js"] = "always"
+
     return ResolvedPolicy(domain=host, status=status, **settings)
+
+
+def learned_render_js(row: FetchPolicyRow, *, now: dt.datetime | None = None) -> bool:
+    """Whether this domain has earned going straight to the browser.
+
+    Two conditions, and the second is the one that keeps this honest. The count
+    says the domain has needed the browser every time recently; the timestamp
+    says that observation is still recent — because once a domain is skipping
+    the static fetch it can never produce evidence to the contrary, so without
+    an expiry the first correct conclusion becomes permanent and a redesign is
+    invisible.
+
+    The cost of expiry is three double-fetches per domain per window, which is
+    nothing against a crawl, and it buys the property that this cannot be
+    permanently wrong.
+    """
+    if row.render_js_escalations < RENDER_JS_THRESHOLD:
+        return False
+    if row.render_js_learned_at is None:
+        return False
+    moment = now or dt.datetime.now(dt.UTC)
+    return moment - row.render_js_learned_at < RENDER_JS_TTL
 
 
 async def source_tier_map(sess: AsyncSession) -> dict[str, Any]:
@@ -318,3 +366,52 @@ async def apply_fetch_outcome(
     if signal == "unreachable":
         return await record_failure(sess, domain, blocked_after=blocked_after)
     return False
+
+
+async def record_render_outcome(
+    sess: AsyncSession,
+    domain: str,
+    *,
+    escalated: bool,
+    now: dt.datetime | None = None,
+) -> None:
+    """Record whether this domain needed the browser (task P1-27). Flushes.
+
+    **Only `auto` fetches are evidence.** A domain already skipping the static
+    attempt renders every time by construction, and counting that would be the
+    conclusion feeding itself — which is why the expiry in
+    :func:`learned_render_js` exists rather than a way of un-learning from
+    observations that can no longer be made.
+
+    Consecutive, like `consecutive_failures`: one static fetch that turned out to
+    be enough puts the domain back to zero. A domain that changes behaviour
+    should stop being treated as though it had not, and a running total never
+    lets it.
+    """
+    host = registrable_domain(domain)
+    row = await sess.get(FetchPolicyRow, host)
+    if row is None:
+        # No row, nothing learned. Creating one here would fill `fetch_policy`
+        # with a row per domain the frontier ever touched, which is a table of
+        # configuration nobody wrote.
+        return
+
+    if not escalated:
+        if row.render_js_escalations or row.render_js_learned_at:
+            row.render_js_escalations = 0
+            row.render_js_learned_at = None
+            await sess.flush()
+        return
+
+    moment = now or dt.datetime.now(dt.UTC)
+    row.render_js_escalations += 1
+    if row.render_js_escalations >= RENDER_JS_THRESHOLD and not learned_render_js(row, now=moment):
+        # Stamped when the threshold is crossed *and* whenever a previous
+        # conclusion has expired, so a re-probe that confirms the old answer
+        # renews it rather than re-counting from zero.
+        row.render_js_learned_at = moment
+        log.info(
+            "domain goes straight to the browser from now on",
+            extra={"domain": host, "escalations": row.render_js_escalations},
+        )
+    await sess.flush()

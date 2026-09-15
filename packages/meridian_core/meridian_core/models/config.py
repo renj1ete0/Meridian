@@ -115,6 +115,29 @@ class FetchPolicy(Base):
         Integer, nullable=False, default=0, server_default=text("0")
     )
 
+    # --- what the crawl learned about this domain (task P1-27) ------------
+    #
+    # Learned state, not configuration. `render_js: auto` fetches statically and
+    # re-fetches through the browser when the HTML is a shell, which is the
+    # right order for a corpus of mostly-static pages — and has no memory, so a
+    # JS-only domain pays both requests on every page forever. Those requests
+    # queue in the same per-domain slot the pages do, so the cost is crawl
+    # throughput on exactly the domains that are already slowest.
+
+    #: *Consecutive* escalations, reset the moment a static fetch turns out to
+    #: have been enough. The same shape as `consecutive_failures` above and for
+    #: the same reason: a domain that changes behaviour should stop being
+    #: treated as though it had not.
+    render_js_escalations: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    #: When the threshold was crossed. The learning **expires**, and without
+    #: that this is a trap: a domain going straight to the browser never fetches
+    #: statically again, so the counter cannot reset and a redesign can never be
+    #: noticed.
+    render_js_learned_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
     updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[str | None] = mapped_column(Text)
 

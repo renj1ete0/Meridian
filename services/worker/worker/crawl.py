@@ -37,7 +37,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from meridian_core.attempts import record_attempt
 from meridian_core.logging import get_logger
 from meridian_core.models import Source
-from meridian_core.policy import ResolvedPolicy, apply_fetch_outcome, resolve_policy
+from meridian_core.policy import (
+    ResolvedPolicy,
+    apply_fetch_outcome,
+    record_render_outcome,
+    resolve_policy,
+)
 from meridian_core.tiering import registrable_domain
 
 from .fetch import Fetcher, FetchResult
@@ -250,6 +255,18 @@ class Crawler:
                 status_code=result.status_code,
                 blocked_after=policy.blocked_after_failures,
             )
+            # What this fetch taught us about the domain (`P1-27`). Only `auto`
+            # produces evidence: a domain already going straight to the browser
+            # renders every time by construction, and counting that would be the
+            # conclusion feeding itself.
+            #
+            # In the same transaction as the attempt row, for the same reason —
+            # a log saying a domain escalated five times beside a policy row
+            # that counted none of them is worse than either alone.
+            if result.ok and (policy.render_js or "auto").lower() == "auto":
+                await record_render_outcome(
+                    sess, policy.domain, escalated=result.render_mode != "http"
+                )
             await sess.commit()
 
         if blocked_now:

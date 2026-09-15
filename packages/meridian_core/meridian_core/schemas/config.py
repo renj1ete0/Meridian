@@ -90,6 +90,12 @@ class FetchPolicyRead(BaseModel):
     status: DomainStatus
     note: str | None
     consecutive_failures: int
+    #: What the crawl learned about this domain (`P1-27`), as distinct from what
+    #: was configured for it. Exposed so an admin screen can show *why* a domain
+    #: is going straight to the browser — a learned value that looked like a
+    #: setting would be one somebody tried to change and could not find.
+    render_js_escalations: int = 0
+    render_js_learned_at: dt.datetime | None = None
     updated_at: dt.datetime | None
     updated_by: str | None
 
