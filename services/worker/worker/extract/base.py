@@ -59,6 +59,30 @@ class Page:
 
 
 @dataclasses.dataclass(frozen=True)
+class ExtractedFigure:
+    """One figure, as much as extraction can know about it without a model."""
+
+    caption: str | None = None
+    alt_text: str | None = None
+    #: Absolute, when the document gave one. The only handle on the image until
+    #: something downloads it.
+    image_url: str | None = None
+    #: 1-based, for paginated documents only (§5.3's rule, applied to figures).
+    page: int | None = None
+
+    @property
+    def is_useful(self) -> bool:
+        """Whether this is worth a row.
+
+        An image with neither a caption nor alt text describes nothing. The
+        corpus is for reading, and a figure nobody can read anything about is a
+        row that makes every figure count larger and every figure list longer
+        without making anything findable.
+        """
+        return bool(self.caption or self.alt_text)
+
+
+@dataclasses.dataclass(frozen=True)
 class ExtractedDocument:
     """What one document yielded, whichever extractor produced it.
 
@@ -83,6 +107,10 @@ class ExtractedDocument:
     #: Populated only by paginated formats. Empty means `page_or_offset` on this
     #: document's chunks is a character offset (§5.3).
     pages: tuple[Page, ...] = ()
+    #: Captions and alt text, never image bytes (§6.6: "start with captions, not
+    #: vision"). Empty is the ordinary case — most pages have no figures, and a
+    #: document with none is not a failed extraction.
+    figures: tuple[ExtractedFigure, ...] = ()
     extractor: str = "unknown"
     #: True when the document is a scan with no extractable text layer. The
     #: source stays metadata-only and OCR is queued rather than run (§6.6) —

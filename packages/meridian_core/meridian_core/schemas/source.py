@@ -110,6 +110,7 @@ class FigureCreate(CreateBase):
     bbox: dict | None = None
     file_path: str | None = None
     thumbnail_path: str | None = None
+    image_url: str | None = None
     caption: str | None = None
     alt_text: str | None = None
     vlm_description: str | None = None
@@ -126,6 +127,10 @@ class FigureRead(BaseModel):
     bbox: dict | None
     file_path: str | None
     thumbnail_path: str | None
+    #: The image on the web (`P1-10`). `file_path` is a *local* path and nothing
+    #: downloads figure images, so this is the only handle a reader — or
+    #: `P7-07`'s enrichment — has on the picture itself.
+    image_url: str | None = None
     caption: str | None
     alt_text: str | None
     vlm_description: str | None

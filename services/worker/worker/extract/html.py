@@ -47,6 +47,7 @@ from lxml import html as lxml_html
 from meridian_core.logging import get_logger
 
 from .base import TEXT_FLOOR, Citation, ExtractedDocument
+from .figures import figures_from_html
 
 log = get_logger(__name__)
 
@@ -124,6 +125,11 @@ def extract_html(
         links=links,
         citations=citations,
         doi=own_doi,
+        # From the raw HTML rather than the extracted text: precision filtering
+        # strips `<figure>` wrappers along with the rest of the page furniture,
+        # so by the time trafilatura is done the markup that identified a figure
+        # as a figure is gone (`P1-10`).
+        figures=figures_from_html(content, url),
         # A page can name its own language more reliably than a guess from a
         # paragraph of it, and the extractors often decline to say.
         language=document.language or _language_from_html(html_text),

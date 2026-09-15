@@ -155,7 +155,7 @@ def parse_sitemap(
     if not data.strip():
         raise SitemapError("empty", "no body")
 
-    lowered = data[:_dtd_scan_window(data)].lower()
+    lowered = data[: _dtd_scan_window(data)].lower()
     for marker in _DTD_MARKERS:
         if marker in lowered:
             # Before the parse, not after: the allocation is the attack.
@@ -238,9 +238,7 @@ def parse_sitemap(
     if not kind:
         raise SitemapError("not_a_sitemap", "no root element")
 
-    return ParsedSitemap(
-        kind=kind, urls=tuple(urls), truncated=truncated, dropped=dict(dropped)
-    )
+    return ParsedSitemap(kind=kind, urls=tuple(urls), truncated=truncated, dropped=dict(dropped))
 
 
 def _dtd_scan_window(data: bytes) -> int:

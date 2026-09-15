@@ -59,6 +59,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
 from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
+from meridian_core.figures import FigureWrite, replace_figures
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
 from meridian_core.novelty import novelty_health
@@ -1246,12 +1247,31 @@ class Worker:
         # reading applies — not which extractor happened to run.
         cut = chunk_pages(document.pages) if document.is_paginated else chunk_text(document.text)
         written, deleted = await replace_chunks(sess, source.source_id, as_writes(cut))
+
+        # In the same transaction as the chunks and the source row (`P1-10`). A
+        # source whose text came from this fetch and whose figures came from the
+        # last one describes a document that never existed, and a caption
+        # attached to the wrong picture is a citation that resolves to a lie.
+        figures_written, _ = await replace_figures(
+            sess,
+            source.source_id,
+            [
+                FigureWrite(
+                    caption=figure.caption,
+                    alt_text=figure.alt_text,
+                    image_url=figure.image_url,
+                    page=figure.page,
+                )
+                for figure in document.figures
+            ],
+        )
         log.info(
             "chunked",
             extra={
                 "url": source.url,
                 "source_id": source.source_id,
                 "chunks": written,
+                "figures": figures_written,
                 "replaced": deleted,
                 "chars": document.char_count,
                 "paginated": document.is_paginated,

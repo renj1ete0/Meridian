@@ -46,6 +46,7 @@ async def test_a_connection_error_is_unhealthy_not_an_exception() -> None:
     report it — a probe that raises would take down the pass that prunes the
     attempt log and logs the health line.
     """
+
     def boom(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route to host")
 

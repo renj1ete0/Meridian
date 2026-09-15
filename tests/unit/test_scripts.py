@@ -66,9 +66,7 @@ def test_the_unwritten_list_does_not_outlive_its_scripts() -> None:
     assert not stale, f"written, but still listed as unwritten: {sorted(stale)} — remove them"
 
 
-@pytest.mark.parametrize(
-    "script", sorted(s for s in referenced_scripts() if (REPO / s).exists())
-)
+@pytest.mark.parametrize("script", sorted(s for s in referenced_scripts() if (REPO / s).exists()))
 def test_referenced_scripts_are_executable(script: str) -> None:
     """`make` invokes them as `./scripts/x.sh`, not as `bash scripts/x.sh`, so a
     missing execute bit is a "Permission denied" that reads as a file-ownership
@@ -79,16 +77,11 @@ def test_referenced_scripts_are_executable(script: str) -> None:
 
 @pytest.mark.parametrize(
     "script",
-    sorted(
-        str(p.relative_to(REPO))
-        for p in (REPO / "scripts").glob("*.sh")
-    ),
+    sorted(str(p.relative_to(REPO)) for p in (REPO / "scripts").glob("*.sh")),
 )
 def test_shell_scripts_parse(script: str) -> None:
     """`bash -n`. These run rarely and at the worst possible moment — a restore
     after a failure, a snapshot after a two-day crawl — so a syntax error in a
     branch nobody exercises is found at exactly the wrong time."""
-    result = subprocess.run(
-        ["bash", "-n", str(REPO / script)], capture_output=True, text=True
-    )
+    result = subprocess.run(["bash", "-n", str(REPO / script)], capture_output=True, text=True)
     assert result.returncode == 0, f"{script}: {result.stderr.strip()}"

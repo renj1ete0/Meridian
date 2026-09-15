@@ -473,9 +473,7 @@ def test_citations_are_still_extracted_from_a_browser_document() -> None:
     """
     payload = browser("# Rendered\n" + BODY)
 
-    document = extract_html(
-        page(f"{BODY} See 10.5555/browser-doi."), URL, browser_payload=payload
-    )
+    document = extract_html(page(f"{BODY} See 10.5555/browser-doi."), URL, browser_payload=payload)
 
     assert "doi:10.5555/browser-doi" in cites(document)
 

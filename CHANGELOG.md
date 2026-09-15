@@ -48,6 +48,48 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.51.0] — 2026-09-15
+
+**Figures become findable, without a model touching them.**
+
+### Added
+
+- `P1-10` `extract/figures.py`, `meridian_core/figures.py`, and the write in the
+  keep transaction. The `figures` table has existed since `P0-06` and had no
+  writer at all; it now fills at ingestion
+- §6.6 is explicit about where to start — **"Start with captions, not vision.
+  Figure captions are text, usually extractable, and often the most
+  information-dense sentence about the figure"** — so this extracts captions
+  and alt text and nothing else. No image bytes, no bounding boxes, no model.
+  That is not a stub: a caption plus a page is already a citable claim about
+  what a figure shows
+- Two inputs, two genuinely different problems. **HTML has semantics**:
+  `<figure>`/`<figcaption>` says outright what is a figure, and `alt` is a
+  description written for the purpose. **A PDF has none**: a caption is
+  distinguishable only by convention — a line beginning "Figure 3:" — and that
+  convention is near-universal in what this corpus collects
+- The PDF path carries a page and no bbox. The page is known exactly, the
+  position on it is not known at all, and a fabricated bbox would put false
+  precision on a citation someone follows
+- New column `figures.image_url`. `file_path` is a *local* path and nothing
+  downloads figure images, so without this a row describes a picture nobody
+  could ever look at and `P7-07`'s enrichment would have nothing to fetch
+
+### Testing
+
+- Nineteen extraction tests, and the rejections carry the weight: an image with
+  neither caption nor alt text is not a figure, `Figure 4.` alone is a label
+  without a caption, and "Figure out the cost" is prose. A figures table full of
+  logos and spacers makes every count larger and nothing findable
+- That when the per-document cap truncates, marked-up `<figure>` elements
+  survive and bare `alt` attributes are dropped — the cap must shed the weaker
+  evidence, not whatever came last
+- Six persistence tests: replacement rather than accumulation, the empty case
+  that a replacement which only inserts would get wrong, the cascade, and that
+  one source's figures are not another's
+- End-to-end through the worker to a **committed row**, per the rule `P1-28`
+  bought
+
 ## [0.50.0] — 2026-09-15
 
 **The Access header is never trusted.**

@@ -43,6 +43,7 @@ import shutil
 from meridian_core.logging import get_logger
 
 from .base import ExtractedDocument, Page
+from .figures import figures_from_pages
 
 log = get_logger(__name__)
 
@@ -153,6 +154,10 @@ async def extract_pdf(
     return ExtractedDocument(
         text="\n\n".join(page.text for page in extracted.pages),
         pages=extracted.pages,
+        # Caption lines from the text layer (`P1-10`). No image and no bbox: the
+        # page is known exactly, the position on it is not known at all, and a
+        # fabricated bbox would put false precision on a citation.
+        figures=figures_from_pages(extracted.pages),
         extractor="pdftotext",
         **metadata,
     )

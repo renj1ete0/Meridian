@@ -111,9 +111,7 @@ def test_the_worker_is_the_only_writer_on_egress(compose: dict) -> None:
     """A service on `egress` that also reaches Postgres is a route from hostile
     content to the database. Worker and orchestrator are the deliberate ones."""
     both = {
-        name
-        for name in compose["services"]
-        if {"internal", "egress"} <= networks_of(compose, name)
+        name for name in compose["services"] if {"internal", "egress"} <= networks_of(compose, name)
     }
     assert both <= {"worker", "orchestrator", "cloudflared"}, f"unexpected: {both}"
 

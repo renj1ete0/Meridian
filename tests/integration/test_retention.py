@@ -196,9 +196,7 @@ async def test_a_missing_raw_store_is_not_an_error(session_for, tmp_path) -> Non
 # --------------------------------------------------------------------------
 
 
-async def test_a_cited_background_source_keeps_its_file(
-    session_for, marker, root, cleanup
-) -> None:
+async def test_a_cited_background_source_keeps_its_file(session_for, marker, root, cleanup) -> None:
     """The clause that turns this from a tier lookup into a graph question.
 
     Empty until edges exist, which is why the query is written now rather than

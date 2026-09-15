@@ -22,7 +22,7 @@ import pytest
 from http_doubles import RecordingTransport, streamed
 from sqlalchemy import delete, select
 
-from meridian_core.models import FetchAttempt, FetchPolicy, QueueTask, Source
+from meridian_core.models import FetchAttempt, FetchPolicy, Figure, QueueTask, Source
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier
 from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
@@ -743,6 +743,8 @@ async def test_a_fetched_page_fills_in_the_bibliographic_columns(
         "</head><body><nav>Skip to main content</nav>"
         f"<article><h1>Rail Ridership 2026</h1><p>{ARTICLE}</p>"
         "<p>Method follows doi:10.5555/method-paper.</p>"
+        '<figure><img src="/charts/ridership.png" alt="A line chart">'
+        "<figcaption>Figure 1: ridership by corridor</figcaption></figure>"
         '<a href="/deeper/report.pdf">full report</a></article>'
         "<footer>All rights reserved.</footer></body></html>"
     ).encode()
@@ -766,6 +768,16 @@ async def test_a_fetched_page_fills_in_the_bibliographic_columns(
     # committed row back rather than trusting the extractor's return value —
     # `P1-28` shipped a feature that parsed perfectly and never wrote anything.
     assert source.extractor == "trafilatura", "the static path did not record which tool ran"
+
+    # `P1-10`: the handler ends in a write, so the test reads the committed row
+    # back. §6.6 asks for captions at ingestion and nothing more — no image
+    # bytes, no bbox, no model.
+    figures = list(
+        (await sess.execute(select(Figure).where(Figure.source_id == source.source_id))).scalars()
+    )
+    assert [f.caption for f in figures] == ["Figure 1: ridership by corridor"]
+    assert figures[0].image_url == f"https://{run_domain}/charts/ridership.png"
+    assert figures[0].vlm_description is None, "vision is deferred enrichment (P7-07)"
 
 
 async def test_a_page_with_nothing_extractable_still_records_its_extractor(

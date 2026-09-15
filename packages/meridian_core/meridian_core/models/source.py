@@ -283,6 +283,17 @@ class Figure(Base, TimestampMixin):
     file_path: Mapped[str | None] = mapped_column(Text)
     thumbnail_path: Mapped[str | None] = mapped_column(Text)
 
+    #: Where the image is on the web (task P1-10).
+    #:
+    #: `file_path` is a local raw path and nothing downloads figure images, so
+    #: without this a row describes a picture nobody can ever look at — and the
+    #: enrichment §6.6 defers (`P7-07`) would have nothing to fetch. It is the
+    #: only handle on the image until something stores one.
+    #:
+    #: NULL for a figure found in a PDF's text layer: there the caption is
+    #: extractable and the image is not addressable at all.
+    image_url: Mapped[str | None] = mapped_column(Text)
+
     caption: Mapped[str | None] = mapped_column(Text)
     alt_text: Mapped[str | None] = mapped_column(Text)
     vlm_description: Mapped[str | None] = mapped_column(Text)
@@ -291,6 +302,13 @@ class Figure(Base, TimestampMixin):
     linked_entity_ids: Mapped[list[int] | None] = mapped_column(JSON)
 
     source: Mapped[Source] = relationship(back_populates="figures")
+
+    __table_args__ = (
+        # A source's figures are always read together — the figures panel
+        # (`P6-14`) and any enrichment batch both start from "which figures does
+        # this source have".
+        Index("ix_figures_source", "source_id"),
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Figure {self.figure_id} src={self.source_id} p{self.page}>"

@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1452 backend tests and 127 frontend.
+1477 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -212,62 +212,16 @@ when its queue drained.
       admitted as content. A missing poppler raises loudly — a worker that had
       quietly lost it would store every PDF and extract none of them. Title and
       creation date come from `pdfinfo`
-- [ ] `P1-10` `extract/figures.py` — figure extraction with captions.
-      **Nothing writes the `figures` table today — it has zero rows and no
-      writer anywhere in the worker.** So images, charts and diagrams are
-      currently not extracted, not stored, not captioned and not searchable, in
-      HTML or in PDFs; the raw file keeps them and nothing else knows they
-      exist. The schema is ready and has been since `P0-06`: `page`, `bbox`,
-      `file_path`, `caption`, `vlm_description`, `linked_entity_ids`. §6.6 is
-      specific that captions are extracted at ingestion and indexed like any
-      other text — which is most of the value at no model cost — while
-      `vlm_description` is deferred, user-triggered enrichment (`P7-07`) and
-      figure *similarity* search needs multimodal embeddings (`B-03`), which is
-      backlog. Worth doing after `P1-16` rather than before: a caption
-      extractor is cheap to write and its value is entirely a function of how
-      many figures the corpus actually has, which nobody knows yet
-- [x] `P1-11` Raw store writer — `worker/rawstore.py` plus
-      `meridian_core/sources.py`. Path is `<domain>/<hex shard>/<sha256(url)><ext>`,
-      derived from the URL so a re-fetch overwrites rather than accumulating, and
-      refused outright for a host that cannot safely be a directory name. Writes
-      are atomic (temp file in the destination directory, fsync, `os.replace`).
-      Retention actually splits per §5.4 — primary keeps the file, background
-      keeps the checksum and metadata only. `upsert_source()` stores the
-      validators that make `conditional_requests` real for the first time, and
-      returns whether the checksum changed. A fetch the store could not keep is
-      retried, never advanced
-- [x] `P1-12` Source tier assignment — `meridian_core/tiering.py`, exact → longest
-      pattern → default, seeded into the DB with the global fetch policy
-- [x] `P1-13` `ocr_queue.py` — a scan becomes a source record plus one
-      `enrichment_queue` row, idempotent so a re-crawl does not inflate the
-      pending count an operator makes a spending decision from. `ocr_applied`
-      and `ocr_tier` written explicitly so a skipped document is findable rather
-      than inferred from an absence (§6.6)
-- [x] `P1-14` `resolve_doi.py` — Unpaywall → OpenAlex → CORE → preprint chain,
-      stopping at the first **legally available** copy. Plus the two ends that
-      make it reachable: citations become `doi` rows (§6.1 lists them beside
-      links; they were extracted and never queued, capped at 30 per page so one
-      review article cannot flood the frontier) and a `doi` row resolves to an
-      ordinary `url` row that goes through the whole fetch stack. Three
-      outcomes settle three ways — a provider erroring is routine, "no copy
-      anywhere" is an answer and settles `done`, and no provider answering is
-      transient and retries. A provider with no credential is skipped, not
-      failed, so a bare deployment still gets OpenAlex and preprints. Verified
-      live against real Unpaywall and OpenAlex across all four outcomes.
-      Extended in `v0.28.0` with Europe PMC and Semantic Scholar below §6.5's
-      four, and with the bug that finding them exposed: a rate-limited provider
-      read as "no copy exists", which settled the task `done` and lost the
-      paper — see the handover's §3 entry before adding a provider anywhere
-- [x] `P1-15` Worker main loop, supervision, graceful restart —
-      `services/worker/worker/main.py`. N claim-fetch-settle lanes over one
-      shared `Crawler`; the database is the queue and `SKIP LOCKED` is the
-      dispatcher, so the loop needs no scheduler of its own. `queue_disposition()`
-      decides whether an outcome is a failure to retry or a refusal to abandon —
-      a different question from `domain_signal()`'s, and they disagree in both
-      directions. Everything is caught except cancellation, which is the
-      shutdown path. `SIGTERM` finishes the fetches in flight and hands the
-      leases back; a second signal cancels. Housekeeping gives `prune_attempts()`
-      somewhere to run and logs §12.5's health line
+- [x] `P1-10` `extract/figures.py` — figure extraction with captions, `v0.51.0`.
+      §6.6's "start with captions, not vision": captions and alt text at
+      ingestion, no image bytes, no bbox, no model. HTML has semantics to read
+      (`<figure>`, `alt`); a PDF has only the convention that a caption line
+      begins "Figure 3:", and the page is exact while the position on it is
+      unknown — so no bbox is invented. Adds `figures.image_url`, because
+      `file_path` is local and nothing downloads images, so a row would
+      otherwise describe a picture nobody could look at. Vision is `P7-07`, the
+      panel is `P6-14`
+
 - [~] `P1-25` **Egress restriction** — host-level control shipped in `v0.39.0`,
       the proxy option still open. `deploy/egress-restrict.nft` gives the
       fetching process no route to RFC1918: not in the application, not in the

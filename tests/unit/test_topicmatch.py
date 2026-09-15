@@ -150,7 +150,7 @@ def test_a_short_topic_name_is_still_subject_to_the_length_floor() -> None:
 
 
 def test_the_longest_match_leads() -> None:
-    """"riverside trail network" is better evidence than "places"."""
+    """ "riverside trail network" is better evidence than "places"."""
     v = vocab(
         FakeTerm("Places", ["biology"]),
         FakeTerm("Riverside Trail Network", ["alpha"]),
@@ -194,9 +194,7 @@ def test_an_empty_vocabulary_matches_nothing_and_does_not_raise() -> None:
     assert v.topics_for("https://x.test/anything") == ()
 
 
-@pytest.mark.parametrize(
-    "url", ["", "not a url", "https://", "mailto:a@b.test", "https://x.test"]
-)
+@pytest.mark.parametrize("url", ["", "not a url", "https://", "mailto:a@b.test", "https://x.test"])
 def test_degenerate_urls_do_not_raise(url: str) -> None:
     v = TopicVocabulary.from_terms((), ("robotics",))
     assert v.best_topic(url) is None
