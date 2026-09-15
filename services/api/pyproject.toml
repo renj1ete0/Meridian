@@ -1,6 +1,6 @@
 [project]
 name = "meridian-api"
-version = "0.43.0"
+version = "0.44.0"
 description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
 requires-python = ">=3.12"
 dependencies = [
@@ -9,6 +9,7 @@ dependencies = [
     # ASGI server. Here rather than in a dev group: the container's CMD is
     # `uvicorn`, so an image built with `--no-dev` must still have it.
     "uvicorn[standard]>=0.34",
+    "mcp>=1.2",
 ]
 
 # Deliberately NOT depending on sentence-transformers, and this is a decision

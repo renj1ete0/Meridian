@@ -43,6 +43,64 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.44.0] — 2026-09-15
+
+**An external agent can pull evidence, with citations.**
+
+### Added
+
+- `P3-01`/`P3-02` The MCP read surface, mounted on the API at `/mcp`. §11.1's
+  agent-initiated direction: an external model connects inward and pulls
+  evidence; Meridian holds the corpus and the provenance and generates nothing
+- Four tools — `search_chunks`, `get_source_metadata`, `list_new_since`,
+  `corpus_overview`. `list_new_since` is §11.1a's entry point and needs no query
+  and no embedder at all: a synthesis session *walks* what is new rather than
+  searching for it
+- **The instructions are load-bearing, not documentation.** They are the only
+  thing a model reads before deciding how to treat these results, and three of
+  the mistakes it would otherwise make are ones this system exists to prevent:
+  concluding the corpus lacks a topic when the search was word-matching,
+  reading `source_tier` as a credibility score §8 explicitly refuses to compute,
+  and reporting a claim without its citation
+- The retrieval mode rides on **every search result**, not only on the server
+  instructions — a client reads instructions once at connect and then summarises
+  individual calls, so a warning attached anywhere else does not survive the
+  summary. When degraded, the wording tells the model *what to do*: retry with
+  alternative wordings. A client told only that a flag is true will not think to
+  try synonyms, and that retry is what makes lexical-only retrieval usable while
+  `P2-17` does not exist
+- Mounted on the same app as `/api/explore/*` deliberately. Same corpus, same
+  read-only role, same provenance — §11.1b is explicit that all three
+  integration directions hit one validation layer with none privileged
+- DNS-rebinding protection on the transport, configurable by environment and
+  defaulting to loopback. It is off by default in the SDK and matters the moment
+  this is behind a tunnel: without it a page on any origin can point a hostname
+  at loopback and drive this surface through the reader's own browser
+
+### Testing
+
+- 15 tests, and most are about what the tools *say* rather than what they
+  return. The consumer is a language model with no other source of truth about
+  this corpus: it acts on the wording it is given, summarises away what it was
+  not told to care about, and reports to someone who cannot check
+- That no write tool is registered — absent, not disabled. §11.6 splits read
+  from write and §11.4 puts write scope on the orchestrator alone; a write tool
+  present and guarded is one refactor from present and unguarded
+- That an **empty** search still carries the caveat, which is the case that
+  matters most and the one an implementation naturally skips
+- That the mark walks forward exactly once: no overlap, no gap, and an exhausted
+  mark does not rewind — a caller polling for new work must not be sent back to
+  the beginning, which is an infinite loop that looks like activity
+- Verified against a real MCP client over streamable HTTP: initialize,
+  `list_tools`, all four tools, resumption across two pages, and a missing
+  source answered rather than raised
+
+### Fixed
+
+- `list_new_since` read ORM attributes after its session closed. Found by
+  driving it from a real client — `DetachedInstanceError` surfaces as "error
+  executing tool" with nothing to say it was a lifetime problem
+
 ## [0.43.0] — 2026-09-15
 
 **The corpus becomes reachable over HTTP.**

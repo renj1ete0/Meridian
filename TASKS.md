@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1348 backend tests and 87 frontend.
+1404 backend tests and 87 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -556,8 +556,21 @@ when its queue drained.
 
 *Checkpoint: an external agent can retrieve usefully.*
 
-- [ ] `P3-01` MCP server scaffold inside `api`
-- [ ] `P3-02` Read tools: `search_chunks`, `get_source_metadata`, `list_new_since`
+- [x] `P3-01` MCP server scaffold inside `api` — `v0.44.0`. Mounted at
+      `/mcp` on the same app as `/api/explore/*`: same corpus, same read-only
+      role, same provenance, and §11.1b is explicit that all three integration
+      directions hit one validation layer. DNS-rebinding protection is on and
+      defaults to loopback, because it is off by default in the SDK and matters
+      the moment a tunnel is in front
+- [x] `P3-02` Read tools: `search_chunks`, `get_source_metadata`,
+      `list_new_since`, plus `corpus_overview` — `v0.44.0`. The **instructions
+      are load-bearing**: they are the only thing a model reads before deciding
+      how to treat the results, and they name the three mistakes it would
+      otherwise make. The retrieval mode rides on every result, not just at
+      connect, because a client summarises individual calls; and when degraded
+      the wording says what to *do* about it, since a client told only that a
+      flag is true will not think to try synonyms. `list_new_since` is §11.1a's
+      entry point and needs no embedder at all
 - [ ] `P3-03` Scoped tokens: `allowed_tools`, rate limit, expiry (spec §11.4)
 - [ ] `P3-04` `run_readonly_query` behind the read-only role, statement timeout, row cap
 - [ ] `P3-05` Cloudflare Tunnel + Access in front of the API

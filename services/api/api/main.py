@@ -24,13 +24,37 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from mcp.server.transport_security import TransportSecuritySettings
 
 from meridian_core.db import check_connection, dispose_engines
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
+from .mcp.server import build_mcp
 from .routes import explore
 
 log = get_logger(__name__)
+
+#: Where the MCP surface mounts. A client is given this path, so moving it
+#: breaks every configured client — it is API, not a detail.
+MCP_PATH = "/mcp"
+
+
+def transport_security() -> TransportSecuritySettings:
+    """Which Host and Origin headers the MCP transport will answer.
+
+    Read from the environment rather than hardcoded, because the answer is a
+    deployment fact: locally it is loopback, in production it is the hostname
+    Cloudflare fronts. Unset means loopback only, which is the safe default for
+    a service that is not yet exposed — and a deployment that puts this behind
+    a tunnel without setting it will find the tunnel refused rather than
+    silently reachable from anywhere.
+    """
+    hosts = [h for h in os.environ.get("MERIDIAN_MCP_ALLOWED_HOSTS", "").split(",") if h]
+    origins = [o for o in os.environ.get("MERIDIAN_MCP_ALLOWED_ORIGINS", "").split(",") if o]
+    return TransportSecuritySettings(
+        allowed_hosts=hosts or ["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*"],
+        allowed_origins=origins or ["http://127.0.0.1:*", "http://localhost:*"],
+    )
 
 
 async def log_requests(
@@ -81,11 +105,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     configure_logging("api")
     log.info("api starting", extra={"routes": len(app.routes)})
-    try:
-        yield
-    finally:
-        await dispose_engines()
-        log.info("api stopped")
+
+    # The MCP transport keeps per-connection state — streamable HTTP is a
+    # long-lived session, not a request/response — so its manager has to be
+    # entered for the life of the app. Mounting the sub-app without running it
+    # gives a route that accepts a connection and then fails on the first
+    # message, which reads as a client bug rather than a missing lifespan.
+    mcp = app.state.mcp
+    async with mcp.session_manager.run():
+        log.info("mcp surface ready", extra={"path": MCP_PATH})
+        try:
+            yield
+        finally:
+            await dispose_engines()
+            log.info("api stopped")
 
 
 def create_app() -> FastAPI:
@@ -97,6 +130,36 @@ def create_app() -> FastAPI:
     )
     app.middleware("http")(log_requests)
     app.include_router(explore.router)
+
+    # §11.1's agent-initiated direction (`P3-01`). Mounted on the same app on
+    # purpose: it is the same corpus, the same read-only role and the same
+    # provenance, and §11.1b is explicit that all three integration directions
+    # hit one validation layer with none privileged. A separate service would
+    # be a second place for that to drift.
+    #
+    # It carries no authentication of its own yet. Today that is survivable
+    # because nothing is exposed — `api` is on `internal` and published to
+    # loopback only — but it is exactly what `P3-03` (scoped tokens) and
+    # `P3-05` (Cloudflare Access) exist to close, and it must not reach a
+    # tunnel before they do.
+    mcp = build_mcp(version=os.environ.get("MERIDIAN_VERSION", "0"))
+    app.state.mcp = mcp
+    app.mount(
+        MCP_PATH,
+        # `streamable_http_path="/"` because the sub-app serves `/mcp` by
+        # default and mounting *that* at `/mcp` would publish `/mcp/mcp`. The
+        # symptom is a client that connects and gets "Not Found" from
+        # `initialize`, which reads as a protocol mismatch rather than a path
+        # one.
+        mcp.streamable_http_app(
+            streamable_http_path="/",
+            # DNS-rebinding protection. It is off by default and matters the
+            # moment this is behind a tunnel (`P3-05`): without it a page on
+            # any origin can point a hostname at loopback and drive the MCP
+            # surface through the reader's own browser.
+            transport_security=transport_security(),
+        ),
+    )
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, object]:
