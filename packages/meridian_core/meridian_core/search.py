@@ -71,6 +71,27 @@ DEFAULT_CANDIDATES = 100
 
 DEFAULT_LIMIT = 20
 
+#: Media types whose extractor produces pages rather than flat text (§6.6).
+#:
+#: §5.3 defines `page_or_offset` as "page number for paginated documents,
+#: character offset otherwise" — a rule every consumer otherwise has to know and
+#: apply itself, from a media type that was not on the hit. `P2-18`: derived
+#: once, here, so a client can label the number instead of guessing.
+PAGINATED_MEDIA_TYPES = frozenset({"application/pdf"})
+
+
+def page_unit_for(media_type: str | None) -> str | None:
+    """What a hit's ``page_or_offset`` counts, or None when it cannot be known.
+
+    None rather than a default. Guessing "offset" mislabels every PDF and
+    guessing "page" mislabels every web page, and a source whose media type was
+    never recorded is genuinely unknown — saying so is more useful than a
+    confident wrong label on a citation someone will try to follow.
+    """
+    if media_type is None:
+        return None
+    return "page" if media_type in PAGINATED_MEDIA_TYPES else "offset"
+
 
 @dataclasses.dataclass(frozen=True)
 class SearchFilters:
@@ -122,6 +143,12 @@ class SearchHit:
     source_tier: str
     publication_date: dt.date | None
     language: str | None
+
+    #: What ``page_or_offset`` counts: ``page``, ``offset``, or None when the
+    #: source's media type was never recorded (`P2-18`). Derived here so no
+    #: consumer has to re-implement §5.3's rule.
+    page_unit: str | None
+    media_type: str | None
 
     duplicate_of: int | None
 
@@ -311,6 +338,8 @@ async def search(
                 publication_date=source.publication_date,
                 language=source.language,
                 duplicate_of=chunk.duplicate_of,
+                media_type=(source.extra or {}).get("media_type"),
+                page_unit=page_unit_for((source.extra or {}).get("media_type")),
                 score=scores[chunk_id],
                 lexical_rank=lexical_at.get(chunk_id),
                 vector_rank=vector_at.get(chunk_id),

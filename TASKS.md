@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1430 backend tests and 124 frontend.
+1432 backend tests and 127 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -560,17 +560,13 @@ when its queue drained.
       that list to the pydantic class — and the second is the one that matters:
       drop a field from both the interface and the list and `tsc` stays green
       while the server contradicts it
-- [ ] `P2-18` **Four things `P2-07`'s surface makes awkward to consume**, found
-      by writing the client against it. (a) `page_or_offset` cannot be
-      interpreted: §5.3 defines it as a page for paginated documents and an
-      offset otherwise, and a `SearchHit` carries nothing that says which — so
-      the UI has to label it "page/offset" or mislabel every HTML source.
-      (b) `arms` is `list[str]` rather than a `Literal`, so the frontend's
-      `'lexical' | 'vector'` is invented rather than derived and is the one type
-      the drift test cannot protect. (c) FastAPI's `detail` is a string from
-      `HTTPException` and an array from validation, so every client re-pays the
-      normalisation or renders `[object Object]`. (d) `/stats` carries no
-      timestamp, so a client cannot tell a cached count from a fresh one
+- [x] `P2-18` **Four things `P2-07`'s surface made awkward to consume** —
+      `v0.49.0`. `page_unit` derived in core so §5.3's rule is applied once
+      rather than by every consumer, and None when the media type was never
+      recorded — a wrong label on a citation someone opens is worse than an
+      honest hedge. `arms` is a `Literal` so it crosses the boundary like
+      `SourceTier`. `detail` is always a string, with the structured form kept
+      under `errors`. `/stats` carries `as_of`
 
 ## Phase 3 · MCP read surface
 

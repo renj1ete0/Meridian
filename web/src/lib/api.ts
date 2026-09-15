@@ -59,6 +59,8 @@ export type RetentionTier = 'primary' | 'background' | 'junk'
 export type OcrTier = 'none' | 'cheap' | 'quality'
 
 /** Which retrieval arms ran. Lexical-only is a legitimate, reported mode. */
+export type PageUnit = 'page' | 'offset'
+
 export type SearchArm = 'lexical' | 'vector'
 
 /** Mirrors `SearchHitRead`. */
@@ -75,6 +77,17 @@ export interface SearchHit {
   /** `YYYY-MM-DD`, or null. Not a `Date` — see the module docstring. */
   publication_date: string | null
   language: string | null
+
+  /**
+   * What `page_or_offset` counts (`P2-18`). §5.3 makes it a page for paginated
+   * documents and a character offset otherwise; before this the hit carried
+   * nothing that said which, so a citation could only be labelled
+   * "page/offset". `null` means the source's media type was never recorded —
+   * genuinely unknown, rather than a default that mislabels one kind or the
+   * other.
+   */
+  page_unit: PageUnit | null
+  media_type: string | null
 
   /** The novelty gate's verdict, so a surface can say why something is absent. */
   duplicate_of: number | null
@@ -95,6 +108,8 @@ export const SEARCH_HIT_FIELDS = [
   'source_tier',
   'publication_date',
   'language',
+  'page_unit',
+  'media_type',
   'duplicate_of',
   'score',
   'lexical_rank',
@@ -130,6 +145,9 @@ export const SEARCH_RESPONSE_FIELDS = [
 
 /** Mirrors `CorpusStatsRead`. */
 export interface CorpusStats {
+  /** When the counts were taken (`P2-18`) — a client cannot otherwise tell a
+   *  cached figure from a fresh one. ISO 8601. */
+  as_of: string
   sources: number
   chunks: number
   embedded_chunks: number
@@ -142,6 +160,7 @@ export interface CorpusStats {
 }
 
 export const CORPUS_STATS_FIELDS = [
+  'as_of',
   'sources',
   'chunks',
   'embedded_chunks',

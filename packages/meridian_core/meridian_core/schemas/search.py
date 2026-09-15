@@ -18,7 +18,7 @@ import datetime as dt
 
 from pydantic import BaseModel, ConfigDict
 
-from .enums import SourceTier
+from .enums import PageUnit, SearchArm, SourceTier
 from .source import ChunkRead
 
 
@@ -45,6 +45,14 @@ class SearchHitRead(BaseModel):
     source_tier: SourceTier
     publication_date: dt.date | None
     language: str | None
+
+    #: What `page_or_offset` counts, and what it was derived from. §5.3's rule
+    #: is "page for paginated documents, offset otherwise", and before `P2-18`
+    #: a hit carried nothing that said which — so a consumer either re-derived
+    #: it from a media type it did not have, or labelled every citation
+    #: "page/offset". None means the media type was never recorded.
+    page_unit: PageUnit | None = None
+    media_type: str | None = None
 
     #: The novelty gate's verdict (§6.1). Present so a surface can say *why*
     #: something is missing — a filtered near-duplicate and a never-crawled page
@@ -75,7 +83,7 @@ class SearchResponse(BaseModel):
     #: Which arms ran: ``lexical``, ``vector``, or both. Sorted for a stable
     #: payload — a set's iteration order is not, and a field that reshuffles
     #: between identical requests breaks response caching and diffing.
-    arms: list[str]
+    arms: list[SearchArm]
     degraded: bool
     #: Why, when degraded. Empty when it is not.
     degraded_reason: str | None = None
@@ -102,6 +110,9 @@ class CorpusStatsRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    #: When these numbers were counted (`P2-18`). A client cannot
+    #: otherwise tell a cached count from a fresh one.
+    as_of: dt.datetime
     sources: int
     chunks: int
     embedded_chunks: int

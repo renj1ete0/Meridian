@@ -41,11 +41,13 @@ function Provenance({ hit }: { hit: SearchHit }) {
       <TierChip tier={hit.source_tier} />
       <DataChip>{hit.publication_date ?? 'no date'}</DataChip>
       {hit.page_or_offset !== null ? (
-        // Labelled with both names because the API cannot say which it is:
-        // §5.3 defines the column as a page number for paginated documents and
-        // a character offset otherwise, and a hit carries nothing that
-        // distinguishes them. Guessing "page" would mislabel every HTML source.
-        <DataChip>page/offset {hit.page_or_offset}</DataChip>
+        // `P2-18` gave the hit a `page_unit`, so this can name the number
+        // instead of hedging. `null` still means the source's media type was
+        // never recorded — falling back to both names there is honest, where
+        // picking one would mislabel a citation someone will try to follow.
+        <DataChip>
+          {hit.page_unit ?? 'page/offset'} {hit.page_or_offset}
+        </DataChip>
       ) : null}
       {hit.duplicate_of !== null ? (
         <DataChip>duplicate of {hit.duplicate_of}</DataChip>

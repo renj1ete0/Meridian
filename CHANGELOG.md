@@ -48,6 +48,43 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.49.0] — 2026-09-15
+
+**A citation can say what its number counts.**
+
+### Fixed
+
+- `P2-18`, all four things writing the frontend client found awkward in
+  `P2-07`'s surface
+- **`page_or_offset` can now be interpreted.** §5.3 defines it as a page number
+  for paginated documents and a character offset otherwise — a rule every
+  consumer had to know and apply for itself, from a media type the hit did not
+  carry. `page_unit` is derived once, in core, and the UI labels the number
+  instead of printing "page/offset". None when the media type was never
+  recorded: guessing "offset" mislabels every PDF and guessing "page" mislabels
+  every web page, and a wrong label on a citation someone will open is worse
+  than an honest hedge
+- `arms` is `list[SearchArm]` rather than `list[str]`, so the value set crosses
+  the boundary the way `SourceTier` does. A frontend inventing its own union was
+  the one type the cross-language drift test could not protect
+- `detail` is always a string. FastAPI returns one from `HTTPException` and a
+  list of objects from validation, so every client normalises both shapes or
+  renders `[object Object]` at the moment someone needs to read the message. The
+  structured form is kept alongside under `errors`, so a client highlighting the
+  offending field does not have to parse prose to find it
+- `/stats` carries `as_of`. These are the numbers someone quotes as "the corpus
+  has N documents" months later, and a client could not tell a cached figure
+  from a fresh one
+
+### Testing
+
+- The cross-language drift test caught both changed DTOs without being asked,
+  and TypeScript caught the test fixture that had not been updated. That is the
+  two-link chain working exactly as `P2-13` designed it
+- That the UI hedges *only* when the media type is genuinely unknown. The
+  fallback has to stay and has to stay rare — hedging on every source teaches
+  readers the label carries no information
+
 ## [0.48.0] — 2026-09-15
 
 **The MCP surface refuses by default.**

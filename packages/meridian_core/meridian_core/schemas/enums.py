@@ -77,3 +77,14 @@ RunStatus = Literal[*RUN_STATUS.enums]
 JobStatus = Literal[*JOB_STATUS.enums]
 EnrichmentType = Literal[*ENRICHMENT_TYPE.enums]
 NotificationType = Literal[*NOTIFICATION_TYPE.enums]
+
+
+#: Which retrieval arm produced a hit (`P2-06`, `P2-18`).
+#:
+#: A Literal rather than `str` so the value set crosses the API boundary the way
+#: `SourceTier` does — a frontend that has to invent its own union is the one
+#: type a cross-language drift test cannot protect.
+SearchArm = Literal["lexical", "vector"]
+
+#: What a hit's `page_or_offset` counts (§5.3, `P2-18`).
+PageUnit = Literal["page", "offset"]

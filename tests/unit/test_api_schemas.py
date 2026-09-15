@@ -77,6 +77,8 @@ def test_a_hit_validates_from_the_dataclass() -> None:
         source_tier="government",
         publication_date=None,
         language="en",
+        page_unit="page",
+        media_type="application/pdf",
         duplicate_of=None,
         score=0.5,
         lexical_rank=1,
@@ -87,6 +89,9 @@ def test_a_hit_validates_from_the_dataclass() -> None:
 
     assert dto.chunk_id == 1
     assert dto.source_tier == "government"
+    # `P2-18`: the unit rides with the number, so a citation can be labelled
+    # rather than guessed at.
+    assert dto.page_unit == "page"
     assert dto.vector_rank is None
 
 

@@ -24,6 +24,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -203,6 +205,34 @@ def create_app() -> FastAPI:
             transport_security=transport_security(),
         ),
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def readable_validation_error(request: Request, exc: RequestValidationError):
+        """Make `detail` a string, always (`P2-18`).
+
+        FastAPI hands back a string from `HTTPException` and a list of error
+        objects from validation, so every client must normalise both shapes or
+        render `[object Object]` at the one moment a user needs to read the
+        message. That is FastAPI's convention rather than a bug, but each
+        consumer re-pays it — and a browser, an MCP client and a curl user are
+        three consumers already.
+
+        The structured form is kept alongside under `errors`, because a client
+        that wants to highlight the offending field should not have to parse
+        prose to find it.
+        """
+        parts = []
+        for error in exc.errors():
+            location = ".".join(str(piece) for piece in error.get("loc", ()) if piece != "query")
+            parts.append(
+                f"{location}: {error.get('msg', 'invalid')}"
+                if location
+                else error.get("msg", "invalid")
+            )
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "; ".join(parts) or "invalid request", "errors": exc.errors()},
+        )
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, object]:

@@ -46,6 +46,8 @@ function hit(over: Partial<SearchHit> = {}): SearchHit {
     chunk_index: 0,
     url: 'https://example.test/report.pdf',
     title: 'Annual Report 2026',
+    page_unit: 'page',
+    media_type: 'application/pdf',
     source_tier: 'government',
     publication_date: '2025-12-03',
     language: 'en',
@@ -226,5 +228,35 @@ describe('the copy holds the voice guide', () => {
 
   it('contains no exclamation marks', () => {
     for (const copy of rendered) expect(copy).not.toContain('!')
+  })
+})
+
+// --------------------------------------------------------------------------
+// A citation says what its number counts (task P2-18, spec §5.3)
+// --------------------------------------------------------------------------
+
+describe('the page number is labelled, not hedged', () => {
+  it('says "page" for a paginated source', () => {
+    const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ page_unit: 'page' })]} />))
+    expect(rendered).toContain('page 1')
+  })
+
+  it('says "offset" for one that is not', () => {
+    const rendered = text(
+      renderToStaticMarkup(
+        <ResultList hits={[hit({ page_unit: 'offset', media_type: 'text/html' })]} />,
+      ),
+    )
+    expect(rendered).toContain('offset 1')
+  })
+
+  it('hedges only when the source never recorded a media type', () => {
+    // The fallback has to stay, and has to stay rare. Picking one name for an
+    // unknown source mislabels a citation someone will open; hedging on every
+    // source teaches readers the label carries no information.
+    const rendered = text(
+      renderToStaticMarkup(<ResultList hits={[hit({ page_unit: null, media_type: null })]} />),
+    )
+    expect(rendered).toContain('page/offset 1')
   })
 })

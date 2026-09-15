@@ -69,3 +69,31 @@ def test_fusion_takes_any_number_of_arms() -> None:
     plausible addition, and it should not require rewriting the fusion."""
     scores = fuse([1], [1], [1])
     assert scores[1] == pytest.approx(3.0 / (RRF_K + 1))
+
+
+# --------------------------------------------------------------------------
+# What a page number counts (task P2-18, spec §5.3)
+# --------------------------------------------------------------------------
+
+
+def test_a_pdf_counts_pages_and_a_web_page_counts_characters() -> None:
+    """§5.3: "page number for paginated documents, character offset otherwise".
+
+    A rule every consumer previously had to know and apply for itself, from a
+    media type that was not on the hit — so the UI either re-derived it or
+    labelled every citation "page/offset". Derived once, here.
+    """
+    from meridian_core.search import page_unit_for
+
+    assert page_unit_for("application/pdf") == "page"
+    assert page_unit_for("text/html") == "offset"
+
+
+def test_an_unrecorded_media_type_is_unknown_rather_than_guessed() -> None:
+    """Guessing "offset" mislabels every PDF and guessing "page" mislabels every
+    web page. A source whose media type was never recorded is genuinely unknown,
+    and saying so beats a confident wrong label on a citation someone will try
+    to follow."""
+    from meridian_core.search import page_unit_for
+
+    assert page_unit_for(None) is None

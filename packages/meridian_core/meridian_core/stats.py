@@ -20,6 +20,7 @@ a refresh time *displayed beside it*, not a silent approximation.
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +39,8 @@ class CorpusStats:
     Reporting one number for both would erase exactly that distinction.
     """
 
+    #: When these numbers were counted (`P2-18`).
+    as_of: dt.datetime
     sources: int
     chunks: int
     embedded_chunks: int
@@ -59,6 +62,10 @@ async def corpus_stats(sess: AsyncSession) -> CorpusStats:
         return int(await sess.scalar(stmt) or 0)
 
     return CorpusStats(
+        # `P2-18`: a client cannot otherwise tell a cached count from a fresh
+        # one, and these are exactly the numbers someone quotes as "the corpus
+        # has N documents" months later.
+        as_of=dt.datetime.now(dt.UTC),
         sources=await count(select(func.count()).select_from(Source)),
         chunks=await count(select(func.count()).select_from(Chunk)),
         embedded_chunks=await count(
