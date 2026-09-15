@@ -1,0 +1,62 @@
+/* Tailwind v4 is CSS-first: `@theme` both declares the custom properties and
+ * generates the utilities from them, so the token file stays the single source
+ * rather than being mirrored into a JS config that can drift from it. */
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme inline {
+  --color-ground-deep: var(--ground-deep);
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-accent-graph: var(--accent-graph);
+  --color-accent-graph-deep: var(--accent-graph-deep);
+  --color-accent-attention: var(--accent-attention);
+  --color-accent-attention-deep: var(--accent-attention-deep);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-none: var(--radius);
+  --radius-chip: var(--radius-chip);
+}
+
+html {
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Digits that sit in a column must line up — §3. Applied to the mono face
+ * globally rather than per-component, because every mono use in this system is
+ * measured data by definition. */
+code,
+kbd,
+samp,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus is `line.strong`, never a removed outline: the canvas is keyboard
+ * navigable and an invisible focus ring makes it unusable. */
+:focus-visible {
+  outline: 2px solid var(--line-strong);
+  outline-offset: 1px;
+}

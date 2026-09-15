@@ -17,6 +17,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Computed,
     Date,
     DateTime,
     ForeignKey,
@@ -27,7 +28,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import text as sql_text  # `Chunk.text` shadows the name in that class body
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from meridian_core.db import Base
@@ -161,6 +162,32 @@ class Chunk(Base, TimestampMixin):
         BigInteger, ForeignKey("chunks.chunk_id", ondelete="SET NULL"), index=True
     )
 
+    # --- the lexical half of hybrid retrieval (§12.5, task P2-05) ---------
+    #
+    # A STORED generated column, not the trigger the task named. Postgres 12
+    # made the trigger unnecessary, and a generated column is strictly stronger
+    # than one: it cannot be bypassed by a write path that forgot to fire it,
+    # cannot drift from ``text`` after a bulk UPDATE, and needs no ordering
+    # agreement with any other BEFORE trigger on the table. The failure mode a
+    # trigger has here is silent — a chunk that exists, is embedded, and is
+    # unfindable lexically — and the corpus gives no signal that it happened.
+    #
+    # The regconfig is a literal on purpose. ``to_tsvector(text)`` resolves the
+    # configuration through ``default_text_search_config``, which is a session
+    # GUC and therefore not IMMUTABLE, and Postgres refuses it in a generated
+    # column. Naming it also pins the stemming: the same text indexed under a
+    # different session setting would otherwise produce a different vector.
+    #
+    # NOT NULL because ``text`` is: ``to_tsvector`` of a stopword-only string is
+    # the empty tsvector, not NULL, so a NULL here would mean the column was
+    # added without being generated — which is precisely the migration mistake
+    # worth failing on.
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', text)", persisted=True),
+        nullable=False,
+    )
+
     source: Mapped[Source] = relationship(back_populates="chunks")
 
     __table_args__ = (
@@ -174,6 +201,10 @@ class Chunk(Base, TimestampMixin):
             "chunk_id",
             postgresql_where=sql_text("embedding IS NOT NULL AND novelty_checked_at IS NULL"),
         ),
+        # GIN rather than GiST: this index is read constantly and written once
+        # per chunk, which is the tradeoff GIN is built for. GiST would be the
+        # choice only if the corpus churned.
+        Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

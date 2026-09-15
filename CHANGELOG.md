@@ -8,6 +8,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Docs: `docs/deployment.md` — the runbook for putting the stack on the server,
+  the bounded smoke run, and `P1-16`. Names four Makefile targets that call
+  scripts which do not exist, one of which (`make snapshot-corpus`) is `P1-16`'s
+  stated deliverable. New tasks `P1-36`, `P1-37`
+- Docs: `docs/connectors.md` — four levels of adding a source, cheapest first,
+  ending at the sidecar-container pattern that `crawl4ai` and `searxng` already
+  are. Records which of the compose topology rules are enforced generically and
+  which are asserted for `crawl4ai` by name, because a new sidecar inherits only
+  the first
+- Spec: `docs/spec/external-acquisition.md` — consigning URLs the crawler cannot
+  fetch to an external actor (a container, or a person with a browser), and
+  admitting what comes back through the ordinary pipeline with permanent
+  provenance that it was not fetched here. Eligibility is a narrow allowlist;
+  `robots_denied` and `unsafe_target` are never eligible, and the spec says why
+  the line is absolute. New tasks `P1-38`–`P1-42`
+- Spec: `docs/spec/shared-read-access.md` — read-only MCP access for other
+  people's models, and the grant model for giving access to people who are not
+  the operator. Cloudflare Access answers who is at the door; Meridian answers
+  what they may read. New tasks `P3-06`–`P3-11`
+
 - Docs: `TASKS.md` and `docs/handover.md` brought up to date with `v0.21.0`–
   `v0.24.0`. The handover's "what does not exist yet" claimed there were no
   embeddings, and its build-state and test counts were four releases stale
@@ -21,6 +41,64 @@ design-only changes do not require a version bump, but may be listed under Unrel
   its JSON API enabled and the cold-start seeds ship query seeds, but no handler
   claims them — so when the frontier empties the crawl idles rather than
   searching for more
+
+
+## [0.29.0] — 2026-09-15
+
+**The lexical half of search, and a frontend that has tokens before it has screens.**
+
+### Added
+
+- `P2-05` `chunks.search_vector` — a STORED generated `tsvector` over
+  `chunks.text`, plus the GIN index behind it. The lexical half of §12.5's
+  hybrid retrieval; the vector half already exists and nothing yet fuses them
+  (`P2-06`)
+- A generated column rather than the trigger the task named. Postgres 12 made
+  the trigger unnecessary, and a generated column cannot be bypassed by a write
+  path that forgot to fire it, cannot drift from `text` after a bulk UPDATE, and
+  needs no ordering agreement with other BEFORE triggers. The failure a trigger
+  has here is silent: a chunk that is present, embedded and novelty-judged, and
+  lexically unfindable, which is indistinguishable from a corpus that does not
+  contain the term
+- The regconfig is named rather than defaulted. `to_tsvector(text)` resolves
+  through `default_text_search_config`, a session GUC, so it is not IMMUTABLE
+  and Postgres refuses it in a generated column — and naming it also pins the
+  stemming, so the same text cannot index differently depending on who connected
+- `P2-11` `web/` scaffold: Vite, React, TypeScript and Tailwind v4, with the dev
+  proxy sending `/api` onward so no environment-specific base URL exists in the
+  source. The proxy target is a property of the machine, not the app, and reads
+  `VITE_API_PROXY`
+- `P2-12` Design tokens in code — both palettes, the type scale and §5's surface
+  rules as CSS custom properties, wired into the Tailwind theme so the token
+  file generates the utilities rather than being mirrored into a second config
+- `P6-18`, a new task: four light-theme roles are inferred rather than decided.
+  The design system publishes nine light tokens against thirteen dark ones, and
+  the four it omits are all canvas roles — its graph-canvas table has no light
+  column
+
+### Fixed
+
+- Nothing. Both tasks are new surface
+
+### Testing
+
+- `tests/integration/test_search_index.py` — seven tests against a real
+  Postgres. `alembic check` explicitly declines to compare computed defaults
+  ("Computed default on chunks.search_vector cannot be modified"), so the one
+  thing autogenerate normally guards is exactly what it does not guard here: a
+  drift test compares the model's `Computed` expression against the database's
+  own record of it instead
+- The suite covers the failures this column can actually have: a plain column
+  that never populates, a vector that does not follow an UPDATE to the text, an
+  application write that should be refused, a configuration that quietly became
+  `simple` (caught through stemming, the only observable difference), a missing
+  index, and an index the planner cannot use for `@@`
+- `web/tests/tokens.test.ts` — five tests parsing the palette out of
+  `docs/design/design-system.md` and comparing it against `tokens.css` in both
+  directions: every published colour must be defined at its published value, and
+  no source file outside the token file may contain a colour literal at all.
+  Neither hardcodes a palette, so a legitimate change is a one-file edit
+- 1234 backend tests pass with a real Postgres, 5 frontend
 
 
 ## [0.28.0] — 2026-09-08

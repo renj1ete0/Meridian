@@ -87,7 +87,10 @@ READ_PAIRS = [
     (models.FetchAttempt, schemas.FetchAttemptRead, set()),
     # Embeddings are 1024 floats — never in a response payload.
     (models.Source, schemas.SourceRead, set()),
-    (models.Chunk, schemas.ChunkRead, {"embedding"}),
+    # `search_vector` is an index artifact, not content: it is derived from
+    # `text`, which is already exposed, and a tsvector in a response payload
+    # would be a stemmed, lossy second copy of the field beside it.
+    (models.Chunk, schemas.ChunkRead, {"embedding", "search_vector"}),
     (models.Figure, schemas.FigureRead, set()),
     (models.Entity, schemas.EntityRead, {"embedding"}),
     (models.Edge, schemas.EdgeRead, set()),

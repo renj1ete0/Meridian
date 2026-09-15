@@ -16,11 +16,11 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 2 opening, phase 1 not yet closed.** The crawl runs unattended,
+**Current phase: 2, phase 1 not yet closed.** The crawl runs unattended,
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1227 tests.
+1234 backend tests and 5 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -40,11 +40,16 @@ nothing. The agreed sequence:
    checkout. Its purpose is "do the containers come up and talk to each other",
    not corpus volume
 4. ~~`P2-03` novelty gate~~ — **done in v0.25.0**, ahead of the smoke run
-   because it needed neither the stack nor the server. Then
-   `P2-05`/`P2-04`/`P2-06` search, built against real crawl output. The gate
-   went before the long run deliberately: nothing deletes from the raw store
-   (`P1-31`), so an ungated 48h run keeps every near-duplicate it finds — it
-   now at least *knows* which ones they are
+   because it needed neither the stack nor the server. The gate went before the
+   long run deliberately: nothing deletes from the raw store (`P1-31`), so an
+   ungated 48h run keeps every near-duplicate it finds — it now at least
+   *knows* which ones they are.
+   ~~`P2-05` tsvector~~ — **done in v0.29.0**, for the same reason: an index
+   definition needs neither a corpus nor a server, and building it before the
+   run means the run's chunks arrive already indexed rather than needing a
+   backfill afterwards. `P2-04` HNSW and `P2-06` search still want real crawl
+   output — `P2-04`'s task is half index and half *measurement*, and the
+   measurement is the half that cannot be faked
 4b. ~~`P1-34` query handler~~ — **done in v0.26.0**, and it moved ahead of the
    long run for a reason worth keeping: a 48h window is only worth paying for
    if the frontier can widen when it drains. Building it surfaced that `P1-28`
@@ -52,6 +57,12 @@ nothing. The agreed sequence:
    much narrower than anyone expected
 5. `P1-16` the 48h run, then `P0-15` held-out questions — which must be written
    before `P2-06` is judged, not after — and `P2-09`, the call
+
+The frontend is a third track and blocks on none of it: `P2-11` and `P2-12`
+are done in `v0.29.0`, so `web/` has a build, a token layer and a test that
+stops the palette drifting from the design system. `P2-13` (the typed API
+client) is the first frontend task that genuinely waits — it types
+`/api/explore/*`, which `P2-07` has not written yet.
 
 `P1-10` (figures) is the remaining phase-1 extraction work and does not block
 the checkpoint. `P1-14` is done: it moved up because `P1-34` wired an academic
@@ -98,10 +109,14 @@ when its queue drained.
 - [x] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
 - [x] `P0-14` ⚑ human — the ten questions, traced against the schema → `docs/design-questions.md`.
       Found five gaps; fixed in `P0-20`
-- [-] `P0-15` ⚑ human — held-out question set, **deferred by decision**. Needed before
-      the phase 2 go/no-go, not before phase 1: §14.1 uses it to measure whether the
-      graph improves month to month, and there is nothing to measure until the corpus
-      exists. Re-open when phase 2 starts
+- [ ] `P0-15` ⚑ human — held-out question set. Deferred through phase 1 by
+      decision — §14.1 uses it to measure whether the graph improves month to
+      month, and there was nothing to measure until a corpus existed — with
+      "re-open when phase 2 starts" as the condition. **Phase 2 has started, so
+      it is re-opened here.** Write it before `P2-06` is judged, not after: a
+      question set written once results are visible is a description of those
+      results, and `P2-09` is then a go/no-go against a target drawn around the
+      shot
 - [x] `P0-16` ⚑ human — cold-start seeds: 8 authority roots + 5 query seeds. Kept short
       deliberately; tier-upranking of search results does the discovery
 - [x] `P0-17` ⚑ human — gazetteer at 64 terms, jurisdiction-scoped, with 20 ambiguous
@@ -323,6 +338,50 @@ when its queue drained.
       it spends queue slots. `SEMANTIC_SCHOLAR_API_KEY` is free to request and
       is read already; this is a registration, not code. Measure the retry rate
       during `P1-16` before deciding it matters. ⚑ human
+- [ ] `P1-36` **`make snapshot-corpus` calls a script that does not exist.**
+      It is `P1-16`'s stated deliverable — the 48h run's output *becomes* the
+      dev corpus, and scaffold §6 asks for real crawl snapshots rather than
+      fixtures. `scripts/` holds only `init-roles.sh` and `seed.py`, so the
+      target fails at the shell. Finding that out after the run is a wasted 48
+      hours. Needs `snapshot_corpus.sh` and its `restore_corpus.sh` counterpart,
+      and both halves have to travel together: a dump whose `sources.raw_path`
+      values point at files nobody kept is a catalogue, not a corpus
+- [ ] `P1-37` **`make build-push` and `make backup` call scripts that do not
+      exist either.** Less urgent than `P1-36` — a first deploy can build on the
+      server, and `pg_dump` by hand is a backup — but `build-push` is the reason
+      the arm64 target is not a cross-compilation problem, and it should exist
+      before the stack is something you would rather not rebuild in place
+### External acquisition — see [docs/spec/external-acquisition.md](docs/spec/external-acquisition.md)
+
+*A URL the crawler cannot fetch becomes a question for something else, and what
+comes back is processed by the ordinary pipeline while the corpus records,
+permanently, that Meridian did not fetch it.*
+
+- [ ] `P1-38` **`consignment_eligible()` — the allowlist and the two absolute
+      refusals.** Deliberately standalone: no table, no API, no external actor.
+      It is the part of that spec with a security argument behind it —
+      `robots_denied` must be unreachable rather than merely off by default,
+      because consigning one is the same crawl with the conduct removed, and
+      `unsafe_target` must be unreachable because publishing it asks a third
+      party to fetch the LAN and post the result back. Tests pin both
+- [ ] `P1-39` Schema: `consignments`, `sources.acquired_via`/`acquired_by`,
+      `queue.consignment_attempts`, `fetch_policy.consignment_allowed`, and
+      `external_supplied` on `FETCH_OUTCOME`. Hand-written CHECK migration
+      (`P0-21`), and the value must reach the enum *and* the constraint before
+      anything uses the literal (`P1-28`'s trap)
+- [ ] `P1-40` Admission — size, media type, checksum, the injection screen
+      unconditionally, and attribution to the **consigned** URL rather than the
+      one the supplier names. Everything downstream is the existing
+      rawstore/extract/chunk path, unchanged, or the two pipelines drift
+- [ ] `P1-41` `/api/acquisition/*` — claim with a lease (reuse `claim_next()`'s,
+      do not invent a second), hand back, read status. Three outcomes that must
+      stay three: `supplied` → `fetched`, `unavailable` → `done`, `failed` →
+      re-consignable. Needs the API service to exist (`P2-07`)
+- [ ] `P1-42` `consignment: configured | stale | absent` on the §12.5 health
+      line, and open consignments visible in Admin. An external actor that
+      stopped collecting its feed three weeks ago otherwise looks exactly like a
+      crawl with no eligible failures
+
 - [ ] `P1-27` **Per-domain `render_js` learning.** `auto` re-fetches a shell through
       the browser every time it sees one, so a JS-only domain pays two requests per
       page forever. Record the escalation on `fetch_policy` after N confirmations and
@@ -366,20 +425,40 @@ when its queue drained.
       boilerplate a site repeats under every URL, at similarity 1.0, and
       demoted nothing
 - [ ] `P2-04` pgvector HNSW index; measure recall and latency at corpus size
-- [ ] `P2-05` `tsvector` index and trigger
+- [x] `P2-05` `tsvector` index and trigger — shipped as a **generated column,
+      not a trigger**. Postgres 12 made the trigger unnecessary and a generated
+      column is strictly stronger: it cannot be bypassed by a write path that
+      forgot to fire it, cannot drift from `text` after a bulk UPDATE, and needs
+      no ordering agreement with other BEFORE triggers. `chunks.search_vector`
+      is `to_tsvector('english', text)` STORED, with a GIN index. The regconfig
+      is named because the one-argument form reads a session GUC and is
+      therefore not IMMUTABLE — and naming it pins the stemming too. Note
+      `alembic check` **cannot** guard this: it warns "Computed default on
+      chunks.search_vector cannot be modified" and moves on, so the drift test
+      compares the model's expression against the database's own record of it
 - [ ] `P2-06` `search.py` — hybrid retrieval, RRF fusion, **filters before vector search**
 - [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
 - [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible
 - [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
 - [x] `P2-10` ⚑ human — frontend framework chosen: **React + TypeScript + Tailwind CSS**,
       with Sigma.js v3 + graphology for the canvas
-- [ ] `P2-11` Frontend scaffold: Vite + React + TypeScript + Tailwind, `web/` structure
-      per scaffold §2, dev proxy `/api` → `localhost:8000` so no environment-specific
-      base URL exists
-- [ ] `P2-12` Design tokens in code — the two palettes, type scale, and surface rules
-      from `docs/design/design-system.md` as CSS custom properties, wired into the
-      Tailwind theme. Tokens must stay the single source: no raw hex in className,
-      or the design system and the app drift apart immediately
+- [x] `P2-11` Frontend scaffold: Vite + React + TypeScript + Tailwind v4, `web/`
+      structure per scaffold §2. The app only ever calls `/api/...` relative, so
+      no environment-specific base URL exists in the source; the proxy target is
+      a property of the machine and reads `VITE_API_PROXY`, defaulting to
+      `localhost:8000` (a natively-run uvicorn) with `localhost:21114` for the
+      compose stack. The landing state states the absence rather than promising
+      a feature, per the voice guide — there is no retrieval path yet and it
+      says so
+- [x] `P2-12` Design tokens in code — both palettes, the type scale and §5's
+      surface rules as CSS custom properties in `web/src/styles/tokens.css`,
+      wired into Tailwind v4's `@theme` so the token file *generates* the
+      utilities rather than being mirrored into a second config that can drift
+      from it. "Tokens stay the single source" is enforced rather than asserted:
+      `web/tests/tokens.test.ts` parses the palette out of the design system and
+      checks it both ways — every published colour defined at its published
+      value, and no colour literal anywhere outside the token file. It caught
+      two things on its first run, one of them in its own docstring
 - [ ] `P2-13` `web/src/lib/api.ts` — typed client over `/api/explore/*`, with the
       request/response types kept in step with the pydantic DTOs
 
@@ -392,6 +471,36 @@ when its queue drained.
 - [ ] `P3-03` Scoped tokens: `allowed_tools`, rate limit, expiry (spec §11.4)
 - [ ] `P3-04` `run_readonly_query` behind the read-only role, statement timeout, row cap
 - [ ] `P3-05` Cloudflare Tunnel + Access in front of the API
+
+### Sharing it with other people — see [docs/spec/shared-read-access.md](docs/spec/shared-read-access.md)
+
+*Two questions answered by two systems: Cloudflare decides whether a request
+reaches the machine, Meridian decides what it may read once there. `P3-01`–`P3-05`
+cover the operator's own access; these cover everyone else's.*
+
+- [ ] `P3-07` **`meridian_guest` role — SELECT on the corpus and graph tables
+      and nothing else.** First, and doable now: it needs no API, no MCP server
+      and no Cloudflare account. `meridian_ro` can read `agent_tokens`, whose
+      `token_hash` column is the one secret in the schema, so it is the wrong
+      role to put behind a query tool a guest can reach. A rejection test per
+      excluded table, against a real Postgres
+- [ ] `P3-06` `grants` table + `agent_tokens.grant_id`. The unit of sharing is a
+      person, not a credential — they will hold several — so revoking a grant
+      must revoke every token beneath it in one statement, with a test that
+      proves it
+- [ ] `P3-08` Access JWT verification: fetch the team keys, verify signature and
+      audience on every request, map identity → grant. **Never** trust
+      `Cf-Access-Jwt-Assertion` as a header; it is a string, and an app that
+      trusts it is one stray ingress away from letting anyone assert any identity
+- [ ] `P3-09` Service tokens for MCP clients — an MCP client cannot complete an
+      SSO redirect — plus the runbook. The Cloudflare half and the Meridian half
+      are two steps and both are easy to half-do
+- [ ] `P3-10` Grant scoping in the tool layer: `topics[]`, `max_source_tier`,
+      `raw_files` (default **false** — serving raw files to other people is
+      redistribution, not sharing), and annotation exclusion
+- [ ] `P3-11` Per-grant audit log and per-token rate limiting. Audit by grant,
+      not by token: "what has this person's model been reading" is unanswerable
+      from a per-token log once they have three clients
 
 ## Phase 4 · Graph and writes — the loop closes
 
@@ -457,6 +566,14 @@ when its queue drained.
 - [ ] `P6-16` Shared UI primitives from the design system: the 17-icon set, source-tier
       and contested (dagger) badges, node chips, the top-right status/notification cluster
 - [ ] `P6-17` Theme switching, honouring the system preference by default
+- [ ] `P6-18` **Four light-theme roles are inferred, not decided.** The design
+      system publishes nine light tokens against thirteen dark, and the four it
+      omits are all canvas roles — its graph-canvas table is headed "Dark" and
+      has no light column. `tokens.css` maps them to values the design system
+      *does* define rather than inventing hexes (recolouring outside the palette
+      is an explicit Never), but a mapping made by the person wiring the tokens
+      is not a design decision. Decide whether the canvas stays dark in both
+      themes, and publish the light values if it does not. ⚑ human
 
 ## Phase 7 · Full design
 

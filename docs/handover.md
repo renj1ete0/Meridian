@@ -77,7 +77,10 @@ worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.
         queue_disposition() → fetched | done | retry | abandon
 ```
 
-**What does not exist yet.** No search, no API, no frontend. Embeddings exist as of
+**What does not exist yet.** No retrieval, no API. The frontend now exists as
+a *build* — `web/` has Vite, React, Tailwind v4, a token layer and a test that
+stops the palette drifting from the design system — but it renders no data,
+because there is nothing to render it from. Embeddings exist as of
 `P2-01`, but only as a **separate backfill pass** (`python -m worker.embed`) — the
 fetch loop never touches the model. The novelty gate (`P2-03`) is a second such
 pass (`python -m worker.novelty`) and is the only thing that reads the vectors so
@@ -235,6 +238,45 @@ Test it by inserting through **raw SQL**, not the ORM. SQLAlchemy's
 `validate_strings=True` rejects bad values in Python, so an ORM-based rejection test
 passes whether or not the database constraint exists at all — which is exactly how
 Phase 0 shipped unchecked VARCHAR columns while its tests were green.
+
+### `alembic check` cannot see a generated column's expression
+
+`P2-05` added `chunks.search_vector` as `GENERATED ALWAYS AS
+(to_tsvector('english', text)) STORED`. Autogenerate warns
+
+```
+UserWarning: Computed default on chunks.search_vector cannot be modified
+```
+
+and moves on. So model-versus-database drift — the one thing `alembic check`
+normally guards, and the reason `make migrate` is trusted — is exactly what it
+does **not** guard for this column. A model changed to a different text-search
+configuration with no migration behind it passes `alembic check` cleanly and
+leaves the corpus indexed under the old one, with no error at any point.
+
+`tests/integration/test_search_index.py::test_generation_expression_matches_the_model`
+is the replacement: it reads `information_schema.columns.generation_expression`
+and compares it to the model's `Computed.sqltext`, normalising what the parser
+adds (`'english'` comes back as `'english'::regconfig`).
+
+Two other things about that column worth not rediscovering:
+
+- **The regconfig must be a literal.** `to_tsvector(text)` resolves through
+  `default_text_search_config`, which is a session GUC, so the one-argument form
+  is not IMMUTABLE and Postgres refuses it in a generated column outright.
+- **`attgenerated` comes back as bytes.** It is Postgres's internal `"char"`
+  type, so `attgenerated == "s"` is False and `attgenerated == b"s"` is True.
+  Cast it in SQL rather than comparing in Python.
+
+### The Makefile has four targets pointing at scripts that do not exist
+
+`scripts/` contains `init-roles.sh` and `seed.py`. `make snapshot-corpus`,
+`make restore-corpus`, `make backup` and `make build-push` all call shell
+scripts that were never written. `snapshot-corpus` is the one that matters:
+`P1-16`'s task line is "48h unattended acceptance run → `make snapshot-corpus`",
+so the run's deliverable is a target that fails at the shell. Find that out
+before the run, not after. Tracked as `P1-36`/`P1-37`, and
+[deployment.md](deployment.md) §6 has the manual equivalent.
 
 ### A value used in code but absent from the enum fails at the insert, not at import
 
