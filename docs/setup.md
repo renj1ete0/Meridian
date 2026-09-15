@@ -257,10 +257,15 @@ What is missing, and why it blocks:
   checks the scope per tool. Anonymous access is an explicit opt-out
   (`MERIDIAN_MCP_ALLOW_ANONYMOUS`), which `.env.dev` sets for local use
 
+- ✅ `P3-08` — Access assertions are **verified cryptographically** against
+  your team's published keys, with the audience checked, on every request. The
+  unsigned `Cf-Access-Authenticated-User-Email` header is never believed. Set
+  `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`; without both, the middleware is
+  not installed and says so at startup
+
 | Missing | Task | Why it blocks |
 |---|---|---|
-| Cloudflare Tunnel + Access | `P3-05` | Nothing reaches the machine from outside |
-| Access JWT verification | `P3-08` | Without it the app trusts a header, and a header is a string anyone can send |
+| Cloudflare Tunnel + Access | `P3-05` | Nothing reaches the machine from outside. **Needs your Cloudflare account** |
 | OAuth flow | `P3-09` | A phone app pastes a URL — there is nowhere to put a service-token header |
 
 **Do not set `MERIDIAN_MCP_ALLOW_ANONYMOUS` on anything reachable.** It is for a
