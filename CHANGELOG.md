@@ -48,6 +48,67 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.66.0] — 2026-09-15
+
+**The robots cache survives a restart.**
+
+### Added
+
+- `P1-29` a `robots_cache` table, and a `RobotsCache` that reads and writes it.
+  The cache was in-process, so a restart re-fetched `/robots.txt` for every
+  origin the crawl touched — and each of those queues in the same per-domain slot
+  the pages do, so the first minutes back were spent asking permission
+- **The raw file is stored, not the parsed rules.** Re-parsing on load is cheap,
+  the compiled matchers are not serialisable in any form worth versioning, and a
+  parser fix then reaches everything already cached rather than only what is
+  fetched afterwards. The file is also the evidence for "why was this URL
+  refused"
+- A per-origin lock. At the start of a crawl a lane claims many URLs from one
+  domain at once, and without it every one of them missed the empty cache and
+  fetched the same file — a thundering herd aimed at the one file that asked to
+  be treated gently
+
+### Two layers, two clocks
+
+- In memory, entries still expire on `time.monotonic()`, which is right there: it
+  cannot be moved by NTP stepping the wall clock, so a correction mid-run cannot
+  extend or void an entry
+- Persisted, they expire on wall clock, because monotonic counts from an
+  arbitrary origin — usually boot — and a stored monotonic deadline would be
+  compared against a different clock after exactly the restart the row exists to
+  survive
+
+### `missing` and `unreachable` are different columns' worth of meaning
+
+- Both store no body and they mean opposite things (§2.3.1.3): a 404 permits the
+  whole origin, an unreachable server refuses it until the file can be read. The
+  outcome is a column rather than inferred from `body IS NULL`, because
+  collapsing them would turn every origin that was down at restart into one that
+  had granted permission
+- A refusal keeps its short TTL across the round trip. Caching "refuse
+  everything" for a day because of one blip takes a domain out of the crawl for
+  a day
+
+### The cache cannot stop the crawl
+
+- Every store call is wrapped: a failed load is a miss, a failed save is a fetch
+  that happens again. An optimisation that can take the crawl down is worse than
+  no optimisation — the failure guarded against is a database hiccup becoming
+  "this worker refuses every origin"
+- Without a store it is the in-process cache it always was, so every caller
+  without a database keeps the previous behaviour
+
+### Testing
+
+- A *new* `RobotsCache` answering without fetching — a different object, since an
+  in-memory double would make the claim trivially true
+- Both halves of the outcome distinction after a restart, the TTL boundary in
+  both directions, and eight concurrent requests for one origin producing one
+  fetch
+- The migration/model drift test caught a missing `created_at` index that
+  `TimestampMixin` declares. Worth recording: the index is not decoration, and
+  the check is the only thing that reports it
+
 ## [0.65.0] — 2026-09-15
 
 **Steering: the weight vector is editable, and the floor is a guarantee.**

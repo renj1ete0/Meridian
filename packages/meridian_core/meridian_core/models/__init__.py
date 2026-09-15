@@ -15,6 +15,7 @@ from .mixins import (
     TimestampMixin,
 )
 from .queue import FetchAttempt, QueueTask
+from .robots import RobotsCacheEntry
 from .runs import EnrichmentItem, Notification, Report, Run
 from .source import EMBEDDING_DIM, Chunk, Figure, Source
 
@@ -40,6 +41,7 @@ __all__ = [
     "ProvenanceMixin",
     "QueueTask",
     "Report",
+    "RobotsCacheEntry",
     "Run",
     "Source",
     "ScheduledJob",

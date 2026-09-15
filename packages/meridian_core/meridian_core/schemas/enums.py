@@ -34,6 +34,7 @@ from meridian_core.models.queue import (
     TASK_STATUS,
     TASK_TYPE,
 )
+from meridian_core.models.robots import ROBOTS_OUTCOME
 from meridian_core.models.runs import (
     ENRICHMENT_TYPE,
     JOB_STATUS,
@@ -64,6 +65,9 @@ AttributeStatus = Literal[*ATTRIBUTE_STATUS.enums]
 # gazetteer.py
 GazetteerEntityType = Literal[*GAZETTEER_ENTITY_TYPE.enums]
 GazetteerSource = Literal[*GAZETTEER_SOURCE.enums]
+
+#: How the last read of an origin's robots.txt ended (`P1-29`).
+RobotsOutcome = Literal[*ROBOTS_OUTCOME.enums]
 
 # config.py
 TopicStatus = Literal[*TOPIC_STATUS.enums]

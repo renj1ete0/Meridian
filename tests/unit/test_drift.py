@@ -37,6 +37,7 @@ ENUM_PAIRS = [
     ("AttributeStatus", models.graph.ATTRIBUTE_STATUS),
     ("GazetteerEntityType", models.gazetteer.GAZETTEER_ENTITY_TYPE),
     ("GazetteerSource", models.gazetteer.GAZETTEER_SOURCE),
+    ("RobotsOutcome", models.robots.ROBOTS_OUTCOME),
     ("TopicStatus", models.config.TOPIC_STATUS),
     ("DomainStatus", models.config.DOMAIN_STATUS),
     ("TokenScope", models.config.TOKEN_SCOPE),

@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1780 backend tests and 205 frontend.
+1792 backend tests and 205 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -266,10 +266,17 @@ when its queue drained.
       work at all. Paired with `worker/topicmatch.py`: a sitemap URL gets the
       topic its path implies, not the one the triggering page happened to carry,
       and an unmatched URL is deprioritised to -10 rather than dropped
-- [ ] `P1-29` **Persist the robots cache across restarts.** It is in-process, so a
-      worker restart re-fetches robots.txt for every origin it touches. Harmless at
-      current scale and wasteful at corpus scale; revisit when the crawl is wide
-      rather than deep
+- [x] `P1-29` **Persist the robots cache across restarts** — `v0.66.0`. A
+      `robots_cache` table holding the *raw file*, re-parsed on load, so a parser
+      fix reaches everything already cached. Two layers on two clocks:
+      `time.monotonic()` in memory, where NTP cannot move it, and wall clock in
+      the row, because a stored monotonic deadline would be compared against a
+      different clock after exactly the restart it exists to survive. `missing`
+      and `unreachable` stay distinct — both store no body and mean opposite
+      things, and collapsing them would turn every origin that was down at
+      restart into one that granted permission. Plus a per-origin lock, since a
+      lane claims many URLs from one domain at once and every one of them used to
+      miss the empty cache
 - [ ] `P1-32` **Replacing chunks orphans the edges that cite them.**
       `edges.supporting_chunk_ids` is an array of ids with no foreign key behind
       it, and `replace_chunks()` deletes the old set when a page's content

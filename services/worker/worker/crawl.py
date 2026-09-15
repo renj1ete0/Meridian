@@ -89,7 +89,13 @@ class Crawler:
         # crawler that honours a domain's delay for its pages and then fetches
         # robots.txt whenever it likes has misread which of the two is the
         # courtesy.
-        self._robots = robots or RobotsCache(self._fetch_in_slot)
+        #
+        # The session factory is handed on so the cache survives a restart
+        # (`P1-29`). Without it a restart re-fetches robots.txt for every origin
+        # the crawl touches, and each of those requests queues in the same
+        # per-domain slot the pages do — so the first minutes back are spent
+        # asking permission rather than crawling.
+        self._robots = robots or RobotsCache(self._fetch_in_slot, store=session_factory)
 
     @property
     def limiter(self) -> DomainLimiter:
