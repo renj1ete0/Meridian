@@ -235,10 +235,23 @@ It reports index recall, latency and how often the two search arms agree — and
 refuses to report numbers a small corpus cannot support, which is most of what
 it does before `P1-16`.
 
-> **Search is word-matching only right now.** There is no query embedder
-> (`P2-17`), so semantically-related passages phrased differently are not found.
-> Every response says so, and the UI shows it. This matters most for broad
-> research questions, least for exact-term lookups.
+**Hybrid search needs the embedding sidecar** (`P2-17`). It is the worker's own
+image with a different command:
+
+```bash
+docker compose up -d embedder
+docker compose logs embedder | tail -3      # first start loads 2.3GB
+curl localhost:21114/api/explore/stats      # sanity
+```
+
+Set `MERIDIAN_EMBEDDER_URL=http://embedder:8100` in `.env`. Without it, search
+runs on words alone — every response says so, and the UI shows it. That matters
+most for broad research questions and least for exact-term lookups.
+
+The distinction the API draws is worth knowing: *"this deployment has no
+embedder"* is a choice, and *"the embedding service did not answer"* is an
+outage. If you see the second, the sidecar is down — the search still works on
+one arm, which is why you would otherwise not notice.
 
 ---
 
