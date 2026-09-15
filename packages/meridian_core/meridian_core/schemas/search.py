@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .enums import PageUnit, SearchArm, SourceTier
 from .runs import NotificationRead
@@ -132,6 +132,15 @@ class CorpusStatsRead(BaseModel):
     #: as the second.
     new_sources: int | None = None
     new_chunks: int | None = None
+
+    #: Every configured topic, most-attended first (`P6-24`) — what a filter
+    #: control offers. From `topic_config`, so a topic with no sources yet is
+    #: offered and filters to nothing, which is the true answer.
+    topics: list[str] = Field(default_factory=list)
+
+    #: Sources nothing has examined for topics (`P6-24`). What lets a topic
+    #: filter tell a reader that narrowing may be hiding unexamined material.
+    sources_without_topics: int = 0
 
 
 class SourceChunksRead(BaseModel):

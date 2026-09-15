@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1876 backend tests and 224 frontend.
+1879 backend tests and 233 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -469,9 +469,13 @@ when its queue drained.
       which deliberately records **less** than the live path, because the crawl's
       own topic is not recoverable after the fact and the join that would
       recover it is the one this task rejected
-- [ ] `P6-24` Topic filter control in Explore. `P2-14` made the API filter real
-      and put the labels on every hit; choosing one from the UI needs the topic
-      list on the client, which `/stats` does not carry
+- [x] `P6-24` Topic filter control in Explore — `v0.72.0`. `/stats` now carries
+      the configured topics and a count of sources nothing has examined. The
+      second is the point: a topic filter excludes those, correctly and
+      silently, so a reader who narrows and sees three results cannot otherwise
+      tell the corpus holds three hundred nobody looked at. The control says so
+      once, while narrowing. Filtering re-runs the search rather than filtering
+      results in place, because fusion ranks a candidate pool
 - [ ] `P2-15` **Benchmark embedding models against each other.**
       `scripts/benchmark_search.py` measures the index and the methods over
       whatever vectors are in the corpus; comparing bge-m3 against an

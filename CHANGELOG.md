@@ -48,6 +48,44 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.72.0] — 2026-09-15
+
+**Explore can narrow to a topic, and says what narrowing hides.**
+
+### Added
+
+- `P6-24` a topic filter in Explore, completing what `P2-14` started: the labels
+  were on every hit and the filter was on the API, with no way to choose one
+- `CorpusStats.topics`, from `topic_config` rather than from the labels present
+  on sources. The second needs `DISTINCT unnest(topic_labels)` over the whole
+  corpus, which no GIN index answers, and it would make the landing page's cost
+  grow with the crawl. A topic with no sources filters to nothing, which is true
+- On `/stats` rather than a route of its own, because Explore needs it at the
+  same moment it needs the counts
+
+### The caveat is the feature
+
+- A topic filter excludes sources nothing has examined — correctly, since nothing
+  has established they belong to the topic — and **silently**. A reader who
+  narrows and sees three results has no way to know the corpus holds three hundred
+  documents nobody looked at
+- So `CorpusStats.sources_without_topics` exists, and the control says so: once,
+  and only while a filter is active. On every render it is noise; never, it is an
+  omission the reader cannot see
+- Filtering re-runs the search rather than filtering the results in place. Fusion
+  ranks a candidate pool, so a filter applied afterwards shows the top 20 of an
+  unfiltered ranking with most of them removed — which looks like a topic with
+  almost nothing in it
+
+### Also
+
+- Chips rather than a dropdown: the set is small (it is §10's weight vector), and
+  a dropdown hides how much is on offer behind a click
+- The control renders nothing when no topics are configured. A control with no
+  options is furniture, and an empty row of chips reads as a failed load
+- Selection uses the graph accent and nothing else. A topic is not better or
+  worse than another one, so the only thing colour says is "this is on"
+
 ## [0.71.0] — 2026-09-15
 
 **Per-domain fetch policy, and the guards that are deliberately not on it.**

@@ -25,7 +25,7 @@ import datetime as dt
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Chunk, Edge, Entity, Source
+from .models import Chunk, Edge, Entity, Source, TopicConfig
 
 
 @dataclasses.dataclass(frozen=True)
@@ -57,6 +57,29 @@ class CorpusStats:
     new_sources: int | None = None
     new_chunks: int | None = None
 
+    #: Every configured topic, most-attended first (`P6-24`). Here rather than
+    #: on a route of its own because Explore needs it at the same moment it
+    #: needs the counts, and a second request on first paint to populate one
+    #: dropdown is a request nobody would make twice.
+    #:
+    #: From `topic_config` rather than from the labels actually present on
+    #: sources: the second needs `DISTINCT unnest(topic_labels)` over the whole
+    #: corpus, which no GIN index answers, and it would make the landing page's
+    #: cost grow with the crawl. A topic with no sources yet filters to nothing,
+    #: which is a true answer.
+    topics: list[str] = dataclasses.field(default_factory=list)
+
+    #: Sources nothing has examined for topics — `topic_labels IS NULL` (`P6-24`).
+    #: A topic filter excludes them, correctly and invisibly: a reader narrowing
+    #: to a topic and seeing three results cannot otherwise tell that the corpus
+    #: holds three hundred documents nobody has looked at. This is what lets the
+    #: filter say so.
+    #:
+    #: A plain COUNT with no index behind it. Milliseconds at the scale this
+    #: corpus is built for; if `sources` ever reaches millions, this is the
+    #: number on the landing page that will be felt first.
+    sources_without_topics: int = 0
+
     @property
     def searchable_chunks(self) -> int:
         """Chunks a default search can return: everything not marked duplicate."""
@@ -85,6 +108,12 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
             .where(Chunk.created_at > since, Chunk.superseded_at.is_(None))
         )
 
+    topics = list(
+        await sess.scalars(
+            select(TopicConfig.topic).order_by(TopicConfig.weight.desc(), TopicConfig.topic)
+        )
+    )
+
     return CorpusStats(
         # `P2-18`: a client cannot otherwise tell a cached count from a fresh
         # one, and these are exactly the numbers someone quotes as "the corpus
@@ -92,6 +121,10 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
         as_of=dt.datetime.now(dt.UTC),
         new_sources=new_sources,
         new_chunks=new_chunks,
+        topics=topics,
+        sources_without_topics=await count(
+            select(func.count()).select_from(Source).where(Source.topic_labels.is_(None))
+        ),
         sources=await count(select(func.count()).select_from(Source)),
         # Live chunks only (`P1-32`). "How much is in here" means the text on the
         # pages now; counting retired generations would make the corpus appear

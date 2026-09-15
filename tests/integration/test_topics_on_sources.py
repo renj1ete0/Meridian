@@ -234,3 +234,42 @@ async def test_an_empty_vocabulary_writes_nothing(clean, scope, term) -> None:
     stats = await run_pass(apply=True, vocabulary=TopicVocabulary())
 
     assert stats.examined == 0
+
+
+# --------------------------------------------------------------------------
+# What the filter control is offered (task P6-24)
+# --------------------------------------------------------------------------
+
+
+async def test_the_stats_carry_every_configured_topic(clean) -> None:
+    # From `topic_config` rather than from the labels present on sources: the
+    # second needs `DISTINCT unnest(topic_labels)` over the whole corpus, which
+    # no GIN index answers, and it would make the landing page's cost grow with
+    # the crawl.
+    from meridian_core.stats import corpus_stats
+
+    stats = await corpus_stats(clean)
+
+    assert stats.topics
+    assert stats.topics == sorted(set(stats.topics), key=stats.topics.index)
+
+
+async def test_the_stats_count_sources_nobody_examined(clean, scope, term) -> None:
+    # What lets the filter tell a reader that narrowing may be hiding material.
+    # A reader who narrows and sees three results cannot otherwise know the
+    # corpus holds three hundred documents that were never looked at.
+    from meridian_core.stats import corpus_stats
+
+    before = (await corpus_stats(clean)).sources_without_topics
+    await a_source(clean, scope, f"A {term} report.")
+
+    assert (await corpus_stats(clean)).sources_without_topics == before + 1
+
+
+async def test_an_examined_source_is_not_counted_as_unexamined(clean, scope, term) -> None:
+    from meridian_core.stats import corpus_stats
+
+    before = (await corpus_stats(clean)).sources_without_topics
+    await a_source(clean, scope, f"A {term} report.", topic_labels=[])
+
+    assert (await corpus_stats(clean)).sources_without_topics == before

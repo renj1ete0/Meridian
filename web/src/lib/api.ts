@@ -167,6 +167,10 @@ export interface CorpusStats {
    */
   new_sources: number | null
   new_chunks: number | null
+  /** Every configured topic, most-attended first (`P6-24`). */
+  topics: string[]
+  /** Sources nothing has examined for topics — a topic filter excludes them. */
+  sources_without_topics: number
 }
 
 export const CORPUS_STATS_FIELDS = [
@@ -181,6 +185,8 @@ export const CORPUS_STATS_FIELDS = [
   'contested_edges',
   'new_sources',
   'new_chunks',
+  'topics',
+  'sources_without_topics',
 ] as const
 
 /** Mirrors `ChunkRead`. No `embedding` — a 1024-float vector is not a payload. */
@@ -385,6 +391,8 @@ export interface SearchParams {
   offset?: number
   source_tier?: readonly SourceTier[]
   language?: readonly string[]
+  /** Keep sources carrying any of these topics (`P2-14`). */
+  topic?: readonly string[]
   published_after?: string
   published_before?: string
   include_duplicates?: boolean
@@ -423,6 +431,7 @@ export function searchQuery(params: SearchParams): string {
 
   for (const tier of params.source_tier ?? []) query.append('source_tier', tier)
   for (const language of params.language ?? []) query.append('language', language)
+  for (const topic of params.topic ?? []) query.append('topic', topic)
 
   return query.toString()
 }

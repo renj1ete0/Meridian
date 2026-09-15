@@ -6,6 +6,7 @@ import { EntryPoints, type EntryPointName } from './EntryPoints'
 import { ResultList } from './ResultList'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
+import { TopicFilter } from './TopicFilter'
 import { WhereYouWere } from './WhereYouWere'
 import {
   ApiError,
@@ -53,6 +54,11 @@ type Phase = 'idle' | 'searching' | 'done' | 'failed'
 export function ExplorePage() {
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState('')
+  // Topics narrow the *next* search rather than re-filtering the last one's
+  // results: fusion ranks a candidate pool, so a filter applied afterwards
+  // would show the top 20 of an unfiltered ranking with most of them removed,
+  // which looks like a topic with almost nothing in it (`P6-24`).
+  const [topics, setTopics] = useState<string[]>([])
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -81,7 +87,7 @@ export function ExplorePage() {
     // `since` is captured once and never changes, so this runs on mount only.
   }, [since])
 
-  const run = useCallback((text: string) => {
+  const run = useCallback((text: string, within: readonly string[] = []) => {
     const trimmed = text.trim()
     if (!trimmed) return
 
@@ -93,7 +99,7 @@ export function ExplorePage() {
     setAsked(trimmed)
     setError(null)
 
-    searchCorpus({ q: trimmed }, { signal: controller.signal })
+    searchCorpus({ q: trimmed, topic: within }, { signal: controller.signal })
       .then((response) => {
         setResults(response)
         setPhase('done')
@@ -116,7 +122,31 @@ export function ExplorePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <SearchField value={query} onChange={setQuery} onSubmit={run} />
+      <SearchField value={query} onChange={setQuery} onSubmit={(text) => run(text, topics)} />
+
+      {stats ? (
+        <div className="mt-4">
+          <TopicFilter
+            topics={stats.topics}
+            active={topics}
+            unexamined={stats.sources_without_topics > 0}
+            onToggle={(topic) => {
+              const next = topics.includes(topic)
+                ? topics.filter((t) => t !== topic)
+                : [...topics, topic]
+              setTopics(next)
+              // Re-run immediately, but only when there is a query to re-run.
+              // Changing the filter with an empty box is setting up a search,
+              // not performing one.
+              if (asked) run(asked, next)
+            }}
+            onClear={() => {
+              setTopics([])
+              if (asked) run(asked, [])
+            }}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-12">
         <CorpusCounts counts={stats ? figuresFrom(stats) : null} />
