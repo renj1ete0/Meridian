@@ -51,6 +51,7 @@ function hit(over: Partial<SearchHit> = {}): SearchHit {
     source_tier: 'government',
     publication_date: '2025-12-03',
     language: 'en',
+    topic_labels: ['walkability'],
     duplicate_of: null,
     score: 0.016,
     lexical_rank: 1,
@@ -115,6 +116,27 @@ describe('every result carries its citation', () => {
     // corpus. Swallowing it turns a data problem into a rendering mystery.
     const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ url: 'not a url' })]} />))
     expect(rendered).toContain('not a url')
+  })
+
+  it('shows the topics the source was filed under', () => {
+    // A filtered result set a reader cannot check is a filter they have to
+    // trust. §12.5 puts topic among the filters, so it belongs on the row.
+    const rendered = text(
+      renderToStaticMarkup(<ResultList hits={[hit({ topic_labels: ['walkability', 'transit'] })]} />),
+    )
+
+    expect(rendered).toContain('walkability')
+    expect(rendered).toContain('transit')
+  })
+
+  it('shows no topic chip when the source was never examined', () => {
+    // Null and [] are different facts — "nothing examined this" and "examined,
+    // matched nothing" — and neither is a topic. Inventing a chip for either
+    // would put a label on a document that has none.
+    for (const labels of [null, []]) {
+      const markup = renderToStaticMarkup(<ResultList hits={[hit({ topic_labels: labels })]} />)
+      expect(text(markup)).not.toContain('walkability')
+    }
   })
 
   it('marks a near-duplicate as one', () => {

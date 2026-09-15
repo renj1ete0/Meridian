@@ -391,6 +391,35 @@ class Worker:
     def stats(self) -> WorkerStats:
         return self._stats
 
+    def _labels_for(self, claim: object, final_url: str | None) -> list[str]:
+        """Which topics this source belongs to (task P2-14, §12.5).
+
+        Two sources of evidence, unioned, and they are different kinds of thing.
+
+        The claim's topic is **provenance**: it is why this URL was fetched at
+        all, recorded on the queue row that produced the fetch. That is the
+        stronger of the two and is the reason this happens here rather than in a
+        later pass — after the fact, the only way back to it is a join on the
+        URL, and a URL can be enqueued repeatedly under different topics while a
+        redirect means the fetched URL is frequently not the queued one.
+
+        The path match is **evidence from the URL itself**, and it is why the
+        final URL is used rather than the requested one: a redirect to
+        `/transport/walking/...` says something about the document, and the
+        address that was asked for says only what was guessed.
+
+        A list, never None. An empty list means "examined, matched nothing",
+        which is a fact worth recording and is what stops the backfill pass from
+        re-reading it forever.
+        """
+        labels: dict[str, None] = {}
+        topic = getattr(claim, "topic", None)
+        if topic:
+            labels[topic] = None
+        for match in self._topics.topics_for(final_url or getattr(claim, "url", "")):
+            labels[match] = None
+        return sorted(labels)
+
     def stop(self) -> None:
         """Ask the loop to finish what it is holding and come back."""
         self._stopping.set()
@@ -1058,6 +1087,7 @@ class Worker:
                     retention_tier=stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,
+                    topic_labels=self._labels_for(claim, result.final_url),
                     **_bibliography(document, screening),
                     **validators(result.headers),
                 )

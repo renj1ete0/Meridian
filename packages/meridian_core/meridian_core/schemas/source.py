@@ -67,6 +67,10 @@ class SourceRead(BaseModel):
     ocr_confidence: float | None
     #: When §5.6's acronym harvest last read this document (`P5-02`). NULL is the
     #: queue, and the default keeps rows written before the column readable.
+    #: Which topics this source belongs to (`P2-14`). NULL means nothing has
+    #: examined it — distinct from `[]`, which means it was examined and matched
+    #: nothing, and only the first is worth a backfill.
+    topic_labels: list[str] | None = None
     acronyms_harvested_at: dt.datetime | None = None
     extra: dict | None
     created_at: dt.datetime

@@ -27,6 +27,7 @@ graph.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
@@ -80,6 +81,7 @@ async def upsert_source(
     doi: str | None = None,
     extractor: str | None = None,
     text_available: bool | None = None,
+    topic_labels: Sequence[str] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> tuple[Source, bool]:
     """Create or update the source row for ``url``. Flushes; does not commit.
@@ -140,6 +142,18 @@ async def upsert_source(
         # changed, and keeping the older name would misattribute the text now
         # in the corpus.
         row.extractor = extractor
+    if topic_labels is not None:
+        # Accumulates; never replaces (`P2-14`). A source reached under two
+        # topics belongs to both, and overwriting would make the label depend on
+        # which crawl ran last — so a URL enqueued under `walkability` and later
+        # found again through an `on-demand-bus` seed ends up carrying both,
+        # which is the truth about how it entered the corpus.
+        #
+        # An empty list therefore still writes: it turns NULL ("never examined")
+        # into `{}` ("examined, matched nothing"), which is the distinction the
+        # backfill pass reads.
+        merged = dict.fromkeys([*(row.topic_labels or ()), *topic_labels])
+        row.topic_labels = sorted(merged)
     if text_available is not None:
         # This one *does* overwrite in both directions. A page that used to
         # extract and now does not is a real change — a paywall going up, a

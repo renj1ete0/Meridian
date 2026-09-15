@@ -50,6 +50,17 @@ function Provenance({ hit }: { hit: SearchHit }) {
           {hit.page_unit ?? 'page/offset'} {hit.page_or_offset}
         </DataChip>
       ) : null}
+      {/* Topics, when the source has been examined for them (`P2-14`). A hit
+          whose topic a reader cannot see is a filter they have to trust rather
+          than check, which is the opposite of what this corpus is for.
+
+          Nothing is shown when the list is null or empty, and the two are
+          different facts — "nothing examined this" and "examined, matched
+          nothing" — but neither is a topic, and inventing a chip for either
+          would put a label on a document that has none. */}
+      {(hit.topic_labels ?? []).map((topic) => (
+        <DataChip key={topic}>{topic}</DataChip>
+      ))}
       {hit.duplicate_of !== null ? (
         <DataChip>duplicate of {hit.duplicate_of}</DataChip>
       ) : null}

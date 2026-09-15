@@ -77,6 +77,8 @@ export interface SearchHit {
   /** `YYYY-MM-DD`, or null. Not a `Date` — see the module docstring. */
   publication_date: string | null
   language: string | null
+  /** Which topics the source belongs to (`P2-14`). Null means nothing examined it. */
+  topic_labels: string[] | null
 
   /**
    * What `page_or_offset` counts (`P2-18`). §5.3 makes it a page for paginated
@@ -108,6 +110,7 @@ export const SEARCH_HIT_FIELDS = [
   'source_tier',
   'publication_date',
   'language',
+  'topic_labels',
   'page_unit',
   'media_type',
   'duplicate_of',
@@ -234,6 +237,8 @@ export interface Source {
   ocr_applied: boolean
   ocr_tier: OcrTier
   ocr_confidence: number | null
+  /** Which topics this source belongs to (`P2-14`). Null means nothing examined it. */
+  topic_labels: string[] | null
   /** When the acronym harvest last read this document (`P5-02`). Null is the queue. */
   acronyms_harvested_at: string | null
   extra: Record<string, unknown> | null
@@ -263,6 +268,7 @@ export const SOURCE_FIELDS = [
   'ocr_applied',
   'ocr_tier',
   'ocr_confidence',
+  'topic_labels',
   'acronyms_harvested_at',
   'extra',
   'created_at',

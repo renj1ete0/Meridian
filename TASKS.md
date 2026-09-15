@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1807 backend tests and 205 frontend.
+1822 backend tests and 207 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -454,15 +454,20 @@ when its queue drained.
       and the orchestrator and neither should acquire a 2.3GB model dependency.
       Verified live: both arms ran over the real dev corpus and fusion
       reordered rather than rubber-stamping either arm
-- [ ] `P2-14` **A source records no topic, so search cannot filter by one.**
-      §12.5 lists topic among the filters and §12.3 lists it among the canvas
-      filters, and `sources` has no such column: the crawl knows the topic — it
-      is on the queue row that produced the fetch — and drops it at
-      `upsert_source`. Filtering through a join back to `queue` on the URL would
-      be wrong often enough to be worse than not offering it, since a URL can be
-      enqueued more than once under different topics and a redirect means the
-      fetched URL is frequently not the queued one. Needs the column, the write
-      at keep time, and a decision about what the already-crawled sources get
+- [x] `P2-14` **A source records no topic, so search cannot filter by one** —
+      `v0.68.0`. `sources.topic_labels`, written at keep time from two kinds of
+      evidence: the claim's topic (provenance — why the URL was fetched) and a
+      match against the **final** URL. Labels accumulate rather than replace, or
+      the label would depend on which crawl ran last. NULL and `{}` stay
+      distinct — "never examined" versus "examined, matched nothing" — and the
+      topic filter excludes both, since neither has been established as
+      belonging to a topic. Already-crawled sources: `python -m worker.retopic`,
+      which deliberately records **less** than the live path, because the crawl's
+      own topic is not recoverable after the fact and the join that would
+      recover it is the one this task rejected
+- [ ] `P6-24` Topic filter control in Explore. `P2-14` made the API filter real
+      and put the labels on every hit; choosing one from the UI needs the topic
+      list on the client, which `/stats` does not carry
 - [ ] `P2-15` **Benchmark embedding models against each other.**
       `scripts/benchmark_search.py` measures the index and the methods over
       whatever vectors are in the corpus; comparing bge-m3 against an

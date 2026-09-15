@@ -145,6 +145,7 @@ def build_mcp(
         query: str,
         limit: int = 10,
         source_tier: list[str] | None = None,
+        topic: list[str] | None = None,
         published_after: str | None = None,
         published_before: str | None = None,
         include_duplicates: bool = False,
@@ -154,11 +155,16 @@ def build_mcp(
         Returns a `retrieval` field describing how the match was made — read it.
         When it says word-matching, absence of results is not evidence of
         absence, and you should retry with different wording.
+
+        `topic` keeps sources carrying any of the named topics. Documents
+        crawled before topics were recorded carry none and are excluded by it,
+        so a narrowed search can miss older material that is genuinely relevant.
         """
         require_tool("search_chunks")
 
         filters = SearchFilters(
             source_tiers=source_tier or None,
+            topics=topic or None,
             published_after=dt.date.fromisoformat(published_after) if published_after else None,
             published_before=dt.date.fromisoformat(published_before) if published_before else None,
             include_duplicates=include_duplicates,

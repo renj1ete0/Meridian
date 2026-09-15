@@ -101,18 +101,21 @@ class SearchFilters:
     set of things it is safe to filter on is a decision this module owns rather
     than one each caller makes.
 
-    **There is no topic filter, and its absence is not an oversight.** §12.5 and
-    §12.3 both list topic as a filter, and `sources` does not record one — the
-    crawl knows the topic (it is on the queue row that produced the fetch) and
-    drops it at `upsert_source`. Filtering by topic through a join back to
-    `queue` on the URL would be wrong often enough to be worse than not
-    offering it: a URL can be enqueued more than once under different topics,
-    and a redirect means the fetched URL is frequently not the queued one.
-    `P2-14` puts the topic on the source where it belongs.
+    **The topic filter is overlap, not equality** (`P2-14`). A source carries
+    every topic it belongs to, so naming two topics means "either", which is
+    what a reader narrowing a search expects — and an AND across topics would
+    return almost nothing, since a document rarely sits squarely in two.
+
+    A source whose `topic_labels` is NULL is *not* excluded by an empty filter
+    and *is* excluded by a topic filter: NULL means nothing has examined it, so
+    it cannot be claimed for a topic, and claiming it would silently assert
+    something no pass has established.
     """
 
     source_tiers: Sequence[str] | None = None
     languages: Sequence[str] | None = None
+    #: Match a source carrying any of these topics (§12.5, §12.3).
+    topics: Sequence[str] | None = None
     published_after: dt.date | None = None
     published_before: dt.date | None = None
     #: Near-duplicates are out unless asked for. The gate marked them for a reason.
@@ -143,6 +146,11 @@ class SearchHit:
     source_tier: str
     publication_date: dt.date | None
     language: str | None
+    #: Which topics the source belongs to (`P2-14`). Carried on the hit so a
+    #: result list can show why a document is in a filtered set — a hit whose
+    #: topic a reader cannot see is a filter they have to trust rather than
+    #: check, which is the opposite of what this corpus is for.
+    topic_labels: list[str] | None
 
     #: What ``page_or_offset`` counts: ``page``, ``offset``, or None when the
     #: source's media type was never recorded (`P2-18`). Derived here so no
@@ -193,6 +201,11 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         where.append(Source.source_tier.in_(list(filters.source_tiers)))
     if filters.languages:
         where.append(Source.language.in_(list(filters.languages)))
+    if filters.topics:
+        # `&&` is array overlap. `= ANY` would be the other way round and
+        # `IN` does not apply to an array column at all — both are easy to reach
+        # for and both would filter on something other than what was asked.
+        where.append(Source.topic_labels.op("&&")(list(filters.topics)))
     if filters.published_after is not None:
         where.append(Source.publication_date >= filters.published_after)
     if filters.published_before is not None:
@@ -342,6 +355,7 @@ async def search(
                 source_tier=source.source_tier,
                 publication_date=source.publication_date,
                 language=source.language,
+                topic_labels=source.topic_labels,
                 duplicate_of=chunk.duplicate_of,
                 media_type=(source.extra or {}).get("media_type"),
                 page_unit=page_unit_for((source.extra or {}).get("media_type")),

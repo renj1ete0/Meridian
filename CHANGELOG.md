@@ -48,6 +48,60 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.68.0] — 2026-09-15
+
+**Sources record their topics, so search can filter by one.**
+
+### Added
+
+- `P2-14` `sources.topic_labels`, written at keep time, filterable through
+  `/api/explore/search?topic=`, the MCP `search_chunks` tool, and shown on every
+  hit
+- The one dimension the whole system is organised around — steering weights
+  topics, coverage scores topics, seeds are drawn per topic — was the one thing
+  a reader could not filter by. The crawl already knew: the topic is on the queue
+  row that produced the fetch, and `upsert_source` dropped it
+- An array, named to match `entities.topic_labels` and `gazetteer.topic_labels`,
+  which already carry exactly this. A source genuinely belongs to more than one
+
+### Two kinds of evidence, unioned at keep time
+
+- The claim's topic is **provenance**: why this URL was fetched at all. That is
+  the stronger of the two and the reason this happens during the crawl — after
+  the fact the only route back is a join on the URL, and a URL can be enqueued
+  repeatedly under different topics while a redirect means the fetched URL is
+  frequently not the queued one
+- The path match is evidence from the URL itself, taken from the **final** URL: a
+  redirect to `/transport/walking/…` says something about the document, and the
+  address that was asked for says only what was guessed
+- Labels **accumulate, never replace**. A source reached under two topics belongs
+  to both, and overwriting would make the label depend on which crawl ran last —
+  the same corpus filtering differently depending on fetch order
+
+### NULL and `{}` are different facts
+
+- NULL means nothing has examined the source; `{}` means something has, and it
+  matched nothing. Only the first is a backfill queue, and without the
+  distinction the backfill either re-reads the corpus every run or silently
+  claims everything it could not match has no topic
+- A topic filter excludes both: neither has been established as belonging to the
+  topic, and claiming one would assert something no pass checked. Without a topic
+  filter both are still searchable, so a corpus crawled before this still works
+- Overlap (`&&`), not equality. Naming two topics means *either* — an AND across
+  topics returns almost nothing, since a document rarely sits squarely in two
+
+### `python -m worker.retopic`
+
+- Backfills already-crawled sources by matching their URLs. Reports by default,
+  writes with `--apply`
+- **Deliberately records less than the live path.** It cannot recover the
+  crawl's own topic, and the join that would is the one this task rejected — a
+  label attached by a wrong join is indistinguishable from one the crawl
+  established, which makes it worse than no label
+- Refuses to run with an empty vocabulary: it would stamp `{}` on every source
+  in the corpus, recording "examined, matched nothing" about a question it never
+  asked, and it is not repeatable afterwards because the NULLs are gone
+
 ## [0.67.0] — 2026-09-15
 
 **Chunks are superseded, not deleted, so a citation keeps resolving.**

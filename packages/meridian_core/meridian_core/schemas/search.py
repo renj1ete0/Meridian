@@ -46,6 +46,10 @@ class SearchHitRead(BaseModel):
     source_tier: SourceTier
     publication_date: dt.date | None
     language: str | None
+    #: Which topics the source belongs to (`P2-14`). On the hit so a result list
+    #: can show why a document is in a filtered set — a hit whose topic a reader
+    #: cannot see is a filter they have to trust rather than check.
+    topic_labels: list[str] | None = None
 
     #: What `page_or_offset` counts, and what it was derived from. §5.3's rule
     #: is "page for paginated documents, offset otherwise", and before `P2-18`

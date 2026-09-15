@@ -73,6 +73,13 @@ async def explore_search(
         list[SourceTier] | None, Query(description="Repeat to allow several.")
     ] = None,
     language: Annotated[list[str] | None, Query()] = None,
+    topic: Annotated[
+        list[str] | None,
+        Query(
+            description="Repeat to allow several; a source matching any of them is kept. "
+            "Sources crawled before topics were recorded carry none and are excluded."
+        ),
+    ] = None,
     published_after: Annotated[dt.date | None, Query()] = None,
     published_before: Annotated[dt.date | None, Query()] = None,
     include_duplicates: Annotated[
@@ -110,6 +117,7 @@ async def explore_search(
     filters = SearchFilters(
         source_tiers=source_tier,
         languages=language,
+        topics=topic,
         published_after=published_after,
         published_before=published_before,
         include_duplicates=include_duplicates,

@@ -77,6 +77,7 @@ def test_a_hit_validates_from_the_dataclass() -> None:
         source_tier="government",
         publication_date=None,
         language="en",
+        topic_labels=["walkability"],
         page_unit="page",
         media_type="application/pdf",
         duplicate_of=None,

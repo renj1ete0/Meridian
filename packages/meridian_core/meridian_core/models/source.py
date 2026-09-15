@@ -28,7 +28,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import text as sql_text  # `Chunk.text` shadows the name in that class body
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from meridian_core.db import Base
@@ -130,6 +130,20 @@ class Source(Base, TimestampMixin):
     )
     ocr_confidence: Mapped[float | None] = mapped_column()
 
+    #: Which topics this source belongs to (task P2-14, §12.5, §12.3).
+    #:
+    #: An array, and named to match `entities.topic_labels` and
+    #: `gazetteer.topic_labels`, which already carry exactly this. A source
+    #: genuinely belongs to more than one: a URL can be enqueued under several
+    #: topics and its path can match several more, and picking one would make
+    #: the label depend on whichever crawl ran last.
+    #:
+    #: **NULL and `{}` are different.** NULL means nothing has examined this
+    #: source — every row written before the column existed — and `{}` means it
+    #: was examined and matched nothing. Only the first is worth a backfill,
+    #: which is what `python -m worker.retopic` reads.
+    topic_labels: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+
     #: When §5.6's acronym harvest last read this document (task P5-02).
     #:
     #: NULL is the whole queue, exactly like ``chunks.novelty_checked_at``. A
@@ -154,6 +168,10 @@ class Source(Base, TimestampMixin):
         # The acronym harvest's queue (`P5-02`). Partial: everything with text
         # and not yet read. A metadata-only source has nothing to harvest, and
         # leaving it in the queue means re-skipping it on every pass forever.
+        # GIN, because the query is array overlap (`&&`) rather than equality —
+        # a btree cannot answer it at all, and without this the topic filter is
+        # a sequential scan over every source in the corpus.
+        Index("ix_sources_topic_labels", "topic_labels", postgresql_using="gin"),
         Index(
             "ix_sources_harvest_pending",
             "source_id",
