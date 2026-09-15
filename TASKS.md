@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1553 backend tests and 138 frontend.
+1553 backend tests and 148 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -713,6 +713,17 @@ when its queue drained.
       reader who never touches it. Restructured `tokens.css` into palettes
       (each published colour written once) and per-theme role mappings, which is
       what makes the mapping drift testable
+- [x] `P6-21` **Source detail page** — `v0.57.0`. `/sources/{id}`: the header
+      with tier, date, DOI and `extractor`, the passages in document order, the
+      figures panel and both exports. The first screen where the corpus reads as
+      documents rather than results, and where `P6-14`/`P6-15` finally have
+      somewhere to live. A textless source is a finding, not a failure (§6.5)
+- [ ] `P6-20` **Replace the hand-rolled router when the screen count justifies
+      it.** `v0.57.0` added forty lines rather than a dependency, because two
+      routes do not justify inheriting an upgrade path — and URLs had to be real
+      so a source page can be linked into a citation. Phase 6 has fifteen more
+      screens; when nested layouts or route-level data loading arrive, replace
+      it rather than growing it
 - [ ] `P6-19` **Three lockup values are inferred, not published.** §1 gives the
       mark's geometry exactly and the lockup's gaps (22px) and wordmark weight,
       but not the cap-height ratio the hairline rule sits at, nor the

@@ -48,6 +48,49 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.57.0] — 2026-09-15
+
+**A source reads as a document.**
+
+### Added
+
+- `P6-21` the source detail page: `/sources/{id}`, pulling together the header,
+  the passages in document order, the figures panel (`P6-14`) and the exports
+  (`P6-15`). The first screen where the corpus reads like documents rather than
+  results — and the place several endpoints built today finally have to live
+- **Provenance is the page, not a footnote on it.** Tier, date, DOI and
+  `extractor` are in the header, because "what is this and how do I know" is the
+  question a reader arrives with — and `P1-44`'s extractor is the difference
+  between a document that had no text and one whose extractor fell over
+- A source with no text is presented as a finding rather than a failure. §6.5
+  makes metadata-only a valid resting state: a scan, or a paywall. It is still
+  citable and still counts toward coverage, and the page says so
+- Results now carry two destinations, kept distinct: the title goes to the live
+  page, "in this corpus" goes to what Meridian actually holds. They answer
+  different questions, and a reader chasing a citation usually wants the second
+
+### A router, deliberately hand-rolled
+
+- Forty lines, no dependency. There are two routes, and a dependency for two
+  routes is an upgrade path inherited for the life of the project
+- It does the one thing that matters here: **URLs are real.** A corpus that
+  insists everything be checkable cannot make its own documents unaddressable
+- It will stop being the right answer — phase 6 has fifteen more screens, and
+  when nested layouts or route-level loading arrive this should be replaced
+  rather than grown. `P6-20`
+- A modified click is left alone. A reader holding ⌘ is asking for a new tab,
+  and swallowing that is the most irritating thing a hand-rolled router can do
+
+### Testing
+
+- That what the UI writes into an `href`, the router reads back — the property
+  that keeps a citation shareable
+- That a non-numeric id does not coerce: `/sources/../../etc/passwd` parses as
+  explore, not as a request for `/sources/NaN`
+- Component tests with a mocked client, covering the two states that are not
+  success: an error that names its cause (§4), and a textless source that reads
+  as a finding
+
 ## [0.56.0] — 2026-09-15
 
 **Figures become openable.**

@@ -1,3 +1,4 @@
+import { hrefForSource, onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
 import type { SearchHit } from '../lib/api'
 
@@ -69,8 +70,20 @@ export function ResultList({ hits }: ResultListProps) {
           >
             {hit.title ?? domainOf(hit.url)}
           </a>
-          <p className="mt-1 break-all font-mono text-[length:var(--text-label)] text-text-faint">
-            {domainOf(hit.url)}
+          <p className="mt-1 flex flex-wrap items-center gap-2 break-all font-mono text-[length:var(--text-label)] text-text-faint">
+            <span>{domainOf(hit.url)}</span>
+            {/* Two destinations, kept distinct: the title goes to the live page,
+                this goes to what this corpus actually holds — the passages it
+                extracted, the figures, and the stored copy. They answer
+                different questions and a reader chasing a citation usually
+                wants the second. */}
+            <a
+              href={hrefForSource(hit.source_id)}
+              onClick={onInternalClick(hrefForSource(hit.source_id))}
+              className="text-accent-graph underline"
+            >
+              in this corpus
+            </a>
           </p>
 
           <Provenance hit={hit} />

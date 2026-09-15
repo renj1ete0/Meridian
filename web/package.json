@@ -1,7 +1,7 @@
 {
   "name": "meridian-web",
   "private": true,
-  "version": "0.56.0",
+  "version": "0.57.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,8 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.5.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
