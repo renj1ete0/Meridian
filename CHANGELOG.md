@@ -43,6 +43,51 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.47.0] — 2026-09-15
+
+**Scoped credentials, before anything is exposed.**
+
+### Added
+
+- `P3-03` `meridian_core/tokens.py` — §11.4's model made enforceable: issue,
+  resolve, revoke, with tool scope, expiry and a revocation switch
+- **Secrets are never compared in code.** The presented token is hashed and the
+  hash is looked up, so no branch's duration depends on how much of a token was
+  right and a log line that accidentally included the row would include a hash
+- SHA-256 rather than bcrypt, deliberately. Password hashes are slow to defend
+  low-entropy human choices against offline guessing; these are 256 bits of
+  `secrets.token_urlsafe`, where an attacker holding the hash cannot guess the
+  preimage at any cost and a slow hash would only add latency to every request.
+  The scheme is named in the stored value so changing it is a migration rather
+  than archaeology
+- **An unscoped token grants nothing.** `allowed_tools` is nullable and NULL
+  means *no tools*. Same argument as `P3-07`'s refusal of default privileges:
+  the nullable column's empty state is what a row created without thinking will
+  hold, so it must be the safe one
+- Every rejection returns None — unknown, revoked and expired are not
+  distinguished to the caller. Telling an unauthenticated client which applies
+  confirms that a token exists or once existed, and "revoked" in particular
+  confirms a real credential was guessed. The operator gets the reason in the log
+- Revocation rather than deletion, so "which agent read this, and when was its
+  access withdrawn" outlives the credential
+
+### Testing
+
+- Twelve tests, mostly rejections: unknown, empty, revoked, expired, and the
+  expiry boundary — a token expiring *at* an instant is expired, because the
+  other rounding leaves a credential valid for the moment it was meant to stop
+  being valid, which nobody notices until an audit
+- That the secret does not survive issuing, that the resolved scope does not
+  carry the row containing the hash, and that all three rejection paths are
+  indistinguishable from outside
+
+### Not closed
+
+- `P3-03` stays `[~]`. This is the mechanism; wiring it into the MCP surface as
+  an enforced verifier lands with `P3-05`, and until then `/mcp` authenticates
+  nobody. That is survivable only because it is not exposed — `api` sits on
+  `internal` and is published to loopback — and it must not reach a tunnel first
+
 ## [0.46.0] — 2026-09-15
 
 **The frontend shows the corpus.**
