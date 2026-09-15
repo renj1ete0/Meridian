@@ -348,6 +348,22 @@ present the token it receives.
 Then issue it a Meridian credential (see the snippet above) — Access decides
 *who got in*, the scoped token decides *what they may read*.
 
+### 8f. Optional — the SQL escape hatch
+
+§12.4 offers an agent one more tool: a direct read-only SQL query, for questions
+the curated tools cannot answer. It runs as `meridian_guest`, which can see the
+corpus and the graph and **not** the table holding your token hashes.
+
+```bash
+# .env — both are needed; the role is created NOLOGIN without a password
+PG_GUEST_PASSWORD=<a distinct password>
+PG_GUEST_URL=postgresql://meridian_guest:<that password>@postgres:5432/meridian
+```
+
+Leave them unset and the tool is simply not registered. Worth knowing before you
+enable it: every query is logged, deliberately — the queries an agent reaches
+for here are the best evidence about which curated tool to build next.
+
 | Still open | Task |
 |---|---|
 | Mapping an Access identity to a grant | `P3-06`, `P3-10` |
