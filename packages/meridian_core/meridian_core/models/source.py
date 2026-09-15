@@ -205,6 +205,28 @@ class Chunk(Base, TimestampMixin):
         # per chunk, which is the tradeoff GIN is built for. GiST would be the
         # choice only if the corpus churned.
         Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
+        # --- the vector half of hybrid retrieval (§12.5, task P2-04) -------
+        #
+        # `vector_cosine_ops` because that is the operator everything here
+        # already uses: `embeddings.py` normalises, so `<=>` is the cheap one,
+        # and `novelty.py` compares with `cosine_distance`. An index built for
+        # a different operator class is not a slower index, it is an unused
+        # one — the planner silently declines it and every search becomes a
+        # sequential scan over every vector in the corpus.
+        #
+        # Not partial on `duplicate_of IS NULL`. A near-duplicate is a verdict
+        # that can be re-judged when the threshold moves (§6.1), and an index
+        # that excluded them would have to be rebuilt to follow.
+        #
+        # HNSW rather than IVFFlat: IVFFlat needs a representative sample to
+        # build its lists and is therefore wrong to create on an empty table,
+        # which is exactly when a migration runs.
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

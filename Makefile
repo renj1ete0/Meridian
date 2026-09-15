@@ -12,7 +12,7 @@
 export
 
 .PHONY: dev-up dev-down up down logs migrate seed \
-        snapshot-corpus restore-corpus backup test build-push build-worker
+        snapshot-corpus restore-corpus backup test bench-search build-push build-worker
 
 # --- Local development (infra only) -----------------------------------------
 dev-up:
@@ -58,6 +58,13 @@ backup:
 
 test:
 	uv run pytest
+
+# --- Measurement (P2-04) ------------------------------------------------------
+# Index recall, latency and arm agreement. Reports whether the planner actually
+# used the HNSW index, because below a few thousand vectors it will not — and a
+# recall figure measured against a sequential scan is 1.0 by construction.
+bench-search:
+	uv run python scripts/benchmark_search.py $(ARGS)
 
 build-push:
 	./scripts/build_and_push.sh

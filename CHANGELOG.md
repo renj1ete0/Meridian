@@ -43,6 +43,91 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.30.0] — 2026-09-15
+
+**The corpus becomes searchable.**
+
+### Added
+
+- `P2-06` `meridian_core/search.py` — hybrid retrieval over the chunk corpus.
+  Two arms, `tsvector` and pgvector, fused by reciprocal rank. This is the
+  thing phase 2 exists to judge, and the first time anything in this system
+  reads the corpus back
+- `P2-04` the HNSW index, `vector_cosine_ops` to match the operator everything
+  here already uses — vectors are normalised at embedding time and the novelty
+  gate compares with `cosine_distance`, so an index built for another operator
+  class would not be a slower index, it would be an unused one. Built now
+  rather than after the long run: maintained incrementally it costs nothing per
+  insert, where building one over a finished corpus is a single operation
+  wanting more `maintenance_work_mem` than the target has. The *measurement*
+  half of `P2-04` still waits for a real corpus, and the task says so
+- Filters are predicates inside both arm queries, which is the whole of §12.5's
+  "filters before vector search". The anti-pattern — take the top k by
+  distance, then drop what fails the filter — returns a truncated set with no
+  indication it was truncated, and an empty page then reads as a thin corpus
+  rather than as a query built the wrong way round
+- Reciprocal rank rather than score fusion, because the two arms produce
+  numbers that are not comparable: `ts_rank_cd` is unbounded and length
+  dependent, cosine distance is bounded. RRF needs only the ordering, which is
+  the part both arms agree is meaningful
+- A missing arm is reported rather than hidden. Retrieval with no query vector
+  is lexical-only, which is legitimate — the embedder is a separate pass and a
+  chunk exists before it has a vector — but a caller that believes it ran a
+  hybrid search and ran half of one will conclude the wrong thing about the
+  corpus. `SearchResult.arms` and `.degraded` say which ran
+- Near-duplicates are excluded by default and available on request, which is
+  what `P2-03`'s mark-don't-delete was for. `duplicate_of` rides on every hit
+  so a surface can say why something is missing
+- Every hit carries its citation — url, title, tier, date, page or offset.
+  A retrieval surface that returns text and leaves the caller to find its
+  source is a RAG endpoint, and §2 principle 3 is the opposite of that
+- New task `P2-14`: a source records no topic, so search cannot filter by one
+  even though §12.5 and §12.3 both list it
+
+- `scripts/benchmark_search.py` and `make bench-search` — `P2-04`'s measurement
+  half. Index recall against exact search across an `ef_search` sweep, latency
+  per method, and how often the two arms agree. Query vectors are sampled from
+  the corpus rather than generated: a random 1024-dimension vector is
+  near-orthogonal to everything, so every candidate is equidistant and the
+  measurement reduces to a scan-rate test
+- The benchmark refuses to report a number it cannot support. Below a few
+  thousand vectors the planner prefers a sequential scan, which is exact, so
+  recall is 1.0 by construction and says nothing about the index — it reports
+  whether the index was used and says so. The same problem appears again in arm
+  agreement: with a corpus smaller than the candidate pool the vector arm
+  returns everything, so agreement is 100% by arithmetic. Both caveats print
+  loudly rather than being left for the reader to notice
+- Retrieval *quality* is explicitly not measured. That needs `P0-15`'s held-out
+  questions, written before the results are visible, and `--questions` is the
+  hook for when they exist
+- New tasks `P1-43` and `P1-44` from reading the dev corpus: the browser
+  extraction path does no boilerplate removal of its own, and a source does not
+  record which extractor produced its text. `P1-10` gains the current state —
+  the `figures` table has no writer at all, so figures are not extracted
+  anywhere today
+
+### Testing
+
+- `tests/unit/test_rrf.py` — fusion arithmetic with no database, including the
+  property that justifies using RRF at all: a chunk both arms found at rank 2
+  must outrank one a single arm found at rank 1, or the second query is wasted
+  work
+- `tests/integration/test_search.py` — 13 tests against a real Postgres. The
+  load-bearing one puts the two nearest neighbours outside the filter and sets
+  the candidate pool to exactly two, so post-filtering would return nothing and
+  a predicate inside the query reaches past them
+- Both arms are checked to narrow identically. Two copies of a filter
+  eventually disagree, and the arm that drifted is the one quietly returning
+  material the caller excluded — which RRF then rewards
+- Scoping is deliberate: a vector search has no WHERE clause hiding the rest of
+  the corpus, and the dev database holds a real crawl, so every test filters to
+  its own fixtures and the lexical assertions use a term that cannot occur in
+  crawled text
+- Verified live against the real dev corpus. Both arms ran, and fusion
+  reordered rather than rubber-stamping either: the top result placed fourth in
+  both arms, ahead of the lexical first place that the vector arm ranked
+  twelfth
+
 ## [0.29.0] — 2026-09-15
 
 **The lexical half of search, and a frontend that has tokens before it has screens.**

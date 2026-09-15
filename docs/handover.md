@@ -239,6 +239,44 @@ Test it by inserting through **raw SQL**, not the ORM. SQLAlchemy's
 passes whether or not the database constraint exists at all — which is exactly how
 Phase 0 shipped unchecked VARCHAR columns while its tests were green.
 
+### Two ways a benchmark lies on a small corpus
+
+Both were live in `scripts/benchmark_search.py` before its own output exposed
+them, and both have the same shape: a number that is produced by arithmetic
+rather than by the thing being measured.
+
+- **ANN recall is 1.0 when the index is not used.** Below a few thousand
+  vectors the planner prefers a sequential scan, which is exact by definition,
+  so "approximate" and "exact" are the same query and recall is perfect. It
+  looks like a flawless index. Always check `EXPLAIN` for the index name before
+  believing a recall figure.
+- **Arm agreement is 100% when the corpus is smaller than the candidate pool.**
+  The vector arm takes 100 neighbours; with 26 searchable chunks it returns all
+  of them, so every lexical hit is necessarily also a vector hit. That reads as
+  "fusion is buying nothing", which is a strong conclusion drawn from a corpus
+  that cannot support one.
+
+### pgvector values need pgvector's type on the way in *and* out
+
+Two separate traps, an hour apart:
+
+- Selecting `embedding` through a raw `text()` query returns its **text
+  representation** — asyncpg has no reason to know the type — and `list()` of
+  that string is a list of single characters. Select through the mapped column.
+- Binding a vector as a plain string into `CAST(:v AS vector)` fails the same
+  way from the other direction. Use `bindparam(..., type_=Vector(DIM))`.
+
+Neither fails where the mistake is. Both surface as
+`could not convert string to float: '['` at the next bind, several frames away.
+
+### `websearch_to_tsquery` needs a `regconfig`, not a string
+
+Binding the configuration name as a parameter produces
+`websearch_to_tsquery(varchar, varchar)`, which does not exist — there is no
+implicit cast from varchar to regconfig. The error is "function does not exist",
+which reads as a missing extension rather than a type problem. `cast(TS_CONFIG,
+REGCONFIG)` is the fix.
+
 ### `alembic check` cannot see a generated column's expression
 
 `P2-05` added `chunks.search_vector` as `GENERATED ALWAYS AS

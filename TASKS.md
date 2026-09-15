@@ -16,11 +16,11 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 2, phase 1 not yet closed.** The crawl runs unattended,
+**Current phase: 2, phase 1 not yet closed. The corpus is searchable.** The crawl runs unattended,
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1234 backend tests and 5 frontend.
+1254 backend tests and 5 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -212,7 +212,20 @@ when its queue drained.
       admitted as content. A missing poppler raises loudly — a worker that had
       quietly lost it would store every PDF and extract none of them. Title and
       creation date come from `pdfinfo`
-- [ ] `P1-10` `extract/figures.py` — figure extraction with captions
+- [ ] `P1-10` `extract/figures.py` — figure extraction with captions.
+      **Nothing writes the `figures` table today — it has zero rows and no
+      writer anywhere in the worker.** So images, charts and diagrams are
+      currently not extracted, not stored, not captioned and not searchable, in
+      HTML or in PDFs; the raw file keeps them and nothing else knows they
+      exist. The schema is ready and has been since `P0-06`: `page`, `bbox`,
+      `file_path`, `caption`, `vlm_description`, `linked_entity_ids`. §6.6 is
+      specific that captions are extracted at ingestion and indexed like any
+      other text — which is most of the value at no model cost — while
+      `vlm_description` is deferred, user-triggered enrichment (`P7-07`) and
+      figure *similarity* search needs multimodal embeddings (`B-03`), which is
+      backlog. Worth doing after `P1-16` rather than before: a caption
+      extractor is cheap to write and its value is entirely a function of how
+      many figures the corpus actually has, which nobody knows yet
 - [x] `P1-11` Raw store writer — `worker/rawstore.py` plus
       `meridian_core/sources.py`. Path is `<domain>/<hex shard>/<sha256(url)><ext>`,
       derived from the URL so a re-fetch overwrites rather than accumulating, and
@@ -338,6 +351,26 @@ when its queue drained.
       it spends queue slots. `SEMANTIC_SCHOLAR_API_KEY` is free to request and
       is read already; this is a registration, not code. Measure the retry rate
       during `P1-16` before deciding it matters. ⚑ human
+- [ ] `P1-43` **The browser path does no boilerplate removal of its own.**
+      `extract/html.py` has two inputs and treats them very differently. The
+      static path runs `trafilatura` configured to favour precision — it would
+      rather lose a sentence of body than gain a navigation menu. The browser
+      path uses Crawl4AI's `fit_markdown` as-is, and `PruningContentFilter` is
+      a far more permissive filter than that. The asymmetry is visible in the
+      dev corpus: chunks that are repeated station lists, an app promo banner,
+      and a footer link block, and their markdown link syntax is what identifies
+      which path produced them. This matters more than it looks — boilerplate
+      becomes entities, entities become edges, and it also inflates the novelty
+      gate's duplicate count with text that was never content. Either run
+      trafilatura over the rendered HTML too, or tighten the filter Crawl4AI is
+      asked for
+- [ ] `P1-44` **A source does not record which extractor produced its text.**
+      `extra->>'extractor'` is NULL on every source in the dev corpus, so
+      answering "did this come through the browser or the static path" means
+      inferring it from whether the text contains markdown link syntax. That is
+      how `P1-43` was found, and it should not have needed detective work:
+      `ExtractedDocument` already carries `extractor`, and it is dropped at
+      `upsert_source`. One column, written at keep time
 - [ ] `P1-36` **`make snapshot-corpus` calls a script that does not exist.**
       It is `P1-16`'s stated deliverable — the 48h run's output *becomes* the
       dev corpus, and scaffold §6 asks for real crawl snapshots rather than
@@ -424,7 +457,17 @@ permanently, that Meridian did not fetch it.*
       **never** `primary`. Verified against a real crawled corpus: it found the
       boilerplate a site repeats under every URL, at similarity 1.0, and
       demoted nothing
-- [ ] `P2-04` pgvector HNSW index; measure recall and latency at corpus size
+- [~] `P2-04` pgvector HNSW index; measure recall and latency at corpus size —
+      **index built in v0.30.0, measurement outstanding.** `vector_cosine_ops`,
+      matching the operator everything here already uses; an index built for
+      another operator class is not slower, it is unused, and the planner
+      declines it silently. Built before the long run rather than after because
+      maintained incrementally it costs nothing per insert, where building one
+      over a finished corpus is a single operation wanting more
+      `maintenance_work_mem` than the target has. `m`/`ef_construction` left at
+      defaults — tuning them is a measurement against a real corpus, and
+      re-tuning later is a REINDEX rather than a migration. **Stays `[~]` until
+      `scripts/benchmark_search.py` is run against `P1-16`'s corpus**
 - [x] `P2-05` `tsvector` index and trigger — shipped as a **generated column,
       not a trigger**. Postgres 12 made the trigger unnecessary and a generated
       column is strictly stronger: it cannot be bypassed by a write path that
@@ -436,7 +479,37 @@ permanently, that Meridian did not fetch it.*
       `alembic check` **cannot** guard this: it warns "Computed default on
       chunks.search_vector cannot be modified" and moves on, so the drift test
       compares the model's expression against the database's own record of it
-- [ ] `P2-06` `search.py` — hybrid retrieval, RRF fusion, **filters before vector search**
+- [x] `P2-06` `search.py` — hybrid retrieval, RRF fusion, **filters before
+      vector search**. `meridian_core/search.py`: two arms fused by reciprocal
+      rank, because the arms' scores are not comparable — `ts_rank_cd` is
+      unbounded and length-dependent, cosine distance is bounded — and RRF needs
+      only the ordering, which is the part both agree is meaningful. Filters are
+      predicates *inside* both arm queries; the anti-pattern returns a truncated
+      set with nothing to say it was truncated, and an empty page then reads as
+      a thin corpus rather than a query built the wrong way round. A missing arm
+      is reported (`SearchResult.degraded`), not hidden: lexical-only is
+      legitimate, since the embedder is a separate pass, but a caller that
+      thinks it ran hybrid and ran half will conclude the wrong thing. The query
+      vector is supplied by the caller — `meridian_core` is imported by the API
+      and the orchestrator and neither should acquire a 2.3GB model dependency.
+      Verified live: both arms ran over the real dev corpus and fusion
+      reordered rather than rubber-stamping either arm
+- [ ] `P2-14` **A source records no topic, so search cannot filter by one.**
+      §12.5 lists topic among the filters and §12.3 lists it among the canvas
+      filters, and `sources` has no such column: the crawl knows the topic — it
+      is on the queue row that produced the fetch — and drops it at
+      `upsert_source`. Filtering through a join back to `queue` on the URL would
+      be wrong often enough to be worse than not offering it, since a URL can be
+      enqueued more than once under different topics and a redirect means the
+      fetched URL is frequently not the queued one. Needs the column, the write
+      at keep time, and a decision about what the already-crawled sources get
+- [ ] `P2-15` **Benchmark embedding models against each other.**
+      `scripts/benchmark_search.py` measures the index and the methods over
+      whatever vectors are in the corpus; comparing bge-m3 against an
+      alternative is a different job, because it means re-embedding the corpus
+      into a second column and running both. Worth doing once, after `P1-16`,
+      and only if `P2-09` is marginal — swapping the embedder is a full re-embed
+      and a migration, so it needs a measured reason
 - [ ] `P2-07` `/api/explore/*` read endpoints on the read-only session
 - [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible
 - [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
