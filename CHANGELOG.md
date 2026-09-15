@@ -43,6 +43,56 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.36.0] — 2026-09-15
+
+**A read role that cannot read the token table.**
+
+### Added
+
+- `P3-07` `meridian_guest` — SELECT on the corpus and the graph, and nothing
+  else. `meridian_ro` can SELECT every table in the schema, `agent_tokens`
+  included, and that table's `token_hash` column is the only secret the database
+  holds. It is the right role for the operator's own read path and the wrong one
+  to put behind `P3-04`'s SQL escape hatch or any shared read surface
+- Eight readable tables: sources, chunks, figures, entities, edges, attribute
+  definitions and values, observations. The excluded ones are not all secrets —
+  `queue` and `fetch_policy` describe what this crawler is about to look at and
+  how it behaves, which is the operator's research direction rather than the
+  corpus
+- Grants live in a migration and the credential does not. Tables must exist
+  before they can be granted on, which makes this schema-scoped work; the
+  password is deployment state and stays in `init-roles.sh` (§11.11). The
+  migration creates the role NOLOGIN if absent, so an existing database gets
+  correct privileges without a password being invented for it, and a deployment
+  that shares nothing ends up with a role that simply cannot connect
+- **No default privileges, deliberately.** Every other role here has
+  `ALTER DEFAULT PRIVILEGES` so migrations' new tables are covered
+  automatically; this one does not, so a table added later is invisible to
+  guests until granted explicitly. The asymmetry is the argument: forgetting to
+  grant means a guest cannot read something they should, which gets reported,
+  and forgetting to revoke means a guest reads a table nobody considered, which
+  does not
+
+### Testing
+
+- Twelve tests against a real Postgres, because privileges are a property of no
+  code. `P0-18` is the precedent — a role bootstrap that never ran and default
+  privileges that silently denied reads were invisible to everything else — and
+  the same holds in the other direction: a grant nobody intended looks exactly
+  like one nobody made
+- The privilege matrix is checked over `pg_tables` rather than over a list in
+  the test, so a table added to neither set fails. "Should a guest read this" is
+  a decision, and a new table silently inheriting either answer is how the wrong
+  one gets made. The expected list is loaded from the migration itself; a copy
+  would drift, and the copy is what the test would then be checking
+- Rejection tests run under `SET ROLE` rather than asserting the catalogue,
+  because `has_table_privilege` and the planner are meant to agree and checking
+  only the first would pass if they ever did not. Plus the converse — the role
+  can read the corpus — since a role that can read nothing is trivially safe,
+  useless, and passes every other test here
+- A probe that creates a table and asserts a guest cannot read it, which is the
+  fail-closed property stated as a test rather than as a comment
+
 ## [0.35.0] — 2026-09-15
 
 **The retention sweep, and what measuring first changed about it.**

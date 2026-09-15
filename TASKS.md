@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1271 backend tests and 50 frontend.
+1292 backend tests and 50 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -587,12 +587,16 @@ permanently, that Meridian did not fetch it.*
 reaches the machine, Meridian decides what it may read once there. `P3-01`–`P3-05`
 cover the operator's own access; these cover everyone else's.*
 
-- [ ] `P3-07` **`meridian_guest` role — SELECT on the corpus and graph tables
-      and nothing else.** First, and doable now: it needs no API, no MCP server
-      and no Cloudflare account. `meridian_ro` can read `agent_tokens`, whose
-      `token_hash` column is the one secret in the schema, so it is the wrong
-      role to put behind a query tool a guest can reach. A rejection test per
-      excluded table, against a real Postgres
+- [x] `P3-07` **`meridian_guest` role** — `v0.36.0`. SELECT on the corpus and
+      the graph (eight tables), nothing else. `meridian_ro` can read every table
+      including `agent_tokens`, whose `token_hash` is the one secret in the
+      schema. Grants are a migration (tables must exist first), the credential
+      stays in `init-roles.sh` (§11.11), and the role is created NOLOGIN when no
+      password is configured — so a deployment that shares nothing gets correct
+      privileges on a role that cannot connect. **No default privileges on
+      purpose**: a table added later is invisible to guests until granted, which
+      is the fail-closed direction. The privilege matrix is tested over
+      `pg_tables`, so a new table forces the decision rather than inheriting one
 - [ ] `P3-06` `grants` table + `agent_tokens.grant_id`. The unit of sharing is a
       person, not a credential — they will hold several — so revoking a grant
       must revoke every token beneath it in one statement, with a test that

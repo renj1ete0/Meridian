@@ -4,6 +4,14 @@
 #
 #   worker, orchestrator, /api/admin/*  -> meridian_rw
 #   /api/explore/*, run_readonly_query  -> meridian_ro
+#   anything a guest can reach          -> meridian_guest  (P3-07)
+#
+# meridian_ro can SELECT every table, `agent_tokens` included, and that table
+# holds the one secret in the schema. It is the right role for the operator's
+# own read path and the wrong one to put behind a shared surface, so
+# meridian_guest exists with SELECT on the corpus and the graph and nothing
+# else. Its *grants* are a migration (tables must exist first); only the
+# credential is here.
 #
 # Enforcing read-only at the database, not in application code, is what makes the
 # read-only escape hatch (spec §12.4) safe.
@@ -53,5 +61,22 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 
 	CREATE EXTENSION IF NOT EXISTS vector;
 EOSQL
+
+# The guest role, only when a password is configured. Absent, the migration
+# still creates it NOLOGIN and grants it the corpus — so the privileges are
+# always right and the role simply cannot connect, which is the correct state
+# for a deployment that is not sharing anything.
+#
+# Deliberately NOT given ALTER DEFAULT PRIVILEGES anywhere: a table added later
+# must be granted explicitly. Forgetting means a guest cannot read something
+# they should, which gets reported; the opposite failure does not.
+if [ -n "${PG_GUEST_PASSWORD:-}" ]; then
+	psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+		CREATE ROLE meridian_guest LOGIN PASSWORD '${PG_GUEST_PASSWORD}';
+		GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO meridian_guest;
+		GRANT USAGE ON SCHEMA public TO meridian_guest;
+	EOSQL
+	echo "meridian: role meridian_guest created (grants applied by migration)"
+fi
 
 echo "meridian: roles meridian_rw / meridian_ro created, pgvector enabled"

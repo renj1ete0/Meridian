@@ -18,7 +18,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 
 from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.models import Chunk, Edge, Entity, Source
