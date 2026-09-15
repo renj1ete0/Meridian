@@ -9,8 +9,8 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.28" src="https://img.shields.io/badge/version-0.28-0D6F7C">
-  <img alt="Status: phase 1" src="https://img.shields.io/badge/status-phase%201%20of%207-805A28">
+  <img alt="Version 0.74" src="https://img.shields.io/badge/version-0.74-0D6F7C">
+  <img alt="Status: phase 3 of 7" src="https://img.shields.io/badge/status-phase%203%20of%207-805A28">
 </p>
 
 ---
@@ -22,14 +22,19 @@ and relationships into a knowledge graph, and records where every single claim c
 from. You explore that graph, annotate it, and ask questions of it — and it tells you
 not just what it knows, but where the evidence is thin, stale, or contradictory.
 
-> **Status: phase 1 of 7.** The design, the shared core and the schema are in place,
-> and the crawler runs: it drains a queue unattended, fetches politely, keeps what it
-> fetched, reads it, chunks it, and widens its own frontier from both links and
-> sitemaps — supervised, in containers, on a network topology that keeps the browser
-> away from the database. Chunks carry embeddings, and a novelty gate marks the ones
-> that duplicate something already collected. **Nothing searches them yet**, and
-> that is the next thing: phase 2 asks whether searching this corpus is useful with no
-> model involved, and it is a real go/no-go.
+> **Status: phase 3 of 7, with one checkpoint outstanding.** The crawler runs
+> unattended — fetching politely, keeping what it fetched, reading it, chunking it and
+> widening its own frontier from links, sitemaps, search and citations. The corpus is
+> **searchable**: hybrid retrieval over pgvector and `tsvector`, fused by reciprocal
+> rank, behind an HTTP API, a web interface and an MCP surface an external assistant
+> can read through. Admin steers it — topics, per-domain fetch policy, the gazetteer.
+>
+> Two things are not done, and they are the honest headline. **The 48-hour acceptance
+> run has not happened** (`P1-16`), so nothing here has been measured against a real
+> corpus. And **there is no graph yet**: phases 4 onward — entity resolution, edges,
+> synthesis — are designed and unbuilt, so today this reads documents rather than the
+> relationships between them.
+>
 > See [docs/setup.md](docs/setup.md) to run it, the [roadmap](docs/roadmap.md)
 > for where it is going, and [TASKS.md](TASKS.md) for what is next.
 
@@ -68,10 +73,11 @@ Three decoupled planes sharing one Postgres database. No plane blocks another.
                         │   POSTGRES   │        REASONING ── ~1h/day
                         │ queue·graph  │◄────── extract relations · tag
                         │   vectors    │        coverage · gap analysis
-                        └──────┬───────┘
+                        └──────┬───────┘        ── not built (phase 4) ──
                                ▼
                           INTERFACE
                  search · graph · steering · export
+                 search, steering and export work; graph waits on phase 4
 ```
 
 The ingestion loop never calls a language model, so it keeps working whether or not any
@@ -142,22 +148,20 @@ Production runs the whole stack in containers behind `cloudflared`
 `make build-worker` builds the ingestion image locally. Full sequence:
 [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
 
-> `packages/meridian_core` and the worker are built and tested, so `make migrate`,
-> `make seed`, `make test` and `python -m worker.main` all work today — the worker
-> drains the queue, fetches politely, records every attempt, keeps what it fetched
-> as a `sources` row plus (for primary sources) a local copy, extracts HTML, PDFs and
-> Office documents to text, bibliographic metadata and citations, and cuts it into
-> citable chunks — page-accurate for PDFs. Scanned PDFs are detected and filed for
-> OCR rather than read, every page
-> is screened for prompt injection on the way past. Two further passes run on demand
-> rather than in the loop: `python -m worker.embed` gives chunks their vectors and
-> `python -m worker.novelty` marks the near-duplicates among them. Nothing searches
-> them yet (`P2-04`–`P2-06`). Frontier expansion is on through three channels: a
-> fetched page's links, a site's own sitemaps, and search queries run against a
-> self-hosted SearXNG — all filtered and queued, so the crawl keeps going past
-> its seed list. The API and
-> web commands are phase 2 and 3. See
-> [docs/handover.md](docs/handover.md) for what runs today and what does not.
+> **Four processes, not one loop.** §6.1 draws ingestion as a single pipeline and it is
+> not one, which is worth knowing before you run anything:
+>
+> ```
+> worker.main       fetch → extract → chunk         24/7, no model, no vectors
+> worker.embed      embedding IS NULL → vector      the model, or the sidecar
+> worker.novelty    unjudged chunks → duplicate_of  Postgres and arithmetic only
+> worker.scheduler  the timetable in the database   spawns the others on a cadence
+> ```
+>
+> Each queue is a predicate on a column, so every pass is resumable with no state
+> outside the table and any of them can lag the others safely. Three more run on
+> demand: `worker.sweep` (retention, reports before it deletes), `worker.harvest`
+> (acronym definitions into the gazetteer) and `worker.retopic`.
 >
 > The loop is configured entirely from the environment — `MERIDIAN_WORKER_CONCURRENCY`,
 > `MERIDIAN_WORKER_TOPICS`, `MERIDIAN_WORKER_MAX_TASKS` and friends, all listed in
@@ -165,6 +169,11 @@ Production runs the whole stack in containers behind `cloudflared`
 > way to try it without leaving a crawler going. Set `MERIDIAN_RAW_ROOT` when
 > running natively — it defaults to the container's `/data/raw` mount, and the
 > raw store is where fetched primary sources land (spec §5.4).
+>
+> `/api/admin/*` **fails closed**: without Cloudflare Access configured it refuses
+> every request until `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` says the instance is not
+> exposed. See [docs/handover.md](docs/handover.md) for what runs today and what
+> does not.
 
 Host ports sit in a distinctive `211xx` block — `21111` postgres, `21112` searxng,
 `21113` crawl4ai, `21114` api, `21115` web — so a fresh clone doesn't collide with
@@ -181,11 +190,16 @@ editing the files has no effect.
 ```
 config/       first-boot seed values (YAML → DB, then the DB is authoritative)
 packages/     meridian_core — shared models and schemas, imported by every service
-services/     worker (ingestion) · orchestrator (synthesis) · api (Explore, Admin, MCP)
+services/     worker (ingestion) · api (Explore, Admin, MCP) · orchestrator (phase 4, empty)
 web/          Explore and Admin frontend
 migrations/   alembic
-docs/         specs, roadmap, design system and brand assets
+deploy/       systemd units for the stack and the off-device backup
+scripts/      seed, role bootstrap, corpus snapshot/restore, backup, search benchmark
+docs/         specs, setup and deployment runbooks, roadmap, design system, handover
 ```
+
+`services/orchestrator/` holds three empty directories and no code. Phase 4 is designed
+and unbuilt, and nothing in this repository has ever called a model that generates text.
 
 ## Documentation
 
@@ -196,19 +210,25 @@ docs/         specs, roadmap, design system and brand assets
 | [Roadmap](docs/roadmap.md) | Build phases and their acceptance checkpoints. |
 | [TASKS.md](TASKS.md) | The live build list — what's done, what's next, broken into single-sitting tasks. |
 | [Handover](docs/handover.md) | How the built parts fit together, the traps already discovered, and what is verified live rather than only tested. |
+| [Setup](docs/setup.md) | Every step from a bare server to a running, exposed stack, in order. Start here to deploy. |
+| [Deployment](docs/deployment.md) | The container and network topology, the database roles, and what each service may reach. |
+| [Connectors](docs/connectors.md) | Adding a data source, and the consignment pipeline for what the crawler cannot fetch itself. |
+| [Shared read access](docs/spec/shared-read-access.md) | MCP over Cloudflare, and how to give somebody else read-only access to the corpus. |
+| [External acquisition](docs/spec/external-acquisition.md) | The spec for handing failed fetches to something outside Meridian and taking the result back. |
 | [Design system](docs/design/design-system.md) | Mark geometry, colour tokens, typography, voice, interaction rules. |
+| [Design questions](docs/design-questions.md) | Decisions the design system leaves open, and which are still open. |
 | [AGENTS.md](AGENTS.md) | Conventions and invariants for anyone writing code here, human or agent. |
 | [CHANGELOG.md](CHANGELOG.md) | Version history. |
 
 ## FAQ
 
 **Can I run it today?**
-You can run the *ingestion* half. `make migrate && make seed` gives you a real, empty
-database, and the worker will then crawl unattended — politely, storing what it fetches,
-extracting and chunking it, and expanding its own frontier. What you cannot do is read
-any of it back: there is no search, no API and no interface yet, so the corpus is only
-reachable through SQL. The [roadmap](docs/roadmap.md) tracks progress; phase 2 is the
-honest go/no-go.
+Yes, for reading documents. `make migrate && make seed` gives you a real, empty database;
+the worker crawls unattended, and the corpus is searchable through the web interface, the
+HTTP API and MCP. What does not exist is the *graph* — entity resolution, edges,
+contested pairs, coverage scoring and synthesis are phases 4 to 7, designed and unbuilt.
+So today it finds and cites passages; it does not yet relate them. The
+[roadmap](docs/roadmap.md) tracks progress.
 
 **How is this different from Zotero, Obsidian, or a RAG chatbot?**
 Those store or retrieve documents. Meridian builds a *typed graph of claims* with

@@ -16,7 +16,7 @@ instructions for something that does not exist are worse than no instructions.
 | [5. The 48h run](#5-the-48h-run) | A corpus worth querying | **works** |
 | [6. Backups](#6-backups) | The crawl survives the disk | **works** |
 | [7. Look at it](#7-look-at-it) | Search, API, and the web UI | **works** |
-| [8. Expose it](#8-expose-it-not-built-yet) | Your phone can reach it | **not built** |
+| [8. Expose it](#8-expose-it) | Your phone can reach it | **code done, needs your Cloudflare account** |
 
 ---
 
@@ -367,16 +367,17 @@ one arm, which is why you would otherwise not notice.
 
 ---
 
-## 8. Expose it (not built yet)
+## 8. Expose it
 
-**This is the part that lets an assistant on your phone query the corpus.
-Do not attempt it yet.** The pieces that exist:
+**This is the part that lets an assistant on your phone query the corpus.**
+Everything on Meridian's side is built and tested; what remains is configuration
+in a Cloudflare account. The pieces that exist:
 
 - ✅ `/mcp` — the MCP server with four read tools, mounted on the API
 - ✅ `meridian_guest` — a database role that cannot read your token table
 - ✅ `meridian_core/tokens.py` — scoped credentials with tool scope and expiry
 
-What is missing, and why it blocks:
+And the authentication, which is the half worth reading before you open a port:
 
 - ✅ `P3-03` — the surface **refuses unauthenticated callers by default**, and
   checks the scope per tool. Anonymous access is an explicit opt-out

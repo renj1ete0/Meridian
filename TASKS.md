@@ -16,68 +16,45 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**Current phase: 2, phase 1 not yet closed. The corpus is searchable.** The crawl runs unattended,
-expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
-documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
-`P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1908 backend tests and 267 frontend.
-`P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
-pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
-it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
-than an image. Verified live — real government PDFs extracted with
-page-accurate chunks, and the injection screen clean across every page crawled.
+**`v0.74.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 1908 backend tests
+against a real Postgres, 267 frontend.
 
-Phase 1's checkpoint (`P1-16`, the 48h run) is the gate on phase 2's go/no-go
-(`P2-09`), because a search-quality judgement over a corpus this small measures
-nothing. The agreed sequence:
+The crawl runs unattended and widens its own frontier through four channels — links,
+sitemaps, search and citations. The corpus is **searchable**: hybrid retrieval over
+pgvector and `tsvector` fused by reciprocal rank, behind an HTTP API, a web interface
+and an MCP surface. Admin steers topics, per-domain fetch policy and the gazetteer.
 
-1. ~~`P1-28` sitemaps~~ — **done in v0.22.0**, with topic matching
-2. ~~`P1-22` network topology, then `P1-26`~~ — **done in v0.24.0**. The stack
-   has a topology, the browser has an image, and the health line says whether
-   it is actually there
-3. **← next.** A short bounded run (`MERIDIAN_WORKER_MAX_TASKS`, not a timer) as
-   a **stack** smoke test, deployed to the server rather than run from a
-   checkout. Its purpose is "do the containers come up and talk to each other",
-   not corpus volume
-4. ~~`P2-03` novelty gate~~ — **done in v0.25.0**, ahead of the smoke run
-   because it needed neither the stack nor the server. The gate went before the
-   long run deliberately: nothing deletes from the raw store (`P1-31`), so an
-   ungated 48h run keeps every near-duplicate it finds — it now at least
-   *knows* which ones they are.
-   ~~`P2-05` tsvector~~ — **done in v0.29.0**, for the same reason: an index
-   definition needs neither a corpus nor a server, and building it before the
-   run means the run's chunks arrive already indexed rather than needing a
-   backfill afterwards. `P2-04` HNSW and `P2-06` search still want real crawl
-   output — `P2-04`'s task is half index and half *measurement*, and the
-   measurement is the half that cannot be faked
-4b. ~~`P1-34` query handler~~ — **done in v0.26.0**, and it moved ahead of the
-   long run for a reason worth keeping: a 48h window is only worth paying for
-   if the frontier can widen when it drains. Building it surfaced that `P1-28`
-   had never enqueued anything either, which would have made the same window
-   much narrower than anyone expected
-5. `P1-16` the 48h run, then `P0-15` held-out questions — which must be written
-   before `P2-06` is judged, not after — and `P2-09`, the call
+**Three things gate almost everything that is left.**
 
-The frontend is a third track and blocks on none of it: `P2-11` and `P2-12`
-are done in `v0.29.0`, so `web/` has a build, a token layer and a test that
-stops the palette drifting from the design system. `P2-13` (the typed API
-client) is the first frontend task that genuinely waits — it types
-`/api/explore/*`, which `P2-07` has not written yet.
+1. **`P1-16`, the 48-hour run.** It has not happened, and it is what `P2-09` — the
+   go/no-go on whether searching this corpus is useful with no model involved — has to
+   be judged against. Judging search quality over a corpus this small measures nothing.
+   `P0-15`'s held-out question set must be written *before* that judgement, not after.
+2. **A Cloudflare account**, for `P3-05` and the rest of `P3-09`. The code side is done
+   and tested; what is missing is a tunnel, an Access application and an AUD tag.
+3. **The graph.** Phase 4 is designed and entirely unbuilt — nothing has ever written an
+   edge — so `P4-*`, most of `P5-03`–`P5-05`, `P6-01`–`P6-03`, `P6-06`, `P6-07`,
+   `P6-10` and all of phase 7 wait on it. Apache AGE supports PG17 (v1.6.0), so
+   `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
+   mid-deploy.
 
-`P1-10` (figures) is the remaining phase-1 extraction work and does not block
-the checkpoint. `P1-14` is done: it moved up because `P1-34` wired an academic
-search feed into the frontier, and roughly a third of what that returns are
-publisher landing pages — an abstract, a paywall, nothing to extract. `P1-25` (egress restriction)
-is **not** closed by `P1-22`: `internal: true` stops a container reaching the
-internet, and does nothing about the worker — which must have a default route —
-reaching the LAN.
+**Buildable today**, needing none of the three: `P6-05` (annotation as first-class
+nodes — the one graph-shaped feature that does not wait, since an annotation is a node
+somebody writes by hand), `P6-23` (agent registry and run history, better after there is
+a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a Semantic Scholar key,
+ten minutes, felt during the 48h run).
 
-Worth knowing before the run: **`P1-28`'s sitemap handler had never enqueued a
-URL** — `seed_source="sitemap"` was missing from the enum, so every sitemap
-fetched, parsed, and then raised at the insert while the logs said it worked.
-Fixed in `v0.26.0`, along with `P1-34`, which was the other reason the frontier
-could only narrow. Both were found by asking what a 48h run would actually do
-when its queue drained.
+**Explicitly parked, with reasons.** `P2-15` is gated by its own text on `P1-16` *and*
+on `P2-09` being marginal, and means a second embedding column plus a full re-embed for
+a model you may never adopt. `P6-18` and `P6-19` are ⚑ human: published-design decisions
+that an agent would be inventing rather than implementing.
+
+**What was verified live** — real government PDFs extracted with page-accurate chunks,
+the injection screen clean across every page crawled, `render_js: auto` escalating and
+not escalating on real sites, `Crawl-delay` honoured. **What was not**: anything after
+phase 1. Every claim about phases 2, 3 and 6 rests on tests against a real Postgres and
+real HTTP doubles, because the stack has never been deployed. `docs/handover.md` §4
+carries that list, and it is the checklist for the first deploy.
 
 ---
 

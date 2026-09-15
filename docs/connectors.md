@@ -31,12 +31,19 @@ per-domain row is the mechanism for every "this one site is special" case:
 | Symptom | The knob |
 |---|---|
 | Served as a content type the allowlist refuses | `allowed_content_types` — this is what makes sitemaps work at all, since most are `text/xml` |
-| A shell with no text until JS runs | `render_js: true`, instead of paying `auto`'s two requests per page forever |
+| A shell with no text until JS runs | usually nothing — `P1-27` learns it after three escalations in a row and re-checks weekly. Set `render_js: always` only to overrule that, or `never` to forbid the browser |
 | 429s, or a host that asks for slowness | `delay_per_domain_ms`, `concurrency_per_domain` |
 | Legitimately http-only | `require_https_final: false`, for that domain and no other |
 | A bot-challenge interstitial | `challenge_wait_s` (`P1-33`); 0 disables |
 
-Everything in that table is a row, not a deploy.
+Everything in that table is a row, not a deploy — and as of `P6-22` every one of
+them is editable from **Admin → Domains**, which also shows what the crawl
+learned about a domain as distinct from what was configured for it.
+
+Two knobs are deliberately *not* on that screen: the address guards
+(`block_private_addresses` and friends) and `respect_robots`. Those are
+deployment settings, in `.env` or `config/fetch_policy.yaml`, because a web form
+that could switch one off would sit one click from controls about politeness.
 
 ---
 

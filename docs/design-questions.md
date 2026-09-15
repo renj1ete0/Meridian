@@ -132,3 +132,15 @@ five new columns, and two CHECK constraints:
 Five of the ten questions were unanswerable beforehand. Discovering that in
 month four, with a corpus already built on the wrong shape, is the outcome §14.3
 exists to avoid.
+
+
+## The other half, still owed
+
+§14.3's backwards pass has a sibling in §14.1: a **held-out question set**, which is
+the only real regression test this system will ever have. It is not the ten above —
+those were chosen to stress the *schema*, and a regression set has to stress
+*retrieval*, with answers a person has already judged.
+
+Tracked as `P0-15`, and it has a deadline rather than a priority: it must be written
+**before** `P2-09` judges the corpus, not after. A question set written once results
+are visible is a set written to the results.

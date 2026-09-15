@@ -162,8 +162,8 @@ which read `PG_*` from the environment and cannot see it otherwise. They fail wi
 `PG_RW_URL is not set`, which reads as a code failure and is not one.
 
 Without Postgres running, the integration tests **skip** rather than fail — currently
-about a quarter of the suite. A green run that finished in under a second is a run that
-tested almost nothing; read the skip count, not just the colour.
+635 of 1910, a third of the suite. A green run that finished in a few seconds is a run
+that tested almost nothing; read the skip count, not just the colour.
 
 Crawl4AI is a 6GB image that runs a browser pool. Start it only when you are actually
 exercising the browser path, and `make dev-down` when you stop.
@@ -197,6 +197,23 @@ depends on the frontier still being `pending`.
 To exercise the shutdown path, `timeout -s TERM 5 uv run python -m worker.main` works
 — `uv run` forwards the signal — but pipe it to a file rather than to `grep`, or the
 signal takes the pipeline with it and you lose the last lines.
+
+**Running the read surface by hand.** Same environment, two more processes:
+
+```bash
+set -a; . ./.env.dev; set +a
+uv run uvicorn api.main:app --reload --port 21114   # API, Admin and /mcp
+cd web && npm run dev                               # UI on :21115, proxying to the API
+```
+
+The UI reaches the API through Vite's dev proxy, so there is no base URL anywhere in
+`web/` and nothing to configure. If the API is not running, Explore says the corpus
+counts are unavailable rather than rendering zeros — which is the distinction
+`CorpusCounts` exists to preserve, not a bug.
+
+**A stale uvicorn on :21114 is the trap here.** It serves old code and every new route
+404s, which reads exactly like a route that was never registered. Kill it before
+assuming the mount is wrong.
 
 **Admin needs `MERIDIAN_ADMIN_ALLOW_ANONYMOUS=true` in `.env.dev`,** or every
 `/api/admin/*` route answers 503. That is the intended behaviour on an exposed
@@ -396,15 +413,18 @@ Two other things about that column worth not rediscovering:
   type, so `attgenerated == "s"` is False and `attgenerated == b"s"` is True.
   Cast it in SQL rather than comparing in Python.
 
-### The Makefile has four targets pointing at scripts that do not exist
+### `make build-push` still calls a script that does not exist
 
-`scripts/` contains `init-roles.sh` and `seed.py`. `make snapshot-corpus`,
-`make restore-corpus`, `make backup` and `make build-push` all call shell
-scripts that were never written. `snapshot-corpus` is the one that matters:
-`P1-16`'s task line is "48h unattended acceptance run → `make snapshot-corpus`",
-so the run's deliverable is a target that fails at the shell. Find that out
-before the run, not after. Tracked as `P1-36`/`P1-37`, and
-[deployment.md](deployment.md) §6 has the manual equivalent.
+Four Makefile targets once pointed at scripts nobody had written, and
+`snapshot-corpus` was the one that mattered — `P1-16`'s deliverable is literally
+"48h unattended acceptance run → `make snapshot-corpus`", so the run's output was
+a target that failed at the shell. `P1-36` wrote that one, plus `restore-corpus`
+and `backup`.
+
+`make build-push` is still a stub (`P1-37`). It only bites when building
+multi-arch images from a laptop for an arm64 server; `docker compose build` on
+the server itself is the way round it, and [deployment.md](deployment.md) §6 has
+both.
 
 ### A value used in code but absent from the enum fails at the insert, not at import
 
@@ -702,13 +722,6 @@ reader that these are native enums.
 than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
-
-### `caplog` does not work in this suite
-
-`addopts` carries `-p no:logging`, because pytest's logging plugin interleaves
-plain-text records with the JSON ones `meridian_core.logging` emits and the
-logging tests parse. To assert on a log line, attach a `logging.Handler` to the
-named logger and remove it in a `finally`.
 
 ### A key set on the global `*` policy row is set for every domain
 

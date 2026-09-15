@@ -19,8 +19,9 @@ server.
 ## 0. What you are deploying
 
 Eight services, two of which do not start on their own schedule
-(`orchestrator`, `cloudflared`) and one of which does not exist yet as a real
-image (`api` has no routes). For the smoke run only four matter:
+(`orchestrator`, `cloudflared`). `orchestrator` is the only one with nothing
+behind it — phase 4 is unbuilt, so it has no image and nothing to run. For the
+smoke run only four matter:
 
 | Service | Network | Why it is in the smoke run |
 |---|---|---|
@@ -40,9 +41,11 @@ real browser against pages this crawler found by following links, so it is on
 ## 1. Before you touch the server
 
 **Decide where the data lives.** `DATA_ROOT` (default `/srv/meridian`) holds
-`pgdata/`, `raw/` and `figures/`. The raw store only grows — nothing deletes
-from it (`P1-31`), and a 48h run is the first time that will be visible. Put it
-on the disk you are willing to fill, and check `df` before and after.
+`pgdata/`, `raw/` and `figures/`. The raw store only grows unless somebody
+spends the sweep: `python -m worker.sweep` reports what §5.4 would reclaim and
+deletes only with `--apply` (`P1-31`). A 48h run is the first time that will be
+visible. Put it on the disk you are willing to fill, and check `df` before and
+after.
 
 **Decide how the images get there.** The server is arm64 and your machine
 probably is not, so there are two routes:
@@ -50,7 +53,7 @@ probably is not, so there are two routes:
 - **Build on the server.** `docker compose build` over an SSH session. Slowest,
   needs no registry, and is the right call for a first smoke run.
 - **Build and push multi-arch.** What `make build-push` is *for*. See §6 — the
-  script it calls does not exist yet.
+  script it calls is still missing (`P1-37`).
 
 ---
 
@@ -293,15 +296,15 @@ below.
 
 | Target | Calls | Status |
 |---|---|---|
-| `make snapshot-corpus` | `./scripts/snapshot_corpus.sh` | **missing** — and it is `P1-16`'s stated deliverable |
-| `make restore-corpus` | `./scripts/restore_corpus.sh` | missing |
-| `make backup` | `./scripts/backup.sh` | missing |
-| `make build-push` | `./scripts/build_and_push.sh` | missing |
+| `make snapshot-corpus` | `./scripts/snapshot_corpus.sh` | built (`P1-36`) — and it is `P1-16`'s stated deliverable |
+| `make restore-corpus` | `./scripts/restore_corpus.sh` | built |
+| `make backup` | `./scripts/backup.sh` | built; `deploy/meridian-backup.timer` runs it (`P5-08`) |
+| `make build-push` | `./scripts/build_and_push.sh` | **still missing** (`P1-37`) |
 
-Tracked as `P1-36` and `P1-37`. `snapshot-corpus` is the urgent one: it is how
-the 48h run becomes the dev corpus everything after phase 2 is built against,
-and discovering it is a stub *after* the run is a wasted 48 hours. Until it
-exists, the manual equivalent is a `pg_dump` plus a tar of the raw store:
+`snapshot-corpus` was the urgent one, because it is how the 48h run becomes the
+dev corpus everything after phase 2 is built against and discovering it was a
+stub *after* the run would be a wasted 48 hours. It exists now. The manual
+equivalent, if you ever need it, is a `pg_dump` plus a tar of the raw store:
 
 ```bash
 docker compose exec -T postgres pg_dump -U meridian -Fc meridian > corpus.dump
