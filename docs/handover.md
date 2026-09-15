@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.71.0`. 1876 backend tests against a real Postgres, 224 frontend.**
+**`v0.74.0`. 1908 backend tests against a real Postgres, 267 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -58,9 +58,10 @@ worker.retopic    topic labels onto sources crawled before P2-14
 - **An API.** `/api/explore/*` on the read-only role, `/api/admin/*` on the
   read-write one. The prefix *is* the role boundary (§12.6) and a test asserts
   nothing under `/api/explore` accepts a write.
-- **A UI that renders data.** Explore with search, the corpus counts, a
-  since-last-visit delta, notifications; a source page at `/sources/{id}` with
-  passages, figures and both exports; and Admin with three screens.
+- **A UI that renders data.** Explore with search, a topic filter, the corpus
+  counts, a since-last-visit delta, saved views and notifications; a source page
+  at `/sources/{id}` with passages, figures and both exports; a node panel at
+  `/nodes/{id}`; and Admin with three screens (gazetteer, topics, domains).
 - **An MCP read surface**, mounted on the same app, same read-only role, same
   provenance. Scoped tokens, a statement-timeout SQL escape hatch on a separate
   `meridian_guest` role, and Access JWT verification.
@@ -81,9 +82,12 @@ worker.retopic    topic labels onto sources crawled before P2-14
 - **OCR.** Scanned PDFs are detected and filed in `enrichment_queue`, and nothing
   ever runs that queue — §6.6 makes OCR user-triggered, so the rows wait for a UI
   to spend against them.
-- **`/api/explore/search?topic=` has a filter and no control.** `P2-14` put the
-  labels on every hit and the filter on the API; choosing one from the UI is
-  `P6-24`.
+- **Anything that needs a node to exist.** The node panel (`P6-04`) is built,
+  tested and reachable at `/nodes/{id}`, and there is nothing to put in it.
+  Likewise a saved view's `focus_entity_id`. Both were built ahead of the graph
+  deliberately — their hard parts are about how a claim is presented, and those
+  do not get easier by waiting for rows — but do not mistake "the screen exists"
+  for "the feature works end to end".
 
 ### The shape of the read path
 
@@ -124,6 +128,19 @@ sources.
   Cloudflare Access is configured or `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` is set.
 - **Run `uv lock` in the same commit as a version bump**, or the Docker build
   breaks. See §3.
+
+### Two exceptions, both deliberate, both easy to mistake for bugs
+
+- **`GET /api/explore/nodes/{id}` returns superseded chunks**, and it is the only
+  read path that does. Everywhere else a superseded chunk is text the page no
+  longer carries; there it is the text an attribute was *derived from*, and §2.4
+  re-derives from source chunks — so the citation has to resolve even after the
+  page changed.
+- **Saved views read on `/api/explore` and write on `/api/admin`.** §12.6 splits
+  by mutation, not by audience, and here that is the useful split: views are
+  shared state with no per-viewer scoping, so a guest opens the owner's and
+  cannot add to them. Saving therefore needs Access configured, or the
+  anonymous opt-out.
 
 ## 2. Getting a working environment
 
@@ -935,6 +952,11 @@ first edge has happened: chunks are superseded rather than deleted, and a
 citation keeps resolving after the page changes. Do not undo that by adding a
 delete path.
 
+**`P6-04` already reads the graph tables**, so `tests/integration/test_node_detail.py`
+is a worked example of writing `entities`, `attribute_values` and `edges` rows
+against their real constraints — including the one that catches people, the CHECK
+on `observations` requiring a value.
+
 **`P4-13` before `P4-08`.** §16 says budget caps must exist before the first
 autonomous run, and nothing enforces the ordering — the compounding
 seed→crawl→cost loop is first noticed as a bill.
@@ -946,21 +968,26 @@ verification refuses rather than bypasses when JWKS is unreachable, and the MCP
 surface advertises its protected-resource metadata only when authentication is
 on. What is missing is a tunnel, an Access application, and an AUD tag.
 
-### Buildable today, in rough order of value
+### Buildable today
 
-1. **`P6-24`** — topic filter control in Explore. `P2-14` made the filter real
-   and put labels on every hit; the UI needs the topic list, which `/stats` does
-   not carry.
-2. **`P6-09`** — saved views. Self-contained, and the Explore landing state
-   already has a slot rendering an empty list.
-3. **`P6-23`** — admin: agent registry and run history. Both tables exist and
-   both stay empty until phase 4 has run something, so this is worth building
-   *after* there is a run to show: an empty screen teaches nothing about what the
-   full one should look like.
-4. **`P5-07`'s inbound half** — Telegram commands. §13.3 makes the bot a control
+The shortlist is genuinely short now. `P6-24` (topic filter), `P6-04` (node
+panel) and `P6-09` (saved views) are done, which was the last of the interface
+work that did not need the graph.
+
+1. **`P6-05`** — annotation as first-class nodes. §12.5 says to build the
+   affordance early or it will not get used, and it is the one graph-shaped
+   feature that does *not* wait for `P4-01`: an annotation is a node somebody
+   writes by hand, so it needs `entities` and nothing that fills it.
+2. **`P6-23`** — admin: agent registry and run history. Both tables exist and
+   stay empty until phase 4 runs something, so this is worth building *after*
+   there is a run to show: an empty screen teaches nothing about what the full
+   one should look like.
+3. **`P5-07`'s inbound half** — Telegram commands. §13.3 makes the bot a control
    surface that can trigger runs and change steering, so the single-chat
    restriction and command authorisation have to exist before the first command
    does; most useful commands need the orchestrator anyway.
+4. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
+   the 48-hour run is when it is felt.
 
 ### Explicitly *not* worth doing yet
 
