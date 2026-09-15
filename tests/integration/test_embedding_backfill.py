@@ -28,6 +28,7 @@ from meridian_core.models import Chunk, Source
 from meridian_core.sources import upsert_source
 from worker.embed import Backfill
 from worker.embeddings import EmbeddingError, FakeEmbedder
+from worker.vectors import LocalEmbedder
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -71,7 +72,11 @@ def backfill_for(sess, chunks, embedder=None, **kwargs) -> Backfill:
     The same trap `test_worker_run.py` documents for the seeded frontier.
     """
     return Backfill(
-        embedder or FakeEmbedder(),
+        # Wrapped, because `Backfill` takes an async embedder since `P2-19` —
+        # the sidecar is one of its two implementations. `LocalEmbedder` is the
+        # adapter the production in-process path uses, so wrapping here means
+        # these tests exercise it rather than a shortcut around it.
+        LocalEmbedder(embedder or FakeEmbedder()),
         session_factory=factory(sess),
         start_after=min(c.chunk_id for c in chunks) - 1,
         **kwargs,
@@ -295,7 +300,7 @@ async def test_work_committed_before_a_stop_survives_it(session_for, url, cleanu
             backfill.stop()
             return vectors
 
-    backfill._embedder = StopAfterOne()
+    backfill._embedder = LocalEmbedder(StopAfterOne())
     await backfill.run_once()
 
     done = 0

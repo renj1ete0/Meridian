@@ -48,6 +48,47 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.69.0] — 2026-09-15
+
+**One copy of the model, not two.**
+
+### Fixed
+
+- `P2-19` the backfill embeds through the sidecar `P2-17` already runs, instead
+  of constructing a `BGEEmbedder` of its own. A stack running both held two
+  copies of 2.3GB of weights on a machine chosen for being small
+- `worker/vectors.py` is the seam: `LocalEmbedder` drives the in-process model
+  off the event loop, `PreferRemote` asks the sidecar and falls back
+
+### Falling back is right; falling back silently is not
+
+- A backfill can afford to wait for a model to load. What it cannot afford is to
+  *appear* to be using the sidecar while quietly loading a second copy — the
+  symptom is memory pressure with nothing in the log to explain it. The switch is
+  logged once with its reason, and the reason is asserted in a test
+- One-way within a process. Once the local model is loaded the memory is spent,
+  so returning to the sidecar mid-pass buys nothing and costs a reload's worth of
+  uncertainty about which produced what. The next pass asks again
+- The batch in flight is not lost: it is retried locally. The cursor has already
+  moved past those rows
+
+### A sidecar serving a different model is refused
+
+- The one failure here that cannot be detected afterwards. `<=>` accepts any two
+  vectors of the right width and returns a number, so a column holding two
+  models' vectors ranks confident nonsense and nothing downstream — not the
+  search, not the novelty gate, not a reader — can tell
+- `RemoteEmbedder` takes `expect_model` (from `MERIDIAN_EMBED_MODEL`, the same
+  variable the worker builds its own model from) and raises `EmbedderMismatch` on
+  a response naming another. Checked on **every** response, not once at startup:
+  a sidecar can be restarted with a different model under a running client
+- A subclass of `EmbeddingUnavailable`, because every caller's correct response is
+  the same — degrade, or fall back. The backfill falls back, since the local
+  model is the right one, and reports it as a mismatch rather than an outage:
+  one comes back on its own and the other needs somebody to change a URL
+- `describe()` replaces the boolean `healthy()` internally. "Up" is not the
+  question that matters — a sidecar running the wrong model is up
+
 ## [0.68.0] — 2026-09-15
 
 **Sources record their topics, so search can filter by one.**

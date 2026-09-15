@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1822 backend tests and 207 frontend.
+1841 backend tests and 207 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -544,14 +544,16 @@ when its queue drained.
       `SourceTier`. `detail` is always a string, with the structured form kept
       under `errors`. `/stats` carries `as_of`
 
-- [ ] `P2-19` **The backfill still loads its own copy of the model.**
-      `P2-17` put one resident in the sidecar for the query path, and
-      `worker.embed` continues to construct a `BGEEmbedder` of its own — so a
-      stack running both holds two. `Embedder` is a Protocol whose docstring
-      already anticipates "a remote service", so this is a substitution rather
-      than a rewrite; what it needs is a sync-over-async shim or an async batch
-      path, and a decision about what the backfill does when the sidecar is down
-      (probably: load locally, since a backfill can afford the wait)
+- [x] `P2-19` **The backfill still loads its own copy of the model** —
+      `v0.69.0`. `worker/vectors.py`: `PreferRemote` asks the sidecar,
+      `LocalEmbedder` drives the in-process model off the loop. Falls back when
+      the sidecar is unreachable — a backfill can afford the wait — and the
+      switch is logged with its reason, because a pass that quietly loads a
+      second model looks exactly like one using the sidecar and the only symptom
+      is memory pressure. One-way within a process: the memory is already spent.
+      A sidecar naming a **different** model is refused, checked on every
+      response rather than once at startup, since that is the one failure here
+      nothing downstream can detect — mixed vectors compare without erroring
 
 ## Phase 3 · MCP read surface
 

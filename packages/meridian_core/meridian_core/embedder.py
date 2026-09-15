@@ -54,6 +54,17 @@ class EmbeddingUnavailable(RuntimeError):
     """
 
 
+class EmbedderMismatch(EmbeddingUnavailable):
+    """The sidecar answered, with a different model than this corpus was built on.
+
+    A subclass of "unavailable" on purpose: every caller's correct response is
+    the same one — degrade, or fall back — and the danger in treating it as a
+    lesser problem is that the vectors *work*. `<=>` takes any two vectors of
+    the right width and returns a number, so a corpus with two models' vectors
+    in one column ranks confident nonsense and nothing downstream can detect it.
+    """
+
+
 class RemoteEmbedder:
     """Vectors from the embedding sidecar.
 
@@ -68,11 +79,17 @@ class RemoteEmbedder:
         *,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         client: httpx.AsyncClient | None = None,
+        expect_model: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._timeout = timeout_s
         self._client = client
         self._owns_client = client is None
+        #: Which model this corpus was embedded with. When set, a sidecar naming
+        #: a different one is refused rather than used — the failure it prevents
+        #: is a column holding vectors from two models, which compare without
+        #: erroring and rank nonsense with complete confidence.
+        self.expect_model = expect_model
 
     @classmethod
     def from_env(cls) -> RemoteEmbedder | None:
@@ -84,7 +101,14 @@ class RemoteEmbedder:
         url = os.environ.get("MERIDIAN_EMBEDDER_URL", "").strip()
         if not url:
             return None
-        return cls(url, timeout_s=_float_env("MERIDIAN_EMBEDDER_TIMEOUT_S", DEFAULT_TIMEOUT_S))
+        return cls(
+            url,
+            timeout_s=_float_env("MERIDIAN_EMBEDDER_TIMEOUT_S", DEFAULT_TIMEOUT_S),
+            # The same variable the worker builds its own model from, so the two
+            # sides of the boundary read one setting rather than two that can
+            # disagree silently.
+            expect_model=os.environ.get("MERIDIAN_EMBED_MODEL", "").strip() or None,
+        )
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -97,11 +121,23 @@ class RemoteEmbedder:
             self._client = None
 
     async def healthy(self) -> bool:
+        return await self.describe() is not None
+
+    async def describe(self) -> dict | None:
+        """What the sidecar says it is, or None when it cannot be reached.
+
+        Returned rather than reduced to a boolean because "up" is not the
+        question that matters: a sidecar running a different model is up, and
+        using it is worse than having none.
+        """
         try:
             response = await self._http().get(f"{self.base_url}/health", timeout=5.0)
-            return response.status_code == 200
-        except httpx.HTTPError:
-            return False
+            if response.status_code != 200:
+                return None
+            body = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        return body if isinstance(body, dict) else None
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Vectors for ``texts``, in order.
@@ -126,6 +162,17 @@ class RemoteEmbedder:
             raise EmbeddingUnavailable(f"{self.base_url}: {exc}") from exc
         except ValueError as exc:
             raise EmbeddingUnavailable(f"{self.base_url}: unreadable response") from exc
+
+        named = body.get("model")
+        if self.expect_model and named and named != self.expect_model:
+            # Checked on every response, not once at startup. A sidecar can be
+            # restarted with a different model under a running client, and the
+            # vectors it returns afterwards are valid floats of the right width
+            # — there is no later point at which this becomes visible.
+            raise EmbedderMismatch(
+                f"{self.base_url} is serving {named!r}; this corpus is embedded "
+                f"with {self.expect_model!r}. Mixed vectors rank nonsense."
+            )
 
         vectors = body.get("vectors")
         if not isinstance(vectors, list) or len(vectors) != len(texts):

@@ -51,7 +51,8 @@ from meridian_core.chunks import (
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
-from .embeddings import BGEEmbedder, Embedder, EmbedderSettings, EmbeddingError
+from .embeddings import EmbeddingError
+from .vectors import AsyncEmbedder, build_embedder
 
 log = get_logger(__name__)
 
@@ -94,7 +95,7 @@ class Backfill:
 
     def __init__(
         self,
-        embedder: Embedder,
+        embedder: AsyncEmbedder,
         *,
         session_factory: SessionFactory = session,
         batch_size: int = DEFAULT_CHUNK_BATCH,
@@ -148,9 +149,11 @@ class Backfill:
             stats.batches += 1
 
             try:
-                # The model is synchronous and CPU-bound; a thread keeps the
-                # event loop free so a signal still stops the pass promptly.
-                vectors = await asyncio.to_thread(self._embedder.embed, [text for _, text in batch])
+                # Async, because the embedder may be the sidecar rather than an
+                # in-process model (`P2-19`). `LocalEmbedder` is what keeps the
+                # loop free when it is in-process, so a signal still stops the
+                # pass promptly either way.
+                vectors = await self._embedder.embed([text for _, text in batch])
             except (EmbeddingError, ValueError):
                 stats.failed_batches += 1
                 log.exception(
@@ -206,7 +209,10 @@ class Backfill:
 
 
 async def run_backfill(*, once: bool, max_batches: int | None) -> EmbedStats:
-    embedder = BGEEmbedder(EmbedderSettings.from_env())
+    # The sidecar when there is one (`P2-19`). A stack running both the query
+    # path and this pass used to hold two copies of 2.3GB of weights on a
+    # machine chosen for being small.
+    embedder = await build_embedder()
     backfill = Backfill(
         embedder,
         batch_size=_int_env("MERIDIAN_EMBED_CHUNK_BATCH", DEFAULT_CHUNK_BATCH),

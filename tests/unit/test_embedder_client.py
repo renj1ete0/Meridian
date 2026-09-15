@@ -16,6 +16,7 @@ import pytest
 
 from meridian_core.embedder import (
     MAX_TEXTS,
+    EmbedderMismatch,
     EmbeddingUnavailable,
     RemoteEmbedder,
 )
@@ -149,3 +150,102 @@ async def test_embed_one_returns_a_single_vector() -> None:
     vector = await RemoteEmbedder(URL, client=client).embed_one("a query")
 
     assert len(vector) == 4
+
+
+# --------------------------------------------------------------------------
+# A sidecar serving a different model (task P2-19)
+# --------------------------------------------------------------------------
+#
+# The one failure in this area that cannot be detected afterwards. `<=>` accepts
+# any two vectors of the right width and returns a number, so a column holding
+# two models' vectors ranks confident nonsense and nothing downstream — not the
+# search, not the novelty gate, not a reader — can tell.
+
+
+def _embedding_response(model: str, texts: list[str]) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "vectors": [[0.1] * 4 for _ in texts],
+            "dimensions": 4,
+            "model": model,
+        },
+    )
+
+
+async def test_a_sidecar_serving_another_model_is_refused() -> None:
+    transport = httpx.MockTransport(lambda request: _embedding_response("other-model", ["a"]))
+    embedder = RemoteEmbedder(
+        "http://embedder.test",
+        client=httpx.AsyncClient(transport=transport),
+        expect_model="bge-m3",
+    )
+
+    with pytest.raises(EmbedderMismatch, match="other-model"):
+        await embedder.embed(["a"])
+
+
+async def test_the_matching_model_is_accepted() -> None:
+    # The converse, without which the test above would pass against a client
+    # that refused everything.
+    transport = httpx.MockTransport(lambda request: _embedding_response("bge-m3", ["a"]))
+    embedder = RemoteEmbedder(
+        "http://embedder.test",
+        client=httpx.AsyncClient(transport=transport),
+        expect_model="bge-m3",
+    )
+
+    assert len(await embedder.embed(["a"])) == 1
+
+
+async def test_no_expectation_means_no_check() -> None:
+    # A deployment that has not said which model it uses gets the previous
+    # behaviour rather than a refusal it cannot act on.
+    transport = httpx.MockTransport(lambda request: _embedding_response("anything", ["a"]))
+    embedder = RemoteEmbedder(
+        "http://embedder.test", client=httpx.AsyncClient(transport=transport)
+    )
+
+    assert len(await embedder.embed(["a"])) == 1
+
+
+async def test_the_check_runs_on_every_response_not_once() -> None:
+    # A sidecar can be restarted with a different model under a running client,
+    # and the vectors it returns afterwards are valid floats of the right width.
+    served = {"model": "bge-m3"}
+    transport = httpx.MockTransport(
+        lambda request: _embedding_response(served["model"], ["a"])
+    )
+    embedder = RemoteEmbedder(
+        "http://embedder.test",
+        client=httpx.AsyncClient(transport=transport),
+        expect_model="bge-m3",
+    )
+    await embedder.embed(["a"])
+
+    served["model"] = "something-else"
+
+    with pytest.raises(EmbedderMismatch):
+        await embedder.embed(["a"])
+
+
+async def test_describe_reports_what_the_sidecar_says_it_is() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"model": "bge-m3", "loaded": True})
+    )
+    embedder = RemoteEmbedder(
+        "http://embedder.test", client=httpx.AsyncClient(transport=transport)
+    )
+
+    assert (await embedder.describe())["model"] == "bge-m3"
+
+
+async def test_describe_is_none_when_the_sidecar_is_down() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    embedder = RemoteEmbedder(
+        "http://embedder.test", client=httpx.AsyncClient(transport=httpx.MockTransport(refuse))
+    )
+
+    assert await embedder.describe() is None
