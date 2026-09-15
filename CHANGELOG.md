@@ -43,6 +43,68 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.31.0] — 2026-09-15
+
+**Both extraction paths now filter to the same standard.**
+
+### Fixed
+
+- `P1-43` The browser path did no boilerplate removal of its own. It took
+  Crawl4AI's `fit_markdown` as-is, on the stated reasoning that
+  `PruningContentFilter` had seen a rendered DOM this process never had. The
+  premise was wrong: the rendered HTML comes back in the same response and is
+  already what the extractor receives as its content, so trafilatura can see
+  everything the filter saw
+- What the premise cost was an asymmetry nobody chose. `PruningContentFilter`
+  is far more permissive than trafilatura at `favor_precision`, so whether a
+  page kept its navigation depended on whether the fetcher happened to escalate
+  it to a browser — a decision made on how much visible text the *static* fetch
+  found, which has nothing to do with how much boilerplate the page carries
+- Expensive twice over: boilerplate becomes entities and entities become edges
+  (§2.3), and it inflates the novelty gate's duplicate count with text that was
+  never content, because every page on a site repeats the same chrome. Visible
+  in the dev corpus as chunks that were repeated link lists, a promo banner and
+  a footer block
+- Now trafilatura extracts the text from the rendered HTML, and the payload
+  contributes what it is genuinely better at: metadata read from the rendered
+  DOM, and links including the ones JavaScript inserted. `fit_markdown` stays
+  as the fallback for pages trafilatura finds nothing in — a real case on
+  JS-assembled pages with no semantic structure to detect, which is why the
+  browser was escalated to in the first place — and only above `TEXT_FLOOR`,
+  because a sub-floor fallback is a cookie banner
+- The tradeoff, recorded rather than discovered later: a DOI written in a
+  region precision filtering strips is no longer seen. A DOI that is a *link*
+  still is, since links come from the rendered DOM rather than the text, and a
+  page's own identifier is read straight from its meta tags either way
+
+### Added
+
+- `P1-44` `sources.extractor` — which tool produced this source's text. §6.6
+  routes each format to a different tool and HTML to two of them, so "how was
+  this read" is a per-row fact that cannot be derived from the media type.
+  Without it, telling a browser-extracted page from a locally-extracted one
+  meant looking for markdown link syntax in the text, which is how `P1-43` was
+  found and is not a diagnostic anyone should have to invent twice
+- Deliberately not a constrained value set. These names grow whenever an
+  extractor or a failure mode is added, and a CHECK would recreate `P1-28`'s
+  trap exactly — a literal used in code and missing from the enum raises at the
+  insert, after the fetch, the parse and the log line have all reported
+  success. A diagnostic that can fail a write is worse than no diagnostic
+- Nullable with no backfill. The sources already in a corpus were extracted
+  before anything recorded it, and inventing a value for them would assert
+  something nobody knows
+
+### Testing
+
+- The five tests that encoded "the browser's markdown is preferred" now encode
+  the opposite, and three were added: that site chrome does not survive the
+  browser path, that the markdown fallback still works when local extraction
+  finds nothing, and that a sub-floor fallback is refused
+- `P1-44`'s end-to-end test reads the **committed row** back rather than
+  trusting the extractor's return value, per the rule `P1-28` bought: for any
+  handler that ends in a write, the parser passing tells you nothing
+- 1262 backend tests, 5 frontend
+
 ## [0.30.0] — 2026-09-15
 
 **The corpus becomes searchable.**

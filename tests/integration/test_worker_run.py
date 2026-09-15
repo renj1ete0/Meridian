@@ -762,6 +762,35 @@ async def test_a_fetched_page_fills_in_the_bibliographic_columns(
     assert source.doi == "10.9999/ridership.2026"
     assert source.text_available is True
     assert {c["value"] for c in source.extra["citations"]} == {"10.5555/method-paper"}
+    # `P1-44`. The handler ends in a write, so the test that matters reads the
+    # committed row back rather than trusting the extractor's return value —
+    # `P1-28` shipped a feature that parsed perfectly and never wrote anything.
+    assert source.extractor == "trafilatura", "the static path did not record which tool ran"
+
+
+async def test_a_page_with_nothing_extractable_still_records_its_extractor(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The distinction `P1-44` exists to keep: "nothing to extract" and "the
+    extractor fell over" both leave `text_available` False and need different
+    follow-ups. Only this column tells them apart after the fact."""
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+
+    def shell(request: httpx.Request) -> httpx.Response:
+        return streamed(
+            200,
+            headers={"content-type": "text/html"},
+            chunks=[b"<html><body><nav>menu</nav></body></html>"],
+        )
+
+    worker, _ = build_worker(sess, shell, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source.text_available is False
+    assert source.extractor == "trafilatura", "a nothing-found extraction is still an extraction"
 
 
 async def test_a_page_with_nothing_extractable_stays_metadata_only(

@@ -54,6 +54,10 @@ class SourceRead(BaseModel):
     retention_tier: RetentionTier
     raw_file_path: str | None
     language: str | None
+    #: Which tool read this source's text (`P1-44`). NULL on rows extracted
+    #: before the column existed — which is the truth, and distinguishable from
+    #: every real extractor name.
+    extractor: str | None = None
     text_available: bool
     ocr_applied: bool
     ocr_tier: OcrTier

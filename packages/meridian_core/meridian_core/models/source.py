@@ -85,6 +85,23 @@ class Source(Base, TimestampMixin):
     raw_file_path: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str | None] = mapped_column(Text, index=True)
 
+    #: Which extractor produced this source's text (task P1-44, §6.6).
+    #:
+    #: §6.6 routes each format to a different tool and HTML to two of them, so
+    #: "how was this read" has a different answer per row and is not derivable
+    #: from the media type. Without it the only way to tell a browser-extracted
+    #: page from a locally-extracted one is to look for markdown link syntax in
+    #: the text — which is how `P1-43` was found, and is not a diagnostic
+    #: anyone should have to invent twice.
+    #:
+    #: Deliberately **not** `constrained()`. The value set grows whenever an
+    #: extractor is added or a compound path is named, and a CHECK here would
+    #: recreate `P1-28`'s trap exactly: a literal used in code and missing from
+    #: the enum raises at the insert, after the fetch, the parse and the log
+    #: line have all reported success. This column is a diagnostic, and a
+    #: diagnostic that can fail a write is worse than no diagnostic.
+    extractor: Mapped[str | None] = mapped_column(Text)
+
     # A source with no extractable text is still a citable graph participant and
     # still counts toward coverage — metadata-only is a valid resting state (§6.5).
     text_available: Mapped[bool] = mapped_column(

@@ -292,3 +292,78 @@ async def test_touching_a_url_with_no_row_says_so_rather_than_inventing_one(
 
     assert await touch_source(sess, url) is None
     assert await get_source(sess, url) is None
+
+
+# --------------------------------------------------------------------------
+# Which extractor produced the text (task P1-44, §6.6)
+# --------------------------------------------------------------------------
+
+
+async def test_the_extractor_is_recorded_and_reads_back(session_for, url, cleanup) -> None:
+    """§6.6 routes each format to a different tool and HTML to two of them, so
+    "how was this read" is a per-row fact that is not derivable from the media
+    type. Before this column the only way to tell a browser-extracted page from
+    a locally-extracted one was to look for markdown link syntax in its text."""
+    sess = await session_for("rw")
+
+    await upsert_source(sess, url, checksum="sha256:one", extractor="trafilatura+rendered")
+    await sess.flush()
+    sess.expunge_all()
+
+    row = await get_source(sess, url)
+    assert row is not None
+    assert row.extractor == "trafilatura+rendered"
+
+
+async def test_a_later_extraction_overwrites_the_extractor(session_for, url, cleanup) -> None:
+    """Unlike the bibliography, this describes *this* extraction rather than a
+    fact about the document. A page that used to be read by one tool and is now
+    read by another has changed, and keeping the older name would misattribute
+    the text currently in the corpus."""
+    sess = await session_for("rw")
+
+    await upsert_source(sess, url, checksum="sha256:one", extractor="trafilatura")
+    await upsert_source(sess, url, checksum="sha256:two", extractor="crawl4ai")
+    await sess.flush()
+
+    row = await get_source(sess, url)
+    assert row is not None and row.extractor == "crawl4ai"
+
+
+async def test_not_naming_an_extractor_leaves_the_recorded_one_alone(
+    session_for, url, cleanup
+) -> None:
+    """Every keyword on `upsert_source` means "nothing new" when None, never
+    "clear it". A caller that only learned a new `accessed_at` must not erase
+    what the last extraction recorded."""
+    sess = await session_for("rw")
+
+    await upsert_source(sess, url, checksum="sha256:one", extractor="pdftotext")
+    await upsert_source(sess, url, checksum="sha256:two")
+    await sess.flush()
+
+    row = await get_source(sess, url)
+    assert row is not None and row.extractor == "pdftotext"
+
+
+async def test_a_failed_extraction_records_which_tool_failed(session_for, url, cleanup) -> None:
+    """The distinction the column exists to preserve: a source whose extractor
+    says `pdftotext-failed` and whose `text_available` is False is a different
+    problem from one that simply had no text, and needs a different follow-up.
+
+    Also the reason this column is not `constrained()`: these names grow
+    whenever an extractor or a failure mode is added, and a CHECK would recreate
+    `P1-28` exactly — a literal used in code and absent from the enum raises at
+    the insert, after the fetch, the parse and the log line all reported success.
+    """
+    sess = await session_for("rw")
+
+    await upsert_source(
+        sess, url, checksum="sha256:one", extractor="pdftotext-failed", text_available=False
+    )
+    await sess.flush()
+
+    row = await get_source(sess, url)
+    assert row is not None
+    assert row.extractor == "pdftotext-failed"
+    assert row.text_available is False

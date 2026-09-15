@@ -1643,6 +1643,11 @@ def _bibliography(
         "publication_date": document.publication_date,
         "language": document.language,
         "doi": document.doi,
+        # Which tool read this, including the failure names (`P1-44`). A source
+        # whose extractor says `pdftotext-failed` and whose `text_available` is
+        # False is a different problem from one that simply had no text, and
+        # only this column distinguishes them after the fact.
+        "extractor": document.extractor,
         # A scan has no text and is not merely empty: `mark_scanned` records
         # why and what would fix it, and must not be undone by this.
         "text_available": document.has_text,

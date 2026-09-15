@@ -77,6 +77,7 @@ async def upsert_source(
     publication_date: dt.date | None = None,
     language: str | None = None,
     doi: str | None = None,
+    extractor: str | None = None,
     text_available: bool | None = None,
     extra: dict[str, Any] | None = None,
 ) -> tuple[Source, bool]:
@@ -127,6 +128,13 @@ async def upsert_source(
         row.language = language
     if doi is not None:
         row.doi = doi
+    if extractor is not None:
+        # Overwrites, like `text_available` and unlike the bibliography: it
+        # describes *this* extraction, not a fact about the document. A page
+        # that used to extract with one tool and now extracts with another has
+        # changed, and keeping the older name would misattribute the text now
+        # in the corpus.
+        row.extractor = extractor
     if text_available is not None:
         # This one *does* overwrite in both directions. A page that used to
         # extract and now does not is a real change — a paywall going up, a

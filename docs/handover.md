@@ -239,6 +239,33 @@ Test it by inserting through **raw SQL**, not the ORM. SQLAlchemy's
 passes whether or not the database constraint exists at all — which is exactly how
 Phase 0 shipped unchecked VARCHAR columns while its tests were green.
 
+### The browser and static extraction paths were not equivalent
+
+Until `v0.31.0` the browser path used Crawl4AI's `fit_markdown` directly while
+the static path ran trafilatura at `favor_precision`. Those are very different
+filters, so the same page could keep or lose its navigation depending on whether
+the fetcher escalated it to a browser — and that decision is made on how much
+visible text the *static* fetch found, which has nothing to do with how much
+chrome the page carries.
+
+The premise in the docstring was that re-extracting locally would throw away a
+filter that saw a rendered DOM. It is worth knowing why that was wrong, because
+the same reasoning is tempting anywhere a sidecar returns processed output:
+**the rendered HTML comes back in the same response** (`fetch.py` stores it as
+the body), so the local extractor was never working from less than the filter
+was. Check what the sidecar already handed you before deciding it knows
+something you cannot.
+
+Two consequences worth holding on to:
+
+- Boilerplate does not just add noise. It becomes entities and entities become
+  edges, and it **inflates the novelty gate's duplicate count** — every page on
+  a site repeats the same chrome, so real pages get marked as duplicates of each
+  other's furniture.
+- Precision filtering drops DOIs written in stripped regions. Links survive
+  (they come from the DOM, not the text) and a page's own identifier survives
+  (meta tags), but a bare DOI in a sidebar does not.
+
 ### Two ways a benchmark lies on a small corpus
 
 Both were live in `scripts/benchmark_search.py` before its own output exposed

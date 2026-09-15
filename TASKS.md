@@ -20,7 +20,7 @@ something went wrong.
 expands its own frontier from links *and sitemaps*, and reads HTML, PDFs and Office
 documents: `P1-01`–`P1-09`, `P1-11`–`P1-15`, `P1-17`–`P1-24`, `P1-26`,
 `P1-28`, `P1-30`, `P1-33`, `P1-34` and (pulled forward) `P2-02` are done, at
-1254 backend tests and 5 frontend.
+1262 backend tests and 5 frontend.
 `P2-01` adds embeddings, so chunks carry vectors — written by a separate backfill
 pass, not by the fetch loop — and `P2-03` judges them, so a chunk now knows what
 it duplicates. `P1-22` gave the stack a topology, so it is now a stack rather
@@ -351,7 +351,18 @@ when its queue drained.
       it spends queue slots. `SEMANTIC_SCHOLAR_API_KEY` is free to request and
       is read already; this is a registration, not code. Measure the retry rate
       during `P1-16` before deciding it matters. ⚑ human
-- [ ] `P1-43` **The browser path does no boilerplate removal of its own.**
+- [x] `P1-43` **The browser path did no boilerplate removal of its own** —
+      fixed in `v0.31.0`. It took `fit_markdown` as-is on the reasoning that
+      `PruningContentFilter` had seen a rendered DOM this process never had,
+      and that premise was simply wrong: the rendered HTML comes back in the
+      same response and is already what the extractor receives. So whether a
+      page kept its navigation depended on whether the fetcher escalated it to
+      a browser — a decision made on how much text the *static* fetch found,
+      which is unrelated to how much boilerplate the page carries. Now
+      trafilatura extracts from the rendered HTML at the same precision as
+      everywhere else, the payload contributes metadata and JS-inserted links,
+      and `fit_markdown` is the above-floor fallback for pages with no semantic
+      structure to detect. Superseded text: ~~
       `extract/html.py` has two inputs and treats them very differently. The
       static path runs `trafilatura` configured to favour precision — it would
       rather lose a sentence of body than gain a navigation menu. The browser
@@ -363,14 +374,19 @@ when its queue drained.
       becomes entities, entities become edges, and it also inflates the novelty
       gate's duplicate count with text that was never content. Either run
       trafilatura over the rendered HTML too, or tighten the filter Crawl4AI is
-      asked for
-- [ ] `P1-44` **A source does not record which extractor produced its text.**
+      asked for~~
+- [x] `P1-44` **A source now records which extractor produced its text**
+      (`v0.31.0`). `sources.extractor`, written at keep time, plain Text rather
+      than `constrained()` — the names grow whenever an extractor or a failure
+      mode is added, and a CHECK would recreate `P1-28` exactly. Nullable with
+      no backfill: rows extracted before the column existed get NULL, which is
+      the truth. Superseded text: ~~
       `extra->>'extractor'` is NULL on every source in the dev corpus, so
       answering "did this come through the browser or the static path" means
       inferring it from whether the text contains markdown link syntax. That is
       how `P1-43` was found, and it should not have needed detective work:
       `ExtractedDocument` already carries `extractor`, and it is dropped at
-      `upsert_source`. One column, written at keep time
+      `upsert_source`. One column, written at keep time~~
 - [ ] `P1-36` **`make snapshot-corpus` calls a script that does not exist.**
       It is `P1-16`'s stated deliverable — the 48h run's output *becomes* the
       dev corpus, and scaffold §6 asks for real crawl snapshots rather than

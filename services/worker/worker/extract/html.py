@@ -46,7 +46,7 @@ from lxml import html as lxml_html
 
 from meridian_core.logging import get_logger
 
-from .base import Citation, ExtractedDocument
+from .base import TEXT_FLOOR, Citation, ExtractedDocument
 
 log = get_logger(__name__)
 
@@ -105,13 +105,14 @@ def extract_html(
     """Extract text, metadata and citations from one HTML document.
 
     ``browser_payload`` is Crawl4AI's result dict when the browser path ran.
-    Its markdown is preferred over re-extracting locally: `PruningContentFilter`
-    saw the rendered DOM, and this process only has the HTML that came back.
+    Both paths extract with the same tool at the same precision — see
+    :func:`_from_browser` for why that is not what this used to do.
     """
     html_text = content.decode("utf-8", "replace") if isinstance(content, bytes) else content
 
-    document = _from_browser(browser_payload, url) if browser_payload else None
-    if document is None:
+    if browser_payload:
+        document = _from_browser(browser_payload, url, content)
+    else:
         document = _from_html(content, url)
 
     links = document.links or _links_from_html(html_text, url)
@@ -134,37 +135,87 @@ def extract_html(
 # --------------------------------------------------------------------------
 
 
-def _from_browser(payload: dict[str, Any], url: str) -> ExtractedDocument | None:
-    """Crawl4AI's own markdown, or None if it did not produce any.
+def _pruned_markdown(payload: dict[str, Any]) -> str:
+    """Crawl4AI's `PruningContentFilter` output, whichever shape it shipped in.
 
-    `fit_markdown` is `PruningContentFilter`'s output and is what §6.6 is asking
-    for; `raw_markdown` is the whole page including its chrome and is the
-    fallback. Crawl4AI has shipped `markdown` as both a string and a dict across
-    versions, so both shapes are read rather than assumed.
+    `fit_markdown` is the filtered text; `raw_markdown` is the whole page
+    including its chrome. Crawl4AI has shipped `markdown` as both a string and a
+    dict across versions, so both shapes are read rather than assumed.
     """
     markdown = payload.get("markdown")
-    text = ""
     if isinstance(markdown, dict):
-        text = (markdown.get("fit_markdown") or markdown.get("raw_markdown") or "").strip()
-    elif isinstance(markdown, str):
-        text = markdown.strip()
+        return (markdown.get("fit_markdown") or markdown.get("raw_markdown") or "").strip()
+    if isinstance(markdown, str):
+        return markdown.strip()
+    return ""
 
-    if not text:
-        # The browser ran and produced no markdown. Falling through to the local
-        # extractor is right — it still has the rendered HTML, which is more
-        # than a static fetch would have had.
-        return None
 
+def _from_browser(payload: dict[str, Any], url: str, content: bytes | str) -> ExtractedDocument:
+    """A rendered page, filtered to the same standard as every other page (`P1-43`).
+
+    This used to take `fit_markdown` as-is, on the reasoning that
+    `PruningContentFilter` had seen a rendered DOM this process never had. The
+    premise was wrong: the rendered HTML comes back in the same response and is
+    exactly what ``content`` already holds (see `fetch.py`, which stores it as
+    the body), so trafilatura can see everything the filter saw.
+
+    What the premise cost was an asymmetry nobody chose. `PruningContentFilter`
+    is far more permissive than trafilatura at ``favor_precision``, so whether a
+    page kept its navigation depended on whether the fetcher happened to
+    escalate it to a browser — a decision made on how much visible text the
+    static fetch found, which has nothing to do with how much boilerplate the
+    page carries. It is visible in the corpus as chunks that are repeated
+    station lists, promo banners and footer link blocks.
+
+    That is expensive twice over: boilerplate becomes entities and entities
+    become edges (§2.3), and it also inflates the novelty gate's duplicate count
+    with text that was never content, because every page on a site repeats the
+    same chrome.
+
+    So trafilatura extracts the text from the rendered HTML, and the payload
+    contributes what it is genuinely better at: metadata read from the rendered
+    DOM, and links including the ones JavaScript inserted. `fit_markdown` stays
+    as the fallback for pages trafilatura finds nothing in, which is a real case
+    on JS-assembled pages with no semantic structure to detect — the browser was
+    escalated to for a reason.
+    """
     metadata = payload.get("metadata") or {}
-    return ExtractedDocument(
-        text=_normalise(text),
-        title=_clean(metadata.get("title")),
-        author=_clean(metadata.get("author")),
-        excerpt=_clean(metadata.get("description")),
-        language=_clean(metadata.get("language")),
-        links=_links_from_payload(payload, url),
-        extractor="crawl4ai",
-    )
+    local = _from_html(content, url)
+    links = _links_from_payload(payload, url) or local.links
+
+    if local.has_text:
+        return dataclasses.replace(
+            local,
+            links=links,
+            # Names both halves, because "which extractor ran" now has two
+            # answers on this path and `P1-44` writes it to the source.
+            extractor="trafilatura+rendered",
+            title=local.title or _clean(metadata.get("title")),
+            author=local.author or _clean(metadata.get("author")),
+            excerpt=local.excerpt or _clean(metadata.get("description")),
+            language=local.language or _clean(metadata.get("language")),
+        )
+
+    pruned = _pruned_markdown(payload)
+    if len(pruned) >= TEXT_FLOOR:
+        # trafilatura found nothing usable and the browser did. Below the floor
+        # this branch is not worth taking: a sub-200-character `fit_markdown` is
+        # a cookie banner, and admitting it as content is what the floor exists
+        # to prevent.
+        return ExtractedDocument(
+            text=_normalise(pruned),
+            title=_clean(metadata.get("title")),
+            author=_clean(metadata.get("author")),
+            excerpt=_clean(metadata.get("description")),
+            language=_clean(metadata.get("language")),
+            links=links,
+            extractor="crawl4ai",
+        )
+
+    # Neither found text. Return the local result rather than nothing: it
+    # carries whatever metadata trafilatura did find, and `has_text` already
+    # says the document is metadata-only (§6.5).
+    return dataclasses.replace(local, links=links)
 
 
 def _from_html(content: bytes | str, url: str) -> ExtractedDocument:

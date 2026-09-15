@@ -357,15 +357,48 @@ def browser(markdown, *, links=None, metadata=None) -> dict:
     return payload
 
 
-def test_crawl4ais_pruned_markdown_is_preferred_over_re_extracting() -> None:
-    """`PruningContentFilter` saw a rendered DOM this process never had.
+def test_a_rendered_page_is_filtered_locally_not_by_the_browsers_own_filter() -> None:
+    """`P1-43`. The browser path used to take `fit_markdown` as-is.
 
-    Re-extracting from the HTML that came back would throw that away, which is
-    the whole reason §6.6 routes HTML to Crawl4AI in the first place.
+    `PruningContentFilter` is far more permissive than trafilatura at
+    `favor_precision`, so whether a page kept its navigation depended on whether
+    the fetcher happened to escalate it to a browser — a decision made on how
+    much visible text the *static* fetch found, which has nothing to do with how
+    much boilerplate the page carries.
     """
-    payload = browser({"fit_markdown": "# Pruned\n" + BODY, "raw_markdown": "# Raw\nnav nav nav"})
+    payload = browser({"fit_markdown": "# Pruned\n" + BODY, "raw_markdown": "# Raw\nnav nav"})
 
     document = extract_html(page(), URL, browser_payload=payload)
+
+    assert document.extractor == "trafilatura+rendered"
+    assert "transit planning" in document.text
+
+
+def test_boilerplate_does_not_survive_the_browser_path() -> None:
+    """The regression this fix exists for.
+
+    Boilerplate is expensive twice: it becomes entities and entities become
+    edges (§2.3), and it inflates the novelty gate's duplicate count with text
+    that was never content — every page on a site repeats the same chrome, so
+    the gate marks real pages as duplicates of each other's furniture.
+    """
+    chrome = "Skip to main content About Contact us Privacy policy"
+    payload = browser({"fit_markdown": f"{chrome}\n\n{BODY}\n\n{chrome}"})
+
+    document = extract_html(page(), URL, browser_payload=payload)
+
+    assert "Skip to main content" not in document.text
+    assert "Privacy policy" not in document.text
+    assert "transit planning" in document.text
+
+
+def test_the_browsers_markdown_is_the_fallback_when_local_extraction_finds_nothing() -> None:
+    """A real case, and the reason the browser was escalated to in the first
+    place: a JS-assembled page with no semantic structure for trafilatura to
+    detect, where `PruningContentFilter` still found the content."""
+    payload = browser({"fit_markdown": "# Pruned\n" + BODY})
+
+    document = extract_html(page(body=""), URL, browser_payload=payload)
 
     assert document.extractor == "crawl4ai"
     assert document.text.startswith("# Pruned")
@@ -374,24 +407,33 @@ def test_crawl4ais_pruned_markdown_is_preferred_over_re_extracting() -> None:
 def test_raw_markdown_is_the_fallback_when_the_filter_produced_nothing() -> None:
     payload = browser({"fit_markdown": "", "raw_markdown": "# Raw\n" + BODY})
 
-    document = extract_html(page(), URL, browser_payload=payload)
+    document = extract_html(page(body=""), URL, browser_payload=payload)
 
     assert document.text.startswith("# Raw")
 
 
 def test_markdown_as_a_plain_string_is_read_too() -> None:
     """Crawl4AI has shipped both shapes across versions."""
-    document = extract_html(page(), URL, browser_payload=browser("# String\n" + BODY))
+    document = extract_html(page(body=""), URL, browser_payload=browser("# String\n" + BODY))
 
     assert document.text.startswith("# String")
 
 
-def test_a_browser_payload_with_no_markdown_falls_through_to_local_extraction() -> None:
+def test_a_sub_floor_fallback_is_not_admitted_as_content() -> None:
+    """Below `TEXT_FLOOR` the browser's markdown is a cookie banner, and taking
+    it would make §6.5's metadata-only state indistinguishable from a real
+    extraction — which is exactly what the floor exists to prevent."""
+    document = extract_html(page(body=""), URL, browser_payload=browser("Accept all cookies"))
+
+    assert document.has_text is False
+
+
+def test_a_browser_payload_with_no_markdown_still_extracts_locally() -> None:
     """The browser ran and produced nothing usable. It still has rendered HTML,
     which is more than a static fetch would have had."""
     document = extract_html(page(), URL, browser_payload=browser({"fit_markdown": ""}))
 
-    assert document.extractor == "trafilatura"
+    assert document.extractor == "trafilatura+rendered"
     assert "transit planning" in document.text
 
 
@@ -421,9 +463,19 @@ def test_a_browser_page_with_no_links_still_gets_them_from_the_html() -> None:
 
 
 def test_citations_are_still_extracted_from_a_browser_document() -> None:
-    payload = browser("# Rendered\n" + BODY + " See 10.5555/browser-doi.")
+    """From the extracted text, which since `P1-43` is trafilatura's.
 
-    document = extract_html(page(), URL, browser_payload=payload)
+    The tradeoff that comes with the fix: a DOI written in a region precision
+    filtering strips — a sidebar "cite this" box, say — is no longer seen. A DOI
+    that is a *link* still is, because links come from the rendered DOM rather
+    than from the text, and `_own_doi` reads the page's own identifier straight
+    from the meta tags either way.
+    """
+    payload = browser("# Rendered\n" + BODY)
+
+    document = extract_html(
+        page(f"{BODY} See 10.5555/browser-doi."), URL, browser_payload=payload
+    )
 
     assert "doi:10.5555/browser-doi" in cites(document)
 
