@@ -526,9 +526,13 @@ when its queue drained.
       were". Deliberately not a page — `/api/explore/*` does not exist, and a
       page would have to show fabricated numbers, which inverts the one thing
       §12.5's first state is for. `P2-08` is the wiring
-- [ ] `P2-08` Minimal Explore UI: search box, results, source tier and date visible.
-      The components exist (`P2-16`); this is wiring them to `/api/explore/*`
-      and adding the results list
+- [x] `P2-08` Minimal Explore UI — `v0.46.0`. The page, the results list, and
+      the client between them; the components existed from `P2-16`. Every result
+      shows source, tier, date and page/offset. The degraded search is
+      **rendered**: shown whenever set, escalated when the result set is empty,
+      and the test that makes that mean something is its converse — with
+      `degraded: false` and no hits the caveat must not appear, or readers learn
+      to skip it
 - [ ] `P2-09` ⚑ human — run the held-out questions; make the go/no-go call
 - [x] `P2-10` ⚑ human — frontend framework chosen: **React + TypeScript + Tailwind CSS**,
       with Sigma.js v3 + graphology for the canvas

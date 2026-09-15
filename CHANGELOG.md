@@ -43,6 +43,30 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.46.0] — 2026-09-15
+
+**The frontend shows the corpus.**
+
+### Added
+
+- `P2-08` The Explore page, wired. `SearchField`, `CorpusCounts`, `EntryPoints`
+  and `WhereYouWere` were already built as components (`P2-16`); this is the
+  page, the results list, and the client between them. The `Lockup` goes in the
+  header, so the mark finally appears in the application it belongs to
+- Every result shows its source, tier, date and page/offset. A results list that
+  showed text without provenance would make this a RAG interface over a pile of
+  documents, which the README is explicit it is not
+
+### The degraded search is rendered, not swallowed
+
+- `P2-07` runs the lexical arm only, and the reason is shown whenever it is set.
+  When the result set is **empty** it escalates — bordered, at attention weight,
+  with an added sentence saying that passages using different wording were not
+  searched and that an empty result is not evidence the corpus lacks the subject
+- The test that gives this meaning is its converse: with `degraded: false` and
+  no hits, that sentence must **not** appear. A caveat shown on every empty
+  result says nothing about degradation, and readers learn to skip it
+
 ## [0.45.0] — 2026-09-15
 
 **A typed client, checked against the server it talks to.**
