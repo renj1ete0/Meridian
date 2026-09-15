@@ -13,120 +13,117 @@ add it here.
 
 ## 1. Where the build actually is
 
-Phase 0 is closed. Phase 1 has its fetch path complete *and running*: a URL goes in,
-bytes come out, politely, without becoming a route into the network, leaving a record
-of itself, keeping what it read, reading it, cutting it into citable chunks, and
-following its links onward — and all of it with nobody watching. HTML and PDFs are
-both read, Office documents too, and every page is screened for prompt injection on
-the way past. As of `v0.20.0` it does that from a container image rather than a
-checkout, and as of `v0.24.0` the whole stack has a topology rather than one flat
-network. Chunks carry vectors (`v0.22.0` reads sitemaps too) and, as of `v0.25.0`,
-a verdict on what they duplicate. 1227 tests pass with a real Postgres.
+**`v0.71.0`. 1876 backend tests against a real Postgres, 224 frontend.**
+
+Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
+complete except its human checkpoint: the corpus is searchable over HTTP, through
+a UI, and through MCP. Phase 3's read surface is built and waits only on a
+Cloudflare account. **Phase 4 does not exist at all** — there is no graph, no
+orchestrator, and nothing has ever written an edge.
+
+The single thing standing between here and phase 2's go/no-go is `P1-16`: the
+48-hour unattended run. It has not happened.
+
+### The four processes
+
+§6.1 draws the fast loop as one pipeline. It is not one, and holding the split in
+your head explains most of the operational surprises:
 
 ```
-worker.main ──► claim (queueing.py) ──► Crawler.fetch (worker/crawl.py)
-                                        │
-                    ┌───────────────────┼────────────────────┐
-                    ▼                   ▼                    ▼
-          resolve_policy()        RobotsCache          DomainLimiter
-          (policy.py)             (worker/robots.py)   (worker/ratelimit.py)
-          per-domain → global     RFC 9309, cached     concurrency + delay
-          → file defaults         per origin, 24h      per domain
-                    │
-                    ▼
-              Fetcher.fetch (worker/fetch.py)
-                    │
-        ┌───────────┴────────────┐
-        ▼                        ▼
-   fetch_static             fetch_rendered
-   httpx, address-pinned    Crawl4AI browser
-   netguard on every hop    (validated, not pinned)
-                    │
-                    ▼
-        Crawler._record — one transaction
-                    │
-        ┌───────────┴────────────┐
-        ▼                        ▼
-   record_attempt()      apply_fetch_outcome()
-   (attempts.py)         (policy.py) → blocked?
-   one fetch_attempts    → limiter.forget(domain)
-   row, every path
-                    │
-                    ▼
-        worker.main._keep — the bytes, before the settle
-                    │
-        ┌───────────┬────────────┐
-        ▼           ▼            ▼
-   rawstore     extract/     upsert_source()
-   .store()     by media     checksum, etag, tier,
-   path from    type (§6.6): raw path, title, date,
-   the URL,     html.py or   language, doi,
-   primary      pdf.py       text_available
-   only (§5.4)       │              │
-                     ▼              ▼
-                chunk_text()   replace_chunks()   Prefilter.keep()
-                verbatim       same transaction   normalise, shape,
-                slices +       as the source row  blocklist, seen
-                offsets                                 │
-                                                        ▼
-                                                   enqueue() at
-                                                   tier priority
-                    │
-                    ▼
-        worker.main settles the task
-        queue_disposition() → fetched | done | retry | abandon
-```
-
-**What does not exist yet.** No retrieval, no API. The frontend now exists as
-a *build* — `web/` has Vite, React, Tailwind v4, a token layer and a test that
-stops the palette drifting from the design system — but it renders no data,
-because there is nothing to render it from. Embeddings exist as of
-`P2-01`, but only as a **separate backfill pass** (`python -m worker.embed`) — the
-fetch loop never touches the model. The novelty gate (`P2-03`) is a second such
-pass (`python -m worker.novelty`) and is the only thing that reads the vectors so
-far: there is still no index (`P2-04`/`P2-05`) and no retrieval (`P2-06`).
-
-**Three passes, not one loop.** Worth holding in your head, because §6.1 draws all
-of it as a single pipeline and it is not one:
-
-```
-worker.main     fetch → extract → chunk        (24/7, no model, no vectors)
-worker.embed    embedding IS NULL → vector     (needs 2.3GB of weights)
-worker.novelty  novelty_checked_at IS NULL     (needs Postgres and nothing else)
-                → duplicate_of, retention_tier
+worker.main       fetch → extract → chunk          24/7, no model, no vectors
+worker.embed      embedding IS NULL → vector       needs the model (or the sidecar)
+worker.novelty    novelty_checked_at IS NULL       Postgres and arithmetic only
+worker.scheduler  the timetable in `scheduled_jobs` spawns the above as subprocesses
 ```
 
 Each queue is a predicate on a column, so each pass is resumable with no state
-outside the table and any of them can be behind the others without anything
-breaking. What it costs is a window where a chunk exists, is not searchable, and
-is not yet known to be a duplicate.
+outside the table, and any of them can lag the others without anything breaking.
+What it costs is a window where a chunk exists, is not searchable, and is not yet
+known to be a duplicate.
 
-HTML, PDFs and OOXML Office documents are read; `.doc`, `.xls` and EPub are
-deliberately outside the converter allowlist and stay metadata-only. Scanned PDFs are
-detected and filed in `enrichment_queue`, and **nothing ever runs that queue** — §6.6
-makes OCR explicitly user-triggered, so the rows sit there until a UI exists to spend
-against them.
+Three more passes are on demand rather than on the loop:
 
-The frontier is links, sitemaps (`P1-28`), search (`P1-34`) and citations (`P1-14`),
-with topics assigned from the URL path for sitemap entries and inherited from the
-query or citing page otherwise. It is still not the rest of `P5-01`: no spaCy NER, no
-TF-IDF.
+```
+worker.sweep      retention report; deletes only with --apply
+worker.harvest    §5.6 acronym definitions → gazetteer, unapproved
+worker.retopic    topic labels onto sources crawled before P2-14
+```
 
-Both of the non-link channels were broken or missing until `v0.26.0`, and they were
-broken in the same direction — the frontier could only ever narrow. `P1-34` had no
-handler at all, and `P1-28`'s handler had never enqueued a single URL (see §3). If
-you are about to run something long, that is the class of bug to look for first: a
-crawl that drains its queue and idles reports the same numbers as one that finished.
+### What exists that the older version of this document said did not
 
-`fetch_health()` is logged hourly by the loop and displayed nowhere (there is no UI);
-the novelty pass rate rides on the same line as of `v0.25.0`, and
-`search: configured | unreachable | absent` as of `v0.26.0`. Nothing ever *deletes*
-from the raw store — but §5.4's junk drop is no longer blocked on anything, because
-`P2-03` gave it `chunks.duplicate_of` and `sources.retention_tier = 'junk'` to act
-on. `P1-31` is now a sweep somebody has to write, not a decision somebody has to
-make.
+- **Retrieval.** `meridian_core/search.py` fuses a lexical arm (tsvector/GIN) and
+  a vector arm (pgvector HNSW) with RRF. `_conditions()` is the single filter
+  source for both arms, deliberately — two filter sites is how one arm silently
+  returns material the caller excluded.
+- **An API.** `/api/explore/*` on the read-only role, `/api/admin/*` on the
+  read-write one. The prefix *is* the role boundary (§12.6) and a test asserts
+  nothing under `/api/explore` accepts a write.
+- **A UI that renders data.** Explore with search, the corpus counts, a
+  since-last-visit delta, notifications; a source page at `/sources/{id}` with
+  passages, figures and both exports; and Admin with three screens.
+- **An MCP read surface**, mounted on the same app, same read-only role, same
+  provenance. Scoped tokens, a statement-timeout SQL escape hatch on a separate
+  `meridian_guest` role, and Access JWT verification.
+- **An embedding sidecar**, and as of `P2-19` the backfill uses it too, so a
+  stack running both holds one copy of the weights rather than two.
 
----
+### What still does not exist
+
+- **The graph.** `entities`, `edges`, `observations` and `attribute_values` are
+  tables with DTOs, drift tests and provenance rules — and zero rows. Apache AGE
+  (`P4-01`) is not installed; it does support PG17 (v1.6.0), so it is not blocked
+  on a Postgres downgrade, only on not swapping the image mid-deploy.
+- **Any LLM call.** The orchestrator does not exist. Nothing in this repository
+  has ever called a model that generates text.
+- **spaCy NER.** `P5-02` built the gazetteer and the `EntityRuler` patterns, and
+  spaCy is an optional extra (`uv sync --extra ner`) that the worker image does
+  not carry. `P5-01`'s frontier NER and TF-IDF are unbuilt.
+- **OCR.** Scanned PDFs are detected and filed in `enrichment_queue`, and nothing
+  ever runs that queue — §6.6 makes OCR user-triggered, so the rows wait for a UI
+  to spend against them.
+- **`/api/explore/search?topic=` has a filter and no control.** `P2-14` put the
+  labels on every hit and the filter on the API; choosing one from the UI is
+  `P6-24`.
+
+### The shape of the read path
+
+```
+GET /api/explore/search ──► paged_search (api/search_service.py)
+                             │
+                             ├─► RemoteEmbedder.embed_one()  ── sidecar, or absent
+                             │                                   (absent ⇒ degraded)
+                             ▼
+                        search() (meridian_core/search.py)
+                             │
+              ┌──────────────┴──────────────┐
+              ▼                             ▼
+        _lexical()                     _vector()
+        websearch_to_tsquery           embedding <=> query
+        ts_rank_cd                     HNSW, vector_cosine_ops
+              └──────────────┬──────────────┘
+                             ▼
+                      rrf() fusion → hydrate → SearchHit
+```
+
+Both arms narrow through `_conditions()`, which always excludes superseded
+chunks (`P1-32`) and, unless asked otherwise, near-duplicates and junk-tier
+sources.
+
+### Conventions that are load-bearing and easy to miss
+
+- **Nothing is deleted.** A re-crawl supersedes chunks rather than deleting them
+  (`P1-32`); a rejected gazetteer term keeps its row as a tombstone (`P6-13`); an
+  archived topic keeps its weight (`P6-12`); a retention sweep reports and only
+  deletes with `--apply`. The pattern is consistent and each instance has a
+  different reason — follow the citation in the code.
+- **NULL and empty are different facts** in at least three places:
+  `sources.topic_labels`, `chunks.novelty_checked_at`, `sources.acronyms_harvested_at`.
+  NULL means no pass has looked; empty means one looked and found nothing. Each
+  distinction is what makes a backfill queue finite.
+- **Admin fails closed.** `/api/admin/*` refuses everything with 503 unless
+  Cloudflare Access is configured or `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` is set.
+- **Run `uv lock` in the same commit as a version bump**, or the Docker build
+  breaks. See §3.
 
 ## 2. Getting a working environment
 
@@ -183,6 +180,21 @@ depends on the frontier still being `pending`.
 To exercise the shutdown path, `timeout -s TERM 5 uv run python -m worker.main` works
 — `uv run` forwards the signal — but pipe it to a file rather than to `grep`, or the
 signal takes the pipeline with it and you lose the last lines.
+
+**Admin needs `MERIDIAN_ADMIN_ALLOW_ANONYMOUS=true` in `.env.dev`,** or every
+`/api/admin/*` route answers 503. That is the intended behaviour on an exposed
+instance without Cloudflare Access (`P6-13`), and it is a confusing five minutes
+locally if nobody told you. The 503 body names both fixes.
+
+**The optional extras.** `uv sync --extra ner` installs spaCy for `P5-02`'s
+`EntityRuler`; without it the pattern tests still run — the compiler lives in
+`meridian_core` and needs nothing — and the tests that drive the real matcher
+skip. `uv sync --extra embed` is the 2.3GB model. Neither is in the worker image
+by default.
+
+**`uv run` re-locks; `uv run --no-sync` does not.** Worth knowing while iterating
+on a `pyproject.toml`, and worth *not* relying on: the lock must be committed with
+the version bump either way (§3).
 
 ---
 
@@ -653,6 +665,42 @@ The rule in AGENTS.md is one task per commit, and the way it is broken is never
 `git add -A` — it is a single path that happens to hold more than one thing.
 Check `git show --stat` against the message before moving on.
 
+### `TimestampMixin` indexes `created_at`, and a migration that forgets it fails
+
+Every table using the mixin gets `ix_<table>_created_at`. A hand-written
+`create_table` that adds the column and not the index passes its own tests and
+fails `alembic check` — which is `test_migrations_match_the_models`, so it shows
+up as one unrelated-looking integration failure. The index is not decoration; add
+it in the migration.
+
+### `constrained()` is a VARCHAR with a CHECK, not a native enum
+
+So there is no Postgres enum type to drop in a `downgrade`. Writing
+`sa.Enum(name=...).drop(...)` looks right, does nothing, and suggests to the next
+reader that these are native enums.
+
+### SQLAlchemy cannot negate a `text()` fragment
+
+`~sql_text("EXISTS (...)")` raises an assertion deep inside `elements.py` rather
+than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
+loudly and immediately, which is the good case — the bad version of this bug is
+a clause that silently matches everything.
+
+### `caplog` does not work in this suite
+
+`addopts` carries `-p no:logging`, because pytest's logging plugin interleaves
+plain-text records with the JSON ones `meridian_core.logging` emits and the
+logging tests parse. To assert on a log line, attach a `logging.Handler` to the
+named logger and remove it in a `finally`.
+
+### A key set on the global `*` policy row is set for every domain
+
+`P1-27` nearly shipped dead because of this: the rule was "learn only where
+nobody configured `render_js`", and the global row ships `render_js: auto` as its
+default — so every domain counted as configured and the learning never applied.
+Any per-domain rule of the form "only when this key is absent" has to be written
+against the *merged* value, not against the presence of a key in some row.
+
 ---
 
 ## 4. What is verified live, and what is only tested
@@ -825,60 +873,113 @@ routine — and to anything else this codebase queries in a loop.
 **Never confirmed against a real server:** the decompression-ratio cap (tested against a
 local socket serving a synthetic bomb) and the 5xx-robots refusal path.
 
+### Nothing after phase 1 has met a real deployment
+
+This is the largest gap in this document and it is worth stating plainly. Every
+claim about phase 2, 3 and 6 rests on tests — a real Postgres, a real ASGI
+transport, real HTTP doubles — and on nothing else, because **the stack has never
+been deployed to the server**. Specifically unverified outside tests:
+
+- the API and UI behind `cloudflared`, and Access JWT verification against real
+  Cloudflare JWKS;
+- an external assistant connecting over MCP from a phone, which is what §11 and
+  `P3-05` exist for;
+- the embedding sidecar under a real backfill — including `P2-19`'s fallback,
+  which has only been exercised against fakes;
+- the systemd units: `meridian.service`, and `meridian-backup.timer`'s
+  `Persistent=true` catch-up after a machine was off;
+- the worker healthcheck actually restarting a wedged container, as opposed to
+  the liveness file being stale in a unit test;
+- anything at corpus scale: HNSW recall (`P2-04`'s open half), search latency,
+  the acronym harvest's precision over real documents, and whether any domain
+  triggers `P1-27`'s render learning at all.
+
+When the 48-hour run happens, that list is the checklist.
+
 ---
 
 ## 5. What to build next
 
-`TASKS.md` is authoritative; this is just the reasoning behind the ordering.
+`TASKS.md` is authoritative; this is the reasoning behind the ordering, and the
+short version is that **almost everything left is gated on one of three things**:
+the 48-hour run, a Cloudflare account, or the graph.
 
-**A short bounded run before the long one.** `P1-22` and `P1-26` are done, so the
-stack is runnable; what has not happened is running it. Bound it with
-`MERIDIAN_WORKER_MAX_TASKS`, not a timer — polite per-domain delays mean a fixed
-wall-clock window yields wildly different volume depending on which domains the
-frontier hands you, and a task count is reproducible.
+### The gate is `P1-16`
 
-Its purpose is to smoke-test the **stack**, not to build a corpus: do the containers
-come up, does egress work, does the browser answer its health check, do the logs land.
-Corpus volume is what `P1-16` is for.
+Every phase-1 task that could be done without a real corpus is done. What remains
+is running the thing for two days and looking at what comes out — which is also
+the only way to answer `P2-09`, the human go/no-go on whether hybrid retrieval
+over this corpus is better than reading the sources.
 
-**`P2-03` is done (`v0.25.0`), and it went before the smoke run** because it needed
-neither the stack nor the server — the gate is Postgres and arithmetic. What it does
-*not* do is delete: the 48-hour run will still fill the disk at phase-1 speed, it will
-just know which chunks it could drop. `P1-31` is the sweep that spends that, and it is
-now unblocked.
+Bound a smoke run with `MERIDIAN_WORKER_MAX_TASKS`, not a timer: polite
+per-domain delays mean a fixed wall-clock window yields wildly different volume
+depending on which domains the frontier hands you, and a task count is
+reproducible. `P1-16` itself is the timed one.
 
-**Two things to know before running the gate on a large corpus.** The nearest-neighbour
-scan is sequential until `P2-04`, so the cost is quadratic in corpus size — run it
-incrementally beside the embedder rather than as one pass at the end. And when `P2-04`
-does land, its index makes the scan approximate: the `chunk_id <` filter is applied
-after the vector search, so some near-duplicates will be missed. That is the right way
-round — a missed duplicate is a chunk that stays.
+**The failure to watch for** is a queue that drains. A crawl that empties its
+frontier and idles logs exactly what a healthy one logs. `pending` falling
+monotonically to zero is the signal; a healthy run keeps finding more than it
+drains. Two of the three non-link discovery channels were dead once before and
+nothing reported it.
 
-**Decide `P1-32` before the first real edges land.** `replace_chunks()` deletes a
-source's chunks when its content changes, and `edges.supporting_chunk_ids` is an
-array with no foreign key behind it. Nothing is orphaned today because no edges
-exist. That stops being true the moment the orchestrator writes one.
+### Gated on the graph (phase 4)
 
-`P2-03` is worth copying here: `chunks.duplicate_of` is a real foreign key with
-`ON DELETE SET NULL`, so a re-crawl that deletes a survivor cannot leave a verdict
-pointing at nothing. `edges.supporting_chunk_ids` is the same relationship written as
-a bare array, and that is precisely the difference `P1-32` has to close.
+`P6-01`–`P6-07` — canvas, path mode, node panel, synthesis — are the payoff
+layer and need edges to exist. `P6-10` needs `P5-03`'s coverage scoring, which
+needs the schema-aware pass, which needs the graph. `P4-02`'s entity resolution
+is the largest single piece of unbuilt design in the repository, and §5.5
+specifies it closely enough to be written test-first.
 
-**`P1-34` is done (`v0.26.0`)**, and it went before `P1-16` for a reason worth
-keeping: a 48-hour window is only worth paying for if the frontier can widen when it
-drains. Building it is also what surfaced that `P1-28` had never enqueued anything —
-so both non-link discovery channels were dead, and the long run would have been a
-long run over a queue that could only shrink.
+**`P1-32` is decided and built**, so the thing that had to happen before the
+first edge has happened: chunks are superseded rather than deleted, and a
+citation keeps resolving after the page changes. Do not undo that by adding a
+delete path.
 
-**`P1-14` is done too (`v0.27.0`)**, and it went next for the same reason: `P1-34`
-wired an academic search feed into the frontier, and roughly a third of what that
-returns are publisher landing pages — an abstract, a paywall, nothing to extract.
-Resolution turns those into the open-access copy the same paper is already sitting in
-somewhere else. It also closed the last task type with no handler, so `HANDLED_TASK_TYPES`
-is now every value in the enum.
+**`P4-13` before `P4-08`.** §16 says budget caps must exist before the first
+autonomous run, and nothing enforces the ordering — the compounding
+seed→crawl→cost loop is first noticed as a bill.
 
-**What is still worth checking before the long run.** Every handler that ends in a
-write should have a test that reads the row back (§3) — that rule is what all three of
-these tasks kept running into. Citation seeding is capped at 30 DOIs per page, which
-is a guess: a real run is what says whether that is too tight for a literature review
-or too loose for the queue.
+### Gated on a Cloudflare account
+
+`P3-05` and the rest of `P3-09`. The code side is done and tested: Access JWT
+verification refuses rather than bypasses when JWKS is unreachable, and the MCP
+surface advertises its protected-resource metadata only when authentication is
+on. What is missing is a tunnel, an Access application, and an AUD tag.
+
+### Buildable today, in rough order of value
+
+1. **`P6-24`** — topic filter control in Explore. `P2-14` made the filter real
+   and put labels on every hit; the UI needs the topic list, which `/stats` does
+   not carry.
+2. **`P6-09`** — saved views. Self-contained, and the Explore landing state
+   already has a slot rendering an empty list.
+3. **`P6-23`** — admin: agent registry and run history. Both tables exist and
+   both stay empty until phase 4 has run something, so this is worth building
+   *after* there is a run to show: an empty screen teaches nothing about what the
+   full one should look like.
+4. **`P5-07`'s inbound half** — Telegram commands. §13.3 makes the bot a control
+   surface that can trigger runs and change steering, so the single-chat
+   restriction and command authorisation have to exist before the first command
+   does; most useful commands need the orchestrator anyway.
+
+### Explicitly *not* worth doing yet
+
+**`P2-15`** (benchmark embedding models against each other). Its own text gates
+it on `P1-16` and on `P2-09` being marginal, and it means a second embedding
+column plus a full re-embed for a model you may never adopt. The benchmark that
+*does* exist — `make bench-search` — measures the index and the methods over the
+vectors already in the corpus, and that is the one worth running after the crawl.
+
+**`P6-18` and `P6-19`** are marked ⚑ human. They are published-design decisions:
+four light-theme canvas roles and three lockup values that were inferred rather
+than decided. An agent picking values for those is inventing design, not
+implementing it.
+
+### A rule that keeps paying
+
+Every handler that ends in a write should have a test that reads the row back.
+That single rule is what caught the sitemap handler that never enqueued anything,
+the digest that reported zeros forever, the gazetteer term that loaded no
+patterns, and the route walk that asserted an empty list against an empty list.
+The common shape is not a crash — it is a success message about work that did not
+happen.
