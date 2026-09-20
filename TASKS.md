@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.100.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2711 backend tests
+**`v0.101.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2738 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -758,7 +758,38 @@ deploy runbook whose first two commands could not work (`B-17`).
       from a redirect and into one. The log row survives reversal and is
       stamped: "merged then reversed" is the signal a threshold is wrong, which
       is what `P7-10` samples for
-- [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`
+- [x] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`,
+      `advance_mark` — `v0.101.0`. §11.6's "narrow, validated, orchestrator
+      scope only", where each word was decided elsewhere: narrow is these four
+      functions, validated is `P4-05` built first so these are callers rather
+      than authors of the rules, and scope is `grants.py` — `PROFILE_TOOLS`
+      gives no shared profile a write tool, `operator` included, so none of
+      this is reachable over the MCP surface an external agent holds a grant
+      for. **The same claim twice is corroboration, not a second edge**: same
+      subject, relation and object is one relation with two citations, and
+      duplicating would make every edge count — contested pairs, coverage, the
+      digest — a count of extraction passes rather than of knowledge. **A
+      cheaper model never overwrites a better one** (§11.12), which matters
+      because of the schedule rather than in principle: nightly tier-2 tagging
+      runs far more often than the frontier sessions producing tier-4 edges.
+      A better model replaces the judgement and keeps every citation — evidence
+      is never discarded. **A refusal writes nothing**, the queue included, or
+      a rejected seed sits in `queue` being retried with backoff and the
+      rejection has scheduled what it rejected. Attributes are not created by
+      tagging (§7.3's cap, `P7-01`'s gate), and every tool counts what it did
+      on the run so §11.9's week-on-week comparison means something
+- [ ] `P4-15` **The provider client — the missing link between routing and
+      writing.** `P4-07` says which agent does a task and `P4-04` says where
+      its answer goes; nothing calls the model in between, which is why every
+      orchestrator stage still reports itself unbuilt. Needs: an
+      OpenAI-compatible client (§11.7 — Ollama, llama.cpp and vLLM all expose
+      one, and the hosted providers are the other shape), the key read from the
+      environment variable the registry *names* (§11.11 — never the key
+      itself), token counting into `reserve_tokens` before the call rather
+      than after, and the fallback chain walked on failure rather than the
+      first error ending the run. **Retrieved content goes through `framing.py`
+      on the way in** (`P4-06`) and every returned write through `P4-05` on the
+      way out — the model is untrusted in both directions
 - [x] `P4-05` `validation.py` — server-side guards, node existence, domain
       allowlist, caps — `v0.76.0`. Built before the write tools that call it
       (`P4-04`), because §11.8 specifies the rules precisely enough for the test

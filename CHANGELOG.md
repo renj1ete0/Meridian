@@ -214,6 +214,39 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.101.0] — 2026-09-20
+
+**The four writes a model's output can cause.**
+
+### Added
+
+- `P4-04`: `meridian_core/writes.py` — `add_edge`, `tag_entity`,
+  `enqueue_seed`, `advance_mark`
+- New task `P4-15`: the provider client. The tools now have somewhere to write;
+  what the stages still lack is the call that produces something to write
+
+### Why it is shaped this way
+
+- **The same claim twice is corroboration, not a second edge.** Two
+  extractions of one relation from different chunks are one relation with two
+  citations. Duplicating would double every edge count, and contested pairs,
+  coverage and the digest's totals would be counting extraction passes rather
+  than knowledge
+- **A cheaper model never overwrites a better one.** The schedule is why that
+  matters: nightly tier-2 tagging runs far more often than the frontier
+  sessions producing tier-4 edges, so without the guard the cheap work
+  overwrites the good work on a timer while every run reports success
+- **Evidence is never discarded.** A better model replaces the judgement —
+  confidence, stance, certainty — and keeps every citation
+- **A refusal writes nothing, including the queue.** A seed rejected at seed
+  time must not land in `queue` to be retried with backoff; that is a rejection
+  that has scheduled the thing it rejected
+- **Attributes are not created by tagging.** §7.3 caps the comparison
+  dimensions and `P7-01` gates proposals; creating one on first use would route
+  around both and the cap would be whatever the models invented
+- **Not on the MCP surface.** `PROFILE_TOOLS` gives no shared profile a write
+  tool, `operator` included. These are called in-process by the orchestrator
+
 ## [0.100.0] — 2026-09-20
 
 **The mark moves after the writes, or not at all.**

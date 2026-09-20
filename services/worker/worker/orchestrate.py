@@ -76,13 +76,16 @@ __all__ = [
 #:
 #: `done` is absent because it is not work — it is the state of having finished.
 BUILT_BY: Final[dict[str, str]] = {
-    "pull": "`P4-04`'s read side — nothing selects the chunks a run reasons over yet",
-    "extract": "`P4-04`'s `add_edge` — relation extraction has nowhere to write",
-    "tag": "`P4-04`'s `tag_entity`, and `P7-01`'s proposal gate",
+    # `P4-04` gave these three somewhere to write. What they still lack is the
+    # call itself: something that hands a batch and a prompt to the agent
+    # `P4-07` routed to, and counts the tokens it spent (`P4-15`).
+    "pull": "`P4-15` — the batch a run reasons over is selected by the stage that uses it",
+    "extract": "`P4-15`'s model call; `add_edge` is ready for what it returns",
+    "tag": "`P4-15`'s model call; `tag_entity` is ready, and `P7-01` gates new attributes",
     "score": "`P5-03`'s coverage scoring, which is schema-aware",
     "analogies": "`P7-04`'s analogical expansion",
     "gap": "`P5-04`'s gap analysis",
-    "seed": "`P5-04`'s seed emission, capped and validated",
+    "seed": "`P5-04`'s seed emission — `enqueue_seed` already caps and validates it",
 }
 
 
