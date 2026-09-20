@@ -44,6 +44,7 @@ from .logging import get_logger
 from .models import Chunk, Entity, FetchPolicy, Run
 from .netguard import BlockedTarget, check_scheme, normalise_address
 from .tiering import registrable_domain
+from .trust import FRONTIER_DISCOVERY
 
 log = get_logger(__name__)
 
@@ -187,7 +188,11 @@ def _literal_address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 async def check_seed_allowed(
-    sess: AsyncSession, url: str, *, allowed_schemes: Sequence[str] | None = None
+    sess: AsyncSession,
+    url: str,
+    *,
+    allowed_schemes: Sequence[str] | None = None,
+    require_seed_allowed: bool = False,
 ) -> str:
     """Refuse a seed that must not be queued; return its registrable domain.
 
@@ -210,6 +215,12 @@ async def check_seed_allowed(
     **An operator's block.** `fetch_policy.status = 'blocked'` is a decision a
     person made, and a model must not be able to route around it by seeding the
     domain again.
+
+    **And, with `require_seed_allowed`, an unapproved domain** (`P4-12`). Off by
+    default because the crawl's own frontier expansion seeds constantly and
+    legitimately; on for the tool surface, where the caller is a model. A domain
+    the crawl discovered itself and has not yet approved is still seedable —
+    `seed_allowed` gates *proposals*, not the crawl's own reach.
     """
     if not url or not url.strip():
         raise ValidationError("seed_url", "A seed needs a URL.")
@@ -232,9 +243,27 @@ async def check_seed_allowed(
         )
 
     domain = registrable_domain(host)
-    status = await sess.scalar(select(FetchPolicy.status).where(FetchPolicy.domain == domain))
-    if status == "blocked":
+    row = (
+        await sess.execute(select(FetchPolicy).where(FetchPolicy.domain == domain))
+    ).scalar_one_or_none()
+    if row is not None and row.status == "blocked":
         raise ValidationError("domain_allowed", f"{domain} is blocked by fetch policy.")
+
+    # `P4-12`. A model proposing a domain nobody has ruled on does not get to
+    # seed it. **False and None are refused for different reasons** and the
+    # message says which, because "somebody declined this" and "nobody has
+    # looked yet" lead to different actions.
+    if require_seed_allowed and row is not None and row.seed_allowed is not True:
+        if row.seed_allowed is False:
+            raise ValidationError(
+                "domain_allowed", f"{domain} is not allowed for seeding."
+            )
+        if row.first_seen_via not in FRONTIER_DISCOVERY:
+            raise ValidationError(
+                "domain_allowed",
+                f"{domain} has not been approved for seeding yet; it is waiting "
+                f"for a decision in Admin.",
+            )
 
     return domain
 

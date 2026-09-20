@@ -81,7 +81,7 @@ from meridian_core.queueing import (
 )
 from meridian_core.sources import get_source, touch_source, upsert_source
 from meridian_core.tiering import is_tier_mapped, priority_for_domain
-from meridian_core.trust import page_state, record_screening
+from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
 from . import rawstore
 from .crawl import Crawler, validators
@@ -1118,6 +1118,12 @@ class Worker:
                 # checksum says one thing and whose chunks were cut from another
                 # is a corpus that cites text it does not hold.
                 chunks_written = await self._chunk(sess, source, document, changed=changed)
+                if changed:
+                    # `P4-12`: a domain earns its seeding allowance on *novel*
+                    # documents, so this is counted here rather than per fetch.
+                    # A site serving one page under a thousand URLs would
+                    # otherwise approve itself on volume alone.
+                    await record_novel_fetch(sess, result.domain)
                 queued = await self._expand_frontier(sess, claim, document)
                 queued += await self._seed_citations(sess, claim, document)
                 await sess.commit()

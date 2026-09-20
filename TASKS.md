@@ -686,9 +686,23 @@ deploy runbook whose first two commands could not work (`B-17`).
       `queue` being retried with backoff. Hostnames are deliberately **not**
       resolved here — a second DNS answer can disagree with the one `P1-24`
       pinned at fetch time — though literal private addresses are refused
-- [ ] `P4-12` Allowlist growth: `fetch_policy.seed_allowed` + `first_seen_via`. Domains
-      reached by frontier expansion auto-approve after N successful novel fetches;
-      model-proposed domains queue for approval like gazetteer terms
+- [x] `P4-12` Allowlist growth: `fetch_policy.seed_allowed` + `first_seen_via`
+      — `v0.84.0`. A third question beside `status` (may we fetch what is
+      queued) and `trust_state` (may a model read what came back): may new URLs
+      on this domain be *queued at all*. **NULL is undecided, and undecided is
+      not permission** — a boolean defaulting to false would have said the same
+      thing worse, since "declined" and "not yet considered" need different
+      screens and different messages. A frontier-discovered domain approves
+      itself after three **novel** documents (novel, not fetches: a site
+      serving one page under a thousand URLs would approve itself on volume);
+      an operator's own seed is allowed immediately, because typing a URL is
+      consent. **A model-proposed domain never approves itself, however much
+      evidence accrues** — evidence gathered after the proposal is evidence the
+      proposal caused, which is the exact shape of a model talking the crawl
+      into a domain. It queues for a person like a harvested gazetteer term.
+      `first_seen_via` is never overwritten, and discovery is recorded inside
+      `enqueue` rather than at its four call sites, so a fifth call site cannot
+      leave a domain with no provenance and therefore no path to approval
 - [x] `P4-13` Refuse to start a synthesis run with no budget configured —
       `v0.81.1`. §16 states the ordering — caps before the first autonomous run
       — as a mitigation, and a mitigation nothing enforces is a sentence.

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from meridian_core.db import Base
 
 from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
+from .queue import SEED_SOURCE
 
 TOPIC_STATUS = constrained("active", "maintenance", "paused", "archived", name="topic_status")
 DOMAIN_STATUS = constrained("active", "blocked", "paused", name="domain_status")
@@ -138,6 +139,36 @@ class FetchPolicy(Base):
     #: statically again, so the counter cannot reset and a redesign can never be
     #: noticed.
     render_js_learned_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- whether this domain may be seeded at all (task P4-12, §11.4) -----
+    #
+    # Distinct from `status` and from `trust_state`, and the three answer
+    # different questions: `status` is whether to fetch what is already queued,
+    # `trust_state` is whether a model may read what came back, and this is
+    # whether new URLs on this domain may be *queued in the first place*.
+    #
+    # **NULL means undecided, and undecided is not permission.** The crawl
+    # earns a domain its allowance by fetching from it successfully; a model
+    # proposing a domain nobody has seen gets NULL and waits, the same shape as
+    # a harvested gazetteer term that queues for approval rather than applying
+    # itself (§5.6).
+
+    #: True once the domain may be seeded freely. NULL until something decides.
+    seed_allowed: Mapped[bool | None] = mapped_column()
+
+    #: How this domain first entered the crawl's awareness — a `seed_source`
+    #: value. **The first one, never overwritten**: a domain discovered by
+    #: following a link and later proposed by a model was still discovered by
+    #: following a link, and letting the later event win would erase exactly
+    #: the provenance this column exists to keep.
+    first_seen_via: Mapped[str | None] = mapped_column(SEED_SOURCE)
+
+    #: Successful fetches that produced a *novel* document. The threshold for
+    #: auto-approval, and novelty is the point: a domain serving the same page
+    #: under a thousand URLs would otherwise approve itself on volume alone.
+    novel_fetches: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     # --- what screening concluded about this domain (task P4-14, §2.5) ----
     #

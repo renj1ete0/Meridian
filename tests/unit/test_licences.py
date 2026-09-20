@@ -106,7 +106,11 @@ def installed() -> dict[str, str]:
     """
     found: dict[str, str] = {}
     for dist in md.distributions():
-        name = (dist.metadata["Name"] or "").lower()
+        # `.get`, not `dist.name` and not `dist.metadata["Name"]`. Both of
+        # those reach the subscript, which returns None implicitly for a
+        # missing key — deprecated in 3.14 — and this walks every installed
+        # distribution, so it was sixteen hundred warnings on its own.
+        name = (dist.metadata.get("Name") or "").lower()
         if not name or name in found:
             continue
         expression = (

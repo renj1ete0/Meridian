@@ -214,6 +214,38 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.84.0] — 2026-09-20
+
+**A domain earns its seeding allowance.**
+
+### Added
+
+- `P4-12` `fetch_policy.seed_allowed`, `first_seen_via` and `novel_fetches`.
+  Whether new URLs on a domain may be *queued* is a third question, beside
+  whether to fetch what is already queued (`status`) and whether a model may
+  read what came back (`trust_state`)
+- A frontier-discovered domain approves itself after three novel documents; an
+  operator's own seed is approved immediately
+- `awaiting_seed_approval` — the queue an admin screen shows, the same shape as
+  the gazetteer's
+
+### NULL is undecided, and undecided is not permission
+
+- A boolean defaulting to false would have said the same thing worse.
+  "Somebody declined this" and "nobody has looked yet" lead to different
+  actions, so they get different states and different messages
+- **A model-proposed domain never approves itself**, however much evidence
+  accrues. Evidence gathered after the proposal is evidence the proposal
+  caused, which is exactly how a model talks a crawl into a domain
+- Novel documents, not fetches: a site serving one page under a thousand URLs
+  would otherwise approve itself on volume alone
+
+### Where it is recorded
+
+- Inside `enqueue`, not at its four call sites. A fifth call site added later
+  that forgot would leave a domain with no provenance — and a domain with no
+  provenance can never auto-approve
+
 ## [0.83.0] — 2026-09-20
 
 **Somebody has now checked the licences.**

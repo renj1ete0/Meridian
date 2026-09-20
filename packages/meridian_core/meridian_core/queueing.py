@@ -27,6 +27,7 @@ re-asked three times over an hour to be told the same thing.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import random
 from collections.abc import Sequence
@@ -37,6 +38,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .logging import get_logger
 from .models import QueueTask
 from .policy import BACKOFF_STATUS
+from .tiering import registrable_domain
+from .trust import record_discovery
 
 log = get_logger(__name__)
 
@@ -324,7 +327,17 @@ async def enqueue(
     policy says — all of which need more than the queue table, and all of which
     belong to `worker/prefilter.py`. A queueing function that also decided
     policy would be impossible to test and impossible to reuse from Admin.
+
+    It does *record* one thing, though (`P4-12`): how the domain first became
+    known. That goes here rather than at the four call sites because it must not
+    be forgettable — a call site added next year that skipped it would leave a
+    domain with no provenance, and a domain with no provenance can never
+    auto-approve. Recording is not deciding: `seed_allowed` is untouched except
+    for an operator's own seed, which is consent.
     """
+    with contextlib.suppress(ValueError):
+        await record_discovery(sess, registrable_domain(url), seed_source=seed_source)
+
     task = QueueTask(
         url_or_query=url,
         topic=topic,

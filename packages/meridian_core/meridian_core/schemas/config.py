@@ -13,7 +13,14 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase, QualityTier
-from .enums import AgentAvailability, DomainStatus, TokenScope, TopicStatus, TrustState
+from .enums import (
+    AgentAvailability,
+    DomainStatus,
+    SeedSource,
+    TokenScope,
+    TopicStatus,
+    TrustState,
+)
 
 
 class TopicConfigCreate(CreateBase):
@@ -100,6 +107,13 @@ class FetchPolicyRead(BaseModel):
     #: same reason the learned render state is: a quarantine an operator cannot
     #: see is one they cannot lift, and `trust_reason` is the sentence the
     #: screen has to be able to justify itself with.
+    #: Whether new URLs on this domain may be *queued* (`P4-12`). A third
+    #: question beside `status` and `trust_state`, and NULL is undecided rather
+    #: than refused — the admin screen has to tell "nobody has looked" from
+    #: "somebody declined", because they lead to different actions.
+    seed_allowed: bool | None = None
+    first_seen_via: SeedSource | None = None
+    novel_fetches: int = 0
     trust_state: TrustState = "unscreened"
     clean_fetches: int = 0
     trust_decided_at: dt.datetime | None = None

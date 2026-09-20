@@ -28,9 +28,14 @@ from meridian_core.trust import (
     DECIDED_BY_CLEAN,
     DECIDED_BY_SCREEN,
     DECIDED_BY_TIER,
+    NOVEL_FETCHES_TO_ALLOW,
+    awaiting_seed_approval,
     page_state,
+    record_discovery,
+    record_novel_fetch,
     record_screening,
 )
+from meridian_core.validation import ValidationError, check_seed_allowed
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -253,3 +258,99 @@ def test_being_in_the_map_is_not_the_same_as_getting_a_tier() -> None:
     assert is_tier_mapped("example.gov", mapping)
     assert is_tier_mapped("mit.edu", mapping)
     assert not is_tier_mapped("some-blog.test", mapping)
+
+
+# --------------------------------------------------------------------------
+# Whether a domain may be seeded at all (task `P4-12`)
+# --------------------------------------------------------------------------
+
+
+async def test_a_domain_records_how_it_was_first_found(clean) -> None:
+    await record_discovery(clean, DOMAIN, seed_source="frontier")
+
+    row = await clean.get(FetchPolicy, DOMAIN)
+    assert row.first_seen_via == "frontier"
+    assert row.seed_allowed is None, "discovery is not approval"
+
+
+async def test_the_first_sighting_is_not_overwritten(clean) -> None:
+    """A domain found by following a link and later proposed by a model was
+    still found by following a link. Letting the later event win would erase
+    the provenance that decides whether it can auto-approve."""
+    await record_discovery(clean, DOMAIN, seed_source="frontier")
+    await record_discovery(clean, DOMAIN, seed_source="model")
+
+    row = await clean.get(FetchPolicy, DOMAIN)
+    assert row.first_seen_via == "frontier"
+
+
+async def test_an_operators_own_seed_is_allowed_immediately(clean) -> None:
+    """Typing a URL is consent. Making somebody wait three fetches for a domain
+    they chose is the system disbelieving them."""
+    await record_discovery(clean, DOMAIN, seed_source="user")
+
+    row = await clean.get(FetchPolicy, DOMAIN)
+    assert row.seed_allowed is True
+
+
+async def test_a_frontier_domain_approves_itself_on_novel_documents(clean) -> None:
+    await record_discovery(clean, DOMAIN, seed_source="frontier")
+
+    for _ in range(NOVEL_FETCHES_TO_ALLOW - 1):
+        assert await record_novel_fetch(clean, DOMAIN) is None
+
+    assert await record_novel_fetch(clean, DOMAIN) is True
+
+
+async def test_a_model_proposed_domain_never_approves_itself(clean) -> None:
+    """The failure being avoided is a model talking the crawl into a domain by
+    describing it confidently. Evidence gathered *after* the proposal is
+    evidence the proposal caused, so it cannot be what approves it."""
+    await record_discovery(clean, DOMAIN, seed_source="model")
+
+    for _ in range(NOVEL_FETCHES_TO_ALLOW * 3):
+        allowed = await record_novel_fetch(clean, DOMAIN)
+
+    assert allowed is None
+
+
+async def test_an_unapproved_domain_is_refused_to_a_model(clean) -> None:
+    await record_discovery(clean, DOMAIN, seed_source="model")
+
+    with pytest.raises(ValidationError) as raised:
+        await check_seed_allowed(clean, f"https://{DOMAIN}/page", require_seed_allowed=True)
+
+    assert raised.value.rule == "domain_allowed"
+    assert "waiting" in str(raised.value)
+
+
+async def test_a_declined_domain_says_so_differently(clean) -> None:
+    """ "Somebody declined this" and "nobody has looked yet" lead to different
+    actions, so they must not produce the same message."""
+    clean.add(FetchPolicy(domain=DOMAIN, first_seen_via="model", seed_allowed=False))
+    await clean.flush()
+
+    with pytest.raises(ValidationError) as raised:
+        await check_seed_allowed(clean, f"https://{DOMAIN}/page", require_seed_allowed=True)
+
+    assert "not allowed" in str(raised.value)
+    assert "waiting" not in str(raised.value)
+
+
+async def test_the_crawls_own_reach_is_not_gated(clean) -> None:
+    """`seed_allowed` gates *proposals*. The crawl's own frontier expansion
+    seeds constantly and legitimately, and gating it would stop the crawl
+    discovering anything it had not already approved."""
+    await record_discovery(clean, DOMAIN, seed_source="frontier")
+
+    assert await check_seed_allowed(clean, f"https://{DOMAIN}/page") == DOMAIN
+
+
+async def test_the_approval_queue_holds_only_what_needs_a_person(clean) -> None:
+    await record_discovery(clean, "proposed.test", seed_source="model")
+    await record_discovery(clean, "found.test", seed_source="frontier")
+    await record_discovery(clean, "typed.test", seed_source="user")
+
+    waiting = {row.domain for row in await awaiting_seed_approval(clean)}
+
+    assert waiting == {"proposed.test"}

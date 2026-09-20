@@ -74,10 +74,16 @@ __all__ = [
     "DECIDED_BY_CLEAN",
     "DECIDED_BY_SCREEN",
     "DECIDED_BY_TIER",
+    "FRONTIER_DISCOVERY",
+    "NOVEL_FETCHES_TO_ALLOW",
+    "OPERATOR_CHOSEN",
     "READABLE_STATES",
+    "awaiting_seed_approval",
     "only_readable",
     "page_state",
     "readable_chunk_ids",
+    "record_discovery",
+    "record_novel_fetch",
     "record_screening",
 ]
 
@@ -204,3 +210,110 @@ def readable_chunk_ids(states: Sequence[str] = READABLE_STATES) -> Select:
     `sources` join to hang a predicate on.
     """
     return select(Chunk.chunk_id).join(Source).where(Source.trust_state.in_(tuple(states)))
+
+
+# ---------------------------------------------------------------------------
+# Whether a domain may be seeded at all (task `P4-12`, §11.4)
+# ---------------------------------------------------------------------------
+#
+# A third question beside "may we fetch this" (`status`) and "may a model read
+# what came back" (`trust_state`). §11.4 caps what a model may seed; this is
+# about *which domains* the cap applies within.
+
+#: Novel documents a frontier-discovered domain must return before it may be
+#: seeded freely. Novel, not fetched: a site serving one page under a thousand
+#: URLs would otherwise approve itself on volume alone.
+NOVEL_FETCHES_TO_ALLOW = 3
+
+#: How a domain can arrive without anyone having chosen it. These are the
+#: crawl's own discoveries — it followed a link, read a sitemap, resolved a
+#: citation — and they auto-approve on evidence.
+FRONTIER_DISCOVERY = ("frontier", "sitemap", "search", "citation", "doi")
+
+#: These do not. `user` is somebody typing a URL, which is consent; `model` and
+#: `diversity` are a model's suggestion, which is a proposal.
+OPERATOR_CHOSEN = ("user",)
+
+
+async def record_discovery(sess: AsyncSession, domain: str, *, seed_source: str) -> FetchPolicy:
+    """Note how a domain first became known, without overwriting the answer.
+
+    Called wherever a URL is queued. The first `seed_source` sticks: a domain
+    found by following a link and later proposed by a model was still found by
+    following a link, and letting the later event win would erase the
+    provenance that decides whether it may auto-approve.
+
+    An operator's own seed is allowed immediately — typing a URL is consent,
+    and making somebody wait three fetches for a domain they chose would be
+    the system disbelieving them.
+    """
+    row = await sess.get(FetchPolicy, domain, with_for_update=True)
+    if row is None:
+        row = FetchPolicy(domain=domain)
+        sess.add(row)
+
+    if row.first_seen_via is None:
+        row.first_seen_via = seed_source
+        if seed_source in OPERATOR_CHOSEN:
+            row.seed_allowed = True
+
+    await sess.flush()
+    return row
+
+
+async def record_novel_fetch(
+    sess: AsyncSession, domain: str, *, now: dt.datetime | None = None
+) -> bool | None:
+    """Count a novel document from ``domain``, and approve it if it has earned it.
+
+    Returns the domain's `seed_allowed` after the count. A domain whose first
+    sighting was a model's proposal is **not** approved by this: it accrues the
+    same evidence and still waits for a person, because the failure being
+    avoided is a model talking the crawl into a domain by describing it
+    confidently, and evidence gathered after the proposal is evidence the
+    proposal caused.
+    """
+    row = await sess.get(FetchPolicy, domain, with_for_update=True)
+    if row is None:
+        row = FetchPolicy(domain=domain)
+        sess.add(row)
+        await sess.flush()
+
+    row.novel_fetches += 1
+
+    if (
+        row.seed_allowed is None
+        and row.first_seen_via in FRONTIER_DISCOVERY
+        and row.novel_fetches >= NOVEL_FETCHES_TO_ALLOW
+    ):
+        row.seed_allowed = True
+        log.info(
+            "domain allowed for seeding",
+            extra={
+                "domain": domain,
+                "novel_fetches": row.novel_fetches,
+                "first_seen_via": row.first_seen_via,
+            },
+        )
+
+    await sess.flush()
+    return row.seed_allowed
+
+
+async def awaiting_seed_approval(sess: AsyncSession) -> list[FetchPolicy]:
+    """Domains a model proposed that nobody has ruled on.
+
+    The queue an admin screen shows, the same shape as the gazetteer's
+    (§5.6). Ordered by evidence so the ones most likely to be worth approving
+    are the ones somebody sees first.
+    """
+    stmt = (
+        select(FetchPolicy)
+        .where(
+            FetchPolicy.seed_allowed.is_(None),
+            FetchPolicy.first_seen_via.not_in(FRONTIER_DISCOVERY),
+            FetchPolicy.first_seen_via.is_not(None),
+        )
+        .order_by(FetchPolicy.novel_fetches.desc(), FetchPolicy.domain)
+    )
+    return list((await sess.execute(stmt)).scalars().all())
