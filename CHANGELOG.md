@@ -214,6 +214,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.93.0] — 2026-09-20
+
+**A merge you can undo exactly.**
+
+### Added
+
+- `P4-03` `merge` and `reverse` in `meridian_core/resolution.py`, and a
+  `merge_log` table that records which rows each merge moved
+
+### Why the log stores ids, not just the fact
+
+- `entities.merged_from` says *that* an entity was absorbed. It cannot say
+  which edges came with it — so reversing one of two merges into the same
+  target would take the other's rows
+- Each merge records the edge, attribute-value and observation ids it
+  reassigned; a reversal moves exactly those back
+
+### What it refuses
+
+- Merging an entity into itself, across node types, out of a redirect, or into
+  one. None is recoverable by scoring harder
+
+### What it keeps
+
+- The source, as a redirect. Deleting it would break every citation that
+  already named it, and make the merge the invisible thing §5.5 warns about
+- The aliases, or the merge loses the spellings that caused it and the next
+  mention fragments again
+- The log row after a reversal, stamped. "Merged then reversed" is the signal
+  that a threshold is wrong — which is what `P7-10` samples for
+
 ## [0.92.0] — 2026-09-20
 
 **Deciding whether two mentions are the same thing.**

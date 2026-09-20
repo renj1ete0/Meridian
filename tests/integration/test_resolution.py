@@ -15,16 +15,19 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import delete
 
-from meridian_core.models import Entity, GazetteerTerm
+from meridian_core.models import Edge, Entity, GazetteerTerm, MergeLog
 from meridian_core.resolution import (
     AUTO_MERGE,
     SEPARATE_BELOW,
+    MergeError,
     block,
     context_overlap,
     decide,
     embedding_similarity,
     expansions_from_gazetteer,
+    merge,
     normalise,
+    reverse,
     score,
     string_similarity,
 )
@@ -37,6 +40,8 @@ MARK = "resolution-test"
 @pytest.fixture
 async def clean(session_for):
     sess = await session_for("rw")
+    await sess.execute(delete(MergeLog))
+    await sess.execute(delete(Edge))
     await sess.execute(delete(Entity).where(Entity.description == MARK))
     await sess.execute(delete(GazetteerTerm).where(GazetteerTerm.canonical.like("%.test")))
     await sess.flush()
@@ -237,3 +242,171 @@ async def test_blocking_finds_a_shared_token(clean) -> None:
 
     assert any(c.entity.canonical_name == "Land Transport Authority" for c in candidates)
     assert all(c.via == "name" for c in candidates)
+
+
+# --------------------------------------------------------------------------
+# Merging, reversibly (task `P4-03`, §5.5)
+# --------------------------------------------------------------------------
+#
+# §5.5: "Bad merges are worse than duplicates because conflation is invisible
+# once done." So the tests that matter are the refusals, and the one that
+# proves a reversal puts back *this* merge's rows rather than whatever happens
+# to point at the target now.
+
+
+async def an_edge(sess, from_id, to_id) -> Edge:
+    row = Edge(
+        from_node=from_id,
+        to_node=to_id,
+        relation_type="influences",
+        supporting_chunk_ids=[1],
+    )
+    sess.add(row)
+    await sess.flush()
+    return row
+
+
+async def test_a_merge_moves_the_edges_and_keeps_a_redirect(clean) -> None:
+    """The source is kept, never deleted. Deleting it would break every
+    citation that already named it — and make the merge exactly the invisible
+    thing §5.5 warns about."""
+    source = await an_entity(clean, "LTA")
+    target = await an_entity(clean, "Land Transport Authority")
+    other = await an_entity(clean, "Somewhere Else")
+    edge = await an_edge(clean, source.entity_id, other.entity_id)
+
+    await merge(clean, source.entity_id, target.entity_id, decided_by="auto")
+
+    await clean.refresh(edge)
+    await clean.refresh(source)
+    await clean.refresh(target)
+    assert edge.from_node == target.entity_id
+    assert source.redirects_to == target.entity_id
+    assert source.entity_id in (target.merged_from or [])
+
+
+async def test_a_merge_carries_the_aliases_across(clean) -> None:
+    """A merge that dropped them would lose the very spellings that caused it,
+    so the next mention fragments again."""
+    source = await an_entity(clean, "LTA", aliases=["the Authority"])
+    target = await an_entity(clean, "Land Transport Authority")
+
+    await merge(clean, source.entity_id, target.entity_id, decided_by="auto")
+
+    await clean.refresh(target)
+    assert "LTA" in (target.aliases or [])
+    assert "the Authority" in (target.aliases or [])
+
+
+@pytest.mark.parametrize(
+    "setup,reason",
+    [
+        ("self", "self"),
+        ("node_type", "node_type"),
+        ("source_redirects", "chain"),
+        ("target_redirects", "chain"),
+    ],
+)
+async def test_the_four_refusals(clean, setup: str, reason: str) -> None:
+    """Each is a merge somebody would regret, and none is recoverable by
+    scoring harder."""
+    a = await an_entity(clean, "Alpha")
+    b = await an_entity(clean, "Beta")
+
+    if setup == "self":
+        pair = (a.entity_id, a.entity_id)
+    elif setup == "node_type":
+        place = await an_entity(clean, "Alpha", node_type="place")
+        pair = (place.entity_id, a.entity_id)
+    elif setup == "source_redirects":
+        a.redirects_to = b.entity_id
+        await clean.flush()
+        pair = (a.entity_id, b.entity_id)
+    else:
+        b.redirects_to = a.entity_id
+        await clean.flush()
+        c = await an_entity(clean, "Gamma")
+        pair = (c.entity_id, b.entity_id)
+
+    with pytest.raises(MergeError) as raised:
+        await merge(clean, pair[0], pair[1], decided_by="auto")
+
+    assert raised.value.reason == reason
+
+
+async def test_the_log_records_what_the_resolver_thought(clean) -> None:
+    """`P7-10` samples merges, and a merge at 0.91 on string alone is a
+    different decision from one at 0.91 with context agreeing."""
+    source = await an_entity(clean, "LTA", chunks=[1, 2])
+    target = await an_entity(clean, "Land Transport Authority", chunks=[1, 2])
+    verdict = score(source, target)
+
+    entry = await merge(
+        clean, source.entity_id, target.entity_id, decided_by="auto", verdict=verdict
+    )
+
+    assert entry.score == pytest.approx(verdict.score)
+    assert set(entry.signals) == set(verdict.signals)
+    assert entry.decided_by == "auto"
+
+
+async def test_a_reversal_puts_back_exactly_this_merges_rows(clean) -> None:
+    """The reason the log records moved ids rather than only the fact of the
+    move. Two merges into the same target are otherwise indistinguishable, and
+    reversing the second would take the first's edges with it.
+    """
+    first = await an_entity(clean, "First Name")
+    second = await an_entity(clean, "Second Name")
+    target = await an_entity(clean, "Canonical Name")
+    other = await an_entity(clean, "Elsewhere")
+
+    first_edge = await an_edge(clean, first.entity_id, other.entity_id)
+    second_edge = await an_edge(clean, second.entity_id, other.entity_id)
+
+    await merge(clean, first.entity_id, target.entity_id, decided_by="auto")
+    second_merge = await merge(clean, second.entity_id, target.entity_id, decided_by="auto")
+
+    await reverse(clean, second_merge.merge_id, reversed_by="user")
+
+    await clean.refresh(first_edge)
+    await clean.refresh(second_edge)
+    assert second_edge.from_node == second.entity_id, "its own edge came back"
+    assert first_edge.from_node == target.entity_id, "the other merge's edge stayed put"
+
+
+async def test_a_reversal_clears_the_redirect_and_the_provenance(clean) -> None:
+    source = await an_entity(clean, "Old Name")
+    target = await an_entity(clean, "New Name")
+    entry = await merge(clean, source.entity_id, target.entity_id, decided_by="auto")
+
+    await reverse(clean, entry.merge_id, reversed_by="user")
+
+    await clean.refresh(source)
+    await clean.refresh(target)
+    assert source.redirects_to is None
+    assert source.entity_id not in (target.merged_from or [])
+
+
+async def test_the_log_row_survives_the_reversal(clean) -> None:
+    """ "Merged and then reversed" is a more interesting fact than "never
+    merged" — it is the signal that a threshold is wrong."""
+    source = await an_entity(clean, "Old Name")
+    target = await an_entity(clean, "New Name")
+    entry = await merge(clean, source.entity_id, target.entity_id, decided_by="auto")
+
+    await reverse(clean, entry.merge_id, reversed_by="user")
+
+    assert entry.reversed_at is not None
+    assert entry.reversed_by == "user"
+
+
+async def test_a_merge_cannot_be_reversed_twice(clean) -> None:
+    source = await an_entity(clean, "Old Name")
+    target = await an_entity(clean, "New Name")
+    entry = await merge(clean, source.entity_id, target.entity_id, decided_by="auto")
+    await reverse(clean, entry.merge_id, reversed_by="user")
+
+    with pytest.raises(MergeError) as raised:
+        await reverse(clean, entry.merge_id, reversed_by="user")
+
+    assert raised.value.reason == "already"

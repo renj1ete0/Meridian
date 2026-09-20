@@ -31,6 +31,7 @@ from sqlalchemy import (
     Integer,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -217,6 +218,64 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Edge {self.edge_id} {self.from_node}-[{self.relation_type}]->{self.to_node}>"
+
+
+class MergeLog(Base):
+    """Every merge, and enough to undo exactly this one (task `P4-03`, §5.5).
+
+    §5.5: "Merges must be reversible. Reassign edges to the canonical node,
+    retain the old ID as a redirect rather than deleting, log every merge. Bad
+    merges are worse than duplicates because conflation is invisible once
+    done."
+
+    **The rows moved are recorded, not just the fact of the move.** `merged_from`
+    says *that* an entity was absorbed; it cannot say which edges came with it.
+    Reverse two merges into the same target without that and the second
+    reversal takes rows belonging to the first — so each merge stores the ids
+    it actually reassigned, and a reversal moves exactly those back.
+
+    **A log, not an audit trail bolted on.** `P7-10` asks for merge sampling as
+    routine, and the numbers it needs — the score and its three signals — are
+    only knowable at the moment of the decision.
+    """
+
+    __tablename__ = "merge_log"
+
+    merge_id: Mapped[int] = pk()
+
+    at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+
+    #: The entity that was absorbed, and the one it went into. Not foreign
+    #: keys: a log that disappears when a row does cannot answer questions
+    #: about rows that disappeared.
+    source_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    target_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    #: What the resolver thought, at the time. `P7-10`'s sampling needs the
+    #: score *and* the breakdown — a merge at 0.91 on string alone and one at
+    #: 0.91 with context agreeing are different decisions.
+    score: Mapped[float | None] = mapped_column(Float)
+    signals: Mapped[dict | None] = mapped_column(JSONB)
+
+    #: `auto`, a model's id, or a person. §2 principle 3 wants every write
+    #: attributable, and a merge is the write that is hardest to notice later.
+    decided_by: Mapped[str] = mapped_column(Text, nullable=False)
+
+    #: Exactly what moved, so a reversal is exact rather than approximate.
+    moved_edge_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
+    moved_attribute_value_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
+    moved_observation_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
+
+    #: Set when the merge is undone. The row stays: "this was merged and then
+    #: reversed" is a different and more interesting fact than "this was never
+    #: merged", and it is what tells you a threshold is wrong.
+    reversed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    reversed_by: Mapped[str | None] = mapped_column(Text)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<MergeLog {self.source_entity_id}->{self.target_entity_id}>"
 
 
 class AttributeDefinition(Base, TimestampMixin):

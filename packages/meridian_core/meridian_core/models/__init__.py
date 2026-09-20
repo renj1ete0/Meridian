@@ -16,7 +16,7 @@ from .config import (
     TopicConfig,
 )
 from .gazetteer import GazetteerTerm
-from .graph import AttributeDefinition, AttributeValue, Edge, Entity, Observation
+from .graph import MergeLog, AttributeDefinition, AttributeValue, Edge, Entity, Observation
 from .mixins import (
     CURRENT_SCHEMA_VERSION,
     QUALITY_TIER_MAX,
@@ -58,6 +58,7 @@ __all__ = [
     "Source",
     "BudgetConfig",
     "Grant",
+    "MergeLog",
     "GrantAudit",
     "ScheduledJob",
     "SteeringLog",

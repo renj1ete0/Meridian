@@ -738,7 +738,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       subtle bug here is a silent bad merge. **Outstanding**: nothing calls it
       yet — the write path is `P4-04`, and the middle band's queue lands as a
       `merge_adjudication` notification once there is a run to raise it in
-- [ ] `P4-03` Merge reversibility: redirects, `merged_from`, merge log
+- [x] `P4-03` Merge reversibility: redirects, `merged_from`, merge log —
+      `v0.93.0`. §5.5: "bad merges are worse than duplicates because
+      conflation is invisible once done", and that sentence shapes all of it.
+      The source is **kept as a redirect, never deleted** — deleting it breaks
+      every citation that already named it. Everything pointing at it moves:
+      edges both ways, attribute values, observations both ways, aliases and
+      supporting chunks. **The log records which rows moved, not just that a
+      merge happened**: `merged_from` cannot say which edges came with an
+      entity, so reversing one of two merges into the same target would take
+      the other's rows. Each merge stores the ids it reassigned and a reversal
+      moves exactly those back, with a test that merges twice and reverses the
+      second. Four refusals no score may overturn — self, across node types,
+      from a redirect and into one. The log row survives reversal and is
+      stamped: "merged then reversed" is the signal a threshold is wrong, which
+      is what `P7-10` samples for
 - [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`
 - [x] `P4-05` `validation.py` — server-side guards, node existence, domain
       allowlist, caps — `v0.76.0`. Built before the write tools that call it

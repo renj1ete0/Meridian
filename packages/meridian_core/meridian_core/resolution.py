@@ -26,6 +26,7 @@ name are two things, always, and no score should be able to overturn that.
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import difflib
 import re
 import unicodedata
@@ -35,7 +36,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
-from .models import Entity, GazetteerTerm
+from .models import AttributeValue, Edge, Entity, GazetteerTerm, MergeLog, Observation
 
 log = get_logger(__name__)
 
@@ -70,6 +71,9 @@ __all__ = [
     "block",
     "decide",
     "expansions_from_gazetteer",
+    "MergeError",
+    "merge",
+    "reverse",
     "normalise",
     "score",
 ]
@@ -352,3 +356,192 @@ async def block(
         extra={"entity_name": name, "node_type": node_type, "candidates": len(rows)},
     )
     return [Candidate(entity=row, via=found[row.entity_id]) for row in rows[:limit]]
+
+
+# ---------------------------------------------------------------------------
+# Acting on the decision, reversibly (task `P4-03`, §5.5)
+# ---------------------------------------------------------------------------
+#
+# §5.5: "Merges must be reversible. Reassign edges to the canonical node,
+# retain the old ID as a redirect rather than deleting, log every merge. Bad
+# merges are worse than duplicates because conflation is invisible once done."
+#
+# The last sentence is why this is written the way it is. A duplicate is
+# visible — two nodes with similar names, and somebody notices. A conflation
+# leaves one node that looks correct, and the evidence that it was two is gone
+# unless something kept it.
+
+
+class MergeError(RuntimeError):
+    """A merge that must not happen, or a reversal that cannot."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+async def merge(
+    sess: AsyncSession,
+    source_id: int,
+    target_id: int,
+    *,
+    decided_by: str,
+    verdict: Verdict | None = None,
+) -> MergeLog:
+    """Absorb ``source_id`` into ``target_id``, reversibly.
+
+    The source is **kept as a redirect, never deleted**. Deleting it would
+    break every citation that already named it, and would make the merge
+    exactly the invisible thing §5.5 warns about.
+
+    Four refusals, and each is a merge somebody would regret:
+
+    - **across node types**, which no score may overturn;
+    - **into itself**, which would empty an entity into nothing;
+    - **from an entity that already redirects**, which builds a chain somebody
+      has to follow to find the real node;
+    - **into an entity that redirects**, for the same reason from the other
+      side — the target must be a destination.
+
+    Everything that pointed at the source is moved and the moved ids are
+    recorded, so `reverse` can put back exactly this merge's rows rather than
+    whatever currently points at the target.
+    """
+    source = await sess.get(Entity, source_id, with_for_update=True)
+    target = await sess.get(Entity, target_id, with_for_update=True)
+    if source is None or target is None:
+        raise MergeError("missing", f"No entity {source_id if source is None else target_id}.")
+    if source_id == target_id:
+        raise MergeError("self", "An entity cannot be merged into itself.")
+    if source.node_type != target.node_type:
+        raise MergeError(
+            "node_type",
+            f"{source.node_type} and {target.node_type} are different kinds of thing "
+            f"(§5.5: never merge across node types).",
+        )
+    if source.redirects_to is not None:
+        raise MergeError("chain", f"Entity {source_id} already redirects; merge the target.")
+    if target.redirects_to is not None:
+        raise MergeError("chain", f"Entity {target_id} is itself a redirect; it is not a home.")
+
+    moved_edges = await _reassign(sess, Edge, ("from_node", "to_node"), source_id, target_id)
+    moved_values = await _reassign(sess, AttributeValue, ("entity_id",), source_id, target_id)
+    moved_observations = await _reassign(
+        sess, Observation, ("subject_entity_id", "geography_entity_id"), source_id, target_id
+    )
+
+    # The aliases come too. A merge that dropped them would lose the very
+    # spellings that caused the merge, so the next mention fragments again.
+    target.aliases = sorted(
+        {*(target.aliases or ()), *(source.aliases or ()), source.canonical_name}
+    )
+    target.merged_from = sorted(
+        {*(target.merged_from or ()), source_id, *(source.merged_from or ())}
+    )
+    target.supporting_chunk_ids = sorted(
+        {*(target.supporting_chunk_ids or ()), *(source.supporting_chunk_ids or ())}
+    )
+    source.redirects_to = target_id
+
+    entry = MergeLog(
+        source_entity_id=source_id,
+        target_entity_id=target_id,
+        score=verdict.score if verdict else None,
+        signals=dict(verdict.signals) if verdict else None,
+        decided_by=decided_by,
+        moved_edge_ids=moved_edges,
+        moved_attribute_value_ids=moved_values,
+        moved_observation_ids=moved_observations,
+    )
+    sess.add(entry)
+    await sess.flush()
+
+    log.info(
+        "entities merged",
+        extra={
+            "source_entity_id": source_id,
+            "target_entity_id": target_id,
+            "decided_by": decided_by,
+            "edges": len(moved_edges),
+        },
+    )
+    return entry
+
+
+async def reverse(sess: AsyncSession, merge_id: int, *, reversed_by: str) -> MergeLog:
+    """Undo one merge, exactly.
+
+    Moves back the rows *this* merge moved, not everything now pointing at the
+    target — two merges into the same entity are otherwise indistinguishable
+    afterwards, and reversing the second would take the first's edges with it.
+
+    The log row is kept and stamped rather than deleted. "Merged and then
+    reversed" is a more interesting fact than "never merged": it is the signal
+    that a threshold is wrong, which is what `P7-10`'s sampling looks for.
+    """
+    entry = await sess.get(MergeLog, merge_id, with_for_update=True)
+    if entry is None:
+        raise MergeError("missing", f"No merge {merge_id}.")
+    if entry.reversed_at is not None:
+        raise MergeError("already", f"Merge {merge_id} was already reversed.")
+
+    source = await sess.get(Entity, entry.source_entity_id, with_for_update=True)
+    target = await sess.get(Entity, entry.target_entity_id, with_for_update=True)
+    if source is None or target is None:
+        raise MergeError("missing", "One side of this merge no longer exists.")
+
+    await _restore(sess, Edge, ("from_node", "to_node"), entry.moved_edge_ids, entry)
+    await _restore(sess, AttributeValue, ("entity_id",), entry.moved_attribute_value_ids, entry)
+    await _restore(
+        sess,
+        Observation,
+        ("subject_entity_id", "geography_entity_id"),
+        entry.moved_observation_ids,
+        entry,
+    )
+
+    source.redirects_to = None
+    target.merged_from = [i for i in (target.merged_from or ()) if i != entry.source_entity_id]
+    entry.reversed_at = dt.datetime.now(dt.UTC)
+    entry.reversed_by = reversed_by
+    await sess.flush()
+
+    log.info(
+        "merge reversed",
+        extra={"merge_id": merge_id, "reversed_by": reversed_by},
+    )
+    return entry
+
+
+async def _reassign(
+    sess: AsyncSession, model, columns, source_id: int, target_id: int
+) -> list[int]:
+    """Point every ``columns`` reference at the target, and report which rows.
+
+    Reads the ids first and updates by primary key. The obvious alternative —
+    one `UPDATE ... WHERE from_node = source` — cannot tell you afterwards
+    which rows it touched, and that list is the whole reversibility story.
+    """
+    pk_column = list(model.__table__.primary_key.columns)[0]
+    moved: list[int] = []
+    for column in columns:
+        attribute = getattr(model, column)
+        rows = (await sess.execute(select(model).where(attribute == source_id))).scalars().all()
+        for row in rows:
+            setattr(row, column, target_id)
+            moved.append(getattr(row, pk_column.name))
+    await sess.flush()
+    return sorted(set(moved))
+
+
+async def _restore(sess: AsyncSession, model, columns, ids, entry: MergeLog) -> None:
+    """Point the recorded rows back at the source."""
+    if not ids:
+        return
+    pk_column = list(model.__table__.primary_key.columns)[0]
+    rows = (await sess.execute(select(model).where(pk_column.in_(list(ids))))).scalars().all()
+    for row in rows:
+        for column in columns:
+            if getattr(row, column) == entry.target_entity_id:
+                setattr(row, column, entry.source_entity_id)
+    await sess.flush()
