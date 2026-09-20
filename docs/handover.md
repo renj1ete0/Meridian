@@ -1083,6 +1083,29 @@ A long-running service that overrides its image's command must now declare a
 healthcheck or disable one explicitly, so the next one cannot inherit a probe
 for a process it does not run.
 
+### A control surface is a service, and a service is a thing that can be down
+
+`P5-07`'s inbound half is `worker/bot.py`, and it is a separate compose service
+rather than a lane inside the worker. Three things about it are worth knowing
+before the first command is typed.
+
+**It drops whatever was sent while it was down.** Telegram holds undelivered
+updates for 24 hours and replays them on the next poll, so a bot restarted after
+a night off would work through yesterday's queue at breakfast — `/run` at
+midnight starting a run in the morning, a `/boost` applied a second time. The
+first poll therefore acknowledges the backlog without reading it. If a command
+seems to have been ignored, this is why, and the fix is to send it again.
+
+**It polls rather than being called.** No inbound port, no certificate, no
+hostname — which is the whole reason it works on a machine with no ingress. The
+cost is that it is one more long-lived process to notice the death of, so it
+touches the same liveness file the worker does and carries the same healthcheck.
+
+**An unknown chat gets silence, not a refusal.** A reply would confirm that the
+bot exists and is listening. If your own messages are being ignored, the
+unauthorised chat id is in the log — that is what it is logged for, because the
+likeliest cause is a `TELEGRAM_CHAT_ID` that is wrong rather than an intruder.
+
 ### A container on an `internal: true` network cannot publish a port
 
 Docker installs no gateway on it, so there is nothing for the host to forward to
@@ -1379,11 +1402,7 @@ last of the interface work that did not need the graph.
    stay empty until phase 4 runs something, so this is worth building *after*
    there is a run to show: an empty screen teaches nothing about what the full
    one should look like.
-2. **`P5-07`'s inbound half** — Telegram commands. §13.3 makes the bot a control
-   surface that can trigger runs and change steering, so the single-chat
-   restriction and command authorisation have to exist before the first command
-   does; most useful commands need the orchestrator anyway.
-3. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
+2. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
    the 48-hour run is when it is felt.
 
 ### Explicitly *not* worth doing yet

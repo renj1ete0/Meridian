@@ -141,12 +141,13 @@ def test_the_release_script_covers_every_application_image() -> None:
         if isinstance(service, dict) and "build" in service
     }
     # `crawl4ai` is built from a pinned upstream base for hardening (`P1-26`)
-    # and is not one of ours. `embedder`, `modelfetch` and `scheduler` are the
-    # worker image under a different command — one copy of 2.3 GB of weights is
-    # the whole design (`P2-17`, `B-14`), and the scheduler spawns `python -m`
-    # entry points out of that same tree (`B-15`) — so none of them is a
-    # separate thing to push.
-    built_by_compose -= {"crawl4ai", "embedder", "modelfetch", "scheduler"}
+    # and is not one of ours. `embedder`, `modelfetch`, `scheduler` and `bot`
+    # are the worker image under a different command — one copy of 2.3 GB of
+    # weights is the whole design (`P2-17`, `B-14`), the scheduler spawns
+    # `python -m` entry points out of that same tree (`B-15`), and `bot` is one
+    # more of those entry points (`P5-07`) — so none of them is a separate
+    # thing to push.
+    built_by_compose -= {"crawl4ai", "embedder", "modelfetch", "scheduler", "bot"}
 
     named_by_script = set(re.findall(r'^\s*"(\w+)\|', build_script(), flags=re.MULTILINE))
 

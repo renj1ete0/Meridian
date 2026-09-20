@@ -214,6 +214,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.96.0] — 2026-09-20
+
+**The bot takes orders, from exactly one chat.**
+
+### Added
+
+- `P5-07`'s inbound half: `worker/commands.py` parses and runs a command,
+  `worker/bot.py` is the loop that asks for them, and a `bot` service runs it
+- The commands that need a later phase refuse **by name**. "Not a command" and
+  "a command that does nothing" are indistinguishable from a phone, and only
+  one of them is true
+
+### Why it is shaped this way
+
+- **Authorisation happens before parsing.** A message from an unknown chat is
+  discarded unread, and gets no reply at all — an error message is a map of the
+  command surface, and a refusal confirms the bot is listening
+- **An unset chat id refuses everyone.** Reading "nobody configured" as "anybody
+  allowed" would turn a missing environment variable into an open control
+  surface
+- **The backlog is dropped at startup.** Telegram replays a day of undelivered
+  updates, and a command is an instruction about now — a restart must not work
+  through yesterday's queue
+- **The offset advances before the work.** An update that fails is one Telegram
+  redelivers forever, so a single bad message would wedge the loop permanently
+- **Nothing reachable deletes.** The worst a compromised chat can do is
+  misweight the crawl, which is recorded in `steering_log` and reversible
+
 ## [0.95.0] — 2026-09-20
 
 **The same half-lives now decide what to fetch first.**

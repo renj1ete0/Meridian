@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.90.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2474 backend tests
+**`v0.96.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2603 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -40,16 +40,16 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 
 **Buildable today** is now a short list, because a session went through it.
 `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`, `P3-10`, `P3-11`, `B-07`, `B-09`,
-`B-11` and `P2-20` are done; `P5-01` and `P6-23` are open on their own
+`B-11`, `P2-20` and `P5-07` are done; `P5-01` and `P6-23` are open on their own
 arguments, both written into their entries — one has no consumer for its
 output, the other would be designed against an empty table. What is left needs
 one of the three gates.
 
 Formerly buildable, for the record: `P6-23` (agent registry and run history,
-better after there is a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a
-Semantic Scholar key, ten minutes, felt during the 48h run). `P6-05` was the other one
-and is done — an annotation is a node somebody writes by hand, so it is the one
-graph-shaped feature that never needed the graph.
+better after there is a run to show) and `P1-35` (a Semantic Scholar key, ten minutes,
+felt during the 48h run). `P6-05` and `P5-07`'s inbound half are done — an annotation is
+a node somebody writes by hand, so it is the one graph-shaped feature that never needed
+the graph, and the bot's commands needed the steering that `P5-06` had since shipped.
 
 **Explicitly parked, with reasons.** `P2-15` is gated by its own text on `P1-16` *and*
 on `P2-09` being marginal, and means a second embedding column plus a full re-embed for
@@ -899,17 +899,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       a UI. `python -m <module>` with args as a list and no shell, so a row a UI
       can write is not a remote execution surface. Four jobs seeded; sweep
       without `--apply`
-- [~] `P5-07` Telegram digest, alerts on sustained conditions only, inbound
-      commands — **outbound done in `v0.58.0`, inbound outstanding**.
+- [x] `P5-07` Telegram digest, alerts on sustained conditions only, inbound
+      commands — outbound `v0.58.0`, inbound `v0.96.0`.
       `python -m worker.digest`: §12.5's health line plus four sustained
       conditions, suppressed by a cooldown held in `notifications` (the digest
       exits between runs, so in-memory suppression would forget and re-alert
       every timer tick). Findings are recorded before they are sent, so a failed
-      delivery loses the message and not the evidence. **Inbound is deliberately
-      not built**: §13.3 makes the bot a control surface that can trigger runs
-      and change steering, so the single-chat restriction and the command
-      authorisation have to exist before the first command does — and most
-      commands need steering (`P5-06`) or the orchestrator (phase 4) anyway
+      delivery loses the message and not the evidence. Inbound is
+      `worker/commands.py` (parse and run) and `worker/bot.py` (the loop),
+      behind a `bot` service. **Authorisation happens before parsing** and an
+      unknown chat gets silence rather than a refusal — an error message is a
+      map of the surface, and an unset chat id refuses everyone rather than
+      allowing anyone. The backlog is dropped at startup, because a command is
+      an instruction about now and Telegram replays a day of them. The offset
+      advances before the work, so one bad message cannot wedge the loop.
+      Commands needing phase 4 refuse **by name**; nothing reachable deletes
 - [x] `P5-08` Health endpoint, watchdog, off-device snapshot job — `v0.62.0`.
       `/health` shipped with `P2-07`; this adds the two that were missing. A
       liveness heartbeat the worker touches each iteration **before** the work,

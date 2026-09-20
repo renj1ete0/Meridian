@@ -15,7 +15,7 @@ instructions for something that does not exist are worse than no instructions.
 | [4. The smoke run](#4-the-smoke-run) | Proof the containers talk to each other | **works** |
 | [5. The 48h run](#5-the-48h-run) | A corpus worth querying | **works** |
 | [6. Backups](#6-backups) | The crawl survives the disk | **works** |
-| [7. Look at it](#7-look-at-it) | Search, API, and the web UI | **works** |
+| [7. Look at it](#7-look-at-it) | Search, API, the web UI, and the bot | **works** |
 | [8. Expose it](#8-expose-it) | Your phone can reach it | **code done, needs your Cloudflare account** |
 
 ---
@@ -390,6 +390,34 @@ The distinction the API draws is worth knowing: *"this deployment has no
 embedder"* is a choice, and *"the embedding service did not answer"* is an
 outage. If you see the second, the sidecar is down — the search still works on
 one arm, which is why you would otherwise not notice.
+
+**Steer it from a phone** (`P5-07`, §13.3). Optional, and off unless both
+variables are set:
+
+```bash
+# In .env — from @BotFather, and your own chat id from @userinfobot
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+
+docker compose up -d bot
+docker compose logs bot | tail -5
+```
+
+Then message the bot `/status`. `/weights`, `/boost <topic> <x> <weeks>`,
+`/pause <topic>` and `/seed <url or query> [topic]` are the rest; the commands
+that need phase 4 answer with what they are waiting for rather than staying
+silent.
+
+Three behaviours to expect, all deliberate:
+
+- **Only `TELEGRAM_CHAT_ID` is obeyed.** Any other chat is ignored without a
+  reply. If your own messages are ignored, `docker compose logs bot` has the
+  chat id that did arrive — which is almost always the fix.
+- **Commands sent while the bot was down are dropped**, not queued. A `/run`
+  typed at midnight should not start one at breakfast.
+- **Leaving the chat id blank gives you a bot that reports and takes no
+  orders.** The digest and the alerts are the outbound half and need only the
+  token.
 
 ---
 

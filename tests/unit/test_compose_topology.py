@@ -125,11 +125,20 @@ def test_only_named_services_write_from_egress(compose: dict) -> None:
     can reach the internet. That is the same trade `worker` already makes, in
     the same image, which is why it is tolerable here and would not be for a
     service that had no such reason.
+
+    `bot` (`P5-07`) is the one entry whose reason runs the other way. It is not
+    a service that fetches hostile content and happens to hold credentials; it
+    is a service whose entire job is to carry instructions inward from outside
+    the stack. `egress` is unavoidable — the messages come from a third party's
+    API — so the containment is elsewhere: one chat id may command it, nothing
+    it can do deletes, and every change it makes is in `steering_log`.
     """
     both = {
         name for name in compose["services"] if {"internal", "egress"} <= networks_of(compose, name)
     }
-    assert both <= {"worker", "scheduler", "orchestrator", "cloudflared"}, f"unexpected: {both}"
+    assert both <= {"worker", "scheduler", "bot", "orchestrator", "cloudflared"}, (
+        f"unexpected: {both}"
+    )
 
 
 def test_no_service_sets_both_network_mode_and_networks(compose: dict) -> None:
@@ -392,9 +401,7 @@ def test_a_stack_that_runs_the_embedder_tells_its_clients_where_it_is(
     doc = yaml.safe_load(path.read_text())
     services = doc.get("services") or {}
 
-    if not any(
-        isinstance(s, dict) and EMBEDSERVER in _command_of(s) for s in services.values()
-    ):
+    if not any(isinstance(s, dict) and EMBEDSERVER in _command_of(s) for s in services.values()):
         pytest.skip(f"{path.name} does not run the sidecar")
 
     blind = [
@@ -407,7 +414,6 @@ def test_a_stack_that_runs_the_embedder_tells_its_clients_where_it_is(
         f"{path.name} runs {EMBEDSERVER} but {blind} cannot find it — "
         f"searches there will silently report having no embedder"
     )
-
 
 
 # --------------------------------------------------------------------------
@@ -453,7 +459,8 @@ def test_every_service_up_starts_can_actually_be_built(path: pathlib.Path) -> No
     missing = {
         name: str(dockerfile.relative_to(REPO))
         for name, service in services.items()
-        if isinstance(service, dict) and not service.get("profiles")
+        if isinstance(service, dict)
+        and not service.get("profiles")
         and (dockerfile := _build_dockerfile(service)) is not None
         and not dockerfile.exists()
     }
@@ -479,9 +486,7 @@ def test_nothing_publishes_a_port_it_cannot_publish(path: pathlib.Path) -> None:
             continue
         attached = service.get("networks") or []
         # No `networks:` at all means the default bridge, which is routable.
-        if attached and not any(
-            not (networks.get(n) or {}).get("internal") for n in attached
-        ):
+        if attached and not any(not (networks.get(n) or {}).get("internal") for n in attached):
             inert[name] = service["ports"]
 
     assert not inert, (
@@ -521,7 +526,7 @@ def test_a_service_running_its_own_command_says_what_its_health_is(
         if isinstance(service, dict)
         and service.get("command")
         and service.get("build")
-        and not service.get("profiles")          # one-shots exit; exempt
+        and not service.get("profiles")  # one-shots exit; exempt
         and "healthcheck" not in service
     ]
 

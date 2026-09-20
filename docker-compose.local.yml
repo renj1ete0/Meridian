@@ -257,6 +257,40 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
 
+  # §13.3's inbound half (`P5-07`). Its own service rather than a lane inside
+  # `worker`: it spends its life parked in a 50-second long poll, and a lane
+  # that blocks for that long starves the queue it shares. They also fail for
+  # different reasons, and a wedged crawl must not take down the channel you
+  # would use to notice it.
+  bot:
+    <<: *common
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.bot"]
+    # The loop touches the liveness file each time round the poll, so a bot
+    # still running and no longer listening — a token revoked, a socket wedged
+    # open — looks different from a quiet one.
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker.liveness"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    environment:
+      <<: [*pg-credentials, *db-urls]
+      # Absent is a supported state: no token means the stack comes up with no
+      # control surface, which is what a local run usually wants.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    # Both, and for the usual reason: `egress` reaches api.telegram.org,
+    # `internal` reaches the steering a command changes.
+    networks: [internal, egress]
+    depends_on:
+      postgres: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
   api:
     <<: *common
     build: { context: ., dockerfile: services/api/Dockerfile }

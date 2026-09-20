@@ -1,15 +1,16 @@
-"""Telegram, outbound (task P5-07, spec §13.3, §11.11).
+"""Telegram, the transport (task P5-07, spec §13.3, §11.11).
 
 §13.3 chooses Telegram for a reason that matters later rather than now: inline
 keyboards make intervention possible from a phone. This is the outbound half —
 the digest and the alerts — and it is deliberately the half that can exist
-before there is anything to intervene in.
+before there is anything to intervene in. The inbound half arrived later and
+is `worker/bot.py`; what lives here is the transport both directions share.
 
-**It is a control surface, not a notifier**, and §13.3 says so: the bot will
-eventually trigger runs and change steering. That is why the chat id is
-configured rather than discovered, and why inbound commands are not built here —
-a bot that could be messaged by anyone would be a way to steer this system from
-outside it, and the restriction has to exist before the first command does.
+**It is a control surface, not a notifier**, and §13.3 says so: the bot can
+trigger runs and change steering. That is why the chat id is configured rather
+than discovered — a bot that could be commanded by anyone would be a way to
+steer this system from outside it — and why `poll` reads updates but decides
+nothing about them.
 
 **The credential is environment, never database** (§11.11). The database is
 snapshotted off-device for backup, and a token in it would travel with every
@@ -38,6 +39,11 @@ DEFAULT_TIMEOUT_S = 15.0
 #: would fail entirely rather than arrive shortened, which is the wrong failure
 #: for the channel that is supposed to tell you things are wrong.
 MAX_MESSAGE = 4096
+
+#: How long Telegram holds a `getUpdates` request open with nothing to say.
+#: Long enough that a quiet bot makes a handful of requests an hour, short
+#: enough that a restart is noticed within the minute.
+LONG_POLL_S = 50
 
 
 class Telegram:
@@ -71,6 +77,11 @@ class Telegram:
             return None
         return cls(token, chat)
 
+    @property
+    def chat_id(self) -> str:
+        """The one chat this bot talks to, and the only one it takes orders from."""
+        return self._chat_id
+
     async def aclose(self) -> None:
         if self._owns_client and self._client is not None:
             await self._client.aclose()
@@ -80,6 +91,56 @@ class Telegram:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self._timeout)
         return self._client
+
+    async def poll(self, *, offset: int | None, timeout_s: int = LONG_POLL_S) -> list[dict] | None:
+        """Wait for messages, and return them. Never raises.
+
+        **`None` and `[]` are different answers.** `[]` is "nothing was said";
+        `None` is "could not ask". They arrive at the same speed and look the
+        same to a caller that conflates them — which is how a polling loop
+        whose network is down turns into a hot loop hammering a dead host.
+
+        **Long polling rather than a webhook.** A webhook needs an inbound
+        port, a certificate and a public hostname; this needs none of them, so
+        the bot works from a machine with no ingress at all — which is the
+        deployment §13.3 is written for.
+
+        `offset` acknowledges: passing `last_update_id + 1` tells Telegram the
+        earlier updates were handled and stops it redelivering them. An offset
+        that never advanced would replay the same message forever, so the
+        caller advances it even for a command that failed.
+        """
+        try:
+            response = await self._http().get(
+                f"{API}/bot{self._token}/getUpdates",
+                params={
+                    "timeout": timeout_s,
+                    # Only messages. Telegram will otherwise deliver edits,
+                    # channel posts and callback queries, and an *edited*
+                    # command is a command somebody can rewrite after the fact.
+                    "allowed_updates": '["message"]',
+                    **({"offset": offset} if offset is not None else {}),
+                },
+                # Past the long poll: the server holds the request open for
+                # `timeout_s`, so a client timeout below it would abort every
+                # quiet interval and look like a network fault.
+                timeout=timeout_s + self._timeout,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            # The token is in the URL, so only the type is logged.
+            log.warning("telegram poll failed", extra={"reason": type(exc).__name__})
+            return None
+
+        body = response.json()
+        if not body.get("ok"):
+            # `ok: false` with a 200 is how Telegram reports a second poller on
+            # the same token. Retrying instantly would make two loops fight.
+            log.warning(
+                "telegram refused the poll", extra={"reason": str(body.get("description"))[:80]}
+            )
+            return None
+        return list(body.get("result") or [])
 
     async def send(self, text: str) -> bool:
         """Send one message. Returns whether it arrived.
