@@ -8,6 +8,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Docs: `docs/deployment.md` audited before the first real deploy. New §1b lists
+  every key and what each unlocks — **none are needed to crawl and search**.
+  §0's service inventory was three services and one phase out of date, §3 did
+  not say that Postgres is *built* (AGE is compiled onto pgvector), and §6 still
+  claimed four Makefile targets pointed at scripts that do not exist; all four
+  have existed since `v0.76.1`
+- Config: `SEMANTIC_SCHOLAR_API_KEY` added to `.env.example`. The code has read
+  it since `P1-19`, so `P1-35` told an operator to get a key without saying
+  where to put it. `OPENAI_API_KEY` is documented as unused unless a registry
+  row names it
+
 - Docs: `TASKS.md`, `docs/handover.md`, `README.md` and `docs/roadmap.md`
   corrected after phase 4's spine landed. All four still said phase 4 was
   "designed and unbuilt" and that nothing had ever called a model; the accurate

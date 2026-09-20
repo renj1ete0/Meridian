@@ -18,10 +18,18 @@ server.
 
 ## 0. What you are deploying
 
-Eight services, two of which do not start on their own schedule
-(`orchestrator`, `cloudflared`). `orchestrator` is the only one with nothing
-behind it — phase 4 is unbuilt, so it has no image and nothing to run. For the
-smoke run only four matter:
+Fourteen services in `docker-compose.yml`, three of them one-shots that run and
+exit (`datadirs`, `modelfetch`, `tools`) and one that still has nothing behind
+it: `orchestrator` is profile-gated because its Dockerfile does not exist.
+Phase 4's spine *is* built — it runs from the worker image as
+`python -m worker.orchestrate`, and gets a service of its own when the stages
+that reason over documents land (`P4-16`).
+
+`bot` is the newest (`P5-07`): §13.3's inbound Telegram commands. It starts
+whether or not a token is configured and idles when there is none, so an
+unconfigured deployment has no control surface rather than a crash loop.
+
+For the smoke run only four matter:
 
 | Service | Network | Why it is in the smoke run |
 |---|---|---|
@@ -56,6 +64,38 @@ probably is not, so there are two routes:
   script it calls is still missing (`P1-37`).
 
 ---
+
+## 1b. Keys, and what each one actually unlocks
+
+**None of these are needed to crawl and search.** That is worth saying first,
+because it decides what you can do on the first evening: the corpus, the
+extraction, the embeddings, hybrid search, the API, the web UI and the MCP read
+surface all work with no third-party key at all. Everything below buys
+something specific on top.
+
+| Variable | Needed for | Without it |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Synthesis — the model client (`P4-15`) | The crawl and search are unaffected. A run finds no usable agent and refuses; the orchestrator's stages are not built yet anyway (`P4-16`) |
+| `SEMANTIC_SCHOLAR_API_KEY` | Open-access PDF resolution for DOIs | The provider still answers, then rate-limits hard. Free to get, and the 48h run is when its absence is felt (`P1-35`) |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | The digest, the alerts, and inbound commands (`P5-07`) | The digest still runs and still records findings to `notifications`; it simply delivers nothing. **Both or neither** |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Reaching the API from outside the LAN (`P3-05`) | Everything works on the LAN. This is what lets an assistant on your phone query the corpus |
+| `GHCR_READ_PAT` | Pulling pre-built private images | Not needed if you build on the server, which `make quickstart` does |
+| `OPENAI_API_KEY` | Nothing, today | No seeded agent names it. It is here for a registry row you might add pointing at a local or third-party endpoint |
+
+**The model key is read indirectly, and that is deliberate.** The registry row
+names the *variable* (`agents.api_key_env_var`) and `provider.py` reads it at
+call time, so the key is never in the database — which is snapshotted off-device
+for backup, and a key stored there would travel with every snapshot (§11.11).
+
+**One trap worth reading twice.** Unset `ANTHROPIC_API_KEY` in any shell running
+Claude Code against Meridian's MCP server. If it is set, Claude Code bills API
+usage instead of drawing on the subscription (§11.1a). The orchestrator's own
+container is where that key belongs, not your terminal.
+
+**What you must set regardless**, because nothing has a safe default: the five
+Postgres passwords and the three connection URLs, `DATA_ROOT`, and
+`MERIDIAN_CONTACT_EMAIL` — which goes in the crawler's User-Agent, and is the
+difference between a polite crawler and an anonymous one.
 
 ## 2. Put the repo and the environment on the server
 
@@ -102,9 +142,15 @@ directory is empty. Changing them later changes nothing until you delete
 ## 3. First boot
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres       # builds first: see below
 docker compose logs -f postgres     # wait for "database system is ready"
 ```
+
+**Postgres is built here, not pulled** (`P4-01`). `deploy/postgres/Dockerfile`
+compiles Apache AGE onto the pgvector image, because no published image carries
+both and §3 chose one store. Expect a few minutes the first time. The graph
+extension is then present from the first migration, so nobody installs an
+extension by hand on a running database.
 
 Then migrate and seed **from the server**, not from your machine — the URLs in
 `.env` name `postgres`, which only resolves inside the compose network:
@@ -305,21 +351,16 @@ below.
 
 ---
 
-## 6. Four Makefile targets point at scripts that do not exist
+## 6. Snapshotting the corpus
 
-`scripts/` contains `init-roles.sh` and `seed.py`. The Makefile also declares:
-
-| Target | Calls | Status |
-|---|---|---|
-| `make snapshot-corpus` | `./scripts/snapshot_corpus.sh` | built (`P1-36`) — and it is `P1-16`'s stated deliverable |
-| `make restore-corpus` | `./scripts/restore_corpus.sh` | built |
-| `make backup` | `./scripts/backup.sh` | built; `deploy/meridian-backup.timer` runs it (`P5-08`) |
-| `make build-push` | `./scripts/build_and_push.sh` | **still missing** (`P1-37`) |
+All four of the Makefile targets that once pointed at missing scripts now work
+(`P1-36`, `P1-37`): `make snapshot-corpus`, `make restore-corpus`, `make backup`
+and `make build-push`.
 
 `snapshot-corpus` was the urgent one, because it is how the 48h run becomes the
-dev corpus everything after phase 2 is built against and discovering it was a
-stub *after* the run would be a wasted 48 hours. It exists now. The manual
-equivalent, if you ever need it, is a `pg_dump` plus a tar of the raw store:
+dev corpus everything after phase 2 is built against — discovering it was a stub
+*after* the run would have been a wasted 48 hours. The manual equivalent, if you
+ever need it:
 
 ```bash
 docker compose exec -T postgres pg_dump -U meridian -Fc meridian > corpus.dump
