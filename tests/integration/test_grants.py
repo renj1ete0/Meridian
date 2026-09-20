@@ -1,13 +1,12 @@
-"""Access for somebody who is not the operator (task `P3-06`, §3).
+"""Access for somebody who is not the operator (tasks `P3-06`, `P3-10`, §3, §5).
 
 Two properties carry this design, and both are negatives:
 
 - **Revoking a person revokes every credential they hold.** That is the reason
   grants exist rather than tokens alone, and the way it fails is one token left
   working that nobody remembers issuing.
-- **A profile grants tools, never a list somebody edited.** §3: a free-form set
-  per person is how somebody ends up holding a write tool nobody remembers
-  granting.
+- **A guest cannot widen their own grant.** Filters intersect, so a narrower
+  request narrows further and a broader one changes nothing.
 
 Against a real Postgres for the first, because it is a transaction over two
 tables and the point is that they move together.
@@ -22,12 +21,16 @@ from sqlalchemy import delete, select
 
 from meridian_core.grants import (
     PROFILE_TOOLS,
+    TIER_ORDER,
     GrantError,
     ResolvedGrant,
+    filters_for,
     resolve_grant,
     revoke_grant,
+    tiers_allowed,
 )
 from meridian_core.models import AgentToken, Grant
+from meridian_core.search import SearchFilters
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -195,7 +198,71 @@ def test_an_unknown_profile_grants_nothing() -> None:
 
 
 # --------------------------------------------------------------------------
+# Scoping — a guest cannot widen their grant
+
+
+def test_a_grant_without_topics_sees_everything() -> None:
+    assert filters_for(resolved()).topics is None
+
+
+def test_a_scoped_grant_narrows_an_unscoped_request() -> None:
+    filters = filters_for(resolved(topics=("walkability",)))
+
+    assert filters.topics == ("walkability",)
+
+
+def test_a_guest_asking_wider_does_not_get_wider() -> None:
+    """The intersection is the point. Asking for a topic they do not hold must
+    not add it."""
+    filters = filters_for(
+        resolved(topics=("walkability",)), SearchFilters(topics=["walkability", "robotics"])
+    )
+
+    assert filters.topics == ("walkability",)
+
+
+def test_a_guest_asking_only_for_what_they_lack_gets_nothing(clean=None) -> None:
+    """Not "everything they do hold" — that answers a question they did not
+    ask. An empty intersection is the honest result."""
+    filters = filters_for(resolved(topics=("walkability",)), SearchFilters(topics=["robotics"]))
+
+    assert filters.topics not in (None, ())
+    assert "robotics" not in (filters.topics or ())
+    assert "walkability" not in (filters.topics or ())
+
+
+def test_a_tier_ceiling_admits_that_tier_and_above() -> None:
+    assert tiers_allowed("academic") == ("government", "academic")
+
+
+def test_no_ceiling_admits_every_tier() -> None:
+    assert tiers_allowed(None) == TIER_ORDER
+
+
+def test_an_unknown_ceiling_admits_nothing() -> None:
+    """A typo must not widen access. Treating an unrecognised ceiling as "no
+    ceiling" is a mistake failing in the wrong direction."""
+    assert tiers_allowed("gov") == ()
+
+
+def test_a_guests_search_is_always_cleared_only() -> None:
+    """This is content going to somebody else's model, which is what `P4-14`'s
+    screening exists to guard."""
+    assert filters_for(resolved(), SearchFilters(cleared_only=False)).cleared_only is True
+
+
+# --------------------------------------------------------------------------
 # §5: two things a guest does not get by default
+
+
+def test_raw_files_are_off_unless_the_grant_says_otherwise() -> None:
+    """Serving the raw store to somebody else is redistribution of third-party
+    material — a different act from sharing what was extracted from it. A guest
+    gets chunks, metadata and the source URL, which is a citation."""
+    from meridian_core.grants import may_read_raw
+
+    assert may_read_raw(resolved()) is False
+    assert may_read_raw(resolved(raw_files=True)) is True
 
 
 def test_annotations_are_not_shared_by_default() -> None:

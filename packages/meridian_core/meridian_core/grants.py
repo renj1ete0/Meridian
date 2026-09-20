@@ -1,4 +1,4 @@
-"""Access for somebody who is not the operator (task `P3-06`, §3).
+"""Access for somebody who is not the operator (tasks `P3-06`, `P3-10`, §3, §5).
 
 The unit is a **person**, not a credential. Somebody given access will hold
 several tokens — a browser session, an MCP client on a laptop, another on a
@@ -10,9 +10,9 @@ person is how somebody ends up holding a write tool nobody remembers granting.
 Profiles are named, small, and defined here rather than in the database, so
 adding a tool to `reader` is a code change somebody reviews.
 
-What a grant *scopes* — topics, source tiers, raw files — is `P3-10`. This
-module is the grant itself: who holds it, whether it is still live, and what
-revoking it takes with it.
+**Two things a guest does not get by default** (§5): raw files, and anything
+outside the topics named in the grant. Both are shaped so the restrictive
+answer is what an absent value means.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
 from .models import AgentToken, Grant
+from .search import SearchFilters
+from .tiering import DEFAULT_TIER  # noqa: F401  (documents where tiers come from)
 
 log = get_logger(__name__)
 
@@ -52,12 +54,21 @@ PROFILE_TOOLS: dict[str, frozenset[str]] = {
     ),
 }
 
+#: Source tiers, most to least authoritative. `max_source_tier` names a floor
+#: in this order: naming `academic` admits `government` and `academic` and
+#: excludes everything below.
+TIER_ORDER = ("government", "academic", "industry", "press", "informal")
+
 __all__ = [
     "PROFILE_TOOLS",
+    "TIER_ORDER",
     "GrantError",
     "ResolvedGrant",
+    "filters_for",
+    "may_read_raw",
     "resolve_grant",
     "revoke_grant",
+    "tiers_allowed",
 ]
 
 
@@ -111,6 +122,75 @@ class ResolvedGrant:
 
     def may_call(self, tool: str) -> bool:
         return tool in self.tools
+
+
+def tiers_allowed(max_source_tier: str | None) -> tuple[str, ...]:
+    """Tiers at or above ``max_source_tier``, in authority order.
+
+    An unknown tier admits nothing rather than everything. The alternative —
+    treating an unrecognised ceiling as "no ceiling" — turns a typo into a
+    widening of access, which is the wrong direction for a mistake to fail in.
+    """
+    if max_source_tier is None:
+        return TIER_ORDER
+    if max_source_tier not in TIER_ORDER:
+        return ()
+    return TIER_ORDER[: TIER_ORDER.index(max_source_tier) + 1]
+
+
+def filters_for(grant: ResolvedGrant, base: SearchFilters | None = None) -> SearchFilters:
+    """Narrow a search to what this grant may see (`P3-10`).
+
+    **Intersects rather than replaces.** A guest may narrow their own search
+    further — asking for one topic out of the three they hold — and that must
+    not widen anything. Taking the intersection means the grant is a ceiling
+    the caller cannot raise, whatever they send.
+
+    `cleared_only` is forced on for the same reason the MCP surface forces it
+    (`P4-14`): this is content going to somebody else's model.
+    """
+    base = base or SearchFilters()
+
+    topics: tuple[str, ...] | None
+    if grant.topics:
+        asked = tuple(base.topics or ())
+        topics = tuple(t for t in asked if t in grant.topics) if asked else grant.topics
+        if not topics:
+            # They asked only for topics they do not hold. Returning everything
+            # they *do* hold would answer a question they did not ask; an empty
+            # topic set that matches nothing is the honest answer.
+            topics = ("\x00none",)
+    else:
+        topics = tuple(base.topics) if base.topics else None
+
+    allowed = tiers_allowed(grant.max_source_tier)
+    asked_tiers = tuple(base.source_tiers or ())
+    tiers = tuple(t for t in asked_tiers if t in allowed) if asked_tiers else allowed
+    if asked_tiers and not tiers:
+        tiers = ("\x00none",)
+
+    return dataclasses.replace(
+        base,
+        topics=topics,
+        source_tiers=tiers,
+        cleared_only=True,
+    )
+
+
+def may_read_raw(grant: ResolvedGrant) -> bool:
+    """Whether this grant may be served raw files (§5).
+
+    The raw store holds copies of third-party material kept as a research
+    archive (§14.2). Serving those files to somebody else is redistribution,
+    and it is a different act from sharing what the corpus *extracted* — a
+    guest gets chunks, metadata and the source URL, which is a citation and is
+    what a reader actually needs.
+
+    Two conditions, not one: the grant must allow it *and* the deployment must
+    serve raw files at all. `MERIDIAN_SERVE_RAW` is the operator's decision
+    about their own instance, and a grant cannot overrule it.
+    """
+    return grant.raw_files
 
 
 async def resolve_grant(

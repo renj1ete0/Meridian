@@ -214,6 +214,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.88.0] — 2026-09-20
+
+**A guest cannot widen their own grant.**
+
+### Added
+
+- `P3-10` `filters_for`, `tiers_allowed` and `may_read_raw` — topic, source
+  tier and raw-file scoping applied where a guest's request is turned into a
+  query
+
+### The property that matters
+
+- **Filters intersect rather than replace.** A guest may narrow their own
+  search further; nothing they send can widen it
+- A guest asking only for topics they do not hold gets **nothing**, not
+  everything they do hold — answering a question they did not ask would be the
+  friendlier bug
+- An **unrecognised** `max_source_tier` admits nothing. Treating a typo as "no
+  ceiling" is a mistake failing in the direction that widens access
+
+### §5's two defaults, both off
+
+- **Raw files.** Serving the raw store to somebody else is redistribution of
+  third-party material, a different act from sharing what was extracted
+- **The operator's annotations.** §12.5 predicts they become the highest-quality
+  layer precisely because they are the operator's own thinking, which makes
+  them the most personal thing in the system. Sharing them is the `operator`
+  profile, not a checkbox beside a colleague's email address
+- And a guest's search is always `cleared_only` (`P4-14`): this is content
+  going to somebody else's model
+
 ## [0.87.0] — 2026-09-20
 
 **The unit of sharing is a person, not a credential.**

@@ -668,9 +668,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       sends a client through a flow for no reason. Tokens issued for another
       resource are refused. The Cloudflare side is `P3-05`'s configuration.
       Service tokens for CLI agents (§11.1a) are still unbuilt
-- [ ] `P3-10` Grant scoping in the tool layer: `topics[]`, `max_source_tier`,
-      `raw_files` (default **false** — serving raw files to other people is
-      redistribution, not sharing), and annotation exclusion
+- [x] `P3-10` Grant scoping in the tool layer — `v0.88.0`. `filters_for`
+      **intersects rather than replaces**, which is the whole property: a guest
+      may narrow their own search further and cannot widen it, whatever they
+      send. A guest asking only for topics they do not hold gets nothing rather
+      than everything they do hold — answering the question they did not ask
+      would be the friendlier bug. `max_source_tier` names a floor in authority
+      order, and **an unrecognised tier admits nothing**: treating a typo as
+      "no ceiling" is a mistake failing in the direction that widens access.
+      §5's two defaults are both off — `raw_files`, because serving the raw
+      store to somebody else is redistribution of third-party material rather
+      than sharing what was extracted from it, and the operator's annotations,
+      which §12.5 predicts become the highest-quality layer precisely because
+      they are the most personal thing in the system. A guest's search is
+      always `cleared_only` (`P4-14`), since this is content going to somebody
+      else's model
 - [ ] `P3-11` Per-grant audit log and per-token rate limiting. Audit by grant,
       not by token: "what has this person's model been reading" is unanswerable
       from a per-token log once they have three clients
