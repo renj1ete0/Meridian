@@ -22,6 +22,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
+from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
 
 from meridian_core import annotations
@@ -32,17 +33,20 @@ from meridian_core.models import (
     Chunk,
     Edge,
     Entity,
+    FetchAttempt,
     Figure,
     Notification,
     SavedView,
     Source,
 )
+from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
 from meridian_core.schemas.runs import NotificationRead
 from meridian_core.schemas.search import (
     CorpusStatsRead,
+    CrawlProgressRead,
     FigureRefRead,
     NodeAttributeRead,
     NodeDetailRead,
@@ -637,3 +641,64 @@ async def explore_export_annotations(
     """
     mine = await annotations.listing(sess, about=about, limit=MAX_EXPORT_ANNOTATIONS)
     return annotations.to_markdown(mine.annotations)
+
+
+@router.get("/progress", response_model=CrawlProgressRead)
+async def explore_progress(sess: ReadSession) -> CrawlProgressRead:
+    """What the crawl is doing right now (task `B-09`, scaffold §1.7).
+
+    Production starts empty by design, so for the first hour there is nothing
+    to search and a landing page has to say something true anyway. The decision
+    this takes: **make the first hour legible rather than ship a demo corpus.**
+
+    Shipping one was the alternative, and it is worse twice over. A snapshot of
+    a real crawl is third-party content, and whether it may be redistributed is
+    the question §14.2 keeps carefully separate — the same reasoning that keeps
+    `MERIDIAN_SERVE_RAW` off by default. Synthetic fixtures are worse still and
+    the task rules them out: they do not resemble real extraction output, so
+    the first impression would be of a system that works better than it does.
+
+    A queue draining is a system working. These are the numbers that make that
+    visible, and every one of them is true.
+    """
+    now = dt.datetime.now(dt.UTC)
+    hour_ago = now - dt.timedelta(hours=1)
+
+    queue = await queue_depth(sess)
+
+    # Distinct domains, newest first. `max(attempted_at)` per domain rather
+    # than the raw rows: a crawl hammering one slow site would otherwise fill
+    # the list with a single name and hide that anything else is happening.
+    recent = (
+        await sess.execute(
+            select(FetchAttempt.domain, func.max(FetchAttempt.attempted_at).label("last"))
+            .group_by(FetchAttempt.domain)
+            .order_by(sql_desc("last"))
+            .limit(8)
+        )
+    ).all()
+
+    attempts = int(
+        await sess.scalar(
+            select(func.count())
+            .select_from(FetchAttempt)
+            .where(FetchAttempt.attempted_at >= hour_ago)
+        )
+        or 0
+    )
+    successes = int(
+        await sess.scalar(
+            select(func.count())
+            .select_from(FetchAttempt)
+            .where(FetchAttempt.attempted_at >= hour_ago, FetchAttempt.outcome == "success")
+        )
+        or 0
+    )
+
+    return CrawlProgressRead(
+        as_of=now,
+        queue=dict(queue),
+        recent_domains=[domain for domain, _ in recent],
+        attempts_last_hour=attempts,
+        successes_last_hour=successes,
+    )

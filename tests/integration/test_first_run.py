@@ -198,3 +198,78 @@ async def test_removing_something_that_is_not_there_is_a_404(clean) -> None:
         await drop_seed(-1, None, clean)
 
     assert raised.value.status_code == 404
+
+
+# --------------------------------------------------------------------------
+# What an empty corpus shows (task `B-09`)
+# --------------------------------------------------------------------------
+#
+# The decision, recorded where it is enforced: **make the first hour legible
+# rather than ship a demo corpus.** A snapshot of a real crawl is third-party
+# content and redistributing it is §14.2's separate question — the same
+# reasoning that keeps `MERIDIAN_SERVE_RAW` off by default — and synthetic
+# fixtures are ruled out by the task itself, because they do not resemble real
+# extraction output.
+
+
+async def test_progress_reports_the_queue_by_status(clean) -> None:
+    """Not a single depth. 4,000 pending and 4,000 failed are the same number
+    and opposite situations (§12.5)."""
+    from api.routes.explore import explore_progress
+
+    await a_seed(clean, url=f"{URL}/p1")
+    await a_seed(clean, url=f"{URL}/p2", status="failed")
+
+    view = await explore_progress(clean)
+
+    assert view.queue.get("pending", 0) >= 1
+    assert view.queue.get("failed", 0) >= 1
+
+
+async def test_progress_reports_both_halves_of_the_fetch_rate(clean) -> None:
+    """A crawl failing steadily and one succeeding steadily produce the same
+    attempt count and want opposite reactions from the reader."""
+    from api.routes.explore import explore_progress
+    from meridian_core.models import FetchAttempt
+
+    now = dt.datetime.now(dt.UTC)
+    for outcome in ("success", "success", "http_error"):
+        clean.add(
+            FetchAttempt(
+                domain="first-run.test",
+                url=f"{URL}/x",
+                attempted_at=now,
+                outcome=outcome,
+            )
+        )
+    await clean.flush()
+
+    view = await explore_progress(clean)
+
+    assert view.attempts_last_hour >= 3
+    assert view.successes_last_hour >= 2
+    assert view.successes_last_hour < view.attempts_last_hour
+
+
+async def test_progress_names_domains_once_each(clean) -> None:
+    """Grouped by domain rather than listing raw attempts: a crawl hammering
+    one slow site would otherwise fill the list with a single name and hide
+    that anything else is happening."""
+    from api.routes.explore import explore_progress
+    from meridian_core.models import FetchAttempt
+
+    now = dt.datetime.now(dt.UTC)
+    for i in range(5):
+        clean.add(
+            FetchAttempt(
+                domain="first-run.test",
+                url=f"{URL}/{i}",
+                attempted_at=now - dt.timedelta(seconds=i),
+                outcome="success",
+            )
+        )
+    await clean.flush()
+
+    view = await explore_progress(clean)
+
+    assert view.recent_domains.count("first-run.test") == 1

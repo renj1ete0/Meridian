@@ -1202,8 +1202,18 @@ assumes `uv`, `npm`, and three terminals; this is the path that doesn't.
       whether the stack fits), disk measured at `DATA_ROOT` rather than the
       checkout, colour only on a TTY. A drift test ties the numbers to the README
       table, which is where a user reads them
-- [ ] `B-09` Decide what a first run should *show*. Production starts empty by design
-      (scaffold §1.7), so a fresh install has nothing to look at until it has crawled
-      for a while. Options: ship a small real crawl snapshot as an opt-in demo corpus,
-      or design an empty state that makes the first hour legible. Not synthetic
-      fixtures either way — they don't resemble real extraction output
+- [x] `B-09` **What a first run shows — decided and built**, `v0.86.0`. The
+      task offered two ways out and the decision is recorded where it is
+      enforced: **make the first hour legible rather than ship a demo corpus.**
+      A snapshot of a real crawl is third-party content, and whether it may be
+      redistributed is the question §14.2 keeps separate from everything else —
+      the same reasoning that keeps `MERIDIAN_SERVE_RAW` off by default, and
+      `B-11` reached it independently the same week. Shipping a corpus in the
+      repository would have answered that question the other way without saying
+      so. Synthetic fixtures were ruled out by the task itself. So
+      `GET /api/explore/progress` reports the queue by status, both halves of
+      the last hour's fetch rate, and the domains most recently fetched — every
+      number true of that machine right now. **The two failures that both look
+      like "no results" are separated**: a crawl with nowhere to begin says so,
+      and a crawl where every fetch failed says that rather than reporting
+      twenty attempts as progress

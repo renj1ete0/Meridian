@@ -214,6 +214,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.86.0] — 2026-09-20
+
+**An empty corpus now shows something true.**
+
+### Decided
+
+- `B-09` **Make the first hour legible rather than ship a demo corpus.** A
+  snapshot of a real crawl is third-party content, and whether it may be
+  redistributed is the question §14.2 keeps separate from everything else —
+  the same reasoning that keeps `MERIDIAN_SERVE_RAW` off by default. Shipping
+  one in the repository would have answered that question the other way
+  without saying so
+- Synthetic fixtures were ruled out by the task itself: they do not resemble
+  real extraction output, so the first impression would be of a system that
+  works better than it does
+
+### Added
+
+- `GET /api/explore/progress` — the queue by status, both halves of the last
+  hour's fetch rate, and the domains most recently fetched
+- A `FirstHour` view for Explore. A queue draining is a system working, and
+  that is the honest thing an empty corpus has to show
+
+### The two failures that both look like "no results"
+
+- A crawl with **nowhere to begin** says so and points at Admin
+- A crawl where **every fetch failed** says that, rather than reporting twenty
+  attempts as though they were progress
+- Queue statuses are listed rather than summed, for §12.5's reason: 4,000
+  pending and 4,000 failed are the same depth and opposite situations
+
 ## [0.85.0] — 2026-09-20
 
 **Cold-start seeds are editable from the interface.**

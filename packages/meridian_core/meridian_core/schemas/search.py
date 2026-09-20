@@ -274,3 +274,41 @@ class NodeDetailRead(BaseModel):
     #: existed is still a valid panel, and making it required would turn a
     #: missing notes query into a 500 rather than an empty section.
     annotations: list[AnnotationRead] = Field(default_factory=list)
+
+
+class CrawlProgressRead(BaseModel):
+    """What the crawl is doing, for a corpus too small to search (task `B-09`).
+
+    Production starts empty by design (scaffold §1.7), so a fresh install has
+    nothing to look at for the first hour. The choice §12.3 implies and this
+    takes: **make the first hour legible rather than shipping a demo corpus.**
+
+    Shipping one was the alternative and it is worse on two counts. A snapshot
+    of a real crawl is third-party content, and redistributing it is the
+    question §14.2 keeps separate from everything else (`B-11` reaches the same
+    conclusion about `MERIDIAN_SERVE_RAW`). Synthetic fixtures are worse still
+    — the task rules them out directly, because they do not resemble real
+    extraction output and the first impression would be of a system that works
+    better than it does.
+
+    So: the numbers that are true right now. A queue draining is a system
+    working, and it is the only honest thing an empty corpus has to show.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    as_of: dt.datetime
+
+    #: Queue rows by status. Not a single depth: 4,000 `pending` and 4,000
+    #: `failed` are the same number and opposite situations (§12.5).
+    queue: dict[str, int] = Field(default_factory=dict)
+
+    #: Domains fetched most recently, newest first. The concrete answer to
+    #: "is it doing anything" — a count that moves says less than a name.
+    recent_domains: list[str] = Field(default_factory=list)
+
+    #: Fetch attempts in the last hour, and how many succeeded. Both, because
+    #: a crawl failing steadily and a crawl succeeding steadily produce the
+    #: same attempt count and want opposite reactions from the reader.
+    attempts_last_hour: int = 0
+    successes_last_hour: int = 0

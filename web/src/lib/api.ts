@@ -1354,3 +1354,27 @@ export async function removeSeed(taskId: number, init?: RequestInit): Promise<vo
     throw new ApiError(response.status, describeDetail(detail, response.status))
   }
 }
+
+// --------------------------------------------------------------------------
+// What the crawl is doing (task B-09)
+
+export const CRAWL_PROGRESS_FIELDS = [
+  'as_of',
+  'queue',
+  'recent_domains',
+  'attempts_last_hour',
+  'successes_last_hour',
+] as const
+
+/** Mirrors `CrawlProgressRead`. */
+export interface CrawlProgress {
+  as_of: string
+  queue: Record<string, number>
+  recent_domains: readonly string[]
+  attempts_last_hour: number
+  successes_last_hour: number
+}
+
+export function getCrawlProgress(init?: RequestInit): Promise<CrawlProgress> {
+  return request<CrawlProgress>('/api/explore/progress', init)
+}
