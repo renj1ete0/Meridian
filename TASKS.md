@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.75.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 1934 backend tests
+**`v0.75.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 1935 backend tests
 against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -705,6 +705,14 @@ carries that list, and it is the checklist for the first deploy.
       is not a trade worth making. §13.4's remaining item — "no successful
       synthesis run in N days" — waits for runs to exist (phase 4);
       `check_no_recent_success` already covers the fetch half
+- [x] `P5-09` Fix: the alert suppression test expired on a calendar date —
+      `v0.75.1`. `record_alert` takes `created_at` from the database clock while
+      the file's `NOW` is a fixed instant, so "48 hours after the alert" meant
+      48 hours after a date that kept receding. It went red five days after it
+      was written, with nothing changed. Suppression tests now set the row's age
+      explicitly, the way `attempts()` always set `attempted_at`, and the
+      cooldown's *holding* half is asserted too — the expiry assertion alone
+      passes against a function that never suppresses anything
 
 ## Phase 6 · Interface — the payoff layer
 

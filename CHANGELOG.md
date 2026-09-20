@@ -48,6 +48,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.75.1] — 2026-09-20
+
+### Fixed
+
+- `P5-09` The alert suppression test expired on a calendar date.
+  `record_alert` takes `created_at` from the database clock while
+  `tests/integration/test_alerts.py` pins `NOW` to a literal instant, so "48
+  hours after the alert" meant 48 hours after a date that kept receding. It
+  went red five days after it was written, with nothing changed — the worst
+  shape a failure can take, because the blame lands on whatever was committed
+  that morning
+- Suppression tests now set the row's age explicitly, the way `attempts()`
+  always set `attempted_at`. Added the cooldown's *holding* half: asserting
+  only that suppression expires passes equally well against a function that
+  never suppresses anything, which is the failure §13.3 exists to avoid
+
 ## [0.75.0] — 2026-09-20
 
 **Annotation as first-class nodes: the one layer nothing else can write.**

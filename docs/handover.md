@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.75.0`. 1934 backend tests against a real Postgres, 296 frontend.**
+**`v0.75.1`. 1935 backend tests against a real Postgres, 296 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -644,6 +644,26 @@ It does its own encoding detection, which is the entire point of handing it the 
 response body: a page that declares UTF-8 and serves Latin-1 is common, and decoding
 here first turns a recoverable document into replacement characters. `extract_html`
 accepts both and passes bytes straight through.
+
+### A test whose clock is fixed and whose rows' clock is not expires on a date
+
+`tests/integration/test_alerts.py` pins `NOW` to a literal instant, which is
+right: a window test that used the wall clock would measure a different window
+every run. But `record_alert` takes `created_at` from the *database* clock, so
+a test that wrote a row and then asked about it "48 hours later" was comparing
+a fixed `NOW` against a timestamp that kept moving. It passed for two days and
+then went red with nothing changed, which is the worst possible shape for a
+failure: the blame lands on whatever was committed that morning.
+
+The rule, and `attempts()` in that file had followed it from the start: **a test
+about a window must own both ends of it.** If the code under test derives one
+end from a clock you did not set, set it yourself afterwards
+(`row.created_at = when`) rather than assuming the two clocks stay close.
+
+Worth checking the same way: anything calling `func.now()` or a `server_default`
+timestamp and then asserting against a literal date. Grep for `dt.datetime(20`
+in the suite — each one is a fixed end of some window, and the question is
+always what the other end is.
 
 ### A dev database that has actually crawled breaks absolute-count assertions
 

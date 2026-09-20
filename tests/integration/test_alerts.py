@@ -23,6 +23,7 @@ from sqlalchemy import delete
 
 from meridian_core.alerts import (
     MIN_ATTEMPTS_TO_JUDGE,
+    Alert,
     check_fetch_success,
     check_no_recent_success,
     check_queue_drained,
@@ -87,6 +88,25 @@ async def clean(session_for, domain):
     yield sess
     await sess.execute(delete(FetchAttempt).where(FetchAttempt.domain.like("alert%")))
     await wipe()
+
+
+async def alerted_at(sess, key: str, when: dt.datetime) -> None:
+    """Record an alert and give the row a timestamp the test chose.
+
+    `record_alert` takes `created_at` from the database clock, and rightly so —
+    an alert is raised when it is raised. But `NOW` here is a fixed instant, so
+    a test that wrote a row and then asked about it "48 hours later" was really
+    asking about a row stamped with *today's* real date, which stops being 48
+    hours before `NOW` two days after the file is written. It did, and the suite
+    went red on a date nobody changed anything on.
+
+    So suppression tests set the age explicitly, exactly as `attempts()` above
+    sets `attempted_at`. The rule is the same either way: a test about a window
+    must own both ends of it.
+    """
+    row = await record_alert(sess, Alert(key=key, title=f"TEST {key}", body="b"))
+    row.created_at = when
+    await sess.flush()
 
 
 async def attempts(sess, domain: str, outcome: str, count: int, *, minutes_ago: int = 5) -> None:
@@ -188,36 +208,40 @@ async def test_a_reported_condition_goes_quiet(clean) -> None:
     exits. Anything it remembered in memory would be forgotten before the next
     run, and the same alert would arrive every time the timer fired — which is
     single-event alerting wearing a different hat."""
-    from meridian_core.alerts import Alert
+    assert await recently_alerted(clean, "test_condition", now=NOW) is False
 
-    alert = Alert(key="test_condition", title="TEST condition", body="body")
+    await alerted_at(clean, "test_condition", NOW)
 
-    assert await recently_alerted(clean, alert.key, now=NOW) is False
-
-    await record_alert(clean, alert)
-    await clean.flush()
-
-    assert await recently_alerted(clean, alert.key, now=NOW) is True
+    assert await recently_alerted(clean, "test_condition", now=NOW) is True
 
 
 async def test_suppression_expires(clean) -> None:
     """A condition that is still true tomorrow is worth saying again. Silence
     forever is how a real outage gets reported once and then forgotten."""
-    from meridian_core.alerts import Alert
-
-    await record_alert(clean, Alert(key="test_expiry", title="TEST expiry", body="b"))
-    await clean.flush()
+    await alerted_at(clean, "test_expiry", NOW)
 
     later = NOW + dt.timedelta(hours=48)
     assert await recently_alerted(clean, "test_expiry", cooldown_hours=6, now=later) is False
 
 
+async def test_suppression_holds_inside_the_cooldown(clean) -> None:
+    """The other half, and the half that makes the one above mean something.
+
+    Asserting only that suppression *expires* passes just as well against a
+    function that never suppresses anything, which is the failure this alerting
+    exists to avoid (§13.3: single-event alerting teaches the reader to ignore
+    the channel). Both ends of the window are pinned to `NOW`, so neither
+    assertion depends on what day the suite runs.
+    """
+    await alerted_at(clean, "test_expiry", NOW)
+
+    soon = NOW + dt.timedelta(hours=2)
+    assert await recently_alerted(clean, "test_expiry", cooldown_hours=6, now=soon) is True
+
+
 async def test_suppression_is_per_condition(clean) -> None:
     """One noisy condition must not silence a different, real one."""
-    from meridian_core.alerts import Alert
-
-    await record_alert(clean, Alert(key="test_one", title="TEST one", body="b"))
-    await clean.flush()
+    await alerted_at(clean, "test_one", NOW)
 
     assert await recently_alerted(clean, "test_two", now=NOW) is False
 
