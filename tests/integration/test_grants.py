@@ -279,3 +279,142 @@ async def test_a_grant_defaults_to_no_raw_files_in_the_database(clean) -> None:
     grant = await a_grant(clean)
 
     assert grant.raw_files is False
+
+
+# --------------------------------------------------------------------------
+# Audit and rate limiting (task `P3-11`, §6)
+# --------------------------------------------------------------------------
+
+
+async def test_calls_are_indexed_by_grant_not_by_token(clean) -> None:
+    """The reason the table has this shape. "What has this person's model been
+    reading" is unanswerable from a per-token log once they hold three
+    clients, and joining them by hand means hoping you found them all."""
+    from meridian_core.grants import calls_by_grant, record_call
+
+    grant = await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+
+    for token_id in (1, 2, 3):
+        await record_call(clean, live, "search_chunks", token_id=token_id, rows=4)
+
+    calls = await calls_by_grant(clean, grant.grant_id)
+
+    assert len(calls) == 3
+    assert {c.token_id for c in calls} == {1, 2, 3}
+
+
+async def test_the_arguments_are_kept_and_the_results_are_not(clean) -> None:
+    """What somebody searched for is the audit. What came back is the corpus,
+    and copying it here would be a second store of the same content with none
+    of the retention rules the first one has (§5.4)."""
+    from meridian_core.grants import calls_by_grant, record_call
+
+    grant = await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+
+    await record_call(clean, live, "search_chunks", arguments={"query": "kerb ramps"}, rows=12)
+
+    call = (await calls_by_grant(clean, grant.grant_id))[0]
+    assert call.arguments == {"query": "kerb ramps"}
+    assert call.rows == 12
+    assert not hasattr(call, "results")
+
+
+async def test_refusals_are_recorded_too(clean) -> None:
+    """A log of successful calls answers half the question. A grant repeatedly
+    refused a tool is the more interesting signal, and it is the one that
+    disappears if only successes land here."""
+    from meridian_core.grants import calls_by_grant, record_call
+
+    grant = await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+
+    await record_call(clean, live, "run_readonly_query", refused="profile")
+
+    call = (await calls_by_grant(clean, grant.grant_id))[0]
+    assert call.refused == "profile"
+
+
+async def test_a_failing_audit_write_does_not_take_the_read_surface_down(clean) -> None:
+    """Monitoring causing the outage it exists to detect. A missing audit row
+    is a smaller problem than a guest's client failing on a query that
+    worked."""
+    from meridian_core.grants import record_call
+
+    live = ResolvedGrant(
+        grant_id=-1,  # no such grant: the foreign key will refuse this row
+        subject=SUBJECT,
+        subject_kind="person",
+        profile="reader",
+        topics=(),
+        max_source_tier=None,
+        raw_files=False,
+    )
+
+    await record_call(clean, live, "search_chunks")  # must not raise
+    await clean.rollback()
+
+
+async def test_the_rate_limit_counts_a_token_not_a_person(clean) -> None:
+    """One misbehaving laptop must not silence the same person's phone. What
+    is being limited is a client in a retry loop — §6's point is that it is
+    otherwise indistinguishable from a crawl — and that is a property of the
+    client."""
+    from meridian_core.grants import record_call, within_rate_limit
+
+    await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+
+    for _ in range(3):
+        await record_call(clean, live, "search_chunks", token_id=1)
+
+    assert await within_rate_limit(clean, live, token_id=1, limit=3, now=NOW) is False
+    assert await within_rate_limit(clean, live, token_id=2, limit=3, now=NOW) is True
+
+
+async def test_refused_calls_do_not_count_against_the_limit(clean) -> None:
+    """Rate-limiting somebody for calls they were not allowed to make turns one
+    misconfiguration into two, and the refusals are already visible."""
+    from meridian_core.grants import record_call, within_rate_limit
+
+    await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+
+    for _ in range(5):
+        await record_call(clean, live, "run_readonly_query", token_id=1, refused="profile")
+
+    assert await within_rate_limit(clean, live, token_id=1, limit=3, now=NOW) is True
+
+
+async def test_calls_outside_the_window_do_not_count(clean) -> None:
+    from meridian_core.grants import within_rate_limit
+    from meridian_core.models import GrantAudit
+
+    grant = await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+    for _ in range(5):
+        clean.add(
+            GrantAudit(
+                grant_id=grant.grant_id,
+                token_id=1,
+                tool="search_chunks",
+                at=NOW - dt.timedelta(hours=2),
+            )
+        )
+    await clean.flush()
+
+    assert await within_rate_limit(clean, live, token_id=1, limit=3, now=NOW) is True
+
+
+async def test_no_limit_means_no_limit(clean) -> None:
+    """The opposite of `budget.py`'s convention, and right here: a rate limit
+    throttles something already authorised, so a token issued without one is a
+    decision somebody made. A budget with no cap is a decision nobody made."""
+    from meridian_core.grants import within_rate_limit
+
+    await a_grant(clean)
+    live = await resolve_grant(clean, SUBJECT, now=NOW)
+
+    assert await within_rate_limit(clean, live, token_id=1, limit=None, now=NOW) is True
+    assert await within_rate_limit(clean, live, token_id=1, limit=0, now=NOW) is False

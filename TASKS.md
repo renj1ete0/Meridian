@@ -683,9 +683,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       they are the most personal thing in the system. A guest's search is
       always `cleared_only` (`P4-14`), since this is content going to somebody
       else's model
-- [ ] `P3-11` Per-grant audit log and per-token rate limiting. Audit by grant,
-      not by token: "what has this person's model been reading" is unanswerable
-      from a per-token log once they have three clients
+- [x] `P3-11` Per-grant audit log and per-token rate limiting — `v0.89.0`.
+      **Audited by grant**, because "what has this person's model been reading"
+      is unanswerable from a per-token log once they hold three clients; the
+      token is a column, not the index. **Arguments are kept and results are
+      not** — what somebody searched for is the audit, what came back is the
+      corpus, and copying it here would be a second store of the same content
+      with none of the retention rules the first one has (§5.4). Refusals are
+      recorded too: a log of successful calls answers half the question, and a
+      grant repeatedly refused a tool is the more interesting signal.
+      **Rate-limited per token, not per grant**, even though everything else
+      here is per grant — what is being throttled is a client in a retry loop,
+      which is a property of one client, and limiting the grant would let one
+      misbehaving laptop silence the same person's phone. Refused calls do not
+      count against the limit, or one misconfiguration becomes two. An audit
+      write that fails never raises: monitoring that takes the read surface
+      down is the outage it exists to detect
 
 ## Phase 4 · Graph and writes — the loop closes
 

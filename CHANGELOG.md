@@ -214,6 +214,35 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.89.0] — 2026-09-20
+
+**What has this person's model been reading.**
+
+### Added
+
+- `P3-11` A `grant_audit` table and `record_call`, `within_rate_limit`,
+  `calls_by_grant`
+
+### Indexed by grant, throttled by token
+
+- **Audited by grant**, because the question is about a person and a per-token
+  log cannot answer it once they hold three clients
+- **Rate-limited per token**, because what is being throttled is a client in a
+  retry loop — a property of one client. Limiting the grant would let one
+  misbehaving laptop silence the same person's phone
+
+### Three smaller decisions
+
+- **Arguments kept, results not.** What somebody searched for is the audit;
+  what came back is the corpus, and copying it here would be a second store of
+  the same content with none of §5.4's retention rules
+- **Refusals recorded.** A log of successful calls answers half the question,
+  and a grant repeatedly refused a tool is the more interesting half. Refused
+  calls do not count against the rate limit, or one misconfiguration becomes
+  two
+- **An audit write never raises.** Monitoring that takes the read surface down
+  is the outage it exists to detect
+
 ## [0.88.0] — 2026-09-20
 
 **A guest cannot widen their own grant.**

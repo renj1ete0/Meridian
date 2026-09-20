@@ -20,11 +20,11 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
-from .models import AgentToken, Grant
+from .models import AgentToken, Grant, GrantAudit
 from .search import SearchFilters
 from .tiering import DEFAULT_TIER  # noqa: F401  (documents where tiers come from)
 
@@ -66,6 +66,9 @@ __all__ = [
     "ResolvedGrant",
     "filters_for",
     "may_read_raw",
+    "calls_by_grant",
+    "record_call",
+    "within_rate_limit",
     "resolve_grant",
     "revoke_grant",
     "tiers_allowed",
@@ -254,3 +257,113 @@ async def revoke_grant(sess: AsyncSession, grant_id: int) -> int:
         extra={"grant_id": grant_id, "subject": grant.subject, "tokens": len(tokens)},
     )
     return len(tokens)
+
+
+# ---------------------------------------------------------------------------
+# Audit and rate limiting (task `P3-11`, §6)
+# ---------------------------------------------------------------------------
+
+
+async def record_call(
+    sess: AsyncSession,
+    grant: ResolvedGrant,
+    tool: str,
+    *,
+    token_id: int | None = None,
+    arguments: dict | None = None,
+    rows: int | None = None,
+    duration_ms: int | None = None,
+    refused: str | None = None,
+) -> None:
+    """Record one tool call against its grant.
+
+    Indexed by grant rather than token: "what has this person's model been
+    reading" is the question, and once they hold three clients a per-token log
+    cannot answer it.
+
+    **Refusals are recorded too.** A log of successful calls answers half the
+    question — a grant being repeatedly refused a tool is the more interesting
+    signal, and it is exactly the one that disappears if only successes land
+    here.
+
+    Never raises. An audit write that took a read surface down would be the
+    monitoring causing the outage, and a missing audit row is a smaller problem
+    than a guest's client failing on a query that worked.
+    """
+    try:
+        sess.add(
+            GrantAudit(
+                grant_id=grant.grant_id,
+                token_id=token_id,
+                tool=tool,
+                arguments=arguments,
+                rows=rows,
+                duration_ms=duration_ms,
+                refused=refused,
+            )
+        )
+        await sess.flush()
+    except Exception as exc:  # noqa: BLE001 - see the docstring
+        log.warning("could not record a grant call", extra={"reason": str(exc), "tool": tool})
+
+
+async def within_rate_limit(
+    sess: AsyncSession,
+    grant: ResolvedGrant,
+    *,
+    token_id: int,
+    limit: int | None,
+    window_seconds: int = 3600,
+    now: dt.datetime | None = None,
+) -> bool:
+    """Whether this token may make another call.
+
+    **Per token, not per grant**, and that is deliberate even though everything
+    else here is per grant. The thing being limited is a client in a retry
+    loop, which §6 notes is otherwise indistinguishable from a crawl — and that
+    is a property of one client, not of the person. Limiting the grant would
+    mean one misbehaving laptop silences the same person's phone.
+
+    `limit=None` means no limit, which is the opposite of the convention
+    `budget.py` uses and is right here: a rate limit is a throttle on something
+    already authorised, not an authorisation in itself. A token with no limit
+    is a decision somebody made when they issued it; a *budget* with no cap is
+    a decision nobody made.
+    """
+    if limit is None:
+        return True
+    if limit <= 0:
+        return False
+
+    moment = now or dt.datetime.now(dt.UTC)
+    since = moment - dt.timedelta(seconds=window_seconds)
+    used = int(
+        await sess.scalar(
+            select(func.count())
+            .select_from(GrantAudit)
+            .where(
+                GrantAudit.token_id == token_id,
+                GrantAudit.at >= since,
+                # Refused calls do not count against the limit. Rate-limiting
+                # somebody for calls they were not allowed to make turns one
+                # misconfiguration into two, and the refusals are already
+                # visible in the audit.
+                GrantAudit.refused.is_(None),
+            )
+        )
+        or 0
+    )
+    return used < limit
+
+
+async def calls_by_grant(
+    sess: AsyncSession, grant_id: int, *, limit: int = 100
+) -> list[GrantAudit]:
+    """What this person's model has been reading, newest first."""
+    stmt = (
+        select(GrantAudit)
+        .where(GrantAudit.grant_id == grant_id)
+        .order_by(GrantAudit.at.desc())
+        .limit(limit)
+    )
+    return list((await sess.execute(stmt)).scalars().all())

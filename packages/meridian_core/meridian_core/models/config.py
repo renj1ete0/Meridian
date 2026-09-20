@@ -342,6 +342,58 @@ class Grant(Base, TimestampMixin):
         return f"<Grant {self.grant_id} {self.subject} {self.profile}>"
 
 
+class GrantAudit(Base):
+    """One row per tool call made under a grant (task `P3-11`, §6).
+
+    **Audited by grant, not by token.** The question worth answering later is
+    "what has this person's model been reading", and a per-token log cannot
+    answer it once they hold three clients — you would be joining logs by hand
+    and hoping you found them all. The token is recorded too, because "which
+    credential" is a real follow-up question, but the grant is the index.
+
+    **Arguments are recorded, results are not.** What somebody searched for is
+    the audit; what came back is the corpus, and copying it here would mean a
+    second store of the same content with none of the retention rules the first
+    one has (§5.4). `rows` answers "how much" without keeping any of it.
+
+    High volume by design, like `fetch_attempts`, and pruned the same way: the
+    aggregate is what matters after a few weeks.
+    """
+
+    __tablename__ = "grant_audit"
+
+    audit_id: Mapped[int] = pk()
+
+    grant_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("grants.grant_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: Which credential, for the follow-up question. Nullable because the grant
+    #: outlives any particular token and a call can be attributed to the grant
+    #: even when the token row has been pruned.
+    token_id: Mapped[int | None] = mapped_column(BigInteger)
+
+    at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    tool: Mapped[str] = mapped_column(Text, nullable=False)
+
+    #: The call's arguments, as given. A search is a sentence somebody wrote,
+    #: and paraphrasing it into a summary would destroy the only thing this row
+    #: is for.
+    arguments: Mapped[dict | None] = mapped_column(JSONB)
+
+    rows: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+
+    #: Set when the call was refused, naming the rule. A log of successful calls
+    #: answers half the question — a grant being repeatedly refused a tool is
+    #: the more interesting signal.
+    refused: Mapped[str | None] = mapped_column(Text)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<GrantAudit {self.grant_id} {self.tool}>"
+
+
 class AgentToken(Base, TimestampMixin):
     """Scoped credential per agent (§11.4).
 
