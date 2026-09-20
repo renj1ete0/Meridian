@@ -1,6 +1,6 @@
 [project]
 name = "meridian-api"
-version = "0.76.3"
+version = "0.76.4"
 description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,12 @@ dependencies = [
     # `uvicorn`, so an image built with `--no-dev` must still have it.
     "uvicorn[standard]>=0.34",
     "mcp>=1.2",
+    # `access.py` verifies Cloudflare Access JWTs (`P3-05`) and imports `jwt` at
+    # module level. It arrived transitively through `mcp` and therefore worked,
+    # which is the same accident as `P1-30`'s pyyaml wearing a different hat: an
+    # import that only resolves because something else happened to install it.
+    # `[crypto]` because Access signs with RS256, which needs `cryptography`.
+    "pyjwt[crypto]>=2.9",
 ]
 
 # Deliberately NOT depending on sentence-transformers, and this is a decision

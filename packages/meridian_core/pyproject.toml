@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.76.3"
+version = "0.76.4"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,6 +14,13 @@ dependencies = [
     # nothing the root happens to also depend on, which is exactly how the
     # container found this missing and dev never did.
     "pyyaml>=6.0",
+    # `embedder.py` imports it at module level, and both the API and the worker
+    # import `embedder`. An earlier comment here argued an HTTP client had no
+    # business in this closure and put `httpx` on `meridian-worker` instead —
+    # which was right until `P2-17` put the sidecar *client* in this package.
+    # The rule the comment was protecting still holds: a package declares what
+    # it imports, and this one imports httpx.
+    "httpx>=0.28",
 ]
 
 [build-system]

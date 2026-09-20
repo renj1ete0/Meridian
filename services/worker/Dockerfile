@@ -26,16 +26,26 @@ WORKDIR /app
 # Dependencies before source. They change on the order of once a release and the
 # source changes every commit, so splitting the two is the difference between a
 # rebuild that takes seconds and one that resolves the whole tree again.
+# `--extra embed` on both syncs below. It is what `P2-17`'s sidecar needs —
+# compose starts the *worker image* with `python -m worker.embedserver` rather
+# than building a second image, precisely so one copy of the 2.3 GB model is
+# downloaded and one is resident. Without the extra that service dies at import
+# on `ModuleNotFoundError: fastapi`, which is what it did: the sidecar had never
+# been started from a container, only natively in development.
+#
+# The cost is that the crawl worker carries torch it does not use. That is the
+# trade the sidecar design already made; `ner` stays an extra and out of the
+# image for the opposite reason — nothing calls it yet.
 COPY pyproject.toml uv.lock ./
 COPY packages/meridian_core/pyproject.toml packages/meridian_core/
 COPY services/worker/pyproject.toml services/worker/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-workspace --no-dev --package meridian-worker
+    uv sync --frozen --no-install-workspace --no-dev --package meridian-worker --extra embed
 
 COPY packages/meridian_core/ packages/meridian_core/
 COPY services/worker/ services/worker/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --package meridian-worker
+    uv sync --frozen --no-dev --package meridian-worker --extra embed
 
 # --- runtime ---------------------------------------------------------------
 FROM python:3.12-slim-bookworm AS runtime

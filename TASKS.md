@@ -976,6 +976,15 @@ Things worth doing that don't belong to a phase yet.
       Python source, with a short exemption list for the ones read by the
       Postgres entrypoint and the upstream images — and a second test that the
       exemptions are all still set, so the list cannot become a museum
+- [x] `B-13` Fix: a workspace package must declare what it imports — `v0.76.4`.
+      The third time, and every time found by *running* a container rather than
+      building one: `meridian_core.embedder` imports `httpx`, declared on
+      `meridian-worker`; `services/api` imports `jwt`, which arrived
+      transitively through `mcp`; and `worker.embedserver` imports `fastapi`
+      from the `embed` extra the worker image did not install, so `P2-17`'s
+      sidecar had never once started from a container. `P1-30` wrote the rule
+      down and the handover predicted the recurrence; predicting it was not
+      enough. Now derived from the AST on both sides, per workspace member
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

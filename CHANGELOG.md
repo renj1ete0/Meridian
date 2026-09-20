@@ -68,6 +68,29 @@ design-only changes do not require a version bump, but may be listed under Unrel
   the list cannot become a museum of variables that no longer exist — which is
   how the next real typo would hide
 
+## [0.76.4] — 2026-09-20
+
+### Fixed
+
+- `B-13` Three undeclared imports, each of which dies at container startup and
+  never in development: `meridian_core.embedder` imports `httpx`, declared on
+  `meridian-worker`; `services/api` imports `jwt`, which had been arriving
+  transitively through `mcp`; and `worker.embedserver` imports `fastapi` from
+  the `embed` extra the worker image did not install
+- The worker image now syncs `--extra embed`. `P2-17`'s sidecar is the worker
+  image under a different command, precisely so there is one copy of the model
+  — and without the extra it died at import, which it did, because the sidecar
+  had never once been started from a container
+
+### The rule, third time
+
+- `P1-30` wrote it down: a package declares what it imports, because
+  `uv sync --package X` installs X's closure and nothing the root happens to
+  also pull in. The handover predicted the recurrence. Predicting was not enough
+- Now asserted per workspace member, with both sides derived — imports from the
+  AST, dependencies from the `pyproject.toml` files, siblings followed
+  transitively because that much really is legitimate
+
 ## [0.76.2] — 2026-09-20
 
 ### Added
