@@ -799,7 +799,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       than during it: a run cannot know what it will spend, and killing one
       halfway leaves a half-written graph — so the month's next run is the one
       refused, which is why §11.9 also asks for trend alerting
-- [ ] `P4-06` Untrusted-data framing for all retrieved content in prompts (spec §11.8)
+- [x] `P4-06` Untrusted-data framing for all retrieved content in prompts —
+      `v0.94.0`. §11.8 mitigation 1, wired into the surface it is about: the
+      MCP tool returns arbitrary crawled text to a model holding tools, and now
+      returns a `framed` block beside the structured hits. **The delimiter is
+      random per call**, so a page cannot contain it — a fixed marker is one a
+      document can simply include, closing the fence early and putting the rest
+      of its text back in instruction position. Per call rather than per
+      process, since a leaked one would work for every later call in that
+      worker's life. **Nothing is stripped**: `P1-23` established that an
+      article *about* injection quotes the phrases, so rewriting documents
+      would break the corpus's ability to answer questions about them. The
+      instruction precedes the payload, attribution travels inside the fence so
+      a model reads the citation rather than reconstructing it, and an empty
+      result says so rather than presenting an empty fence. **This is not the
+      control** and the module says so — §11.8 is explicit that server-side
+      validation is load-bearing (`P4-05`) and this is defence in depth
 - [~] `P4-14` **Quarantine and screening for unknown domains** — the
       mechanical half, `v0.82.0`. `P1-23` built the pre-screen and deliberately
       blocked nothing; this is what acts on a flag. `sources.trust_state` and a

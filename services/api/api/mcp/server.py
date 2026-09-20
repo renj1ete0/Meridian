@@ -37,6 +37,7 @@ from mcp.server.mcpserver import MCPServer
 from sqlalchemy import select
 
 from meridian_core.db import guest_configured, session_guest, session_ro
+from meridian_core.framing import frame_passages
 from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
@@ -186,6 +187,16 @@ def build_mcp(
             "arms": sorted(result.arms),
             "results": [_cite(hit) for hit in result.hits],
             "returned": len(result.hits),
+            # §11.8 mitigation 1, and this is the surface it is about: a model
+            # on the other end of this call holds tools, and every `text` above
+            # is arbitrary web content the crawler fetched (`P4-06`).
+            #
+            # Both shapes are returned deliberately. `results` stays structured
+            # because a client that wants to render citations needs fields, and
+            # `framed` is the block to paste into a prompt — a client that
+            # concatenated `results` itself would put scraped text in
+            # instruction position, which is the whole thing being avoided.
+            "framed": frame_passages(result.hits),
         }
 
     @mcp.tool()

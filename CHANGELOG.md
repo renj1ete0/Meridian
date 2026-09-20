@@ -214,6 +214,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.94.0] — 2026-09-20
+
+**Retrieved content marked as data, not instruction.**
+
+### Added
+
+- `P4-06` `meridian_core/framing.py`, and a `framed` block on the MCP search
+  tool's response — the surface §11.8 is actually about, where a model holding
+  tools reads text the crawler fetched
+
+### Three properties, each for a specific failure
+
+- **The delimiter is random per call.** A fixed marker is one a page can
+  contain, closing the fence early and putting its remaining text back in
+  instruction position. Per call, not per process: a leaked one would work for
+  every later call in that worker's life
+- **Nothing is stripped or rewritten.** `P1-23` established that an article
+  *about* injection quotes the phrases; a corpus that rewrote its own documents
+  could not answer questions about them
+- **The instruction comes before the payload.** Text after it is text an
+  injection can try to imitate, having just seen the closing delimiter
+
+### Stated plainly in the module
+
+- This is **not** the control. §11.8 is explicit that server-side validation is
+  load-bearing — `P4-05`'s guards and `P4-14`'s screening are what refuse.
+  Framing means the obvious attacks stop working and the rest have to try harder
+
 ## [0.93.0] — 2026-09-20
 
 **A merge you can undo exactly.**
