@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.101.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2738 backend tests
+**`v0.102.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2776 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -778,18 +778,37 @@ deploy runbook whose first two commands could not work (`B-17`).
       rejection has scheduled what it rejected. Attributes are not created by
       tagging (§7.3's cap, `P7-01`'s gate), and every tool counts what it did
       on the run so §11.9's week-on-week comparison means something
-- [ ] `P4-15` **The provider client — the missing link between routing and
-      writing.** `P4-07` says which agent does a task and `P4-04` says where
-      its answer goes; nothing calls the model in between, which is why every
-      orchestrator stage still reports itself unbuilt. Needs: an
-      OpenAI-compatible client (§11.7 — Ollama, llama.cpp and vLLM all expose
-      one, and the hosted providers are the other shape), the key read from the
-      environment variable the registry *names* (§11.11 — never the key
-      itself), token counting into `reserve_tokens` before the call rather
-      than after, and the fallback chain walked on failure rather than the
-      first error ending the run. **Retrieved content goes through `framing.py`
-      on the way in** (`P4-06`) and every returned write through `P4-05` on the
-      way out — the model is untrusted in both directions
+- [x] `P4-15` **The provider client** — `v0.102.0`. `P4-07` said which agent,
+      `P4-04` said where the answer goes, and nothing called the model in
+      between. **Behind `meridian-core[agent]`, an optional extra**, because
+      `meridian-worker` says of itself "never calls an LLM (§2.1, §6.1)" and
+      that is an invariant: the fast loop has to keep acquiring while an agent
+      is unavailable, which is only true if it cannot depend on one. The worker
+      image does not install the extra, so it physically lacks the SDK — the
+      rule is mechanical rather than remembered. **The worst case is reserved
+      before the call and settled after**: a cap checked afterwards is not a
+      cap, and without `settle_tokens` a run would exhaust its allowance on
+      answers it never gave. A failed call releases what it reserved, or a
+      flapping agent eats the allowance the working one needs. **The chain is
+      walked, not retried** — a provider that is down stays down for the
+      seconds a retry would take, and only when every agent has refused does
+      the caller get something worth deferring on (§13.4). The key is read at
+      call time from the variable the row *names* (§11.11); a missing one takes
+      that agent out rather than the run. Two call shapes, because §11.7's
+      local tier speaks an OpenAI-compatible protocol and Anthropic does not —
+      no shim.
+      **Found on the way in**: the seeded registry carried a placeholder model
+      string and no `api_key_env_var`. The first returns a vendor error hours
+      into a run; the second is quieter, because the SDK falls back to its own
+      default variable and the deployment works by coincidence wherever that is
+      set. Fixed in the YAML and, per the `P4-07` lesson, in a migration
+- [ ] `P4-16` **The extraction and tagging stages' own middle.** Routing, the
+      call and the writes all exist; what `extract` and `tag` still lack is the
+      prompt each sends and the parse that turns an answer into tool
+      arguments. The parse is the load-bearing half — §11.8's position is that
+      a model's output is untrusted, so it is validated (`P4-05`) rather than
+      trusted, and a parse that raised on a malformed answer would make one bad
+      response end a run that should have skipped a batch
 - [x] `P4-05` `validation.py` — server-side guards, node existence, domain
       allowlist, caps — `v0.76.0`. Built before the write tools that call it
       (`P4-04`), because §11.8 specifies the rules precisely enough for the test

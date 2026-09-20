@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.101.0"
+version = "0.102.0"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 license = "MIT"
@@ -28,6 +28,22 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[project.optional-dependencies]
+# The model client (`P4-15`). An extra rather than a dependency, because
+# `meridian-worker` says of itself "never calls an LLM (§2.1, §6.1)" and that
+# is an invariant rather than a habit — the fast loop has to keep acquiring
+# while an agent is unavailable, which is only true if it cannot depend on one.
+# The worker image is built with `--package meridian-worker` and does not ask
+# for this extra, so it physically lacks the SDK; the orchestrator asks for it.
+agent = [
+    "anthropic>=1.0",
+    # The local tier (§11.7) speaks an OpenAI-compatible protocol over plain
+    # HTTP. Here rather than in the core dependencies for the reason
+    # `meridian-worker` already gives: an HTTP client has no business in the
+    # dependency closure that exists for database access.
+    "httpx>=0.28",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["meridian_core"]

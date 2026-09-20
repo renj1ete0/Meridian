@@ -56,6 +56,7 @@ __all__ = [
     "month_window",
     "record_run_spend",
     "reserve_tokens",
+    "settle_tokens",
 ]
 
 
@@ -260,6 +261,45 @@ async def reserve_tokens(sess: AsyncSession, run_id: int, count: int, *, cap: in
         extra={"run_id": run_id, "tokens": count, "used": run.tokens_used, "remaining": remaining},
     )
     return remaining
+
+
+async def settle_tokens(sess: AsyncSession, run_id: int, *, reserved: int, actual: int) -> int:
+    """Correct a reservation once the real cost is known (`P4-15`).
+
+    A call has to be paid for before it is made — the cap exists to stop a call
+    that cannot be afforded, and finding out afterwards is not a cap. But the
+    only figure available beforehand is the worst case: the prompt plus
+    `max_tokens`, which almost every answer comes in under. Left alone, a run
+    would exhaust its allowance on answers it never gave.
+
+    So the reservation is the worst case and this is the correction. It only
+    ever *releases* — an answer that somehow cost more than was reserved keeps
+    the larger figure, because the tokens were genuinely spent and a cap that
+    forgave an overrun would be a cap with a hole in it.
+    """
+    if reserved < 0 or actual < 0:
+        raise BudgetError("token_cap", "Token counts cannot be negative.")
+
+    release = reserved - actual
+    if release <= 0:
+        return 0
+
+    run = (
+        await sess.execute(select(Run).where(Run.run_id == run_id).with_for_update())
+    ).scalar_one_or_none()
+    if run is None:
+        raise BudgetError("run_open", f"No run {run_id}.")
+
+    # Never below zero: a settlement that ran twice would otherwise credit the
+    # run with tokens nobody reserved.
+    release = min(release, run.tokens_used)
+    run.tokens_used -= release
+    await sess.flush()
+    log.info(
+        "tokens released",
+        extra={"run_id": run_id, "released": release, "used": run.tokens_used},
+    )
+    return release
 
 
 async def record_run_spend(sess: AsyncSession, run_id: int, *, cost_usd: float) -> float:

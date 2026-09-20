@@ -214,6 +214,46 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.102.0] — 2026-09-20
+
+**Something finally calls the model.**
+
+### Added
+
+- `P4-15`: `meridian_core/provider.py` — `complete()`, which asks the agent
+  routing chose and falls down the chain when it will not answer
+- `budget.settle_tokens` — releases the difference between what was reserved
+  and what was spent
+- `meridian-core[agent]`, an optional extra carrying the SDK
+- A migration filling in the registry's model strings and the name of the
+  variable holding its key
+- New task `P4-16`: the extraction and tagging stages' own prompt and parse
+
+### Why it is shaped this way
+
+- **Behind an optional extra.** `meridian-worker` says of itself "never calls
+  an LLM (§2.1, §6.1)", and that is an invariant rather than a habit — the fast
+  loop must keep acquiring while an agent is unavailable. The worker image is
+  built without the extra, so it *cannot* call a model
+- **The worst case is reserved before the call and settled after.** A cap
+  checked afterwards is not a cap; without the settlement a run would exhaust
+  its allowance on answers it never gave
+- **A failed call releases what it reserved**, or a flapping agent eats the
+  allowance the working one needs
+- **The chain is walked, not retried.** A provider that is down stays down for
+  the seconds a retry would take
+- **The key is read from the variable the registry names** (§11.11), at call
+  time. A missing one takes that agent out of the chain rather than the run
+- **Two shapes, not one client.** The local tier speaks an OpenAI-compatible
+  protocol; Anthropic does not, and is not approximated with a shim
+
+### Fixed
+
+- **The registry shipped a placeholder model string and no key variable.** The
+  first reaches the vendor and returns a bad request hours into a run; the
+  second is quieter — the SDK falls back to its own default variable, so a
+  deployment works by coincidence wherever that happens to be set
+
 ## [0.101.0] — 2026-09-20
 
 **The four writes a model's output can cause.**

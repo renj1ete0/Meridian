@@ -195,6 +195,10 @@ async def seed_agents(sess) -> tuple[int, int]:
                 health_url=row.get("health_url"),
                 availability=row.get("availability", "on_demand"),
                 wake_mac=row.get("wake_mac"),
+                # The NAME of the variable holding the key, never the key
+                # (§11.11). A row that omits it reads as "needs no key", which
+                # is how a local endpoint is configured.
+                api_key_env_var=row.get("api_key_env_var"),
             )
         )
         added += 1

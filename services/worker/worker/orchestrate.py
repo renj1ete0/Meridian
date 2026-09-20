@@ -76,12 +76,12 @@ __all__ = [
 #:
 #: `done` is absent because it is not work — it is the state of having finished.
 BUILT_BY: Final[dict[str, str]] = {
-    # `P4-04` gave these three somewhere to write. What they still lack is the
-    # call itself: something that hands a batch and a prompt to the agent
-    # `P4-07` routed to, and counts the tokens it spent (`P4-15`).
-    "pull": "`P4-15` — the batch a run reasons over is selected by the stage that uses it",
-    "extract": "`P4-15`'s model call; `add_edge` is ready for what it returns",
-    "tag": "`P4-15`'s model call; `tag_entity` is ready, and `P7-01` gates new attributes",
+    # Routing (`P4-07`), the call (`P4-15`) and the writes (`P4-04`) all exist.
+    # What is left for these three is their own middle: the prompt each one
+    # sends and the parse that turns an answer into arguments (`P4-16`).
+    "pull": "`P4-16` — the batch a run reasons over is chosen by the stage that reads it",
+    "extract": "`P4-16`'s prompt and parse; routing, the call and `add_edge` are ready",
+    "tag": "`P4-16`'s prompt and parse; `P7-01` still gates a new attribute",
     "score": "`P5-03`'s coverage scoring, which is schema-aware",
     "analogies": "`P7-04`'s analogical expansion",
     "gap": "`P5-04`'s gap analysis",

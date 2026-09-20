@@ -1,12 +1,20 @@
 # Agent registry defaults, seeded into the `agents` table at first boot
 # (spec §11.3). quality_tier is ordinal (1=local small ... 4=hosted frontier)
-# and distinct from cost_tier (spec §11.12). Fill in real endpoints/models
-# before first synthesis run; disabled rows are safe placeholders.
+# and distinct from cost_tier (spec §11.12).
+#
+# `api_key_env_var` is the NAME of the variable holding the key, never the key
+# (§11.11): the database is snapshotted off-device, and a credential stored
+# here would travel with every snapshot.
+#
+# Rows ship disabled. Set `enabled: true` once the key is in the environment —
+# and note that `local-llamacpp` still needs its model string filled in,
+# because which model a local server exposes is nobody else's business.
 
 agents:
   - agent_id: hosted-frontier
     provider: anthropic
-    model: "<fill in exact model string>"
+    model: claude-opus-5
+    api_key_env_var: ANTHROPIC_API_KEY
     task_types: [relation_extraction, gap_analysis, analogical_expansion, drafting]
     token_scope: read_write
     cost_tier: high
@@ -21,7 +29,8 @@ agents:
 
   - agent_id: hosted-mid
     provider: anthropic
-    model: "<fill in exact model string>"
+    model: claude-sonnet-5
+    api_key_env_var: ANTHROPIC_API_KEY
     task_types: [tag_attributes]
     token_scope: read_write
     cost_tier: medium

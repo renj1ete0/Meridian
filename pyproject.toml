@@ -1,12 +1,15 @@
 [project]
 name = "meridian"
-version = "0.101.0"
+version = "0.102.0"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
-    "meridian-core",
+    # `[agent]` here and not in the service packages: the development
+    # environment runs the whole suite, including the orchestrator's model
+    # client, while each image installs only its own package (`P4-15`).
+    "meridian-core[agent]",
     "meridian-worker",
     "meridian-api",
     "pyyaml>=6.0",

@@ -52,9 +52,10 @@ questions that needed a human.
 
 ## Python dependencies
 
-116 distributions in the default install. Every one resolves to a permissive
-licence: MIT, BSD (2- and 3-clause), Apache-2.0, ISC, PSF, MPL, or a
-combination of those.
+96 distributions in the default install, counted the way
+[`tests/unit/test_licences.py`](../tests/unit/test_licences.py) counts them.
+Every one resolves to a permissive licence: MIT, BSD (2- and 3-clause),
+Apache-2.0, ISC, PSF, MPL, or a combination of those.
 
 No GPL. No AGPL. No non-commercial terms.
 
@@ -66,6 +67,7 @@ licence:
 | `tld` | `MPL-1.1 OR GPL-2.0-only OR LGPL-2.1-or-later` | **A choice, and we take MPL-1.1.** Tri-licensed means the user picks; picking MPL-1.1 carries file-level copyleft on modifications to `tld` itself and no obligation on anything that imports it. We do not modify it. |
 | `certifi` | `MPL-2.0` | Fine. MPL-2.0 is file-level copyleft — obligations attach to modified MPL files, not to software that uses them. We ship it unmodified. |
 | `tqdm` | `MPL-2.0 AND MIT` | Same reading as `certifi`. |
+| `anthropic` | `MIT` | The model client (`P4-15`), behind the `agent` extra. MIT, and so is everything it pulls in that was not already here — `jiter`, `distro`, `httpx2`. Not installed in the worker image, which is how the fast loop is kept unable to call a model. |
 | `numpy` | `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0` | A bundle of permissive licences covering vendored components. Nothing restrictive. |
 
 `tld` is the only one that requires a decision rather than a reading, and the
