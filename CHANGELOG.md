@@ -214,6 +214,41 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.92.0] — 2026-09-20
+
+**Deciding whether two mentions are the same thing.**
+
+### Added
+
+- `P4-02` `meridian_core/resolution.py` — §5.5's pipeline as four functions:
+  normalise, block, score, decide
+- A guard that no `extra={...}` key shadows a `LogRecord` attribute, after this
+  task shipped one that did
+
+### What it refuses to do
+
+- **Never merges across node types**, enforced in `block` so a caller cannot
+  forget it
+- **Decides, does not act.** `merge` is `P4-03`; §16 calls bad merges harder to
+  detect than duplicates, so scoring and writing stay separately arguable
+- **The middle band is narrow on purpose.** A wide one is a queue nobody reads
+
+### Two choices worth stating
+
+- **Context is weighted heaviest**, because §5.5 gives the reason: "Cambridge"
+  the city and "Cambridge" the university share every character and no
+  neighbours. Before edges exist, the neighbourhood is each entity's chunks
+- **Absent signals are dropped and the weights renormalised**, not scored as
+  zero — otherwise an entity with no embedding could never merge however
+  exactly its name matched
+
+### Fixed
+
+- `extra={"name": ...}` raises rather than dropping the key, and only once
+  logging is configured — so it passed in isolation and failed in the suite.
+  The handover has carried this trap since a scheduler died on it; now a test
+  enforces it repo-wide
+
 ## [0.91.0] — 2026-09-20
 
 **The graph store is in the image.**

@@ -721,7 +721,23 @@ deploy runbook whose first two commands could not work (`B-17`).
       and a reconciliation story when they disagree — cheap now, expensive
       after fifty thousand edges, and not a call to make inside a migration.
       Nothing writes to the graph yet
-- [ ] `P4-02` Entity resolution: normalise → block → score → three-band decision
+- [~] `P4-02` Entity resolution: normalise → block → score → three-band
+      decision — `v0.92.0`. §5.5's four steps as four functions, each testable
+      alone. **Decides and does not act**: `merge` is `P4-03`, because §16 calls
+      bad merges harder to detect than duplicates and a change to a threshold
+      should not be a change to a function that rewrites rows. **Never across
+      node types**, enforced in `block` rather than left to callers — an
+      organisation and a place sharing a name are two things and no score
+      should overturn that. **Context is weighted heaviest** because §5.5 says
+      so: "Cambridge" the city and "Cambridge" the university share every
+      character and no neighbours, and before edges exist the neighbourhood is
+      the set of chunks each was drawn from. **Absent signals are dropped and
+      the weights renormalised**, not counted as zero, or a corpus that has not
+      finished embedding could resolve nothing. Token-set plus `difflib`
+      rather than a new dependency: both are hard to get subtly wrong, and a
+      subtle bug here is a silent bad merge. **Outstanding**: nothing calls it
+      yet — the write path is `P4-04`, and the middle band's queue lands as a
+      `merge_adjudication` notification once there is a run to raise it in
 - [ ] `P4-03` Merge reversibility: redirects, `merged_from`, merge log
 - [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`
 - [x] `P4-05` `validation.py` — server-side guards, node existence, domain

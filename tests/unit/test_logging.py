@@ -124,3 +124,75 @@ def test_invalid_level_fails_loudly() -> None:
     """A typo'd level must not silently fall back and hide records."""
     with pytest.raises(RuntimeError):
         configure_logging("test-service", level="LOUD")
+
+
+# --------------------------------------------------------------------------
+# `extra` keys that shadow a LogRecord attribute (task `P4-02`)
+# --------------------------------------------------------------------------
+#
+# `logging` refuses to let an `extra` key shadow a `LogRecord` attribute, and
+# it **raises** rather than dropping the key — so the offending line takes down
+# whatever called it. The handover has carried this since a scheduler died on
+# `extra={"module": ...}`, and carrying it was not enough: `P4-02` shipped
+# `extra={"name": ...}`, which passed every test run in isolation and failed
+# the moment the suite configured logging.
+#
+# That is the shape worth guarding. The failure is invisible until logging is
+# set up, which is exactly when it is least convenient, so this greps the
+# source instead of waiting for a code path to be exercised.
+
+import ast as _ast
+import pathlib as _pathlib
+
+#: Every attribute `logging.LogRecord.__init__` sets. Derived from a real
+#: record rather than typed out, so a new attribute in a future Python is
+#: covered without anyone remembering this test exists.
+RESERVED = frozenset(
+    vars(
+        logging.LogRecord(
+            name="n", level=20, pathname="p", lineno=1, msg="m", args=(), exc_info=None
+        )
+    )
+) | {"message", "asctime"}
+
+SOURCE_ROOTS = ("packages", "services", "scripts", "migrations")
+
+
+def _extra_keys(tree: _ast.AST):
+    """Every literal key passed as `extra={...}` anywhere in a module."""
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Call):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg != "extra" or not isinstance(keyword.value, _ast.Dict):
+                continue
+            for key in keyword.value.keys:
+                if isinstance(key, _ast.Constant) and isinstance(key.value, str):
+                    yield key.value, node.lineno
+
+
+def test_the_reserved_set_was_actually_derived() -> None:
+    """Guard on the derivation. An empty set would make the sweep below pass
+    over everything."""
+    assert {"name", "module", "args", "levelname", "lineno"} <= RESERVED
+
+
+def test_no_log_call_shadows_a_logrecord_attribute() -> None:
+    """A shadowed key is not dropped — it raises, on the line that logs it.
+
+    Prefix them: `entity_name`, not `name`; `job_module`, not `module`.
+    """
+    repo = _pathlib.Path(__file__).resolve().parents[2]
+    offences: list[str] = []
+
+    for root in SOURCE_ROOTS:
+        for path in (repo / root).rglob("*.py"):
+            tree = _ast.parse(path.read_text(errors="ignore"), filename=str(path))
+            for key, line in _extra_keys(tree):
+                if key in RESERVED:
+                    offences.append(f"{path.relative_to(repo)}:{line} extra={{{key!r}: ...}}")
+
+    assert not offences, (
+        "these `extra` keys shadow a LogRecord attribute and will raise when "
+        f"the line is reached with logging configured: {offences}"
+    )
