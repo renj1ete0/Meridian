@@ -259,8 +259,19 @@ services:
       resources:
         limits: { memory: 4G }
 
+  # Phase 4, and `services/orchestrator/Dockerfile` does not exist yet.
+  #
+  # **Profile-gated for that reason alone.** Compose does not skip a service
+  # whose Dockerfile is missing — it fails the whole command with an `lstat ...
+  # no such file or directory`, so an unprofiled orchestrator meant
+  # `docker compose up -d` could not bring up the stack at all. The same shape
+  # as `web`, which had no Dockerfile either until `B-05` wrote one.
+  #
+  # Remove the profile when the image exists; `tests/unit/test_compose_
+  # topology.py` will start requiring it at that point rather than allowing it.
   orchestrator:
     <<: *common
+    profiles: [phase4]
     build: { context: ., dockerfile: services/orchestrator/Dockerfile }
     env_file: .env
     # `network_mode` and `networks` are mutually exclusive and compose refuses a
@@ -283,7 +294,12 @@ services:
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures:ro
-    ports: ["127.0.0.1:21114:8000"]  # loopback only; cloudflared fronts it
+    # No `ports:`. There was one — `127.0.0.1:21114:8000`, commented "loopback
+    # only" — and it published nothing: a container on an `internal: true`
+    # network has no gateway for the host to forward to, so the line was inert
+    # rather than an error (`B-18`). Worse than useless, because it told the
+    # next person to curl 21114 on the server and conclude the API was down.
+    # `cloudflared` sits on `internal` and proxies inward; that is the door.
 
   web:
     <<: *common

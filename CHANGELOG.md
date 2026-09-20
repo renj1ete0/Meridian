@@ -214,6 +214,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.78.2] — 2026-09-20
+
+### Fixed
+
+- `B-18` `docker compose up -d` could not bring up the production stack.
+  `orchestrator` is phase 4 and its Dockerfile does not exist, and **compose
+  does not skip a service it cannot build** — it fails the whole command with
+  `lstat ...: no such file or directory`. Profile-gated until the image exists
+- The same shape as `web`, which had no Dockerfile either until `B-05`. That
+  one was written; this one has nothing to write yet
+- `api` no longer publishes `127.0.0.1:21114:8000`. A container attached only to
+  an `internal: true` network has no gateway for the host to forward to, so the
+  line published nothing and was not an error — under a comment calling it
+  "loopback only", which is worse than no line at all
+
+### Generalised rather than patched
+
+- Every non-profiled service must build from a Dockerfile that exists. This is
+  the second time a missing image has stopped the stack coming up
+- Nothing may publish a port when every network it is on is internal
+- Both checked by reintroducing the defect and watching them fail
+
 ## [0.78.1] — 2026-09-20
 
 ### Fixed

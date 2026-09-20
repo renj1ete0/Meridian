@@ -360,8 +360,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       tag is for — scaffold §5 pins the SHA in compose so a bad build does not
       roll out on restart and rollback is a one-line edit, and a tag naming a
       commit whose code is not what was built is discovered to be wrong while
-      rolling back. `orchestrator` and `web` have no Dockerfile yet and are
-      skipped *loudly*; a drift test checks the image list against the services
+      rolling back. `orchestrator` has no Dockerfile yet (`web` gained one in
+      `B-05`) and is skipped *loudly*; a drift test checks the image list against the services
       compose actually builds, since one added there and not here never gets
       built for arm64 and fails on the Pi days later
 - [x] `P1-27` **Per-domain `render_js` learning** — `v0.70.0`. Built before
@@ -1031,6 +1031,19 @@ Things worth doing that don't belong to a phase yet.
       never installs `uv`, and `postgres` resolves only inside the compose
       network. New test walks every `docker compose run` in the deploy docs and
       checks the named service's Dockerfile actually carries what is invoked
+- [x] `B-18` Fix: `docker compose up -d` could not bring up the production
+      stack — `v0.78.2`. `orchestrator` is phase 4 and its Dockerfile does not
+      exist, and **compose does not skip a service it cannot build**: it fails
+      the whole command with `lstat ...: no such file or directory`. The same
+      shape as `web`, which had no Dockerfile either until `B-05`; that one was
+      written, this one profile-gated until the image exists. Also removed
+      `api`'s `ports: 127.0.0.1:21114:8000`, which published nothing — a
+      container attached only to an `internal: true` network has no gateway for
+      the host to forward to, so the line was inert under a comment promising a
+      port to curl. Both generalised rather than patched: every non-profiled
+      service must build from a Dockerfile that exists, and nothing may publish
+      a port on networks that are all internal. Each verified by reintroducing
+      the bug
 - [ ] `B-15` **Nothing starts the scheduler.** `P5-06` is ticked and its code
       runs, but no compose file has ever started `python -m worker.scheduler` —
       so `seed.py`'s five `scheduled_jobs` rows, all `enabled`, all with

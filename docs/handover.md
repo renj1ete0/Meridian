@@ -823,6 +823,29 @@ than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
 
+### Compose does not skip a service it cannot build
+
+It fails the whole command. A `build:` pointing at a Dockerfile nobody has
+written gives `lstat ...: no such file or directory` and nothing starts — so
+`web` before `B-05`, and `orchestrator` until `B-18`, each meant
+`docker compose up -d` could not bring up the production stack at all.
+
+The fix for a service that genuinely does not exist yet is `profiles:`, not
+silence: `up` ignores a profiled service, and naming the profile says out loud
+that this is declared ahead of its image. `orchestrator` carries `phase4` for
+exactly as long as `services/orchestrator/Dockerfile` is missing.
+
+The neighbouring one, found at the same time: `ports:` on a service attached
+only to `internal: true` networks publishes **nothing**, and is not an error.
+`api` carried `127.0.0.1:21114:8000` with a comment calling it loopback-only,
+which is worse than having no line at all — it tells the next person to curl
+21114 on the server and read the silence as an API that is down. Verified
+directly rather than assumed: a container on an internal-only network with a
+published port refuses the connection.
+
+Both are asserted now, over every compose file rather than the two services
+that happened to be wrong.
+
 ### The first two commands in the deploy runbook could not work
 
 `docs/setup.md` and `docs/deployment.md` both said

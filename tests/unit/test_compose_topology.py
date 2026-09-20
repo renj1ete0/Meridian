@@ -389,3 +389,83 @@ def test_a_stack_that_runs_the_embedder_tells_its_clients_where_it_is(
         f"searches there will silently report having no embedder"
     )
 
+
+
+# --------------------------------------------------------------------------
+# Compose fails on what it cannot build, and publishes nothing it cannot reach
+# --------------------------------------------------------------------------
+#
+# Two defects of the same shape, both found by trying to bring a stack up
+# rather than by reading the file (`B-05`, `B-18`).
+#
+# `web` and then `orchestrator` carried `build:` pointing at a Dockerfile
+# nobody had written. Compose does not skip those — it fails the whole command
+# with `lstat ...: no such file or directory` — so the production stack could
+# not be brought up at all, and had not been.
+#
+# And `api` published `127.0.0.1:21114:8000` while attached only to an
+# `internal: true` network, which has no gateway for the host to forward to.
+# That is not an error either. It is a port that silently does not exist,
+# under a comment promising it does.
+
+
+def _build_dockerfile(service: dict) -> pathlib.Path | None:
+    spec = service.get("build")
+    if isinstance(spec, dict):
+        named = spec.get("dockerfile")
+        if named:
+            return REPO / str(named)
+        return REPO / str(spec.get("context", ".")) / "Dockerfile"
+    if isinstance(spec, str):
+        return REPO / spec / "Dockerfile"
+    return None
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_every_service_up_starts_can_actually_be_built(path: pathlib.Path) -> None:
+    """A missing Dockerfile is not a skipped service, it is a failed `up`.
+
+    Profile-gated services are exempt because `up` does not start them — that
+    is how something can be declared before it is built, which is the whole
+    reason `orchestrator` is allowed to sit here with no image.
+    """
+    services = yaml.safe_load(path.read_text()).get("services") or {}
+
+    missing = {
+        name: str(dockerfile.relative_to(REPO))
+        for name, service in services.items()
+        if isinstance(service, dict) and not service.get("profiles")
+        and (dockerfile := _build_dockerfile(service)) is not None
+        and not dockerfile.exists()
+    }
+
+    assert not missing, (
+        f"{path.name}: `docker compose up` would fail on {missing} — compose "
+        f"does not skip a service whose Dockerfile is absent. Profile-gate it "
+        f"until the image exists"
+    )
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_nothing_publishes_a_port_it_cannot_publish(path: pathlib.Path) -> None:
+    """`ports:` on a service attached only to `internal: true` networks does
+    nothing at all, and says the opposite."""
+    doc = yaml.safe_load(path.read_text())
+    services = doc.get("services") or {}
+    networks = doc.get("networks") or {}
+
+    inert = {}
+    for name, service in services.items():
+        if not isinstance(service, dict) or not service.get("ports"):
+            continue
+        attached = service.get("networks") or []
+        # No `networks:` at all means the default bridge, which is routable.
+        if attached and not any(
+            not (networks.get(n) or {}).get("internal") for n in attached
+        ):
+            inert[name] = service["ports"]
+
+    assert not inert, (
+        f"{path.name}: {inert} — every network these are on is `internal: "
+        f"true`, so Docker installs no gateway and the published port is inert"
+    )
