@@ -453,6 +453,35 @@ carries that list, and it is the checklist for the first deploy.
       tell the corpus holds three hundred nobody looked at. The control says so
       once, while narrowing. Filtering re-runs the search rather than filtering
       results in place, because fusion ranks a candidate pool
+- [ ] `P2-20` **Age-aware ranking, by document kind rather than globally.**
+      §9 already says ageing is *topic*-dependent — "a 2014 finding on AV public
+      acceptance is near-worthless, while a 2014 finding on pedestrian thermal
+      comfort remains sound" — and the same is true across `source_tier`: press
+      and informal rot in months, `peer_reviewed` often does not rot at all.
+      Today `publication_date` is a filter (`published_after`/`_before`) and
+      nothing else; nothing in ranking knows how old a document is.
+      **A single "newer is better" multiplier is the wrong shape** and is the
+      thing to avoid: it buries the foundational papers, which for an academic
+      corpus is the failure that matters. Use a **half-life per source tier**,
+      overridable per topic, applied as a decay on the fused RRF score rather
+      than as a filter. `peer_reviewed` gets a very long or infinite half-life;
+      `press` and `informal` a short one; `government` and `institutional` in
+      between, since a policy page supersedes rather than ages.
+      **An undated document must not be treated as either old or new.** Around a
+      third of crawled pages have no extractable date, and whichever default is
+      picked is wrong for the other kind — decay applies only where a date
+      exists, and the result says so, exactly as the UI already prints "no date"
+      rather than a blank.
+      **Show the adjustment.** A result silently demoted is a result the reader
+      cannot audit, which is the opposite of what this corpus is for: the hit
+      carries its age and the decay applied, the way it already carries tier and
+      rank.
+      Second half, separable: the same table feeds **crawl priority**
+      (`tiering.priority_for_tier`). A news seed is worth fetching sooner than a
+      paper because it rots sooner and because the page will be gone; a paper is
+      worth fetching *at all* long after. Related: `P7-06` flags stale
+      dimensions in gap analysis and should read the same half-lives rather than
+      inventing a second set
 - [ ] `P2-15` **Benchmark embedding models against each other.**
       `scripts/benchmark_search.py` measures the index and the methods over
       whatever vectors are in the corpus; comparing bge-m3 against an
