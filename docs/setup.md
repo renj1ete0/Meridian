@@ -391,6 +391,23 @@ embedder"* is a choice, and *"the embedding service did not answer"* is an
 outage. If you see the second, the sidecar is down — the search still works on
 one arm, which is why you would otherwise not notice.
 
+**Check the orchestrator is wired up before it can spend anything**
+(`P4-09`):
+
+```bash
+docker compose run --rm worker python -m worker.orchestrate --dry-run
+```
+
+It walks a whole synthesis cycle and prints what each stage would do, inside a
+transaction that is rolled back — so it writes nothing, including the run row
+itself. Today every stage reports which task builds it, which is the honest
+answer: the state machine, the resumability and the budget accounting are
+built, and the stages that reason over the corpus are not.
+
+Drop `--dry-run` and it records a real run. `--stop-after <stage>` stops part
+way and leaves the run resumable, so the next invocation continues rather than
+starting over.
+
 **Steer it from a phone** (`P5-07`, §13.3). Optional, and off unless both
 variables are set:
 

@@ -214,6 +214,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.99.0] — 2026-09-20
+
+**A cycle you can run without letting it write.**
+
+### Added
+
+- `P4-09`: `python -m worker.orchestrate`, with `--dry-run`, `--once`,
+  `--stop-after` and `--max-cycles`
+- A journal of what a cycle intended, printed whether or not it was applied
+
+### Why it is shaped this way
+
+- **`--dry-run` is a rolled-back transaction, not a promise.** A mode each
+  stage had to remember to honour is one a stage will forget, and the way that
+  is discovered is by a dry run leaving something behind. A stage added next
+  year by somebody who never read the module still writes nothing
+- **A cycle that changes nothing stops the loop.** Progress is the exit
+  condition, not emptiness — otherwise an orchestrator whose stages are unbuilt
+  finds work, fails to advance the mark, finds the same work, and spins. From
+  outside, a spinning process looks like a busy one
+- **`--stop-after` leaves the run unfinished on purpose**, so it stays
+  resumable and the next invocation continues rather than starting over
+- **A live run is reported, not fought over.** Raising would make a scheduled
+  job alert, which teaches you to ignore the channel
+- **The stages are named, not absent.** Each says which task builds it: "there
+  is no tagging stage" and "the tagging stage did nothing" are
+  indistinguishable in a log, and only one is true
+- **In the worker image rather than a new service.** An empty profiled service
+  costs a Dockerfile, a compose entry, a release line and a healthcheck for a
+  process with no stages to run; moving the module later is a rename
+
 ## [0.98.0] — 2026-09-20
 
 **A crash resumes at the stage it reached.**

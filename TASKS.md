@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.98.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2675 backend tests
+**`v0.99.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2698 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -877,7 +877,27 @@ deploy runbook whose first two commands could not work (`B-17`).
       go backwards — the stage is a claim about what has already committed, and
       redone work produces duplicates nothing can tell from the originals.
       Counters accumulate, for the reason `budget.py` gives
-- [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
+- [x] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
+      — `v0.99.0`. `python -m worker.orchestrate`, the thing that calls
+      `P4-08`'s state machine. **`--dry-run` is a rolled-back transaction, not
+      a promise**: a mode each stage had to remember to honour is one a stage
+      will forget, and the way that is found out is by a dry run leaving
+      something behind — so the guarantee holds for a stage whose author never
+      read the module. **A cycle that changes nothing stops the loop**; the
+      exit condition is progress, not emptiness, or an orchestrator with
+      unbuilt stages finds work, fails to advance the mark, and spins while
+      looking busy. `--stop-after` leaves the run unfinished deliberately so it
+      stays resumable, which is what makes stepping through one possible. A
+      live run is reported rather than fought over (§13.4 skips the cycle).
+      **Stages are named, not absent** — each says which task builds it, since
+      "there is no tagging stage" and "the tagging stage did nothing" are
+      indistinguishable in a log.
+      **In `worker/` rather than `services/orchestrator/`**: that service is
+      compose-gated behind `phase4` because its Dockerfile does not exist, and
+      creating it now means a Dockerfile, a compose entry, a release line and a
+      healthcheck for a process with no stages. Moving the module later is a
+      rename. No timetable row either — a scheduled job that does nothing is
+      the shape `B-15` found five of
 - [x] `P4-10` `budget.py` — per-run token and seed caps, cost logging, monthly
       ceiling — `v0.81.0`. `budget_config` is a **single row the database
       enforces**, because a settings table that can hold two eventually does and
