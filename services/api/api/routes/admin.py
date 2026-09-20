@@ -31,9 +31,16 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
 from meridian_core import annotations, steering
+from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
-from meridian_core.models import FetchPolicy, GazetteerTerm, SavedView, SteeringLog
+from meridian_core.models import (
+    BudgetConfig,
+    FetchPolicy,
+    GazetteerTerm,
+    SavedView,
+    SteeringLog,
+)
 from meridian_core.policy import (
     GLOBAL_DOMAIN,
     ResolvedPolicy,
@@ -42,6 +49,8 @@ from meridian_core.policy import (
     merge_layers,
 )
 from meridian_core.schemas.admin import (
+    BudgetEdit,
+    BudgetRead,
     FetchPolicyEdit,
     FetchPolicyPage,
     FetchPolicyRowRead,
@@ -541,9 +550,9 @@ async def list_fetch_policy(
 
     found = list(
         await sess.scalars(
-            statement.order_by(
-                (FetchPolicy.status != "blocked"), FetchPolicy.domain
-            ).limit(limit + 1).offset(offset)
+            statement.order_by((FetchPolicy.status != "blocked"), FetchPolicy.domain)
+            .limit(limit + 1)
+            .offset(offset)
         )
     )
 
@@ -860,3 +869,92 @@ async def rewrite_annotation(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return (await annotations.hydrate(sess, [note]))[0]
+
+
+# ---------------------------------------------------------------------------
+# The budget (tasks `P4-10`, `P4-13`, §16)
+# ---------------------------------------------------------------------------
+#
+# §16's mitigation for the seed→ingest→cost loop is "caps set before first
+# autonomous run", and `check_can_start_run` refuses without them. That refusal
+# is only fair if there is somewhere to set them, and this is it.
+#
+# **Nothing seeds a default budget**, deliberately. `config/*.yaml` seeds topics
+# and fetch policy at first boot because a sensible default is better than an
+# empty table; a sensible default *cap* is the opposite, because it would mean
+# every install starts with limits nobody chose and the ordering requirement
+# §16 states would be satisfied by accident. A fresh install has no budget and
+# the first run says so.
+
+
+async def _budget_read(sess: WriteSession) -> BudgetRead:
+    """One shape for both handlers, so a GET after a PUT cannot disagree."""
+    row = await sess.get(BudgetConfig, BUDGET_ID)
+    budget = await load_budget(sess)
+    spent = await month_to_date_cost(sess)
+
+    ready = False
+    if budget is not None and budget.is_complete:
+        ceiling = budget.monthly_cost_ceiling_usd
+        ready = ceiling is not None and spent < ceiling
+
+    return BudgetRead(
+        max_tokens_per_run=budget.max_tokens_per_run if budget else None,
+        max_seeds_per_run=budget.max_seeds_per_run if budget else None,
+        monthly_cost_ceiling_usd=budget.monthly_cost_ceiling_usd if budget else None,
+        month_to_date_usd=round(spent, 4),
+        ready=ready,
+        missing=list(budget.missing) if budget else sorted(CAP_FIELDS),
+        updated_at=row.updated_at if row else None,
+        updated_by=row.updated_by if row else None,
+    )
+
+
+#: The three caps, named once. Used for "everything is missing" when there is no
+#: row at all, which is a different state from a row with nulls in it.
+CAP_FIELDS = frozenset(BudgetEdit.model_fields)
+
+
+@router.get("/budget", response_model=BudgetRead)
+async def read_budget(_: AdminAllowed, sess: WriteSession) -> BudgetRead:
+    """The caps, the month's spend, and whether a run could start right now."""
+    return await _budget_read(sess)
+
+
+@router.put("/budget", response_model=BudgetRead)
+async def set_budget(edit: BudgetEdit, _: AdminAllowed, sess: WriteSession) -> BudgetRead:
+    """Set or change the caps.
+
+    `PUT` rather than `PATCH` on a singleton, and still a partial update: there
+    is exactly one budget, so there is no collection to create into and no id to
+    choose. Omitted fields are left alone; an explicit `null` clears a cap,
+    which un-configures it and stops runs starting. Both have to be expressible
+    — a cap set by mistake must be removable — and `exclude_unset` is what keeps
+    them apart.
+
+    The row is created on first write, which is why a fresh install has none.
+    """
+    changes = edit.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=422, detail="No fields to change.")
+
+    row = await sess.get(BudgetConfig, BUDGET_ID)
+    if row is None:
+        row = BudgetConfig(budget_id=BUDGET_ID)
+        sess.add(row)
+
+    for field, value in changes.items():
+        setattr(row, field, value)
+    row.updated_at = _now()
+    row.updated_by = ACTOR
+
+    await sess.commit()
+    await sess.refresh(row)
+    log.info(
+        "budget changed",
+        extra={
+            "fields": sorted(changes),
+            "cleared": sorted(k for k, v in changes.items() if v is None),
+        },
+    )
+    return await _budget_read(sess)

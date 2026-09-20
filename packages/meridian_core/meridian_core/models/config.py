@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Float, Index, Integer, Text, func, text
+from sqlalchemy import CheckConstraint, DateTime, Float, Index, Integer, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -218,6 +218,70 @@ class AgentToken(Base, TimestampMixin):
 
 
 JOB_STATUS = constrained("ok", "failed", "timeout", name="job_run_status")
+
+
+class BudgetConfig(Base, TimestampMixin):
+    """The caps, and the fact that somebody set them (task `P4-10`, §16, §11.9).
+
+    §16 lists runaway cost from the seed→ingest→cost feedback loop as
+    *"manageable if caps are set before first autonomous run"* — a mitigation
+    with an ordering requirement in it, and nothing enforced the ordering. This
+    table is what "set" means, and `P4-13` is what refuses to start without it.
+
+    **One row, enforced by the database.** A settings table that can hold two
+    rows eventually holds two rows, and then "the budget" is whichever one the
+    query happened to order first. The CHECK makes the second insert an error
+    rather than a silent ambiguity, and makes `SELECT ... WHERE budget_id = 1`
+    the only access pattern anyone can write.
+
+    **Nullable caps mean unconfigured, not unlimited.** `reserve_seeds` already
+    refuses a `None` cap for that reason, and the columns carry it through: a
+    budget row that exists but leaves `max_seeds_per_run` empty has not been
+    configured for seeds, and the run does not start. "Nobody decided" must
+    never read as "no limit", because that is the shape in which a missing
+    config becomes a bill.
+    """
+
+    __tablename__ = "budget_config"
+
+    #: Always 1. The CHECK below is what makes that true rather than customary.
+    budget_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+
+    #: Per run. Both are the caps §11.9 names, and both are refused when unset.
+    max_tokens_per_run: Mapped[int | None] = mapped_column(Integer)
+    max_seeds_per_run: Mapped[int | None] = mapped_column(Integer)
+
+    #: Across the calendar month, in USD. The ceiling the trend alerting in
+    #: §11.9 is measured against — and the one a single run cannot exceed by
+    #: itself, because a run is checked against the remainder before it starts.
+    monthly_cost_ceiling_usd: Mapped[float | None] = mapped_column(Float)
+
+    #: Who last changed it, for the same reason `steering_log` exists: a cap
+    #: that moved is a decision, and decisions should be attributable.
+    updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_by: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("budget_id = 1", name="single_row"),
+        CheckConstraint(
+            "max_tokens_per_run IS NULL OR max_tokens_per_run > 0",
+            name="tokens_positive",
+        ),
+        CheckConstraint(
+            "max_seeds_per_run IS NULL OR max_seeds_per_run > 0",
+            name="seeds_positive",
+        ),
+        CheckConstraint(
+            "monthly_cost_ceiling_usd IS NULL OR monthly_cost_ceiling_usd > 0",
+            name="ceiling_positive",
+        ),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            f"<BudgetConfig tokens={self.max_tokens_per_run} "
+            f"seeds={self.max_seeds_per_run} ceiling={self.monthly_cost_ceiling_usd}>"
+        )
 
 
 class ScheduledJob(Base, TimestampMixin):

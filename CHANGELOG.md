@@ -214,6 +214,39 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.81.0] — 2026-09-20
+
+**Caps, so the first autonomous run cannot be the first invoice.**
+
+### Added
+
+- `P4-10` `meridian_core/budget.py` and the `budget_config` table: per-run token
+  and seed caps, cost accumulation, and a monthly ceiling
+- `reserve_tokens`, the same shape as `reserve_seeds` — all-or-nothing, locked
+  with `FOR UPDATE` so two concurrent tool calls cannot both fit under one cap,
+  and returning the remainder so a caller can stop before it is refused
+- `GET`/`PUT /api/admin/budget`
+
+### Absent is refused, never unlimited
+
+- Every cap is nullable and null means *unconfigured*. A default of infinity is
+  the shape in which forgetting to configure something becomes a bill, and the
+  loop §11.9 describes is unattended — the first signal would be the invoice
+- Nothing seeds a default budget. `config/*.yaml` seeds topics and fetch policy
+  because a sensible default beats an empty table; a sensible default *cap*
+  would satisfy §16's ordering requirement by accident
+
+### Three decisions worth stating
+
+- **One row, enforced by a CHECK.** A settings table that can hold two rows
+  eventually does, and then "the budget" is whichever the query ordered first
+- **Cost accumulates rather than being assigned.** A run makes many calls; a
+  setter would record whichever wrote last, and the per-run figure §11.9
+  compares week on week would mean different things in different runs
+- **The calendar month, in UTC, measured on `started_at`.** A ceiling set from a
+  monthly invoice should reset when the invoice does, and a run spanning the 1st
+  must not be invisible to it while it keeps spending
+
 ## [0.80.0] — 2026-09-20
 
 **The scheduler can be supervised.**

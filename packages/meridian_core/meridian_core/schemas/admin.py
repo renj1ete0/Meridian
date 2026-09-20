@@ -229,3 +229,56 @@ class FetchPolicyEdit(BaseModel):
     #: crawl touches. Not a dialog — a dialog is a client's promise, and this is
     #: the one edit on this surface whose blast radius is the whole crawl.
     confirm: bool = False
+
+
+# ---------------------------------------------------------------------------
+# The budget (tasks `P4-10`, `P4-13`, §16)
+# ---------------------------------------------------------------------------
+
+
+class BudgetRead(BaseModel):
+    """The caps, what the month has spent, and whether a run may start.
+
+    `ready` is published rather than left to the client to derive. The rule is
+    "every cap set, and the month not already at its ceiling", and a screen that
+    recomputed it would eventually disagree with the server that actually
+    refuses the run — which is the worst version of this, because the UI would
+    show a green light for a run that cannot start.
+    """
+
+    max_tokens_per_run: int | None = None
+    max_seeds_per_run: int | None = None
+    monthly_cost_ceiling_usd: float | None = None
+
+    #: Spent so far this calendar month, in USD, across every run that started
+    #: in it — including one still running.
+    month_to_date_usd: float
+
+    #: Whether `check_can_start_run` would allow a run right now.
+    ready: bool
+
+    #: Which caps are unset, so the screen can mark the fields rather than
+    #: showing one message about the form as a whole. Empty when all are set.
+    missing: list[str] = Field(default_factory=list)
+
+    updated_at: dt.datetime | None = None
+    updated_by: str | None = None
+
+
+class BudgetEdit(BaseModel):
+    """Set or change the caps. Every field optional; omitted means "leave it".
+
+    **Null is a meaningful value here and is not the same as omitted.** Sending
+    `null` clears a cap, which un-configures it and stops runs starting — so it
+    has to be possible (a cap set by mistake must be removable) and it has to be
+    distinguishable from "I did not mention this field". `exclude_unset` on the
+    caller's side is what tells the two apart.
+
+    The bounds are duplicated from the table's CHECKs on purpose: a 422 naming
+    the field is a better answer than a 500 carrying an `IntegrityError`, and
+    the CHECK is still what makes it true.
+    """
+
+    max_tokens_per_run: int | None = Field(default=None, gt=0)
+    max_seeds_per_run: int | None = Field(default=None, gt=0)
+    monthly_cost_ceiling_usd: float | None = Field(default=None, gt=0)

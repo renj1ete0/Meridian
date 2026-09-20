@@ -703,7 +703,21 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `P4-07` Agent registry, task-type routing, fallback chains
 - [ ] `P4-08` Orchestrator run state machine + `runs` table resumability
 - [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
-- [ ] `P4-10` `budget.py` — per-run token and seed caps, cost logging, monthly ceiling
+- [x] `P4-10` `budget.py` — per-run token and seed caps, cost logging, monthly
+      ceiling — `v0.81.0`. `budget_config` is a **single row the database
+      enforces**, because a settings table that can hold two eventually does and
+      then "the budget" is whichever one the query ordered first. Every cap is
+      nullable and **null means unconfigured, not unlimited** — the same
+      position `reserve_seeds` already took, now with somewhere for the caps to
+      come from. `reserve_tokens` mirrors it: all-or-nothing, `FOR UPDATE` so
+      two concurrent tool calls cannot both fit under one cap, and it returns
+      the remainder so a caller can stop before it is refused. Cost accumulates
+      rather than being assigned, or the per-run figure §11.9 compares week on
+      week would mean "the last call" in some runs and "all of them" in others.
+      The ceiling is the **calendar month in UTC**, measured on `started_at` so
+      a run spanning the 1st is not invisible while it keeps spending. Admin
+      gets `GET`/`PUT /api/admin/budget`, since a refusal that points at a
+      screen needs the screen to exist
 - [ ] `P4-11` High-water mark advances only after writes commit
 
 ## Phase 5 · Autonomy
