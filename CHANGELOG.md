@@ -214,6 +214,38 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.98.0] — 2026-09-20
+
+**A crash resumes at the stage it reached.**
+
+### Added
+
+- `P4-08`: `meridian_core/runs.py` — `begin_or_resume`, `advance`, `mark`,
+  `record`, `beat`, `defer`, `fail`, `finish`
+- `runs.heartbeat_at`, and two unique partial indexes that permit at most one
+  unfinished run
+
+### Why it is shaped this way
+
+- **At most one unfinished run, enforced by the database.** Two orchestrators
+  on one corpus means double spend against the monthly ceiling and two sets of
+  writes racing the same high-water mark. The application checks first, but a
+  check is a race and an index is not
+- **A heartbeat, because a crashed run and a live one look identical.** Both
+  are `status="running"` with a stage. Without something that decays, a resume
+  either never happens or happens alongside the run it was replacing. NULL
+  reads as stale — a run that died before its first step is the one that most
+  needs taking over
+- **Deferred is not failed.** An unreachable provider defers; the stage is kept
+  and the next cycle continues from it, so an outage costs synthesis rather
+  than the day's crawl
+- **Stages only move forward and the mark never goes back.** The stage is a
+  claim about what has already been committed, so moving back redoes work that
+  is in the corpus — and the duplicates would be indistinguishable from the
+  originals. Refused rather than clamped: clamping hides the caller bug
+- **Counters accumulate.** A per-run cost figure that meant "the last stage" in
+  some runs and "all of them" in others would make the week-on-week trend noise
+
 ## [0.97.0] — 2026-09-20
 
 **The registry decides who does the work.**

@@ -38,6 +38,9 @@ class RunRead(BaseModel):
     tags_added: int
     seeds_emitted: int
     error: str | None
+    #: Exposed so a reader can tell a run that is working from one that died
+    #: holding the row — from outside, both are `status="running"`.
+    heartbeat_at: dt.datetime | None
 
 
 class EnrichmentItemCreate(CreateBase):

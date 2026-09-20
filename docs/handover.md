@@ -1106,6 +1106,39 @@ bot exists and is listening. If your own messages are being ignored, the
 unauthorised chat id is in the log — that is what it is logged for, because the
 likeliest cause is a `TELEGRAM_CHAT_ID` that is wrong rather than an intruder.
 
+### One unfinished run is an invariant, so a stuck run blocks every later one
+
+`P4-08` puts two unique partial indexes on `runs`: at most one row may be
+`running`, and at most one `deferred`. That is deliberate — two orchestrators
+on one corpus means double spend and two sets of writes racing the same
+high-water mark — but it has an operational consequence worth knowing before it
+is met at three in the morning.
+
+**A run that is stuck occupies the only slot.** Nothing else can start until
+either it finishes, or its `heartbeat_at` goes stale (30 minutes, `STALE_AFTER`)
+and the next wake takes it over. That window is not a delay anybody chose to
+wait through; it is long because a single stage can legitimately spend minutes
+on a frontier model, and a shorter one would hand a live run to a second
+process.
+
+To unblock deliberately, end the run rather than deleting it:
+
+```sql
+UPDATE runs SET status = 'failed', error = 'ended by hand', completed_at = now()
+ WHERE status IN ('running', 'deferred');
+```
+
+**`status='running'` does not mean anything is running.** It means a row was
+claimed. `heartbeat_at` is the column that says whether anybody is there, and
+it is NULL for a run that died before completing its first step — which reads
+as stale, on purpose.
+
+**Deferred is not failed.** A deferred run is waiting for the next cycle
+(§13.4: an unreachable provider should cost synthesis, not the crawl), keeps
+its stage, and is resumed rather than restarted. If synthesis seems to have
+stopped, `status` tells you which of the two it is and `stage` tells you how
+far it got.
+
 ### Fixing a config file does not fix a database that was already seeded
 
 `scripts/seed.py` skips a row that already exists. That is deliberate and worth

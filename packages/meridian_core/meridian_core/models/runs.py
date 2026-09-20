@@ -76,6 +76,39 @@ class Run(Base):
 
     error: Mapped[str | None] = mapped_column(Text)
 
+    #: Touched each time the orchestrator completes a step (`P4-08`). A crashed
+    #: run and a live one are both `status='running'` and otherwise identical
+    #: from outside; this is what separates them, and without it a resume would
+    #: either never happen or happen alongside the run it was meant to replace.
+    #:
+    #: NULL means "claimed but has not completed a step yet", which reads as
+    #: stale — a run that died before its first beat is exactly the one that
+    #: most needs taking over.
+    heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        # **At most one unfinished run, enforced by the database** (`P4-08`).
+        # Two orchestrators on one corpus means double spend and two sets of
+        # writes against the same high-water mark, and §11.9 is explicit that
+        # the first signal of runaway cost would be the bill. A unique index on
+        # `status` restricted to one value permits exactly one row holding it.
+        Index(
+            "ix_runs_one_running",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+        # The same for `deferred` (§13.4's "skip and retry next cycle"): a
+        # deferred run is resumable state, and two of them would mean the next
+        # wake had to choose which day's work to continue.
+        Index(
+            "ix_runs_one_deferred",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'deferred'"),
+        ),
+    )
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Run {self.run_id} {self.stage} {self.status}>"
 

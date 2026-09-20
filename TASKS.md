@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.97.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2636 backend tests
+**`v0.98.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2675 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -859,7 +859,24 @@ deploy runbook whose first two commands could not work (`B-17`).
       construction — `text[]` accepts anything and the symptom is an agent that
       is never chosen. The seed is insert-only, so the YAML fix does not reach
       an already-seeded database and a migration does
-- [ ] `P4-08` Orchestrator run state machine + `runs` table resumability
+- [x] `P4-08` Orchestrator run state machine + `runs` table resumability —
+      `v0.98.0`. §11.10's rejection of workflow frameworks, as a module that
+      moves one row. **Nothing here does the work**: which chunks a stage
+      reads and which model it asks are the stages' own business, which is
+      what lets every resumability rule be tested without a model, a corpus or
+      a stage that exists yet. **At most one unfinished run, enforced by two
+      unique partial indexes** — two orchestrators means double spend and two
+      sets of writes racing one high-water mark, and the application check that
+      precedes them is a race the index closes. **A heartbeat**, because a
+      crashed run and a live one are both `status='running'` with a stage and
+      nothing else separates them; NULL reads as stale, which is right for a
+      run that died before its first step and for every row written before the
+      column existed. **Deferred is not failed** (§13.4): the stage is kept and
+      the next cycle continues from it, so a provider outage costs synthesis
+      rather than the crawl. Stages move forward only and the mark refuses to
+      go backwards — the stage is a claim about what has already committed, and
+      redone work produces duplicates nothing can tell from the originals.
+      Counters accumulate, for the reason `budget.py` gives
 - [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
 - [x] `P4-10` `budget.py` — per-run token and seed caps, cost logging, monthly
       ceiling — `v0.81.0`. `budget_config` is a **single row the database
