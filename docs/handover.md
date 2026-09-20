@@ -918,7 +918,7 @@ services that would use it must be able to find it — and `test_fetchmodel.py`
 asserts the fetcher and the sidecar agree on the path, because two containers
 agreeing by coincidence is the version of this that looks like success.
 
-### Nothing starts the scheduler, so four of the six passes never run
+### Nothing starts the scheduler, so every scheduled job has never run
 
 `P5-06` is ticked, its code works, and no compose file has ever run `python -m
 worker.scheduler`. `seed.py` writes five `scheduled_jobs` rows — embed and
