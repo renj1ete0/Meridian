@@ -1106,6 +1106,29 @@ bot exists and is listening. If your own messages are being ignored, the
 unauthorised chat id is in the log — that is what it is logged for, because the
 likeliest cause is a `TELEGRAM_CHAT_ID` that is wrong rather than an intruder.
 
+### Fixing a config file does not fix a database that was already seeded
+
+`scripts/seed.py` skips a row that already exists. That is deliberate and worth
+keeping — re-seeding must not undo steering — but it means **editing
+`config/*.yaml` changes new installs only**. Every database seeded before the
+edit keeps the old value, and nothing that reads the YAML can tell.
+
+`P4-07` hit this. The agent registry declared `tagging` for a task everything
+else calls `tag_attributes`; `task_types` is `text[]`, so Postgres accepted it,
+routing matched on equality and the agent was simply never chosen. The visible
+symptom would have been the frontier model doing narrow work configured to go
+to a cheap one — a bill, not an error.
+
+The fix is two things, and only doing the first is the trap:
+
+1. correct the YAML, so new installs are right;
+2. **a migration**, so seeded databases are too.
+
+`tests/integration/test_routing.py` now asserts the rule against the `agents`
+table rather than against the file, which is the only version of that test that
+can tell the two apart. The same shape applies to `config/seed_sources.yaml`,
+`config/attributes.yaml` and the gazetteer.
+
 ### A container on an `internal: true` network cannot publish a port
 
 Docker installs no gateway on it, so there is nothing for the host to forward to

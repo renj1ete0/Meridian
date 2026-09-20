@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.96.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2603 backend tests
+**`v0.97.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2636 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -838,7 +838,27 @@ deploy runbook whose first two commands could not work (`B-17`).
       model to judge (`P4-07`). Until then a quarantine is lifted by a person,
       which is the correct failure — the alternative is admitting unscreened
       content because nothing was available to screen it
-- [ ] `P4-07` Agent registry, task-type routing, fallback chains
+- [x] `P4-07` Agent registry, task-type routing, fallback chains — `v0.97.0`.
+      The registry has existed since `P0-07` and nothing read it; this reads
+      it. **Nothing here calls a model** — routing answers "who", the caller
+      asks, and keeping them apart makes every rule testable against rows.
+      **The strongest agent is not the right agent**: §11.3 assigns each task a
+      profile, and `TARGET_TIER` encodes it, so attribute tagging goes to the
+      mid tier rather than spending frontier money on schema-constrained work
+      that would look fine either way. Ties go to the stronger agent, because
+      overshooting costs money and undershooting costs quality. **The stated
+      fallback is followed, then everything else that could do the task** — the
+      seeded chain points the mid tier at a model that does not declare
+      attribute tagging, so following `fallback_agent_id` alone would leave
+      that task with no fallback at all. A cycle ends the chain rather than
+      hanging the run. Disabled is never routed and an empty `task_types`
+      declares nothing, and the refusal separates "not seeded" from "never
+      filled in" from "nothing declares this task".
+      **Found and fixed on the way in**: the seeded registry named a task type
+      nothing routes (`tagging` for `tag_attributes`), which is invisible by
+      construction — `text[]` accepts anything and the symptom is an agent that
+      is never chosen. The seed is insert-only, so the YAML fix does not reach
+      an already-seeded database and a migration does
 - [ ] `P4-08` Orchestrator run state machine + `runs` table resumability
 - [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)
 - [x] `P4-10` `budget.py` — per-run token and seed caps, cost logging, monthly

@@ -214,6 +214,43 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.97.0] — 2026-09-20
+
+**The registry decides who does the work.**
+
+### Added
+
+- `P4-07`: `meridian_core/routing.py` — `route`, `chain_for`, `resolve_chain`,
+  and `TARGET_TIER`, the tier each task is aimed at
+- A migration repairing one task type in an already-seeded `agents` table
+
+### Fixed
+
+- **A registry row named a task type nothing routes.** The local tier declared
+  `tagging` where every other row and every caller said `tag_attributes`.
+  `task_types` is `text[]`, so nothing raised — the agent was simply never
+  chosen, and narrow schema-constrained work would have gone to the frontier
+  model at frontier prices on every run
+
+### Why it is shaped this way
+
+- **The strongest agent is not the right agent.** §11.3 assigns each task a
+  profile, not a maximum: mid-tier for attribute tagging, "any multilingual"
+  for translation. Routing by raw quality would spend frontier money on work
+  the table explicitly sends elsewhere, and the output would look fine
+- **Ties go to the stronger agent.** Overshooting costs money and undershooting
+  costs quality, and bad output is the harder failure to detect
+- **The stated fallback is followed, then everything else that could.** The
+  seeded chain points the mid tier at a model that does not declare attribute
+  tagging, so following `fallback_agent_id` alone leaves that task with no
+  fallback while a capable agent sits unused
+- **A cycle ends the chain instead of hanging the run.** Nothing stops
+  A → B → A in a plain column, and a hung run looks exactly like a slow one
+- **Disabled is never routed and an empty `task_types` declares nothing** — the
+  same position `budget.py` and `trust.py` take. Every install starts as
+  placeholder rows, so the refusal distinguishes "not seeded" from "never
+  filled in" from "nothing declares this task"
+
 ## [0.96.0] — 2026-09-20
 
 **The bot takes orders, from exactly one chat.**

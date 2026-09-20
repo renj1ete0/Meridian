@@ -37,7 +37,7 @@ agents:
   - agent_id: local-llamacpp
     provider: openai_compatible
     model: "<fill in — dedicated Meridian process, not the interactive one>"
-    task_types: [tagging, translation, triage, extraction_fallback]
+    task_types: [tag_attributes, translation, triage, extraction_fallback]
     token_scope: read_write
     cost_tier: free
     quality_tier: 2
