@@ -73,6 +73,21 @@ class SearchHitRead(BaseModel):
     lexical_rank: int | None
     vector_rank: int | None
 
+    #: How old the document is, and what that did to its score (`P2-20`).
+    #:
+    #: Published rather than applied silently. A result quietly demoted is one
+    #: the reader cannot audit, which is the opposite of what this corpus is
+    #: for — so the hit carries its age and its factor the way it already
+    #: carries its tier and its per-arm ranks.
+    #:
+    #: `age_days` is None for an undated document and `decay` is then 1.0: not
+    #: a guess in either direction, because around a third of crawled pages
+    #: have no extractable date and whichever default you pick is wrong for
+    #: the other kind.
+    age_days: int | None = None
+    decay: float = 1.0
+    score_before_decay: float = 0.0
+
 
 class SearchResponse(BaseModel):
     """A page of hits, and an honest account of how they were found.

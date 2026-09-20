@@ -214,6 +214,40 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.90.0] — 2026-09-20
+
+**Age-aware ranking, by document kind rather than globally.**
+
+### Added
+
+- `P2-20` `meridian_core/ageing.py`: a half-life per source tier, overridable
+  per topic, applied as a decay on the fused score rather than as a filter
+- `SearchFilters.age_aware` and `half_life_overrides`; hits carry `age_days`,
+  `decay` and `score_before_decay`
+
+### The failure this avoids
+
+- **`peer_reviewed` does not decay at all.** A single "newer is better"
+  multiplier buries the foundational paper, and for a corpus with an academic
+  spine that is the failure that matters
+- Press and informal rot in months; a government policy page supersedes rather
+  than ages, so it sits well above press without being exempt
+
+### Three properties
+
+- **An undated document is neither old nor new.** A third of crawled pages have
+  no date, and whichever default you pick is wrong for the other kind
+- **The adjustment is shown.** A result silently demoted is one the reader
+  cannot audit, which is the opposite of what this corpus is for
+- **Floored at 0.25**, so decay reorders rather than deletes — without a floor
+  a ten-year-old article scores within rounding of zero and leaves the result
+  set entirely, which is a filter wearing a decay's clothes
+
+### Off by default
+
+- It changes what search returns, and `P2-04`'s benchmark and `P2-09`'s
+  go/no-go are measured against the current baseline
+
 ## [0.89.0] — 2026-09-20
 
 **What has this person's model been reading.**

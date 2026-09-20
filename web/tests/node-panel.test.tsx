@@ -92,6 +92,9 @@ function hit(): SearchHit {
     score: 0,
     lexical_rank: null,
     vector_rank: null,
+    age_days: null,
+    decay: 1,
+    score_before_decay: 0,
   }
 }
 

@@ -97,6 +97,15 @@ export interface SearchHit {
   score: number
   lexical_rank: number | null
   vector_rank: number | null
+  /**
+   * How old the document is, and what that did to its score (`P2-20`).
+   * Published rather than applied silently: a result quietly demoted is one
+   * the reader cannot audit. `age_days` is null for an undated document and
+   * `decay` is then 1 — not a guess in either direction.
+   */
+  age_days: number | null
+  decay: number
+  score_before_decay: number
 }
 
 export const SEARCH_HIT_FIELDS = [
@@ -117,6 +126,9 @@ export const SEARCH_HIT_FIELDS = [
   'score',
   'lexical_rank',
   'vector_rank',
+  'age_days',
+  'decay',
+  'score_before_decay',
 ] as const
 
 /** Mirrors `SearchResponse`. */

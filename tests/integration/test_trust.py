@@ -354,3 +354,90 @@ async def test_the_approval_queue_holds_only_what_needs_a_person(clean) -> None:
     waiting = {row.domain for row in await awaiting_seed_approval(clean)}
 
     assert waiting == {"proposed.test"}
+
+
+# --------------------------------------------------------------------------
+# Age-aware ranking, end to end (task `P2-20`)
+# --------------------------------------------------------------------------
+
+
+async def test_ageing_is_off_unless_asked_for(clean) -> None:
+    """It changes what a search returns, and turning it on for every existing
+    caller would silently move the baseline `P2-04`'s benchmark and `P2-09`'s
+    go/no-go are measured against."""
+    from meridian_core.search import SearchFilters, search
+
+    await a_source(clean, url="https://age.test/1", trust_state="cleared", text="tram siding")
+
+    result = await search(clean, "tram siding", filters=SearchFilters(), limit=5)
+
+    assert result.hits
+    assert result.hits[0].decay == 1.0
+
+
+async def test_an_old_article_ranks_below_a_paper_of_the_same_age(clean) -> None:
+    """The reordering this task exists for, and the failure it exists to avoid
+    — a global multiplier would have moved both."""
+    import datetime as date_module
+
+    from meridian_core.models import Chunk, Source
+    from meridian_core.search import SearchFilters, search
+
+    old = date_module.date.today() - date_module.timedelta(days=20 * 365)
+    for url, tier in (
+        ("https://age.test/paper", "peer_reviewed"),
+        ("https://age.test/news", "press"),
+    ):
+        source = Source(
+            url=url,
+            source_tier=tier,
+            retention_tier="primary",
+            trust_state="cleared",
+            language="en",
+            publication_date=old,
+        )
+        clean.add(source)
+        await clean.flush()
+        clean.add(
+            Chunk(source_id=source.source_id, text="cycleway separation study", chunk_index=0)
+        )
+    await clean.flush()
+
+    result = await search(
+        clean, "cycleway separation study", filters=SearchFilters(age_aware=True), limit=5
+    )
+
+    by_url = {hit.url: hit for hit in result.hits}
+    assert by_url["https://age.test/paper"].decay == 1.0
+    assert by_url["https://age.test/news"].decay < 1.0
+    assert by_url["https://age.test/paper"].score > by_url["https://age.test/news"].score
+
+
+async def test_the_hit_shows_what_was_done_to_it(clean) -> None:
+    """A result silently demoted is one the reader cannot audit, which is the
+    opposite of what this corpus is for."""
+    import datetime as date_module
+
+    from meridian_core.models import Chunk, Source
+    from meridian_core.search import SearchFilters, search
+
+    source = Source(
+        url="https://age.test/shown",
+        source_tier="press",
+        retention_tier="primary",
+        trust_state="cleared",
+        language="en",
+        publication_date=date_module.date.today() - date_module.timedelta(days=365),
+    )
+    clean.add(source)
+    await clean.flush()
+    clean.add(Chunk(source_id=source.source_id, text="verge planting trial", chunk_index=0))
+    await clean.flush()
+
+    hit = (
+        await search(clean, "verge planting trial", filters=SearchFilters(age_aware=True), limit=5)
+    ).hits[0]
+
+    assert hit.age_days is not None and hit.age_days >= 364
+    assert hit.decay == pytest.approx(0.5, abs=0.01)
+    assert hit.score == pytest.approx(hit.score_before_decay * hit.decay)

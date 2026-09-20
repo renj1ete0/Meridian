@@ -43,6 +43,7 @@ from sqlalchemy import ColumnElement, Select, and_, cast, func, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .ageing import age_in_days, decay_factor
 from .logging import get_logger
 from .models import Chunk, Source
 from .trust import READABLE_STATES
@@ -136,6 +137,17 @@ class SearchFilters:
     #: optional in exactly the case it exists for.
     cleared_only: bool = False
 
+    #: Weight results by how fast their kind of document ages (`P2-20`, §9).
+    #:
+    #: **Off by default.** Ageing changes what a search returns, and switching
+    #: it on for every existing caller would silently move a baseline that
+    #: `P2-04`'s benchmark and `P2-09`'s go/no-go are measured against.
+    age_aware: bool = False
+
+    #: Per-topic half-lives in days, overriding the per-tier table. `None` as a
+    #: value means "does not age", which is how a topic exempts itself.
+    half_life_overrides: dict[str, int | None] | None = None
+
 
 @dataclasses.dataclass(frozen=True)
 class SearchHit:
@@ -178,6 +190,21 @@ class SearchHit:
     #: of hit, and the fused score alone cannot tell them apart.
     lexical_rank: int | None
     vector_rank: int | None
+
+    #: How old the document is in days, or None when it has no date (`P2-20`).
+    #: Carried rather than left to the caller to compute, because the caller
+    #: would need today's date to agree with the one the decay used.
+    age_days: int | None = None
+
+    #: What the age did to the score. 1.0 is no adjustment, and an undated
+    #: document always gets 1.0 — neither old nor new.
+    #:
+    #: Shown rather than applied silently: a result quietly demoted is one the
+    #: reader cannot audit, which is the opposite of what this corpus is for.
+    decay: float = 1.0
+
+    #: The fused score before decay, so the adjustment can be undone by eye.
+    score_before_decay: float = 0.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -373,10 +400,36 @@ async def search(
                 duplicate_of=chunk.duplicate_of,
                 media_type=(source.extra or {}).get("media_type"),
                 page_unit=page_unit_for((source.extra or {}).get("media_type")),
-                score=scores[chunk_id],
+                score=scores[chunk_id] * _decay_for(source, filters),
+                age_days=age_in_days(source.publication_date),
+                decay=_decay_for(source, filters),
+                score_before_decay=scores[chunk_id],
                 lexical_rank=lexical_at.get(chunk_id),
                 vector_rank=vector_at.get(chunk_id),
             )
         )
 
+    # Re-sorted, because the decay is applied after fusion and a hit that
+    # dropped below the one under it would otherwise be listed above it — a
+    # result list whose order disagrees with its own scores.
+    hits.sort(key=lambda hit: hit.score, reverse=True)
+
     return SearchResult(hits, frozenset(arms), len(lexical), len(vectorial))
+
+
+def _decay_for(source: Source, filters: SearchFilters) -> float:
+    """The age adjustment for one hit, or 1.0 when ageing is off.
+
+    Off by default (`SearchFilters.age_aware`). Ageing changes what a search
+    returns, and turning it on for every existing caller — the MCP surface, the
+    benchmark in `P2-04`, the novelty gate — would silently move a baseline
+    that other work is measured against.
+    """
+    if not filters.age_aware:
+        return 1.0
+    return decay_factor(
+        source.publication_date,
+        source.source_tier,
+        topics=source.topic_labels,
+        overrides=filters.half_life_overrides,
+    )
