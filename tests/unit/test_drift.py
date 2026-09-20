@@ -49,6 +49,8 @@ ENUM_PAIRS = [
     ("EnrichmentType", models.runs.ENRICHMENT_TYPE),
     ("NotificationType", models.runs.NOTIFICATION_TYPE),
     ("TrustState", models.mixins.TRUST_STATE),
+    ("SubjectKind", models.config.SUBJECT_KIND),
+    ("GrantProfile", models.config.GRANT_PROFILE),
 ]
 
 

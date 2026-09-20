@@ -634,10 +634,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       purpose**: a table added later is invisible to guests until granted, which
       is the fail-closed direction. The privilege matrix is tested over
       `pg_tables`, so a new table forces the decision rather than inheriting one
-- [ ] `P3-06` `grants` table + `agent_tokens.grant_id`. The unit of sharing is a
-      person, not a credential — they will hold several — so revoking a grant
-      must revoke every token beneath it in one statement, with a test that
-      proves it
+- [x] `P3-06` `grants` table + `agent_tokens.grant_id` — `v0.87.0`. **The unit
+      of sharing is a person, not a credential.** Somebody given access holds
+      several — a browser session, an MCP client on a laptop, another on a
+      server — and revoking their access has to revoke all of them at once; a
+      per-token model leaves you chasing credentials, and the one you miss is
+      the one that still works. `revoke_grant` does both in one transaction,
+      with a test that proves it. Tokens are marked revoked rather than
+      deleted, because an audit entry points at a token row and deleting it
+      would leave the history unable to say whose credential made a call.
+      **A person grant must have an expiry**, enforced by a CHECK: §3 says an
+      access grant with no end is one nobody revisits, and a code path that
+      forgot would otherwise create one. A service grant may be open-ended — it
+      belongs to a machine somebody is already running. Profiles are named sets
+      defined in code, never free-form lists (§3), **no profile carries a write
+      tool** including `operator`, and an unknown profile grants nothing rather
+      than everything
 - [x] `P3-08` Access JWT verification — `v0.50.0`. Verified against the team's
       published keys with audience and issuer checked, on every request, and
       **no path where an unverifiable assertion is treated as

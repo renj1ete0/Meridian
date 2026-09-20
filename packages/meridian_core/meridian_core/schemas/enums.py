@@ -17,6 +17,8 @@ from typing import Literal
 from meridian_core.models.config import (
     AVAILABILITY,
     DOMAIN_STATUS,
+    GRANT_PROFILE,
+    SUBJECT_KIND,
     TOKEN_SCOPE,
     TOPIC_STATUS,
 )
@@ -74,6 +76,14 @@ RobotsOutcome = Literal[*ROBOTS_OUTCOME.enums]
 TopicStatus = Literal[*TOPIC_STATUS.enums]
 DomainStatus = Literal[*DOMAIN_STATUS.enums]
 TokenScope = Literal[*TOKEN_SCOPE.enums]
+
+#: Who is on the other end of a grant (`P3-06`). A person arrives through SSO
+#: and a machine through a service token, and they are audited differently.
+SubjectKind = Literal[*SUBJECT_KIND.enums]
+
+#: A named set of tools, never a free-form list — a per-person tool list is how
+#: somebody ends up holding a write tool nobody remembers granting (§3).
+GrantProfile = Literal[*GRANT_PROFILE.enums]
 AgentAvailability = Literal[*AVAILABILITY.enums]
 
 # mixins.py — shared by `sources` and `fetch_policy` (`P4-14`)

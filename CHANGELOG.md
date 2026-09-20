@@ -214,6 +214,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.87.0] — 2026-09-20
+
+**The unit of sharing is a person, not a credential.**
+
+### Added
+
+- `P3-06` A `grants` table and `agent_tokens.grant_id`. Somebody given access
+  holds several credentials, and revoking their access has to revoke all of
+  them at once — a per-token model leaves you chasing them
+- `resolve_grant` and `revoke_grant`, and profiles as named sets of tools
+
+### Three decisions
+
+- **Tokens are revoked, not deleted.** An audit entry points at a token row;
+  deleting it leaves the history unable to say whose credential made a call
+- **A person grant must have an expiry**, enforced by a CHECK. §3: an access
+  grant with no end is one nobody revisits, and a code path that forgot would
+  create one. A service grant may be open-ended
+- **No profile carries a write tool**, including `operator`, and an unknown
+  profile grants nothing rather than everything — a profile added by a later
+  migration must fail closed
+
 ## [0.86.0] — 2026-09-20
 
 **An empty corpus now shows something true.**

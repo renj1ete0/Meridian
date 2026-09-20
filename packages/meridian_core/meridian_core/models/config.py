@@ -14,18 +14,40 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import CheckConstraint, DateTime, Float, Index, Integer, Text, func, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from meridian_core.db import Base
 
 from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
+from .source import SOURCE_TIER
 from .queue import SEED_SOURCE
 
 TOPIC_STATUS = constrained("active", "maintenance", "paused", "archived", name="topic_status")
 DOMAIN_STATUS = constrained("active", "blocked", "paused", name="domain_status")
 TOKEN_SCOPE = constrained("read", "read_write", name="token_scope")
+
+# Who is on the other end of a grant (task P3-06, shared-read-access §3).
+# A person arrives through SSO and a machine through a service token, and
+# they are audited differently — so the distinction is a column rather than
+# something inferred from whether the subject looks like an email address.
+SUBJECT_KIND = constrained("person", "service", name="subject_kind")
+
+# A named set of tools, never a free-form list (§3). A per-person tool list
+# is how somebody ends up holding a write tool nobody remembers granting.
+GRANT_PROFILE = constrained("reader", "analyst", "operator", name="grant_profile")
 AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_availability")
 
 
@@ -255,6 +277,71 @@ class Agent(Base, TimestampMixin):
         return f"<Agent {self.agent_id} tier={self.quality_tier} enabled={self.enabled}>"
 
 
+class Grant(Base, TimestampMixin):
+    """Access for one person or one machine (task `P3-06`, shared-read-access §3).
+
+    **The unit of sharing is a person, not a credential.** Somebody will hold
+    several tokens — a browser session, an MCP client on a laptop, another on a
+    server — and revoking their access has to revoke all of them at once. A
+    per-token model cannot express that: you would be chasing credentials,
+    and the one you miss is the one that still works.
+
+    So `agent_tokens.grant_id` points here, and revoking a grant revokes every
+    token beneath it in one statement.
+    """
+
+    __tablename__ = "grants"
+
+    grant_id: Mapped[int] = pk()
+
+    #: The Cloudflare Access identity: an email address for a person, a service
+    #: token client id for a machine. Stored as Access reports it, because it is
+    #: matched against an assertion rather than typed by anybody at request time.
+    subject: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    subject_kind: Mapped[str] = mapped_column(SUBJECT_KIND, nullable=False)
+
+    profile: Mapped[str] = mapped_column(
+        GRANT_PROFILE, nullable=False, default="reader", server_default="reader"
+    )
+
+    #: Empty means every topic. Sharing one topic's corpus without sharing the
+    #: rest is the common case, and the shape that makes it cheap is a filter
+    #: that is usually absent.
+    topics: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+
+    #: So a grant can exclude `informal` material without excluding the person.
+    #: NULL means no ceiling.
+    max_source_tier: Mapped[str | None] = mapped_column(SOURCE_TIER)
+
+    #: **False by default**, and §5 is firm about why: serving somebody else the
+    #: raw files is redistribution of third-party material, which is a different
+    #: act from sharing what was extracted from it.
+    raw_files: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+
+    #: Required for a `person` grant, enforced by the CHECK below. An access
+    #: grant with no end is a grant nobody revisits.
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    revoked: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+    #: Why this person has access, in one line. The question a grant list has to
+    #: answer a year later, and the one nobody can reconstruct.
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint(
+            "subject_kind <> 'person' OR expires_at IS NOT NULL",
+            name="person_grants_expire",
+        ),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<Grant {self.grant_id} {self.subject} {self.profile}>"
+
+
 class AgentToken(Base, TimestampMixin):
     """Scoped credential per agent (§11.4).
 
@@ -268,6 +355,13 @@ class AgentToken(Base, TimestampMixin):
     token_id: Mapped[int] = pk()
 
     agent_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+
+    #: The grant this credential belongs to (`P3-06`). NULL for the
+    #: operator's own agent tokens, which predate grants and are not
+    #: shared with anybody — a grant for yourself would be ceremony.
+    grant_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("grants.grant_id", ondelete="CASCADE"), index=True
+    )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     allowed_tools: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
