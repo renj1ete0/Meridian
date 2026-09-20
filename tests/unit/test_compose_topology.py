@@ -126,9 +126,15 @@ def test_no_service_sets_both_network_mode_and_networks(compose: dict) -> None:
 
 def test_every_service_declares_its_networks(compose: dict) -> None:
     """`x-common` no longer supplies a default, so an omission means the
-    service silently lands on compose's default network instead."""
+    service silently lands on compose's default network instead.
+
+    `network_mode: none` counts, and is the only honest way to say "no
+    network" — `B-16`'s `chown` one-shot needs none, and saying nothing gave
+    the one container here that runs as root a route to the internet.
+    """
     for name, service in compose["services"].items():
-        assert service.get("networks"), f"{name} declares no networks"
+        declared = service.get("networks") or service.get("network_mode") == "none"
+        assert declared, f"{name} declares no networks"
 
 
 # --------------------------------------------------------------------------

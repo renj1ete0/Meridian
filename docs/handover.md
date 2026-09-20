@@ -823,6 +823,37 @@ than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
 
+### Docker creates a bind-mount source as root, and nothing here runs as root
+
+The worst of the four found by first running the stack in containers. Every
+application image creates and uses `meridian`, uid 1001, with `cap_drop: ALL`
+and a read-only root filesystem — all correct. Docker, meeting a bind-mount
+source that does not exist on the host, creates it as **root**. So the first
+crawl fetched a handful of real pages, hundreds of kilobytes each, and could not `mkdir
+/data/raw/<domain>/`, and settled every task as
+
+```
+"outcome": "success", "disposition": "retry", "stored": null, "chars": null
+```
+
+which is *true* — the fetch succeeded. The traceback is there at ERROR, one per
+page, in among a stream that otherwise reads like a healthy crawl.
+
+It would have done the same on the server. `docs/setup.md` and
+`docs/deployment.md` chown `/srv/meridian/app` because that is the checkout, and
+neither says anything about `raw`, `figures` or `models`. `B-16` added a `chown`
+one-shot to both compose files, run by `make quickstart` and belonging in the
+runbook before `up`.
+
+Three things about the shape of it. The directories are chowned, not `-R`:
+what is created beneath them inherits the owner, and a recursive chown over a
+100 GB raw store is its own outage. The one-shot runs `network_mode: none`,
+because omitting `networks:` silently puts a container on compose's default
+bridge — which has egress, and this is the only container in the stack running
+as root. And nothing in the test suite could have caught it: tests write to
+`tmp_path` as whoever ran them, and a container's view of a bind mount does not
+exist until there is a container.
+
 ### The embedding sidecar sits where it cannot fetch its own weights
 
 `embedder` is on `internal`, which is `internal: true` — no gateway, no DNS. The

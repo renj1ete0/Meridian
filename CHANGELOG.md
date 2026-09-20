@@ -122,6 +122,36 @@ design-only changes do not require a version bump, but may be listed under Unrel
   push, twice for a multi-arch build, for files that do not change between
   releases
 
+## [0.76.6] — 2026-09-20
+
+### Fixed
+
+- `B-16` Every page the first containerised crawl fetched was thrown away.
+  Docker creates a missing bind-mount source on the host as **root**; every
+  application image runs as `meridian`, uid 1001, with `cap_drop: ALL`. So the
+  worker fetched a handful of real pages, hundreds of kilobytes each, and could not create
+  `/data/raw/<domain>/`, and settled every task `"outcome": "success",
+  "stored": null` — because the fetch had succeeded
+- The same would have happened on the server. The deploy docs chown
+  `/srv/meridian/app` because that is the checkout, and say nothing about `raw`,
+  `figures` or `models`
+
+### Added
+
+- A `chown` one-shot in both compose files, on `network_mode: none`, run by
+  `make quickstart` and belonging in the runbook before `up`
+- Drift tests tying the uid to the Dockerfiles that create it — three copies of
+  1001 is three chances to move one — and asserting nothing else runs as root
+
+### Two details that were nearly the other way
+
+- The three top-level directories are chowned, not `-R`: what is created beneath
+  them inherits the owner, and a recursive chown over a 100 GB raw store is its
+  own outage
+- `network_mode: none` rather than omitting `networks:`, which silently puts a
+  container on compose's default bridge — that bridge has egress, and this is
+  the only container in the stack running as root
+
 ## [0.76.2] — 2026-09-20
 
 ### Added

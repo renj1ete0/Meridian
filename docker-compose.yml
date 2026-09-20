@@ -137,6 +137,34 @@ services:
       resources:
         limits: { memory: 4G }
 
+  # The data directories, owned by the uid the services run as (`B-16`).
+  #
+  # Docker creates a missing bind-mount source on the host as **root**, and
+  # every application image runs as `meridian` (uid 1001, unprivileged, with
+  # `cap_drop: ALL`). So on a fresh machine the worker fetches a 400 KB
+  # government page, cannot create `/data/raw/<domain>/`, logs a traceback and
+  # settles the task `"outcome": "success", "stored": null`. The crawl keeps
+  # running and keeps nothing.
+  #
+  # Only the three top-level directories, and not recursively: everything
+  # created beneath them inherits the owner, and a `chown -R` over a 100 GB raw
+  # store is a different kind of mistake.
+  datadirs:
+    image: python:3.12-slim-bookworm
+    profiles: [tools]
+    user: root                             # the one thing it needs to be
+    # It touches three inodes and exits. `none` rather than a network, because
+    # omitting the key puts it on compose's default bridge — which has a route
+    # out, and this is the one container here running as root.
+    network_mode: none
+    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models"]
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
+      - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
+      - ${DATA_ROOT:-/srv/meridian}/models:/models
+    restart: "no"
+    logging: *logging
+
   # The weights, once, from a container that has egress and then exits (`B-14`).
   # Profile-gated: this is a deploy step, not a service, and `docker compose up`
   # must not wait on a 2.3GB download it has no reason to repeat.

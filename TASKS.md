@@ -998,6 +998,20 @@ Things worth doing that don't belong to a phase yet.
       fails at the first real batch instead. The isolation is kept deliberately:
       the sidecar runs corpus text through a model, and a route out from there is
       a route out for anything that ever gets in
+- [x] `B-16` Fix: every fetched page was being thrown away — `v0.76.6`. Docker
+      creates a missing bind-mount source on the host as **root**, and every
+      application image runs as `meridian` (uid 1001, `cap_drop: ALL`, read-only
+      root). So the first containerised crawl fetched a handful of real pages,
+      could not create `/data/raw/<domain>/`, logged a traceback per page and
+      settled each task `"outcome": "success", "stored": null` — because the
+      *fetch* had succeeded. It kept crawling and kept nothing, and the same
+      would have happened on the server: the deploy docs chown `/srv/meridian/
+      app` for the checkout and say nothing about `raw`, `figures` or `models`.
+      A `chown` one-shot on `network_mode: none`, in both compose files, of the
+      three top-level directories only — everything created beneath them
+      inherits the owner, and a `chown -R` over a 100 GB raw store is a
+      different mistake. The uid is now tied to the Dockerfiles by a drift test,
+      since three copies of 1001 is three chances to move one
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search
