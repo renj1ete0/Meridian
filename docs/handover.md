@@ -990,15 +990,29 @@ trade in exactly this image. `test_only_named_services_write_from_egress` holds
 the allowlist, and the reasoning is written into it so the next person can
 disagree with it rather than discover it.
 
-Its healthcheck is **switched off rather than left out**, and the difference is
-its own trap. Omitting `healthcheck:` does not give a container none — it
-inherits the image's, and the worker image's probe imports `worker.main` and
-checks poppler. That passes for as long as the package tree is intact, so a
-wedged scheduler would have reported `healthy` for ever while also suppressing
-the restart that no probe at all would have left to `restart: unless-stopped`.
-Caught by watching the container come up and report `health: starting` a minute
-after the comment claiming it had no healthcheck was written. `healthcheck:
-{ disable: true }` says the true thing; `B-19` gives the loop a heartbeat.
+**Omitting `healthcheck:` does not give a container none.** It inherits the
+image's, and the worker image's probe imports `worker.main` and checks poppler
+— which passes for as long as the package tree is intact. The scheduler shipped
+that way for one commit, so a wedged one would have read `healthy` for ever
+while also suppressing the restart that no probe at all would have left to
+`restart: unless-stopped`. Caught by watching the container come up and report
+`health: starting` a minute after the comment claiming it had none was written.
+
+`B-19` closed it properly: the loop writes `P5-08`'s heartbeat itself, and
+**where** it beats is the design. After each claim rather than before it,
+because here the database round trip is the thing that hangs and a beat in
+front of it would be refreshed by a scheduler that never gets an answer — the
+opposite of `worker.main`, which beats first because a lane wedged inside a
+fetch should stop beating within its own iteration. And continuously while a
+job runs, because a backfill takes half an hour and a probe firing during
+normal work would restart the scheduler in the middle of the work it was
+reporting on. That second beat is the weaker claim — a job is in flight and has
+not hit `--timeout-seconds` — and the timeout is what stops it covering for a
+permanently hung child.
+
+A long-running service that overrides its image's command must now declare a
+healthcheck or disable one explicitly, so the next one cannot inherit a probe
+for a process it does not run.
 
 ### A container on an `internal: true` network cannot publish a port
 

@@ -34,6 +34,7 @@ import os
 import signal
 import sys
 import time
+from collections.abc import AsyncIterator
 
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
@@ -44,6 +45,8 @@ from meridian_core.schedule import (
     release_claims,
     settle_job,
 )
+
+from .liveness import beat
 
 log = get_logger(__name__)
 
@@ -56,6 +59,9 @@ DEFAULT_POLL_SECONDS = 30
 #: kill happens before another scheduler could take the job — two copies of a
 #: backup running at once is worse than one that was cut short.
 DEFAULT_TIMEOUT_SECONDS = 1800
+
+#: Ceiling on the gap between heartbeats while a job runs (`B-19`).
+MAX_BEAT_SECONDS = 30
 
 
 def scheduler_id() -> str:
@@ -73,6 +79,10 @@ class Scheduler:
     ) -> None:
         self.id = scheduler_id()
         self._poll = poll_seconds
+        # How often the heartbeat is refreshed while a job is in flight. Tied
+        # to the poll so a test driving a 2-second loop does not wait 30, and
+        # capped so a long poll cannot let the file go stale on its own.
+        self._beat_seconds = max(1, min(poll_seconds, MAX_BEAT_SECONDS))
         self._timeout = timeout_seconds
         self._lease = lease_seconds
         self._max_jobs = max_jobs
@@ -90,6 +100,12 @@ class Scheduler:
         try:
             while not self._stopping:
                 claim = await self._claim()
+                # After the claim, not before it (`B-19`). `worker.main` beats
+                # *before* its work because a lane wedged inside a fetch should
+                # stop beating within the iteration; here the round trip to
+                # claim a job is the thing that can wedge, so the beat has to
+                # come out the other side of it to mean anything.
+                beat()
                 if claim is None:
                     if self._max_jobs is not None:
                         break
@@ -129,7 +145,8 @@ class Scheduler:
                 stderr=asyncio.subprocess.STDOUT,
             )
             try:
-                output, _ = await asyncio.wait_for(process.communicate(), timeout=self._timeout)
+                async with self._beating():
+                    output, _ = await asyncio.wait_for(process.communicate(), timeout=self._timeout)
             except TimeoutError:
                 process.kill()
                 await process.wait()
@@ -149,6 +166,35 @@ class Scheduler:
             await settle_job(
                 sess, claim.job_id, status=status, duration_ms=duration_ms, error=error
             )
+
+    @contextlib.asynccontextmanager
+    async def _beating(self) -> AsyncIterator[None]:
+        """Keep the heartbeat fresh for as long as a job is in flight.
+
+        A backfill can legitimately run for half an hour, and a scheduler that
+        stopped beating for the duration would be restarted in the middle of
+        its own work — killing the job to report that the job was running.
+
+        **What this beat proves is narrower than the one in the loop**, and
+        worth being plain about: it says a job is in flight and has not yet hit
+        `--timeout-seconds`, not that anything is making progress. The ceiling
+        is what makes it honest — the subprocess is killed at the timeout, so
+        this cannot keep a permanently hung job looking alive for longer than
+        that.
+        """
+
+        async def keep_beating() -> None:
+            while True:
+                beat()
+                await asyncio.sleep(self._beat_seconds)
+
+        task = asyncio.create_task(keep_beating())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     async def _sleep(self, seconds: float) -> None:
         with contextlib.suppress(TimeoutError):

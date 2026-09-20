@@ -200,16 +200,16 @@ services:
   # `embed` reaches the sidecar), the raw store (`sweep` deletes from it) and
   # the model cache (`embed`'s fallback).
   #
-  # **The healthcheck is switched off rather than left out**, and the
-  # difference is the whole trap. Omitting `healthcheck:` does not mean the
-  # container has none — it inherits the worker image's, which imports
-  # `worker.main` and checks poppler. That probe passes for as long as the
-  # package tree is intact, so a wedged scheduler would report `healthy`
-  # for ever *and* suppress the restart that a missing probe would at least
-  # leave to `restart: unless-stopped`. A false green is worse than no green.
+  # The probe is the worker's, because the loop now writes the same heartbeat
+  # (`B-19`). It has to be named: omitting `healthcheck:` does not give a
+  # container none, it inherits the image's — which imports `worker.main` and
+  # checks poppler, and would therefore report a wedged scheduler `healthy`
+  # for ever *and* suppress the restart that no probe at all would have left
+  # to `restart: unless-stopped`.
   #
-  # `B-19` gives this loop a heartbeat of its own; until then it is honestly
-  # unprobed.
+  # The loop beats after each claim, and keeps beating while a job runs,
+  # because a backfill can legitimately take half an hour and a scheduler
+  # restarted mid-job kills the work it was reporting.
   #
   # Two schedulers cannot double-run a job — `P5-06` claims with SKIP LOCKED
   # and a lease — so this is safe to restart and safe to run beside a manual
@@ -218,7 +218,12 @@ services:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
     command: ["python", "-m", "worker.scheduler"]
-    healthcheck: { disable: true }
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker.liveness"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     networks: [internal, egress]
     depends_on:
       postgres: { condition: service_healthy }

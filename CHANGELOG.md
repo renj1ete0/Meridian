@@ -214,6 +214,39 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.80.0] — 2026-09-20
+
+**The scheduler can be supervised.**
+
+### Added
+
+- `B-19` The scheduler loop writes `P5-08`'s heartbeat, so `worker.liveness` is
+  a real probe for it and the compose healthcheck is a real healthcheck
+- A rule that a long-running service overriding its image's command must
+  declare a healthcheck or disable one explicitly
+
+### Where the beat goes is the whole design
+
+- **After each claim, not before it.** `worker.main` beats before its work,
+  because a lane wedged inside a fetch should stop beating within the
+  iteration. Here the database round trip that claims a job is the thing that
+  hangs, so a beat in front of it would be refreshed by a scheduler that never
+  gets an answer
+- **Throughout a running job.** A backfill legitimately runs for half an hour;
+  a probe that failed during normal work would restart the scheduler in the
+  middle of the job it was reporting on — monitoring causing the outage it
+  exists to detect
+- That second beat proves less, and the docstring says so: a job is in flight
+  and has not yet hit `--timeout-seconds`. The timeout is what stops it
+  covering for a permanently hung child
+
+### Fixed
+
+- The healthcheck was `disable: true` for one release, which was honest but
+  unsupervised. Omitting it entirely — the state before that — inherited the
+  image's probe, which checks `worker.main` and poppler and would have called
+  a wedged scheduler healthy for ever
+
 ## [0.79.1] — 2026-09-20
 
 ### Fixed

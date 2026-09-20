@@ -38,8 +38,7 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
    mid-deploy.
 
-**Buildable today**, needing none of the three: `B-19` (the scheduler runs now and
-cannot be probed), `P6-23` (agent registry and run history,
+**Buildable today**, needing none of the three: `P6-23` (agent registry and run history,
 better after there is a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a
 Semantic Scholar key, ten minutes, felt during the 48h run). `P6-05` was the other one
 and is done — an annotation is a node somebody writes by hand, so it is the one
@@ -1076,18 +1075,24 @@ Things worth doing that don't belong to a phase yet.
       required file now raises "not in cache" instead of timing out against a
       host that was never reachable. Asserted both ways — a model loader on an
       isolated network must be offline, and the fetcher must never be
-- [ ] `B-19` **The scheduler has no liveness probe.** `P5-08`'s heartbeat is
-      written by `worker.main`'s loop, so the `scheduler` service added in
-      `B-15` carries `healthcheck: { disable: true }` — *off*, not omitted,
-      because omitting it inherits the worker image's probe, which imports
-      `worker.main` and checks poppler and would therefore report a wedged
-      scheduler as healthy for ever while suppressing the restart. `restart: unless-stopped` covers
-      a scheduler that *exits*; one wedged on a lock or a hung subprocess looks
-      exactly like one waiting for the next due job. Either give the scheduler
-      loop its own `beat()` — it already wakes on a poll interval, so there is
-      a natural place — or probe the timetable instead, since a scheduler that
-      has claimed nothing in several poll intervals with jobs due is the
-      condition worth detecting
+- [x] `B-19` **The scheduler can be probed** — `v0.80.0`. `B-15` left it
+      unprobed and, worse, *silently* unprobed: omitting `healthcheck:` does
+      not give a container none, it inherits the image's — and the worker
+      image's imports `worker.main` and checks poppler, so a wedged scheduler
+      would have read `healthy` for ever while suppressing the restart that no
+      probe at all would have left to `restart: unless-stopped`.
+      The loop now writes `P5-08`'s heartbeat itself, and the two placements
+      are the design. **After each claim, not before it** — `worker.main` beats
+      before its work because a lane wedged inside a fetch should stop beating
+      within the iteration, whereas here the database round trip *is* the thing
+      that hangs, so a beat before it would be refreshed by a scheduler that
+      never gets an answer. **And throughout a running job**, because a
+      backfill legitimately takes half an hour and a probe that fired during
+      normal work would restart the scheduler in the middle of the job it was
+      reporting on. That second beat proves less — a job is in flight and has
+      not hit `--timeout-seconds` — and the timeout is what keeps it honest.
+      Generalised: a long-running service overriding its image's command must
+      declare a healthcheck or disable one explicitly
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

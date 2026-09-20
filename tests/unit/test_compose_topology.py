@@ -488,3 +488,45 @@ def test_nothing_publishes_a_port_it_cannot_publish(path: pathlib.Path) -> None:
         f"{path.name}: {inert} — every network these are on is `internal: "
         f"true`, so Docker installs no gateway and the published port is inert"
     )
+
+
+# --------------------------------------------------------------------------
+# A service running a different command inherits the image's healthcheck
+# --------------------------------------------------------------------------
+#
+# Omitting `healthcheck:` does not give a container none — it gets the image's.
+# `B-15` added `scheduler` as the worker image under `python -m
+# worker.scheduler`, said nothing about health, and inherited a probe that
+# imports `worker.main` and checks poppler. That passes for as long as the
+# package tree is intact, so a wedged scheduler would have reported `healthy`
+# for ever *and* suppressed the restart that no probe would have left to
+# `restart: unless-stopped`.
+#
+# So: a long-running service that overrides the image's command has to say what
+# its health is — a real probe, or `disable: true` to mean "unprobed, honestly".
+# One-shots are exempt because they exit, and a healthcheck on something that
+# runs once and stops is a question with no answer.
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_a_service_running_its_own_command_says_what_its_health_is(
+    path: pathlib.Path,
+) -> None:
+    doc = yaml.safe_load(path.read_text())
+    services = doc.get("services") or {}
+
+    silent = [
+        name
+        for name, service in services.items()
+        if isinstance(service, dict)
+        and service.get("command")
+        and service.get("build")
+        and not service.get("profiles")          # one-shots exit; exempt
+        and "healthcheck" not in service
+    ]
+
+    assert not silent, (
+        f"{path.name}: {silent} override the image's command and inherit its "
+        f"healthcheck, which is probing a process they do not run. Declare one "
+        f"or set `healthcheck: {{disable: true}}`"
+    )
