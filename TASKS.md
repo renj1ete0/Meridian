@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.76.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 1985 backend tests
+**`v0.76.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 1990 backend tests
 against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -983,9 +983,17 @@ assumes `uv`, `npm`, and three terminals; this is the path that doesn't.
       seed, start every service. Ends by printing the URL
 - [ ] `B-07` First-run experience — pick topics and confirm cold-start sources from the
       UI instead of hand-editing `config/*.yaml` before the first crawl
-- [ ] `B-08` Preflight check script — verify Docker version, available memory and disk
-      against the stated minimums, and fail with a readable message rather than a
-      container crash loop
+- [x] `B-08` Preflight check script — `v0.76.2`. `scripts/preflight.sh` checks
+      Docker, Compose v2, cores, memory and free disk against the README's
+      minimums and names the *consequence* of each shortfall, not just the
+      number. **Warnings are not failures**: only a missing daemon or Compose v1
+      exit non-zero, because those mean nothing can start — being under the
+      stated minimum is a legitimate choice on hardware somebody already owns,
+      and the figures are sized for a 50k-document corpus. `MemTotal` rather than
+      `MemAvailable` (available is mostly page cache and says nothing about
+      whether the stack fits), disk measured at `DATA_ROOT` rather than the
+      checkout, colour only on a TTY. A drift test ties the numbers to the README
+      table, which is where a user reads them
 - [ ] `B-09` Decide what a first run should *show*. Production starts empty by design
       (scaffold §1.7), so a fresh install has nothing to look at until it has crawled
       for a while. Options: ship a small real crawl snapshot as an opt-in demo corpus,

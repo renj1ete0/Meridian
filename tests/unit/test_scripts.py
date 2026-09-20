@@ -15,6 +15,7 @@ cheap to cause and expensive to discover.
 
 from __future__ import annotations
 
+import os
 import re
 import stat
 import subprocess
@@ -148,3 +149,90 @@ def test_the_release_script_covers_every_application_image() -> None:
 
     missing = built_by_compose - named_by_script
     assert not missing, f"compose builds these and the release script does not: {sorted(missing)}"
+
+
+# --------------------------------------------------------------------------
+# The preflight check (task B-08, README "Minimum requirements")
+# --------------------------------------------------------------------------
+
+PREFLIGHT = REPO / "scripts/preflight.sh"
+
+
+def readme_minimums() -> dict[str, int]:
+    """The numbers out of the README's requirements table.
+
+    Parsed rather than retyped, because the whole point of the test below is
+    that two copies of a number drift. A row reads:
+
+        | Memory | 8 GB | 16 GB or more |
+    """
+    rows = re.findall(
+        r"^\|\s*(Memory|Storage|CPU)\s*\|\s*([\d.]+)\s*(?:GB|cores)",
+        (REPO / "README.md").read_text(),
+        flags=re.MULTILINE,
+    )
+    return {label.lower(): int(float(value)) for label, value in rows}
+
+
+def test_the_readme_table_parses() -> None:
+    """Guard on the parse. A regex that matched nothing would make the drift
+    test below vacuously true, which is how a drift test stops testing anything
+    while still passing."""
+    found = readme_minimums()
+
+    assert set(found) == {"cpu", "memory", "storage"}, found
+    assert all(v > 0 for v in found.values()), found
+
+
+def test_preflight_checks_against_the_readme_numbers() -> None:
+    """The script hardcodes the minimums, so they are a second copy.
+
+    Someone revising the README's requirements — which is where a user reads
+    them — would otherwise leave the script warning against the old figures, and
+    nothing would say so. The README is the source of truth; this asserts the
+    script agrees with it.
+    """
+    script = PREFLIGHT.read_text()
+    declared = {
+        name: int(value)
+        for name, value in re.findall(r"^(MIN_\w+)=(\d+)", script, flags=re.MULTILINE)
+    }
+    readme = readme_minimums()
+
+    assert declared["MIN_CORES"] == readme["cpu"]
+    assert declared["MIN_MEM_GB"] == readme["memory"]
+    assert declared["MIN_DISK_GB"] == readme["storage"]
+
+
+def test_preflight_only_fails_for_things_that_actually_block_a_start() -> None:
+    """Warnings must not exit non-zero.
+
+    `make quickstart` gates on this script, and the gate has to be about whether
+    the stack *can* start — not about whether the machine matches a table. A
+    person running a 500-document corpus on 4 GB is making a reasonable choice,
+    and a preflight that refused would be substituting its judgement for theirs.
+    """
+    script = PREFLIGHT.read_text()
+
+    # The only `exit 1` is the fatal verdict, and it is guarded by the fatal
+    # counter rather than the warning counter.
+    assert 'if [ "$fatal" -gt 0 ]; then' in script
+    assert 'if [ "$warned" -gt 0 ]; then' in script
+
+    warned_block = script.split('if [ "$warned" -gt 0 ]; then', 1)[1].split("fi", 1)[0]
+    assert "exit 0" in warned_block, "a warning must not be a failure"
+    assert "exit 1" not in warned_block
+
+
+def test_preflight_emits_no_colour_when_nothing_is_watching() -> None:
+    """Escape codes belong on a terminal. Piped to a file or a CI log they are
+    noise in exactly the output somebody pastes into a bug report."""
+    result = subprocess.run(
+        ["bash", str(PREFLIGHT)],
+        capture_output=True,
+        text=True,
+        cwd=REPO,
+        env={**os.environ, "NO_COLOR": "1"},
+    )
+
+    assert "\033[" not in result.stdout

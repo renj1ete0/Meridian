@@ -48,6 +48,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.76.2] — 2026-09-20
+
+### Added
+
+- `B-08` `scripts/preflight.sh`. Checks Docker, Compose v2, cores, memory and
+  free disk against the README's stated minimums, and names the consequence of
+  each shortfall rather than only the number
+- A drift test tying the script's hardcoded minimums to the README table, which
+  is where a user actually reads them. Verified to fail when they disagree
+
+### Warnings are not failures
+
+- Only two things exit non-zero: no Docker daemon, and no Compose v2. Those mean
+  nothing can start at all
+- Being under the stated minimum is a loud warning and not a refusal. The
+  README's figures are sized for a 50k-document corpus, and somebody trying this
+  on 500 documents is not wrong — a preflight that refused would be substituting
+  its judgement for theirs. `make quickstart` can therefore gate on the exit
+  status without the gate being an opinion about somebody's laptop
+
+### Details that were the other way first
+
+- **`MemTotal`, not `MemAvailable`.** Available is what is free right now, which
+  on a machine that has been up a while is mostly page cache and says nothing
+  about whether the stack fits
+- **Free space is measured at `DATA_ROOT`**, walking up to the nearest existing
+  parent — raw files are what grow, and they land wherever that points, commonly
+  a different disk from the checkout
+- **Colour only on a TTY**, honouring `NO_COLOR`. Escape codes are noise in
+  exactly the output somebody pastes into a bug report
+
 ## [0.76.1] — 2026-09-20
 
 ### Added
