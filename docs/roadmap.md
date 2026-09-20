@@ -13,8 +13,8 @@ one layer. Each phase should run unattended before the next begins.
 | **1** | Queue, fetcher, extractor, raw retention | Runs 48h unattended without failing. The result becomes the first development corpus | built; **the 48h run has not happened** |
 | **2** | Embeddings, novelty gate, hybrid search, minimal Explore | **Go/no-go** — is searching the corpus already useful with no model involved? | built; the checkpoint waits on phase 1's run |
 | **3** | MCP server, read tools only | An external agent can retrieve usefully | built; remote access waits on a Cloudflare account |
-| **4** | Graph tables, entity resolution, MCP write tools, validation | **The loop closes here** | designed, unbuilt — nothing has written an edge |
-| **5** | Frontier expansion, coverage scoring, scheduling, alerting | Now autonomous | scheduler, alerting and the gazetteer built; coverage needs the graph |
+| **4** | Graph tables, entity resolution, MCP write tools, validation | **The loop closes here** | spine built — store, resolution, write tools, routing, run state, model client. **No run has written an edge**: `P4-16`'s prompt and parse are what close it |
+| **5** | Frontier expansion, coverage scoring, scheduling, alerting | Now autonomous | scheduler, alerting, the gazetteer and the Telegram control surface built; coverage needs edges to exist |
 | **6** | Graph UI, node detail, annotation, admin surfaces | The payoff layer | everything that does not need the graph is built |
 | **7** | Attribute audit, analogies, contradictions, temporal flags, enrichment, reports | Full design | not started |
 

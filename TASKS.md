@@ -32,24 +32,34 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P0-15`'s held-out question set must be written *before* that judgement, not after.
 2. **A Cloudflare account**, for `P3-05` and the rest of `P3-09`. The code side is done
    and tested; what is missing is a tunnel, an Access application and an AUD tag.
-3. **The graph.** Phase 4 is designed and entirely unbuilt — nothing has ever written an
-   edge — so `P4-*`, most of `P5-03`–`P5-05`, `P6-01`–`P6-03`, `P6-06`, `P6-07`,
-   `P6-10` and all of phase 7 wait on it. Apache AGE supports PG17 (v1.6.0), so
-   `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
-   mid-deploy.
+3. **A run that produces an edge.** Phase 4's spine is now built — the store
+   (`P4-01`), resolution and reversible merges (`P4-02`, `P4-03`), untrusted-data
+   framing (`P4-06`), capability routing (`P4-07`), the run state machine and its
+   cycle (`P4-08`, `P4-09`, `P4-11`), the four write tools (`P4-04`) and the model
+   client (`P4-15`). `python -m worker.orchestrate --dry-run` walks a whole cycle
+   today. What is missing is `P4-16`: the prompt each of `extract` and `tag` sends,
+   and the parse that turns an answer into tool arguments. **Until that lands no run
+   has written an edge**, so `P5-03`–`P5-05`, `P6-01`–`P6-03`, `P6-06`, `P6-07`,
+   `P6-10` and all of phase 7 are still waiting — not on the graph existing, which it
+   does, but on something putting data in it.
 
-**Buildable today** is now a short list, because a session went through it.
-`P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`, `P3-10`, `P3-11`, `B-07`, `B-09`,
-`B-11`, `P2-20` and `P5-07` are done; `P5-01` and `P6-23` are open on their own
-arguments, both written into their entries — one has no consumer for its
-output, the other would be designed against an empty table. What is left needs
-one of the three gates.
+**Buildable today** is two entries.
 
-Formerly buildable, for the record: `P6-23` (agent registry and run history,
-better after there is a run to show) and `P1-35` (a Semantic Scholar key, ten minutes,
-felt during the 48h run). `P6-05` and `P5-07`'s inbound half are done — an annotation is
-a node somebody writes by hand, so it is the one graph-shaped feature that never needed
-the graph, and the bot's commands needed the steering that `P5-06` had since shipped.
+1. **`P4-16`** — the prompt and the parse for `extract` and `tag`. Everything around
+   them exists, and this is the one task that changes what the system *does*: it is
+   what turns a cycle that reports each stage unbuilt into one that writes edges.
+2. **`P6-23`** — admin: agent registry and run history. Its own argument was that both
+   tables stay empty until phase 4 runs something and "an empty screen teaches nothing";
+   `runs` now holds real rows with stages, statuses, heartbeats and counters, so there
+   is a shape to design against.
+
+`P5-01` stays open on its own argument — entity co-occurrence has no consumer until
+`P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
+
+Done this stretch, for the record: `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
+`P3-10`, `P3-11`, `B-07`, `B-09`, `B-11`, `P2-20`, `P5-07`, and phase 4's spine —
+`P4-01` through `P4-04`, `P4-06` through `P4-09`, `P4-11` and `P4-15`. `P1-35` (a
+Semantic Scholar key, ten minutes) is still ⚑ human and is felt during the 48h run.
 
 **Explicitly parked, with reasons.** `P2-15` is gated by its own text on `P1-16` *and*
 on `P2-09` being marginal, and means a second embedding column plus a full re-embed for
@@ -706,7 +716,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 
 *Checkpoint: a model can write validated, provenance-bearing edges.*
 
-- [~] `P4-01` Apache AGE setup, graph schema, typed node ontology — **the
+- [x] `P4-01` Apache AGE setup, graph schema, typed node ontology — **the
       store, `v0.91.0`**. `deploy/postgres/Dockerfile` compiles AGE 1.7.0 onto
       the pgvector image, so `make quickstart` starts a database that already
       has both and nobody installs an extension by hand. §3 chose one store;
@@ -720,12 +730,20 @@ deploy runbook whose first two commands could not work (`B-17`).
       the role in `"$user"`, `create_graph` needing `ag_catalog` on the path for
       `graphid_ops`, and `ALTER TABLE ... INHERIT` requiring *ownership* rather
       than `GRANT ALL`.
-      **Outstanding, and deliberately not decided here**: whether AGE is the
-      source of truth for nodes and edges or a projection of the `entities` and
-      `edges` tables that already exist. That is every write going two places
-      and a reconciliation story when they disagree — cheap now, expensive
-      after fifty thousand edges, and not a call to make inside a migration.
-      Nothing writes to the graph yet
+      **⚑ Decided 2026-09-20: the tables are the source of truth and AGE is a
+      projection.** The question was whether AGE holds nodes and edges or
+      mirrors the `entities` and `edges` tables that already exist. The
+      operator's requirement settled it — the MCP surface has to answer "what
+      do we know about X" with citations an assistant can follow, and those
+      come from `chunks`, `entities` and `edges`, not from a traversal. So
+      writes go to the tables and a pass mirrors them into AGE for the
+      questions the tables are bad at: paths, neighbourhoods, contested
+      subgraphs. Because the graph is derived it can be dropped and rebuilt;
+      under either of the other two readings a disagreement between the two
+      stores has no cheap resolution, and the MCP surface is exactly where it
+      would surface — as a fact citing a chunk the graph does not have.
+      **Outstanding**: the projection pass itself. Nothing writes to the graph
+      yet, and nothing needs to until a run produces an edge (`P4-16`)
 - [~] `P4-02` Entity resolution: normalise → block → score → three-band
       decision — `v0.92.0`. §5.5's four steps as four functions, each testable
       alone. **Decides and does not act**: `merge` is `P4-03`, because §16 calls
@@ -741,8 +759,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       finished embedding could resolve nothing. Token-set plus `difflib`
       rather than a new dependency: both are hard to get subtly wrong, and a
       subtle bug here is a silent bad merge. **Outstanding**: nothing calls it
-      yet — the write path is `P4-04`, and the middle band's queue lands as a
-      `merge_adjudication` notification once there is a run to raise it in
+      yet. `P4-04`'s write path exists now, but `add_edge` takes node ids — the
+      caller that has to resolve a *mention* to an entity first is `P4-16`'s
+      extract stage. The middle band's queue lands as a `merge_adjudication`
+      notification once there is a run to raise it in
 - [x] `P4-03` Merge reversibility: redirects, `merged_from`, merge log —
       `v0.93.0`. §5.5: "bad merges are worse than duplicates because
       conflation is invisible once done", and that sentence shapes all of it.
@@ -884,10 +904,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       content stays stored, extracted and chunked (§2.5) and stays visible in
       the operator's own search — that is how a false positive gets noticed —
       while the MCP surface sets `cleared_only` and cannot be asked not to.
-      **Outstanding**: the queue that hands a quarantined domain to a frontier
-      model to judge (`P4-07`). Until then a quarantine is lifted by a person,
-      which is the correct failure — the alternative is admitting unscreened
-      content because nothing was available to screen it
+      **Outstanding**: the pass that hands a quarantined domain to a model to
+      judge. `P4-07`'s routing and `P4-15`'s client are both built, so what is
+      missing is the pass itself rather than anything to call — it wants a
+      `triage` task type, which the registry already declares. Until then a
+      quarantine is lifted by a person, which is the correct failure: the
+      alternative is admitting unscreened content because nothing was available
+      to screen it
 - [x] `P4-07` Agent registry, task-type routing, fallback chains — `v0.97.0`.
       The registry has existed since `P0-07` and nothing read it; this reads
       it. **Nothing here calls a model** — routing answers "who", the caller

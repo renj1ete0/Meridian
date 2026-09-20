@@ -31,9 +31,10 @@ not just what it knows, but where the evidence is thin, stale, or contradictory.
 >
 > Two things are not done, and they are the honest headline. **The 48-hour acceptance
 > run has not happened** (`P1-16`), so nothing here has been measured against a real
-> corpus. And **there is no graph yet**: phases 4 onward — entity resolution, edges,
-> synthesis — are designed and unbuilt, so today this reads documents rather than the
-> relationships between them.
+> corpus. And **no run has written an edge yet**: phase 4's spine is built — the graph
+> store, entity resolution, the write tools, the orchestrator's state machine and the
+> model client — but the stages that reason over documents still lack their prompt and
+> parse, so today this reads documents rather than the relationships between them.
 >
 > See [docs/setup.md](docs/setup.md) to run it, the [roadmap](docs/roadmap.md)
 > for where it is going, and [TASKS.md](TASKS.md) for what is next.
@@ -229,8 +230,11 @@ scripts/      seed, role bootstrap, corpus snapshot/restore, backup, search benc
 docs/         specs, setup and deployment runbooks, roadmap, design system, handover
 ```
 
-`services/orchestrator/` holds three empty directories and no code. Phase 4 is designed
-and unbuilt, and nothing in this repository has ever called a model that generates text.
+`services/orchestrator/` holds three empty directories and no code: phase 4's spine
+lives in `meridian_core` and `worker/orchestrate.py` for now, and gets a service of its
+own when the stages that reason land. The model client exists and is tested against
+fakes — **no real call to a text-generating model has been made from this repository**,
+because nothing has had a key or a reason to make one yet.
 
 ## Documentation
 
@@ -256,9 +260,11 @@ and unbuilt, and nothing in this repository has ever called a model that generat
 **Can I run it today?**
 Yes, for reading documents. `make migrate && make seed` gives you a real, empty database;
 the worker crawls unattended, and the corpus is searchable through the web interface, the
-HTTP API and MCP. What does not exist is the *graph* — entity resolution, edges,
-contested pairs, coverage scoring and synthesis are phases 4 to 7, designed and unbuilt.
-So today it finds and cites passages; it does not yet relate them. The
+HTTP API and MCP. What is not yet *populated* is the graph: the tables, the write tools
+and the orchestrator exist and `python -m worker.orchestrate --dry-run` walks a whole
+synthesis cycle, but the stages that reason over documents are not written, so no edge
+has been produced. Contested pairs, coverage scoring and synthesis are phases 5 to 7 and
+follow from that. So today it finds and cites passages; it does not yet relate them. The
 [roadmap](docs/roadmap.md) tracks progress.
 
 **How is this different from Zotero, Obsidian, or a RAG chatbot?**

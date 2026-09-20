@@ -18,8 +18,10 @@ add it here.
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
 a UI, and through MCP. Phase 3's read surface is built and waits only on a
-Cloudflare account. **Phase 4 does not exist at all** — there is no graph, no
-orchestrator, and nothing has ever written an edge.
+Cloudflare account. **Phase 4's spine is built and has produced nothing** — the
+graph store, entity resolution, the write tools, the run state machine, the
+cycle and the model client all exist and are tested, and no run has written an
+edge, because `extract` and `tag` still lack their prompt and parse (`P4-16`).
 
 The single thing standing between here and phase 2's go/no-go is `P1-16`: the
 48-hour unattended run. It has not happened.
@@ -1106,6 +1108,32 @@ bot exists and is listening. If your own messages are being ignored, the
 unauthorised chat id is in the log — that is what it is logged for, because the
 likeliest cause is a `TELEGRAM_CHAT_ID` that is wrong rather than an intruder.
 
+### The tables are the source of truth; AGE is a projection
+
+`P4-01` shipped the graph store and deliberately left one question open:
+whether AGE holds nodes and edges, or mirrors the `entities` and `edges` tables
+that already exist. **Decided 2026-09-20 — the tables hold them, AGE is
+derived.** It is recorded here as well as in `TASKS.md` because a year from now
+the question is "what did we agree to", and the answer needs to sit next to its
+reason.
+
+The reason is the MCP surface. An assistant asking "what do we know about X"
+needs a passage and a URL it can follow, and those come from `chunks`,
+`entities` and `edges` — not from a traversal. So the store that answers the
+common question is the one that holds the truth, and AGE takes the questions
+the tables are bad at: paths, neighbourhoods, contested subgraphs.
+
+What that buys, and it is the whole argument: **a projection can be dropped and
+rebuilt.** Under the other two readings — AGE authoritative, or both
+authoritative — a disagreement between the stores has no cheap resolution, and
+the place it would surface is the MCP surface, as a fact citing a chunk the
+graph does not have.
+
+The consequence for anyone writing a stage: **write to the tables.** Nothing
+writes to AGE yet and nothing should until the projection pass exists. A stage
+that wrote Cypher directly would be creating exactly the divergence this
+decision exists to prevent.
+
 ### One unfinished run is an invariant, so a stuck run blocks every later one
 
 `P4-08` puts two unique partial indexes on `runs`: at most one row may be
@@ -1419,13 +1447,25 @@ monotonically to zero is the signal; a healthy run keeps finding more than it
 drains. Two of the three non-link discovery channels were dead once before and
 nothing reported it.
 
-### Gated on the graph (phase 4)
+### Gated on a run that produces an edge
 
-`P6-01`–`P6-07` — canvas, path mode, node panel, synthesis — are the payoff
-layer and need edges to exist. `P6-10` needs `P5-03`'s coverage scoring, which
-needs the schema-aware pass, which needs the graph. `P4-02`'s entity resolution
-is the largest single piece of unbuilt design in the repository, and §5.5
-specifies it closely enough to be written test-first.
+**Phase 4's spine is built.** The store, entity resolution and reversible
+merges, untrusted-data framing, capability routing, the run state machine and
+its cycle, the four write tools and the model client all exist, and
+`python -m worker.orchestrate --dry-run` walks a whole cycle today. So the
+old framing — "gated on the graph" — is no longer the right one: the graph
+exists and nothing has put anything in it.
+
+What is missing is `P4-16`, the prompt each of `extract` and `tag` sends and the
+parse that turns an answer into tool arguments. Until it lands, no run has
+written an edge, and `P6-01`–`P6-07` (canvas, path mode, node panel, synthesis)
+have nothing to draw. `P6-10` still needs `P5-03`'s coverage scoring, which
+needs the schema-aware pass, which needs the edges.
+
+**The parse is the load-bearing half of `P4-16`, not the prompt.** §11.8's
+position is that a model's output is untrusted, so it is validated (`P4-05`)
+rather than believed — and a parse that *raised* on a malformed answer would let
+one bad response end a run that should have skipped a batch.
 
 **`P1-32` is decided and built**, so the thing that had to happen before the
 first edge has happened: chunks are superseded rather than deleted, and a
@@ -1437,9 +1477,10 @@ is a worked example of writing `entities`, `attribute_values` and `edges` rows
 against their real constraints — including the one that catches people, the CHECK
 on `observations` requiring a value.
 
-**`P4-13` before `P4-08`.** §16 says budget caps must exist before the first
-autonomous run, and nothing enforces the ordering — the compounding
-seed→crawl→cost loop is first noticed as a bill.
+**`P4-13` came before `P4-08`, as §16 asks**, and the ordering held: the caps
+existed before anything could spend. `P4-15`'s client reserves the worst case
+before a call and settles it after, so the compounding seed→crawl→cost loop —
+the one first noticed as a bill — is bounded at both the token and the seed end.
 
 ### Gated on a Cloudflare account
 
@@ -1450,15 +1491,13 @@ on. What is missing is a tunnel, an Access application, and an AUD tag.
 
 ### Buildable today
 
-The shortlist is genuinely short now. `P6-24` (topic filter), `P6-04` (node
-panel), `P6-09` (saved views) and `P6-05` (annotation) are done, which was the
-last of the interface work that did not need the graph.
-
-1. **`P6-23`** — admin: agent registry and run history. Both tables exist and
-   stay empty until phase 4 runs something, so this is worth building *after*
-   there is a run to show: an empty screen teaches nothing about what the full
-   one should look like.
-2. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
+1. **`P4-16`** — the prompt and parse for `extract` and `tag`. The one task that
+   changes what the system does, and the last of phase 4.
+2. **`P6-23`** — admin: agent registry and run history. Its gate was that both
+   tables stay empty until phase 4 runs something; `runs` now holds real rows
+   with stages, statuses, heartbeats and counters, so there is a shape to design
+   against rather than an empty screen to guess at.
+3. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
    the 48-hour run is when it is felt.
 
 ### Explicitly *not* worth doing yet

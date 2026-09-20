@@ -8,6 +8,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Docs: `TASKS.md`, `docs/handover.md`, `README.md` and `docs/roadmap.md`
+  corrected after phase 4's spine landed. All four still said phase 4 was
+  "designed and unbuilt" and that nothing had ever called a model; the accurate
+  statement is that the spine is built and **no run has written an edge**,
+  which `P4-16` is what closes. `P4-01`'s open question — whether AGE is the
+  source of truth or a projection — is recorded as decided (the tables hold
+  them; AGE is derived and rebuildable), with the reasoning, in both `TASKS.md`
+  and the handover
+
 - Docs: `docs/setup.md` — one document from a bare machine to a queryable
   corpus, with a status column per section. Some of the path works and some is
   not built, and instructions for something that does not exist are worse than
