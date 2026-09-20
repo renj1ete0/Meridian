@@ -48,6 +48,31 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.75.2] — 2026-09-20
+
+### Fixed
+
+- `B-10` `figures.linked_entity_ids` was the only `json` column in the schema,
+  and the only list of ids not stored as `ARRAY(BigInteger)` — `entities.
+  merged_from` and the four `supporting_chunk_ids` columns are the same shape
+  and the same use. `json` keeps the literal document text, so `'[1, 2]'` and
+  `'[1,2]'` were unequal values, nothing could be indexed, and reading one back
+  meant parsing JSON to recover integers Postgres could return directly
+- Two completeness probes derived from the live schema, so a column added next
+  year is covered without anyone remembering: every `*_ids` column is an array
+  of bigint, and nothing uses `json` where `jsonb` was meant
+
+### The migration is four statements, not one
+
+- Autogenerate emits a bare `ALTER COLUMN ... TYPE`, which has no cast from
+  `json` to `bigint[]`. Supplying one needs `jsonb_array_elements_text`
+  aggregated — a subquery, which Postgres rejects in `USING`. Add, `UPDATE`,
+  drop, rename instead, which also puts the values through a real JSON parse
+  rather than string surgery
+- Caught by migrating rows put there on purpose. `figures` is empty in
+  development, which is precisely the condition that lets a migration that
+  would fail on the server pass locally
+
 ## [0.75.1] — 2026-09-20
 
 ### Fixed

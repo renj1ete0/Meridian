@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.75.1`. 1935 backend tests against a real Postgres, 296 frontend.**
+**`v0.75.2`. 1937 backend tests against a real Postgres, 296 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -644,6 +644,31 @@ It does its own encoding detection, which is the entire point of handing it the 
 response body: a page that declares UTF-8 and serves Latin-1 is common, and decoding
 here first turns a recoverable document into replacement characters. `extract_html`
 accepts both and passes bytes straight through.
+
+### An empty table hides a migration that would fail on the server
+
+`alembic upgrade head` passing locally proves nothing about a data migration
+when the table is empty, and most of this schema's tables are. `B-10` changed
+`figures.linked_entity_ids` from `json` to `bigint[]`; autogenerate emitted a
+bare `ALTER COLUMN ... TYPE`, which ran clean against zero rows and would have
+failed on the first deployment that had crawled a PDF with a figure in it —
+Postgres has no implicit cast between those types.
+
+**Insert rows on purpose before running a data migration**, covering the cases
+the column actually holds — here NULL, `[]`, and two JSON spellings of the same
+list — then migrate, check the values, downgrade, and check them again. It takes
+two minutes and it is the only thing that distinguishes "the migration ran" from
+"the migration is correct".
+
+Two Postgres specifics that cost time in that one:
+
+- **`USING` cannot contain a subquery** ("cannot use subquery in transform
+  expression"), so anything needing `jsonb_array_elements_text` aggregated back
+  into an array cannot be done as a type change. Add a column, `UPDATE` it, drop
+  the old one, rename — an `UPDATE` may contain a subquery.
+- **`ARRAY(SELECT ...)` over a NULL input yields `{}`, not NULL.** If the column
+  distinguishes "nothing recorded" from "recorded as empty", the `UPDATE` needs
+  `WHERE col IS NOT NULL` or the distinction is silently collapsed.
 
 ### A test whose clock is fixed and whose rows' clock is not expires on a date
 

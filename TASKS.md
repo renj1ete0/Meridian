@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.75.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 1935 backend tests
+**`v0.75.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 1937 backend tests
 against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -890,13 +890,16 @@ carries that list, and it is the checklist for the first deploy.
 
 Things worth doing that don't belong to a phase yet.
 
-- [ ] `B-10` `figures.linked_entity_ids` is `json`, not `jsonb`, and is the only
-      column in the schema that stores a list of IDs as JSON at all — `entities.
-      merged_from` is exactly the same shape and uses `ARRAY(BigInteger)`. `json`
-      keeps the literal text, so it cannot be indexed and preserves whitespace and
-      key order for nothing. Change it to `ARRAY(BigInteger)` with a migration while
-      the table is still empty; add a drift test asserting no ID-list column uses
-      `json`
+- [x] `B-10` `figures.linked_entity_ids` is an array, not a JSON document —
+      `v0.75.2`. It was the only `json` column in the schema and the only list of
+      ids not stored as `ARRAY(BigInteger)`. Two probes rather than one assertion,
+      both derived from the live schema so they grow with it: every `*_ids` column
+      is an array of bigint, and nothing uses `json` where `jsonb` was meant.
+      **The migration is four statements**, because there is no cast from `json`
+      to `bigint[]` and supplying one needs a subquery, which Postgres rejects in
+      `USING` — autogenerate's version would have failed on the server and passed
+      here, since `figures` is empty locally. Caught by migrating rows put there
+      on purpose, and the downgrade round-trips
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

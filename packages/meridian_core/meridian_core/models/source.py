@@ -15,7 +15,6 @@ import datetime as dt
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    JSON,
     BigInteger,
     Computed,
     Date,
@@ -375,7 +374,15 @@ class Figure(Base, TimestampMixin):
     vlm_description: Mapped[str | None] = mapped_column(Text)
     ocr_text: Mapped[str | None] = mapped_column(Text)
 
-    linked_entity_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    #: Which graph nodes this figure illustrates (§6.6's lookup affordance).
+    #:
+    #: `ARRAY(BigInteger)`, matching `entities.merged_from` and the four
+    #: `supporting_chunk_ids` columns — every other list of ids in this schema.
+    #: It was `json` until `B-10`, which nothing chose: `json` keeps the literal
+    #: document text, so `'[1, 2]'` and `'[1,2]'` are unequal values, there is
+    #: nothing to index against, and reading one back means parsing JSON to
+    #: recover integers Postgres could return directly.
+    linked_entity_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
 
     source: Mapped[Source] = relationship(back_populates="figures")
 

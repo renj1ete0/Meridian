@@ -259,3 +259,76 @@ async def test_supporting_chunk_ids_cannot_be_null(session_for) -> None:
             )
         )
     assert "null" in str(exc.value).lower()
+
+
+# --------------------------------------------------------------------------
+# Column types that were chosen once and then copied (task B-10)
+# --------------------------------------------------------------------------
+#
+# Both of these are completeness probes rather than assertions about a known
+# column: they are derived from the live schema and grow with it, so a column
+# added next year is covered without anyone remembering to add it here. A test
+# listing the columns it knows about would be edited into passing the first time
+# it was inconvenient.
+
+
+async def test_no_column_stores_a_list_of_ids_as_json(session_for) -> None:
+    """A ``*_ids`` column is an array of bigints, everywhere.
+
+    `figures.linked_entity_ids` was `json` while `entities.merged_from` and four
+    `supporting_chunk_ids` columns — the same shape, the same use — were
+    `ARRAY(BigInteger)`. Nothing chose that: it is what happens when a column is
+    added by copying a nearby one instead of the one it resembles.
+
+    It matters beyond tidiness. `json` keeps the literal document text, so
+    `'[1, 2]'` and `'[1,2]'` are different values that compare unequal, there is
+    no containment operator to index, and reading one back means parsing JSON to
+    recover integers the database could have handed over directly.
+    """
+    sess = await session_for("ro")
+    rows = (
+        await sess.execute(
+            text(
+                "SELECT table_name, column_name, data_type, udt_name "
+                "FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND column_name LIKE '%\\_ids' "
+                "ORDER BY table_name, column_name"
+            )
+        )
+    ).all()
+
+    # Guard on the probe. A `LIKE` that matched nothing would make the assertion
+    # below vacuously true, which is the usual way a drift test stops testing
+    # anything while still passing.
+    assert len(rows) >= 4, f"expected several id-list columns, found {rows}"
+
+    wrong = [(t, c, d) for t, c, d, _ in rows if d != "ARRAY"]
+    assert wrong == [], f"id-list columns not stored as arrays: {wrong}"
+
+    not_bigint = [(t, c, u) for t, c, _, u in rows if u != "_int8"]
+    assert not_bigint == [], f"id-list columns not arrays of bigint: {not_bigint}"
+
+
+async def test_no_column_uses_json_where_jsonb_was_meant(session_for) -> None:
+    """`json` is never the right answer in this schema, and was never chosen.
+
+    Every other document column here is `jsonb`. `json` stores the literal text
+    — whitespace, duplicate keys and key order preserved — which is worth having
+    only when the exact bytes a caller sent are themselves the record. Nothing
+    here is that; `payload`, `bbox` and `filters` are all read back as data.
+
+    Asserting the absence rather than a list of known columns, because the
+    failure this catches is a *new* column added the wrong way.
+    """
+    sess = await session_for("ro")
+    rows = (
+        await sess.execute(
+            text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND data_type = 'json' "
+                "ORDER BY table_name, column_name"
+            )
+        )
+    ).all()
+
+    assert [tuple(r) for r in rows] == [], f"columns using json rather than jsonb: {rows}"
