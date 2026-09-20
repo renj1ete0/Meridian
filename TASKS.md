@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.76.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 1990 backend tests
+**`v0.78.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 2057 backend tests
 against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -38,7 +38,8 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
    mid-deploy.
 
-**Buildable today**, needing none of the three: `P6-23` (agent registry and run history,
+**Buildable today**, needing none of the three: `B-15` (nothing starts the scheduler,
+so four of the six passes have never run), `P6-23` (agent registry and run history,
 better after there is a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a
 Semantic Scholar key, ten minutes, felt during the 48h run). `P6-05` was the other one
 and is done — an annotation is a node somebody writes by hand, so it is the one
@@ -51,10 +52,14 @@ that an agent would be inventing rather than implementing.
 
 **What was verified live** — real government PDFs extracted with page-accurate chunks,
 the injection screen clean across every page crawled, `render_js: auto` escalating and
-not escalating on real sites, `Crawl-delay` honoured. **What was not**: anything after
-phase 1. Every claim about phases 2, 3 and 6 rests on tests against a real Postgres and
-real HTTP doubles, because the stack has never been deployed. `docs/handover.md` §4
-carries that list, and it is the checklist for the first deploy.
+not escalating on real sites, `Crawl-delay` honoured. And, as of `v0.78.1`, the stack
+running whole in containers: the crawl storing what it fetches, the embedding sidecar
+serving, and **hybrid search end to end outside a test** — which had never happened.
+Four defects had to be fixed to get there, every one of them invisible to the suite and
+present in the production compose file too (`B-12`, `B-13`, `B-14`, `B-16`), plus a
+deploy runbook whose first two commands could not work (`B-17`).
+**What is still unverified**: anything needing the server, Cloudflare or scale.
+`docs/handover.md` §4 carries that list, and it is the checklist for the first deploy.
 
 ---
 

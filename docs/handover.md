@@ -1144,6 +1144,24 @@ been deployed to the server**. Specifically unverified outside tests:
 
 When the 48-hour run happens, that list is the checklist.
 
+**Four of those are now shorter.** `v0.76.3`–`v0.78.1` brought the whole stack
+up in containers for the first time — not on the server, but not natively
+either — and the four things it broke on are the four in §3 above. What that run
+established, against the real web and a real Postgres:
+
+| Behaviour | Evidence |
+|---|---|
+| The stack comes up whole, from source | seven services healthy from `make quickstart` on a clean clone; migrations and the seed through the `tools` image, topic, policy and gazetteer rows written |
+| The UI is served and reaches the API | nginx on `21116`, `/api` proxied, and a client-side route (`/sources/42`) surviving a reload rather than 404ing on the static root |
+| The crawl stores what it fetches | after `B-16`, nearly every source in the corpus has a raw file, HTML and PDF alike. Before it, none did — each settled `"outcome": "success", "stored": null` |
+| The embedding sidecar serves from a container | `loaded: true`, 1024 dimensions, 143s for a cold load off disk — which is what `start_period: 180s` is for |
+| **Hybrid search, end to end, outside a test** | `arms: ["lexical", "vector"]`, `degraded: false`, both ranks populated. It had never run anywhere but in the suite |
+
+Still untouched by any of this: everything needing the server, Cloudflare or
+scale. `P2-19`'s fallback is the one that moved without being verified — it
+fired, loaded the model in-process and embedded correctly, but only because the
+sidecar was broken at the time, which is not a test anybody designed.
+
 ---
 
 ## 5. What to build next
