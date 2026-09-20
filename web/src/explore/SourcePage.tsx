@@ -5,11 +5,14 @@ import {
   getSource,
   getSourceChunks,
   getSourceFigures,
+  writeAnnotation,
   type Chunk,
+  type NoteDraft,
   type Source,
 } from '../lib/api'
 import { onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
+import { NoteComposer } from './Annotations'
 import { FiguresPanel } from './FiguresPanel'
 
 /**
@@ -25,6 +28,12 @@ import { FiguresPanel } from './FiguresPanel'
  * is the question a reader arrives with — and because `extractor` (`P1-44`) is
  * the difference between a document that had no text and one whose extractor
  * fell over.
+ *
+ * **Annotation lives here** (`P6-05`, §12.5). This is the screen where reading
+ * actually happens, and a note written anywhere else has to remember which
+ * passage it came from. Ticking passages is how the citation gets onto the
+ * note without the reader copying chunk ids by hand — which is the version of
+ * this feature that does not get used.
  */
 
 type Load<T> = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: T }
@@ -57,6 +66,31 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
   const source = useResource<Source>((signal) => getSource(sourceId, { signal }), sourceId)
   const chunks = useResource((signal) => getSourceChunks(sourceId, {}, { signal }), sourceId)
   const figures = useResource((signal) => getSourceFigures(sourceId, { signal }), sourceId)
+
+  // Which passages the note will cite. A set rather than a list: ticking the
+  // same passage twice is a reader changing their mind, not two citations.
+  const [citing, setCiting] = useState<readonly number[]>([])
+  const [writing, setWriting] = useState(false)
+  const [writeError, setWriteError] = useState<string | null>(null)
+  const [kept, setKept] = useState<string | null>(null)
+
+  function onWrite(draft: NoteDraft) {
+    setWriting(true)
+    setWriteError(null)
+    setKept(null)
+    writeAnnotation(draft)
+      .then((note) => {
+        // Said out loud, because a note written here attaches to no node and so
+        // appears on no panel this screen shows. Silence after a write is how a
+        // reader concludes it did not work and stops writing them.
+        setKept(note.title)
+        setCiting([])
+      })
+      .catch((cause: unknown) => {
+        setWriteError(cause instanceof ApiError ? cause.message : 'That note was not saved.')
+      })
+      .finally(() => setWriting(false))
+  }
 
   if (source.status === 'loading') {
     return <p className="text-text-muted">Loading source {sourceId}.</p>
@@ -105,7 +139,44 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
         <h2 className="font-sans text-[length:var(--text-heading)] font-semibold">Passages</h2>
         {chunks.status === 'loading' ? <p className="mt-2 text-text-muted">Loading.</p> : null}
         {chunks.status === 'error' ? <p className="mt-2 text-text">{chunks.message}</p> : null}
-        {chunks.status === 'ready' ? <Passages chunks={chunks.data.chunks} /> : null}
+        {chunks.status === 'ready' ? (
+          <Passages
+            chunks={chunks.data.chunks}
+            citing={citing}
+            onCite={(chunkId) =>
+              setCiting((current) =>
+                current.includes(chunkId)
+                  ? current.filter((id) => id !== chunkId)
+                  : [...current, chunkId],
+              )
+            }
+          />
+        ) : null}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="font-sans text-[length:var(--text-body)] font-semibold">Your note</h2>
+        <p className="mt-1 max-w-prose text-[length:var(--text-small)] text-text-muted">
+          {/* A note written here usually has no node to attach to — phase 4 has
+              not run, and §12.5 wants the habit formed before it does. The
+              passages are the thread back, and they are the part that would be
+              unrecoverable if this screen did not offer it. */}
+          Tick the passages it comes from. A note needs no node to attach to — that is the point of
+          having it before the graph exists.
+        </p>
+        <div className="mt-3">
+          <NoteComposer
+            citing={citing}
+            busy={writing}
+            error={writeError}
+            onWrite={onWrite}
+          />
+        </div>
+        {kept ? (
+          <p className="mt-2 text-[length:var(--text-small)] text-text-muted" role="status">
+            Kept “{kept}”. It is in your notes on the search screen.
+          </p>
+        ) : null}
       </section>
 
       <section className="mt-10">
@@ -120,7 +191,15 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
   )
 }
 
-function Passages({ chunks }: { chunks: readonly Chunk[] }) {
+function Passages({
+  chunks,
+  citing,
+  onCite,
+}: {
+  chunks: readonly Chunk[]
+  citing: readonly number[]
+  onCite: (chunkId: number) => void
+}) {
   if (chunks.length === 0) {
     // §6.5 makes metadata-only a valid resting state, so this is a finding
     // rather than an error — a scanned PDF or a paywall, not a broken fetch.
@@ -138,6 +217,14 @@ function Passages({ chunks }: { chunks: readonly Chunk[] }) {
         <li key={chunk.chunk_id}>
           <p className="whitespace-pre-wrap text-text">{chunk.text}</p>
           <p className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
+              <input
+                type="checkbox"
+                checked={citing.includes(chunk.chunk_id)}
+                onChange={() => onCite(chunk.chunk_id)}
+              />
+              cite
+            </label>
             <DataChip>chunk {chunk.chunk_id}</DataChip>
             {chunk.page_or_offset !== null ? <DataChip>at {chunk.page_or_offset}</DataChip> : null}
             {/* `P2-03`'s verdict. §12.5: a filtered near-duplicate and a

@@ -26,6 +26,9 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  ANNOTATIONS_FIELDS,
+  ANNOTATION_FIELDS,
+  ANNOTATION_TARGET_FIELDS,
   ApiError,
   CHUNK_FIELDS,
   GAZETTEER_QUEUE_FIELDS,
@@ -94,6 +97,9 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['NodeAttributeRead', 'search.py', NODE_ATTRIBUTE_FIELDS],
     ['NodeDetailRead', 'search.py', NODE_DETAIL_FIELDS],
     ['EntityRead', 'graph.py', ENTITY_FIELDS],
+    ['AnnotationTarget', 'annotations.py', ANNOTATION_TARGET_FIELDS],
+    ['AnnotationRead', 'annotations.py', ANNOTATION_FIELDS],
+    ['AnnotationsRead', 'annotations.py', ANNOTATIONS_FIELDS],
     ['SavedViewRead', 'views.py', SAVED_VIEW_FIELDS],
     ['SavedViewsRead', 'views.py', SAVED_VIEWS_FIELDS],
     ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],

@@ -29,6 +29,13 @@ layout rule).
 
 from __future__ import annotations
 
+from .annotations import (
+    AnnotationCreate,
+    AnnotationEdit,
+    AnnotationRead,
+    AnnotationsRead,
+    AnnotationTarget,
+)
 from .common import Confidence, ProvenanceFields, QualityTier, SupportingChunkIds
 from .config import (
     AgentCreate,
@@ -153,6 +160,13 @@ __all__ = [
     # gazetteer
     "GazetteerTermCreate",
     "GazetteerTermRead",
+    # annotations
+    "AnnotationCreate",
+    "AnnotationEdit",
+    "AnnotationRead",
+    "AnnotationTarget",
+    "AnnotationsRead",
+    # saved views
     "SavedViewCreate",
     "SavedViewEdit",
     "SavedViewRead",

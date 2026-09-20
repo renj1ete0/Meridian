@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.74.0`. 1908 backend tests against a real Postgres, 267 frontend.**
+**`v0.75.0`. 1934 backend tests against a real Postgres, 296 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -59,9 +59,14 @@ worker.retopic    topic labels onto sources crawled before P2-14
   read-write one. The prefix *is* the role boundary (§12.6) and a test asserts
   nothing under `/api/explore` accepts a write.
 - **A UI that renders data.** Explore with search, a topic filter, the corpus
-  counts, a since-last-visit delta, saved views and notifications; a source page
-  at `/sources/{id}` with passages, figures and both exports; a node panel at
-  `/nodes/{id}`; and Admin with three screens (gazetteer, topics, domains).
+  counts, a since-last-visit delta, saved views, notifications and the reader's
+  own notes; a source page at `/sources/{id}` with passages, figures, both
+  exports and a note composer; a node panel at `/nodes/{id}`; and Admin with
+  three screens (gazetteer, topics, domains).
+- **Annotation** (`P6-05`), which is the only thing in the graph tables that has
+  rows on a fresh install — a note is an `entities` row somebody wrote by hand.
+  It is also the only write in the system whose author is assigned rather than
+  declared — see the exceptions below.
 - **An MCP read surface**, mounted on the same app, same read-only role, same
   provenance. Scoped tokens, a statement-timeout SQL escape hatch on a separate
   `meridian_guest` role, and Access JWT verification.
@@ -71,7 +76,9 @@ worker.retopic    topic labels onto sources crawled before P2-14
 ### What still does not exist
 
 - **The graph.** `entities`, `edges`, `observations` and `attribute_values` are
-  tables with DTOs, drift tests and provenance rules — and zero rows. Apache AGE
+  tables with DTOs, drift tests and provenance rules, and nothing *derives* a
+  row into them. `P6-05`'s annotations are the one exception and are written by
+  hand, so "no edges exist" is now "no edge was produced by a model". Apache AGE
   (`P4-01`) is not installed; it does support PG17 (v1.6.0), so it is not blocked
   on a Postgres downgrade, only on not swapping the image mid-deploy.
 - **Any LLM call.** The orchestrator does not exist. Nothing in this repository
@@ -82,12 +89,16 @@ worker.retopic    topic labels onto sources crawled before P2-14
 - **OCR.** Scanned PDFs are detected and filed in `enrichment_queue`, and nothing
   ever runs that queue — §6.6 makes OCR user-triggered, so the rows wait for a UI
   to spend against them.
-- **Anything that needs a node to exist.** The node panel (`P6-04`) is built,
-  tested and reachable at `/nodes/{id}`, and there is nothing to put in it.
-  Likewise a saved view's `focus_entity_id`. Both were built ahead of the graph
-  deliberately — their hard parts are about how a claim is presented, and those
-  do not get easier by waiting for rows — but do not mistake "the screen exists"
-  for "the feature works end to end".
+- **Anything that needs a *derived* node to exist.** The node panel (`P6-04`) is
+  built, tested and reachable at `/nodes/{id}`, and the pipeline has put nothing
+  in it. Likewise a saved view's `focus_entity_id`. Both were built ahead of the
+  graph deliberately — their hard parts are about how a claim is presented, and
+  those do not get easier by waiting for rows — but do not mistake "the screen
+  exists" for "the feature works end to end".
+
+  `P6-05` is the exception that proves it: annotations *are* entity rows, so a
+  reader can fill `/nodes/{id}` with their own notes today. That is a real
+  end-to-end path, and it is not the graph.
 
 ### The shape of the read path
 
@@ -129,7 +140,7 @@ sources.
 - **Run `uv lock` in the same commit as a version bump**, or the Docker build
   breaks. See §3.
 
-### Two exceptions, both deliberate, both easy to mistake for bugs
+### Three exceptions, all deliberate, all easy to mistake for bugs
 
 - **`GET /api/explore/nodes/{id}` returns superseded chunks**, and it is the only
   read path that does. Everywhere else a superseded chunk is text the page no
@@ -141,6 +152,25 @@ sources.
   shared state with no per-viewer scoping, so a guest opens the owner's and
   cannot add to them. Saving therefore needs Access configured, or the
   anonymous opt-out.
+- **Annotations take the same split, and `produced_by` is not an input.** Notes
+  read on `/api/explore/annotations` and are written under `/api/admin`, for a
+  sharper version of the same reason: a note is the one thing here that reads as
+  the owner's own thinking, which makes it the worst thing on this system to be
+  able to forge. So `AnnotationCreate` has **no** `produced_by` field and
+  forbids extra keys — `meridian_core/annotations.py` assigns the reserved
+  `human` id and nothing else can. `scripts/seed.py` refuses to register an
+  agent under that id for the same reason, and that refusal will look like an
+  over-zealous validation until you know why it is there.
+
+  Two consequences that look wrong and are not. A note's `quality_tier` and
+  `model` are **null**, because §11.12's tier is an ordinal over models and a
+  person is not on that scale — "quality tier only moves up" must not become a
+  rule about a person. And a note's `annotates` edges carry the note's own
+  `supporting_chunk_ids`, duplicating what the node already holds; the node's
+  copy is the source of truth (a note with no target has no edges at all), and
+  the duplicate exists because *every* edge here names the chunks behind it.
+  They cannot drift — `annotations.py` is the only writer and rewrites the edges
+  from the note on every change.
 
 ## 2. Getting a working environment
 
@@ -984,22 +1014,18 @@ on. What is missing is a tunnel, an Access application, and an AUD tag.
 ### Buildable today
 
 The shortlist is genuinely short now. `P6-24` (topic filter), `P6-04` (node
-panel) and `P6-09` (saved views) are done, which was the last of the interface
-work that did not need the graph.
+panel), `P6-09` (saved views) and `P6-05` (annotation) are done, which was the
+last of the interface work that did not need the graph.
 
-1. **`P6-05`** — annotation as first-class nodes. §12.5 says to build the
-   affordance early or it will not get used, and it is the one graph-shaped
-   feature that does *not* wait for `P4-01`: an annotation is a node somebody
-   writes by hand, so it needs `entities` and nothing that fills it.
-2. **`P6-23`** — admin: agent registry and run history. Both tables exist and
+1. **`P6-23`** — admin: agent registry and run history. Both tables exist and
    stay empty until phase 4 runs something, so this is worth building *after*
    there is a run to show: an empty screen teaches nothing about what the full
    one should look like.
-3. **`P5-07`'s inbound half** — Telegram commands. §13.3 makes the bot a control
+2. **`P5-07`'s inbound half** — Telegram commands. §13.3 makes the bot a control
    surface that can trigger runs and change steering, so the single-chat
    restriction and command authorisation have to exist before the first command
    does; most useful commands need the orchestrator anyway.
-4. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
+3. **`P1-35`** — a Semantic Scholar key, or accept the retries. Ten minutes, and
    the 48-hour run is when it is felt.
 
 ### Explicitly *not* worth doing yet

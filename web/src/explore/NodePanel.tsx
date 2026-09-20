@@ -1,5 +1,6 @@
+import { NoteComposer, NoteList } from './Annotations'
 import { ResultList } from './ResultList'
-import type { NodeAttribute, NodeDetail } from '../lib/api'
+import type { NodeAttribute, NodeDetail, NoteDraft } from '../lib/api'
 
 /**
  * The node detail panel (task P6-04, spec §12.5, §7).
@@ -21,12 +22,26 @@ import type { NodeAttribute, NodeDetail } from '../lib/api'
  * scopes is still more than a panel should open with. `<details>` because it
  * needs no state and works with the keyboard, and because a "+7 more" that is
  * not reachable is the same as not having the tags.
+ *
+ * §12.5 ends the panel with "own annotations", and `P6-05` put them there: the
+ * reader's own thinking about this node, and the affordance to add to it,
+ * last — after the evidence, because a note written before reading the passages
+ * is a note about the title.
  */
 
 export interface NodePanelProps {
   node: NodeDetail
   /** How many tags each group shows before folding the rest away. */
   visible?: number
+  /**
+   * Writing a note about this node. Optional, and the panel renders without it
+   * — `P6-04` built this screen to be readable before anything could write to
+   * it, and a panel that needed a write handler to render would have made the
+   * read path depend on the control surface being reachable.
+   */
+  onWrite?: (draft: NoteDraft) => void
+  writing?: boolean
+  writeError?: string | null
 }
 
 export const DEFAULT_VISIBLE = 6
@@ -78,8 +93,19 @@ function Tag({ attribute }: { attribute: NodeAttribute }) {
   )
 }
 
-export function NodePanel({ node, visible = DEFAULT_VISIBLE }: NodePanelProps) {
+export function NodePanel({
+  node,
+  visible = DEFAULT_VISIBLE,
+  onWrite,
+  writing = false,
+  writeError = null,
+}: NodePanelProps) {
   const groups = groupByScope(node.attributes)
+  const here = {
+    entity_id: node.entity.entity_id,
+    canonical_name: node.entity.canonical_name,
+    node_type: node.entity.node_type,
+  }
 
   return (
     <article>
@@ -170,6 +196,25 @@ export function NodePanel({ node, visible = DEFAULT_VISIBLE }: NodePanelProps) {
             </div>
           </>
         )}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="font-sans text-[length:var(--text-body)] font-semibold">Your notes</h2>
+        <p className="mt-1 max-w-prose text-[length:var(--text-small)] text-text-muted">
+          {/* §12.5 expects this to become the highest-quality layer in the
+              system over months. Saying whose it is matters: everything else on
+              this panel was derived by something, and this was not. */}
+          Yours, not the corpus's. Everything else here was derived from a source; this was not.
+        </p>
+        <NoteList notes={node.annotations} inContextOf={node.entity.entity_id} />
+        <div className="mt-3">
+          <NoteComposer
+            about={[here]}
+            busy={writing}
+            error={writeError}
+            onWrite={onWrite}
+          />
+        </div>
       </section>
     </article>
   )

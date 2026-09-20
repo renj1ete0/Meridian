@@ -117,6 +117,24 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
         default=False, server_default=text("false"), nullable=False
     )
 
+    # What a hand-written node was drawn from, and the one column on this table
+    # that exists for annotations (`P6-05`).
+    #
+    # §2 principle 3 names edges, tags and attributes, not nodes, and that is
+    # right for a derived entity: what justifies it is the edges and attribute
+    # values that cite it, each carrying their own chunks. A node a *person*
+    # wrote has none of those — the note is the claim — so the passages they
+    # were reading have nowhere else to live. Empty for everything the pipeline
+    # derives.
+    #
+    # This is the source of truth, and the note's `annotates` edges carry the
+    # same ids rather than `{}` — an edge that named no chunk would break the
+    # invariant that every edge does, and the two cannot drift because
+    # `annotations.py` is the only writer and rewrites the edges from the note.
+    supporting_chunk_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger), nullable=False, default=list, server_default=text("'{}'")
+    )
+
     __table_args__ = (
         # Blocking step of entity resolution: same type AND same jurisdiction.
         # Never merge across either (§5.5, extended).

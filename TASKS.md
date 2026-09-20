@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.74.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 1908 backend tests
-against a real Postgres, 267 frontend.
+**`v0.75.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 1934 backend tests
+against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
 sitemaps, search and citations. The corpus is **searchable**: hybrid retrieval over
@@ -38,11 +38,11 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
    mid-deploy.
 
-**Buildable today**, needing none of the three: `P6-05` (annotation as first-class
-nodes — the one graph-shaped feature that does not wait, since an annotation is a node
-somebody writes by hand), `P6-23` (agent registry and run history, better after there is
-a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a Semantic Scholar key,
-ten minutes, felt during the 48h run).
+**Buildable today**, needing none of the three: `P6-23` (agent registry and run history,
+better after there is a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a
+Semantic Scholar key, ten minutes, felt during the 48h run). `P6-05` was the other one
+and is done — an annotation is a node somebody writes by hand, so it is the one
+graph-shaped feature that never needed the graph.
 
 **Explicitly parked, with reasons.** `P2-15` is gated by its own text on `P1-16` *and*
 on `P2-09` being marginal, and means a second embedding column plus a full re-embed for
@@ -722,7 +722,20 @@ carries that list, and it is the checklist for the first deploy.
       difference between 0.61 and 0.94. And this is the **only** read path that
       shows superseded chunks — the tag was derived from that text, so the
       citation has to resolve even after the page changed
-- [ ] `P6-05` Annotation as first-class nodes
+- [x] `P6-05` Annotation as first-class nodes — `v0.75.0`. A note is an
+      `entities` row with ordinary `annotates` edges, not a side table: §12.1's
+      traversal, path mode and canvas filters all read `entities` and `edges`,
+      and a notes table would make the layer §12.5 calls the highest-quality one
+      in the system the only layer the graph cannot see. **Authorship is
+      assigned by the server and cannot be claimed** — `AnnotationCreate` has no
+      `produced_by` and forbids extra keys, and `seed.py` refuses to register an
+      agent under the reserved `human` id. `quality_tier` stays null, because
+      §11.12's tier is an ordinal over models and a person is not on it. A note
+      may be about nothing, which with phase 4 unbuilt is every note — the
+      thought that has not found its node is the one the corpus cannot
+      re-derive. Its citations ride on the edges too, since every edge here
+      names the chunks behind it. Composer on both reading surfaces, never in
+      Admin (§12.6)
 - [ ] `P6-06` Synthesis panel: collapsible toggle, thread, node chips, inline citations
 - [ ] `P6-07` Conversation history within the synthesis panel
 - [x] `P6-08` Notifications panel, filterable by type — `v0.60.0`. Reads the

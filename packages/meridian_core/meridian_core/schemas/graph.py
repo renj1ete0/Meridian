@@ -32,6 +32,11 @@ class EntityCreate(ProvenanceFields):
     description: str | None = None
     confidence: Confidence | None = None
     is_annotation: bool = False
+    #: Not ``SupportingChunkIds``: a derived node is justified by the edges and
+    #: attribute values that cite it, each carrying their own chunks, so empty
+    #: is the normal case. It is a hand-written node — an annotation — that has
+    #: nowhere else to record what it was drawn from (`P6-05`, §12.5).
+    supporting_chunk_ids: list[int] = Field(default_factory=list)
 
 
 class EntityRead(BaseModel):
@@ -51,6 +56,7 @@ class EntityRead(BaseModel):
     merged_from: list[int] | None
     redirects_to: int | None
     is_annotation: bool
+    supporting_chunk_ids: list[int]
     produced_by: str | None
     model: str | None
     quality_tier: QualityTier | None

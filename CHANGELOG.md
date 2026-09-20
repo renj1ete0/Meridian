@@ -48,6 +48,61 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.75.0] — 2026-09-20
+
+**Annotation as first-class nodes: the one layer nothing else can write.**
+
+### Added
+
+- `P6-05` A note is an `entities` row with `node_type='annotation'`, attached to
+  what it is about by ordinary `annotates` edges. Reads on
+  `GET /api/explore/annotations`, writes under `/api/admin/annotations`, a
+  Markdown export at `/api/explore/export/annotations`, and the composer on both
+  reading surfaces — the source page, where the passages are, and the node panel,
+  which §12.5 ends with "own annotations"
+- `entities.supporting_chunk_ids`, the one column this needed. §2 principle 3
+  names edges, tags and attributes, not nodes, and that is right for a derived
+  entity: what justifies it is the edges and attribute values that cite it. A
+  node a *person* wrote has none of those — the note is the claim — so the
+  passages they were reading have nowhere else to live
+
+### Not a side table
+
+- The graph's traversal, path mode and canvas filters all read `entities` and
+  `edges`. A notes table would need every one of them taught about it, and the
+  layer §12.5 calls the highest-quality one in the system would be the only
+  layer the graph cannot see
+
+### Authorship is assigned by the server, never accepted
+
+- `AnnotationCreate` has no `produced_by` and forbids extra keys, so nothing can
+  claim to be the reader's own thinking — including, later, a model holding a
+  write tool (`P4-04`). The layer is worth having because a reader can tell
+  their notes from the corpus's, and a note that merely *says* a human wrote it,
+  on a surface where anything could say that, is not a distinguishable layer
+- `scripts/seed.py` refuses to register an agent under the reserved `human` id,
+  because an agent that could would write rows nothing downstream could tell
+  apart from the reader's own
+- `quality_tier` and `model` stay null. §11.12's tier is an ordinal over models;
+  a note carrying one would be ranked against model output on an axis it is not
+  on, and "quality tier only moves up" would become a rule about a person
+
+### Built before the graph, on purpose
+
+- A note may be about nothing. The thought that has not found its node yet is
+  the one the corpus cannot re-derive, and with phase 4 unbuilt it is *every*
+  note — so a composer that required a target would make the affordance
+  unavailable exactly when §12.5 wants the habit forming
+- A citation is refused if it resolves to nothing. The annotation layer is the
+  part a reader trusts without re-checking, so a dangling chunk id here is one
+  nobody will ever click to discover
+
+### Fixed
+
+- The client types for `EntityRead` and `NodeDetailRead` had fallen behind the
+  DTOs. The drift test in `web/tests/api.test.ts` caught both, which is what it
+  is for
+
 ## [0.74.0] — 2026-09-15
 
 **Saved views: a filter set, named and re-openable.**

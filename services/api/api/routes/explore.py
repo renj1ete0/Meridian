@@ -24,6 +24,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import func, or_, select
 
+from meridian_core import annotations
 from meridian_core.export import to_bibtex, to_markdown
 from meridian_core.models import (
     AttributeDefinition,
@@ -36,6 +37,7 @@ from meridian_core.models import (
     SavedView,
     Source,
 )
+from meridian_core.schemas.annotations import AnnotationsRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
 from meridian_core.schemas.runs import NotificationRead
@@ -75,6 +77,19 @@ DEFAULT_LIMIT = 20
 #: attributes can cite a hundred chunks, and a panel that returned all of them
 #: would be a page of prose where §12.5 asked for evidence a reader can follow.
 MAX_SUPPORTING_CHUNKS = 40
+
+#: How many of the reader's own notes the node panel carries. Lower than the
+#: chunk cap and deliberately so: the panel shows the most recent few and the
+#: notes list shows the rest. A node somebody has annotated forty times is a
+#: node they are working on, and burying its attributes under their own backlog
+#: is not what §12.5 asked the panel for.
+MAX_PANEL_ANNOTATIONS = 10
+
+#: How many notes one export may carry. Notes are the reader's own writing, so
+#: this is a page cap rather than a courtesy one — the whole point of §12.5's
+#: export is that the material can leave, and a cap that made "all of them"
+#: unreachable would defeat it.
+MAX_EXPORT_ANNOTATIONS = 500
 
 
 # `Annotated[...]` rather than `= Query(...)` defaults throughout. Both work;
@@ -500,11 +515,14 @@ async def explore_node(entity_id: int, sess: ReadSession) -> NodeDetailRead:
         )
     )
 
+    mine = await annotations.listing(sess, about=entity_id, limit=MAX_PANEL_ANNOTATIONS)
+
     return NodeDetailRead(
         entity=EntityRead.model_validate(entity),
         attributes=attributes,
         supporting=supporting,
         contested_edges=int(contested or 0),
+        annotations=mine.annotations,
     )
 
 
@@ -576,3 +594,46 @@ async def list_views(sess: ReadSession) -> SavedViewsRead:
         )
     )
     return SavedViewsRead(views=[SavedViewRead.model_validate(row) for row in rows])
+
+
+# ---------------------------------------------------------------------------
+# Annotations (task P6-05, spec §12.5)
+# ---------------------------------------------------------------------------
+#
+# Reads only. Every write is `/api/admin/annotations`, so a shared instance
+# (`P3-06`) can show the owner's notes without offering a way to add to them —
+# and the read-only role is what enforces that rather than this comment.
+
+
+@router.get("/annotations", response_model=AnnotationsRead)
+async def list_annotations(
+    sess: ReadSession,
+    about: Annotated[
+        int | None, Query(description="Narrow to the notes attached to one node.")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> AnnotationsRead:
+    """The reader's own notes, most recently written first (§12.5).
+
+    `total` is how many match, not how many came back. A reader who has written
+    four hundred notes is owed the number, and a page that only ever reports its
+    own length cannot tell them.
+    """
+    return await annotations.listing(sess, about=about, limit=limit, offset=offset)
+
+
+@router.get("/export/annotations", response_class=PlainTextResponse)
+async def explore_export_annotations(
+    sess: ReadSession,
+    about: Annotated[int | None, Query(description="Narrow to one node.")] = None,
+) -> str:
+    """Notes as Markdown (`P6-15`, §12.5: "avoid trapping material in a bespoke store").
+
+    The export that matters most of the four, because this is the only material
+    in the corpus that is not recoverable by crawling again. Everything else
+    here can be re-fetched from the web; a note cannot be re-derived from
+    anything.
+    """
+    mine = await annotations.listing(sess, about=about, limit=MAX_EXPORT_ANNOTATIONS)
+    return annotations.to_markdown(mine.annotations)

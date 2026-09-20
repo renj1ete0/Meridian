@@ -18,6 +18,7 @@ import datetime as dt
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .annotations import AnnotationRead
 from .enums import PageUnit, SearchArm, SourceTier
 from .graph import EntityRead
 from .runs import NotificationRead
@@ -264,3 +265,12 @@ class NodeDetailRead(BaseModel):
     #: listed: the list needs the *other* node's name to be worth reading, and
     #: that is the canvas's job (`P6-02`).
     contested_edges: int
+
+    #: §12.5's node panel ends with "own annotations", and this is the only part
+    #: of the panel a person wrote themselves. Most recently written first, and
+    #: capped — the panel shows the recent few, the notes list shows the rest.
+    #:
+    #: Defaulted rather than required, because a panel assembled before `P6-05`
+    #: existed is still a valid panel, and making it required would turn a
+    #: missing notes query into a 500 rather than an empty section.
+    annotations: list[AnnotationRead] = Field(default_factory=list)

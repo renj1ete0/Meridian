@@ -47,6 +47,7 @@ function entity(over: Partial<Entity> = {}): Entity {
     merged_from: null,
     redirects_to: null,
     is_annotation: false,
+    supporting_chunk_ids: [],
     produced_by: null,
     model: null,
     quality_tier: null,
@@ -100,6 +101,7 @@ function node(over: Partial<NodeDetail> = {}): NodeDetail {
     attributes: [attribute()],
     supporting: [hit()],
     contested_edges: 0,
+    annotations: [],
     ...over,
   }
 }

@@ -30,7 +30,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
-from meridian_core import steering
+from meridian_core import annotations, steering
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
 from meridian_core.models import FetchPolicy, GazetteerTerm, SavedView, SteeringLog
@@ -53,6 +53,11 @@ from meridian_core.schemas.admin import (
     TopicEdit,
     TopicRowRead,
     TopicsRead,
+)
+from meridian_core.schemas.annotations import (
+    AnnotationCreate,
+    AnnotationEdit,
+    AnnotationRead,
 )
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
@@ -795,3 +800,63 @@ async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None
     await sess.delete(view)
     await sess.commit()
     log.info("view deleted", extra={"view_id": view_id})
+
+
+# ---------------------------------------------------------------------------
+# Annotations (task P6-05, spec §12.5)
+# ---------------------------------------------------------------------------
+#
+# Writing a note is here and reading them is `/api/explore/annotations`, the
+# same split saved views take and for a sharper reason. §12.5 calls this layer
+# the one that actually reflects the reader's thinking; an annotation surface
+# open to the internet is a way to put text into the corpus that reads as the
+# owner's own thinking, which is the worst thing on this system to be able to
+# forge. On a shared instance (`P3-06`) a guest should see the owner's notes and
+# have no way to add to them.
+
+
+@router.post("/annotations", response_model=AnnotationRead, status_code=201)
+async def write_annotation(
+    body: AnnotationCreate, _: AdminAllowed, sess: WriteSession
+) -> AnnotationRead:
+    """Write one of the reader's own notes.
+
+    `produced_by` is absent from `AnnotationCreate` and the model forbids extra
+    keys, so a request that tries to claim authorship is refused at the boundary
+    rather than silently overwritten — including, later, a request from a model
+    holding a write tool (`P4-04`).
+    """
+    try:
+        note = await annotations.create(sess, body)
+    except LookupError as exc:
+        await sess.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        # Nothing is committed, so a refused note leaves no half-attached row.
+        await sess.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return (await annotations.hydrate(sess, [note]))[0]
+
+
+@router.patch("/annotations/{entity_id}", response_model=AnnotationRead)
+async def rewrite_annotation(
+    entity_id: int, change: AnnotationEdit, _: AdminAllowed, sess: WriteSession
+) -> AnnotationRead:
+    """Rewrite a note, or re-point what it is about.
+
+    404 for a corpus-derived entity, which is the refusal that matters: §2.4
+    re-derives the graph from source chunks, and a hand-edit surviving into a
+    derived node is a change nothing can re-derive or explain. This surface
+    writes the reader's own nodes only.
+    """
+    try:
+        note = await annotations.edit(sess, entity_id, change)
+    except LookupError as exc:
+        await sess.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        await sess.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return (await annotations.hydrate(sess, [note]))[0]

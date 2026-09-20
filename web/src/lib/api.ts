@@ -949,6 +949,129 @@ export type AssertFetchPolicyPage = Expect<
 >
 
 // --------------------------------------------------------------------------
+// Annotations (task P6-05, spec §12.5)
+// --------------------------------------------------------------------------
+//
+// Reads on `/api/explore`, writes on `/api/admin`, the same split saved views
+// take (§12.6 divides the prefixes by mutation) and for a sharper reason: a
+// note is the one thing here that reads as the owner's own thinking, so a
+// shared instance shows the owner's notes and offers no way to add to them.
+//
+// **No `produced_by` on the way out of this file.** `AnnotationCreate` has no
+// such field and the DTO forbids extra keys, so a client cannot claim
+// authorship — the server assigns it. Sending one would be refused, and a
+// helper that offered the argument would suggest otherwise.
+
+/** Mirrors `AnnotationTarget` — a node a note is about, named rather than numbered. */
+export interface AnnotationTarget {
+  entity_id: number
+  canonical_name: string
+  node_type: string
+}
+
+export const ANNOTATION_TARGET_FIELDS = ['entity_id', 'canonical_name', 'node_type'] as const
+
+/** Mirrors `AnnotationRead`. */
+export interface Annotation {
+  entity_id: number
+  title: string
+  body: string | null
+  about: AnnotationTarget[]
+  supporting_chunk_ids: number[]
+  topic_labels: string[] | null
+  /** Always the reserved human author, carried so the layer renders as distinct. */
+  produced_by: string
+  /** When the text was last the author's — moved by a rewrite, unlike `created_at`. */
+  produced_at: string | null
+  created_at: string
+}
+
+export const ANNOTATION_FIELDS = [
+  'entity_id',
+  'title',
+  'body',
+  'about',
+  'supporting_chunk_ids',
+  'topic_labels',
+  'produced_by',
+  'produced_at',
+  'created_at',
+] as const
+
+/** Mirrors `AnnotationsRead`. */
+export interface Annotations {
+  annotations: Annotation[]
+  /** How many match the filter, not how many came back. */
+  total: number
+}
+
+export const ANNOTATIONS_FIELDS = ['annotations', 'total'] as const
+
+export interface AnnotationParams {
+  /** Narrow to the notes attached to one node. */
+  about?: number
+  limit?: number
+  offset?: number
+}
+
+export function getAnnotations(
+  params: AnnotationParams = {},
+  init?: RequestInit,
+): Promise<Annotations> {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(key, String(value))
+  }
+  const suffix = search.toString()
+  return request<Annotations>(`/api/explore/annotations${suffix ? `?${suffix}` : ''}`, init)
+}
+
+/** What a reader writes. The absent `produced_by` is the point — see above. */
+export interface NoteDraft {
+  title: string
+  body?: string | null
+  about?: readonly number[]
+  supporting_chunk_ids?: readonly number[]
+  topic_labels?: readonly string[] | null
+}
+
+export function writeAnnotation(draft: NoteDraft, init?: RequestInit): Promise<Annotation> {
+  return request<Annotation>('/api/admin/annotations', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(draft),
+    ...init,
+  })
+}
+
+/**
+ * Rewrite a note. Fields left out are left alone; `about` given is `about`
+ * replaced, because re-reading changes what a note is about and a note that
+ * accumulated every node it was pointed at would attach to a whole search
+ * history.
+ */
+export function rewriteAnnotation(
+  entityId: number,
+  change: Partial<NoteDraft>,
+  init?: RequestInit,
+): Promise<Annotation> {
+  return request<Annotation>(`/api/admin/annotations/${entityId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(change),
+    ...init,
+  })
+}
+
+export type AssertAnnotationTarget = Expect<
+  Equal<keyof AnnotationTarget, (typeof ANNOTATION_TARGET_FIELDS)[number]>
+>
+export type AssertAnnotation = Expect<Equal<keyof Annotation, (typeof ANNOTATION_FIELDS)[number]>>
+export type AssertAnnotations = Expect<
+  Equal<keyof Annotations, (typeof ANNOTATIONS_FIELDS)[number]>
+>
+
+// --------------------------------------------------------------------------
 // The node detail panel (task P6-04, spec §12.5)
 // --------------------------------------------------------------------------
 
@@ -990,6 +1113,8 @@ export interface Entity {
   merged_from: number[] | null
   redirects_to: number | null
   is_annotation: boolean
+  /** What a hand-written node was drawn from; empty for everything derived (`P6-05`). */
+  supporting_chunk_ids: number[]
   produced_by: string | null
   model: string | null
   quality_tier: number | null
@@ -1010,6 +1135,7 @@ export const ENTITY_FIELDS = [
   'merged_from',
   'redirects_to',
   'is_annotation',
+  'supporting_chunk_ids',
   'produced_by',
   'model',
   'quality_tier',
@@ -1024,6 +1150,8 @@ export interface NodeDetail {
   attributes: NodeAttribute[]
   supporting: SearchHit[]
   contested_edges: number
+  /** §12.5 ends the panel with "own annotations". The recent few (`P6-05`). */
+  annotations: Annotation[]
 }
 
 export const NODE_DETAIL_FIELDS = [
@@ -1031,6 +1159,7 @@ export const NODE_DETAIL_FIELDS = [
   'attributes',
   'supporting',
   'contested_edges',
+  'annotations',
 ] as const
 
 export function getNode(entityId: number, init?: RequestInit): Promise<NodeDetail> {

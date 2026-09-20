@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { openSession } from '../lib/lastVisit'
+import { NotesPanel } from './Annotations'
 import { CorpusCounts, type CorpusFigures } from './CorpusCounts'
 import { EntryPoints, type EntryPointName } from './EntryPoints'
 import { ResultList } from './ResultList'
@@ -12,10 +13,12 @@ import { WhereYouWere } from './WhereYouWere'
 import {
   ApiError,
   corpusStats,
+  getAnnotations,
   getSavedViews,
   markViewOpened,
   saveView,
   searchCorpus,
+  type Annotation,
   type CorpusStats,
   type SavedViewRecord,
   type SearchResponse,
@@ -56,6 +59,13 @@ function figuresFrom(stats: CorpusStats): CorpusFigures {
 
 type Phase = 'idle' | 'searching' | 'done' | 'failed'
 
+/**
+ * How many notes the landing screen shows. Small on purpose: this is a way back
+ * into recent thinking, not the notebook — the export is the notebook, and a
+ * landing page that opened with fifty of anything is one nobody reads.
+ */
+const NOTES_ON_LANDING = 5
+
 export function ExplorePage() {
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState('')
@@ -74,6 +84,12 @@ export function ExplorePage() {
 
   const [stats, setStats] = useState<CorpusStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
+
+  // The reader's own layer (`P6-05`). Loaded beside the stats rather than
+  // behind a click: §12.5's argument for building the affordance early is that
+  // an unseen one does not get used, and that applies to reading them back.
+  const [notes, setNotes] = useState<readonly Annotation[]>([])
+  const [noteCount, setNoteCount] = useState(0)
 
   const inFlight = useRef<AbortController | null>(null)
 
@@ -105,6 +121,25 @@ export function ExplorePage() {
         // failed to render because this list could not be fetched would spend
         // the whole screen on the least important thing on it.
         setViews([])
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getAnnotations({ limit: NOTES_ON_LANDING }, { signal: controller.signal })
+      .then((body) => {
+        setNotes(body.annotations)
+        // The total, not the page. A reader with four hundred notes is owed the
+        // number, and a panel that reports its own length cannot tell them.
+        setNoteCount(body.total)
+      })
+      .catch(() => {
+        // Same reasoning as the views above, one step stronger: this panel is
+        // the reader's own writing, and a landing page that refused to render
+        // because it could not be listed would take the corpus down with it.
+        setNotes([])
+        setNoteCount(0)
       })
     return () => controller.abort()
   }, [])
@@ -229,6 +264,9 @@ export function ExplorePage() {
         <>
           <div className="mt-12">
             <EntryPoints onOpen={() => {}} unavailable={unavailable} />
+          </div>
+          <div className="mt-12">
+            <NotesPanel notes={notes} total={noteCount} />
           </div>
           <div className="mt-12">
             <WhereYouWere

@@ -27,6 +27,7 @@ from typing import Any
 import yaml
 from sqlalchemy import select
 
+from meridian_core.annotations import HUMAN
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import configure_logging, get_logger
 from meridian_core.models import (
@@ -162,6 +163,15 @@ async def seed_agents(sess) -> tuple[int, int]:
     data = _load("agents.yaml") or {}
     added = skipped = 0
     for row in data.get("agents", []):
+        if row["agent_id"] == HUMAN:
+            # `produced_by = HUMAN` is what marks a row as the reader's own
+            # thinking (`P6-05`, §12.5), and it is only a distinguishable layer
+            # while nothing else can write it. An agent registered under this id
+            # would produce edges and tags indistinguishable from the reader's
+            # own notes, and nothing downstream could tell them apart again.
+            raise ValueError(
+                f"{HUMAN!r} is reserved for the reader's own annotations and cannot be an agent id."
+            )
         existing = await sess.scalar(select(Agent).where(Agent.agent_id == row["agent_id"]))
         if existing is not None:
             skipped += 1
