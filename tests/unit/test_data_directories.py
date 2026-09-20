@@ -36,6 +36,15 @@ DOCKERFILES = sorted(REPO.glob("services/*/Dockerfile"))
 #: name, so renaming the service does not quietly disconnect this.
 CHOWN = "chown"
 
+#: Services that run as their own user and own their own data directory, so
+#: the uid the application images use is not the one their files should have.
+#:
+#: `postgres` is the only one, and it became relevant when `P4-01` gave it a
+#: `build:` — the rule above keys off that, and until then it had none. The
+#: database's entrypoint chowns `PGDATA` to the `postgres` user at init;
+#: handing it to uid 1001 would stop the server starting.
+MANAGES_ITS_OWN_DATA = frozenset({"postgres"})
+
 
 def _services(path: pathlib.Path) -> dict:
     return yaml.safe_load(path.read_text()).get("services") or {}
@@ -100,6 +109,8 @@ def test_a_stack_with_bind_mounted_data_hands_it_to_that_uid(
         if not isinstance(service, dict) or CHOWN in _command_of(service):
             continue
         if service.get("user") == "root" or not service.get("build"):
+            continue
+        if name in MANAGES_ITS_OWN_DATA:
             continue
         for container_path, host_path in _mounts(service).items():
             # `:ro` mounts are read-only by definition, and a root-owned

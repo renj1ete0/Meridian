@@ -701,7 +701,26 @@ deploy runbook whose first two commands could not work (`B-17`).
 
 *Checkpoint: a model can write validated, provenance-bearing edges.*
 
-- [ ] `P4-01` Apache AGE setup, graph schema, typed node ontology
+- [~] `P4-01` Apache AGE setup, graph schema, typed node ontology — **the
+      store, `v0.91.0`**. `deploy/postgres/Dockerfile` compiles AGE 1.7.0 onto
+      the pgvector image, so `make quickstart` starts a database that already
+      has both and nobody installs an extension by hand. §3 chose one store;
+      no published image carries both. Verified on the database holding the
+      crawl: the image swap preserved every row, and a Cypher `CREATE` and
+      traversal run as `meridian_rw`, the role the application actually uses.
+      The typed ontology already existed — `NODE_TYPE` has constrained nodes to
+      fourteen kinds since `P0-07`. **Four failures on the way in, each naming
+      something nobody wrote**, all in `docs/handover.md`: a sample config file
+      that `initdb` alone reads, a graph named after the project colliding with
+      the role in `"$user"`, `create_graph` needing `ag_catalog` on the path for
+      `graphid_ops`, and `ALTER TABLE ... INHERIT` requiring *ownership* rather
+      than `GRANT ALL`.
+      **Outstanding, and deliberately not decided here**: whether AGE is the
+      source of truth for nodes and edges or a projection of the `entities` and
+      `edges` tables that already exist. That is every write going two places
+      and a reconciliation story when they disagree — cheap now, expensive
+      after fifty thousand edges, and not a call to make inside a migration.
+      Nothing writes to the graph yet
 - [ ] `P4-02` Entity resolution: normalise → block → score → three-band decision
 - [ ] `P4-03` Merge reversibility: redirects, `merged_from`, merge log
 - [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`

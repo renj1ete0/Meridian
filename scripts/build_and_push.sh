@@ -48,6 +48,11 @@ IMAGES=(
   # tools image that only exists on somebody's laptop is a deploy that stops at
   # `alembic upgrade head`.
   "tools|deploy/tools/Dockerfile|."
+  # Postgres with pgvector and Apache AGE (`P4-01`). Pushed rather than built on
+  # the server for one reason: it compiles AGE from source, and the server is an
+  # arm64 Pi. Cross-building it here once is minutes; building it there is the
+  # database being unavailable while it happens.
+  "postgres|deploy/postgres/Dockerfile|deploy/postgres"
 )
 
 DRY_RUN=0

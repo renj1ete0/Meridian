@@ -17,7 +17,24 @@ name: meridian-dev
 
 services:
   postgres:
-    image: pgvector/pgvector:pg17
+    # The same image the other two stacks run (`P4-01`). Development must not
+    # have a different extension set from production: `alembic upgrade head`
+    # creates the AGE graph, so a dev database without AGE cannot hold the
+    # schema the migrations describe — and `make test` would fail on a machine
+    # that is otherwise correct.
+    build: { context: ./deploy/postgres }
+    image: meridian/postgres:pg17-age
+    # See docker-compose.yml: a sample file is read only by `initdb`, so the
+    # flag is what actually guarantees it on an existing data directory.
+    command: ["postgres", "-c", "shared_preload_libraries=age"]
+    # Named because the command is. Omitting `healthcheck:` inherits the base
+    # image's, which is probing a default `postgres` invocation rather than
+    # this one — and the rule that caught this (`B-19`) exists because a probe
+    # for a process you are not running reports healthy regardless.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-meridian} -d ${POSTGRES_DB:-meridian}"]
+      interval: 5s
+      retries: 10
     ports: ["21111:5432"]             # host 21111 -> container 5432
     environment:
       POSTGRES_DB: meridian

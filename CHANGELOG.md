@@ -214,6 +214,45 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.91.0] — 2026-09-20
+
+**The graph store is in the image.**
+
+### Added
+
+- `P4-01` `deploy/postgres/Dockerfile` — PostgreSQL 17 with pgvector *and*
+  Apache AGE 1.7.0, compiled from the Apache source release and checksum-
+  verified. §3 chose one store; no published image carries both
+- A migration creating the extension and the `graph` graph, with the grants and
+  ownership `meridian_rw` needs to write to it
+- All three compose files use it, so `make quickstart` starts a database that
+  already has both and nobody installs an extension by hand
+
+### Verified on the database holding the crawl
+
+- The image swap preserved every row — 447 sources, 2459 chunks, unchanged
+- A Cypher `CREATE` and traversal, run as `meridian_rw`: the role the
+  application actually connects as, not the owner
+
+### Four failures on the way in, each naming something nobody wrote
+
+- `shared_preload_libraries` in `postgresql.conf.sample` is read **only by
+  `initdb`** — useless on an existing data directory, silently. The compose
+  files pass the flag
+- A graph named after the project collides with the role of the same name, so
+  `"$user"` resolves to it and the graph becomes the default schema. It is
+  called `graph`
+- `create_graph` needs `ag_catalog` on the search path, or fails on
+  `graphid_ops`. `SET LOCAL`, scoped to the migration's transaction
+- AGE attaches label tables with `ALTER TABLE ... INHERIT`, which needs
+  **ownership**, not `GRANT ALL`
+
+### Licence
+
+- Apache AGE is **Apache-2.0**, read from the `LICENSE` in the source tarball
+  and shipped in the image so it can be re-checked from the container.
+  `docs/licences.md` no longer lists it as unverified
+
 ## [0.90.0] — 2026-09-20
 
 **Age-aware ranking, by document kind rather than globally.**

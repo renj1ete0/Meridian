@@ -39,7 +39,11 @@ x-common: &common
 services:
   postgres:
     <<: *common
-    image: pgvector/pgvector:pg17          # TODO: pin by digest before production
+    # See `deploy/postgres/Dockerfile`: pgvector and Apache AGE in one image,
+    # because §3 chose one store for the queue, the metadata and the graph and
+    # no published image has both (`P4-01`).
+    build: { context: ./deploy/postgres }
+    image: meridian/postgres:pg17-age          # TODO: pin by digest before production
     env_file: .env
     networks: [internal]                   # no egress, ever
     volumes:
@@ -51,8 +55,17 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       PG_RW_PASSWORD: ${PG_RW_PASSWORD}
       PG_RO_PASSWORD: ${PG_RO_PASSWORD}
+    # `shared_preload_libraries=age` is passed here, not left to the image.
+    #
+    # `deploy/postgres/Dockerfile` does append it to `postgresql.conf.sample`,
+    # and a sample is read **only by `initdb`** — so on a data directory that
+    # already exists it does nothing at all, silently, and `CREATE EXTENSION
+    # age` then fails with "unhandled cypher(cstring) function call", which
+    # names nothing anybody can act on. A flag here applies to both a fresh
+    # database and one that predates AGE.
     command: >
       postgres
+      -c shared_preload_libraries=age
       -c shared_buffers=2GB
       -c work_mem=32MB
       -c max_connections=40

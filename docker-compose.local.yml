@@ -65,7 +65,14 @@ x-db-urls: &db-urls
 services:
   postgres:
     <<: *common
-    image: pgvector/pgvector:pg17
+    # Built here, not pulled: §3 wants one store for the queue, the metadata
+    # and the graph, and no published image carries both pgvector and Apache
+    # AGE (`P4-01`). `deploy/postgres/Dockerfile` compiles AGE onto the
+    # pgvector image so `make quickstart` starts a database that already has
+    # both — nobody installs an extension by hand, and this stack cannot drift
+    # from production by having one of the two.
+    build: { context: ./deploy/postgres }
+    image: meridian/postgres:pg17-age
     networks: [internal]
     volumes:
       # A named volume rather than a bind mount, for the reason the dev file
@@ -81,8 +88,17 @@ services:
     # Half of production's shared_buffers. The README's minimum is 8 GB total
     # and this stack also runs a browser pool and a 2.3 GB embedding model; 2 GB
     # of shared buffers on an 8 GB laptop is how the OOM killer gets involved.
+    # `shared_preload_libraries=age` is passed here, not left to the image.
+    #
+    # `deploy/postgres/Dockerfile` does append it to `postgresql.conf.sample`,
+    # and a sample is read **only by `initdb`** — so on a data directory that
+    # already exists it does nothing at all, silently, and `CREATE EXTENSION
+    # age` then fails with "unhandled cypher(cstring) function call", which
+    # names nothing anybody can act on. A flag here applies to both a fresh
+    # database and one that predates AGE.
     command: >
       postgres
+      -c shared_preload_libraries=age
       -c shared_buffers=512MB
       -c work_mem=16MB
       -c max_connections=40

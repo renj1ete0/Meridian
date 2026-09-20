@@ -17,9 +17,16 @@ workspace packages declare it rather than inheriting nothing.
 ## Method
 
 Everything below was read off the installed artefact — distribution metadata,
-image labels, the model card on disk — rather than recalled or looked up. Where
-that was not possible it says so. The commands are in the test file, so this
-document can be regenerated rather than re-researched.
+image labels, the model card on disk, the `LICENSE` inside a source tarball —
+rather than recalled or looked up. Where that was not possible it says so. The
+commands are in the test file, so this document can be regenerated rather than
+re-researched.
+
+One dependency is **compiled from source into an image we build**: Apache AGE,
+in `deploy/postgres/Dockerfile`. Its tarball is verified against the checksum
+Apache publishes before anything is unpacked, and its `LICENSE` and `NOTICE`
+are copied into the image — so the verdict can be re-checked from the running
+container rather than by downloading the source again.
 
 ## Verdict
 
@@ -76,7 +83,7 @@ decision is recorded here so it is not re-made differently later.
 | `python:3.12-slim-bookworm` | Debian: a collection, predominantly permissive with GPL **programs** | no image label; Debian base | Fine — see "base images" |
 | `nginx:1.27-alpine` | nginx: BSD-2-Clause; Alpine base | no image label | Fine |
 | `node:22-slim` | Node.js: MIT; Debian base | no image label | Fine |
-| Apache AGE (`P4-01`, not yet installed) | Apache-2.0 | upstream project, **not yet verified from an artefact** | Expected fine; confirm when `P4-01` lands |
+| **Apache AGE 1.7.0** | **Apache-2.0** | the `LICENSE` inside `apache-age-1.7.0-src.tar.gz` from downloads.apache.org, and the copy the image now ships at `/usr/share/doc/apache-age/LICENSE` | Fine |
 
 ### SearXNG is AGPL, and that is the one to understand
 
@@ -137,7 +144,9 @@ Stated so the gaps are visible rather than implied:
 
 - **Transitive licences of the base images' packages**, individually. The
   reasoning above is at the distribution level.
-- **`en_core_web_sm` and Apache AGE**, which are not installed here yet.
+- **`en_core_web_sm`**, which is not installed here — it arrives with the
+  `ner` extra. Apache AGE was in this list and has since been verified from the
+  source tarball; it is in the table above.
 - **Content licences.** This audit is about software. What a crawler may fetch,
   store and redistribute is §14.2 and a different question — `MERIDIAN_SERVE_RAW`
   defaults to off for that reason.

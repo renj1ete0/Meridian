@@ -823,6 +823,41 @@ than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
 
+### Apache AGE cost four separate failures to install, none of them obvious
+
+`P4-01` put AGE into the database. Every step failed first, and each failure
+named something nobody had written, so they are all here.
+
+**`shared_preload_libraries` in the image is only half the answer.** The
+Dockerfile appends it to `postgresql.conf.sample` — and a *sample* is read only
+by `initdb`. An existing data directory never sees it, silently, and every
+Cypher call then fails with `unhandled cypher(cstring) function call`. The
+compose files pass `-c shared_preload_libraries=age`, which works for both a
+fresh database and one that predates AGE.
+
+**Do not name the graph after the project.** `create_graph` creates a Postgres
+*schema* of that name. Called `meridian`, it collides with the `meridian` role,
+so `"$user"` in the default `search_path` resolves to it — the graph silently
+becomes the default schema, `alembic check` proposes dropping AGE's internal
+tables, and a later `CREATE TABLE` with no schema would put an application
+table inside the graph. It is called `graph`.
+
+**`create_graph` needs `ag_catalog` on the search path**, not merely
+schema-qualifying. The label tables it creates reference `graphid_ops`
+unqualified, so without it you get `operator class "graphid_ops" does not exist
+for access method "btree"`. `SET LOCAL` inside the migration's transaction is
+enough and leaves nothing behind.
+
+**The writer must *own* the graph, not be granted on it.** AGE creates a table
+per label on first use and attaches it with `ALTER TABLE ... INHERIT`, which
+Postgres permits only to the parent's owner. `GRANT ALL` is not enough: the
+first edge a model writes fails with `must be owner of table _ag_label_vertex`.
+Ownership of the schema and the two base tables goes to `meridian_rw`.
+
+And one for anything that sends Cypher through SQLAlchemy: **`:Label` collides
+with `:param`.** `text()` parses `(:Finding)` as a bind parameter named
+`Finding` and refuses to run without a value for it. Use `exec_driver_sql`.
+
 ### Absent is refused, and the codebase now says so in four places
 
 A pattern worth naming because it recurs and because the wrong version of it is
