@@ -214,6 +214,46 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.79.0] — 2026-09-20
+
+**The timetable now has something reading it.**
+
+### Added
+
+- `B-15` A `scheduler` service in both compose files. `P5-06` built
+  `worker.scheduler` and nothing had ever started it, so `seed.py`'s five
+  `scheduled_jobs` rows — embed and novelty hourly, digest, sweep and harvest
+  daily, all `enabled`, all already due — were a timetable nobody read
+- In practice that meant a stack left alone fetched, extracted, chunked and
+  stopped. Nothing embedded, deduplicated, swept or harvested, ever
+- The worker image under a different command, like `embedder`: the jobs it
+  spawns are `python -m` entry points from the same tree and inherit the
+  container's environment, so it carries what *they* need — both networks, the
+  raw store, the model cache
+
+### A boundary deliberately widened
+
+- `scheduler` is the second service on `internal` *and* `egress`, which
+  `P1-22` previously allowed only `worker` and `orchestrator`. One of its five
+  jobs (`worker.digest`) reaches Telegram; the other four want nothing outside
+  `internal`
+- The cost is that `worker.harvest` parses crawler-fetched text in a container
+  with a route out. `worker` already makes that trade in the same image, which
+  is why it is tolerable here and would not be for a service with no such need
+- The reasoning lives in the test that holds the allowlist, so the next person
+  can argue with it rather than discover it
+
+### Known gap, and a trap found inside it
+
+- The scheduler's healthcheck is `disable: true` — switched off, not omitted.
+  Omitting it does not give a container none: it inherits the image's, and the
+  worker image probes `worker.main` and poppler, which passes for as long as
+  the package tree is intact
+- So a wedged scheduler would have reported `healthy` for ever *and* suppressed
+  the restart that no probe would have left to `restart: unless-stopped`
+- `P5-08`'s real heartbeat is written by `worker.main`'s loop. Giving this loop
+  one of its own is `B-19`
+
 ## [0.78.2] — 2026-09-20
 
 ### Fixed

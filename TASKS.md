@@ -38,8 +38,8 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
    mid-deploy.
 
-**Buildable today**, needing none of the three: `B-15` (nothing starts the scheduler,
-so four of the six passes have never run), `P6-23` (agent registry and run history,
+**Buildable today**, needing none of the three: `B-19` (the scheduler runs now and
+cannot be probed), `P6-23` (agent registry and run history,
 better after there is a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a
 Semantic Scholar key, ten minutes, felt during the 48h run). `P6-05` was the other one
 and is done — an annotation is a node somebody writes by hand, so it is the one
@@ -1044,16 +1044,35 @@ Things worth doing that don't belong to a phase yet.
       service must build from a Dockerfile that exists, and nothing may publish
       a port on networks that are all internal. Each verified by reintroducing
       the bug
-- [ ] `B-15` **Nothing starts the scheduler.** `P5-06` is ticked and its code
-      runs, but no compose file has ever started `python -m worker.scheduler` —
-      so `seed.py`'s five `scheduled_jobs` rows, all `enabled`, all with
-      `next_run_at` already past, are a timetable nobody reads. In practice
-      nothing ever embeds, deduplicates or sweeps: `worker.main` fetches,
-      extracts and chunks, and the rest of §6.1's passes wait for a supervisor
-      that is not there. Found by bringing the stack up for `B-05` and watching
-      `embedded_chunks` stay at 0 with the backlog non-empty. A service in both
-      compose files, plus the question this raises and should not dodge — what
-      else is ticked because its code runs and nothing runs its code
+- [x] `B-15` **The timetable now has something reading it** — `v0.79.0`.
+      `P5-06` was ticked and its code worked, and no compose file had ever run
+      `python -m worker.scheduler` — so `seed.py`'s five `scheduled_jobs` rows,
+      all `enabled`, all with `next_run_at` already past, were a timetable
+      nobody read. A stack left alone fetched, extracted, chunked and stopped:
+      nothing embedded, deduplicated, swept or harvested, ever, in either
+      stack. Found by bringing the stack up for `B-05` and watching
+      `embedded_chunks` sit at zero against a growing backlog.
+      A `scheduler` service in both files — the worker image under a different
+      command, like `embedder`, because the jobs it spawns are `python -m`
+      entry points from the same tree and inherit its environment. **It is a
+      second service on both networks**, which `P1-22`'s boundary previously
+      allowed only `worker` and `orchestrator`: one of the five jobs
+      (`worker.digest`) reaches Telegram and the other four want nothing
+      outside `internal`. The trade is argued in the test rather than hidden —
+      the same image already makes it, and a scheduled send that fails into
+      `last_error` is the failure mode this task existed to remove
+- [ ] `B-19` **The scheduler has no liveness probe.** `P5-08`'s heartbeat is
+      written by `worker.main`'s loop, so the `scheduler` service added in
+      `B-15` carries `healthcheck: { disable: true }` — *off*, not omitted,
+      because omitting it inherits the worker image's probe, which imports
+      `worker.main` and checks poppler and would therefore report a wedged
+      scheduler as healthy for ever while suppressing the restart. `restart: unless-stopped` covers
+      a scheduler that *exits*; one wedged on a lock or a hung subprocess looks
+      exactly like one waiting for the next due job. Either give the scheduler
+      loop its own `beat()` — it already wakes on a poll interval, so there is
+      a natural place — or probe the timetable instead, since a scheduler that
+      has claimed nothing in several poll intervals with jobs due is the
+      condition worth detecting
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

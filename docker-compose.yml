@@ -259,6 +259,56 @@ services:
       resources:
         limits: { memory: 4G }
 
+  # The timetable, which nothing had ever run (`B-15`).
+  #
+  # `P5-06` built `worker.scheduler` and `seed.py` writes five `scheduled_jobs`
+  # rows — embed and novelty hourly, digest, sweep and harvest daily, all
+  # `enabled`, all with `next_run_at` already past. Reading that table tells
+  # you embedding runs every hour. Nothing started the supervisor, so a stack
+  # left alone fetched, extracted, chunked and stopped, with the backlog
+  # growing and `embedded_chunks` at zero.
+  #
+  # The worker image under a different command, like `embedder` — the jobs it
+  # spawns are `python -m` entry points from this same tree, and they inherit
+  # this container's environment, so it carries what *they* need rather than
+  # what the scheduler does. Hence both networks (`digest` reaches Telegram,
+  # `embed` reaches the sidecar), the raw store (`sweep` deletes from it) and
+  # the model cache (`embed`'s fallback).
+  #
+  # **The healthcheck is switched off rather than left out**, and the
+  # difference is the whole trap. Omitting `healthcheck:` does not mean the
+  # container has none — it inherits the worker image's, which imports
+  # `worker.main` and checks poppler. That probe passes for as long as the
+  # package tree is intact, so a wedged scheduler would report `healthy`
+  # for ever *and* suppress the restart that a missing probe would at least
+  # leave to `restart: unless-stopped`. A false green is worse than no green.
+  #
+  # `B-19` gives this loop a heartbeat of its own; until then it is honestly
+  # unprobed.
+  #
+  # Two schedulers cannot double-run a job — `P5-06` claims with SKIP LOCKED
+  # and a lease — so this is safe to restart and safe to run beside a manual
+  # `docker compose run --rm worker python -m worker.embed`.
+  scheduler:
+    <<: *common
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.scheduler"]
+    healthcheck: { disable: true }
+    networks: [internal, egress]
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      MERIDIAN_EMBED_CACHE: /models
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
+      - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
+      - ${DATA_ROOT:-/srv/meridian}/models:/models
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
   # Phase 4, and `services/orchestrator/Dockerfile` does not exist yet.
   #
   # **Profile-gated for that reason alone.** Compose does not skip a service

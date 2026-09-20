@@ -108,13 +108,28 @@ def test_the_worker_is_on_both(compose: dict) -> None:
     assert networks_of(compose, "worker") >= {"internal", "egress"}
 
 
-def test_the_worker_is_the_only_writer_on_egress(compose: dict) -> None:
+def test_only_named_services_write_from_egress(compose: dict) -> None:
     """A service on `egress` that also reaches Postgres is a route from hostile
-    content to the database. Worker and orchestrator are the deliberate ones."""
+    content to the database, so the set of them is an allowlist rather than a
+    property — each entry is a decision somebody made and can be argued with.
+
+    `scheduler` is the newest and the one worth justifying (`B-15`). It needs
+    `egress` for exactly one of the five jobs it spawns — `worker.digest`
+    reaches Telegram — and the other four want nothing outside `internal`. It
+    is on both anyway, because the alternative is a scheduled job that fails to
+    send and says so only in `last_error`, which is the failure mode this task
+    existed to remove.
+
+    What it costs is honest: the jobs inherit the container's environment, so
+    `worker.harvest` parses text the crawler fetched inside a container that
+    can reach the internet. That is the same trade `worker` already makes, in
+    the same image, which is why it is tolerable here and would not be for a
+    service that had no such reason.
+    """
     both = {
         name for name in compose["services"] if {"internal", "egress"} <= networks_of(compose, name)
     }
-    assert both <= {"worker", "orchestrator", "cloudflared"}, f"unexpected: {both}"
+    assert both <= {"worker", "scheduler", "orchestrator", "cloudflared"}, f"unexpected: {both}"
 
 
 def test_no_service_sets_both_network_mode_and_networks(compose: dict) -> None:

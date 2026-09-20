@@ -941,19 +941,44 @@ services that would use it must be able to find it — and `test_fetchmodel.py`
 asserts the fetcher and the sidecar agree on the path, because two containers
 agreeing by coincidence is the version of this that looks like success.
 
-### Nothing starts the scheduler, so every scheduled job has never run
+### The scheduler is a supervisor, and for a long time nobody supervised it
 
-`P5-06` is ticked, its code works, and no compose file has ever run `python -m
+`P5-06` was ticked, its code worked, and no compose file ran `python -m
 worker.scheduler`. `seed.py` writes five `scheduled_jobs` rows — embed and
 novelty hourly, digest, sweep and harvest daily — all `enabled`, all with
-`next_run_at` in the past. Reading that table tells you embedding runs every
-hour. It has never run once.
+`next_run_at` in the past. Reading that table told you embedding ran every
+hour. It had never run once, in either stack.
 
-So a stack left alone fetches, extracts and chunks, and stops. `embedded_chunks`
-stays at 0 while the backlog grows, which looks like an embedder problem and is
-not one. `B-15` is the fix. The wider point is the one worth carrying: a task is
-done when it *runs*, and "its code runs when invoked" is not the same claim as
-"something invokes it".
+So a stack left alone fetched, extracted, chunked and stopped. `embedded_chunks`
+stayed at zero while the backlog grew, which looks like an embedder problem and
+is not one. `B-15` added the service.
+
+**The wider point is the one to carry.** A task is done when it runs, and "its
+code runs when invoked" is not the same claim as "something invokes it". The
+scheduler had tests, a lease, SKIP LOCKED and a careful argument about not
+passing module names to a shell — all of it correct, none of it reached by any
+code path outside the suite.
+
+**`scheduler` is the second service on both networks**, and that is a real
+widening of `P1-22`'s boundary rather than an oversight. Of the five jobs it
+spawns, only `worker.digest` needs `egress`; the other four want nothing
+outside `internal`. They inherit the container's environment, so `worker.harvest`
+now parses crawler-fetched text somewhere with a route to the internet. The
+trade was taken because the alternative is a scheduled send that fails into
+`last_error` and nowhere else, and because `worker` already makes exactly this
+trade in exactly this image. `test_only_named_services_write_from_egress` holds
+the allowlist, and the reasoning is written into it so the next person can
+disagree with it rather than discover it.
+
+Its healthcheck is **switched off rather than left out**, and the difference is
+its own trap. Omitting `healthcheck:` does not give a container none — it
+inherits the image's, and the worker image's probe imports `worker.main` and
+checks poppler. That passes for as long as the package tree is intact, so a
+wedged scheduler would have reported `healthy` for ever while also suppressing
+the restart that no probe at all would have left to `restart: unless-stopped`.
+Caught by watching the container come up and report `health: starting` a minute
+after the comment claiming it had no healthcheck was written. `healthcheck:
+{ disable: true }` says the true thing; `B-19` gives the loop a heartbeat.
 
 ### A container on an `internal: true` network cannot publish a port
 
