@@ -48,6 +48,55 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.76.0] — 2026-09-20
+
+**Server-side write validation, before anything can write.**
+
+### Added
+
+- `P4-05` `meridian_core/validation.py`. §11.8's mitigations, built as guards
+  rather than as checks inside a write tool: `check_nodes_exist`,
+  `check_chunks_resolve`, `check_not_self_edge`, `check_relation_type`,
+  `check_seed_allowed`, `reserve_seeds`, `check_provenance`,
+  `check_tier_not_downgraded`, and `check_edge` composing them
+- 32 tests, almost all rejections. That valid input is accepted is the weaker
+  half; what matters is that a model which has read a hostile page is actually
+  refused
+
+### Why a module and not checks in the tools
+
+- §11.1b: three callers reach the same writes — the orchestrator's local
+  functions, an external agent over MCP, and an agent CLI with a scoped write
+  token — and "none gets privileged access". A guard inside one caller's path is
+  a guard the other two do not have
+- Every function refuses by raising; none returns a boolean. A boolean gets
+  assigned and not checked, and this module's failure mode is silence — a guard
+  that never ran looks exactly like one that passed
+- `ValidationError.rule` is the machine-readable half, so refusals can be
+  counted and alerted on by rule rather than by message text
+
+### The decisions inside it
+
+- **`cap=None` refuses.** "Nobody configured a cap" must never read as
+  "unlimited" (§16, `P4-13`). A default of infinity is the shape in which a
+  missing config becomes a bill
+- **Seed reservation locks the run row.** Two tool calls reading
+  `seeds_emitted` at 9 against a cap of 10 would both pass and both write
+- **All or nothing.** A partially admitted batch makes the cap depend on the
+  order the model listed its seeds in
+- **Seeds are refused at seed time, not just fetch time.** A rejected seed that
+  reached `queue` would sit there as `pending` and be retried with backoff,
+  which turns a rejected injection into a scheduled one
+- **Hostnames are not resolved here.** DNS at seed time is a second answer that
+  can disagree with the one `netguard` gets at fetch time, and the fetch-time
+  one is what `P1-24` pinned. Literal private addresses are still refused, since
+  there is nothing to look up
+- **The relation vocabulary stays open.** §5.4 closes the node-type ontology and
+  deliberately does not close relations, so `check_relation_type` refuses a
+  shape — prose in a column a traversal groups by — rather than a value
+- **An agent cannot write as `human`.** `P6-05` reserves it for the reader's own
+  notes, and that layer is only distinguishable while nothing else can claim it
+
 ## [0.75.2] — 2026-09-20
 
 ### Fixed

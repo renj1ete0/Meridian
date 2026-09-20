@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.75.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 1937 backend tests
+**`v0.76.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 1980 backend tests
 against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -631,7 +631,21 @@ carries that list, and it is the checklist for the first deploy.
 - [ ] `P4-02` Entity resolution: normalise → block → score → three-band decision
 - [ ] `P4-03` Merge reversibility: redirects, `merged_from`, merge log
 - [ ] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`, `advance_mark`
-- [ ] `P4-05` `validation.py` — server-side guards, node existence, domain allowlist, caps
+- [x] `P4-05` `validation.py` — server-side guards, node existence, domain
+      allowlist, caps — `v0.76.0`. Built before the write tools that call it
+      (`P4-04`), because §11.8 specifies the rules precisely enough for the test
+      to be a transcription. A module rather than checks inside a tool: §11.1b
+      has three callers reaching the same writes and says none gets privileged
+      access, so a guard inside one path is a guard the other two lack. Every
+      function raises rather than returning a boolean — the failure mode here is
+      a guard that never ran, which looks exactly like one that passed.
+      **`cap=None` refuses**, because "nobody configured a cap" must never read
+      as unlimited (§16). Seed reservation locks the run row, since two calls
+      reading `seeds_emitted` at 9 against a cap of 10 would both pass. Seeds are
+      refused at seed time as well as fetch time, or a rejected injection sits in
+      `queue` being retried with backoff. Hostnames are deliberately **not**
+      resolved here — a second DNS answer can disagree with the one `P1-24`
+      pinned at fetch time — though literal private addresses are refused
 - [ ] `P4-12` Allowlist growth: `fetch_policy.seed_allowed` + `first_seen_via`. Domains
       reached by frontier expansion auto-approve after N successful novel fetches;
       model-proposed domains queue for approval like gazetteer terms

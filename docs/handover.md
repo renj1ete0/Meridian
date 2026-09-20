@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.75.2`. 1937 backend tests against a real Postgres, 296 frontend.**
+**`v0.76.0`. 1980 backend tests against a real Postgres, 296 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -82,7 +82,9 @@ worker.retopic    topic labels onto sources crawled before P2-14
   (`P4-01`) is not installed; it does support PG17 (v1.6.0), so it is not blocked
   on a Postgres downgrade, only on not swapping the image mid-deploy.
 - **Any LLM call.** The orchestrator does not exist. Nothing in this repository
-  has ever called a model that generates text.
+  has ever called a model that generates text. `P4-05`'s `validation.py` is the
+  part that is ready for one: every guard §11.8 asks for, tested, with no write
+  tool yet calling them.
 - **spaCy NER.** `P5-02` built the gazetteer and the `EntityRuler` patterns, and
   spaCy is an optional extra (`uv sync --extra ner`) that the worker image does
   not carry. `P5-01`'s frontier NER and TF-IDF are unbuilt.
