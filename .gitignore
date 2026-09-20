@@ -17,6 +17,11 @@ web/dist/
 
 # Local dev data (bind-mount targets, never in the repo)
 .devdata/
+# docker-compose.local.yml's DATA_ROOT default. Written by containers, so it is
+# root-owned and cannot be removed without one — which is the same reason the
+# dev file keeps pgdata in a named volume, and the reason this must never be
+# something `git clean` is asked to deal with.
+.localdata/
 
 # Corpus snapshots and dumps (kept beside backups, not in git).
 # The whole directory: a snapshot is a directory of a dump, a tarball and a

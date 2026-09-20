@@ -1012,6 +1012,16 @@ Things worth doing that don't belong to a phase yet.
       inherits the owner, and a `chown -R` over a 100 GB raw store is a
       different mistake. The uid is now tied to the Dockerfiles by a drift test,
       since three copies of 1001 is three chances to move one
+- [ ] `B-15` **Nothing starts the scheduler.** `P5-06` is ticked and its code
+      runs, but no compose file has ever started `python -m worker.scheduler` —
+      so `seed.py`'s five `scheduled_jobs` rows, all `enabled`, all with
+      `next_run_at` already past, are a timetable nobody reads. In practice
+      nothing ever embeds, deduplicates or sweeps: `worker.main` fetches,
+      extracts and chunks, and the rest of §6.1's passes wait for a supervisor
+      that is not there. Found by bringing the stack up for `B-05` and watching
+      `embedded_chunks` stay at 0 with the backlog non-empty. A service in both
+      compose files, plus the question this raises and should not dodge — what
+      else is ticked because its code runs and nothing runs its code
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search
@@ -1022,8 +1032,20 @@ Things worth doing that don't belong to a phase yet.
 For someone who wants to *run* Meridian rather than develop it. Today's quickstart
 assumes `uv`, `npm`, and three terminals; this is the path that doesn't.
 
-- [ ] `B-05` `docker-compose.local.yml` — the full stack building from source rather
-      than pulling the private GHCR images, so a fresh clone needs no registry access
+- [x] `B-05` `docker-compose.local.yml` — the full stack from source, so a fresh
+      clone needs no registry access — `v0.77.0`. Also the two images
+      `docker-compose.yml` had always referenced and nobody had written:
+      `web/Dockerfile` (node builds, nginx serves, no Node in the runtime) and
+      `deploy/tools/Dockerfile` for Alembic and the seed, which no service image
+      carries because they sync `--no-dev`. **The network split is kept**: it is
+      `P1-22`'s boundary, and a local stack that flattened it would let someone
+      develop against a topology production does not have. One deliberate
+      difference — `api` and `web` sit on a third `frontdoor` network, because a
+      container on an `internal: true` network cannot publish a port at all and
+      the `ports:` line is silently inert rather than an error. Two defects found
+      by running it: `api` was never given `MERIDIAN_EMBEDDER_URL`, so every
+      search reported "this deployment has no embedder" next to a healthy
+      sidecar; and `.localdata/` was not gitignored
 - [ ] `B-06` `make quickstart` — one command: bring up infra, wait for health, migrate,
       seed, start every service. Ends by printing the URL
 - [ ] `B-07` First-run experience — pick topics and confirm cold-start sources from the

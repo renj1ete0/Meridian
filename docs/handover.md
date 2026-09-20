@@ -882,6 +882,45 @@ the weights were in the image sat two lines above the mount that exists because
 they are not; a comment stating a fact about the build is worth checking against
 the build.
 
+### A service that is running is not a service anything talks to
+
+`docker-compose.local.yml` started the embedding sidecar and never gave the API
+`MERIDIAN_EMBEDDER_URL`. Nothing failed: `RemoteEmbedder.from_env()` returns None
+when the variable is unset, because "this deployment has no embedder" is a
+supported state (`P2-07`) — so search ran the lexical arm alone and reported
+exactly that, truthfully, a few hundred bytes of network away from a running
+model.
+
+The general shape: an absent-is-fine default plus a service nobody wired to means
+a stack that is fully healthy and half functional. `tests/unit/test_compose_
+topology.py` now asserts the pairing — if a compose file runs the sidecar, the
+services that would use it must be able to find it — and `test_fetchmodel.py`
+asserts the fetcher and the sidecar agree on the path, because two containers
+agreeing by coincidence is the version of this that looks like success.
+
+### Nothing starts the scheduler, so four of the six passes never run
+
+`P5-06` is ticked, its code works, and no compose file has ever run `python -m
+worker.scheduler`. `seed.py` writes five `scheduled_jobs` rows — embed and
+novelty hourly, digest, sweep and harvest daily — all `enabled`, all with
+`next_run_at` in the past. Reading that table tells you embedding runs every
+hour. It has never run once.
+
+So a stack left alone fetches, extracts and chunks, and stops. `embedded_chunks`
+stays at 0 while the backlog grows, which looks like an embedder problem and is
+not one. `B-15` is the fix. The wider point is the one worth carrying: a task is
+done when it *runs*, and "its code runs when invoked" is not the same claim as
+"something invokes it".
+
+### A container on an `internal: true` network cannot publish a port
+
+Docker installs no gateway on it, so there is nothing for the host to forward to
+— and the `ports:` line is not an error, it is inert. Production gets away with
+it because `cloudflared` sits on `internal` and proxies inward, but the
+`ports: ["127.0.0.1:21114:8000"]` on its `api` does nothing whatsoever. The local
+stack needs a third network (`frontdoor`) carrying only `api` and `web`, for no
+reason other than having a gateway to publish through.
+
 ### A key set on the global `*` policy row is set for every domain
 
 `P1-27` nearly shipped dead because of this: the rule was "learn only where

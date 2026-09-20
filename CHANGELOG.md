@@ -152,6 +152,44 @@ design-only changes do not require a version bump, but may be listed under Unrel
   container on compose's default bridge — that bridge has egress, and this is
   the only container in the stack running as root
 
+## [0.77.0] — 2026-09-20
+
+**The whole stack, locally, from a fresh clone.**
+
+### Added
+
+- `B-05` `docker-compose.local.yml` — every service built from source, so a
+  fresh clone needs no registry access. Credentials that are not secrets and are
+  not pretending to be, data under the working tree, loopback only
+- `web/Dockerfile` and `web/nginx.conf`. `docker-compose.yml` had referenced
+  `build: { context: ./web }` since it was written and the file was not there,
+  so the production stack could not be brought up whole. Node builds, nginx
+  serves, and the runtime carries no Node at all
+- `deploy/tools/Dockerfile` for Alembic and the config seed. No service image
+  carries either: `alembic` is in the root project's `dev` group and every
+  application image syncs `--no-dev`
+- `make local-up`, `make local-down`, `make local-logs`
+
+### The network split is kept, deliberately
+
+- One bridge would have been easier and wrong. `internal` versus `egress` is
+  `P1-22`'s boundary, `crawl4ai` drives a real browser against hostile pages,
+  and a local stack that flattened it would let someone develop against a
+  topology production does not have
+- One difference, stated rather than implied: `api` and `web` sit on a third
+  `frontdoor` network. **A container on an `internal: true` network cannot
+  publish a port at all** — Docker installs no gateway, so the `ports:` line is
+  silently inert rather than an error. Production does not need it because
+  `cloudflared` proxies inward
+
+### Found by running it
+
+- `api` was never given `MERIDIAN_EMBEDDER_URL`, so every search reported "this
+  deployment has no embedder" a few hundred bytes from a running sidecar. A test
+  now asserts the pairing: a stack that runs the sidecar has to tell its clients
+  where it is
+- `.localdata/` was not gitignored
+
 ## [0.76.2] — 2026-09-20
 
 ### Added

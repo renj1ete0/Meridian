@@ -295,3 +295,97 @@ def test_the_exemptions_are_not_a_dumping_ground() -> None:
     stale = {name for name in NOT_READ_BY_PYTHON if name not in declared}
 
     assert not stale, f"exempted but no longer set by any compose file: {sorted(stale)}"
+
+
+# --------------------------------------------------------------------------
+# A service that is running is not the same as a service anything talks to
+# --------------------------------------------------------------------------
+#
+# `docker-compose.local.yml` ran the embedding sidecar, and did not tell the API
+# where it was. Nothing failed. `RemoteEmbedder.from_env()` returns None when
+# `MERIDIAN_EMBEDDER_URL` is unset — absent is a supported state, deliberately
+# (`P2-07`) — so every search ran the lexical arm alone and reported
+# `degraded_reason: "This API has no embedder"` next to a healthy sidecar with
+# the model in it.
+#
+# That sentence is true of a deployment with no embedder and false here, and
+# there is no way to tell the two apart from the outside. Hence a test: if a
+# compose file goes to the trouble of running the sidecar, the services that
+# would use it have to be able to find it.
+
+#: How to recognise the sidecar without naming a service: it is the one started
+#: with the embed server's module, whatever it is called.
+EMBEDSERVER = "worker.embedserver"
+
+#: The services that call `RemoteEmbedder.from_env()` — the API for the vector
+#: arm of a search, the worker for `P2-19`'s backfill.
+EMBEDDER_CLIENTS = ("api", "worker")
+
+
+def _command_of(service: dict) -> str:
+    command = service.get("command")
+    if isinstance(command, list):
+        return " ".join(str(part) for part in command)
+    return str(command or "")
+
+
+def _has_variable(service: dict, name: str) -> bool:
+    """Whether a service is given a variable, by either route.
+
+    `env_file` counts. Production's API takes its whole environment from `.env`
+    rather than listing it, so a test that only read `environment:` would call
+    the deployed stack broken and be wrong.
+    """
+    if service.get("env_file"):
+        return True
+    env = service.get("environment")
+    if isinstance(env, dict):
+        return name in env
+    if isinstance(env, list):
+        return any(str(item).split("=", 1)[0] == name for item in env)
+    return False
+
+
+def _compose_docs() -> list[tuple[pathlib.Path, dict]]:
+    return [(path, yaml.safe_load(path.read_text())) for path in COMPOSE_FILES]
+
+
+def test_there_is_a_compose_file_that_runs_the_sidecar() -> None:
+    """Guard on the discovery. If the sidecar is never recognised, the test
+    below passes over an empty set and asserts nothing at all."""
+    running = [
+        path.name
+        for path, doc in _compose_docs()
+        for service in (doc.get("services") or {}).values()
+        if isinstance(service, dict) and EMBEDSERVER in _command_of(service)
+    ]
+
+    assert running, f"no compose file starts {EMBEDSERVER}; has it been renamed?"
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_a_stack_that_runs_the_embedder_tells_its_clients_where_it_is(
+    path: pathlib.Path,
+) -> None:
+    """Running the model and not pointing anything at it halves retrieval
+    silently, because an unset URL is indistinguishable from a deployment that
+    chose to have no embedder."""
+    doc = yaml.safe_load(path.read_text())
+    services = doc.get("services") or {}
+
+    if not any(
+        isinstance(s, dict) and EMBEDSERVER in _command_of(s) for s in services.values()
+    ):
+        pytest.skip(f"{path.name} does not run the sidecar")
+
+    blind = [
+        name
+        for name in EMBEDDER_CLIENTS
+        if name in services and not _has_variable(services[name], "MERIDIAN_EMBEDDER_URL")
+    ]
+
+    assert not blind, (
+        f"{path.name} runs {EMBEDSERVER} but {blind} cannot find it — "
+        f"searches there will silently report having no embedder"
+    )
+

@@ -12,7 +12,22 @@
 export
 
 .PHONY: dev-up dev-down up down logs migrate seed \
+        local-up local-down local-logs \
         snapshot-corpus restore-corpus backup test bench-search build-push build-worker
+
+# --- Running it, rather than developing it (tasks B-05, B-08) ---------------
+#
+# The same services production runs, built from source, with credentials that
+# are not secrets. `docker-compose.local.yml` says what each of the three
+# compose files is for and why the network split is kept here.
+local-up:
+	docker compose -f docker-compose.local.yml up -d --build
+
+local-down:
+	docker compose -f docker-compose.local.yml down
+
+local-logs:
+	docker compose -f docker-compose.local.yml logs -f
 
 # --- Local development (infra only) -----------------------------------------
 dev-up:

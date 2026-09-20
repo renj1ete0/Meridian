@@ -1,0 +1,315 @@
+# Meridian — the whole stack, locally, from a fresh clone. Task B-05.
+#
+# There are three compose files and they answer three different questions.
+#
+#   docker-compose.dev.yml    infra only. Application services run natively via
+#                             `uv` and `npm` against it. This is what you want
+#                             while *writing* code — a reload is a second, not
+#                             an image rebuild (scaffold §6).
+#   docker-compose.local.yml  this one. The full stack in containers, built
+#                             from source, with credentials that are not
+#                             secrets and data under the working tree. For
+#                             running Meridian rather than developing it.
+#   docker-compose.yml        production. Real credentials from `.env`, data at
+#                             /srv/meridian, cloudflared fronting the API.
+#
+# **The network split is kept, deliberately.** It would be easier to put
+# everything on one bridge here, and it would be wrong: `internal` vs `egress`
+# is the security boundary `P1-22` established, `tests/unit/test_compose_
+# topology.py` asserts it, and a local stack that flattened it would let someone
+# develop against a topology production does not have. `crawl4ai` drives a real
+# browser against hostile pages; it has no route to Postgres here either.
+#
+# What is *not* here, and why:
+#
+#   cloudflared   — it publishes to the internet and needs a tunnel token. A
+#                   local stack must not be reachable from outside, so it is
+#                   absent rather than disabled.
+#   orchestrator  — phase 4. `services/orchestrator/Dockerfile` does not exist.
+#
+# Usage:
+#
+#   make quickstart                                  # does all of this for you
+#   docker compose -f docker-compose.local.yml up -d --build
+#   docker compose -f docker-compose.local.yml down  # add -v to drop the data
+#
+# Then http://localhost:21116.
+
+name: meridian-local
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-common: &common
+  restart: unless-stopped
+  logging: *logging
+
+# The credentials, in one place and openly. These are *not* secrets and are not
+# pretending to be: the stack binds to loopback only, and a local run that
+# demanded a password file before it would start is a local run nobody
+# completes. Production reads real values from `.env` (§11.11 — credentials come
+# from the environment, never from the database), and this file is the reason
+# somebody can try the system without having invented any.
+x-pg-credentials: &pg-credentials
+  PG_USER: meridian
+  PG_PASSWORD: local
+  PG_RW_PASSWORD: local
+  PG_RO_PASSWORD: local
+
+x-db-urls: &db-urls
+  PG_RW_URL: postgresql://meridian_rw:local@postgres:5432/meridian
+  PG_RO_URL: postgresql://meridian_ro:local@postgres:5432/meridian
+  PG_MIGRATION_URL: postgresql://meridian:local@postgres:5432/meridian
+
+services:
+  postgres:
+    <<: *common
+    image: pgvector/pgvector:pg17
+    networks: [internal]
+    volumes:
+      # A named volume rather than a bind mount, for the reason the dev file
+      # gives: Postgres writes as root, and a root-owned pgdata inside the
+      # working tree cannot be removed without starting a container to do it.
+      - meridian_local_pgdata:/var/lib/postgresql/data
+      - ./scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: local
+      <<: *pg-credentials
+    # Half of production's shared_buffers. The README's minimum is 8 GB total
+    # and this stack also runs a browser pool and a 2.3 GB embedding model; 2 GB
+    # of shared buffers on an 8 GB laptop is how the OOM killer gets involved.
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c work_mem=16MB
+      -c max_connections=40
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      retries: 10
+
+  searxng:
+    <<: *common
+    image: searxng/searxng:latest
+    networks: [egress]
+    volumes: ["./config/searxng:/etc/searxng:ro"]
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+
+  crawl4ai:
+    <<: *common
+    build: { context: ./deploy/crawl4ai }
+    image: meridian/crawl4ai:0.9.2
+    shm_size: 1g
+    networks: [egress]
+    environment:
+      # Not optional despite the name: since 0.9.0 the entrypoint binds
+      # gunicorn to 127.0.0.1 inside the container unless a credential is set,
+      # and the service then answers nothing.
+      CRAWL4AI_API_TOKEN: local
+      CRAWL4AI_HOOKS_ENABLED: "false"      # hooks are RCE by design
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:11235/health', timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  embedder:
+    <<: *common
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.embedserver"]
+    networks: [internal]
+    environment:
+      MERIDIAN_EMBEDDER_PORT: "8100"
+      # `MERIDIAN_EMBED_CACHE`, not `..._EMBEDDER_...`. The name is read by
+      # `EmbedderSettings.from_env` and nothing validates it, so the wrong
+      # spelling silently leaves the weights in the library's default cache —
+      # inside the container, on a layer nothing mounted — and the 2.3 GB
+      # downloads again on every recreate.
+      MERIDIAN_EMBED_CACHE: /models
+    volumes:
+      # `.localdata/` is under the working tree and gitignored, so a `git
+      # clean -x` would throw away 2.3 GB that then downloads again. Point
+      # `DATA_ROOT` somewhere else if that matters; the weights are the one
+      # thing here worth keeping across a wipe.
+      - ${DATA_ROOT:-./.localdata}/models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=4).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s                   # a cold start loads 2.3 GB from disk
+
+  worker:
+    <<: *common
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    networks: [internal, egress]           # the only service needing both
+    depends_on:
+      postgres: { condition: service_healthy }
+      crawl4ai: { condition: service_healthy }
+      searxng: { condition: service_started }
+    environment:
+      <<: [*pg-credentials, *db-urls]
+      CRAWL4AI_URL: http://crawl4ai:11235
+      CRAWL4AI_TOKEN: local
+      SEARXNG_URL: http://searxng:8080
+      MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      # The same cache the sidecar uses. `P2-19`'s backfill falls back to
+      # loading the model in *this* process when the sidecar does not answer,
+      # and without this that fallback downloads 2.3 GB into a layer that dies
+      # with the container — silently, and again on the next run.
+      MERIDIAN_EMBED_CACHE: /models
+      MERIDIAN_RAW_ROOT: /data/raw
+    volumes:
+      - ${DATA_ROOT:-./.localdata}/raw:/data/raw
+      - ${DATA_ROOT:-./.localdata}/figures:/data/figures
+      - ${DATA_ROOT:-./.localdata}/models:/models
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker.liveness"]
+      interval: 60s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+  api:
+    <<: *common
+    build: { context: ., dockerfile: services/api/Dockerfile }
+    # `internal` for Postgres, `frontdoor` for the published port. **A
+    # container on an `internal: true` network cannot publish a port at all** —
+    # Docker installs no gateway, so there is nothing for the host to forward
+    # to, and the `ports:` line is silently inert rather than an error.
+    #
+    # Production does not need this because cloudflared sits on `internal` and
+    # proxies inward. There is no cloudflared here, so this is the front door,
+    # and it is a real and deliberate difference from production rather than an
+    # oversight.
+    networks: [internal, frontdoor]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: [*pg-credentials, *db-urls]
+      MERIDIAN_RAW_ROOT: /data/raw
+      # Without this the API answers every search from the lexical arm alone
+      # and reports `degraded: "this API has no embedder"` — which is true of a
+      # deployment that has none and a lie next to a running sidecar. Absent is
+      # a supported state (`meridian_core.embedder`), so the omission does not
+      # fail: it silently halves retrieval on the stack whose whole purpose is
+      # to show what retrieval does.
+      MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      # Admin writes need an identity, and there is no Cloudflare Access in
+      # front of a local stack. Opting out explicitly rather than leaving the
+      # API to guess: the flag is the same one the tests use, and it is named
+      # here so it is obvious this stack has no authentication at all.
+      MERIDIAN_ADMIN_ALLOW_ANONYMOUS: "true"
+    volumes:
+      - ${DATA_ROOT:-./.localdata}/raw:/data/raw:ro
+      - ${DATA_ROOT:-./.localdata}/figures:/data/figures:ro
+    ports: ["127.0.0.1:21114:8000"]        # same port the dev file documents
+
+  # The data directories, owned by the uid the services run as (`B-16`).
+  #
+  # Docker creates a missing bind-mount source on the host as **root**, and
+  # every application image runs as `meridian` (uid 1001, unprivileged, with
+  # `cap_drop: ALL`). So on a fresh machine the worker fetches a 400 KB
+  # government page, cannot create `/data/raw/<domain>/`, logs a traceback and
+  # settles the task `"outcome": "success", "stored": null`. The crawl keeps
+  # running and keeps nothing.
+  #
+  # Only the three top-level directories, and not recursively: everything
+  # created beneath them inherits the owner, and a `chown -R` over a 100 GB raw
+  # store is a different kind of mistake.
+  datadirs:
+    image: python:3.12-slim-bookworm
+    profiles: [tools]
+    user: root                             # the one thing it needs to be
+    # It touches three inodes and exits. `none` rather than a network, because
+    # omitting the key puts it on compose's default bridge — which has a route
+    # out, and this is the one container here running as root.
+    network_mode: none
+    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models"]
+    volumes:
+      - ${DATA_ROOT:-./.localdata}/raw:/data/raw
+      - ${DATA_ROOT:-./.localdata}/figures:/data/figures
+      - ${DATA_ROOT:-./.localdata}/models:/models
+    restart: "no"
+    logging: *logging
+
+  # The weights, fetched once into the volume the sidecar mounts (`B-14`).
+  #
+  # `embedder` is on `internal` and cannot reach huggingface.co, which is the
+  # point of `internal` — so it can never download the model it is lazily
+  # waiting for, and answers `loaded: false` for ever while every embed request
+  # times out. The weights are not in the image either. This is the container
+  # that has egress, writes into `/models`, and exits.
+  #
+  # Profile-gated like `tools`: `quickstart` runs it before starting the rest,
+  # and a second run downloads nothing.
+  modelfetch:
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.fetchmodel"]
+    profiles: [tools]
+    networks: [egress]                     # the only reason this service exists
+    environment:
+      MERIDIAN_EMBED_CACHE: /models
+    volumes:
+      - ${DATA_ROOT:-./.localdata}/models:/models
+    restart: "no"
+    logging: *logging
+
+  # Migrations and the config seed. Not a running service — `profiles` keeps it
+  # out of `up`, so it starts only when named explicitly, which is what
+  # `scripts/quickstart.sh` does between bringing up Postgres and everything
+  # else. `restart: unless-stopped` is deliberately *not* inherited: a one-shot
+  # job that restarts forever is a migration loop.
+  tools:
+    build: { context: ., dockerfile: deploy/tools/Dockerfile }
+    profiles: [tools]
+    networks: [internal]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: [*pg-credentials, *db-urls]
+    restart: "no"
+    logging: *logging
+
+  web:
+    <<: *common
+    build: { context: ./web }
+    # `frontdoor` for its own published port, `internal` so nginx can resolve
+    # `api` by service name for the /api proxy (web/nginx.conf).
+    networks: [internal, frontdoor]
+    depends_on: [api]
+    ports: ["127.0.0.1:21116:8080"]        # this is the one to open
+
+# Different subnets from production's, so that a machine which has both files
+# — the Pi, during a rehearsal — does not have two networks claiming one range.
+# Pinned rather than allocated for the reason production pins them (`P1-25`): a
+# firewall rule written against a subnet that has since moved does not error, it
+# silently matches nothing.
+networks:
+  internal:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.244.0/24 }]
+  egress:
+    driver: bridge
+    ipam:
+      config: [{ subnet: 172.31.245.0/24 }]
+  # Publishing a port requires a network with a gateway, which `internal: true`
+  # by definition does not have. Only `api` and `web` sit here, and only so the
+  # host can reach them; nothing on it talks to Postgres over it.
+  frontdoor:
+    driver: bridge
+    ipam:
+      config: [{ subnet: 172.31.246.0/24 }]
+
+volumes:
+  meridian_local_pgdata:

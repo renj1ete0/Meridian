@@ -237,3 +237,45 @@ def test_preflight_emits_no_colour_when_nothing_is_watching() -> None:
     )
 
     assert "\033[" not in result.stdout
+
+
+# --------------------------------------------------------------------------
+# The tools image pins two versions by hand (tasks B-05, B-06)
+# --------------------------------------------------------------------------
+
+TOOLS_DOCKERFILE = REPO / "deploy/tools/Dockerfile"
+
+
+def locked_version(package: str) -> str:
+    """The version `uv.lock` resolves for a package."""
+    match = re.search(
+        rf'name = "{re.escape(package)}"\nversion = "([^"]+)"',
+        (REPO / "uv.lock").read_text(),
+    )
+    assert match, f"{package} is not in uv.lock"
+    return match.group(1)
+
+
+def test_the_tools_image_pins_match_the_lockfile() -> None:
+    """`deploy/tools/Dockerfile` installs `alembic` and `pyyaml` with
+    `uv pip install`, pinned by hand.
+
+    It has to: `alembic` is in the root project's `dev` group and `pyyaml` is a
+    root dependency, and `uv sync --package meridian-core` — which is what keeps
+    the worker's torch out of this image — installs neither. `uv sync` has no
+    way to say "this workspace member plus the root's dev group".
+
+    That makes the versions a second copy of the lockfile, so this asserts they
+    agree. Without it a `uv lock --upgrade` moves one and the tool image quietly
+    keeps building against the old one, which is exactly the drift the lockfile
+    exists to prevent everywhere else.
+    """
+    dockerfile = TOOLS_DOCKERFILE.read_text()
+    pinned = dict(re.findall(r"(\w+)==([\d.]+)", dockerfile))
+
+    assert pinned, "no pinned versions found in the tools Dockerfile"
+    for package, version in pinned.items():
+        assert version == locked_version(package), (
+            f"{package} is pinned at {version} in deploy/tools/Dockerfile "
+            f"but uv.lock resolves {locked_version(package)}"
+        )
