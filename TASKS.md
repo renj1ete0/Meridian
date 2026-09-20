@@ -900,6 +900,23 @@ Things worth doing that don't belong to a phase yet.
       `USING` — autogenerate's version would have failed on the server and passed
       here, since `figures` is empty locally. Caught by migrating rows put there
       on purpose, and the downgrade round-trips
+- [ ] `B-11` **Licence audit: is every dependency usable commercially?** Nothing
+      has ever checked. The stack pulls a lot of third-party software — Postgres
+      and pgvector, Crawl4AI, SearXNG, MarkItDown, trafilatura, spaCy and its
+      models, the embedding model's weights, Apache AGE when `P4-01` lands — and
+      "open source" is not one licence. AGPL, non-commercial research terms and
+      model-weight licences with field-of-use restrictions all look identical to
+      `uv add`. The model weights are the likeliest problem: a permissive
+      *library* routinely ships weights that are not.
+      Produce `docs/licences.md`: every runtime dependency, its licence, and a
+      verdict — fine, conditional (and on what), or not usable commercially —
+      with anything problematic named and the reason stated. Direct and
+      transitive, because a GPL dependency three levels down is still a GPL
+      dependency, and container base images too. Then a test that fails when a
+      dependency appears with a licence not on the allowlist, so this is a gate
+      rather than a document that goes stale the next time somebody adds a
+      package. **⚑ human** for the final call on anything conditional: what risk
+      to accept is not an agent's decision
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search
