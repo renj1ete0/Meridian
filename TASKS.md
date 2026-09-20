@@ -1012,6 +1012,20 @@ Things worth doing that don't belong to a phase yet.
       inherits the owner, and a `chown -R` over a 100 GB raw store is a
       different mistake. The uid is now tied to the Dockerfiles by a drift test,
       since three copies of 1001 is three chances to move one
+- [x] `B-17` Fix: the documented way to create the database could never have
+      worked — `v0.76.7`. `docs/setup.md` and `docs/deployment.md` both said
+      `docker compose run --rm worker alembic upgrade head`, and the worker
+      image has no `alembic` — it is in the root project's `dev` group and every
+      application image syncs `--no-dev` — and never copies `scripts/`, so the
+      seed line failed too. Both are the *first* commands an operator runs, on
+      the server, and neither had been run there. `deploy/tools/Dockerfile`
+      (written for `B-05`) is promoted to production compose, profile-gated, and
+      the docs name it: the thing worth preventing was a stack that migrates
+      *itself* on boot, and the profile is what prevents that, not the image's
+      absence. `make migrate` is not the answer on the server — docs/setup.md §2
+      never installs `uv`, and `postgres` resolves only inside the compose
+      network. New test walks every `docker compose run` in the deploy docs and
+      checks the named service's Dockerfile actually carries what is invoked
 - [ ] `B-15` **Nothing starts the scheduler.** `P5-06` is ticked and its code
       runs, but no compose file has ever started `python -m worker.scheduler` —
       so `seed.py`'s five `scheduled_jobs` rows, all `enabled`, all with

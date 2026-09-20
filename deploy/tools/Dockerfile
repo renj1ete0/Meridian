@@ -3,16 +3,19 @@
 #
 # **Why this image exists at all.** `alembic` is in the root project's `dev`
 # dependency group, and every application image syncs with `--no-dev` — which is
-# right: the API and the worker have no business carrying migration tooling, and
-# production runs `make migrate` from a checkout that has `uv`.
+# right: the API and the worker have no business carrying migration tooling.
 #
-# `make quickstart` cannot assume a checkout with `uv`; not needing one is the
-# entire premise. So the tooling gets an image of its own rather than being
-# smuggled into a service image that does not want it.
+# Neither stack can assume a host with `uv`. For `make quickstart` not needing
+# one is the entire premise; on the server, docs/setup.md §2 never installs it,
+# and the database URLs name `postgres`, which only resolves inside the compose
+# network. So the tooling gets an image of its own rather than being smuggled
+# into a service image that does not want it.
 #
-# Local only. Nothing in `docker-compose.yml` refers to this, and it should stay
-# that way — production migrating itself from a container is how a half-applied
-# schema change happens with nobody watching.
+# Used by both stacks, and profile-gated in both (`B-17`). The thing worth
+# preventing is production migrating *itself* on boot, with nobody watching, and
+# the profile is what prevents it: this starts only when somebody names it. The
+# alternative was worse — the deploy docs told operators to run `alembic` and
+# `scripts/seed.py` in the `worker` image, which carries neither.
 
 FROM python:3.12-slim-bookworm
 

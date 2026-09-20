@@ -823,6 +823,26 @@ than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
 
+### The first two commands in the deploy runbook could not work
+
+`docs/setup.md` and `docs/deployment.md` both said
+
+```bash
+docker compose run --rm worker alembic upgrade head
+docker compose run --rm worker python scripts/seed.py
+```
+
+and the worker image has neither. `alembic` is in the root project's `dev` group
+and every application image syncs `--no-dev`; the worker Dockerfile copies
+`packages/`, `services/` and `config/`, never `scripts/`. These are the first
+commands an operator runs on a new server, and nobody had run them there.
+
+Documentation rots quietly because nothing executes it, which is the general
+lesson. `tests/unit/test_documented_commands.py` now resolves every
+`docker compose run` in those two files to the Dockerfile that builds the
+service and checks the invoked thing is in it. It cannot tell you the command
+*succeeds* — only that it is not missing — and that is still most of the value.
+
 ### Docker creates a bind-mount source as root, and nothing here runs as root
 
 The worst of the four found by first running the stack in containers. Every

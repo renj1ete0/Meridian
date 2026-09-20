@@ -137,6 +137,30 @@ services:
       resources:
         limits: { memory: 4G }
 
+  # Migrations and the config seed (`B-17`). Not a running service: `profiles`
+  # keeps it out of `up`, so it starts only when named, which is the safeguard
+  # that matters — a stack that migrated *itself* on boot is how a half-applied
+  # schema change happens with nobody watching.
+  #
+  #   docker compose run --rm tools alembic upgrade head
+  #   docker compose run --rm tools python scripts/seed.py
+  #
+  # It exists because the docs told operators to run both in the `worker`
+  # image, which has neither: `alembic` is in the root project's `dev` group
+  # and every application image syncs `--no-dev`, and the worker image never
+  # copies `scripts/`. Both commands failed on a server nobody had tried them
+  # on. `make migrate` is not the answer here — §2 of docs/setup.md never
+  # installs `uv`, and `postgres` only resolves inside the compose network.
+  tools:
+    build: { context: ., dockerfile: deploy/tools/Dockerfile }
+    profiles: [tools]
+    env_file: .env
+    networks: [internal]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    logging: *logging
+
   # The data directories, owned by the uid the services run as (`B-16`).
   #
   # Docker creates a missing bind-mount source on the host as **root**, and

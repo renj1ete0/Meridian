@@ -43,6 +43,11 @@ IMAGES=(
   "api|services/api/Dockerfile|."
   "orchestrator|services/orchestrator/Dockerfile|."
   "web|web/Dockerfile|web"
+  # Migrations and the config seed (`B-17`). Not an application service, but it
+  # is the first thing run on a new server and the server does not build — so a
+  # tools image that only exists on somebody's laptop is a deploy that stops at
+  # `alembic upgrade head`.
+  "tools|deploy/tools/Dockerfile|."
 )
 
 DRY_RUN=0

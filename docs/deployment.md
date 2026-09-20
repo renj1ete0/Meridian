@@ -110,13 +110,28 @@ Then migrate and seed **from the server**, not from your machine — the URLs in
 `.env` name `postgres`, which only resolves inside the compose network:
 
 ```bash
-docker compose run --rm worker alembic upgrade head
-docker compose run --rm worker python scripts/seed.py
+docker compose run --rm datadirs                        # before anything writes
+docker compose run --rm tools alembic upgrade head
+docker compose run --rm tools python scripts/seed.py
+docker compose run --rm modelfetch                      # 2.3 GB, once
 ```
 
 `make migrate` and `make seed` are the local equivalents and read `.env.dev`;
 on the server the environment comes from the container, which is why these go
 through `compose run` instead.
+
+The first and last are easy to skip and expensive to skip. `datadirs` chowns the
+bind mounts to the uid the services run as — Docker creates them as root, and
+without it the crawl stores nothing while reporting success (`B-16`).
+`modelfetch` puts the weights where the embedding sidecar can read them; it is
+on `internal` and cannot fetch them itself, and without it search is lexical-only
+with no error saying why (`B-14`). Both are profile-gated one-shots and both are
+no-ops the second time.
+
+**`tools`, not `worker`.** These two lines named `worker` until `B-17` and
+could never have worked: `alembic` lives in the root project's `dev` group,
+every application image syncs `--no-dev`, and the worker image does not copy
+`scripts/`.
 
 Sanity-check that the roles actually exist, because a failed `init-roles.sh`
 leaves a perfectly working database with one user:

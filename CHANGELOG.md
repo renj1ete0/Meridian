@@ -214,6 +214,38 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.78.1] — 2026-09-20
+
+### Fixed
+
+- `B-17` The first two commands in the deploy runbook could not work. Both
+  `docs/setup.md` and `docs/deployment.md` said
+  `docker compose run --rm worker alembic upgrade head`, and the worker image
+  has no `alembic` — it is in the root project's `dev` group and every
+  application image syncs `--no-dev` — and never copies `scripts/`, so the seed
+  line failed too
+- These are the first commands an operator runs on a new server, at the step
+  where the database is created, and nobody had run them there
+
+### Changed
+
+- `deploy/tools/Dockerfile` is promoted to `docker-compose.yml`, profile-gated,
+  and the docs name it. The thing worth preventing was a stack that migrates
+  *itself* on boot with nobody watching, and the profile is what prevents that
+  — not the image being absent
+- `make migrate` is not the answer on the server: docs/setup.md §2 never
+  installs `uv`, and the database URLs name `postgres`, which resolves only
+  inside the compose network
+- The release script builds the tools image too, because the server does not
+  build
+
+### Added
+
+- A test that walks every `docker compose run` in the two deploy documents,
+  resolves the service to the Dockerfile that builds it, and checks the invoked
+  thing is actually in there. It cannot tell you the command succeeds — only
+  that it is not missing, which is what was wrong
+
 ## [0.76.2] — 2026-09-20
 
 ### Added

@@ -61,15 +61,41 @@ Fill in `.env`. The ones that are not optional:
 > directory is empty. Changing them later changes nothing until you delete
 > `pgdata`, and the symptom is an auth failure that looks like a typo.
 
+**Give the data directories to the uid the services run as.** Docker creates a
+missing bind-mount source as root and every application image runs unprivileged,
+so without this the crawl fetches pages it cannot store — and says `"outcome":
+"success", "stored": null` while doing it (`B-16`):
+
+```bash
+docker compose run --rm datadirs
+```
+
 Bring up the database, migrate, seed:
 
 ```bash
 docker compose up -d postgres
 docker compose logs -f postgres          # wait for "database system is ready"
 
-docker compose run --rm worker alembic upgrade head
-docker compose run --rm worker python scripts/seed.py
+docker compose run --rm tools alembic upgrade head
+docker compose run --rm tools python scripts/seed.py
 ```
+
+> **`tools`, not `worker`.** This said `worker` until `B-17`, and neither
+> command can run there: `alembic` is in the root project's `dev` group and
+> every application image syncs `--no-dev`, and the worker image never copies
+> `scripts/`. `deploy/tools/Dockerfile` is the image that has both. It is
+> profile-gated, so it starts only when you name it.
+
+**Fetch the embedding weights**, before anything asks for a vector:
+
+```bash
+docker compose run --rm modelfetch
+```
+
+The sidecar sits on `internal` and cannot reach huggingface.co — that is what
+`internal` is for — and the weights are not in any image. Skip this and it
+answers `loaded: false` for ever while search quietly stays lexical-only
+(`B-14`). 2.3 GB, once; it is a no-op afterwards.
 
 **Check the roles exist**, because a failed `init-roles.sh` leaves a perfectly
 working database with one user:
