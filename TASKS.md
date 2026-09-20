@@ -1174,8 +1174,23 @@ assumes `uv`, `npm`, and three terminals; this is the path that doesn't.
       head, `seed.py` skips what it has written and the weights resolve from
       cache. Postgres starts alone so a failed migration is readable rather than
       interleaved with six services' startup logs
-- [ ] `B-07` First-run experience — pick topics and confirm cold-start sources from the
-      UI instead of hand-editing `config/*.yaml` before the first crawl
+- [x] `B-07` First-run experience — seeds editable from the UI — `v0.85.0`.
+      §16 calls cold-start seed quality "worth spending an evening on", and
+      until now that evening had to be spent editing `config/seed_sources.yaml`
+      **before** the first boot, because the file is read once and never again
+      (§13.1) — by somebody who has no idea yet what belongs in it. Now a Seeds
+      section in Admin lists what is still pending, takes new URLs and search
+      queries, and drops ones nobody wanted. **Not a wizard and not a gate**:
+      the crawl has already started by the time anyone opens it, so the screen
+      shows what is still changeable *and* what has been reached, and the
+      second is not styled as an error. Admin opens on Seeds when nothing has
+      been crawled yet, because the default section on a fresh machine is
+      otherwise an empty gazetteer queue with no hint of what to do. A typed
+      URL is still validated — a private address is no safer for having been
+      typed than proposed — and a seed cannot be removed once claimed, which is
+      two conditions rather than one: **claiming is a lease, so a seed being
+      fetched right now is still `pending`**, and checking only the status
+      would delete a row out from under a worker mid-fetch
 - [x] `B-08` Preflight check script — `v0.76.2`. `scripts/preflight.sh` checks
       Docker, Compose v2, cores, memory and free disk against the README's
       minimums and names the *consequence* of each shortfall, not just the

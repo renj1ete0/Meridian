@@ -214,6 +214,38 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.85.0] — 2026-09-20
+
+**Cold-start seeds are editable from the interface.**
+
+### Added
+
+- `B-07` A Seeds section in Admin: what is still pending, what has been
+  reached, and the ability to add or drop seeds. `GET /api/admin/first-run`,
+  `POST /api/admin/seeds`, `DELETE /api/admin/seeds/{id}`
+- Admin opens on Seeds when nothing has been crawled yet — the default section
+  on a fresh machine is otherwise an empty gazetteer queue with no hint that
+  the thing worth doing is elsewhere
+
+### Why it is not a wizard
+
+- §16 calls cold-start seed quality "worth spending an evening on", and that
+  evening had to be spent editing `config/seed_sources.yaml` *before* first
+  boot, because the file is read once and never again (§13.1)
+- By the time anyone opens this, the crawl has started. A screen implying
+  otherwise would invite removing a seed that has already been fetched. So both
+  halves are shown, and "already reached" is not styled as an error
+
+### Two refusals
+
+- A typed URL is validated exactly as a model's is. A private address is no
+  safer for having been typed by the operator — §11.8's attack path does not
+  care who asked
+- A seed cannot be removed once it has been claimed, which is **two**
+  conditions: claiming is a lease (`P1-01`), so a seed being fetched right now
+  is still `pending`, and checking only the status would delete the row out
+  from under a worker mid-fetch
+
 ## [0.84.0] — 2026-09-20
 
 **A domain earns its seeding allowance.**

@@ -41,6 +41,7 @@ const SOURCE = {
   ocr_tier: 'none' as const,
   ocr_confidence: null,
   topic_labels: ['walkability'],
+  trust_state: 'cleared' as const,
   acronyms_harvested_at: null,
   extra: null,
   created_at: '2026-09-01T00:00:00Z',

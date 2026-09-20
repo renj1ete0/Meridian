@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { FetchPolicyPanel } from './FetchPolicyPanel'
+import { FirstRunPanel } from './FirstRunPanel'
 import { GazetteerQueue } from './GazetteerQueue'
 import { TopicPanel } from './TopicPanel'
 import {
   ApiError,
   actOnFetchPolicy,
+  addSeed,
   decideGazetteerTerm,
   editGazetteerTerm,
   editTopic,
   getFetchPolicy,
+  getFirstRun,
   getGazetteerQueue,
   getSteeringLog,
   getTopics,
+  removeSeed,
+  type FirstRun,
   type GazetteerEntityType,
   type GazetteerQueue as Queue,
   type DomainStatus,
@@ -48,12 +53,17 @@ import {
 
 type Phase = 'loading' | 'ready' | 'failed'
 
-type Section = 'gazetteer' | 'topics' | 'domains'
+type Section = 'gazetteer' | 'topics' | 'domains' | 'seeds'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'gazetteer', label: 'Gazetteer' },
   { key: 'topics', label: 'Topics' },
   { key: 'domains', label: 'Domains' },
+  // Last, because it is the one section that stops mattering. It is also the
+  // first thing anybody needs on a fresh install, which is why `AdminPage`
+  // opens on it when nothing has been crawled yet rather than leaving somebody
+  // to find it.
+  { key: 'seeds', label: 'Seeds' },
 ]
 
 export function AdminPage() {
@@ -70,6 +80,10 @@ export function AdminPage() {
 
   const [policy, setPolicy] = useState<FetchPolicyPage | null>(null)
   const [domainStatus, setDomainStatus] = useState<DomainStatus | null>(null)
+
+  const [run, setRun] = useState<FirstRun | null>(null)
+  const [seedBusy, setSeedBusy] = useState<number | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const load = useCallback(
     (next: GazetteerState, signal?: AbortSignal) => {
@@ -116,10 +130,42 @@ export function AdminPage() {
       })
   }, [])
 
+  const loadRun = useCallback(async (signal?: AbortSignal) => {
+    try {
+      setRun(await getFirstRun({ signal }))
+      setPhase('ready')
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return
+      setError(cause instanceof ApiError ? cause.message : 'Could not read the seed list.')
+      setPhase('failed')
+    }
+  }, [])
+
+  // A fresh install opens on Seeds rather than Gazetteer. The gazetteer queue
+  // is empty until something has been crawled, so the default section on a new
+  // machine is a screen with nothing on it and no hint that the thing worth
+  // doing is elsewhere. Runs once: after that, Admin remembers nothing and the
+  // person picks.
+  useEffect(() => {
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const first = await getFirstRun({ signal: controller.signal })
+        setRun(first)
+        if (first.is_first_run) setSection('seeds')
+      } catch {
+        // Not worth surfacing. This is a convenience, and a failure here
+        // leaves Admin exactly where it would have been anyway.
+      }
+    })()
+    return () => controller.abort()
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
     if (section === 'gazetteer') void load(state, controller.signal)
     else if (section === 'topics') void loadTopics(controller.signal)
+    else if (section === 'seeds') void loadRun(controller.signal)
     else void loadPolicy(domainStatus, controller.signal)
     return () => controller.abort()
   }, [domainStatus, load, loadPolicy, loadTopics, section, state])
@@ -181,7 +227,45 @@ export function AdminPage() {
         </p>
       ) : null}
 
-      {section === 'domains' ? (
+      {section === 'seeds' ? (
+        run ? (
+          <FirstRunPanel
+            run={run}
+            busy={seedBusy}
+            adding={adding}
+            onAdd={(url, kind, topic) =>
+              void (async () => {
+                setAdding(true)
+                setError(null)
+                try {
+                  await addSeed({ url_or_query: url, task_type: kind, topic })
+                  setRun(await getFirstRun())
+                } catch (cause) {
+                  setError(cause instanceof ApiError ? cause.message : 'That seed was not added.')
+                } finally {
+                  setAdding(false)
+                }
+              })()
+            }
+            onRemove={(taskId) =>
+              void (async () => {
+                setSeedBusy(taskId)
+                setError(null)
+                try {
+                  await removeSeed(taskId)
+                  setRun(await getFirstRun())
+                } catch (cause) {
+                  setError(
+                    cause instanceof ApiError ? cause.message : 'That seed was not removed.',
+                  )
+                } finally {
+                  setSeedBusy(null)
+                }
+              })()
+            }
+          />
+        ) : null
+      ) : section === 'domains' ? (
         policy ? (
           <FetchPolicyPanel
             rows={policy.rows}

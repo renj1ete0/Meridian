@@ -24,8 +24,9 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
-from .enums import DomainStatus, GazetteerEntityType, TopicStatus
+from .enums import DomainStatus, GazetteerEntityType, TaskType, TopicStatus
 from .gazetteer import GazetteerTermRead
+from .queue import QueueTaskRead
 
 
 class GazetteerRowRead(BaseModel):
@@ -282,3 +283,54 @@ class BudgetEdit(BaseModel):
     max_tokens_per_run: int | None = Field(default=None, gt=0)
     max_seeds_per_run: int | None = Field(default=None, gt=0)
     monthly_cost_ceiling_usd: float | None = Field(default=None, gt=0)
+
+
+# ---------------------------------------------------------------------------
+# The first run (task `B-07`, scaffold §1.7, §15 phase 0)
+# ---------------------------------------------------------------------------
+
+
+class FirstRunRead(BaseModel):
+    """Whether this install has started, and what it would start with.
+
+    `is_first_run` is computed here rather than left to the client, for the
+    reason `BudgetRead.ready` is: a screen deriving "has anything been crawled"
+    from a count it also displays will eventually disagree with the server, and
+    the disagreement shows up as a setup wizard reappearing after a week.
+
+    **"No sources yet" is the test, not "no seeds yet".** Seeds are queued by
+    `make seed` at first boot, so a fresh install always has them; what makes a
+    run *first* is that nothing has come back yet.
+    """
+
+    is_first_run: bool
+
+    #: Documents in the corpus. Zero is the condition above.
+    sources: int
+
+    #: Cold-start seeds still waiting to be fetched. These are what a person can
+    #: still change their mind about — §16 calls cold-start seed quality
+    #: "real, worth spending an evening on", and until now the only way to spend
+    #: that evening was editing YAML before the first boot.
+    pending_seeds: list[QueueTaskRead] = Field(default_factory=list)
+
+    #: How many pending seeds are already claimed or attempted, and therefore
+    #: past changing. Shown rather than hidden: a crawl that has started is a
+    #: fact, and a screen implying otherwise would be inviting somebody to
+    #: remove a seed that has already been fetched.
+    seeds_in_flight: int = 0
+
+
+class SeedCreate(BaseModel):
+    """One cold-start seed, added by hand from the interface.
+
+    `topic` is optional and usually wrong to omit: a seed with no topic is
+    crawled and then belongs to whatever the topic matcher makes of it, which
+    for an authority root is often nothing.
+    """
+
+    url_or_query: str = Field(min_length=1)
+    task_type: TaskType = "url"
+    topic: str | None = None
+    #: Cold-start seeds run first, the same default `scripts/seed.py` uses.
+    priority: int = 100

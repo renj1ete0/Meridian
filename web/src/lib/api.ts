@@ -245,6 +245,12 @@ export interface Source {
   ocr_confidence: number | null
   /** Which topics this source belongs to (`P2-14`). Null means nothing examined it. */
   topic_labels: string[] | null
+  /**
+   * What screening concluded about this page (`P4-14`). Shown to the operator
+   * on purpose: a passage from something quarantined should be visible here,
+   * or a false positive never gets noticed. The MCP surface returns none.
+   */
+  trust_state: TrustState
   /** When the acronym harvest last read this document (`P5-02`). Null is the queue. */
   acronyms_harvested_at: string | null
   extra: Record<string, unknown> | null
@@ -275,6 +281,7 @@ export const SOURCE_FIELDS = [
   'ocr_tier',
   'ocr_confidence',
   'topic_labels',
+  'trust_state',
   'acronyms_harvested_at',
   'extra',
   'created_at',
@@ -844,6 +851,20 @@ export type AssertSteeringLog = Expect<
 // Fetch policy (task P6-22, spec §6.4)
 // --------------------------------------------------------------------------
 
+/** `TRUST_STATE` in `models/mixins.py` (`P4-14`). */
+export type TrustState = 'unscreened' | 'cleared' | 'quarantined' | 'rejected'
+
+/** `SEED_SOURCE` in `models/queue.py`. */
+export type SeedSource =
+  | 'frontier'
+  | 'sitemap'
+  | 'search'
+  | 'citation'
+  | 'doi'
+  | 'model'
+  | 'user'
+  | 'diversity'
+
 /** `DOMAIN_STATUS` in `models/config.py`. */
 export type DomainStatus = 'active' | 'blocked' | 'paused'
 
@@ -856,6 +877,14 @@ export interface FetchPolicy {
   consecutive_failures: number
   render_js_escalations: number
   render_js_learned_at: string | null
+  seed_allowed: boolean | null
+  first_seen_via: SeedSource | null
+  novel_fetches: number
+  trust_state: TrustState
+  clean_fetches: number
+  trust_decided_at: string | null
+  trust_decided_by: string | null
+  trust_reason: string | null
   updated_at: string | null
   updated_by: string | null
 }
@@ -868,6 +897,14 @@ export const FETCH_POLICY_FIELDS = [
   'consecutive_failures',
   'render_js_escalations',
   'render_js_learned_at',
+  'seed_allowed',
+  'first_seen_via',
+  'novel_fetches',
+  'trust_state',
+  'clean_fetches',
+  'trust_decided_at',
+  'trust_decided_by',
+  'trust_reason',
   'updated_at',
   'updated_by',
 ] as const
@@ -1241,3 +1278,79 @@ export type AssertSavedView = Expect<
   Equal<keyof SavedViewRecord, (typeof SAVED_VIEW_FIELDS)[number]>
 >
 export type AssertSavedViews = Expect<Equal<keyof SavedViews, (typeof SAVED_VIEWS_FIELDS)[number]>>
+
+// --------------------------------------------------------------------------
+// The first run (task B-07)
+
+export const QUEUE_TASK_FIELDS = [
+  'task_id',
+  'url_or_query',
+  'task_type',
+  'status',
+  'priority',
+  'topic',
+  'seed_source',
+  'attempts',
+  'next_attempt_at',
+  'claimed_at',
+  'claimed_by',
+  'fetched_at',
+  'error',
+  'created_at',
+] as const
+
+export interface QueueTask {
+  task_id: number
+  url_or_query: string
+  task_type: 'url' | 'query'
+  status: string
+  priority: number
+  topic: string | null
+  seed_source: string
+  attempts: number
+  claimed_by: string | null
+  created_at: string
+}
+
+export interface FirstRun {
+  is_first_run: boolean
+  sources: number
+  pending_seeds: readonly QueueTask[]
+  seeds_in_flight: number
+}
+
+export interface SeedCreate {
+  url_or_query: string
+  task_type?: 'url' | 'query'
+  topic?: string | null
+  priority?: number
+}
+
+export function getFirstRun(init?: RequestInit): Promise<FirstRun> {
+  return request<FirstRun>('/api/admin/first-run', init)
+}
+
+export function addSeed(seed: SeedCreate, init?: RequestInit): Promise<QueueTask> {
+  return request<QueueTask>('/api/admin/seeds', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(seed),
+    ...init,
+  })
+}
+
+export async function removeSeed(taskId: number, init?: RequestInit): Promise<void> {
+  // 204, so there is no body to parse and `request` would fail trying. The
+  // error path still has to match the rest of the client, or a refused delete
+  // would surface as "unreachable".
+  const response = await fetch(`/api/admin/seeds/${taskId}`, { method: 'DELETE', ...init })
+  if (!response.ok) {
+    let detail: unknown
+    try {
+      detail = (await response.json())?.detail
+    } catch {
+      detail = undefined
+    }
+    throw new ApiError(response.status, describeDetail(detail, response.status))
+  }
+}

@@ -38,7 +38,9 @@ from meridian_core.models import (
     BudgetConfig,
     FetchPolicy,
     GazetteerTerm,
+    QueueTask,
     SavedView,
+    Source,
     SteeringLog,
 )
 from meridian_core.policy import (
@@ -48,15 +50,18 @@ from meridian_core.policy import (
     learned_render_js,
     merge_layers,
 )
+from meridian_core.queueing import enqueue
 from meridian_core.schemas.admin import (
     BudgetEdit,
     BudgetRead,
     FetchPolicyEdit,
     FetchPolicyPage,
     FetchPolicyRowRead,
+    FirstRunRead,
     GazetteerQueueRead,
     GazetteerRowRead,
     GazetteerTermEdit,
+    SeedCreate,
     SteeringLogPage,
     TopicAdd,
     TopicEdit,
@@ -71,8 +76,10 @@ from meridian_core.schemas.annotations import (
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
+from meridian_core.schemas.queue import QueueTaskRead
 from meridian_core.schemas.views import SavedViewCreate, SavedViewEdit, SavedViewRead
 from meridian_core.search import SearchFilters
+from meridian_core.validation import ValidationError, check_seed_allowed
 
 from ..deps import AdminAllowed, WriteSession
 
@@ -958,3 +965,130 @@ async def set_budget(edit: BudgetEdit, _: AdminAllowed, sess: WriteSession) -> B
         },
     )
     return await _budget_read(sess)
+
+
+# ---------------------------------------------------------------------------
+# The first run (task `B-07`, scaffold §1.7, §15 phase 0)
+# ---------------------------------------------------------------------------
+#
+# §16 lists cold-start seed quality as a real risk — "worth spending an evening
+# on" — and until now the only way to spend that evening was editing
+# `config/seed_sources.yaml` *before* the first boot, because the file is read
+# once and never again (§13.1). Somebody installing Meridian to see what it
+# does has no idea what to put there yet.
+#
+# So the seeds stay editable for as long as they are still pending. This is not
+# a wizard and deliberately not a gate: the crawl has already started by the
+# time anyone opens this, and pretending otherwise would invite removing a seed
+# that has already been fetched. What it offers is the window between a seed
+# being queued and being reached, which per-domain rate limiting makes
+# generous.
+
+
+@router.get("/first-run", response_model=FirstRunRead)
+async def read_first_run(_: AdminAllowed, sess: WriteSession) -> FirstRunRead:
+    """Whether anything has been crawled yet, and what is still queued."""
+    sources = int(await sess.scalar(select(func.count()).select_from(Source)) or 0)
+
+    pending = (
+        (
+            await sess.execute(
+                select(QueueTask)
+                .where(QueueTask.seed_source == "user", QueueTask.status == "pending")
+                .order_by(QueueTask.priority.desc(), QueueTask.task_id)
+                .limit(200)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    in_flight = int(
+        await sess.scalar(
+            select(func.count())
+            .select_from(QueueTask)
+            .where(QueueTask.seed_source == "user", QueueTask.status != "pending")
+        )
+        or 0
+    )
+
+    return FirstRunRead(
+        is_first_run=sources == 0,
+        sources=sources,
+        pending_seeds=[QueueTaskRead.model_validate(row) for row in pending],
+        seeds_in_flight=in_flight,
+    )
+
+
+@router.post("/seeds", response_model=QueueTaskRead, status_code=201)
+async def add_seed(seed: SeedCreate, _: AdminAllowed, sess: WriteSession) -> QueueTaskRead:
+    """Add a cold-start seed from the interface.
+
+    `seed_source="user"` — this is somebody typing a URL, which is consent, and
+    `P4-12` treats it as such by allowing the domain immediately. Validated the
+    same way a model's seed is (`check_seed_allowed`), because the checks that
+    matter here are about the *URL* — a `file:` scheme or a private address is
+    no safer for having been typed by the operator than proposed by a model.
+    """
+    if seed.task_type == "url":
+        try:
+            await check_seed_allowed(sess, seed.url_or_query)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if await sess.scalar(
+        select(QueueTask.task_id).where(QueueTask.url_or_query == seed.url_or_query)
+    ):
+        raise HTTPException(status_code=409, detail="That is already queued.")
+
+    task = await enqueue(
+        sess,
+        seed.url_or_query,
+        topic=seed.topic,
+        seed_source="user",
+        task_type=seed.task_type,
+        priority=seed.priority,
+    )
+    await sess.commit()
+    await sess.refresh(task)
+    log.info("seed added", extra={"url": seed.url_or_query, "topic": seed.topic})
+    return QueueTaskRead.model_validate(task)
+
+
+@router.delete("/seeds/{task_id}", status_code=204)
+async def drop_seed(task_id: int, _: AdminAllowed, sess: WriteSession) -> None:
+    """Remove a cold-start seed that has not been fetched yet.
+
+    **Only while pending and unclaimed**, which is two conditions rather than
+    one. A task that has moved past `pending` has already produced a fetch
+    attempt and possibly a source, and deleting the queue row would leave that
+    evidence with nothing explaining where it came from.
+
+    But claiming is a *lease*, not a status (`P1-01`) — a seed a worker is
+    fetching right now is still `pending`, with `claimed_by` set. Checking only
+    the status would delete a row out from under a worker mid-fetch, which is
+    the one case somebody is most likely to hit: they see the crawl start and
+    reach for the seed they did not mean to include.
+
+    The 409 names which of the two it is, because "I removed that seed" and
+    "that seed had already run" are different things to believe.
+    """
+    task = await sess.get(QueueTask, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"No task {task_id}.")
+    if task.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail=f"That seed is {task.status}, not pending — it has already been reached.",
+        )
+    if task.claimed_by is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"That seed is being fetched right now by {task.claimed_by}. "
+                f"Block the domain in fetch policy if you want it to stop."
+            ),
+        )
+
+    await sess.delete(task)
+    await sess.commit()
+    log.info("seed removed", extra={"task_id": task_id, "url": task.url_or_query})
