@@ -214,6 +214,32 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.79.1] — 2026-09-20
+
+### Fixed
+
+- `B-20` The embedding sidecar took 144.6s to answer its first request, on a
+  cache that already held the weights. `embedder` has no route out by design,
+  and `huggingface_hub` did not know — so every cold start issued HEAD requests
+  for the optional config files the cache does not hold, got `Temporary failure
+  in name resolution`, and retried five times with backoff per file before
+  loading from cache anyway
+- `HF_HUB_OFFLINE=1` takes the same load to **4.9s**, measured both ways on the
+  same cache, and removes a wall of WARNING lines that look exactly like a
+  sidecar that cannot find its weights at all
+
+### Why it is also the more honest failure
+
+- Offline, a genuinely missing *required* file raises "not in cache"
+  immediately. Online, it times out against a host that was never reachable
+  from there, which says nothing about what is actually wrong
+
+### Asserted both ways
+
+- A service that reads the model cache from a network with no route out must
+  set it
+- `modelfetch`, whose entire job is the download, must never have it
+
 ## [0.79.0] — 2026-09-20
 
 **The timetable now has something reading it.**

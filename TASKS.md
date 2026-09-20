@@ -1061,6 +1061,21 @@ Things worth doing that don't belong to a phase yet.
       outside `internal`. The trade is argued in the test rather than hidden —
       the same image already makes it, and a scheduled send that fails into
       `last_error` is the failure mode this task existed to remove
+- [x] `B-20` Fix: the sidecar spent two and a half minutes per cold start
+      asking a host it cannot reach — `v0.79.1`. `embedder` sits on `internal`
+      by design and reads its weights from the cache `modelfetch` filled, but
+      `huggingface_hub` does not know that: every load issued HEAD requests for
+      the optional config files the cache does not hold, got `Temporary failure
+      in name resolution`, and retried five times with backoff *per file*
+      before proceeding from cache anyway. Correct, slow, and logged as a wall
+      of warnings that look exactly like the failure they are not — which is
+      how `B-14` was nearly mistaken for still broken. `HF_HUB_OFFLINE=1` says
+      the true thing about where that container is standing: **144.6s → 4.9s**
+      to first embed, measured both ways on the same populated cache, and no
+      warnings. It is also the honest failure mode, since a genuinely missing
+      required file now raises "not in cache" instead of timing out against a
+      host that was never reachable. Asserted both ways — a model loader on an
+      isolated network must be offline, and the fetcher must never be
 - [ ] `B-19` **The scheduler has no liveness probe.** `P5-08`'s heartbeat is
       written by `worker.main`'s loop, so the `scheduler` service added in
       `B-15` carries `healthcheck: { disable: true }` — *off*, not omitted,

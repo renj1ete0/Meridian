@@ -245,6 +245,10 @@ NOT_READ_BY_PYTHON = {
     "PG_PASSWORD",
     "PG_RW_PASSWORD",
     "PG_RO_PASSWORD",
+    # Read by `huggingface_hub` inside our own image rather than by our code:
+    # it turns off the network probes a container with no route out cannot
+    # answer (`B-20`).
+    "HF_HUB_OFFLINE",
     # Read by the upstream images' own entrypoints.
     "SEARXNG_BASE_URL",
     "CRAWL4AI_API_TOKEN",

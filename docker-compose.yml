@@ -124,6 +124,12 @@ services:
       # meant the mount below went unused and 2.3 GB re-downloaded on every
       # recreate — silently, because a misspelt variable just takes its default.
       MERIDIAN_EMBED_CACHE: /models
+      # The sidecar has no route out, so tell the library that instead of
+      # letting it find out (`B-20`). Without it, every load issues HEAD
+      # requests to huggingface.co for the optional config files the cache does
+      # not hold, gets `Temporary failure in name resolution`, and retries five
+      # times with backoff per file before proceeding from cache anyway.
+      HF_HUB_OFFLINE: "1"
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/models:/models
     healthcheck:

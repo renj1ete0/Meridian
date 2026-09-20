@@ -941,6 +941,26 @@ services that would use it must be able to find it — and `test_fetchmodel.py`
 asserts the fetcher and the sidecar agree on the path, because two containers
 agreeing by coincidence is the version of this that looks like success.
 
+### A library that does not know it is offline retries until it gives up
+
+`embedder` is on `internal` with no route out, and after `B-14` its weights are
+in the cache. It still took **144.6s** to answer its first embed, because
+`huggingface_hub` checks for the optional config files the cache does not hold:
+a HEAD to huggingface.co per file, `Temporary failure in name resolution`, five
+retries with backoff, then on to the next file — and finally a correct load
+from cache. The logs are a wall of WARNING lines about a host being
+unreachable, which is precisely what a *broken* sidecar looks like, and is how
+`B-14`'s fix was nearly mistaken for not having worked.
+
+`HF_HUB_OFFLINE=1` on that service takes it to **4.9s** with no warnings, on
+the same cache, measured both ways. Set it wherever a container reads the model
+cache and has no egress — and never on `modelfetch`, whose whole job is the
+download. Both directions are asserted in `tests/unit/test_fetchmodel.py`.
+
+The general shape is one this codebase keeps meeting: a component that is
+*correct* about its own state and wrong about its surroundings will spend a
+long time finding out, loudly, in a way that reads as a different fault.
+
 ### The scheduler is a supervisor, and for a long time nobody supervised it
 
 `P5-06` was ticked, its code worked, and no compose file ran `python -m

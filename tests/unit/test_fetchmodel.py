@@ -214,3 +214,81 @@ def test_the_fetcher_writes_where_the_sidecar_reads(path: pathlib.Path) -> None:
             assert wanted in _mount_targets(services[name]), (
                 f"{path.name}: {name} writes to {wanted} and mounts nothing there"
             )
+
+
+# --------------------------------------------------------------------------
+# A container with no route out should be told so (task `B-20`)
+# --------------------------------------------------------------------------
+#
+# The sidecar reaches its weights from the cache `modelfetch` filled, and it
+# got there the slow way: `huggingface_hub` issues HEAD requests for the
+# optional config files the cache does not hold, the isolated network answers
+# `Temporary failure in name resolution`, and it retries five times with
+# backoff *per file* before proceeding from cache anyway. Correct in the end,
+# and two and a half minutes of it on every cold start, logged as a wall of
+# warnings that look like the failure they are not.
+#
+# `HF_HUB_OFFLINE` says the true thing about where that container is standing.
+# It is also the honest failure mode: a genuinely missing *required* file then
+# raises immediately and says the cache is incomplete, rather than timing out
+# against a host that was never reachable.
+
+OFFLINE = "HF_HUB_OFFLINE"
+
+
+def _environment(service: dict) -> dict[str, str]:
+    env = service.get("environment")
+    if isinstance(env, dict):
+        return {str(k): str(v) for k, v in env.items()}
+    if isinstance(env, list):
+        pairs = [str(item).split("=", 1) for item in env]
+        return {p[0]: (p[1] if len(p) > 1 else "") for p in pairs}
+    return {}
+
+
+def _reaches_the_internet(doc: dict, service: dict) -> bool:
+    """Whether any network this service is on has a route out."""
+    networks = doc.get("networks") or {}
+    attached = service.get("networks") or []
+    if not attached:
+        # No `networks:` means compose's default bridge, which is routable.
+        return service.get("network_mode") != "none"
+    return any(not (networks.get(n) or {}).get("internal") for n in attached)
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_a_model_loader_with_no_route_out_is_told_so(path: pathlib.Path) -> None:
+    """Every service that reads the model cache from an isolated network."""
+    doc = yaml.safe_load(path.read_text())
+    services = doc.get("services") or {}
+
+    marooned = {
+        name
+        for name, service in services.items()
+        if isinstance(service, dict)
+        and _environment(service).get("MERIDIAN_EMBED_CACHE")
+        and not _reaches_the_internet(doc, service)
+    }
+    if not marooned:
+        pytest.skip(f"{path.name} has no isolated model loader")
+
+    silent = {n for n in marooned if _environment(services[n]).get(OFFLINE) != "1"}
+
+    assert not silent, (
+        f"{path.name}: {sorted(silent)} load the model from an isolated "
+        f"network and do not set {OFFLINE}=1 — every cold start will retry "
+        f"against a host it cannot resolve before falling back to the cache"
+    )
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_the_fetcher_is_never_put_offline(path: pathlib.Path) -> None:
+    """The inverse, and the one that would actually break something: the
+    container whose entire job is downloading must not be told there is no
+    network."""
+    services = yaml.safe_load(path.read_text()).get("services") or {}
+
+    for name in _running(path, FETCHMODEL):
+        assert _environment(services[name]).get(OFFLINE) != "1", (
+            f"{path.name}: {name} downloads the weights and cannot do it offline"
+        )
