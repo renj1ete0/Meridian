@@ -1,4 +1,4 @@
-"""Caps for a run, and where they come from (task `P4-10`, §16, §11.9).
+"""Caps, and the refusal to run without them (tasks `P4-10`, `P4-13`, §16, §11.9).
 
 §11.9 describes the one feedback loop in this design that nothing else bounds:
 gap analysis emits seeds, seeds become crawl targets, a larger corpus produces
@@ -15,9 +15,13 @@ loop is unattended, so the first signal would be the invoice rather than a log
 line. `reserve_seeds` in `validation.py` already took this position for its own
 cap; this module is where the caps come from.
 
-**The ceiling is a number this module reports, not one it enforces.** `P4-13`
-is what refuses a run against it; here the job is to say truthfully what the
-month has spent.
+**Cost is checked before a run, not during it.** A run cannot know what it will
+spend, so the ceiling is enforced as "the month so far leaves room to start" —
+and a run that overshoots is recorded honestly rather than killed halfway, which
+would leave a half-written graph to reconcile. The month's *next* run is the one
+that gets refused. That is a real limitation and the alternative is worse: §11.9
+asks for trend alerting precisely because the ceiling alone is a blunt
+instrument.
 
 **The calendar month, in UTC.** Not a rolling 30 days: a ceiling somebody sets
 by looking at a monthly invoice should reset when the invoice does, and a
@@ -46,6 +50,7 @@ __all__ = [
     "BUDGET_ID",
     "Budget",
     "BudgetError",
+    "check_can_start_run",
     "load_budget",
     "month_to_date_cost",
     "month_window",
@@ -160,6 +165,51 @@ async def month_to_date_cost(sess: AsyncSession, *, now: dt.datetime | None = No
         )
     )
     return float(total or 0.0)
+
+
+async def check_can_start_run(sess: AsyncSession, *, now: dt.datetime | None = None) -> Budget:
+    """Refuse to start a synthesis run that has no budget (`P4-13`).
+
+    Three refusals, in the order somebody would fix them: no budget row at all,
+    a budget with caps missing, and a month that has already reached its
+    ceiling. Returns the budget on success so the caller enforces the same
+    numbers it was checked against — reading them twice invites a run governed
+    by caps that changed in between.
+    """
+    budget = await load_budget(sess)
+    if budget is None:
+        raise BudgetError(
+            "budget_unconfigured",
+            "No budget is configured. §16 requires caps to exist before the "
+            "first autonomous run; set them in Admin before starting one.",
+        )
+    if not budget.is_complete:
+        raise BudgetError(
+            "budget_incomplete",
+            f"The budget is missing {', '.join(budget.missing)}. An unset cap "
+            f"is not an unlimited one — set every cap before starting a run.",
+        )
+
+    spent = await month_to_date_cost(sess, now=now)
+    ceiling = budget.monthly_cost_ceiling_usd
+    assert ceiling is not None  # is_complete
+    if spent >= ceiling:
+        raise BudgetError(
+            "monthly_ceiling",
+            f"This month has spent {spent:.2f} of a {ceiling:.2f} USD ceiling. "
+            f"Raise the ceiling or wait for the month to turn over.",
+        )
+
+    log.info(
+        "run budget checked",
+        extra={
+            "spent_usd": round(spent, 4),
+            "ceiling_usd": ceiling,
+            "max_tokens_per_run": budget.max_tokens_per_run,
+            "max_seeds_per_run": budget.max_seeds_per_run,
+        },
+    )
+    return budget
 
 
 async def reserve_tokens(sess: AsyncSession, run_id: int, count: int, *, cap: int | None) -> int:

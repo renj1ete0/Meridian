@@ -214,6 +214,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.81.1] — 2026-09-20
+
+### Added
+
+- `P4-13` `check_can_start_run` — the refusal §16 describes and nothing
+  enforced. Three checks in the order somebody would fix them: no budget row,
+  a budget with caps missing, and a month already at its ceiling
+- It returns the budget it approved, so a run enforces the numbers it was
+  checked against rather than re-reading caps that may have moved
+
+### Two choices worth stating
+
+- **One missing cap refuses, even with the others set.** A run capped on seeds
+  and uncapped on tokens is an uncapped run — the expensive half is the one
+  nobody limited
+- **The ceiling is checked before a run, not during it.** A run cannot know
+  what it will spend, and killing one halfway leaves a half-written graph to
+  reconcile. The month's *next* run is the one refused, which is why §11.9 asks
+  for trend alerting as well as a ceiling
+
 ## [0.81.0] — 2026-09-20
 
 **Caps, so the first autonomous run cannot be the first invoice.**

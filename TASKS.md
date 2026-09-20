@@ -689,9 +689,19 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `P4-12` Allowlist growth: `fetch_policy.seed_allowed` + `first_seen_via`. Domains
       reached by frontier expansion auto-approve after N successful novel fetches;
       model-proposed domains queue for approval like gazetteer terms
-- [ ] `P4-13` Refuse to start a synthesis run with no budget configured. §16 says caps
-      must exist before the first autonomous run, and nothing currently enforces the
-      ordering — the compounding seed→crawl→cost loop is first noticed as a bill
+- [x] `P4-13` Refuse to start a synthesis run with no budget configured —
+      `v0.81.1`. §16 states the ordering — caps before the first autonomous run
+      — as a mitigation, and a mitigation nothing enforces is a sentence.
+      `check_can_start_run` refuses three ways, in the order somebody would fix
+      them: no budget row at all, a budget with caps missing, and a month
+      already at its ceiling. It returns the budget it approved so the run
+      enforces the same numbers it was checked against, rather than re-reading
+      caps that may have moved in between. **A missing cap refuses even though
+      the others are set**, because a run capped on seeds and uncapped on
+      tokens is an uncapped run. The ceiling is checked *before* a run rather
+      than during it: a run cannot know what it will spend, and killing one
+      halfway leaves a half-written graph — so the month's next run is the one
+      refused, which is why §11.9 also asks for trend alerting
 - [ ] `P4-06` Untrusted-data framing for all retrieved content in prompts (spec §11.8)
 - [ ] `P4-14` **Quarantine and screening for unknown domains.** `sources.trust_state`
       (unscreened | cleared | quarantined | rejected) plus a domain-level verdict

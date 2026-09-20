@@ -1,4 +1,4 @@
-"""Caps for a run, and where they come from (task `P4-10`, §16).
+"""Caps, and the refusal to run without them (tasks `P4-10`, `P4-13`, §16).
 
 Against a real Postgres, because two of the three things worth proving are
 database behaviour rather than Python: the single-row CHECK that stops a second
@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from meridian_core.budget import (
     BUDGET_ID,
     BudgetError,
+    check_can_start_run,
     load_budget,
     month_to_date_cost,
     month_window,
@@ -68,6 +69,82 @@ async def a_run(sess, *, cost=None, started_at=NOW, status="running", tokens=0) 
     sess.add(run)
     await sess.flush()
     return run
+
+
+# --------------------------------------------------------------------------
+# The refusals — the point of the task
+# --------------------------------------------------------------------------
+
+
+async def test_no_budget_at_all_refuses(clean) -> None:
+    """§16's ordering requirement, enforced. A fresh install has no budget row,
+    and that must stop the first autonomous run rather than start it."""
+    with pytest.raises(BudgetError) as raised:
+        await check_can_start_run(clean, now=NOW)
+
+    assert raised.value.reason == "budget_unconfigured"
+
+
+#: Column name → the keyword `a_budget` takes for it.
+CAP_KEYWORDS = {
+    "max_tokens_per_run": "tokens",
+    "max_seeds_per_run": "seeds",
+    "monthly_cost_ceiling_usd": "ceiling",
+}
+
+
+@pytest.mark.parametrize("absent", sorted(CAP_KEYWORDS))
+async def test_any_single_missing_cap_refuses(clean, absent: str) -> None:
+    """A run capped on seeds and uncapped on tokens is an uncapped run. Each
+    cap is checked on its own so the message names the one to go and set."""
+    await a_budget(clean, **{CAP_KEYWORDS[absent]: None})
+
+    with pytest.raises(BudgetError) as raised:
+        await check_can_start_run(clean, now=NOW)
+
+    assert raised.value.reason == "budget_incomplete"
+    assert absent in str(raised.value)
+
+
+async def test_a_month_at_its_ceiling_refuses(clean) -> None:
+    await a_budget(clean, ceiling=10.0)
+    await a_run(clean, cost=10.0, status="done")
+
+    with pytest.raises(BudgetError) as raised:
+        await check_can_start_run(clean, now=NOW)
+
+    assert raised.value.reason == "monthly_ceiling"
+
+
+async def test_a_month_with_room_left_starts(clean) -> None:
+    await a_budget(clean, ceiling=10.0)
+    await a_run(clean, cost=9.99, status="done")
+
+    budget = await check_can_start_run(clean, now=NOW)
+
+    assert budget.max_seeds_per_run == 50
+
+
+async def test_last_months_spend_does_not_block_this_month(clean) -> None:
+    """The ceiling resets with the calendar, because that is when the invoice
+    does. A rolling window would make "how much is left" unanswerable from the
+    statement in front of you."""
+    await a_budget(clean, ceiling=10.0)
+    await a_run(clean, cost=50.0, started_at=NOW - dt.timedelta(days=40), status="done")
+
+    budget = await check_can_start_run(clean, now=NOW)
+
+    assert budget is not None
+
+
+async def test_a_running_run_already_counts_against_the_month(clean) -> None:
+    """Measured on `started_at`, so a long run spanning the 1st is not
+    invisible to the ceiling for as long as it keeps spending."""
+    await a_budget(clean, ceiling=10.0)
+    await a_run(clean, cost=12.0, status="running")
+
+    with pytest.raises(BudgetError):
+        await check_can_start_run(clean, now=NOW)
 
 
 # --------------------------------------------------------------------------
@@ -235,6 +312,21 @@ async def test_a_fresh_install_reports_every_cap_missing(clean) -> None:
     assert view.ready is False
     assert sorted(view.missing) == sorted(CAP_FIELDS)
     assert view.month_to_date_usd == 0.0
+
+
+async def test_the_screen_and_the_refusal_agree(clean) -> None:
+    """`ready` is computed server-side for this reason: a screen deriving it
+    would eventually show a green light for a run the server refuses."""
+    from api.routes.admin import _budget_read
+
+    await a_budget(clean, ceiling=10.0)
+    await a_run(clean, cost=10.0, status="done")
+
+    view = await _budget_read(clean)
+
+    assert view.ready is False
+    with pytest.raises(BudgetError):
+        await check_can_start_run(clean, now=NOW)
 
 
 async def test_a_complete_budget_with_room_is_ready(clean) -> None:
