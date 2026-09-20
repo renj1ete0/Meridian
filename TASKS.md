@@ -471,8 +471,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       tell the corpus holds three hundred nobody looked at. The control says so
       once, while narrowing. Filtering re-runs the search rather than filtering
       results in place, because fusion ranks a candidate pool
-- [~] `P2-20` **Age-aware ranking, by document kind** — first half,
-      `v0.90.0`. A half-life per source tier, overridable per topic, applied as
+- [x] `P2-20` **Age-aware ranking, by document kind** — `v0.90.0` and
+      `v0.95.0`. A half-life per source tier, overridable per topic, applied as
       a **decay on the fused score** rather than a filter — a filter removes,
       a decay reorders, and reordering is what "probably less current" means.
       `peer_reviewed` does not decay at all, which is the point rather than a
@@ -486,10 +486,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       reader cannot audit. Floored at 0.25 so decay cannot become deletion by
       arithmetic, and **off by default** — it changes what search returns, and
       `P2-04`'s benchmark and `P2-09`'s go/no-go are measured against the
-      current baseline. **Outstanding**: the separable second half, feeding the
-      same table into `tiering.priority_for_tier` so a news seed is fetched
-      sooner than a paper. `P7-06` should read these half-lives rather than
-      inventing a second set
+      current baseline. **Second half, `v0.95.0`**: `urgency_for_tier` reads the
+      *same* table and lifts a fast-rotting source's place in the queue, for two
+      reasons pointing the same way — its claim stops being current, and the
+      page itself is likelier to be gone. `peer_reviewed` gains nothing, having
+      no half-life. Bounded so it reorders *within* a tier and cannot promote an
+      informal page above a government one (§5.2); all four of the crawl's
+      enqueue sites use it. `P7-06` should read these half-lives too rather than
+      inventing a second set — the way two sets diverge is that nobody notices
+      there are two
 - [ ] `P2-15` **Benchmark embedding models against each other.**
       `scripts/benchmark_search.py` measures the index and the methods over
       whatever vectors are in the corpus; comparing bge-m3 against an

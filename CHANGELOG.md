@@ -214,6 +214,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.95.0] — 2026-09-20
+
+**The same half-lives now decide what to fetch first.**
+
+### Added
+
+- `P2-20`'s second half: `urgency_for_tier` and `priority_with_urgency`. All
+  four of the crawl's enqueue sites use them
+
+### Two reasons pointing the same way
+
+- A fast-rotting source's **claim** stops being current, so the value of having
+  it decays
+- And the **page** is likelier to be gone — news sites reorganise, press
+  releases move, a paper is still there in five years
+- Neither applies to `peer_reviewed`, which has no half-life and gains nothing
+
+### Bounded on purpose
+
+- Urgency reorders *within* a tier. §5.2 keeps tier deciding the broad order,
+  and an informal page must not overtake a government one on urgency alone
+
+### One table, not two
+
+- It reads the table the ranking reads. `P2-20` asked that `P7-06` do the same
+  rather than inventing a second set, and the way two sets diverge is that
+  nobody notices they exist
+
 ## [0.94.0] — 2026-09-20
 
 **Retrieved content marked as data, not instruction.**

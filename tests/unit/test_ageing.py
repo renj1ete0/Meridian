@@ -169,3 +169,70 @@ def test_an_unknown_tier_decays_rather_than_becoming_exempt() -> None:
     tier nobody added to the table must not inherit it by accident."""
     assert half_life_for("something-new") == DEFAULT_HALF_LIFE_DAYS
     assert decay_factor(days_ago(3650), "something-new", today=TODAY) < 1.0
+
+
+# --------------------------------------------------------------------------
+# The second half: the same table decides what to fetch first (`P2-20`)
+# --------------------------------------------------------------------------
+#
+# `P2-20` is explicit that `P7-06` should read these half-lives rather than
+# inventing a second set, and the reason two sets diverge is that nobody
+# notices they exist. This is the first other reader.
+
+
+def test_a_fast_rotting_source_is_fetched_sooner() -> None:
+    """Two reasons, pointing the same way: the claim stops being current, and
+    the page itself is likelier to be gone. Neither applies to a paper."""
+    from meridian_core.tiering import urgency_for_tier
+
+    press = urgency_for_tier("press", HALF_LIFE_DAYS)
+    academic = urgency_for_tier("academic", HALF_LIFE_DAYS)
+
+    assert press > academic
+
+
+def test_something_that_does_not_rot_gains_no_urgency() -> None:
+    """`peer_reviewed` has no half-life, so there is nothing to hurry for."""
+    from meridian_core.tiering import urgency_for_tier
+
+    assert urgency_for_tier("peer_reviewed", HALF_LIFE_DAYS) == 0
+
+
+def test_urgency_reads_the_same_table_as_the_ranking() -> None:
+    """Not a copy of it. Changing a half-life must move both, or the corpus
+    ranks a document one way and fetched it on another basis."""
+    from meridian_core.tiering import urgency_for_tier
+
+    slowed = {**HALF_LIFE_DAYS, "press": 3650}
+
+    assert urgency_for_tier("press", slowed) < urgency_for_tier("press", HALF_LIFE_DAYS)
+
+
+def test_urgency_cannot_outrank_the_tier_itself() -> None:
+    """§5.2: tier decides the broad order. Urgency separates documents *within*
+    a tier, and must not promote an informal page above a government one."""
+    from meridian_core.tiering import URGENCY_WEIGHT, priority_with_urgency
+
+    mapping = {
+        "exact": {"government": ["gov.test"], "informal": ["blog.test"]},
+        "priority_by_tier": {"government": 50, "informal": 10},
+        "default_tier": "informal",
+    }
+
+    gov = priority_with_urgency("gov.test", mapping, HALF_LIFE_DAYS)
+    blog = priority_with_urgency("blog.test", mapping, HALF_LIFE_DAYS)
+
+    assert gov > blog
+    assert URGENCY_WEIGHT < 50 - 10, "the weight is large enough to reorder tiers"
+
+
+def test_the_crawl_uses_the_urgency_aware_priority() -> None:
+    """One import somebody could revert without any behaviour test noticing —
+    the queue would simply go back to ordering on tier alone."""
+    import pathlib
+
+    body = (
+        pathlib.Path(__file__).resolve().parents[2] / "services/worker/worker/main.py"
+    ).read_text()
+
+    assert "priority_with_urgency(url, tiers, HALF_LIFE_DAYS)" in body

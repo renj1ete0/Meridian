@@ -56,6 +56,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
 from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
@@ -80,7 +81,7 @@ from meridian_core.queueing import (
     release_worker_claims,
 )
 from meridian_core.sources import get_source, touch_source, upsert_source
-from meridian_core.tiering import is_tier_mapped, priority_for_domain
+from meridian_core.tiering import is_tier_mapped, priority_with_urgency
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
 from . import rawstore
@@ -765,12 +766,12 @@ class Worker:
                     # An index is not a page. Its topic is irrelevant — nothing
                     # reads it — so it keeps the claim's and is fetched promptly,
                     # because it is the thing that reveals the actual URLs.
-                    topic, priority = claim.topic, priority_for_domain(url, tiers)
+                    topic, priority = claim.topic, priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
                 else:
                     topic = self._topics.best_topic(url)
                     if topic is not None:
                         matched += 1
-                        priority = priority_for_domain(url, tiers)
+                        priority = priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
                     else:
                         # Not dropped. A sitemap URL that matches no topic is
                         # not known to be irrelevant — the path may simply be
@@ -970,7 +971,7 @@ class Worker:
                     # question and carries it.
                     topic=claim.topic,
                     seed_source="search",
-                    priority=priority_for_domain(url, tiers),
+                    priority=priority_with_urgency(url, tiers, HALF_LIFE_DAYS),
                 )
             await sess.commit()
 
@@ -1188,9 +1189,11 @@ class Worker:
                 topic=claim.topic,
                 seed_source="frontier",
                 # §5.2: a government link outranks a blog without anyone
-                # curating a seed list. `priority_for_domain` has existed since
-                # P1-17 with no caller; this is it.
-                priority=priority_for_domain(url, tiers),
+                # curating a seed list. `priority_for_domain` had existed since
+                # P1-17 with no caller; this was it, and `P2-20` added the
+                # second opinion — a page whose kind rots fast is worth
+                # fetching sooner, and is likelier to be gone if it is not.
+                priority=priority_with_urgency(url, tiers, HALF_LIFE_DAYS),
             )
 
         log.info(

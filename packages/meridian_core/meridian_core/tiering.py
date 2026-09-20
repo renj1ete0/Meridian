@@ -99,6 +99,58 @@ def priority_for_domain(domain: str, mapping: dict[str, Any]) -> int:
     return priority_for_tier(resolve_tier(domain, mapping), mapping)
 
 
+#: How much a short half-life lifts a seed's place in the queue (`P2-20`).
+#:
+#: Small, because tier priority already carries most of the ordering and this
+#: is a second opinion on it rather than a replacement. Large enough that a
+#: news page outranks a paper of the same tier, which is the whole point.
+URGENCY_WEIGHT = 8
+
+
+def urgency_for_tier(tier: str, half_lives: dict[str, int | None]) -> int:
+    """How much sooner this kind of document should be fetched (`P2-20`, §9).
+
+    The second half of age-aware ranking, and it reads the *same* table the
+    ranking does — `P2-20` is explicit that `P7-06` should do likewise rather
+    than inventing a second set of half-lives, and the way two sets diverge is
+    that nobody notices they exist.
+
+    **Two separate reasons a fast-rotting source is worth fetching sooner**,
+    and they point the same way. Its claim stops being current, so the value of
+    having it decays; and the page itself is likelier to be gone — news sites
+    reorganise, press releases move, and a paper is still there in five years.
+    Neither reason applies to `peer_reviewed`, which is why it gets nothing.
+
+    Returns an addition to the tier's priority, never a replacement. Tier still
+    decides the broad order (§5.2); this separates documents *within* a tier
+    that age at different speeds, and cannot promote an informal page above a
+    government one on urgency alone.
+    """
+    half_life = half_lives.get(tier)
+    if half_life is None or half_life <= 0:
+        # No decay, or exempt: nothing is gained by hurrying.
+        return 0
+
+    # Inverse and bounded. A 180-day half-life earns the full weight; a
+    # ten-year one earns almost none. Expressed against a year so the constant
+    # means something a person can hold: "how urgent relative to annual rot".
+    return max(0, min(URGENCY_WEIGHT, round(URGENCY_WEIGHT * 365 / half_life)))
+
+
+def priority_with_urgency(
+    domain: str, mapping: dict[str, Any], half_lives: dict[str, int | None]
+) -> int:
+    """Queue priority for a domain, adjusted for how fast its kind rots.
+
+    The one callers should use when queueing a fetch. Kept beside
+    `priority_for_domain` rather than replacing it, because the plain version
+    is what a test or an admin screen wants when asking "what does the tier map
+    say" without the ageing opinion mixed in.
+    """
+    tier = resolve_tier(domain, mapping)
+    return priority_for_tier(tier, mapping) + urgency_for_tier(tier, half_lives)
+
+
 def jittered_delay_ms(base_ms: int, jitter_ms: int = 0, rng: random.Random | None = None) -> int:
     """A floor plus a random draw from ``[0, jitter_ms]``.
 
