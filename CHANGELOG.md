@@ -190,6 +190,30 @@ design-only changes do not require a version bump, but may be listed under Unrel
   where it is
 - `.localdata/` was not gitignored
 
+## [0.78.0] — 2026-09-20
+
+**One command from a fresh clone to a running, seeded Meridian.**
+
+### Added
+
+- `B-06` `make quickstart`. Checks the machine, builds every image from source,
+  brings up Postgres alone, migrates, seeds, chowns the data directories,
+  fetches the embedding weights, starts the rest, waits for the API and prints
+  the URL
+- A "Just run it" section in the README, above the development path, and port
+  `21116` named in the port table
+
+### Idempotent by construction
+
+- Because "run it again" is the only thing anybody is going to try. Compose
+  converges rather than recreating, `alembic upgrade head` is a no-op at head,
+  `seed.py` skips what it has already written (scaffold §1.6), the chown is a
+  chown, and the weights resolve from cache
+- Postgres starts alone and first, so a failed migration is readable rather than
+  interleaved with six services' startup logs
+- `--skip-preflight` and `--rebuild` for the two cases where the default is
+  wrong
+
 ## [0.76.2] — 2026-09-20
 
 ### Added

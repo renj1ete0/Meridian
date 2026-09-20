@@ -1046,8 +1046,14 @@ assumes `uv`, `npm`, and three terminals; this is the path that doesn't.
       by running it: `api` was never given `MERIDIAN_EMBEDDER_URL`, so every
       search reported "this deployment has no embedder" next to a healthy
       sidecar; and `.localdata/` was not gitignored
-- [ ] `B-06` `make quickstart` — one command: bring up infra, wait for health, migrate,
-      seed, start every service. Ends by printing the URL
+- [x] `B-06` `make quickstart` — one command from a fresh clone to a running,
+      seeded stack — `v0.78.0`. Preflight, build, Postgres alone first, migrate,
+      seed, fetch the weights, start the rest, wait for the API, print the URL.
+      **Idempotent by construction**, because "run it again" is the only thing
+      anybody tries: compose converges, `alembic upgrade head` is a no-op at
+      head, `seed.py` skips what it has written and the weights resolve from
+      cache. Postgres starts alone so a failed migration is readable rather than
+      interleaved with six services' startup logs
 - [ ] `B-07` First-run experience — pick topics and confirm cold-start sources from the
       UI instead of hand-editing `config/*.yaml` before the first crawl
 - [x] `B-08` Preflight check script — `v0.76.2`. `scripts/preflight.sh` checks

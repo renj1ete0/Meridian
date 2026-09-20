@@ -124,7 +124,38 @@ and HTML can reach 50–150 GB. Retention is tiered and configurable.
 Ollama, vLLM) for local inference, and/or an API key for a hosted model. Meridian routes
 work between them by task type and cost.
 
+## Just run it
+
+One command, from a fresh clone, with nothing installed but Docker:
+
+```bash
+git clone <this-repo> && cd meridian
+make quickstart
+```
+
+It checks the machine, builds every image from source, migrates, seeds the
+configuration, fetches the embedding weights and starts the stack — then prints
+the URL. Expect ten to twenty minutes the first time and seconds afterwards; the
+weights are 2.3 GB and are kept in a volume across recreates. No registry access
+and no `uv` or `npm` on the host: everything runs in containers
+(`docker-compose.local.yml`).
+
+```
+http://localhost:21116          the interface
+http://localhost:21114/health   the API's own view of itself
+
+make local-logs                 watch it crawl
+make local-down                 stop it
+```
+
+It starts **empty**, by design (scaffold §1.7) — the crawl begins from the seeds
+in `config/` and there is nothing to search for the first hour. `make preflight`
+alone checks whether this machine is up to it without building anything.
+
 ## Getting started
+
+Developing Meridian rather than running it — application services native, infra
+in containers, so a reload is a second rather than an image rebuild.
 
 ```bash
 git clone <this-repo> && cd meridian
@@ -176,9 +207,9 @@ Production runs the whole stack in containers behind `cloudflared`
 > does not.
 
 Host ports sit in a distinctive `211xx` block — `21111` postgres, `21112` searxng,
-`21113` crawl4ai, `21114` api, `21115` web — so a fresh clone doesn't collide with
-whatever else is already bound to 5432 or 8080. Container-internal ports are
-unchanged.
+`21113` crawl4ai, `21114` api, `21115` web (Vite, development), `21116` web
+(nginx, `make quickstart`) — so a fresh clone doesn't collide with whatever else
+is already bound to 5432 or 8080. Container-internal ports are unchanged.
 
 **Configuration lives in the database, not in files.** The YAML in `config/` seeds topic
 weights, the attribute schema, fetch policy, the agent registry, and the gazetteer
