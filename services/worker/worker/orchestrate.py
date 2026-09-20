@@ -54,6 +54,7 @@ from meridian_core.runs import (
     STAGES,
     RunLocked,
     advance,
+    advancing,
     begin_or_resume,
     finish,
 )
@@ -159,7 +160,14 @@ async def step(sess: AsyncSession, run: Run, *, journal: Journal, now: dt.dateti
     any of them.
     """
     stage = run.stage or STAGES[0]
-    journal.note(stage, f"not built — needs {BUILT_BY.get(stage, 'nothing (it is the end)')}")
+    # The window is where a stage goes. Inside it, writes happen and
+    # `progress.reached(chunk_id)` records how far they got; on the way out the
+    # mark moves once, after them (§6.3, `P4-11`). A stage that lands here
+    # inherits that ordering without restating it — and one that raises leaves
+    # the mark exactly where it was.
+    async with advancing(sess, run, now=now) as progress:
+        journal.note(stage, f"not built — needs {BUILT_BY.get(stage, 'nothing (it is the end)')}")
+        del progress  # nothing has been written, so nothing is marked
     return await advance(sess, run, now=now)
 
 

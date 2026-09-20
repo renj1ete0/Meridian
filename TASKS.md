@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.99.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2698 backend tests
+**`v0.100.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2711 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -913,7 +913,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       a run spanning the 1st is not invisible while it keeps spending. Admin
       gets `GET`/`PUT /api/admin/budget`, since a refusal that points at a
       screen needs the screen to exist
-- [ ] `P4-11` High-water mark advances only after writes commit
+- [x] `P4-11` High-water mark advances only after writes commit — `v0.100.0`.
+      §6.3's rule, enforced rather than documented. **Marking first and writing
+      second loses those chunks permanently**: the mark says they were handled,
+      so nothing is missing from the corpus — only from the reasoning over it,
+      and that is a gap nothing reports. `advancing()` is the window a stage
+      runs inside; writes happen, `Progress.reached` records how far they got,
+      and the mark moves once on the way out. A stage that raises marks
+      nothing and the caller's rollback takes its writes with it.
+      **`mark()` refuses while unflushed changes sit in the session** — that is
+      precisely the "marked before writing" state, and it is visible from
+      inside, so it is a check rather than a convention. One transaction means
+      the writes and the mark land together, which is stronger than §6.3 asks:
+      the rule still permits a window where the writes are in and the mark is
+      not, survivable because the work is merely redone, and removing it costs
+      nothing. `Progress` keeps the highest rather than the latest, or a batch
+      processed out of order leaves the mark behind the work it did
 
 ## Phase 5 · Autonomy
 

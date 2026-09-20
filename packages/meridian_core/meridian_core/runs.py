@@ -34,11 +34,20 @@ committed, so moving back would redo work that is already in the corpus — and
 the duplicates would be indistinguishable from the originals. `advance` refuses
 anything but the next stage, and the high-water mark refuses to go backwards
 for the same reason.
+
+**The mark advances after the writes, never before** (§6.3, `P4-11`). Marking
+first and writing second loses those chunks permanently if anything fails in
+between: nothing would be missing from the corpus, only from the reasoning over
+it, so there is nothing to notice. `advancing()` does the ordering, and `mark()`
+refuses outright while unwritten changes are still sitting in the session.
 """
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import datetime as dt
+from collections.abc import AsyncIterator
 from typing import Final
 
 from sqlalchemy import select
@@ -54,8 +63,10 @@ __all__ = [
     "FINAL_STAGE",
     "STAGES",
     "STALE_AFTER",
+    "Progress",
     "RunLocked",
     "advance",
+    "advancing",
     "beat",
     "begin_or_resume",
     "defer",
@@ -222,13 +233,28 @@ async def advance(sess: AsyncSession, run: Run, *, now: dt.datetime) -> str:
 
 
 async def mark(sess: AsyncSession, run: Run, chunk_id: int, *, now: dt.datetime) -> None:
-    """Advance the high-water mark (§6.3).
+    """Advance the high-water mark (§6.3, `P4-11`).
 
     **Monotonic, and refuses rather than clamps.** A mark that went backwards
     would re-feed chunks the run has already paid to process; one that silently
-    clamped would hide the caller bug that sent it. `P4-11` is the other half —
-    that this is called only after the writes it covers have committed.
+    clamped would hide the caller bug that sent it.
+
+    **It refuses while writes are still pending.** §6.3's rule is that the mark
+    advances only after the writes it covers, and the way that rule gets broken
+    is by marking first and writing second — at which point anything failing in
+    between loses those chunks permanently, because the mark says they were
+    handled. Unflushed objects in the session are exactly that state and are
+    visible from here, so this is a check rather than a convention.
+    `advancing()` is the supported way and does the ordering for you.
     """
+    pending = [obj for obj in (*sess.new, *sess.dirty, *sess.deleted) if obj is not run]
+    if pending:
+        kinds = sorted({type(obj).__name__ for obj in pending})
+        raise ValueError(
+            f"the mark for run {run.run_id} cannot advance with unwritten changes "
+            f"outstanding ({', '.join(kinds)}). Flush them first: §6.3 advances the "
+            "mark only after the writes it covers."
+        )
     if run.last_chunk_id is not None and chunk_id < run.last_chunk_id:
         raise ValueError(
             f"the mark for run {run.run_id} would move back from {run.last_chunk_id} to {chunk_id}."
@@ -236,6 +262,56 @@ async def mark(sess: AsyncSession, run: Run, chunk_id: int, *, now: dt.datetime)
     run.last_chunk_id = chunk_id
     run.heartbeat_at = now
     await sess.flush()
+
+
+@dataclasses.dataclass
+class Progress:
+    """How far a stage got, recorded as it goes.
+
+    Separate from the run row on purpose: nothing here touches the database, so
+    a stage that dies holding one has changed nothing. The mark moves once, at
+    the end, and only if the stage returned.
+    """
+
+    #: The furthest chunk whose writes are in this transaction.
+    chunk_id: int | None = None
+
+    def reached(self, chunk_id: int) -> None:
+        """Note that everything up to `chunk_id` has been written.
+
+        Keeps the highest rather than the latest. A stage that processed a
+        batch out of order would otherwise leave the mark behind the work it
+        did, and the next run would redo the tail of it.
+        """
+        self.chunk_id = chunk_id if self.chunk_id is None else max(self.chunk_id, chunk_id)
+
+
+@contextlib.asynccontextmanager
+async def advancing(sess: AsyncSession, run: Run, *, now: dt.datetime) -> AsyncIterator[Progress]:
+    """Do the writes, then move the mark — or do neither (§6.3, `P4-11`).
+
+    **The ordering is the whole point.** A mark that advanced before its writes
+    landed would tell the next run those chunks were handled, and anything
+    failing in between loses them permanently — silently, because nothing is
+    missing from the corpus, only from the reasoning over it.
+
+    Used as::
+
+        async with advancing(sess, run, now=now) as progress:
+            for chunk in batch:
+                ...                          # writes
+                await sess.flush()
+                progress.reached(chunk.chunk_id)
+
+    An exception leaves the mark exactly where it was, and the caller's
+    transaction discards the writes with it. A clean exit marks once — and
+    because it is the same transaction, the writes and the mark commit together
+    or not at all, which is stronger than the rule asks for.
+    """
+    progress = Progress()
+    yield progress
+    if progress.chunk_id is not None:
+        await mark(sess, run, progress.chunk_id, now=now)
 
 
 async def record(

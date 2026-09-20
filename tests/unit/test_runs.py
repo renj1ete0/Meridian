@@ -12,13 +12,21 @@ is refused.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 
 import pytest
 
 from meridian_core.models import Run
 from meridian_core.models.runs import RUN_STAGE, RUN_STATUS
-from meridian_core.runs import FINAL_STAGE, STAGES, STALE_AFTER, UNFINISHED, is_stale
+from meridian_core.runs import (
+    FINAL_STAGE,
+    STAGES,
+    STALE_AFTER,
+    UNFINISHED,
+    Progress,
+    is_stale,
+)
 
 NOW = dt.datetime(2026, 9, 20, 12, 0, tzinfo=dt.UTC)
 
@@ -101,3 +109,44 @@ def test_staleness_says_nothing_about_a_finished_run(status) -> None:
     # so `is_stale` is never asked about it. Asserted so that a future caller
     # reading `is_stale(run)` as "may be taken over" is reading it correctly.
     assert status not in UNFINISHED
+
+
+# --------------------------------------------------------------------------
+# How far a stage got (task `P4-11`)
+# --------------------------------------------------------------------------
+
+
+def test_progress_starts_with_nothing_to_mark() -> None:
+    # A stage that wrote nothing must not move the mark. `None` is what makes
+    # that distinguishable from "reached chunk 0".
+    assert Progress().chunk_id is None
+
+
+def test_progress_keeps_the_highest_not_the_latest() -> None:
+    """A batch processed out of order would otherwise leave the mark behind
+    the work, and the next run would redo the tail of it."""
+    progress = Progress()
+
+    progress.reached(500)
+    progress.reached(200)
+
+    assert progress.chunk_id == 500
+
+
+def test_progress_moves_forward_as_a_stage_works() -> None:
+    progress = Progress()
+
+    for chunk_id in (10, 20, 30):
+        progress.reached(chunk_id)
+
+    assert progress.chunk_id == 30
+
+
+def test_progress_touches_nothing_outside_itself() -> None:
+    # Deliberately inert: a stage that dies holding one has changed nothing,
+    # which is what lets the mark move exactly once, at the end.
+    progress = Progress()
+    progress.reached(1)
+
+    assert dataclasses.fields(progress)[0].name == "chunk_id"
+    assert len(dataclasses.fields(progress)) == 1

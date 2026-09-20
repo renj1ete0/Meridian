@@ -214,6 +214,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.100.0] — 2026-09-20
+
+**The mark moves after the writes, or not at all.**
+
+`0.100.0`, not `1.0.0`: SemVer orders it after `0.99.0`, and while MAJOR is 0 a
+new capability bumps MINOR.
+
+### Added
+
+- `P4-11`: `advancing()` — a window that does the writes, then moves the
+  high-water mark — and `Progress`, which records how far a stage got
+- `mark()` now refuses outright while unwritten changes sit in the session
+
+### Why it is shaped this way
+
+- **Marking first and writing second loses chunks permanently.** The mark says
+  they were handled, so nothing is missing from the corpus — only from the
+  reasoning over it, which is the kind of gap nothing reports
+- **A check, not a convention.** Unflushed objects in the session *are* the bad
+  state and are visible from inside `mark`, so the rule is enforced rather than
+  documented
+- **One transaction, so the writes and the mark land together.** §6.3 asks only
+  that the mark follow the writes, which still permits a window where the
+  writes are in and the mark is not. That one is survivable — the work is
+  merely redone — but removing it costs nothing
+- **`Progress` keeps the highest, not the latest.** A batch processed out of
+  order would otherwise leave the mark behind the work, and the next run would
+  redo its tail
+- **A stage that raises marks nothing**, and the caller's rollback discards its
+  writes with it
+
 ## [0.99.0] — 2026-09-20
 
 **A cycle you can run without letting it write.**

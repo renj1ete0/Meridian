@@ -29,6 +29,7 @@ from meridian_core.runs import (
     STALE_AFTER,
     RunLocked,
     advance,
+    advancing,
     beat,
     begin_or_resume,
     defer,
@@ -383,3 +384,143 @@ async def test_the_module_exports_what_an_orchestrator_needs(clean) -> None:
     # importing the module by name cannot find.
     for name in run_state.__all__:
         assert hasattr(run_state, name), name
+
+
+# --------------------------------------------------------------------------
+# The mark moves after the writes, never before (task `P4-11`, §6.3)
+# --------------------------------------------------------------------------
+
+
+async def test_the_mark_refuses_to_move_while_writes_are_unwritten(clean) -> None:
+    """§6.3's rule, as a check rather than a convention.
+
+    The way the rule gets broken is by marking first and writing second: if
+    anything fails in between, those chunks are lost permanently, because the
+    mark says they were handled. Nothing would be missing from the corpus —
+    only from the reasoning over it — so there is nothing to notice.
+    """
+    run, _ = await begin_or_resume(clean, now=NOW)
+    clean.add(Run(started_at=NOW, stage="pull", status="failed", error="a pending write"))
+
+    with pytest.raises(ValueError, match="unwritten changes"):
+        await mark(clean, run, 100, now=NOW)
+
+    assert run.last_chunk_id is None
+
+
+async def test_the_mark_moves_once_the_writes_are_flushed(clean) -> None:
+    run, _ = await begin_or_resume(clean, now=NOW)
+    clean.add(Run(started_at=NOW, stage="pull", status="failed", error="a flushed write"))
+    await clean.flush()
+
+    await mark(clean, run, 100, now=NOW)
+
+    assert run.last_chunk_id == 100
+
+
+async def test_a_clean_window_marks_how_far_it_got(clean) -> None:
+    run, _ = await begin_or_resume(clean, now=NOW)
+
+    async with advancing(clean, run, now=NOW) as progress:
+        progress.reached(10)
+        progress.reached(40)
+
+    assert run.last_chunk_id == 40
+
+
+async def test_a_window_that_wrote_nothing_marks_nothing(clean) -> None:
+    # A stage with no work must not claim the corpus was consumed.
+    run, _ = await begin_or_resume(clean, now=NOW)
+
+    async with advancing(clean, run, now=NOW):
+        pass
+
+    assert run.last_chunk_id is None
+
+
+async def test_a_stage_that_fails_leaves_the_mark_where_it_was(clean) -> None:
+    """The failure this exists to prevent, in one test.
+
+    Half a batch written, then a crash. If the mark had already moved, the
+    next run would start past the chunks that were never reasoned over.
+    """
+    run, _ = await begin_or_resume(clean, now=NOW)
+    await mark(clean, run, 50, now=NOW)
+
+    with pytest.raises(RuntimeError, match="the model went away"):
+        async with advancing(clean, run, now=NOW) as progress:
+            progress.reached(900)
+            raise RuntimeError("the model went away")
+
+    assert run.last_chunk_id == 50, "the mark must not move for work that did not finish"
+
+
+async def test_the_writes_and_the_mark_land_together(clean) -> None:
+    """Stronger than §6.3 asks for: same transaction, so both or neither.
+
+    "Advance after the writes commit" still permits a window where the writes
+    are in and the mark is not — survivable, because the work is merely redone.
+    One transaction removes even that.
+    """
+    run, _ = await begin_or_resume(clean, now=NOW)
+
+    async with advancing(clean, run, now=NOW) as progress:
+        written = Run(started_at=NOW, stage="pull", status="failed", error="written in the window")
+        clean.add(written)
+        await clean.flush()
+        progress.reached(1234)
+
+    written_id = written.run_id
+    await clean.commit()
+
+    await clean.rollback()
+    assert (await clean.get(Run, run.run_id)).last_chunk_id == 1234
+    assert await clean.get(Run, written_id) is not None
+
+
+async def test_a_failed_window_discards_the_writes_with_the_mark(clean) -> None:
+    run, _ = await begin_or_resume(clean, now=NOW)
+    await clean.commit()
+    # Read before the rollback below expires the instance; refreshing it
+    # afterwards would be IO from outside the session's context.
+    run_id = run.run_id
+
+    with pytest.raises(RuntimeError):
+        async with advancing(clean, run, now=NOW) as progress:
+            clean.add(Run(started_at=NOW, stage="pull", status="failed", error="doomed"))
+            await clean.flush()
+            progress.reached(77)
+            raise RuntimeError("stage failed")
+
+    await clean.rollback()
+    assert (await clean.get(Run, run_id)).last_chunk_id is None
+    doomed = await clean.scalars(select(Run).where(Run.error == "doomed"))
+    assert list(doomed) == []
+
+
+async def test_the_window_still_refuses_to_move_backwards(clean) -> None:
+    run, _ = await begin_or_resume(clean, now=NOW)
+    await mark(clean, run, 500, now=NOW)
+
+    with pytest.raises(ValueError, match="move back"):
+        async with advancing(clean, run, now=NOW) as progress:
+            progress.reached(100)
+
+
+def test_the_orchestrator_does_not_move_the_mark_by_hand() -> None:
+    """Drift: a stage calling `mark` directly opts out of the ordering.
+
+    The check would still catch unflushed writes, but nothing would stop a
+    stage marking before doing the work at all — which is the failure §6.3 is
+    about.
+    """
+    import pathlib
+
+    import worker.orchestrate as module
+
+    source = pathlib.Path(module.__file__).read_text()
+
+    assert "advancing(" in source, "the orchestrator no longer uses the window"
+    assert "mark(" not in source.replace("advancing(", ""), (
+        "the orchestrator moves the high-water mark by hand; use `advancing`"
+    )
