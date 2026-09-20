@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
 from .models import Chunk, Source
+from .trust import READABLE_STATES
 
 log = get_logger(__name__)
 
@@ -123,6 +124,17 @@ class SearchFilters:
     #: §5.4's junk tier is material a sweep will eventually drop; it should not
     #: be answering questions in the meantime.
     include_junk: bool = False
+    #: Restrict to what screening has cleared (task `P4-14`, §2.5).
+    #:
+    #: **Off by default, and on for anything feeding a model.** The operator
+    #: reading their own corpus should see quarantined material — that is how a
+    #: false positive gets noticed — and the MCP surface sets it, because what
+    #: §11.8 is protecting is the path from a fetched page into a prompt.
+    #:
+    #: Expressed as "only cleared" rather than "not quarantined": a page nothing
+    #: has examined is `unscreened`, and admitting it would make screening
+    #: optional in exactly the case it exists for.
+    cleared_only: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -214,6 +226,8 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         where.append(Chunk.duplicate_of.is_(None))
     if not filters.include_junk:
         where.append(Source.retention_tier != "junk")
+    if filters.cleared_only:
+        where.append(Source.trust_state.in_(READABLE_STATES))
 
     return where
 

@@ -20,12 +20,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from meridian_core.db import Base
 
-from .mixins import TimestampMixin, constrained, pk
+from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
 
 TOPIC_STATUS = constrained("active", "maintenance", "paused", "archived", name="topic_status")
 DOMAIN_STATUS = constrained("active", "blocked", "paused", name="domain_status")
 TOKEN_SCOPE = constrained("read", "read_write", name="token_scope")
 AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_availability")
+
 
 
 class TopicConfig(Base):
@@ -138,11 +139,44 @@ class FetchPolicy(Base):
     #: noticed.
     render_js_learned_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # --- what screening concluded about this domain (task P4-14, §2.5) ----
+    #
+    # The verdict is cached *here*, at the domain, because screening is paid
+    # once per domain and not once per page. A site with four thousand pages
+    # does not get judged four thousand times, and — more to the point — a
+    # domain cleared on Monday does not have page 3,001 quarantined on Friday
+    # because that particular page happened to quote something.
+
+    #: `unscreened` until something concludes otherwise. A cleared domain's
+    #: pages are cleared; a quarantined domain's pages are held back from the
+    #: slow loop until somebody or something judges it.
+    trust_state: Mapped[str] = mapped_column(
+        TRUST_STATE, nullable=False, default="unscreened", server_default="unscreened"
+    )
+
+    #: Consecutive fetches that the injection pre-screen did not flag. The same
+    #: shape as `consecutive_failures` and `render_js_escalations`, and reset
+    #: the same way: a domain that starts serving hostile pages should stop
+    #: being treated as though it had not.
+    clean_fetches: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+
+    #: When the verdict was reached, and by what. `auto:tier` and `auto:clean`
+    #: are the two the crawl can reach on its own; anything else is a judgement
+    #: somebody or some model made, and §2 principle 3 wants it attributable.
+    trust_decided_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    trust_decided_by: Mapped[str | None] = mapped_column(Text)
+
+    #: Why, in one line, for a screen that has to explain a quarantine to the
+    #: person deciding whether to clear it.
+    trust_reason: Mapped[str | None] = mapped_column(Text)
+
     updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[str | None] = mapped_column(Text)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"<FetchPolicy {self.domain} {self.status}>"
+        return f"<FetchPolicy {self.domain} {self.status} {self.trust_state}>"
 
 
 class Agent(Base, TimestampMixin):

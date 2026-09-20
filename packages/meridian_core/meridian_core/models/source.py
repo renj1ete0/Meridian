@@ -32,7 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from meridian_core.db import Base
 
-from .mixins import TimestampMixin, constrained, pk
+from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
 
 # bge-m3 dense vectors (§4). Changing this is a migration and a full re-embed.
 EMBEDDING_DIM = 1024
@@ -151,6 +151,22 @@ class Source(Base, TimestampMixin):
     #: be targetable at everything read before a date. A boolean can only be
     #: reset for the entire corpus at once.
     acronyms_harvested_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: What screening concluded about this page (task P4-14, §2.5).
+    #:
+    #: The *domain* holds the verdict (`fetch_policy.trust_state`) because
+    #: screening is paid per domain; this column is the page's own copy of the
+    #: state it was stored under, so a chunk query can filter without joining
+    #: and so clearing a domain later does not rewrite what was true at the
+    #: time. A page on an unscreened domain that the pre-screen flagged is
+    #: `quarantined` here whatever the domain says.
+    #:
+    #: **Quarantined is stored, never deleted** (§2.5). The page keeps its raw
+    #: file, its extraction and its chunks; what it loses is eligibility for
+    #: the set the slow loop reads, until something clears it.
+    trust_state: Mapped[str] = mapped_column(
+        TRUST_STATE, nullable=False, default="unscreened", server_default="unscreened", index=True
+    )
 
     extra: Mapped[dict | None] = mapped_column(JSONB)
 

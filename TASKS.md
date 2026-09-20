@@ -703,13 +703,24 @@ deploy runbook whose first two commands could not work (`B-17`).
       halfway leaves a half-written graph — so the month's next run is the one
       refused, which is why §11.9 also asks for trend alerting
 - [ ] `P4-06` Untrusted-data framing for all retrieved content in prompts (spec §11.8)
-- [ ] `P4-14` **Quarantine and screening for unknown domains.** `sources.trust_state`
-      (unscreened | cleared | quarantined | rejected) plus a domain-level verdict
-      cached on `fetch_policy`, so screening is paid once per domain, not per page.
-      A domain that is tier-mapped or has N clean fetches is cleared automatically;
-      an unknown domain that trips `P1-23` is quarantined and queued for a frontier
-      model to judge. Quarantined content is still stored — never deleted — but is
-      excluded from the chunk set the slow loop pulls until cleared
+- [~] `P4-14` **Quarantine and screening for unknown domains** — the
+      mechanical half, `v0.82.0`. `P1-23` built the pre-screen and deliberately
+      blocked nothing; this is what acts on a flag. `sources.trust_state` and a
+      domain verdict cached on `fetch_policy`, so **screening is paid once per
+      domain** — a site with four thousand pages is not judged four thousand
+      times, and a domain cleared on Monday does not have page 3,001
+      quarantined on Friday for quoting something. A domain clears on sight if
+      it is in the curated tier map (somebody's judgement, already made) or
+      after five consecutive unflagged fetches, and the streak resets on any
+      flag. **The filter is `IN (cleared)`, not `!= quarantined`**: a page
+      nothing has examined is not a page that has been checked. Quarantined
+      content stays stored, extracted and chunked (§2.5) and stays visible in
+      the operator's own search — that is how a false positive gets noticed —
+      while the MCP surface sets `cleared_only` and cannot be asked not to.
+      **Outstanding**: the queue that hands a quarantined domain to a frontier
+      model to judge (`P4-07`). Until then a quarantine is lifted by a person,
+      which is the correct failure — the alternative is admitting unscreened
+      content because nothing was available to screen it
 - [ ] `P4-07` Agent registry, task-type routing, fallback chains
 - [ ] `P4-08` Orchestrator run state machine + `runs` table resumability
 - [ ] `P4-09` `--once` and `--dry-run` modes (print tool calls, apply nothing)

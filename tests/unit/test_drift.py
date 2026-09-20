@@ -48,6 +48,7 @@ ENUM_PAIRS = [
     ("JobRunStatus", models.config.JOB_STATUS),
     ("EnrichmentType", models.runs.ENRICHMENT_TYPE),
     ("NotificationType", models.runs.NOTIFICATION_TYPE),
+    ("TrustState", models.mixins.TRUST_STATE),
 ]
 
 

@@ -80,7 +80,8 @@ from meridian_core.queueing import (
     release_worker_claims,
 )
 from meridian_core.sources import get_source, touch_source, upsert_source
-from meridian_core.tiering import priority_for_domain
+from meridian_core.tiering import is_tier_mapped, priority_for_domain
+from meridian_core.trust import page_state, record_screening
 
 from . import rawstore
 from .crawl import Crawler, validators
@@ -1077,6 +1078,17 @@ class Worker:
                 self._stats.flagged += 1
 
             async with self._session_factory() as sess:
+                # `P4-14`: fold this fetch into the domain's verdict before the
+                # page is written, so the page is stored under the state its
+                # domain is in *including* what this fetch just showed. Doing it
+                # afterwards would store the previous verdict and leave the
+                # first flagged page on a domain looking clean.
+                domain_trust = await record_screening(
+                    sess,
+                    result.domain,
+                    flagged=bool(screening and screening.suspicious),
+                    tier_mapped=is_tier_mapped(result.domain, await source_tier_map(sess)),
+                )
                 source, changed = await upsert_source(
                     sess,
                     claim.url,
@@ -1084,6 +1096,9 @@ class Worker:
                     raw_file_path=stored.path,
                     raw_root=stored.root,
                     source_tier=tier,
+                    trust_state=page_state(
+                        domain_trust, flagged=bool(screening and screening.suspicious)
+                    ),
                     retention_tier=stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,

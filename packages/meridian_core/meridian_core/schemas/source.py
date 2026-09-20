@@ -9,7 +9,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase
-from .enums import OcrTier, RetentionTier, SourceTier
+from .enums import OcrTier, RetentionTier, SourceTier, TrustState
 
 
 class SourceCreate(CreateBase):
@@ -71,6 +71,11 @@ class SourceRead(BaseModel):
     #: examined it — distinct from `[]`, which means it was examined and matched
     #: nothing, and only the first is worth a backfill.
     topic_labels: list[str] | None = None
+    #: What screening concluded about this page (`P4-14`). Published rather than
+    #: hidden: a reader looking at their own corpus should be able to see that a
+    #: passage came from something quarantined, which is how a false positive
+    #: gets noticed at all. The MCP surface never returns these.
+    trust_state: TrustState = "unscreened"
     acronyms_harvested_at: dt.datetime | None = None
     extra: dict | None
     created_at: dt.datetime

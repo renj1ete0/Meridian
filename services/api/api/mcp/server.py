@@ -168,6 +168,12 @@ def build_mcp(
             published_after=dt.date.fromisoformat(published_after) if published_after else None,
             published_before=dt.date.fromisoformat(published_before) if published_before else None,
             include_duplicates=include_duplicates,
+            # `P4-14`, §11.8. This is the path from a fetched page into a
+            # prompt, which is the one screening exists to guard — so the
+            # model gets cleared material only, and cannot ask otherwise.
+            # The operator's own search does not set this, deliberately: they
+            # should see what was quarantined, or a false positive is invisible.
+            cleared_only=True,
         )
         async with session_ro() as sess:
             # No query vector: this deployment has no embedder (`P2-07`,

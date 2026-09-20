@@ -69,6 +69,7 @@ async def upsert_source(
     raw_file_path: str | None = None,
     raw_root: str | None = None,
     source_tier: str | None = None,
+    trust_state: str | None = None,
     retention_tier: str | None = None,
     media_type: str | None = None,
     final_url: str | None = None,
@@ -116,6 +117,13 @@ async def upsert_source(
         row.raw_root = raw_root
     if source_tier is not None:
         row.source_tier = _not_lower(row.source_tier if not created else None, source_tier)
+    if trust_state is not None:
+        # Overwrites, unlike the metadata below. `P4-14`: this is the state the
+        # page is stored *under*, and a re-fetch is a fresh screening — a page
+        # whose domain has since been quarantined must not keep the clearing it
+        # was written with, and one on a domain that has since cleared should
+        # stop being held back.
+        row.trust_state = trust_state
     if retention_tier is not None:
         row.retention_tier = retention_tier
 

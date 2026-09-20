@@ -28,6 +28,7 @@ from meridian_core.models.graph import (
     NODE_TYPE,
     STANCE,
 )
+from meridian_core.models.mixins import TRUST_STATE
 from meridian_core.models.queue import (
     FETCH_OUTCOME,
     SEED_SOURCE,
@@ -74,6 +75,9 @@ TopicStatus = Literal[*TOPIC_STATUS.enums]
 DomainStatus = Literal[*DOMAIN_STATUS.enums]
 TokenScope = Literal[*TOKEN_SCOPE.enums]
 AgentAvailability = Literal[*AVAILABILITY.enums]
+
+# mixins.py — shared by `sources` and `fetch_policy` (`P4-14`)
+TrustState = Literal[*TRUST_STATE.enums]
 
 # runs.py
 RunStage = Literal[*RUN_STAGE.enums]

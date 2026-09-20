@@ -55,6 +55,35 @@ def resolve_tier(domain: str, mapping: dict[str, Any]) -> str:
     return best_tier
 
 
+def is_tier_mapped(domain: str, mapping: dict[str, Any]) -> bool:
+    """Whether the curated map actually names this domain (task `P4-14`).
+
+    Distinct from `resolve_tier` returning something, because that always
+    returns something — an unmapped domain gets `default_tier`. The difference
+    matters to screening: being in the map is somebody's curation and clears a
+    domain on sight, whereas falling through to the default is precisely the
+    "unknown domain" case that has to earn its clearing.
+
+    The same matching rules as `resolve_tier`, deliberately duplicated in shape
+    rather than shared through a flag: a predicate that also returned a tier, or
+    a tier function that also reported how it decided, would be used for the
+    wrong one of the two by somebody in a hurry.
+    """
+    host = registrable_domain(domain)
+
+    for names in (mapping.get("exact") or {}).values():
+        if host in {n.lower() for n in names or []}:
+            return True
+
+    for patterns in (mapping.get("patterns") or {}).values():
+        for pattern in patterns or []:
+            pattern = pattern.lower()
+            suffix = pattern[1:] if pattern.startswith("*") else "." + pattern
+            if host.endswith(suffix) or host == suffix.lstrip("."):
+                return True
+    return False
+
+
 def priority_for_tier(tier: str, mapping: dict[str, Any]) -> int:
     """Queue priority for a tier — higher is fetched first.
 

@@ -214,6 +214,40 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.82.0] — 2026-09-20
+
+**A flag from the injection pre-screen now does something.**
+
+### Added
+
+- `P4-14` `sources.trust_state` and a domain verdict cached on `fetch_policy`,
+  plus `meridian_core/trust.py`. `P1-23` flagged and blocked nothing, on
+  purpose — a screen that quarantines before its false-positive rate is known
+  quarantines the corpus. It has since run clean on every real page crawled
+- A domain clears on sight if it is in the curated tier map, or after five
+  consecutive unflagged fetches; any flag resets the streak
+- `SearchFilters.cleared_only`, set by the MCP surface and nothing else
+
+### Three decisions
+
+- **Screening is paid once per domain.** A site with four thousand pages must
+  not be judged four thousand times, and a cleared domain must not have page
+  3,001 quarantined for quoting an instruction
+- **The filter admits `cleared` rather than excluding `quarantined`.** A page
+  nothing has examined is not a page that has been checked, and "not known to
+  be bad" is not the claim screening is for
+- **Quarantined content stays stored, and stays visible to the operator.** §2.5
+  keeps it; holding it back is reversible and deleting it is not. The person
+  reading their own corpus sees it, or a false positive is invisible and the
+  screen is unaccountable
+
+### Outstanding
+
+- The queue that hands a quarantined domain to a frontier model to judge needs
+  phase 4. Until then a quarantine is lifted by a person — a worse experience
+  and the correct failure, since the alternative is admitting unscreened
+  content because nothing was available to screen it
+
 ## [0.81.1] — 2026-09-20
 
 ### Added

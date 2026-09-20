@@ -13,7 +13,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase, QualityTier
-from .enums import AgentAvailability, DomainStatus, TokenScope, TopicStatus
+from .enums import AgentAvailability, DomainStatus, TokenScope, TopicStatus, TrustState
 
 
 class TopicConfigCreate(CreateBase):
@@ -96,6 +96,15 @@ class FetchPolicyRead(BaseModel):
     #: setting would be one somebody tried to change and could not find.
     render_js_escalations: int = 0
     render_js_learned_at: dt.datetime | None = None
+    #: What screening concluded about this domain (`P4-14`). Exposed for the
+    #: same reason the learned render state is: a quarantine an operator cannot
+    #: see is one they cannot lift, and `trust_reason` is the sentence the
+    #: screen has to be able to justify itself with.
+    trust_state: TrustState = "unscreened"
+    clean_fetches: int = 0
+    trust_decided_at: dt.datetime | None = None
+    trust_decided_by: str | None = None
+    trust_reason: str | None = None
     updated_at: dt.datetime | None
     updated_by: str | None
 

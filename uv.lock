@@ -1401,7 +1401,7 @@ wheels = [
 
 [[package]]
 name = "meridian"
-version = "0.81.1"
+version = "0.82.0"
 source = { virtual = "." }
 dependencies = [
     { name = "meridian-api" },
@@ -1436,7 +1436,7 @@ dev = [
 
 [[package]]
 name = "meridian-api"
-version = "0.81.1"
+version = "0.82.0"
 source = { editable = "services/api" }
 dependencies = [
     { name = "fastapi" },
@@ -1457,7 +1457,7 @@ requires-dist = [
 
 [[package]]
 name = "meridian-core"
-version = "0.81.1"
+version = "0.82.0"
 source = { editable = "packages/meridian_core" }
 dependencies = [
     { name = "asyncpg" },
@@ -1480,7 +1480,7 @@ requires-dist = [
 
 [[package]]
 name = "meridian-worker"
-version = "0.81.1"
+version = "0.82.0"
 source = { editable = "services/worker" }
 dependencies = [
     { name = "httpx" },

@@ -36,6 +36,12 @@ def constrained(*values: str, name: str) -> Enum:
     )
 
 
+# What screening has concluded about a domain or a page (task P4-14, §2.5).
+# Shared because `sources` and `fetch_policy` both carry it: the domain holds
+# the verdict, the page holds the state it was stored under.
+TRUST_STATE = constrained("unscreened", "cleared", "quarantined", "rejected", name="trust_state")
+
+
 # Ordinal from the agent registry: local small = 1, local large = 2,
 # hosted mid = 3, hosted frontier = 4. Distinct from cost_tier — cheap and good
 # are different axes, and conflating them makes routing decisions wrong (§11.12).
