@@ -989,23 +989,23 @@ Things worth doing that don't belong to a phase yet.
       `USING` — autogenerate's version would have failed on the server and passed
       here, since `figures` is empty locally. Caught by migrating rows put there
       on purpose, and the downgrade round-trips
-- [ ] `B-11` **Licence audit: is every dependency usable commercially?** Nothing
-      has ever checked. The stack pulls a lot of third-party software — Postgres
-      and pgvector, Crawl4AI, SearXNG, MarkItDown, trafilatura, spaCy and its
-      models, the embedding model's weights, Apache AGE when `P4-01` lands — and
-      "open source" is not one licence. AGPL, non-commercial research terms and
-      model-weight licences with field-of-use restrictions all look identical to
-      `uv add`. The model weights are the likeliest problem: a permissive
-      *library* routinely ships weights that are not.
-      Produce `docs/licences.md`: every runtime dependency, its licence, and a
-      verdict — fine, conditional (and on what), or not usable commercially —
-      with anything problematic named and the reason stated. Direct and
-      transitive, because a GPL dependency three levels down is still a GPL
-      dependency, and container base images too. Then a test that fails when a
-      dependency appears with a licence not on the allowlist, so this is a gate
-      rather than a document that goes stale the next time somebody adds a
-      package. **⚑ human** for the final call on anything conditional: what risk
-      to accept is not an agent's decision
+- [~] `B-11` **Licence audit** — `docs/licences.md` and a gate, `v0.83.0`.
+      Every verdict read off the installed artefact rather than recalled:
+      distribution metadata, image labels, the model card on disk. **Nothing
+      blocks commercial use.** All 116 Python distributions are permissive — no
+      GPL, no AGPL, no non-commercial terms — and the weights the task called
+      the likeliest problem are clean (`BAAI/bge-m3` is `license: mit`, read
+      from the snapshot). Two things needed a judgement rather than a reading.
+      **SearXNG is AGPL-3.0-or-later** (confirmed from its image label): run
+      unmodified, in its own container, over HTTP, with no published port —
+      aggregation, not derivative work, and the document states exactly which
+      changes would turn §13 on. **`tld` is tri-licensed** MPL-1.1 / GPL-2.0
+      / LGPL-2.1+, and we take MPL-1.1; the choice is recorded in code, and a
+      test checks the package still offers it. Also found: Meridian's own three
+      packages declared no licence at all, which is the worst case rather than
+      a neutral one — no licence is no grant. **⚑ human** left for you: confirm
+      you accept the SearXNG boundary and the `tld` choice. `en_core_web_sm`
+      and Apache AGE are named but unverified — neither is installed yet
 - [x] `B-12` Fix: `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE` and the code
       reads `MERIDIAN_EMBED_CACHE` — `v0.76.3`. The `/models` volume was
       therefore never used and 2.3 GB re-downloaded on every recreate, silently,

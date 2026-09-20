@@ -214,6 +214,40 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.83.0] — 2026-09-20
+
+**Somebody has now checked the licences.**
+
+### Added
+
+- `B-11` `docs/licences.md` — every runtime dependency, its licence, and a
+  verdict. Read off the installed artefact rather than recalled: distribution
+  metadata, image labels, the model card on disk
+- `tests/unit/test_licences.py`, an allowlist gate. A new licence fails until
+  somebody reads it and adds it, which is the point rather than the friction
+
+### The verdict
+
+- **Nothing blocks commercial use.** All 116 Python distributions are
+  permissive — no GPL, no AGPL, no non-commercial terms
+- The model weights the task called the likeliest problem are clean:
+  `BAAI/bge-m3` declares `license: mit`, read from the snapshot on disk
+
+### Two that needed a judgement
+
+- **SearXNG is AGPL-3.0-or-later**, confirmed from its image label. Run
+  unmodified in its own container, reached over HTTP, never published — that is
+  aggregation, and the document states exactly which changes would turn §13 on
+- **`tld` is tri-licensed** MPL-1.1 / GPL-2.0-only / LGPL-2.1+. We take
+  MPL-1.1; the choice lives in code, and a test fails if the package stops
+  offering it
+
+### Fixed
+
+- Meridian's own three packages declared no licence. That is the worst case
+  rather than a neutral one — no licence is no grant of rights, whatever the
+  author intended
+
 ## [0.82.0] — 2026-09-20
 
 **A flag from the injection pre-screen now does something.**

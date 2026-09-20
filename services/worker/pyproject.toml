@@ -1,8 +1,10 @@
 [project]
 name = "meridian-worker"
-version = "0.82.0"
+version = "0.83.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["../../LICENSE"]
 dependencies = [
     "meridian-core",
     # The static fetch path. httpx is here rather than in meridian_core because

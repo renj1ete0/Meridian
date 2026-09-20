@@ -1,8 +1,10 @@
 [project]
 name = "meridian-core"
-version = "0.82.0"
+version = "0.83.0"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["../../LICENSE"]
 dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30",
