@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.78.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 2057 backend tests
-against a real Postgres, 296 frontend.
+**`v0.90.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2474 backend tests
+against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
 sitemaps, search and citations. The corpus is **searchable**: hybrid retrieval over
@@ -38,7 +38,14 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P4-01` is not blocked on a Postgres downgrade; only on not swapping the image
    mid-deploy.
 
-**Buildable today**, needing none of the three: `P6-23` (agent registry and run history,
+**Buildable today** is now a short list, because a session went through it.
+`P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`, `P3-10`, `P3-11`, `B-07`, `B-09`,
+`B-11` and `P2-20` are done; `P5-01` and `P6-23` are open on their own
+arguments, both written into their entries — one has no consumer for its
+output, the other would be designed against an empty table. What is left needs
+one of the three gates.
+
+Formerly buildable, for the record: `P6-23` (agent registry and run history,
 better after there is a run to show), `P5-07`'s inbound Telegram half, and `P1-35` (a
 Semantic Scholar key, ten minutes, felt during the 48h run). `P6-05` was the other one
 and is done — an annotation is a node somebody writes by hand, so it is the one
@@ -786,7 +793,17 @@ deploy runbook whose first two commands could not work (`B-17`).
 
 *Checkpoint: it runs itself, and tells you when it can't.*
 
-- [ ] `P5-01` `frontier.py` — outbound links, citations, spaCy NER, TF-IDF co-occurrence
+- [ ] `P5-01` `frontier.py` — outbound links, citations, spaCy NER, TF-IDF
+      co-occurrence. **Two halves are already built and the other two have no
+      consumer**, which is why this is still open after a session that went
+      looking for buildable work. Links and citations land through `P1-06`'s
+      frontier expansion and `_seed_citations`; the `EntityRuler` and the
+      acronym harvest are `P5-02`. What is left is entity co-occurrence, and
+      its only readers are `P5-03` and `P5-04` — both gated on the graph.
+      Writing it now means a pass whose output nothing reads, which is the
+      exact shape `B-15` found five instances of: code that runs correctly when
+      invoked and is never invoked. Build it with `P5-03`, or with a consumer
+      named first
 - [x] `P5-02` Gazetteer into `EntityRuler` at worker startup; acronym auto-harvest
       — `v0.63.0`. §5.6's "do not hand-write it — bootstrap it", built as two
       pure halves plus a pass. `compile_patterns` turns approved rows into
@@ -929,10 +946,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       resolved, learned — because a value a reader cannot find anywhere to change
       is this screen's characteristic failure. `seed_allowed` is `P4-12`'s column
       and is not built yet
-- [ ] `P6-23` Admin: agent registry and run history. Both tables exist and both
-      are empty until phase 4 has run something, so this is worth building
-      *after* there is a run to show — an empty screen teaches nothing about what
-      the full one should look like
+- [ ] `P6-23` Admin: agent registry and run history. **Left open deliberately,
+      on the task's own argument**: both tables are empty until phase 4 has run
+      something, and "an empty screen teaches nothing about what the full one
+      should look like" is its own sentence. Building it now would mean
+      designing a run-history view against zero runs and discovering its real
+      shape the first time one exists
 - [x] `P6-14` Figures panel with page-accurate raw file links — `v0.56.0`.
       No thumbnails, because nothing downloads figure images (`P1-10`) and a
       placeholder grid would promise what the corpus cannot keep; the caption is

@@ -823,6 +823,40 @@ than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
 
+### Absent is refused, and the codebase now says so in four places
+
+A pattern worth naming because it recurs and because the wrong version of it is
+always the friendlier one. `reserve_seeds` refused a `None` cap before anything
+could supply one; `budget.py` (`P4-10`) makes the same choice for tokens and
+the monthly ceiling, and nothing seeds a default budget; `trust.py` (`P4-14`)
+admits `cleared` rather than excluding `quarantined`; `P4-12` treats a NULL
+`seed_allowed` as undecided rather than permitted.
+
+In every case the ergonomic default — unlimited, allowed, unexamined-is-fine —
+is the shape in which forgetting to configure something becomes an incident,
+and the loop is unattended so the first signal is a bill or a leak rather than
+a log line.
+
+The exception proves the rule and is worth knowing: **`within_rate_limit`
+treats `None` as no limit**, deliberately. A rate limit throttles something
+already authorised, so a token issued without one is a decision somebody made.
+A budget with no cap is a decision nobody made. The two look identical in code
+and are opposite in meaning.
+
+### An unset cap and a wrong cap fail in different directions
+
+Three places now refuse to widen access on a mistake, and the reasoning is the
+same each time. `tiers_allowed` returns *nothing* for an unrecognised
+`max_source_tier`, because reading "unknown ceiling" as "no ceiling" turns a
+typo in a grant into a widening. `ResolvedGrant.tools` returns an empty set for
+an unknown profile, so a profile added by a later migration fails closed.
+`half_life_for` gives an unknown source tier the default decay rather than
+exemption, because exemption is the valuable state and should be granted
+deliberately.
+
+The general form: when a lookup misses, ask which way the mistake fails, and
+pick the direction that does not quietly grant more than somebody intended.
+
 ### Compose does not skip a service it cannot build
 
 It fails the whole command. A `build:` pointing at a Dockerfile nobody has
