@@ -91,6 +91,37 @@ design-only changes do not require a version bump, but may be listed under Unrel
   AST, dependencies from the `pyproject.toml` files, siblings followed
   transitively because that much really is legitimate
 
+## [0.76.5] — 2026-09-20
+
+### Fixed
+
+- `B-14` The embedding sidecar could never obtain its weights. It sits on
+  `internal`, which has no DNS and no route out, and the weights are not in the
+  image — so on a fresh stack it answered `loaded: false` for ever and timed out
+  every embed request. Search stayed lexical-only, in production too
+- The compose comment asserted the weights *were* in the image, two lines above
+  the mount that exists because they are downloaded at runtime
+- The worker now shares the same cache. `P2-19`'s backfill falls back to loading
+  the model in-process when the sidecar does not answer, and without a mount that
+  fallback pulled 2.3 GB into a layer that dies with the container, every run
+
+### Added
+
+- `python -m worker.fetchmodel` — a profile-gated one-shot on `egress` that
+  writes into the volume the sidecar reads, and exits. It loads and encodes
+  rather than only downloading: a cache missing one file downloads
+  "successfully" and fails at the first real batch of a four-hour backfill
+- It refuses a model whose width is not the schema's, for the same reason
+
+### The isolation is kept on purpose
+
+- Giving the sidecar egress would have been one line. It runs corpus text —
+  derived from pages the crawler fetched — through a model, and a route out from
+  there is a route out for anything that ever gets in
+- Baking the weights into the image was the other option: 2.3 GB on every layer
+  push, twice for a multi-arch build, for files that do not change between
+  releases
+
 ## [0.76.2] — 2026-09-20
 
 ### Added

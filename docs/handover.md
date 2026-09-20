@@ -823,6 +823,34 @@ than producing `NOT EXISTS`. Write the negation into the SQL string. It fails
 loudly and immediately, which is the good case — the bad version of this bug is
 a clause that silently matches everything.
 
+### The embedding sidecar sits where it cannot fetch its own weights
+
+`embedder` is on `internal`, which is `internal: true` — no gateway, no DNS. The
+weights are *not* in the image: the worker image installs `sentence-transformers`
+and never downloads `BAAI/bge-m3`, which is why `MERIDIAN_EMBED_CACHE` and the
+`/models` mount exist at all. So on any stack nobody had hand-seeded, the sidecar
+started, answered `/health` with `loaded: false`, and failed every embed request
+after a 30-second timeout — for ever.
+
+Nothing says so. `/health` is honest, and an unloaded model is the ordinary state
+of a lazy sidecar nobody has used. The symptom is one line in a search response:
+`degraded_reason` saying the embedding service "did not answer", which is easy to
+read as a transient outage rather than a permanent impossibility.
+
+`B-14` added `python -m worker.fetchmodel` — a one-shot on `egress` that writes
+into the same volume and exits. **Run it before `up` on any new machine**; it is
+in `make quickstart` and in the deploy runbook, and a populated cache makes it a
+no-op. Keep the sidecar off `egress`: it runs corpus text through a model, and a
+route out from there is a route out for anything that ever gets in.
+
+Two smaller things fell out of the same hour. `worker.embed` *appears* to work
+anyway, because `P2-19`'s fallback loads the model in-process when the sidecar
+does not answer — it just downloads 2.3 GB into a layer that dies with the
+container, every run, and says so only at INFO. And the compose comment asserting
+the weights were in the image sat two lines above the mount that exists because
+they are not; a comment stating a fact about the build is worth checking against
+the build.
+
 ### A key set on the global `*` policy row is set for every domain
 
 `P1-27` nearly shipped dead because of this: the rule was "learn only where

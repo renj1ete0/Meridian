@@ -985,6 +985,19 @@ Things worth doing that don't belong to a phase yet.
       sidecar had never once started from a container. `P1-30` wrote the rule
       down and the handover predicted the recurrence; predicting it was not
       enough. Now derived from the AST on both sides, per workspace member
+- [x] `B-14` Fix: the embedding sidecar could never obtain its weights —
+      `v0.76.5`. `embedder` is on `internal`, which has no DNS and no route out,
+      and the weights are not in the image — the compose comment claimed they
+      were, two lines above the mount that exists because they are downloaded at
+      runtime. So a fresh stack's sidecar answered `loaded: false` for ever and
+      timed out every request, and search stayed lexical-only in *production*
+      too, which puts this on `P2-09`'s critical path. `python -m
+      worker.fetchmodel` is the one-shot with egress that writes into the volume
+      the sidecar reads, profile-gated so `up` never waits on it. It loads and
+      encodes rather than only downloading, because a cache missing one file
+      fails at the first real batch instead. The isolation is kept deliberately:
+      the sidecar runs corpus text through a model, and a route out from there is
+      a route out for anything that ever gets in
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

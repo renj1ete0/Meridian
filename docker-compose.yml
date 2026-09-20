@@ -102,7 +102,13 @@ services:
   #
   # On `internal` and nothing else: it takes text and returns vectors, holds no
   # database connection, and needs nothing from the internet once the weights
-  # are in the image. No `env_file`, for the same reason `crawl4ai` has none.
+  # are in `/models`. No `env_file`, for the same reason `crawl4ai` has none.
+  #
+  # **They are not in the image** — this comment said they were until `B-14`,
+  # and the worker image installs `sentence-transformers` without ever
+  # downloading `BAAI/bge-m3`. On `internal` there is no DNS and no route out,
+  # so a sidecar that has to fetch them cannot: it answers `loaded: false` and
+  # times out every request, for ever. `modelfetch` below puts them there.
   embedder:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
@@ -131,6 +137,26 @@ services:
       resources:
         limits: { memory: 4G }
 
+  # The weights, once, from a container that has egress and then exits (`B-14`).
+  # Profile-gated: this is a deploy step, not a service, and `docker compose up`
+  # must not wait on a 2.3GB download it has no reason to repeat.
+  #
+  #   docker compose run --rm modelfetch
+  #
+  # Idempotent — a populated cache resolves locally and downloads nothing — so
+  # it belongs in the deploy runbook ahead of `up`, not in somebody's memory.
+  modelfetch:
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.fetchmodel"]
+    profiles: [tools]
+    networks: [egress]
+    environment:
+      MERIDIAN_EMBED_CACHE: /models
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/models:/models
+    restart: "no"
+    logging: *logging
+
   worker:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
@@ -145,9 +171,17 @@ services:
       # and the worker does not need it to start — a missing backend means
       # `query` rows go unclaimed, not that the crawl stops (P1-34).
       searxng: { condition: service_started }
+    environment:
+      # The same cache the sidecar reads, and the reason is the fallback rather
+      # than the fast loop: `P2-19`'s backfill loads the model in *this* process
+      # when the sidecar does not answer. Without this that fallback pulls
+      # 2.3 GB over the Pi's network into a layer that dies with the container,
+      # and does it again next time, at INFO, where nobody is looking.
+      MERIDIAN_EMBED_CACHE: /models
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
+      - ${DATA_ROOT:-/srv/meridian}/models:/models
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
