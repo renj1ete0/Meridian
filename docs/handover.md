@@ -1204,6 +1204,7 @@ established, against the real web and a real Postgres:
 | The crawl stores what it fetches | after `B-16`, nearly every source in the corpus has a raw file, HTML and PDF alike. Before it, none did — each settled `"outcome": "success", "stored": null` |
 | The embedding sidecar serves from a container | `loaded: true`, 1024 dimensions, 143s for a cold load off disk — which is what `start_period: 180s` is for |
 | **Hybrid search, end to end, outside a test** | `arms: ["lexical", "vector"]`, `degraded: false`, both ranks populated. It had never run anywhere but in the suite |
+| The timetable is read (`B-15`) | `scheduler` claimed `digest`, settled it `ok` in 747ms and rescheduled it, then claimed `embed` and began writing vectors against a backlog that had stood at one embedded chunk |
 
 Still untouched by any of this: everything needing the server, Cloudflare or
 scale. `P2-19`'s fallback is the one that moved without being verified — it
