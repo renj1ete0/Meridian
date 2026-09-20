@@ -112,7 +112,12 @@ services:
       MERIDIAN_EMBEDDER_PORT: "8100"
       # Where the weights live. Inside a read-only container the library's
       # default cache is an unwritable layer, so it is named and mounted.
-      MERIDIAN_EMBEDDER_CACHE: /models
+      #
+      # `MERIDIAN_EMBED_CACHE`, not `..._EMBEDDER_...`: that is the name
+      # `EmbedderSettings.from_env` reads. It was the latter until `B-12`, which
+      # meant the mount below went unused and 2.3 GB re-downloaded on every
+      # recreate — silently, because a misspelt variable just takes its default.
+      MERIDIAN_EMBED_CACHE: /models
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/models:/models
     healthcheck:

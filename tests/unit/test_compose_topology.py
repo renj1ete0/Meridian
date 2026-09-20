@@ -14,6 +14,7 @@ credentials.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 
@@ -192,3 +193,99 @@ def test_every_long_running_service_can_be_probed(compose: dict) -> None:
     long-running at all."""
     for name in ("postgres", "crawl4ai", "worker", "embedder"):
         assert compose["services"][name].get("healthcheck"), f"{name} cannot be probed"
+
+
+# --------------------------------------------------------------------------
+# Environment variables nothing reads (task B-12)
+# --------------------------------------------------------------------------
+#
+# `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE` and the code reads
+# `MERIDIAN_EMBED_CACHE`. Nothing failed: the embedder simply fell back to the
+# library's default cache, inside the container, on a layer nobody mounted — so
+# the `/models` volume was never used and 2.3 GB of weights downloaded again on
+# every recreate. A misspelt variable is silent by construction, because the
+# whole point of `os.environ.get(name, default)` is not to raise.
+#
+# Derived from the files rather than listing known names, so a variable added
+# next year is covered without anyone remembering this test exists.
+
+REPO = COMPOSE.parent
+COMPOSE_FILES = sorted(REPO.glob("docker-compose*.yml"))
+
+#: Set in compose, read by something that is not Python. Each needs a reason,
+#: because the empty case is the one worth defending: an entry here is a
+#: variable nothing in this repository can be shown to use.
+NOT_READ_BY_PYTHON = {
+    # Read by the Postgres entrypoint and by scripts/init-roles.sh.
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "PG_USER",
+    "PG_PASSWORD",
+    "PG_RW_PASSWORD",
+    "PG_RO_PASSWORD",
+    # Read by the upstream images' own entrypoints.
+    "SEARXNG_BASE_URL",
+    "CRAWL4AI_API_TOKEN",
+    "CRAWL4AI_HOOKS_ENABLED",
+    "TUNNEL_TOKEN",
+}
+
+
+def _env_names() -> set[str]:
+    """Every variable name set in any compose file's `environment:` block."""
+    names: set[str] = set()
+    for path in COMPOSE_FILES:
+        doc = yaml.safe_load(path.read_text())
+        for service in (doc.get("services") or {}).values():
+            if not isinstance(service, dict):
+                continue
+            env = service.get("environment")
+            if isinstance(env, dict):
+                names |= set(env)
+            elif isinstance(env, list):
+                names |= {str(item).split("=", 1)[0] for item in env}
+    return names
+
+
+def _python_source() -> str:
+    roots = ("packages", "services", "scripts", "migrations")
+    return "\n".join(
+        p.read_text(errors="ignore") for root in roots for p in (REPO / root).rglob("*.py")
+    )
+
+
+def test_the_compose_files_declare_some_environment() -> None:
+    """Guard on the parse. A walk that found nothing would make the assertion
+    below vacuously true."""
+    names = _env_names()
+
+    assert len(names) > 10, names
+    assert "PG_RW_URL" in names
+
+
+def test_every_variable_compose_sets_is_read_by_something() -> None:
+    """A misspelt environment variable never raises — it silently takes a
+    default, which is how `MERIDIAN_EMBEDDER_CACHE` sat in production unread
+    while the model volume it was supposed to point at went unused."""
+    source = _python_source()
+    unread = {
+        name
+        for name in _env_names()
+        if name not in NOT_READ_BY_PYTHON
+        and not re.search(rf"""["']{re.escape(name)}["']""", source)
+    }
+
+    assert not unread, (
+        f"compose sets these and no Python reads them — check the spelling: {sorted(unread)}"
+    )
+
+
+def test_the_exemptions_are_not_a_dumping_ground() -> None:
+    """The other direction. An exemption that outlives its variable turns this
+    list into documentation of a problem that no longer exists, and the next
+    real typo hides among the stale entries."""
+    declared = _env_names()
+    stale = {name for name in NOT_READ_BY_PYTHON if name not in declared}
+
+    assert not stale, f"exempted but no longer set by any compose file: {sorted(stale)}"

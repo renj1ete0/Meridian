@@ -967,6 +967,15 @@ Things worth doing that don't belong to a phase yet.
       rather than a document that goes stale the next time somebody adds a
       package. **⚑ human** for the final call on anything conditional: what risk
       to accept is not an agent's decision
+- [x] `B-12` Fix: `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE` and the code
+      reads `MERIDIAN_EMBED_CACHE` — `v0.76.3`. The `/models` volume was
+      therefore never used and 2.3 GB re-downloaded on every recreate, silently,
+      because the whole point of `os.environ.get(name, default)` is not to
+      raise. A misspelt variable cannot fail loudly, so the test is the only
+      mechanism available: every name any compose file sets must appear in some
+      Python source, with a short exemption list for the ones read by the
+      Postgres entrypoint and the upstream images — and a second test that the
+      exemptions are all still set, so the list cannot become a museum
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

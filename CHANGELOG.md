@@ -48,6 +48,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.76.3] — 2026-09-20
+
+### Fixed
+
+- `B-12` `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE`; the code reads
+  `MERIDIAN_EMBED_CACHE`. The `/models` volume was therefore never used and
+  2.3 GB of weights re-downloaded on every recreate
+
+### A misspelt variable cannot fail loudly
+
+- `os.environ.get(name, default)` exists in order not to raise, so there is no
+  runtime mechanism that could have caught this — the embedder simply used the
+  library's default cache, on a layer nobody mounted, and worked
+- So the test is the mechanism: every variable name any compose file sets must
+  appear somewhere in the Python sources, with a short exemption list for the
+  ones read by the Postgres entrypoint and the upstream images
+- And a second test that every exemption is still set by some compose file, so
+  the list cannot become a museum of variables that no longer exist — which is
+  how the next real typo would hide
+
 ## [0.76.2] — 2026-09-20
 
 ### Added
