@@ -1049,7 +1049,7 @@ Things worth doing that don't belong to a phase yet.
       `USING` — autogenerate's version would have failed on the server and passed
       here, since `figures` is empty locally. Caught by migrating rows put there
       on purpose, and the downgrade round-trips
-- [~] `B-11` **Licence audit** — `docs/licences.md` and a gate, `v0.83.0`.
+- [x] `B-11` **Licence audit** — `docs/licences.md` and a gate, `v0.83.0`.
       Every verdict read off the installed artefact rather than recalled:
       distribution metadata, image labels, the model card on disk. **Nothing
       blocks commercial use.** All 116 Python distributions are permissive — no
@@ -1063,9 +1063,12 @@ Things worth doing that don't belong to a phase yet.
       / LGPL-2.1+, and we take MPL-1.1; the choice is recorded in code, and a
       test checks the package still offers it. Also found: Meridian's own three
       packages declared no licence at all, which is the worst case rather than
-      a neutral one — no licence is no grant. **⚑ human** left for you: confirm
-      you accept the SearXNG boundary and the `tld` choice. `en_core_web_sm`
-      and Apache AGE are named but unverified — neither is installed yet
+      a neutral one — no licence is no grant. **Both ⚑ human calls
+      accepted 2026-09-20** and recorded in the document beside the evidence:
+      the SearXNG boundary, and `tld` under MPL-1.1. `en_core_web_sm` and
+      Apache AGE are named but unverified — neither is installed yet, and both
+      should be confirmed from an artefact when they arrive (`P4-01` brings
+      AGE)
 - [x] `B-12` Fix: `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE` and the code
       reads `MERIDIAN_EMBED_CACHE` — `v0.76.3`. The `/models` volume was
       therefore never used and 2.3 GB re-downloaded on every recreate, silently,

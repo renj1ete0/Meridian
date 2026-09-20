@@ -23,9 +23,25 @@ document can be regenerated rather than re-researched.
 
 ## Verdict
 
-**Nothing here blocks commercial use.** One dependency needs a stated choice and
-one needs a stated boundary; both are below, and both are the kind of thing
-`B-11` was marked ⚑ human for.
+**Nothing here blocks commercial use.** One dependency needed a stated choice
+and one needed a stated boundary. Both were put to the operator and **both were
+accepted on 2026-09-20**:
+
+| Decision | Accepted |
+|---|---|
+| **SearXNG's AGPL boundary.** Run unmodified, in its own container, with no published port — aggregation, not derivative work. The commitment taken on is *not* to patch it and expose it. | yes |
+| **`tld` is taken under MPL-1.1**, out of the three its author offers. We do not modify it, so MPL-1.1's file-level copyleft attaches to nothing. | yes |
+
+Both are recorded here rather than only in a commit message, because the
+question a year from now is "what did we agree to", and the answer needs to sit
+next to the evidence. The `tld` choice is additionally recorded in code —
+`CHOICES` in `tests/unit/test_licences.py`, with a test that fails if the
+package stops offering MPL-1.1.
+
+These are engineering readings of the licence text, not legal advice. This
+document is written to be handed to a lawyer if Meridian ever carries
+commercial weight: every dependency, the evidence for each verdict, and the two
+questions that needed a human.
 
 ## Python dependencies
 
