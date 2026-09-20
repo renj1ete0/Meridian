@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.76.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 1980 backend tests
+**`v0.76.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 1985 backend tests
 against a real Postgres, 296 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -343,15 +343,22 @@ carries that list, and it is the checklist for the first deploy.
       `--replace` and then asks for the source count to be typed back, and
       afterwards samples `raw_file_path` to prove the two halves match.
       `tests/unit/test_scripts.py` stops the whole class recurring
-- [~] `P1-37` **`make backup` works; `make build-push` still does not.**
+- [x] `P1-37` **`make backup` and `make build-push` both work** — `v0.76.1`.
       `scripts/backup.sh` shipped in `v0.42.0` — unattended, asks nothing, fails
       loudly, warns when the backup root shares a filesystem with the data root
       (a backup on the disk it protects survives an accidental delete and
       nothing else), checks the dump is non-empty because `pipefail` does not
       reach across a redirect, and rotates only after the new one is written.
-      `build_and_push.sh` is outstanding: a first deploy can build on the
-      server, so it is not on the critical path, but it should exist before the
-      stack is something anyone would rather not rebuild in place
+      `build_and_push.sh` landed in `v0.76.1`: one multi-arch manifest per
+      application image, tagged by commit SHA. It **refuses a dirty working
+      tree** and never tags `latest`, because both would undo the thing the SHA
+      tag is for — scaffold §5 pins the SHA in compose so a bad build does not
+      roll out on restart and rollback is a one-line edit, and a tag naming a
+      commit whose code is not what was built is discovered to be wrong while
+      rolling back. `orchestrator` and `web` have no Dockerfile yet and are
+      skipped *loudly*; a drift test checks the image list against the services
+      compose actually builds, since one added there and not here never gets
+      built for arm64 and fails on the Pi days later
 - [x] `P1-27` **Per-domain `render_js` learning** — `v0.70.0`. Built before
       `P1-16` rather than after, because the mechanism is self-tuning: the 48h
       run both benefits from it and produces its evidence, where waiting means

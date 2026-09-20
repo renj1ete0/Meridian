@@ -27,15 +27,14 @@ MAKEFILE = REPO / "Makefile"
 
 #: Targets whose scripts are known to be unwritten, with the task that writes
 #: them. Same idea as `test_drift.py`'s exempt sets: an omission has to be
-#: declared, with a reason, rather than quietly passing. When `P1-37` lands, the
-#: entry is removed and this test is what says so.
-UNWRITTEN = {
-    # `build_and_push.sh` is the multi-arch release path. A first deploy can
-    # build on the server instead, so it is not on the critical path — but it
-    # should exist before the stack is something anyone would rather not
-    # rebuild in place.
-    "scripts/build_and_push.sh": "P1-37",
-}
+#: declared, with a reason, rather than quietly passing.
+#:
+#: Empty since `P1-37` — `build_and_push.sh` was the last one. Kept rather than
+#: deleted because the mechanism is the point: the next Makefile target added
+#: ahead of its script has somewhere to be declared, and
+#: `test_the_unwritten_list_does_not_outlive_its_scripts` is what stops the
+#: declaration becoming permanent.
+UNWRITTEN: dict[str, str] = {}
 
 
 def referenced_scripts() -> set[str]:
@@ -85,3 +84,67 @@ def test_shell_scripts_parse(script: str) -> None:
     branch nobody exercises is found at exactly the wrong time."""
     result = subprocess.run(["bash", "-n", str(REPO / script)], capture_output=True, text=True)
     assert result.returncode == 0, f"{script}: {result.stderr.strip()}"
+
+
+# --------------------------------------------------------------------------
+# The release script (task P1-37, scaffold §5)
+# --------------------------------------------------------------------------
+
+BUILD_AND_PUSH = REPO / "scripts/build_and_push.sh"
+
+
+def build_script() -> str:
+    return BUILD_AND_PUSH.read_text()
+
+
+def test_the_release_script_never_tags_latest() -> None:
+    """Scaffold §5 is explicit, and gives the reason: pinning the SHA in
+    `docker-compose.yml` means a bad build does not roll out on the next
+    restart, and rollback is a one-line edit. `latest` in an unattended system
+    removes exactly the control you wanted — and it is a one-word change that
+    looks like a convenience."""
+    code = re.sub(r"^\s*#.*$", "", build_script(), flags=re.MULTILINE)
+
+    assert ":latest" not in code
+    assert "latest" not in re.findall(r"-t\s+(\S+)", code)
+
+
+def test_the_release_script_refuses_a_dirty_tree() -> None:
+    """The property that makes the SHA tag mean anything. Without it the tag
+    names a commit whose code is not what was built, and that is discovered
+    while rolling back."""
+    code = build_script()
+
+    assert "git status --porcelain" in code
+    assert "--platform" in code, "a multi-arch manifest is the point of the script"
+
+
+def test_the_release_script_covers_every_application_image() -> None:
+    """Drift between the script and compose.
+
+    `docker-compose.yml` is where an application service is added, and it is
+    edited by hand. A service added there and not here is one that never gets
+    built for arm64 — which shows up as a service that will not start on the
+    Pi, days later, with nothing pointing at the cause.
+
+    Third-party services are excluded by construction: they carry `image:` from
+    an upstream registry rather than `build:`, and scaffold §5 notes they all
+    publish multi-arch manifests already.
+    """
+    yaml = pytest.importorskip("yaml")
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+
+    built_by_compose = {
+        name
+        for name, service in compose["services"].items()
+        if isinstance(service, dict) and "build" in service
+    }
+    # `crawl4ai` is built from a pinned upstream base for hardening (`P1-26`)
+    # and is not one of ours; `embedder` shares the worker image rather than
+    # having one of its own.
+    built_by_compose -= {"crawl4ai", "embedder"}
+
+    named_by_script = set(re.findall(r'^\s*"(\w+)\|', build_script(), flags=re.MULTILINE))
+
+    missing = built_by_compose - named_by_script
+    assert not missing, f"compose builds these and the release script does not: {sorted(missing)}"

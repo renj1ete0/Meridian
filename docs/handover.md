@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.76.0`. 1980 backend tests against a real Postgres, 296 frontend.**
+**`v0.76.1`. 1985 backend tests against a real Postgres, 296 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -445,7 +445,7 @@ Two other things about that column worth not rediscovering:
   type, so `attgenerated == "s"` is False and `attgenerated == b"s"` is True.
   Cast it in SQL rather than comparing in Python.
 
-### `make build-push` still calls a script that does not exist
+### `make build-push` needs a buildx builder that is not the default one
 
 Four Makefile targets once pointed at scripts nobody had written, and
 `snapshot-corpus` was the one that mattered — `P1-16`'s deliverable is literally
@@ -453,10 +453,33 @@ Four Makefile targets once pointed at scripts nobody had written, and
 a target that failed at the shell. `P1-36` wrote that one, plus `restore-corpus`
 and `backup`.
 
-`make build-push` is still a stub (`P1-37`). It only bites when building
-multi-arch images from a laptop for an arm64 server; `docker compose build` on
-the server itself is the way round it, and [deployment.md](deployment.md) §6 has
-both.
+`make build-push` landed in `P1-37` and has one prerequisite that is not
+obvious. A multi-platform build needs a buildx builder using the
+`docker-container` driver; the **default `docker` driver cannot produce a
+manifest list at all**, and the error it gives when asked for two platforms —
+"docker exporter does not currently support exporting manifest lists" — names
+neither the cause nor the fix. Once:
+
+```bash
+docker buildx create --name meridian --driver docker-container --use
+docker run --privileged --rm tonistiigi/binfmt --install arm64
+```
+
+The second line registers the QEMU handler that lets an x86 box emit arm64
+layers. The script checks the driver and prints both commands rather than
+letting Docker's message stand.
+
+Two behaviours of the script that look like obstruction and are not: it
+**refuses to push from a dirty working tree**, and it never tags `latest`.
+Both protect the same thing — scaffold §5 pins the image SHA in compose so a
+bad build does not roll out on the next restart and rollback is a one-line
+edit, and a tag naming a commit whose code is not what was built turns rollback
+into a guess that is only found to be wrong while rolling back. Use
+`--dry-run` to see the commands without either check stopping you.
+
+`orchestrator` and `web` have no Dockerfile yet, so the script skips them and
+says so. `docker compose build` on the server remains the way round all of this
+for a first deploy, and [deployment.md](deployment.md) §6 has both paths.
 
 ### A value used in code but absent from the enum fails at the insert, not at import
 

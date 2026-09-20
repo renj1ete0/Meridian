@@ -48,6 +48,38 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.76.1] — 2026-09-20
+
+### Added
+
+- `P1-37` `scripts/build_and_push.sh`. `make build-push` has called a script
+  that did not exist since the target was declared; it now cross-builds one
+  multi-arch manifest per application image and pushes it to GHCR, tagged by
+  commit SHA (scaffold §5)
+- Three tests on the script beyond "it exists and parses": it never tags
+  `latest`, it refuses a dirty tree, and its image list is checked against the
+  services `docker-compose.yml` actually builds — a service added there and not
+  here is one that never gets built for arm64, which surfaces days later as a
+  container that will not start on the Pi
+
+### Two refusals, both about what the SHA tag is for
+
+- **It will not push from a dirty working tree.** Scaffold §5 tags by SHA so a
+  bad build does not roll out on the next restart and rollback is a one-line
+  edit. A tag naming a commit whose code is not what was built makes rollback a
+  guess, and the guess is discovered to be wrong while rolling back
+- **It never tags `latest`**, which would remove exactly the control the SHA was
+  providing
+
+### Honest about what does not exist
+
+- `orchestrator` (phase 4) and `web` have no Dockerfile yet, so they are skipped
+  *loudly* and named in the summary. A script that quietly shipped two of four
+  images would be indistinguishable from one that shipped all four
+- The buildx preflight names the fix for the `docker` driver, whose own error
+  ("docker exporter does not currently support exporting manifest lists") names
+  neither the cause nor the remedy
+
 ## [0.76.0] — 2026-09-20
 
 **Server-side write validation, before anything can write.**
