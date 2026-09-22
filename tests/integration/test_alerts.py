@@ -19,9 +19,10 @@ import datetime as dt
 import uuid
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
 
 from meridian_core.alerts import (
+    check_embedding_backlog,
     MIN_ATTEMPTS_TO_JUDGE,
     Alert,
     check_fetch_success,
@@ -32,7 +33,7 @@ from meridian_core.alerts import (
     record_alert,
 )
 from meridian_core.attempts import record_attempt
-from meridian_core.models import FetchAttempt, Notification
+from meridian_core.models import Chunk, FetchAttempt, Notification
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -260,3 +261,87 @@ async def test_due_alerts_skips_what_was_already_said(clean, domain) -> None:
     # list made it pass alone and fail in a full run, which is the kind of
     # flake that gets a real test deleted.
     assert not any(a.key == "fetch_success_low" for a in await due_alerts(clean, now=NOW))
+
+
+# --------------------------------------------------------------------------
+# Vectors falling behind the crawl (task `B-22`, §6.1, §12.5)
+# --------------------------------------------------------------------------
+#
+# Measured, not imagined: the embedding pass ran as an hourly job inside a
+# thirty-minute ceiling, was killed at the ceiling every time, and left a
+# backlog no later window could clear. Nothing said so. The crawl was healthy,
+# the corpus was growing, and it was quietly becoming unsearchable as it grew.
+
+
+@pytest.fixture
+async def unembedded(session_for):
+    """A source whose chunks have no vectors, removed afterwards.
+
+    Seeded rather than assumed: the dev corpus drifts — it held a hundred
+    unembedded chunks this morning and none by the afternoon — and a test that
+    reads whatever happens to be there passes vacuously on one of those days.
+    """
+    from meridian_core.chunks import ChunkWrite, replace_chunks
+    from meridian_core.models import Source
+    from meridian_core.sources import upsert_source
+
+    marker = f"alert{uuid.uuid4().hex[:8]}"
+    sess = await session_for("rw")
+    await sess.rollback()
+    source, _ = await upsert_source(
+        sess,
+        f"https://{marker}.test/doc",
+        checksum=f"sha256:{uuid.uuid4().hex}",
+        source_tier="government",
+    )
+    await replace_chunks(
+        sess,
+        source.source_id,
+        [ChunkWrite(text=f"{marker} passage {n}", chunk_index=n) for n in range(25)],
+    )
+    source_id = source.source_id
+    await sess.commit()
+
+    yield sess
+
+    await sess.rollback()
+    await sess.execute(delete(Chunk).where(Chunk.source_id == source_id))
+    await sess.execute(delete(Source).where(Source.source_id == source_id))
+    await sess.commit()
+
+
+async def test_a_lagging_embedder_is_reported(unembedded) -> None:
+    """The absolute threshold: a corpus falling behind."""
+    alert = await check_embedding_backlog(unembedded, limit=1, fraction=1.1)
+
+    assert alert is not None
+    assert alert.key == "embedding_backlog"
+    assert "lexical arm" in alert.body, "the alert should say what the reader will see"
+
+
+async def test_a_backlog_within_tolerance_is_not_reported(unembedded) -> None:
+    """Lag is normal. §6.1 accepts a window where a chunk exists, is not yet
+    searchable and is not yet known to be a duplicate — an alert firing on that
+    would fire every day and be read on none of them."""
+    assert await check_embedding_backlog(unembedded, limit=10_000_000, fraction=1.1) is None
+
+
+async def test_a_corpus_mostly_unembedded_is_reported(unembedded) -> None:
+    """The share threshold, which exists because the count misses this case: a
+    few hundred chunks with nine tenths unembedded is in the same trouble as a
+    large corpus with thousands waiting, and no absolute threshold notices."""
+    alert = await check_embedding_backlog(unembedded, limit=10_000_000, fraction=0.0001)
+
+    assert alert is not None, "a corpus that is mostly unembedded must be reported"
+
+
+async def test_an_empty_corpus_is_not_a_backlog(session_for) -> None:
+    """Nothing to embed is not the same as falling behind, and a fresh install
+    should not greet its operator with an alert."""
+    sess = await session_for("rw")
+    await sess.rollback()
+    total = await sess.scalar(select(func.count()).select_from(Chunk))
+    if total:
+        pytest.skip("the dev corpus is not empty; this case is covered by the unit of logic")
+
+    assert await check_embedding_backlog(sess) is None

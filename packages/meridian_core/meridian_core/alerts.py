@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .attempts import SUCCESS_OUTCOMES
 from .logging import get_logger
-from .models import FetchAttempt, Notification, QueueTask
+from .models import Chunk, FetchAttempt, Notification, QueueTask
 
 log = get_logger(__name__)
 
@@ -52,6 +52,22 @@ MIN_ATTEMPTS_TO_JUDGE = 20
 
 #: §13.3's number.
 DISK_WARN_FRACTION = 0.8
+
+#: Chunks waiting for a vector before the backlog is worth reporting (`B-22`).
+#:
+#: Lag is normal and by design: §6.1 draws one pipeline and it is three passes,
+#: so a chunk that exists, is not yet searchable and is not yet known to be a
+#: duplicate is an accepted window rather than a fault. What is not normal is a
+#: window that only widens. The number is set where a CPU-only box needs the
+#: better part of an hour to catch up — far enough above a busy afternoon to
+#: stay quiet, low enough to fire long before the corpus is mostly unsearchable.
+EMBED_BACKLOG_LIMIT = 5_000
+
+#: Fraction of the corpus that may be waiting before it is reported regardless
+#: of the absolute count. A small corpus with 90% of itself unembedded is in
+#: the same trouble as a large one with 5,000 waiting, and the absolute
+#: threshold alone would never notice it.
+EMBED_BACKLOG_FRACTION = 0.5
 
 
 @dataclasses.dataclass(frozen=True)
@@ -220,6 +236,59 @@ async def record_alert(sess: AsyncSession, alert: Alert) -> Notification:
     return row
 
 
+async def check_embedding_backlog(
+    sess: AsyncSession,
+    *,
+    limit: int = EMBED_BACKLOG_LIMIT,
+    fraction: float = EMBED_BACKLOG_FRACTION,
+) -> Alert | None:
+    """Vectors are falling behind the crawl (`B-22`, §6.1, §12.5).
+
+    The failure this exists for was measured, not imagined. The embedding pass
+    ran as an hourly job inside a thirty-minute ceiling, was killed at the
+    ceiling every time, and left a backlog no later window could clear — and
+    the only trace was `last_status` in `scheduled_jobs`. Everything a person
+    looks at said the crawl was healthy, because it was: the corpus was growing
+    and simply becoming less searchable as it did.
+
+    **Search does not report this either**, which is why it needs an alert
+    rather than a screen. `SearchResult.degraded` means an arm is *absent*; an
+    arm that is present and covering a third of the corpus returns fewer, worse
+    results and says nothing at all. A reader would conclude the corpus is thin.
+
+    Two thresholds, because one of them misses a case. An absolute count
+    catches a large corpus falling behind; a share catches a small one that is
+    mostly unembedded, which the count alone would call fine.
+    """
+    waiting = int(
+        await sess.scalar(
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.embedding.is_(None), Chunk.superseded_at.is_(None))
+        )
+        or 0
+    )
+    total = int(await sess.scalar(select(func.count()).select_from(Chunk)) or 0)
+    if not total or not waiting:
+        return None
+
+    share = waiting / total
+    if waiting < limit and share < fraction:
+        return None
+
+    return Alert(
+        key="embedding_backlog",
+        title=f"{waiting:,} chunks are waiting for a vector",
+        body=(
+            f"{waiting:,} of {total:,} chunks ({share:.0%}) have no embedding. "
+            "Search is running on its lexical arm alone for those, and reports "
+            "nothing about it — a thin-looking corpus is the symptom. Check that "
+            "the `embed` service is up and keeping pace; if the crawl is simply "
+            "faster than the embedder, MERIDIAN_WORKER_CONCURRENCY is the brake."
+        ),
+    )
+
+
 async def due_alerts(
     sess: AsyncSession,
     *,
@@ -232,6 +301,7 @@ async def due_alerts(
         await check_fetch_success(sess, now=now),
         await check_no_recent_success(sess, now=now),
         await check_queue_drained(sess),
+        await check_embedding_backlog(sess),
         check_disk(raw_root) if raw_root else None,
     ]
     due = []

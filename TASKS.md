@@ -46,17 +46,18 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 
 **Buildable today** is two entries.
 
-1. **`B-22`'s remaining half** — an embedding pass that falls behind should
-   raise §12.5's alert rather than leave `last_status` in a table nobody reads.
-2. **`P6-23`** — admin: agent registry and run history. Its own argument was that both
-   tables stay empty until phase 4 runs something and "an empty screen teaches nothing";
-   `runs` now holds real rows with stages, statuses, heartbeats and counters, so there
-   is a shape to design against.
+1. **`P6-23`** — admin: agent registry and run history. `runs` now holds real
+   rows with stages, statuses, heartbeats and counters, and `agents` is where
+   somebody enables the agent that produces the first edge.
+2. **`B-30`** — the vector arm draws 42% of its top ten from the probe
+   chunk's own source, about four distinct sources per ten hits. Whether to cap
+   per source, diversify after fusion, or leave it to the lexical half wants
+   `P0-15`'s questions to judge against, so it is a decision before it is code.
 
 `P5-01` stays open on its own argument — entity co-occurrence has no consumer until
 `P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
 
-Done this stretch, for the record: `P4-16`, `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
+Done this stretch, for the record: `P4-16`, `P4-17`, `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
 `P3-10`, `P3-11`, `B-07`, `B-09`, `B-11`, `P2-20`, `P5-07`, and phase 4's spine —
 `P4-01` through `P4-04`, `P4-06` through `P4-09`, `P4-11` and `P4-15`. `P1-35` (a
 Semantic Scholar key, ten minutes) is still ⚑ human and is felt during the 48h run.
@@ -1498,24 +1499,18 @@ Things worth doing that don't belong to a phase yet.
       56,487 url tasks: 1,850 routed, 831 dropped. **Three existing tests used
       `/about` as a sample link** and had to move — worth knowing, because the
       next shape gate will do the same thing
-- [ ] `B-22` **A backlog larger than one job window never drains.** *(Half
-      addressed by `B-25`: there is no window to be killed at any more. What
-      remains is throughput and the signal — a pass that falls behind should
-      raise §12.5's alert rather than leave a number in a table. The sidecar
-      half is explained and fixed in `B-27`.)* Found in a
-      live run: the embedding backfill sends `MERIDIAN_EMBED_CHUNK_BATCH` (256)
-      chunks per request against a 30s client timeout, and while the crawl is
-      running that batch overruns it. The pass then reports the sidecar
-      "unusable" and loads the model in-process instead (`P2-19`'s fallback,
-      firing for a reason nobody designed), and the scheduled job finally hits
-      its own 30-minute timeout and settles `timeout` — leaving the backlog
-      exactly where it was, to fail the same way on the next tick. Idle, the
-      sidecar embeds 32 texts in 1.2s, so the work itself is minutes. Three
-      things to decide together: a batch size that respects the timeout rather
-      than racing it, a pass that commits and *reports* partial progress
-      instead of reading as a failure, and whether `timeout` on a job with a
-      growing backlog should raise an alert (§12.5) rather than a table row
-      nobody reads
+- [x] `B-22` **A backlog larger than one job window never drains** —
+      `v0.104.0` and `v0.108.1`. The embedding pass ran hourly inside a
+      thirty-minute scheduler ceiling, was killed at the ceiling, and left a
+      backlog no later window could clear; `B-25` made it a continuous service
+      and `B-27` found why the sidecar was never used. The half that remained
+      was the signal: falling behind left `last_status='timeout'` in
+      `scheduled_jobs` and nothing else. `check_embedding_backlog` now raises
+      §12.5's alert on either an absolute count or a share of the corpus —
+      two thresholds because the count misses a small corpus that is mostly
+      unembedded. It says what a reader will see, since search cannot:
+      `degraded` reports an arm that is *absent*, and one covering a third of
+      the corpus just returns less
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

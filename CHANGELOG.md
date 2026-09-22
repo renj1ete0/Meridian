@@ -234,6 +234,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.108.1] — 2026-09-22
+
+### Added
+
+- `B-22`'s remaining half: `check_embedding_backlog` raises §12.5's alert when
+  vectors fall behind the crawl, instead of leaving `last_status` in a table
+  nobody reads. Two thresholds — an absolute count for a large corpus falling
+  behind, and a share for a small one that is mostly unembedded, which the
+  count alone would call fine
+- The alert says what the reader will actually see, because search does not
+  report this: `degraded` means an arm is *absent*, and an arm covering a third
+  of the corpus returns worse results silently. The symptom is a corpus that
+  looks thin
+
 ## [0.108.0] — 2026-09-22
 
 **A deployment can start a run.**
