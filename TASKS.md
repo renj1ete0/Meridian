@@ -1460,6 +1460,18 @@ Things worth doing that don't belong to a phase yet.
       test pins the mechanism rather than the row count: a few hundred vectors
       is too few for the planner to use the index at all, so the obvious
       assertion passes against the bug
+- [x] `B-32` **Nothing ever created a budget, so nothing could ever run** —
+      `v0.108.0`. `P4-13` refuses a synthesis run without a budget row and
+      §16 requires caps "before first autonomous run"; the ordering was
+      enforced against a row that no code path created, so every deployment
+      deferred at `extract` saying so. Seeded from `config/budget.yaml` at
+      first boot, with a migration for existing databases, and neither touches
+      a row that is already there — a null cap means *unconfigured* and
+      refuses, so re-filling one would turn "stop until I think about this"
+      into "carry on with the default". **Proven on the live stack**: with the
+      budget in place a run reaches the provider and defers with
+      "hosted-frontier reads its key from ANTHROPIC_API_KEY, which is unset",
+      which is the last step before an edge and is not code
 - [x] `B-31` **The snapshot could not read the corpus it was snapshotting** —
       `v0.107.1`. `P1-16`'s stated deliverable is `make snapshot-corpus`, and on
       a real deployment it produced a 15KB `raw.tar.gz` beside a 113MB dump:

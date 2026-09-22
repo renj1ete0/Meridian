@@ -234,6 +234,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.108.0] — 2026-09-22
+
+**A deployment can start a run.**
+
+### Added
+
+- `B-32`: `config/budget.yaml`, seeded like every other config table, plus a
+  migration for databases that already exist. `P4-13` refuses a synthesis run
+  without a budget row — correctly — and nothing had ever created one, so a
+  fresh install's first act was to refuse. Caps are small on purpose: a first
+  day that is cheap tells you what a day costs
+
+### Fixed
+
+- A run that finishes after being deferred no longer carries the error that
+  deferred it. `done` beside an error message reads as "finished, with a
+  problem"; `begin_or_resume` already said the text is "kept until the run
+  finishes", and finishing now does the clearing
+- `tests/integration/test_synthesis_stages.py` created a budget row and
+  restored only pre-existing values, leaving a half-configured one behind — a
+  fixture that creates shared configuration has to remove it
+
 ## [0.107.1] — 2026-09-22
 
 ### Fixed

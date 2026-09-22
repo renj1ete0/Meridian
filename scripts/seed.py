@@ -272,6 +272,41 @@ async def seed_schedule(sess) -> tuple[int, int]:
     return created, skipped
 
 
+async def seed_budget(sess) -> tuple[int, int]:
+    """The caps, before anything can spend (§11.9, §16, task `B-32`).
+
+    First boot only, and one row: `budget_config` carries a CHECK that keeps it
+    to `budget_id = 1`, so "the budget" is never whichever row a query happened
+    to order first.
+
+    A row that already exists is left exactly as it is, including its nulls. A
+    null cap means unconfigured and refuses, and an operator who cleared one
+    was making a decision — re-filling it from a file would turn "stop until I
+    think about this" into "carry on with the default", which is the failure
+    mode the whole table exists to prevent.
+    """
+    from meridian_core.budget import BUDGET_ID
+    from meridian_core.models import BudgetConfig
+
+    data = (_load("budget.yaml") or {}).get("budget") or {}
+    if not data:
+        return 0, 0
+    if await sess.get(BudgetConfig, BUDGET_ID) is not None:
+        return 0, 1
+
+    sess.add(
+        BudgetConfig(
+            budget_id=BUDGET_ID,
+            max_tokens_per_run=data.get("max_tokens_per_run"),
+            max_seeds_per_run=data.get("max_seeds_per_run"),
+            monthly_cost_ceiling_usd=data.get("monthly_cost_ceiling_usd"),
+            updated_by="seed",
+        )
+    )
+    await sess.flush()
+    return 1, 0
+
+
 async def main() -> int:
     configure_logging("seed")
     steps = {
@@ -282,6 +317,7 @@ async def main() -> int:
         "agents": seed_agents,
         "cold_start_queue": seed_cold_start_queue,
         "schedule": seed_schedule,
+        "budget": seed_budget,
     }
 
     totals: dict[str, tuple[int, int]] = {}

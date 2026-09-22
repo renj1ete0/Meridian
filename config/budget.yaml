@@ -1,0 +1,33 @@
+# The caps, set before the first autonomous run (task `B-32`, §11.9, §16).
+#
+# §16 lists runaway cost from the seed → ingest → cost loop as "manageable if
+# caps are set before first autonomous run", which is a mitigation with an
+# ordering requirement in it. `P4-13` enforces the ordering by refusing to
+# start a run without a budget row, and nothing created one: a fresh install
+# had no row, so every synthesis run deferred with "no budget is configured"
+# and the first thing a new deployment did was refuse.
+#
+# Seeded at first boot only, like every other file here. The database is
+# authoritative afterwards (§13.1) — change these in Admin, not by editing this
+# file, or a later seed would quietly undo the change.
+#
+# **These are starting caps, not recommendations.** They are small on purpose:
+# an unattended loop whose first day is cheap tells you what a day costs, and
+# raising a cap you have measured is a decision, where lowering one after a
+# bill is a discovery. A cap left null means *unconfigured* and refuses — it
+# never means unlimited (§11.9).
+
+budget:
+  # Per run. A frontier model reading a 40-chunk batch and answering twice runs
+  # to roughly 60k tokens, so this is about ten batches of headroom before the
+  # run stops rather than overspends.
+  max_tokens_per_run: 750000
+
+  # Per run. §11.9 asks for this to be sized against the token budget rather
+  # than picked: each seed becomes a document, which becomes chunks, which
+  # become tomorrow's batch — the compounding term in the loop.
+  max_seeds_per_run: 25
+
+  # Across the calendar month, in USD. A run is checked against the remainder
+  # before it starts, so this is a ceiling a single run cannot step over.
+  monthly_cost_ceiling_usd: 25.0

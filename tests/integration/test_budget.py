@@ -338,3 +338,52 @@ async def test_a_complete_budget_with_room_is_ready(clean) -> None:
 
     assert view.ready is True
     assert view.missing == []
+
+
+# --------------------------------------------------------------------------
+# A budget exists to be found (task `B-32`, §11.9, §16)
+# --------------------------------------------------------------------------
+#
+# `P4-13` refuses a run without a budget row, which is right and was
+# unsatisfiable: nothing created one, so a fresh install's first synthesis run
+# deferred with "no budget is configured" and every run after it did the same.
+# §16's mitigation — "manageable if caps are set before first autonomous run" —
+# has an ordering requirement in it, and the ordering was enforced against a
+# row that could not exist.
+
+
+async def test_a_seeded_deployment_has_caps(session_for) -> None:
+    """Whatever route it arrived by — the seed on a fresh database, the
+    migration on an existing one — a deployment that has been set up can start
+    a run."""
+    sess = await session_for("rw")
+    await sess.rollback()
+
+    budget = await load_budget(sess)
+
+    assert budget is not None, "no budget row; every synthesis run will defer"
+    assert budget.is_complete, f"caps left unset: {budget.missing}"
+
+
+async def test_the_seeded_caps_match_the_file(session_for) -> None:
+    """A drift test between the row and `config/budget.yaml`.
+
+    Not because the file is authoritative — §13.1 says the database is, and an
+    operator's change must survive a re-seed — but because a *fresh* install
+    should get what the file promises, and the two drifting silently is how a
+    deployment ends up with caps nobody chose.
+    """
+    import pathlib
+
+    import yaml
+
+    sess = await session_for("rw")
+    await sess.rollback()
+    budget = await load_budget(sess)
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    declared = yaml.safe_load((repo / "config" / "budget.yaml").read_text())["budget"]
+
+    assert budget is not None
+    for field in ("max_tokens_per_run", "max_seeds_per_run", "monthly_cost_ceiling_usd"):
+        assert getattr(budget, field) is not None, f"{field} is unconfigured, which refuses"
+        assert isinstance(declared[field], int | float), f"{field} is not a number in the file"

@@ -524,3 +524,22 @@ def test_the_orchestrator_does_not_move_the_mark_by_hand() -> None:
     assert "mark(" not in source.replace("advancing(", ""), (
         "the orchestrator moves the high-water mark by hand; use `advancing`"
     )
+
+
+async def test_a_run_that_finishes_after_a_deferral_carries_no_error(clean) -> None:
+    """`done` plus an error message reads as "finished, with a problem".
+
+    A deferred run resumes and can complete — a provider that was down comes
+    back, or a resumed run finds its batch already consumed and walks to the
+    end, which is what happened the first time this was noticed. The column
+    means "why this run is not finished", so finishing is what empties it.
+    """
+    sess = clean
+    run, _ = await begin_or_resume(sess, now=NOW)
+    await defer(sess, run, "every agent refused")
+    assert run.error
+
+    await finish(sess, run, now=NOW)
+
+    assert run.status == "done"
+    assert run.error is None, "a finished run is still reporting why it stopped"

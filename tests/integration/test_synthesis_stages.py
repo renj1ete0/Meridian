@@ -140,8 +140,14 @@ async def corpus(session_for, marker: str):
     agent.enabled = True
 
     budget = await sess.get(BudgetConfig, 1)
+    # Whether this fixture *created* the row matters at teardown: an earlier
+    # version restored a pre-existing cap and silently kept a row it had made
+    # itself, leaving the dev database with a half-configured budget that a
+    # later test then failed on. A fixture that creates shared configuration
+    # has to remove it again.
+    budget_created = budget is None
     previous_budget = None
-    if budget is None:
+    if budget_created:
         sess.add(BudgetConfig(budget_id=1, max_tokens_per_run=1_000_000, max_seeds_per_run=10))
     else:
         previous_budget = budget.max_tokens_per_run
@@ -170,7 +176,9 @@ async def corpus(session_for, marker: str):
     await sess.execute(delete(Chunk).where(Chunk.source_id == source_id))
     await sess.execute(delete(Run).where(Run.agent_id == AGENT))
     await sess.execute(delete(Agent).where(Agent.agent_id == AGENT))
-    if previous_budget is not None:
+    if budget_created:
+        await sess.execute(delete(BudgetConfig).where(BudgetConfig.budget_id == 1))
+    elif previous_budget is not None:
         row = await sess.get(BudgetConfig, 1)
         row.max_tokens_per_run = previous_budget
     if held is not None:

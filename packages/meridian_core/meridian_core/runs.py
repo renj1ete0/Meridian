@@ -388,9 +388,19 @@ async def finish(sess: AsyncSession, run: Run, *, now: dt.datetime) -> None:
     finished at `pull`, and refusing to close it would leave the table holding
     an unfinished run forever — which the unique index would then read as
     "somebody is working", blocking every later run.
+
+    **`error` is cleared, because a run can finish after being deferred.**
+    `defer` writes the reason a run stopped, and the *same run* resumes later
+    and may complete — a provider that was down is back, or, as observed, a
+    resumed run finds nothing left in its batch and walks to the end. Leaving
+    the text behind produces a row that says `done` and carries an error, which
+    reads as "finished, with a problem" and is the kind of thing somebody
+    debugs for twenty minutes. What stopped it is in `steering_log` and in the
+    logs; what this column means is "why this run is not finished".
     """
     run.stage = FINAL_STAGE
     run.status = "done"
     run.completed_at = now
     run.heartbeat_at = None
+    run.error = None
     await sess.flush()
