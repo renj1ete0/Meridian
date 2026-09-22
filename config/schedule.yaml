@@ -22,17 +22,30 @@ jobs:
   - name: embed
     module: worker.embed
     args: ["--once"]
-    # Hourly. The fetch loop never embeds (§6.1 draws one pipeline and it is
-    # three passes), so chunks are unsearchable by meaning until this runs.
+    # **Disabled: the `embed` service owns this now (`B-25`).**
+    #
+    # The fetch loop never embeds (§6.1 draws one pipeline and it is three
+    # passes), so chunks are unsearchable by meaning until something runs this.
+    # Hourly was the wrong shape for it: the scheduler kills a subprocess at
+    # 1800 seconds, so a pass over a real backlog was cut off at exactly 30
+    # minutes and had to wait an hour for a window it would lose the same way.
+    # A backlog bigger than one window could never clear.
+    #
+    # `worker.embed` without `--once` is a poll loop, and the handover has
+    # always described it as one of four long-running processes, so it runs as
+    # a service and this row stays here disabled rather than deleted: it
+    # documents the cadence somebody would otherwise re-invent, and turning it
+    # back on is how you would run the pass on a deployment with no service.
     interval_seconds: 3600
-    enabled: true
+    enabled: false
 
   - name: novelty
     module: worker.novelty
     args: ["--once"]
-    # Behind `embed`, deliberately: the gate needs vectors. Running them at the
-    # same cadence means it is at most one interval behind, which is the window
-    # §6.1 accepts — a chunk that exists, is not yet searchable, and is not yet
+    # The gate needs vectors, so this trails whatever produced them. With
+    # `embed` running continuously (`B-25`) the lag is at most this interval
+    # rather than the interval plus a queue, and it stays the window §6.1
+    # accepts — a chunk that exists, is not yet searchable, and is not yet
     # known to be a duplicate.
     interval_seconds: 3600
     enabled: true

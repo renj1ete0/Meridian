@@ -330,6 +330,23 @@ let it run. `restart: unless-stopped` in compose owns per-service restarts; the
 unit owns only the stack. Do not add `Restart=` to the unit: two supervisors
 racing to restart one container is how a crash loop goes invisible.
 
+**Watch the embedding backlog as well as the queue.** The crawl and the
+embedding pass are matched for throughput on modest hardware with nothing to
+spare — measured at about 2.1 chunks/second produced against 2.2 embedded — so
+a box doing anything else, or a spell of unusually text-heavy documents, puts
+the pass behind. It runs continuously (`B-25`) and will catch up when the crawl
+slows, but a backlog that only grows over a day means the crawl is outpacing it
+and `MERIDIAN_WORKER_CONCURRENCY` should come down:
+
+```bash
+docker compose exec postgres psql -U meridian -d meridian -c \
+  "SELECT count(*) FILTER (WHERE embedding IS NULL) AS waiting, count(*) FROM chunks"
+```
+
+A corpus whose vectors are far behind its chunks is searchable only lexically,
+and nothing in the UI distinguishes that from an embedder that was never
+configured.
+
 **Watch these, roughly daily:**
 
 ```bash

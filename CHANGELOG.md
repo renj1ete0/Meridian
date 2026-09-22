@@ -234,6 +234,32 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.104.0] — 2026-09-22
+
+**Embedding keeps up, or says why it cannot.**
+
+### Changed
+
+- `B-25`: `worker.embed` runs as its own compose service in `run_forever`
+  mode, rather than as an hourly `worker.embed --once` job. The scheduler
+  kills a subprocess at 1800 seconds, so on a real crawl the pass was cut off
+  at exactly 30 minutes with 3,584 of 17,340 chunks embedded, then waited an
+  hour for a window it would lose the same way — a backlog bigger than one
+  window could never clear
+- The timetable row is disabled rather than deleted, in `config/schedule.yaml`
+  and by migration, because the seed is insert-only and the database is
+  authoritative after first boot (§13.1). It documents the cadence and is how
+  the pass runs on a deployment with no `embed` service
+
+### Added
+
+- `tests/unit/test_timetable_ownership.py`: an enabled job and a service must
+  not run the same module. Two owners both claim batches and both load
+  weights, and neither is wrong from where it is standing
+- `docs/deployment.md` now says to watch the unembedded count, not only the
+  queue: the crawl produces about 2.1 chunks/second and the pass embeds about
+  2.2, which is matched with nothing to spare on CPU-only hardware
+
 ## [0.103.2] — 2026-09-22
 
 ### Fixed

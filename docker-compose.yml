@@ -278,6 +278,55 @@ services:
       resources:
         limits: { memory: 4G }
 
+  # The embedding pass, as the long-running process it was always documented
+  # to be (`B-25`).
+  #
+  # `docs/handover.md` §1 lists four processes and this is one of them:
+  # "embedding IS NULL → vector". The deployment ran it as an hourly one-shot
+  # from the timetable instead, and a real 2h20m crawl showed what that costs.
+  # The job gets one window an hour, the scheduler kills a subprocess at 1800
+  # seconds, and the crawl produces chunks the whole time — so it was killed
+  # at exactly 30 minutes having embedded 3,584 of 17,340, booked its next
+  # attempt for an hour later, and left a backlog no subsequent window could
+  # ever clear. `last_status='timeout'` in `scheduled_jobs` was the only trace.
+  #
+  # `worker.embed` without `--once` is `run_forever`: claim a batch, embed it,
+  # sleep when there is nothing, and handle SIGTERM. It was there all along.
+  #
+  # Throughput on a CPU-only box is the other half of the answer and is not
+  # fixed here: measured at roughly 2.2 chunks/second in-process against a
+  # crawl producing about 2.1, so the two are matched with nothing to spare.
+  # `MERIDIAN_WORKER_CONCURRENCY` (default 4 lanes) is the brake if a backlog
+  # starts growing anyway — fewer lanes, fewer chunks per second.
+  embed:
+    <<: *common
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    command: ["python", "-m", "worker.embed"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker.liveness"]
+      interval: 60s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    networks: [internal]
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      MERIDIAN_EMBED_CACHE: /models
+      # `P2-19`'s fallback loads the model in *this* process when the sidecar
+      # does not answer, and this network has no route out — so without this
+      # every cold start spends its first minutes retrying a host it cannot
+      # resolve before reading the cache it had all along.
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/models:/models
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
   # The timetable, which nothing had ever run (`B-15`).
   #
   # `P5-06` built `worker.scheduler` and `seed.py` writes five `scheduled_jobs`

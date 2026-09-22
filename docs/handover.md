@@ -36,10 +36,17 @@ your head explains most of the operational surprises:
 
 ```
 worker.main       fetch → extract → chunk          24/7, no model, no vectors
-worker.embed      embedding IS NULL → vector       needs the model (or the sidecar)
+worker.embed      embedding IS NULL → vector       24/7, needs the model or the sidecar
 worker.novelty    novelty_checked_at IS NULL       Postgres and arithmetic only
 worker.scheduler  the timetable in `scheduled_jobs` spawns the above as subprocesses
 ```
+
+**Two of those are compose services and the rest are scheduled** — and getting
+that split wrong is `B-25`. `worker.embed` has a `run_forever` mode and was
+deployed as an hourly `--once` job anyway, which the scheduler then killed at
+its 1800-second ceiling. `tests/unit/test_timetable_ownership.py` now fails if
+a module is both an enabled row and a service, because two owners claiming the
+same batches is the other way to get this wrong.
 
 Each queue is a predicate on a column, so each pass is resumable with no state
 outside the table, and any of them can lag the others without anything breaking.
@@ -495,6 +502,14 @@ So a backlog bigger than one job window **never drains**: every tick dies at
 the same place, and the only trace is `last_status` in `scheduled_jobs`. The
 symptom at the far end is a corpus whose search is quietly lexical-only, which
 is the same thing an unconfigured embedder looks like (`B-22`).
+
+**Half of this is fixed** (`B-25`, `v0.104.0`): the pass runs as its own
+service in `run_forever` mode, so there is no window to be killed at and no
+hour to wait for. What is not fixed is throughput — measured at roughly 2.2
+chunks/second in-process against a crawl producing about 2.1, which is matched
+with nothing to spare, and much worse through the sidecar. If a backlog starts
+growing anyway the brake is `MERIDIAN_WORKER_CONCURRENCY`: fewer crawl lanes,
+fewer chunks per second to embed.
 
 Draining it by hand, with the crawl stopped:
 

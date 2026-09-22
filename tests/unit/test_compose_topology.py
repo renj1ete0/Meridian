@@ -221,8 +221,38 @@ def test_every_long_running_service_can_be_probed(compose: dict) -> None:
     it crashes. Listed explicitly rather than "all services", because `api` is
     probed through its own HTTP `/health` and the one-shot passes are not
     long-running at all."""
-    for name in ("postgres", "crawl4ai", "worker", "embedder"):
+    for name in ("postgres", "crawl4ai", "worker", "embed", "embedder"):
         assert compose["services"][name].get("healthcheck"), f"{name} cannot be probed"
+
+
+# --------------------------------------------------------------------------
+# The embedding pass runs continuously (task `B-25`)
+# --------------------------------------------------------------------------
+
+
+def test_the_embedding_pass_runs_as_a_service(compose: dict) -> None:
+    """`docs/handover.md` §1 lists `worker.embed` among four long-running
+    processes. It was deployed as an hourly one-shot instead, and a real crawl
+    showed the difference: killed at the scheduler's 1800-second ceiling with
+    3,584 of 17,340 chunks embedded, then an hour's wait for a window it would
+    lose the same way."""
+    assert "embed" in compose["services"], "the embedding pass has no service"
+
+
+def test_the_embedding_service_does_not_run_the_one_shot_form(compose: dict) -> None:
+    """`--once` drains the current backlog and exits. As a service that is a
+    crash loop with a restart policy, not a daemon — and `run_forever` is the
+    mode that has the idle sleep and the SIGTERM handler."""
+    command = compose["services"]["embed"]["command"]
+
+    assert "worker.embed" in command
+    assert "--once" not in command, "a service must not run the one-shot form"
+
+
+def test_the_embedding_service_stays_off_the_open_web(compose: dict) -> None:
+    """It reads chunks, asks the sidecar for vectors and writes them back.
+    Nothing in that needs a route out, and `internal` is how it is denied."""
+    assert compose["services"]["embed"]["networks"] == ["internal"]
 
 
 # --------------------------------------------------------------------------

@@ -1466,7 +1466,23 @@ Things worth doing that don't belong to a phase yet.
       row exists rather than after, and a help/about/contact path is a shape a
       prefilter can recognise. Worth deciding against real numbers rather than
       a rule list, and the numbers now exist
-- [ ] `B-22` **A backlog larger than one job window never drains.** Found in a
+- [x] `B-25` **Embedding runs continuously instead of hourly** — `v0.104.0`.
+      `worker.embed` has had a `run_forever` mode all along and
+      `docs/handover.md` has always listed it among four long-running
+      processes; the deployment ran the one-shot form on an hourly timer, and
+      the scheduler's 1800-second ceiling then truncated every pass. Now a
+      compose service, on `internal` only, with the worker's liveness probe.
+      The timetable row is disabled in the YAML *and* by migration, since the
+      seed is insert-only and §13.1 makes the database authoritative after
+      first boot. A drift test fails if any enabled job names a module that is
+      also a service — two owners claiming the same batches is the other way
+      to get this wrong, and it would look like nothing at all
+- [ ] `B-22` **A backlog larger than one job window never drains.** *(Half
+      addressed by `B-25`: there is no window to be killed at any more. What
+      remains is throughput and the signal — a pass that falls behind should
+      raise §12.5's alert rather than leave a number in a table, and the
+      sidecar is 5–10× slower than the same model in-process, which nobody has
+      explained yet.)* Found in a
       live run: the embedding backfill sends `MERIDIAN_EMBED_CHUNK_BATCH` (256)
       chunks per request against a 30s client timeout, and while the crawl is
       running that batch overruns it. The pass then reports the sidecar
