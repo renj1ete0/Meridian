@@ -367,5 +367,16 @@ docker compose exec -T postgres pg_dump -U meridian -Fc meridian > corpus.dump
 tar -C "$DATA_ROOT" -czf raw.tar.gz raw/
 ```
 
+**Say which stack you mean if more than one is up.** `scripts/_compose.sh`
+prefers the dev stack whenever its Postgres is running — deliberately, so that
+a developer does not reach production by accident — which means a snapshot
+taken while the test database happens to be up dumps *that*, successfully and
+silently:
+
+```bash
+MERIDIAN_COMPOSE="docker compose -f docker-compose.local.yml" DATA_ROOT=.localdata \
+  make snapshot-corpus
+```
+
 Keep both or neither — a dump whose `sources.raw_path` values point at files you
 did not keep is not a corpus, it is a catalogue.

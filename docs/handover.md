@@ -451,6 +451,27 @@ convention here for "this is going into an `extra`". If a third route into
 `extra` appears — a dict built by a helper, say — assume this failure will
 arrive through it, and extend the test before the route is used.
 
+### `make snapshot-corpus` snapshots whichever Postgres it finds first
+
+`scripts/_compose.sh` picks the dev stack whenever `docker-compose.dev.yml`'s
+Postgres is running, and says why: somebody with both files present is usually
+working against dev, and reaching production by accident is the expensive way
+round to be wrong. That is right, and it is also a trap the moment a *third*
+situation exists — the local stack (`docker-compose.local.yml`) running a real
+crawl while dev Postgres is up for the test suite. The snapshot then dumps the
+test database and tars `.devdata/raw`, and both succeed.
+
+Name the stack and the data root when the corpus you mean is the local one:
+
+```bash
+MERIDIAN_COMPOSE="docker compose -f docker-compose.local.yml" DATA_ROOT=.localdata \
+  make snapshot-corpus
+```
+
+The manifest records row counts, so the way this is caught after the fact is a
+snapshot whose numbers are far smaller than the run that was supposed to be in
+it.
+
 ### Two ways a benchmark lies on a small corpus
 
 Both were live in `scripts/benchmark_search.py` before its own output exposed
