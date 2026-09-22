@@ -11,18 +11,25 @@ from __future__ import annotations
 import pytest
 
 from meridian_core.runs import FINAL_STAGE, STAGES
-from worker.orchestrate import BUILT_BY, Journal, cycle
+from worker.orchestrate import BUILT_BY, RUNNERS, Journal, cycle
 
 
-def test_every_stage_says_who_builds_it() -> None:
-    """A stage missing from the table would log as "needs nothing".
+def test_every_stage_is_either_built_or_says_who_builds_it() -> None:
+    """A stage in neither table would log as "needs nothing".
 
     Which reads as a stage that ran and found nothing to do — the opposite of
     the truth, and indistinguishable from it in a log nobody is watching.
     """
-    unexplained = set(STAGES) - set(BUILT_BY) - {FINAL_STAGE}
+    unexplained = set(STAGES) - set(BUILT_BY) - set(RUNNERS) - {FINAL_STAGE}
 
-    assert not unexplained, f"stages with no task named: {sorted(unexplained)}"
+    assert not unexplained, f"stages with neither a runner nor a task named: {sorted(unexplained)}"
+
+
+def test_no_stage_is_both_built_and_unbuilt() -> None:
+    """One table says "this is done" and the other says "this is not". A stage
+    in both would report whichever the code happened to consult first, and
+    `P4-16` moved three stages from one to the other."""
+    assert not set(BUILT_BY) & set(RUNNERS)
 
 
 def test_the_final_stage_is_not_work() -> None:

@@ -13,15 +13,18 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.76.2`. 1990 backend tests against a real Postgres, 296 frontend.**
+**`v0.103.0`. 2863 backend tests against a real Postgres, 317 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
 a UI, and through MCP. Phase 3's read surface is built and waits only on a
-Cloudflare account. **Phase 4's spine is built and has produced nothing** — the
+Cloudflare account. **Phase 4 now reasons, against a fake model only.** The
 graph store, entity resolution, the write tools, the run state machine, the
-cycle and the model client all exist and are tested, and no run has written an
-edge, because `extract` and `tag` still lack their prompt and parse (`P4-16`).
+cycle, the model client and — since `P4-16` — the prompts, the parse and the
+mention-to-node step all exist. A cycle over a scripted answer writes entities,
+edges, tags and the mark. No run has called a *real* model: that needs a
+registry row with a working key and a budget row, and then `P4-17`, because
+nothing schedules a run.
 
 The single thing standing between here and phase 2's go/no-go is `P1-16`: the
 48-hour unattended run. It has not happened.
@@ -77,16 +80,17 @@ worker.retopic    topic labels onto sources crawled before P2-14
 
 ### What still does not exist
 
-- **The graph.** `entities`, `edges`, `observations` and `attribute_values` are
-  tables with DTOs, drift tests and provenance rules, and nothing *derives* a
-  row into them. `P6-05`'s annotations are the one exception and are written by
-  hand, so "no edges exist" is now "no edge was produced by a model". Apache AGE
-  (`P4-01`) is not installed; it does support PG17 (v1.6.0), so it is not blocked
-  on a Postgres downgrade, only on not swapping the image mid-deploy.
-- **Any LLM call.** The orchestrator does not exist. Nothing in this repository
-  has ever called a model that generates text. `P4-05`'s `validation.py` is the
-  part that is ready for one: every guard §11.8 asks for, tested, with no write
-  tool yet calling them.
+- **A graph with anything in it.** `entities`, `edges`, `observations` and
+  `attribute_values` are tables with DTOs, drift tests, provenance rules and,
+  since `P4-16`, a path that writes them — exercised against a scripted model,
+  not a real one. `P6-05`'s annotations remain the only rows a fresh install
+  has, and they are written by hand. Apache AGE (`P4-01`) is not installed; it
+  does support PG17 (v1.6.0), so it is not blocked on a Postgres downgrade,
+  only on not swapping the image mid-deploy.
+- **Any real LLM call.** `provider.complete()` exists and the stages call it;
+  nothing in this repository has yet reached a model that generates text,
+  because no deployment has had a key and a budget row at the same time. The
+  orchestrator also has no service of its own (`P4-17`).
 - **spaCy NER.** `P5-02` built the gazetteer and the `EntityRuler` patterns, and
   spaCy is an optional extra (`uv sync --extra ner`) that the worker image does
   not carry. `P5-01`'s frontier NER and TF-IDF are unbuilt.
@@ -300,6 +304,59 @@ one that never had it and simply extracts worse.
 `/schema` and `/crawl` refuse. The probe sends the token anyway.
 
 ## 3. Traps that have already cost time
+
+### Novelty-first ordering and a high-water mark cannot both be right
+
+§11.9 says that when a day's chunks exceed the token budget, the run should
+"process highest-novelty first". §6.3 says the run tracks the last chunk id it
+consumed and pulls everything after it. Implement both and the second one eats
+the first: reason over chunk 900 because it scored well, mark the run at 900,
+and chunks 400–899 are now behind the mark and will never be looked at. Nothing
+reports it — the corpus is complete, only the reasoning over it has holes.
+
+A watermark describes a *prefix*, not a set. So the batch is ordered by
+`chunk_id` and novelty is spent as a *filter* instead: known duplicates
+(`duplicate_of IS NOT NULL`) and superseded chunks (`P1-32`) are left out, which
+is the same saving without the hole. Ordering by novelty needs a per-chunk
+"reasoned over" flag, which is a different design and a bigger table.
+
+### An absent signal counted as zero splits every entity it touches
+
+`resolution.score` weights context overlap heaviest — §5.5 is explicit, and the
+reason is "Cambridge" the city against "Cambridge" the university. That is the
+right weighting for comparing two *stored* entities, each with a neighbourhood
+built from many mentions.
+
+It is the wrong weighting for a mention read out of one batch, and the failure
+is not subtle. A mention carries the chunks of the passage it came from; an
+entity created an hour ago carries the chunks it was created from. Two
+identical names from two different passages share no chunk, so context scores
+0.0, and with string 1.0 the combined score is `(1.0×0.3 + 0.0×0.4) / 0.7 =
+0.43` — below `SEPARATE_BELOW`. **An exact name match founds a new node.** Every
+passage mentioning a thing creates another copy of it, which is precisely the
+fragmentation §5.5 opens with, arrived at through the mechanism meant to
+prevent it.
+
+The module already states the rule that fixes it: absent signals are dropped
+and the weights renormalised, never counted as zero. A mention seen once has no
+neighbourhood — its context is absent, not contradictory — so `resolve_mention`
+scores with an empty context and records the chunks on the row it writes. The
+test that pins this is `test_the_same_name_in_two_passages_is_one_node`, and it
+looks like a test of the obvious, which is why it is worth keeping.
+
+### A dry run that called the model would understate the bill
+
+`--dry-run` is a transaction that is rolled back, and that is a strong
+guarantee for writes. It is exactly the wrong one for spending: the HTTP
+request to the provider is not in the transaction, but `reserve_tokens` and
+`settle_tokens` are. A dry run that called a model would spend real money and
+roll back the record of having spent it — and §11.9's whole point is that the
+first signal of the compounding loop would otherwise be the bill.
+
+So the two model stages check `journal.dry_run` and stop before the call,
+saying what they would have sent. That is the one place in this file where a
+stage is allowed to know which mode it is in, and the reason is that the
+transaction cannot cover what happens outside the database.
 
 ### Alembic does not see CHECK constraints on existing tables
 
@@ -1447,25 +1504,31 @@ monotonically to zero is the signal; a healthy run keeps finding more than it
 drains. Two of the three non-link discovery channels were dead once before and
 nothing reported it.
 
-### Gated on a run that produces an edge
+### Gated on a real model call, then on something that schedules one
 
-**Phase 4's spine is built.** The store, entity resolution and reversible
-merges, untrusted-data framing, capability routing, the run state machine and
-its cycle, the four write tools and the model client all exist, and
-`python -m worker.orchestrate --dry-run` walks a whole cycle today. So the
-old framing — "gated on the graph" — is no longer the right one: the graph
-exists and nothing has put anything in it.
+**Phase 4 reasons now.** The store, entity resolution and reversible merges,
+untrusted-data framing, capability routing, the run state machine and its
+cycle, the four write tools, the model client and — since `P4-16` — the
+prompts, the parse and the mention-to-node step all exist. A cycle over a
+scripted answer writes entities, edges, attribute values and the mark, and a
+malformed answer costs a batch rather than a run.
 
-What is missing is `P4-16`, the prompt each of `extract` and `tag` sends and the
-parse that turns an answer into tool arguments. Until it lands, no run has
-written an edge, and `P6-01`–`P6-07` (canvas, path mode, node panel, synthesis)
-have nothing to draw. `P6-10` still needs `P5-03`'s coverage scoring, which
-needs the schema-aware pass, which needs the edges.
+Two things are left before an edge exists that a model actually produced, and
+neither is code: **a registry row with a working key**, and **a budget row**,
+because an unconfigured token cap refuses rather than reading as unlimited. A
+run with neither defers at `extract` and says which one is missing.
 
-**The parse is the load-bearing half of `P4-16`, not the prompt.** §11.8's
-position is that a model's output is untrusted, so it is validated (`P4-05`)
-rather than believed — and a parse that *raised* on a malformed answer would let
-one bad response end a run that should have skipped a batch.
+Then `P4-17`: nothing *runs* the orchestrator. `services/orchestrator/` has no
+Dockerfile and `config/schedule.yaml` has no synthesis job, so a run is
+something a person types. Note the constraint that shapes it — the worker image
+deliberately lacks `meridian-core[agent]`, so this is a different image rather
+than the worker under another command.
+
+**The parse was the load-bearing half of `P4-16`, not the prompt**, and it
+stayed that way: §11.8's position is that a model's output is untrusted, so it
+is validated (`P4-05`) rather than believed, and a parse that *raised* on a
+malformed answer would let one bad response end a run that should have skipped
+a batch.
 
 **`P1-32` is decided and built**, so the thing that had to happen before the
 first edge has happened: chunks are superseded rather than deleted, and a

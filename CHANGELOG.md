@@ -234,6 +234,50 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.103.0] — 2026-09-22
+
+**A run can write an edge.**
+
+### Added
+
+- `P4-16`: `meridian_core/proposals.py` — the prompt `extract` and `tag` send,
+  and the parse that turns an answer into tool arguments
+- `meridian_core/schemas/proposals.py` — `EdgeProposal`, `TagProposal`,
+  `Mention`: the one boundary in this package whose input was generated rather
+  than typed, and the strictest schemas here because of it
+- `meridian_core/mentions.py` — `resolve_mention`, the step between a name a
+  model read and the `entity_id` `add_edge` requires
+- `worker/orchestrate.py`: `pull`, `extract` and `tag` are built. The remaining
+  four stages still name the task that builds them
+
+### Why it is shaped this way
+
+- **The parse never raises.** A parse that raised on a malformed answer would
+  let one bad response end an unattended run that should have skipped a batch.
+  Everything unusable comes back as a rejection with a reason, and the journal
+  prints it
+- **A truncated answer keeps its good items.** Cut off at `max_tokens` is the
+  commonest malformation there is and it is malformed only at the end, so the
+  array is tried first and then each object on its own. The truncation is
+  reported beside the items that survived rather than instead of them
+- **The model cites passage numbers; the server owns the ids.** An id a model
+  supplied is an id it could invent, and an invented one that happens to exist
+  attaches a fabricated claim to a real chunk
+- **A dry run does not call the model.** It would spend real money and then
+  roll back the record of having spent it, leaving the ledger understated
+- **The batch is ordered by chunk id, not by novelty.** §11.9's "most novel
+  first" is incompatible with a high-water mark, which describes a prefix and
+  not a set. Novelty is spent as a filter instead
+- **The mark moves in `tag`, not in `extract`.** Both stages read the batch, so
+  it has been reasoned over only when the second finishes
+- **A mention is scored without context.** It has been seen once, so "shares no
+  neighbours" is an absence rather than a disagreement — and §5.5 drops absent
+  signals rather than counting them as zero. Counting it sank an exact name
+  match to 0.43, below the separation threshold, so every passage founded a new
+  node
+- **A model may not create an annotation.** That node type means "a person
+  wrote this" (§12.5), and nothing downstream could tell a forged one apart
+
 ## [0.102.0] — 2026-09-20
 
 **Something finally calls the model.**

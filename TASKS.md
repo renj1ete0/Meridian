@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.102.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2776 backend tests
+**`v0.103.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2863 backend tests
 against a real Postgres, 317 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
@@ -32,22 +32,21 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P0-15`'s held-out question set must be written *before* that judgement, not after.
 2. **A Cloudflare account**, for `P3-05` and the rest of `P3-09`. The code side is done
    and tested; what is missing is a tunnel, an Access application and an AUD tag.
-3. **A run that produces an edge.** Phase 4's spine is now built — the store
-   (`P4-01`), resolution and reversible merges (`P4-02`, `P4-03`), untrusted-data
-   framing (`P4-06`), capability routing (`P4-07`), the run state machine and its
-   cycle (`P4-08`, `P4-09`, `P4-11`), the four write tools (`P4-04`) and the model
-   client (`P4-15`). `python -m worker.orchestrate --dry-run` walks a whole cycle
-   today. What is missing is `P4-16`: the prompt each of `extract` and `tag` sends,
-   and the parse that turns an answer into tool arguments. **Until that lands no run
-   has written an edge**, so `P5-03`–`P5-05`, `P6-01`–`P6-03`, `P6-06`, `P6-07`,
-   `P6-10` and all of phase 7 are still waiting — not on the graph existing, which it
-   does, but on something putting data in it.
+3. **An agent with a key, and something that schedules a run.** Phase 4's first
+   three stages are built as of `P4-16`: `pull` chooses a batch, `extract` and
+   `tag` each send a prompt, parse the answer and write through the four tools,
+   and a batch survives a malformed answer. Against a fake model the whole path
+   writes edges, tags, entities and the mark. **What has never happened is a
+   call to a real one**, and two things stand in the way — a registry row with
+   a working key, and a budget row, since an unconfigured cap refuses rather
+   than reading as unlimited. Neither is code. After that, `P4-17`: nothing
+   *runs* the orchestrator on a timetable, because `services/orchestrator/`
+   still has no Dockerfile and `config/schedule.yaml` has no synthesis job.
 
 **Buildable today** is two entries.
 
-1. **`P4-16`** — the prompt and the parse for `extract` and `tag`. Everything around
-   them exists, and this is the one task that changes what the system *does*: it is
-   what turns a cycle that reports each stage unbuilt into one that writes edges.
+1. **`P4-17`** — give the orchestrator a service and a place in the timetable.
+   Until it has one, a synthesis run is something a person types.
 2. **`P6-23`** — admin: agent registry and run history. Its own argument was that both
    tables stay empty until phase 4 runs something and "an empty screen teaches nothing";
    `runs` now holds real rows with stages, statuses, heartbeats and counters, so there
@@ -56,7 +55,7 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 `P5-01` stays open on its own argument — entity co-occurrence has no consumer until
 `P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
 
-Done this stretch, for the record: `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
+Done this stretch, for the record: `P4-16`, `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
 `P3-10`, `P3-11`, `B-07`, `B-09`, `B-11`, `P2-20`, `P5-07`, and phase 4's spine —
 `P4-01` through `P4-04`, `P4-06` through `P4-09`, `P4-11` and `P4-15`. `P1-35` (a
 Semantic Scholar key, ten minutes) is still ⚑ human and is felt during the 48h run.
@@ -822,13 +821,35 @@ deploy runbook whose first two commands could not work (`B-17`).
       into a run; the second is quieter, because the SDK falls back to its own
       default variable and the deployment works by coincidence wherever that is
       set. Fixed in the YAML and, per the `P4-07` lesson, in a migration
-- [ ] `P4-16` **The extraction and tagging stages' own middle.** Routing, the
-      call and the writes all exist; what `extract` and `tag` still lack is the
-      prompt each sends and the parse that turns an answer into tool
-      arguments. The parse is the load-bearing half — §11.8's position is that
-      a model's output is untrusted, so it is validated (`P4-05`) rather than
-      trusted, and a parse that raised on a malformed answer would make one bad
-      response end a run that should have skipped a batch
+- [x] `P4-16` **The extraction and tagging stages' own middle** — `v0.103.0`.
+      `meridian_core/proposals.py` holds the prompt each stage sends and the
+      parse that turns an answer into tool arguments; `mentions.py` is the step
+      between a name and the `entity_id` `add_edge` demands. **The parse never
+      raises**, which was the load-bearing half: everything unusable comes back
+      as a rejection with a reason, so one bad response costs a batch rather
+      than a run. A truncated answer — the commonest malformation, and
+      malformed only at its end — keeps the items that completed, and says it
+      was truncated. **The model cites passage numbers, never chunk ids**: an
+      id it supplied is an id it could invent, and an invented one that exists
+      would attach a fabricated claim to a real chunk. **A dry run calls no
+      model**, because it would spend real money and then roll back the record
+      of having spent it. Two things were found on the way in. §11.9's "most
+      novel first" cannot coexist with a high-water mark, which describes a
+      prefix rather than a set — novelty is a filter here, not an ordering. And
+      scoring a fresh mention with the batch's chunks as its context counted a
+      non-overlap as *disagreement*, sinking an exact name match to 0.43 and
+      founding a new node for every passage; §5.5 says an absent signal is
+      dropped, and a mention seen once has no neighbourhood to compare
+- [ ] `P4-17` **The orchestrator has no service and no place in the timetable.**
+      `worker.orchestrate` runs its stages when somebody types it, and nothing
+      types it: `services/orchestrator/Dockerfile` does not exist (the compose
+      service is profile-gated behind `phase4` for that reason) and
+      `config/schedule.yaml` has no synthesis job. §6.3 wants a daily run,
+      early-triggered when unprocessed novel chunks cross a threshold. Note the
+      invariant this must not break — the worker image deliberately lacks
+      `meridian-core[agent]` (§2.1), so the orchestrator is a *different* image
+      rather than the worker under another command, which is what every other
+      `python -m worker.<x>` service is
 - [x] `P4-05` `validation.py` — server-side guards, node existence, domain
       allowlist, caps — `v0.76.0`. Built before the write tools that call it
       (`P4-04`), because §11.8 specifies the rules precisely enough for the test

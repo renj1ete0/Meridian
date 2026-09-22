@@ -30,6 +30,32 @@ until something killed it. The loop's exit condition is progress, not emptiness.
 the same reason `worker/commands.py` refuses by name: "there is no tagging
 stage" and "the tagging stage did nothing" are indistinguishable from a log,
 and only one of them is true.
+
+`P4-16` filled in the first three — `pull`, `extract` and `tag` — and four
+decisions in them are worth reading before changing anything here:
+
+**A dry run does not call the model.** It would spend real money and then roll
+the *record* of having spent it back with everything else, so the ledger would
+be wrong in the one direction that matters: understated. A dry run says which
+batch it would send and how large the prompt is, and stops there.
+
+**The batch is ordered by chunk id, never by novelty.** §11.9 suggests
+processing the most novel first when a day exceeds the budget, and that is
+incompatible with a high-water mark: reasoning over chunk 900 and then marking
+the run at 900 silently abandons 400 through 899. Novelty is spent as a filter
+instead — known duplicates are left out — and the order stays the order the
+mark can describe.
+
+**The mark moves in `tag`, not in `extract`.** Both stages read the batch
+`pull` chose, so the batch has been reasoned over only once the second of them
+is done. A failure in between leaves the mark where it was and the batch is
+pulled again next cycle, which is safe because `add_edge` corroborates a claim
+it already holds rather than writing it twice.
+
+**One refusal does not end a run.** A malformed proposal, a citation out of
+range, a write the guards refuse — each is noted in the journal and the batch
+carries on. The run is deferred only when the model itself is unreachable,
+which is §13.4's answer rather than a crash.
 """
 
 from __future__ import annotations
@@ -46,9 +72,23 @@ from typing import Final
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core.budget import BudgetError, load_budget
 from meridian_core.db import dispose_engines, get_sessionmaker
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
-from meridian_core.models import Chunk, Run
+from meridian_core.mentions import resolve_mention
+from meridian_core.models import Agent, AttributeDefinition, Chunk, Entity, Run, Source, TopicConfig
+from meridian_core.proposals import (
+    CitationOutOfRange,
+    Passage,
+    chunk_ids_for,
+    extract_prompt,
+    parse_edges,
+    parse_tags,
+    tag_prompt,
+)
+from meridian_core.provider import Completion, NotConfigured, ProviderError, complete
+from meridian_core.resolution import expansions_from_gazetteer
+from meridian_core.routing import NoAgentAvailable
 from meridian_core.runs import (
     FINAL_STAGE,
     STAGES,
@@ -56,13 +96,20 @@ from meridian_core.runs import (
     advance,
     advancing,
     begin_or_resume,
+    defer,
     finish,
 )
+from meridian_core.validation import ValidationError
+from meridian_core.writes import add_edge, tag_entity
 
 log = get_logger(__name__)
 
 __all__ = [
+    "BATCH",
     "BUILT_BY",
+    "RUNNERS",
+    "Batch",
+    "Deferred",
     "Journal",
     "cycle",
     "pending_work",
@@ -70,18 +117,23 @@ __all__ = [
     "step",
 ]
 
+#: How many chunks one cycle reasons over. Small enough that a frontier model
+#: reads the whole batch attentively rather than summarising the middle of it,
+#: and small enough that a failure costs one batch rather than a day. The
+#: corpus is drained by running more cycles, which is what `max_cycles` bounds.
+BATCH: Final[int] = 40
+
+#: How many existing entity names the tagging prompt lists for spelling. A long
+#: list is expensive on every call and stops being read; this is enough to
+#: anchor the names a batch is actually about.
+NAMES_IN_PROMPT: Final[int] = 60
+
 #: Which task builds each stage. Named rather than omitted: a stage missing
 #: from a log reads as a stage that ran and found nothing, and the two want
 #: entirely different responses.
 #:
 #: `done` is absent because it is not work — it is the state of having finished.
 BUILT_BY: Final[dict[str, str]] = {
-    # Routing (`P4-07`), the call (`P4-15`) and the writes (`P4-04`) all exist.
-    # What is left for these three is their own middle: the prompt each one
-    # sends and the parse that turns an answer into arguments (`P4-16`).
-    "pull": "`P4-16` — the batch a run reasons over is chosen by the stage that reads it",
-    "extract": "`P4-16`'s prompt and parse; routing, the call and `add_edge` are ready",
-    "tag": "`P4-16`'s prompt and parse; `P7-01` still gates a new attribute",
     "score": "`P5-03`'s coverage scoring, which is schema-aware",
     "analogies": "`P7-04`'s analogical expansion",
     "gap": "`P5-04`'s gap analysis",
@@ -154,23 +206,402 @@ async def pending_work(sess: AsyncSession, run: Run) -> int:
     return int(await sess.scalar(stmt) or 0)
 
 
-async def step(sess: AsyncSession, run: Run, *, journal: Journal, now: dt.datetime) -> str:
+class Deferred(RuntimeError):
+    """The run cannot continue now, and saying so is the answer (§13.4).
+
+    Raised only when the model itself could not be reached — no agent declares
+    the task, every agent in the chain refused, or the budget will not allow
+    the call. Not for a bad proposal or a refused write: those are ordinary and
+    the batch carries on without them.
+    """
+
+
+@dataclasses.dataclass
+class Batch:
+    """The chunks one cycle reasons over, and what the stages learn about them.
+
+    Carried between stages rather than re-queried, for two reasons. `extract`
+    and `tag` must see the *same* passages or their citation numbers mean
+    different things, and re-running the query would re-read a table the
+    crawler is writing to concurrently.
+    """
+
+    passages: list[Passage] = dataclasses.field(default_factory=list)
+    #: Set once a model has actually answered over this batch. The mark may
+    #: only move over chunks something reasoned about, and "the stage ran" is
+    #: not the same claim as "the model was reached".
+    reasoned: bool = False
+    #: Provenance for everything written from this batch, from the agent that
+    #: answered rather than from the registry's preferences (§11.12).
+    produced_by: str | None = None
+    model: str | None = None
+    quality_tier: int | None = None
+
+    @property
+    def last_chunk_id(self) -> int | None:
+        return max((passage.chunk_id for passage in self.passages), default=None)
+
+    def provenance(self, completion: Completion, quality_tier: int | None) -> None:
+        self.reasoned = True
+        self.produced_by = completion.agent_id
+        self.model = completion.model
+        self.quality_tier = quality_tier
+
+
+async def _topics(sess: AsyncSession) -> list[str]:
+    """The active topics, for the prompt. Steering is a weight vector (§10),
+    and the weights are not the model's business — which topics exist is."""
+    rows = await sess.scalars(
+        select(TopicConfig.topic).where(TopicConfig.status == "active").order_by(TopicConfig.topic)
+    )
+    return list(rows)
+
+
+async def _quality_tier(sess: AsyncSession, agent_id: str) -> int | None:
+    """The tier of the agent that answered.
+
+    Read from the registry rather than carried on the completion: §11.12's
+    downgrade guard compares tiers across runs, so the number has to be the
+    one the registry currently states, not one copied at call time.
+    """
+    agent = await sess.get(Agent, agent_id)
+    return agent.quality_tier if agent is not None else None
+
+
+async def _pull(
+    sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now: dt.datetime
+) -> None:
+    """Choose the chunks this cycle reasons over (§6.3).
+
+    **Ordered by id, filtered by novelty** — see the module docstring. The
+    filter drops chunks the gate already judged duplicates and chunks a
+    re-crawl has superseded (`P1-32`): both are text the corpus holds
+    elsewhere, and reasoning over them again costs tokens to reach the same
+    conclusion.
+
+    Takes `now` and does not use it: every runner has one signature, so a stage
+    added later cannot be called with arguments the dispatcher does not send.
+    """
+    del now
+    stmt = (
+        select(Chunk, Source)
+        .join(Source, Chunk.source_id == Source.source_id)
+        .where(Chunk.superseded_at.is_(None), Chunk.duplicate_of.is_(None))
+        .order_by(Chunk.chunk_id)
+        .limit(BATCH)
+    )
+    if run.last_chunk_id is not None:
+        stmt = stmt.where(Chunk.chunk_id > run.last_chunk_id)
+
+    rows = (await sess.execute(stmt)).all()
+    batch.passages = [
+        Passage(
+            chunk_id=chunk.chunk_id,
+            text=chunk.text,
+            url=source.url,
+            source_tier=source.source_tier,
+        )
+        for chunk, source in rows
+    ]
+
+    if not batch.passages:
+        journal.note("pull", "nothing past the mark")
+        return
+    first, last = batch.passages[0].chunk_id, batch.passages[-1].chunk_id
+    journal.note("pull", f"{len(batch.passages)} chunks, {first}–{last}")
+
+
+async def _ask(
+    sess: AsyncSession,
+    run: Run,
+    *,
+    task_type: str,
+    prompt,
+    journal: Journal,
+    stage: str,
+    now: dt.datetime,
+) -> Completion:
+    """One model call, with the two refusals that end a run and the one that does not.
+
+    A budget that is unset refuses here rather than in the provider, because
+    the message differs: "nobody configured a token cap" sends somebody to
+    Admin, while "every agent refused" sends them to the registry or to the
+    provider's status page.
+    """
+    budget = await load_budget(sess)
+    if budget is None:
+        await defer(sess, run, "no budget is configured, so no run may spend tokens (§11.9)")
+        journal.note(stage, "deferred: no budget configured")
+        raise Deferred("no budget configured")
+
+    try:
+        completion = await complete(
+            sess,
+            run,
+            task_type,
+            prompt=prompt.user,
+            system=prompt.system,
+            token_cap=budget.max_tokens_per_run,
+            now=now,
+        )
+    except (NoAgentAvailable, ProviderError, NotConfigured, BudgetError) as exc:
+        # §13.4: a deferred run, not a crash. The run stays resumable and the
+        # batch is pulled again when something can answer for it.
+        await defer(sess, run, f"{task_type}: {exc}")
+        journal.note(stage, f"deferred: {exc}")
+        raise Deferred(str(exc)) from exc
+
+    journal.note(
+        stage,
+        f"{completion.agent_id} answered with {len(completion.text):,} characters "
+        f"for {completion.total_tokens:,} tokens",
+    )
+    return completion
+
+
+async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now) -> None:
+    """Relations, from the passages that state them (§5.4, §11.6).
+
+    Each proposal is resolved, written and counted on its own. A proposal the
+    guards refuse is noted and skipped: `validation.py` exists to refuse model
+    output, and a refusal it produced is the system working rather than an
+    error to propagate.
+    """
+    if not batch.passages:
+        journal.note("extract", "no batch")
+        return
+
+    prompt = extract_prompt(batch.passages, topics=await _topics(sess))
+    if journal.dry_run:
+        journal.note(
+            "extract",
+            f"would send {len(batch.passages)} passages, {prompt.characters:,} characters; "
+            "no model is called on a dry run",
+        )
+        return
+
+    completion = await _ask(
+        sess,
+        run,
+        task_type="relation_extraction",
+        prompt=prompt,
+        journal=journal,
+        stage="extract",
+        now=now,
+    )
+    batch.provenance(completion, await _quality_tier(sess, completion.agent_id))
+
+    parsed = parse_edges(completion.text)
+    journal.note("extract", parsed.summary)
+    for rejection in parsed.rejected:
+        journal.note("extract", f"dropped — {rejection}")
+
+    expansions = await expansions_from_gazetteer(sess)
+    for proposal in parsed.accepted:
+        try:
+            chunk_ids = chunk_ids_for(proposal.citations, batch.passages)
+        except CitationOutOfRange as exc:
+            journal.note("extract", f"dropped — {exc}")
+            continue
+
+        try:
+            subject = await resolve_mention(
+                sess,
+                name=proposal.subject.name,
+                node_type=proposal.subject.node_type,
+                jurisdiction=proposal.subject.jurisdiction,
+                supporting_chunk_ids=chunk_ids,
+                produced_by=batch.produced_by,
+                model=batch.model,
+                quality_tier=batch.quality_tier,
+                expansions=expansions,
+                now=now,
+            )
+            target = await resolve_mention(
+                sess,
+                name=proposal.object.name,
+                node_type=proposal.object.node_type,
+                jurisdiction=proposal.object.jurisdiction,
+                supporting_chunk_ids=chunk_ids,
+                produced_by=batch.produced_by,
+                model=batch.model,
+                quality_tier=batch.quality_tier,
+                expansions=expansions,
+                now=now,
+            )
+            journal.call(
+                "add_edge",
+                from_node=subject.entity.entity_id,
+                to_node=target.entity.entity_id,
+                relation_type=proposal.relation,
+                supporting_chunk_ids=chunk_ids,
+            )
+            result = await add_edge(
+                sess,
+                run,
+                from_node=subject.entity.entity_id,
+                to_node=target.entity.entity_id,
+                relation_type=proposal.relation,
+                supporting_chunk_ids=chunk_ids,
+                produced_by=batch.produced_by,
+                model=batch.model,
+                quality_tier=batch.quality_tier,
+                confidence=proposal.confidence,
+                stance=proposal.stance,
+                certainty=proposal.certainty,
+                topic_labels=proposal.topic_labels,
+                similarity_dimension=proposal.similarity_dimension,
+                disanalogy=proposal.disanalogy,
+                now=now,
+            )
+        except ValidationError as exc:
+            journal.note("extract", f"refused — {exc}")
+            continue
+        journal.note("extract", f"{proposal.relation}: {result.detail}")
+
+
+async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now) -> None:
+    """Attribute values, onto entities the passages describe (§7.3).
+
+    **This is where the mark moves**, because it is the last stage that reads
+    the batch. It moves even when there was nothing to tag — an empty active
+    attribute set is a configuration, not a failure, and a run that refused to
+    advance over it would re-read the same batch until somebody noticed.
+    """
+    if not batch.passages:
+        journal.note("tag", "no batch")
+        return
+
+    attributes = list(
+        (
+            await sess.execute(
+                select(AttributeDefinition.name, AttributeDefinition.description)
+                .where(AttributeDefinition.status == "active")
+                .order_by(AttributeDefinition.name)
+            )
+        ).all()
+    )
+
+    if not attributes:
+        journal.note("tag", "no active attributes; nothing to tag (§7.3)")
+        return
+
+    chunk_ids = [passage.chunk_id for passage in batch.passages]
+    known = list(
+        await sess.scalars(
+            select(Entity.canonical_name)
+            .where(Entity.redirects_to.is_(None), Entity.supporting_chunk_ids.overlap(chunk_ids))
+            .order_by(Entity.entity_id.desc())
+            .limit(NAMES_IN_PROMPT)
+        )
+    )
+
+    prompt = tag_prompt(batch.passages, attributes=attributes, entities=known)
+    if journal.dry_run:
+        journal.note(
+            "tag",
+            f"would send {len(batch.passages)} passages against {len(attributes)} "
+            "attributes; no model is called on a dry run",
+        )
+        return
+
+    completion = await _ask(
+        sess, run, task_type="tag_attributes", prompt=prompt, journal=journal, stage="tag", now=now
+    )
+    quality_tier = await _quality_tier(sess, completion.agent_id)
+
+    parsed = parse_tags(completion.text)
+    journal.note("tag", parsed.summary)
+    for rejection in parsed.rejected:
+        journal.note("tag", f"dropped — {rejection}")
+
+    expansions = await expansions_from_gazetteer(sess)
+    for proposal in parsed.accepted:
+        try:
+            cited = chunk_ids_for(proposal.citations, batch.passages)
+        except CitationOutOfRange as exc:
+            journal.note("tag", f"dropped — {exc}")
+            continue
+
+        try:
+            entity = await resolve_mention(
+                sess,
+                name=proposal.entity.name,
+                node_type=proposal.entity.node_type,
+                jurisdiction=proposal.entity.jurisdiction,
+                supporting_chunk_ids=cited,
+                produced_by=completion.agent_id,
+                model=completion.model,
+                quality_tier=quality_tier,
+                expansions=expansions,
+                now=now,
+            )
+            journal.call(
+                "tag_entity",
+                entity_id=entity.entity.entity_id,
+                attribute=proposal.attribute,
+                supporting_chunk_ids=cited,
+            )
+            result = await tag_entity(
+                sess,
+                run,
+                entity_id=entity.entity.entity_id,
+                attribute=proposal.attribute,
+                supporting_chunk_ids=cited,
+                produced_by=completion.agent_id,
+                model=completion.model,
+                quality_tier=quality_tier,
+                value=proposal.value,
+                value_numeric=proposal.value_numeric,
+                confidence=proposal.confidence,
+                now=now,
+            )
+        except ValidationError as exc:
+            journal.note("tag", f"refused — {exc}")
+            continue
+        journal.note("tag", result.detail)
+
+
+#: The stages that are built, and what runs them. A stage in here must not
+#: also be in `BUILT_BY` — one table says "this is done" and the other says
+#: "this is not", and a stage in both would log whichever the code happened to
+#: check first.
+RUNNERS: Final[dict[str, object]] = {"pull": _pull, "extract": _extract, "tag": _tag}
+
+
+async def step(
+    sess: AsyncSession,
+    run: Run,
+    *,
+    journal: Journal,
+    now: dt.datetime,
+    batch: Batch | None = None,
+) -> str:
     """Do the current stage, then move to the next. Returns the new stage.
 
-    Every stage is presently a refusal that names its task. The structure is
-    the deliverable: a stage that lands drops in here and inherits the
-    resumability, the heartbeat and the dry-run guarantee without restating
-    any of them.
+    The window is where a stage goes. Inside it, writes happen and
+    `progress.reached(chunk_id)` records how far they got; on the way out the
+    mark moves once, after them (§6.3, `P4-11`). A stage that lands here
+    inherits that ordering without restating it — and one that raises leaves
+    the mark exactly where it was.
     """
     stage = run.stage or STAGES[0]
-    # The window is where a stage goes. Inside it, writes happen and
-    # `progress.reached(chunk_id)` records how far they got; on the way out the
-    # mark moves once, after them (§6.3, `P4-11`). A stage that lands here
-    # inherits that ordering without restating it — and one that raises leaves
-    # the mark exactly where it was.
+    held = batch if batch is not None else Batch()
+    runner = RUNNERS.get(stage)
+
     async with advancing(sess, run, now=now) as progress:
-        journal.note(stage, f"not built — needs {BUILT_BY.get(stage, 'nothing (it is the end)')}")
-        del progress  # nothing has been written, so nothing is marked
+        if runner is None:
+            journal.note(
+                stage, f"not built — needs {BUILT_BY.get(stage, 'nothing (it is the end)')}"
+            )
+        else:
+            await runner(sess, run, held, journal=journal, now=now)
+            # Only `tag` marks, and only over a batch a model actually saw.
+            # The two conditions are separate on purpose: a stage that ran
+            # without reaching a model has not reasoned over anything, and a
+            # mark that moved anyway would abandon the batch silently.
+            if stage == "tag" and held.reasoned and held.last_chunk_id is not None:
+                progress.reached(held.last_chunk_id)
     return await advance(sess, run, now=now)
 
 
@@ -198,9 +629,23 @@ async def cycle(
     waiting = await pending_work(sess, run)
     journal.note("run", f"{waiting:,} chunks past the mark")
 
+    # One batch per cycle, shared by every stage that reads it. A resumed run
+    # starts with an empty one and `pull` is behind it, so the first thing a
+    # run resumed at `extract` does is say it has no batch — which is true, and
+    # better than reasoning over a different set of passages than the citation
+    # numbers in its last answer referred to.
+    batch = Batch()
+
     while run.stage != FINAL_STAGE:
         reached = run.stage
-        await step(sess, run, journal=journal, now=now)
+        try:
+            await step(sess, run, journal=journal, now=now, batch=batch)
+        except Deferred:
+            # Already journalled and already written to the run row. The run is
+            # left unfinished on purpose: it resumes at the stage that could not
+            # be served, rather than walking on to stages that would fail the
+            # same way (§13.4).
+            return run
         if stop_after is not None and reached == stop_after:
             journal.note("run", f"stopping after {reached}; the run stays resumable")
             return run

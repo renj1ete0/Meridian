@@ -18,7 +18,8 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from meridian_core.db import dispose_engines
-from meridian_core.models import Chunk, Run
+from meridian_core.models import BudgetConfig, Chunk, Run
+from meridian_core.provider import Completion
 from meridian_core.runs import FINAL_STAGE, STAGES, begin_or_resume, unfinished
 from worker import orchestrate
 from worker.orchestrate import Journal, cycle, pending_work, run_orchestrator
@@ -64,6 +65,44 @@ async def clean(session_for) -> AsyncIterator:
     await dispose_engines()
 
 
+@pytest.fixture
+async def answerable(clean, monkeypatch):
+    """A budget and a model that answers "nothing here".
+
+    `P4-16` gave `extract` and `tag` real work, so a run with no budget row and
+    no reachable agent now defers at `extract` — correctly (§13.4), and
+    uselessly for the tests in this file, which are about the state machine
+    rather than about what a model said. An empty array is a complete answer,
+    so the machinery walks its stages and writes nothing.
+    """
+
+    async def says_nothing(sess, run, task_type, **kwargs):
+        return Completion(
+            text="[]", agent_id="test-null", model="test-model-1", input_tokens=1, output_tokens=1
+        )
+
+    monkeypatch.setattr(orchestrate, "complete", says_nothing)
+
+    budget = await clean.get(BudgetConfig, 1)
+    created = budget is None
+    if created:
+        clean.add(BudgetConfig(budget_id=1, max_tokens_per_run=1_000_000, max_seeds_per_run=10))
+    else:
+        previous = budget.max_tokens_per_run
+        budget.max_tokens_per_run = budget.max_tokens_per_run or 1_000_000
+    await clean.commit()
+
+    yield
+
+    await clean.rollback()
+    if created:
+        await clean.execute(delete(BudgetConfig).where(BudgetConfig.budget_id == 1))
+    else:
+        row = await clean.get(BudgetConfig, 1)
+        row.max_tokens_per_run = previous
+    await clean.commit()
+
+
 async def run_count(sess) -> int:
     await sess.rollback()
     return int(await sess.scalar(select(func.count()).select_from(Run)) or 0)
@@ -74,7 +113,7 @@ async def run_count(sess) -> int:
 # --------------------------------------------------------------------------
 
 
-async def test_a_cycle_walks_every_stage_and_finishes(clean) -> None:
+async def test_a_cycle_walks_every_stage_and_finishes(clean, answerable) -> None:
     journal = Journal()
 
     run = await cycle(clean, journal=journal, now=NOW)
@@ -139,7 +178,7 @@ async def test_a_dry_run_writes_nothing_even_when_a_stage_tries(clean, monkeypat
     """
     written: list[int] = []
 
-    async def writing_step(sess, run, *, journal, now):
+    async def writing_step(sess, run, *, journal, now, **_):
         row = Run(started_at=now, stage="pull", status="failed", error="written by a rogue stage")
         sess.add(row)
         await sess.flush()
@@ -172,7 +211,7 @@ async def test_a_real_run_does_leave_a_row(clean) -> None:
 # --------------------------------------------------------------------------
 
 
-async def test_stopping_after_a_stage_leaves_the_run_resumable(clean) -> None:
+async def test_stopping_after_a_stage_leaves_the_run_resumable(clean, answerable) -> None:
     """Unfinished on purpose. That is what makes stepping through a run
     possible without the state machine reading each step as a fresh crash."""
     await run_orchestrator(stop_after="extract", now=NOW)
