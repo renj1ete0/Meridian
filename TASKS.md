@@ -1466,6 +1466,16 @@ Things worth doing that don't belong to a phase yet.
       row exists rather than after, and a help/about/contact path is a shape a
       prefilter can recognise. Worth deciding against real numbers rather than
       a rule list, and the numbers now exist
+- [x] `B-28` **The embedding service was permanently unhealthy** —
+      `v0.105.2`. `B-25` gave it the worker's liveness probe, and
+      `worker.embed` had never written the heartbeat file — so the container
+      reported `unhealthy` from startup and stayed there while embedding
+      correctly. Always-red is worse than no probe: it is the alarm everybody
+      learns to ignore, which is the failure `liveness.py` argues against in
+      the other direction. The pass now beats before each batch and on each
+      idle poll — before, because a batch is minutes of CPU and a heartbeat
+      written on completion goes stale during normal work; on idle, because a
+      caught-up embedder would otherwise look wedged
 - [x] `B-27` **The sidecar was never usable for a backfill** — `v0.105.1`.
       `MERIDIAN_EMBED_CHUNK_BATCH` is 256 and the client timeout was a flat 30
       seconds, but 256 real chunks are about two minutes of CPU. So every batch

@@ -234,6 +234,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.105.2] — 2026-09-22
+
+### Fixed
+
+- `B-28`: the `embed` service reported `unhealthy` from the moment it started
+  and stayed there while working perfectly. `B-25` gave it the worker's
+  liveness probe and the pass had never touched the heartbeat file. A probe
+  that is always red is one everybody learns to ignore — the same alarm
+  fatigue `liveness.py` designs against from the other direction
+- The pass now beats **before** each batch and on each idle poll. A batch is
+  minutes of CPU here, so a heartbeat written only on completion goes stale
+  during normal work, and a restart then kills the batch that would have
+  refreshed it
+
 ## [0.105.1] — 2026-09-22
 
 ### Fixed
