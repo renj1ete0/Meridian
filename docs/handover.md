@@ -472,6 +472,38 @@ The manifest records row counts, so the way this is caught after the fact is a
 snapshot whose numbers are far smaller than the run that was supposed to be in
 it.
 
+### The embed pass and the crawl compete, and the loser is a timeout
+
+Observed in a real run, not in a test. The backfill batches 256 chunks per
+request and the client waits 30 seconds. Idle, the sidecar answers 32 texts in
+1.2 seconds, so a 256-chunk batch is about ten seconds and the whole thing is
+comfortable. With the crawl running — browser pool, extraction, and Postgres
+all on the same box — it is not, and the batch overruns the timeout.
+
+What happens then is the part worth knowing, because none of it says
+"contended":
+
+1. The client reports the sidecar **unusable**, with an empty reason, because
+   a timeout carries no message.
+2. `P2-19`'s fallback loads bge-m3 **inside the calling container**, which is
+   correct behaviour for an absent sidecar and the wrong diagnosis for a busy
+   one — and it puts 2.3GB in a process that had none.
+3. The scheduled job eventually hits the scheduler's own timeout and settles
+   `timeout`, leaving `next_run_at` an hour later and the backlog untouched.
+
+So a backlog bigger than one job window **never drains**: every tick dies at
+the same place, and the only trace is `last_status` in `scheduled_jobs`. The
+symptom at the far end is a corpus whose search is quietly lexical-only, which
+is the same thing an unconfigured embedder looks like (`B-22`).
+
+Draining it by hand, with the crawl stopped:
+
+```bash
+docker compose -f docker-compose.local.yml exec -T \
+  -e MERIDIAN_EMBEDDER_TIMEOUT_S=300 -e MERIDIAN_EMBED_CHUNK_BATCH=128 \
+  scheduler python -m worker.embed --once
+```
+
 ### Two ways a benchmark lies on a small corpus
 
 Both were live in `scripts/benchmark_search.py` before its own output exposed

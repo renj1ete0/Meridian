@@ -1440,6 +1440,20 @@ Things worth doing that don't belong to a phase yet.
       it now sweeps those field names too, which is the hole all three
       recurrences of this came through. Found in a live scheduler's log, not by
       the suite
+- [ ] `B-22` **A backlog larger than one job window never drains.** Found in a
+      live run: the embedding backfill sends `MERIDIAN_EMBED_CHUNK_BATCH` (256)
+      chunks per request against a 30s client timeout, and while the crawl is
+      running that batch overruns it. The pass then reports the sidecar
+      "unusable" and loads the model in-process instead (`P2-19`'s fallback,
+      firing for a reason nobody designed), and the scheduled job finally hits
+      its own 30-minute timeout and settles `timeout` — leaving the backlog
+      exactly where it was, to fail the same way on the next tick. Idle, the
+      sidecar embeds 32 texts in 1.2s, so the work itself is minutes. Three
+      things to decide together: a batch size that respects the timeout rather
+      than racing it, a pass that commits and *reports* partial progress
+      instead of reading as a failure, and whether `timeout` on a job with a
+      growing backlog should raise an alert (§12.5) rather than a table row
+      nobody reads
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search
