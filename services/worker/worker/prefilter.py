@@ -142,6 +142,55 @@ SKIP_EXTENSIONS = frozenset(
     }
 )
 
+#: Hosts that resolve an identifier rather than serving a document (`B-23`).
+#:
+#: A `doi.org` URL is a DOI wearing a URL's clothes. Fetching it follows a
+#: redirect to a publisher, which is usually a paywall, a consent wall or a
+#: landing stub — measured on the first real corpus: 244 such rows, 134 of them
+#: with no extractable text at all. Meanwhile the citation channel was already
+#: queueing the *same* identifiers correctly, as `doi` tasks that the resolver
+#: turns into open-access copies. The frontier was simply asking the wrong
+#: question about the same thing.
+#:
+#: So these are routed, not dropped — see `Verdict.dois`.
+IDENTIFIER_HOSTS = frozenset({"doi.org", "dx.doi.org"})
+
+#: Path segments that mean "this page is about the website" (`B-23`).
+#:
+#: Not a blocklist of topics — a shape. A corpus of research documents has no
+#: use for a site's contact form, and one real run indexed 106 pages of a
+#: single site's help section, which is a tenth of everything it fetched that
+#: day. Checked as a whole path segment, so `/about/` matches and
+#: `/about-congestion-pricing` does not: the second is an article and the
+#: distinction is the entire reason this is a segment match rather than a
+#: substring one.
+FURNITURE_SEGMENTS = frozenset(
+    {
+        "about",
+        "contact",
+        "help",
+        "faq",
+        "faqs",
+        "support",
+        "privacy",
+        "terms",
+        "legal",
+        "cookies",
+        "accessibility",
+        "login",
+        "signin",
+        "register",
+        "subscribe",
+        "newsletter",
+        "careers",
+        "jobs",
+        "advertise",
+        "donate",
+        "cart",
+        "checkout",
+    }
+)
+
 #: Default ports, dropped so `https://x.test:443/a` and `https://x.test/a` are
 #: one URL rather than two.
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
@@ -156,11 +205,16 @@ class Verdict:
     """
 
     kept: tuple[str, ...] = ()
+    #: Identifiers found on a redirector host, for the caller to queue as `doi`
+    #: tasks. Separate from `kept` because they are a different *kind* of work:
+    #: queued as a URL they fetch a redirect, and queued as a DOI they reach
+    #: the resolver that finds an open-access copy (`B-23`).
+    dois: tuple[str, ...] = ()
     dropped: dict[str, int] = dataclasses.field(default_factory=dict)
 
     @property
     def considered(self) -> int:
-        return len(self.kept) + sum(self.dropped.values())
+        return len(self.kept) + len(self.dois) + sum(self.dropped.values())
 
 
 def normalise_url(url: str) -> str | None:
@@ -194,6 +248,35 @@ def normalise_url(url: str) -> str | None:
     )
     # The fragment addresses a place inside a document, not a document.
     return urlunsplit((scheme, netloc, split.path or "/", query, ""))
+
+
+def identifier_for(url: str) -> str | None:
+    """The DOI a redirector URL stands for, or None if it is not one.
+
+    Parsed here rather than fetched: the identifier is in the path, and the
+    only thing a request to `doi.org` adds is a redirect to somewhere the
+    resolver would have reached better.
+    """
+    # `removeprefix`, not `lstrip("www.")`: the second strips *characters*, so
+    # it would turn `wwwdoi.org` into `doi.org` and `dx.doi.org` into
+    # `x.doi.org`. Ruff catches this one (B005) and it is worth spelling out,
+    # because the wrong version looks right.
+    host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
+    if host not in IDENTIFIER_HOSTS:
+        return None
+    candidate = urlsplit(url).path.lstrip("/")
+    return candidate or None
+
+
+def is_site_furniture(url: str) -> bool:
+    """True for a path that is about the website rather than about anything.
+
+    Segment-wise, and only for segments that are *exactly* one of these words.
+    A substring rule would drop `/about-congestion-pricing`, which is an
+    article, and the two are told apart by nothing else.
+    """
+    segments = [segment.lower() for segment in urlsplit(url).path.split("/") if segment]
+    return any(segment in FURNITURE_SEGMENTS for segment in segments)
 
 
 def has_skipped_extension(url: str) -> bool:
@@ -241,6 +324,7 @@ class Prefilter:
         """
         dropped: dict[str, int] = {}
         candidates: dict[str, None] = {}
+        identifiers: dict[str, None] = {}
 
         def drop(reason: str) -> None:
             dropped[reason] = dropped.get(reason, 0) + 1
@@ -253,6 +337,15 @@ class Prefilter:
             if has_skipped_extension(normalised):
                 drop("not_a_document")
                 continue
+            if (identifier := identifier_for(normalised)) is not None:
+                # Routed rather than kept or dropped. The resolver deduplicates
+                # against whatever the citation channel already queued, because
+                # both arrive as the same bare identifier.
+                identifiers[identifier] = None
+                continue
+            if is_site_furniture(normalised):
+                drop("site_furniture")
+                continue
             if self.is_blocked(normalised):
                 drop("blocked_domain")
                 continue
@@ -262,7 +355,7 @@ class Prefilter:
             candidates[normalised] = None
 
         if not candidates:
-            return Verdict(dropped=dropped)
+            return Verdict(dois=tuple(identifiers), dropped=dropped)
 
         # The two database round-trips, once for the whole batch rather than
         # once per link — the difference between one query and four hundred.
@@ -280,7 +373,7 @@ class Prefilter:
             else:
                 kept.append(url)
 
-        return Verdict(kept=tuple(kept), dropped=dropped)
+        return Verdict(kept=tuple(kept), dois=tuple(identifiers), dropped=dropped)
 
     async def _inactive_domains(self, sess: AsyncSession, urls: Iterable[str]) -> set[str]:
         """Domains whose `fetch_policy` row says blocked or paused.

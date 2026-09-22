@@ -1146,7 +1146,7 @@ async def test_a_fetched_page_puts_its_links_in_the_queue(
     sess = await session_for("rw")
     await set_tier(sess, run_domain, "government")
     await enqueue(sess, run_domain, run_topic)
-    body = linking_page("/reports/2026", "/about")
+    body = linking_page("/reports/2026", "/guidance")
 
     def html(request: httpx.Request) -> httpx.Response:
         return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
@@ -1158,7 +1158,7 @@ async def test_a_fetched_page_puts_its_links_in_the_queue(
     assert stats.queued == 2
     assert set(await queued_urls(sess, run_topic)) == {
         f"https://{run_domain}/reports/2026",
-        f"https://{run_domain}/about",
+        f"https://{run_domain}/guidance",
     }
 
 
@@ -1762,7 +1762,7 @@ async def test_a_sitemaps_urls_reach_the_queue(
     sess = await session_for("rw")
     await set_tier(sess, run_domain, "government")
     task = await enqueue(sess, run_domain, run_topic, path="/sitemap.xml", task_type="sitemap")
-    body = urlset(run_domain, "/reports/2026", "/about")
+    body = urlset(run_domain, "/reports/2026", "/guidance")
 
     worker, _ = with_frontier(
         sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
@@ -1775,7 +1775,7 @@ async def test_a_sitemaps_urls_reach_the_queue(
     queued = await rows_for(sess, run_domain, "sitemap")
     assert {row.url_or_query for row in queued} == {
         f"https://{run_domain}/reports/2026",
-        f"https://{run_domain}/about",
+        f"https://{run_domain}/guidance",
     }
     assert all(row.task_type == "url" for row in queued)
 

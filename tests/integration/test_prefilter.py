@@ -230,9 +230,14 @@ async def test_the_cheap_gates_run_before_the_queries(session_for, domain, topic
 async def test_a_url_repeated_on_one_page_produces_one_row(
     session_for, domain, topic, cleanup
 ) -> None:
-    """A nav link appears in the header and the footer of the same document."""
+    """A nav link appears in the header and the footer of the same document.
+
+    The example used to be `/about`, which `B-23` now drops as site furniture —
+    a nav link is exactly the kind of URL that is, and this test is about
+    deduplication rather than about what survives it.
+    """
     sess = await session_for("rw")
-    url = f"https://{domain}/about"
+    url = f"https://{domain}/reports/annual-review"
 
     verdict = await Prefilter().keep(sess, [url, f"{url}#top", url, f"{url}?utm_source=x"])
 

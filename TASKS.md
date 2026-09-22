@@ -46,9 +46,8 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 
 **Buildable today** is two entries.
 
-1. **`B-23`** — shape gates for redirector hosts and site furniture. Two fifths
-   of the first real corpus was neither: 244 DOI redirector rows (134 of them
-   resolving to nothing readable) and 106 pages of one site's own help section.
+1. **`B-22`'s remaining half** — an embedding pass that falls behind should
+   raise §12.5's alert rather than leave `last_status` in a table nobody reads.
 2. **`P6-23`** — admin: agent registry and run history. Its own argument was that both
    tables stay empty until phase 4 runs something and "an empty screen teaches nothing";
    `runs` now holds real rows with stages, statuses, heartbeats and counters, so there
@@ -1461,91 +1460,20 @@ Things worth doing that don't belong to a phase yet.
       test pins the mechanism rather than the row count: a few hundred vectors
       is too few for the planner to use the index at all, so the obvious
       assertion passes against the bug
-- [ ] `B-23` **The frontier has no notion of site furniture or of a redirector
-      host.** Measured on a real run: of 775 sources, 244 were `doi.org` URLs —
-      a DOI is an identifier that redirects, so 134 of those resolved to
-      nothing readable and became empty source rows — and 106 were
-      `info.arxiv.org` pages (`/help`, `/about/ourmembers.html`), which is a
-      site's own scaffolding rather than anything anybody would cite. Add 65
-      pages of unrelated statute and roughly two fifths of the corpus is not
-      research material. The existing shape gates drop social links, shorteners
-      and assets, which is a different question. Two candidates, and they are
-      separable: a redirector should resolve to its target *before* a source
-      row exists rather than after, and a help/about/contact path is a shape a
-      prefilter can recognise. Worth deciding against real numbers rather than
-      a rule list, and the numbers now exist
-- [ ] `B-30` **The vector arm returns the same document to itself.** Measured
-      on the first real corpus: of the vector arm's top ten, **42% come from
-      the probe chunk's own source**, and ten hits span about four distinct
-      sources. It is not wrong — adjacent chunks of one document *are* the
-      nearest neighbours — but it means a reader who searches a concept gets
-      one paper four times, and it is most of why the two arms overlap only
-      13%. The decision is a product one and should be made against the
-      question set, not guessed: cap hits per source in the vector arm, diversify
-      after fusion (MMR-style), or leave it and let fusion's lexical half carry
-      the spread. Worth revisiting when `P0-15` exists, because "better" here
-      is only answerable against questions somebody wrote down first
-- [x] `B-29` **Arm agreement was measuring two different questions** —
-      `v0.105.4`. `scripts/benchmark_search.py` paired a sampled chunk's vector
-      with an unrelated frequent word, so the arms could not agree and the
-      figure was 0% by construction — and it printed a warning blaming the
-      text-search configuration, which would send somebody after a bug that
-      does not exist. Both arms now answer one probe: a chunk's own distinctive
-      terms against its own vector, with the probe chunk excluded so it cannot
-      match itself in both. **Two wrong versions before one right one**, both
-      of which read as findings about the corpus: the second used ANDed terms,
-      which co-occur only in the probe chunk, and reported the lexical arm
-      finding nothing at all. With `or` the real figure is 13.3% agreement —
-      fusion earns its second query
-- [x] `B-28` **The embedding service was permanently unhealthy** —
-      `v0.105.2`. `B-25` gave it the worker's liveness probe, and
-      `worker.embed` had never written the heartbeat file — so the container
-      reported `unhealthy` from startup and stayed there while embedding
-      correctly. Always-red is worse than no probe: it is the alarm everybody
-      learns to ignore, which is the failure `liveness.py` argues against in
-      the other direction. The pass now beats before each batch and on each
-      idle poll — before, because a batch is minutes of CPU and a heartbeat
-      written on completion goes stale during normal work; on idle, because a
-      caught-up embedder would otherwise look wedged
-- [x] `B-27` **The sidecar was never usable for a backfill** — `v0.105.1`.
-      `MERIDIAN_EMBED_CHUNK_BATCH` is 256 and the client timeout was a flat 30
-      seconds, but 256 real chunks are about two minutes of CPU. So every batch
-      call timed out at exactly thirty seconds, `P2-19`'s fallback loaded the
-      model in the calling process, and the work completed correctly — with a
-      second copy of 2.3 GB of weights on a machine chosen for being small,
-      which is the one thing the sidecar exists to prevent (`P2-17`, `B-14`).
-      The client now sizes its wait to the number of texts, keeping the
-      configured timeout as a floor so the query path stays impatient. Also
-      retires the "sidecar is 5–10× slower" note: it was not slower, it was
-      timing out, and what got measured was the fallback
-- [x] `B-26` **The crawl claims in proportion to the attention vector** —
-      `v0.105.0`. §10 opens with "attention is a weight vector over topics;
-      seeds are drawn proportionally", and nothing in acquisition had ever read
-      it: `steering.py` was the only module that touched those weights. The
-      cost compounds — a discovered link inherits its parent's topic, so the
-      crawl makes more of whatever it is already doing, and a real run finished
-      97% concentrated on the topic weighted *lowest* of three. `draw_topic`
-      picks a topic per claim and the worker claims within it, falling back
-      unfiltered when that topic is momentarily empty so a lane never stalls.
-      A pinned `MERIDIAN_WORKER_TOPICS` is not widened by the draw. **This is
-      the consumption half only**: `P5-04`'s gap-driven seed emission is still
-      what introduces material a link graph would never reach. Refined in
-      `v0.105.3`: the first version fell straight through to an unfiltered
-      claim when a drawn topic was empty, which handed that topic's share to
-      whichever topic had most queued — 45% of the weight, on the live stack,
-      because three of six active topics had no rows. An empty topic is now
-      dropped from the pool and another drawn
-- [x] `B-25` **Embedding runs continuously instead of hourly** — `v0.104.0`.
-      `worker.embed` has had a `run_forever` mode all along and
-      `docs/handover.md` has always listed it among four long-running
-      processes; the deployment ran the one-shot form on an hourly timer, and
-      the scheduler's 1800-second ceiling then truncated every pass. Now a
-      compose service, on `internal` only, with the worker's liveness probe.
-      The timetable row is disabled in the YAML *and* by migration, since the
-      seed is insert-only and §13.1 makes the database authoritative after
-      first boot. A drift test fails if any enabled job names a module that is
-      also a service — two owners claiming the same batches is the other way
-      to get this wrong, and it would look like nothing at all
+- [x] `B-23` **The frontier routes identifiers and skips site furniture** —
+      `v0.107.0`. A `doi.org` link is an identifier wearing a URL's clothes:
+      fetched, it redirects to a publisher and yields a paywall or a landing
+      stub, which is why 134 of 244 such sources held no extractable text. The
+      citation channel had been queueing the same identifiers correctly as
+      `doi` tasks the whole time, so this is a route rather than a drop — the
+      resolver deduplicates the two channels for free, because both arrive as
+      the same bare identifier. Site furniture is a shape, not a topic: a path
+      segment that is exactly `about`, `help`, `privacy` and a dozen more,
+      matched segment-wise because `/about-congestion-pricing` is an article
+      and nothing else distinguishes them. Measured on the live frontier of
+      56,487 url tasks: 1,850 routed, 831 dropped. **Three existing tests used
+      `/about` as a sample link** and had to move — worth knowing, because the
+      next shape gate will do the same thing
 - [ ] `B-22` **A backlog larger than one job window never drains.** *(Half
       addressed by `B-25`: there is no window to be killed at any more. What
       remains is throughput and the signal — a pass that falls behind should

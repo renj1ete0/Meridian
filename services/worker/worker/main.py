@@ -1231,12 +1231,30 @@ class Worker:
             return 0
 
         verdict = await self._prefilter.keep(sess, document.links)
+
+        # Identifiers first, and as `doi` tasks (`B-23`). A `doi.org` link
+        # queued as a URL fetches a redirect to a publisher, which is usually a
+        # paywall or a landing stub; the same identifier queued as a DOI
+        # reaches the resolver that finds an open-access copy. The citation
+        # channel had been doing this correctly all along, so the frontier was
+        # asking the wrong question about the same thing — 244 rows of it on
+        # the first real corpus, 134 with no extractable text.
+        for identifier in verdict.dois:
+            await enqueue(
+                sess,
+                identifier,
+                topic=claim.topic,
+                seed_source="frontier",
+                task_type="doi",
+                priority=RESOLVED_PAPER_PRIORITY,
+            )
+
         if not verdict.kept:
             log.debug(
                 "frontier expansion queued nothing",
-                extra={"url": claim.url, "dropped": verdict.dropped},
+                extra={"url": claim.url, "dropped": verdict.dropped, "dois": len(verdict.dois)},
             )
-            return 0
+            return len(verdict.dois)
 
         tiers = await source_tier_map(sess)
         for url in verdict.kept:
@@ -1260,10 +1278,11 @@ class Worker:
                 "task_id": claim.task_id,
                 "considered": verdict.considered,
                 "queued": len(verdict.kept),
+                "dois": len(verdict.dois),
                 "dropped": verdict.dropped,
             },
         )
-        return len(verdict.kept)
+        return len(verdict.kept) + len(verdict.dois)
 
     async def _seed_citations(
         self, sess: AsyncSession, claim: Claim, document: ExtractedDocument | None

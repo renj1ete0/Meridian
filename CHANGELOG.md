@@ -234,6 +234,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.107.0] — 2026-09-22
+
+**The frontier stops fetching identifiers and site furniture.**
+
+### Changed
+
+- `B-23`: a link on a DOI redirector host is queued as a `doi` task carrying
+  the identifier, not as a `url` task that fetches a redirect. The citation
+  channel had been doing this correctly all along; the frontier was asking the
+  wrong question about the same thing — 1,850 rows of it in the live frontier,
+  and 244 already-fetched sources of which 134 held no extractable text
+- A path with a segment that is exactly `about`, `help`, `contact`, `privacy`,
+  `careers` and a dozen similar is dropped as site furniture. Segment-wise on
+  purpose: `/about-congestion-pricing` is an article, and nothing else tells
+  the two apart. 831 rows in the live frontier
+
+### Measured
+
+- Against the real frontier of 56,487 queued URL tasks: 3.3% routed to the
+  resolver, 1.5% dropped. The routed half is the valuable one — those become
+  open-access copies instead of paywall redirects
+
 ## [0.106.0] — 2026-09-22
 
 **Something runs the synthesis cycle.**

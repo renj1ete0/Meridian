@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from worker import prefilter
 from worker.prefilter import (
     SKIP_EXTENSIONS,
     TRACKING_PARAMS,
@@ -223,3 +224,62 @@ def test_a_verdict_counts_everything_it_saw() -> None:
 def test_an_empty_verdict_is_coherent() -> None:
     assert Verdict().considered == 0
     assert Verdict().kept == ()
+
+
+# --------------------------------------------------------------------------
+# Identifiers and site furniture (task `B-23`)
+# --------------------------------------------------------------------------
+#
+# Measured on the first real corpus, where two fifths of what the crawl
+# fetched was neither research nor readable: 244 `doi.org` rows (134 with no
+# extractable text), 106 pages of one site's help section, and a wedge of
+# unrelated statute. The first two are shapes a gate can recognise.
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://doi.org/10.1007/s11071-026-12983-x", "10.1007/s11071-026-12983-x"),
+        ("https://dx.doi.org/10.1234/abc", "10.1234/abc"),
+        ("https://www.doi.org/10.1234/abc", "10.1234/abc"),
+        ("https://doi.org/", None),
+        ("https://example.test/10.1234/abc", None),
+        # `lstrip("www.")` would turn this into `doi.org` and claim it.
+        ("https://wwwdoi.org/10.1234/abc", None),
+        # ...and this into `x.doi.org`, which is not a redirector either.
+        ("https://notdoi.org/10.1234/abc", None),
+    ],
+)
+def test_an_identifier_is_recognised_without_fetching_it(url: str, expected: str | None) -> None:
+    """The DOI is in the path. Fetching `doi.org` only adds a redirect to
+    somewhere the resolver reaches better."""
+    assert prefilter.identifier_for(url) == expected
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://agency.test/about",
+        "https://agency.test/about/",
+        "https://agency.test/en/help/contact.html",
+        "https://agency.test/careers",
+        "https://agency.test/privacy",
+    ],
+)
+def test_site_furniture_is_recognised(url: str) -> None:
+    assert prefilter.is_site_furniture(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # The distinction the segment match exists for: an article whose slug
+        # begins with a furniture word is an article.
+        "https://agency.test/about-congestion-pricing",
+        "https://agency.test/research/helping-older-pedestrians",
+        "https://agency.test/reports/2026/terms-of-reference-for-the-review",
+        "https://agency.test/",
+    ],
+)
+def test_an_article_is_not_furniture(url: str) -> None:
+    assert not prefilter.is_site_furniture(url)
