@@ -55,7 +55,24 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 `P5-01` stays open on its own argument — entity co-occurrence has no consumer until
 `P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
 
-Done this stretch, for the record: `P4-16`, `P4-17`, `P6-23`, `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
+**The local stack is running as this was written.** A crawl started at 15:20Z on
+2026-09-22 with every fix from that day live, against the corpus the 2h20m run
+produced. It is not `P1-16` — that is a deliberate 48h run and wants a decision
+about whether to start clean — but it is the same stack doing the same work, so
+whatever state it is in when somebody next looks is evidence. Stop it with
+`docker compose -f docker-compose.local.yml stop worker`; the rest of the stack
+can stay up, and the corpus stays searchable at `http://localhost:21116`.
+
+Done this stretch: `P4-16`, `P4-17`, `P6-23`, and twelve defects the first real
+corpus turned up (`B-21`–`B-32`). **Six of those were found by watching the stack
+run, not by the suite** — `B-21` the nightly harvest dying on its own log line,
+`B-24` the vector arm returning a third of its candidates, `B-25` and `B-27`
+embedding that could never catch up because the sidecar had never once served a
+backfill, `B-26` a crawl that ignored the attention vector, `B-31` a snapshot
+that could not read the corpus, and `B-32` a deployment that could not start a
+run at all. That is the argument for running the thing before trusting it.
+
+Also: `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
 `P3-10`, `P3-11`, `B-07`, `B-09`, `B-11`, `P2-20`, `P5-07`, and phase 4's spine —
 `P4-01` through `P4-04`, `P4-06` through `P4-09`, `P4-11` and `P4-15`. `P1-35` (a
 Semantic Scholar key, ten minutes) is still ⚑ human and is felt during the 48h run.

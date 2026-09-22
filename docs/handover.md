@@ -539,6 +539,72 @@ docker compose -f docker-compose.local.yml exec -T \
   scheduler python -m worker.embed --once
 ```
 
+### A fresh install could never start a synthesis run
+
+`P4-13` refuses a run without a budget row, §16 requires caps "before first
+autonomous run", and **nothing ever created one**. Every deployment deferred
+its first run with "no budget is configured" and would have done so for ever.
+Seeded now from `config/budget.yaml`, with a migration for databases that
+already exist (`B-32`).
+
+The shape is worth remembering rather than the bug: a rule enforced against a
+row nothing creates is a rule that only ever says no. When you add a guard that
+reads configuration, check that something writes it.
+
+### The attention vector steered nothing for three phases
+
+§10's first line is that attention is a weight vector over topics and seeds are
+drawn proportionally. Nothing in the acquisition path read it: `steering.py`
+was the only module in the tree that touched those weights, and the crawl
+claimed by priority and age.
+
+It compounds rather than merely being absent, which is why nobody noticed. A
+discovered link inherits its parent's topic, so whatever the crawl is already
+doing produces more of itself — one early citation trail decided the shape of
+everything after it. The first real corpus finished 93% on the topic weighted
+*lowest* of three (`B-26`).
+
+**The fallback was the second half of the bug.** Claiming within a drawn topic
+and falling through to an unfiltered claim when that topic was empty hands the
+share of every empty topic to whichever topic has most queued — the
+concentration this exists to correct, by the back door. Three of six active
+topics had no rows at all, so 45% of the weight was being donated. An empty
+topic is now dropped from the pool and another drawn.
+
+### A shape gate will trip test fixtures that used that shape incidentally
+
+`B-23` dropped `/about` as site furniture, and three existing tests broke —
+none about furniture. They had used `/about` as a second sample link because it
+is the obvious thing to type.
+
+Worth expecting rather than being surprised by: the next shape gate will do the
+same. A test whose example URL is incidental should say so, and when one
+breaks, re-point it rather than weakening the gate.
+
+### A fixture that creates shared configuration has to remove it
+
+Twice in one day, both times found by an unrelated test failing much later.
+`test_synthesis_stages` created a budget row and only restored *pre-existing*
+values, leaving a half-configured budget in the dev database; `test_topic_draw`
+paused every other topic to isolate its draw and restored them in a teardown
+that did not run, leaving every topic paused.
+
+Two rules came out of it. Record whether the fixture *created* the row, because
+"restore what was there" is not the same as "remove what I made". And prefer
+patching the loader to mutating shared rows — `test_topic_draw` now monkeypatches
+`steering_topics` and touches nothing global, which cannot leak however it exits.
+
+### `sess.commit = sess.flush` in a test double disarms the fixture's cleanup
+
+The worker harness downgrades `commit` to `flush` so the worker's settle step
+stays inside the test's transaction. The fixture that later calls
+`await sess.commit()` to *delete its rows* is then calling `flush`, so the
+deletes run, commit nothing, and the rows outlive the test — twelve topic rows
+and 360 queue rows, in this case, discovered when an unrelated test failed on
+floors that summed wrong.
+
+Capture the real `commit` before yielding and restore it in teardown.
+
 ### Two ways a benchmark lies on a small corpus
 
 Both were live in `scripts/benchmark_search.py` before its own output exposed
@@ -1610,10 +1676,30 @@ established, against the real web and a real Postgres:
 | **Hybrid search, end to end, outside a test** | `arms: ["lexical", "vector"]`, `degraded: false`, both ranks populated. It had never run anywhere but in the suite |
 | The timetable is read (`B-15`) | `scheduler` claimed `digest`, settled it `ok` in 747ms and rescheduled it, then claimed `embed` and began writing vectors against a backlog that had stood at one embedded chunk |
 
-Still untouched by any of this: everything needing the server, Cloudflare or
-scale. `P2-19`'s fallback is the one that moved without being verified — it
-fired, loaded the model in-process and embedded correctly, but only because the
-sidecar was broken at the time, which is not a test anybody designed.
+Still untouched by that: everything needing the server or Cloudflare.
+
+### And `v0.103.0`–`v0.110.0`, the day a corpus existed
+
+A 2h20m crawl from an empty database, then the stack kept running while the
+fixes it provoked were written. **Five defects came out of watching it that the
+suite could not have found**, which is the argument for doing this again before
+`P1-16` rather than after.
+
+| Behaviour | Evidence |
+|---|---|
+| A corpus, from empty | 1,282 sources · 19,949 chunks · 34 domains in 2h20m, frontier still widening at 58k pending — the failure `P1-16` watches for is a queue that drains, and it did not |
+| Every chunk embedded | 19,949 of 19,949, after `B-25` made the pass a service and `B-27` let it reach the sidecar |
+| **The sidecar served a backfill** | for the first time ever: 1.42 chunks/second, zero timeouts. Before `B-27` every batch timed out at exactly 30s and the in-process fallback did the work |
+| A snapshot that is a corpus | 77MB of raw files beside a 109MB dump, with checksums. The first attempt produced 15KB, which is the "catalogue, not a corpus" the script's own header warns about (`B-31`) |
+| Hybrid search measured, not asserted | HNSW used by the planner, recall@10 1.0000 at the `ef_search` `B-24` now sets, vector p50 26ms, hybrid p50 97ms |
+| Fusion earns its second query | 13–16% of hits found by both arms once `B-29` made the two arms answer the same question. It had read 0% by construction |
+| **The attention vector steers the crawl** | walkability was 2% of the corpus at 0.22 weight and is 62% of what is fetched now; AV was 93% at the *lowest* weight (`B-26`) |
+| The frontier skips what it cannot read | 11–12 site-furniture links dropped per page, and a `doi.org` link routed to the resolver as an identifier rather than fetched as a redirect (`B-23`) |
+| A run reaches the provider | `extract deferred: every agent for 'relation_extraction' refused: hosted-frontier reads its key from ANTHROPIC_API_KEY, which is unset` — the whole chain, in the right image, stopping exactly where it should |
+
+**What is still unverified**: anything needing the server, Cloudflare, or a real
+model call. `P2-19`'s fallback moved again without being designed for — `B-27`
+found it had been carrying every backfill since the sidecar was built.
 
 ---
 
