@@ -1466,6 +1466,17 @@ Things worth doing that don't belong to a phase yet.
       row exists rather than after, and a help/about/contact path is a shape a
       prefilter can recognise. Worth deciding against real numbers rather than
       a rule list, and the numbers now exist
+- [x] `B-27` **The sidecar was never usable for a backfill** — `v0.105.1`.
+      `MERIDIAN_EMBED_CHUNK_BATCH` is 256 and the client timeout was a flat 30
+      seconds, but 256 real chunks are about two minutes of CPU. So every batch
+      call timed out at exactly thirty seconds, `P2-19`'s fallback loaded the
+      model in the calling process, and the work completed correctly — with a
+      second copy of 2.3 GB of weights on a machine chosen for being small,
+      which is the one thing the sidecar exists to prevent (`P2-17`, `B-14`).
+      The client now sizes its wait to the number of texts, keeping the
+      configured timeout as a floor so the query path stays impatient. Also
+      retires the "sidecar is 5–10× slower" note: it was not slower, it was
+      timing out, and what got measured was the fallback
 - [x] `B-26` **The crawl claims in proportion to the attention vector** —
       `v0.105.0`. §10 opens with "attention is a weight vector over topics;
       seeds are drawn proportionally", and nothing in acquisition had ever read
@@ -1492,9 +1503,8 @@ Things worth doing that don't belong to a phase yet.
 - [ ] `B-22` **A backlog larger than one job window never drains.** *(Half
       addressed by `B-25`: there is no window to be killed at any more. What
       remains is throughput and the signal — a pass that falls behind should
-      raise §12.5's alert rather than leave a number in a table, and the
-      sidecar is 5–10× slower than the same model in-process, which nobody has
-      explained yet.)* Found in a
+      raise §12.5's alert rather than leave a number in a table. The sidecar
+      half is explained and fixed in `B-27`.)* Found in a
       live run: the embedding backfill sends `MERIDIAN_EMBED_CHUNK_BATCH` (256)
       chunks per request against a 30s client timeout, and while the crawl is
       running that batch overruns it. The pass then reports the sidecar

@@ -503,13 +503,24 @@ the same place, and the only trace is `last_status` in `scheduled_jobs`. The
 symptom at the far end is a corpus whose search is quietly lexical-only, which
 is the same thing an unconfigured embedder looks like (`B-22`).
 
-**Half of this is fixed** (`B-25`, `v0.104.0`): the pass runs as its own
-service in `run_forever` mode, so there is no window to be killed at and no
-hour to wait for. What is not fixed is throughput — measured at roughly 2.2
-chunks/second in-process against a crawl producing about 2.1, which is matched
-with nothing to spare, and much worse through the sidecar. If a backlog starts
-growing anyway the brake is `MERIDIAN_WORKER_CONCURRENCY`: fewer crawl lanes,
-fewer chunks per second to embed.
+**Both halves are now fixed, and the second one is the more interesting.**
+`B-25` made the pass its own service in `run_forever` mode, so there is no
+window to be killed at and no hour to wait for.
+
+`B-27` explains the rest. The sidecar was not slow — **it was never used**.
+The pass batches 256 chunks into one request against a client that waited 30
+seconds, and 256 real chunks are about two minutes of CPU, so every batch
+timed out at exactly thirty seconds and `P2-19`'s fallback loaded the model in
+the calling process. The vectors were correct and the pass finished, so the
+only symptom was a second copy of 2.3 GB of weights on a machine chosen for
+being small — the precise thing the sidecar exists to prevent. Anything
+measured about "the sidecar's throughput" before `v0.105.1` was measuring the
+fallback.
+
+What remains is genuine throughput: roughly 2 chunks/second on this hardware
+against a crawl producing about the same, which is matched with nothing to
+spare. If a backlog grows anyway the brake is `MERIDIAN_WORKER_CONCURRENCY` —
+fewer crawl lanes, fewer chunks per second to embed.
 
 Draining it by hand, with the crawl stopped:
 

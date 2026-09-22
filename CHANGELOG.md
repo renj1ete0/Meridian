@@ -234,6 +234,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.105.1] — 2026-09-22
+
+### Fixed
+
+- `B-27`: the embedding sidecar was never usable for a backfill. The pass
+  batches 256 chunks into one request and the client waited 30 seconds; a real
+  chunk takes the better part of half a second on CPU, so every batch timed
+  out at exactly thirty seconds and the caller fell back to loading the model
+  in its own process. It worked, which is why nobody noticed — the only
+  symptom was a second copy of 2.3 GB of weights on the machine the sidecar
+  exists to spare. The client now sizes its timeout to the batch, with the
+  configured value as a floor
+- This also retires the "the sidecar is 5–10× slower" note from `B-22`. It was
+  not slower; it was timing out, and the measurement was of the fallback
+
 ## [0.105.0] — 2026-09-22
 
 **The crawl reads the attention vector.**
