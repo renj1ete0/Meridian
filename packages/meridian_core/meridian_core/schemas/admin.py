@@ -334,3 +334,108 @@ class SeedCreate(BaseModel):
     topic: str | None = None
     #: Cold-start seeds run first, the same default `scripts/seed.py` uses.
     priority: int = 100
+
+
+# ---------------------------------------------------------------------------
+# The agent registry and run history (task `P6-23`, §11.3, §11.10, §11.12)
+# ---------------------------------------------------------------------------
+#
+# `P6-23` was held open on its own argument — both tables are empty until phase
+# 4 runs something, and "an empty screen teaches nothing about what the full one
+# should look like". Both now have rows: `runs` carries real stages, statuses,
+# heartbeats and counters, and `agents` is where somebody turns on the agent
+# that produces the first edge.
+
+
+class AgentRowRead(BaseModel):
+    """One registry row, as Admin shows it.
+
+    **No key, and no place to put one.** §11.11 keeps credentials out of the
+    database because it is snapshotted off-device, so the row names the
+    *variable* and the value is read at call time. `key_present` is computed
+    server-side from the environment the API can see, because the alternative —
+    a screen that cannot tell a configured agent from an unconfigured one — is
+    how somebody enables an agent and waits a day to find out it never answered.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    agent_id: str
+    provider: str
+    model: str | None
+    task_types: list[str] | None
+    quality_tier: int | None
+    cost_tier: str | None
+    availability: str | None
+    enabled: bool
+    fallback_agent_id: str | None
+    endpoint: str | None
+    api_key_env_var: str | None
+    #: Whether the variable this row names is set where the API runs. Not
+    #: whether the key *works* — that costs a request, and a screen that made
+    #: one per row on every load would be a bill for looking.
+    key_present: bool = False
+    #: Why this row cannot be routed to, in the words routing would use.
+    #: Empty means it can. Published rather than derived on the client for the
+    #: same reason `BudgetRead.ready` is: a UI computing its own answer will
+    #: eventually disagree with the router that actually refuses.
+    blocked_by: list[str] = Field(default_factory=list)
+
+
+class AgentsRead(BaseModel):
+    rows: list[AgentRowRead]
+    #: Task types no enabled agent declares. §11.3 routes by task type, so an
+    #: undeclared one is a stage that defers every run — and the registry looks
+    #: fine, because the absence is between rows rather than in one.
+    unserved_tasks: list[str] = Field(default_factory=list)
+
+
+class AgentEdit(BaseModel):
+    """The only field Admin writes.
+
+    Models, endpoints and task types are deployment configuration and belong in
+    `config/agents.yaml` and its migrations, where a change is reviewable.
+    Enabling is different in kind: it is the switch that starts spending, and it
+    is the one thing an operator needs at three in the morning.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class RunRowRead(BaseModel):
+    """One synthesis run (§11.10).
+
+    Counters rather than a verdict: §11.9 compares cost and volume per run week
+    on week, and a row that said "successful" would hide a run that finished
+    having written nothing.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    run_id: int
+    started_at: dt.datetime | None
+    completed_at: dt.datetime | None
+    stage: str | None
+    status: str
+    agent_id: str | None
+    tokens_used: int
+    cost_usd: float | None
+    edges_added: int
+    tags_added: int
+    seeds_emitted: int
+    last_chunk_id: int | None
+    heartbeat_at: dt.datetime | None
+    #: Kept: a deferred run's reason is the whole point of the row, and §13.4
+    #: makes deferral ordinary rather than exceptional.
+    error: str | None
+
+
+class RunsRead(BaseModel):
+    rows: list[RunRowRead]
+    total: int
+    #: The run in flight, if any. Separate from the list because "is something
+    #: happening right now" is the first question this screen is opened to
+    #: answer, and scanning a status column for it is a worse way to find out.
+    active: RunRowRead | None = None

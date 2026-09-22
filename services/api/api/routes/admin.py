@@ -24,6 +24,7 @@ pass, and the queue refills with exactly what somebody already turned down.
 from __future__ import annotations
 
 import datetime as dt
+import os
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -35,10 +36,12 @@ from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
 from meridian_core.models import (
+    Agent,
     BudgetConfig,
     FetchPolicy,
     GazetteerTerm,
     QueueTask,
+    Run,
     SavedView,
     Source,
     SteeringLog,
@@ -51,7 +54,11 @@ from meridian_core.policy import (
     merge_layers,
 )
 from meridian_core.queueing import enqueue
+from meridian_core.routing import TASK_TYPES
 from meridian_core.schemas.admin import (
+    AgentEdit,
+    AgentRowRead,
+    AgentsRead,
     BudgetEdit,
     BudgetRead,
     FetchPolicyEdit,
@@ -61,6 +68,8 @@ from meridian_core.schemas.admin import (
     GazetteerQueueRead,
     GazetteerRowRead,
     GazetteerTermEdit,
+    RunRowRead,
+    RunsRead,
     SeedCreate,
     SteeringLogPage,
     TopicAdd,
@@ -1092,3 +1101,115 @@ async def drop_seed(task_id: int, _: AdminAllowed, sess: WriteSession) -> None:
     await sess.delete(task)
     await sess.commit()
     log.info("seed removed", extra={"task_id": task_id, "url": task.url_or_query})
+
+
+# ---------------------------------------------------------------------------
+# The agent registry and run history (task `P6-23`, §11.3, §11.10)
+# ---------------------------------------------------------------------------
+
+
+def _blocked_by(agent: Agent, *, key_present: bool) -> list[str]:
+    """Why routing would skip this row, in routing's own terms.
+
+    Computed here rather than in the client because the client would eventually
+    disagree with `routing.eligible`, and the direction it disagrees in is the
+    bad one: a screen showing a usable agent that every run then refuses.
+    """
+    reasons: list[str] = []
+    if not agent.enabled:
+        reasons.append("disabled")
+    if not (agent.task_types or []):
+        reasons.append("declares no task types")
+    unknown = sorted(set(agent.task_types or []) - TASK_TYPES)
+    if unknown:
+        reasons.append(f"unknown task type: {', '.join(unknown)}")
+    model = (agent.model or "").strip()
+    if not model or model.startswith("<"):
+        reasons.append("no model string")
+    if agent.api_key_env_var and not key_present:
+        reasons.append(f"{agent.api_key_env_var} is unset here")
+    if agent.provider == "openai_compatible" and not (agent.endpoint or "").strip():
+        reasons.append("no endpoint")
+    return reasons
+
+
+@router.get("/agents", response_model=AgentsRead)
+async def list_agents(_: AdminAllowed, sess: WriteSession) -> AgentsRead:
+    """The registry, with the reason each row is or is not routable.
+
+    **`unserved_tasks` is the question this screen exists to answer.** §11.3
+    routes by task type, so a type no enabled row declares is a stage that
+    defers every run — and nothing about the rows themselves looks wrong,
+    because the absence is *between* them. A run that defers at `extract` and
+    an operator staring at a registry full of plausible agents is exactly the
+    afternoon this line is meant to save.
+    """
+    rows = list(await sess.scalars(select(Agent).order_by(Agent.quality_tier.desc().nulls_last())))
+
+    read: list[AgentRowRead] = []
+    served: set[str] = set()
+    for agent in rows:
+        # The name, never the value (§11.11). `bool` of it and nothing else
+        # reaches the response.
+        key_present = bool(os.environ.get(agent.api_key_env_var or "", "").strip())
+        blocked = _blocked_by(agent, key_present=key_present)
+        if not blocked:
+            served.update(agent.task_types or [])
+        row = AgentRowRead.model_validate(agent)
+        read.append(row.model_copy(update={"key_present": key_present, "blocked_by": blocked}))
+
+    return AgentsRead(rows=read, unserved_tasks=sorted(TASK_TYPES - served))
+
+
+@router.patch("/agents/{agent_id}", response_model=AgentsRead)
+async def edit_agent(
+    agent_id: str, body: AgentEdit, _: AdminAllowed, sess: WriteSession
+) -> AgentsRead:
+    """Enable or disable one agent, and return the whole registry.
+
+    The whole registry because `unserved_tasks` is computed across rows:
+    disabling the only agent that declares a task type changes a fact about
+    every other row's screen, and patching one row in place would leave Admin
+    stating something that stopped being true as it was clicked.
+
+    Only `enabled` is writable. Models, endpoints and task types are deployment
+    configuration and belong in `config/agents.yaml` with a migration behind
+    them; enabling is the switch that starts spending, which is the one an
+    operator needs immediately.
+    """
+    agent = await sess.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"No agent {agent_id!r}.")
+
+    if agent.enabled != body.enabled:
+        agent.enabled = body.enabled
+        await sess.flush()
+        log.info(
+            "agent toggled from admin",
+            extra={"agent": agent_id, "enabled": body.enabled},
+        )
+    await sess.commit()
+    return await list_agents(_, sess)
+
+
+@router.get("/runs", response_model=RunsRead)
+async def list_runs(
+    _: AdminAllowed,
+    sess: WriteSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 25,
+) -> RunsRead:
+    """Recent synthesis runs, newest first, with the one in flight called out.
+
+    **Counters rather than a verdict.** §11.9 compares cost and volume per run
+    week on week, and a column that said "successful" would hide the run that
+    finished having written nothing — which is the common case while stages are
+    still being built, and the interesting case afterwards.
+    """
+    total = int(await sess.scalar(select(func.count()).select_from(Run)) or 0)
+    rows = list(await sess.scalars(select(Run).order_by(Run.run_id.desc()).limit(limit)))
+    active = next((row for row in rows if row.status in ("running", "deferred")), None)
+    return RunsRead(
+        rows=[RunRowRead.model_validate(row) for row in rows],
+        total=total,
+        active=RunRowRead.model_validate(active) if active is not None else None,
+    )

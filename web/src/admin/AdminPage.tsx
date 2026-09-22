@@ -1,23 +1,30 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { AgentsPanel } from './AgentsPanel'
 import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
 import { GazetteerQueue } from './GazetteerQueue'
+import { RunsPanel } from './RunsPanel'
 import { TopicPanel } from './TopicPanel'
 import {
   ApiError,
   actOnFetchPolicy,
   addSeed,
+  editAgent,
   decideGazetteerTerm,
   editGazetteerTerm,
   editTopic,
   getFetchPolicy,
+  getAgents,
   getFirstRun,
   getGazetteerQueue,
+  getRuns,
   getSteeringLog,
   getTopics,
   removeSeed,
+  type Agents,
   type FirstRun,
+  type Runs,
   type GazetteerEntityType,
   type GazetteerQueue as Queue,
   type DomainStatus,
@@ -53,12 +60,16 @@ import {
 
 type Phase = 'loading' | 'ready' | 'failed'
 
-type Section = 'gazetteer' | 'topics' | 'domains' | 'seeds'
+type Section = 'gazetteer' | 'topics' | 'domains' | 'agents' | 'runs' | 'seeds'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'gazetteer', label: 'Gazetteer' },
   { key: 'topics', label: 'Topics' },
   { key: 'domains', label: 'Domains' },
+  // `P6-23`. Adjacent because they are read together: a run that deferred and
+  // the registry row that made it defer are one question asked twice.
+  { key: 'agents', label: 'Agents' },
+  { key: 'runs', label: 'Runs' },
   // Last, because it is the one section that stops mattering. It is also the
   // first thing anybody needs on a fresh install, which is why `AdminPage`
   // opens on it when nothing has been crawled yet rather than leaving somebody
@@ -80,6 +91,9 @@ export function AdminPage() {
 
   const [policy, setPolicy] = useState<FetchPolicyPage | null>(null)
   const [domainStatus, setDomainStatus] = useState<DomainStatus | null>(null)
+
+  const [agents, setAgents] = useState<Agents | null>(null)
+  const [runs, setRuns] = useState<Runs | null>(null)
 
   const [run, setRun] = useState<FirstRun | null>(null)
   const [seedBusy, setSeedBusy] = useState<number | null>(null)
@@ -130,6 +144,30 @@ export function AdminPage() {
       })
   }, [])
 
+  const loadAgents = useCallback((signal?: AbortSignal) => {
+    return getAgents({ signal })
+      .then((body) => {
+        setAgents(body)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'The registry could not be loaded.')
+      })
+  }, [])
+
+  const loadRuns = useCallback((signal?: AbortSignal) => {
+    return getRuns({ limit: 25 }, { signal })
+      .then((body) => {
+        setRuns(body)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'Run history could not be loaded.')
+      })
+  }, [])
+
   const loadRun = useCallback(async (signal?: AbortSignal) => {
     try {
       setRun(await getFirstRun({ signal }))
@@ -166,9 +204,11 @@ export function AdminPage() {
     if (section === 'gazetteer') void load(state, controller.signal)
     else if (section === 'topics') void loadTopics(controller.signal)
     else if (section === 'seeds') void loadRun(controller.signal)
+    else if (section === 'agents') void loadAgents(controller.signal)
+    else if (section === 'runs') void loadRuns(controller.signal)
     else void loadPolicy(domainStatus, controller.signal)
     return () => controller.abort()
-  }, [domainStatus, load, loadPolicy, loadTopics, section, state])
+  }, [domainStatus, load, loadAgents, loadPolicy, loadRuns, loadTopics, section, state])
 
   async function act(termId: number, run: () => Promise<unknown>) {
     setBusy(termId)
@@ -286,6 +326,34 @@ export function AdminPage() {
               })
             }
           />
+        ) : (
+          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
+        )
+      ) : null}
+
+      {section === 'agents' ? (
+        agents ? (
+          <AgentsPanel
+            rows={agents.rows}
+            unserved={agents.unserved_tasks}
+            busy={steering}
+            onToggle={(agentId, enabled) =>
+              void steer(agentId, async () => {
+                // The whole registry comes back, because `unserved_tasks` is a
+                // fact across rows: disabling the only agent that declares a
+                // task type changes what every other row's screen should say.
+                setAgents(await editAgent(agentId, enabled))
+              })
+            }
+          />
+        ) : (
+          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
+        )
+      ) : null}
+
+      {section === 'runs' ? (
+        runs ? (
+          <RunsPanel rows={runs.rows} total={runs.total} active={runs.active} />
         ) : (
           <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
         )

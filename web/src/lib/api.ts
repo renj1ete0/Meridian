@@ -1390,3 +1390,111 @@ export interface CrawlProgress {
 export function getCrawlProgress(init?: RequestInit): Promise<CrawlProgress> {
   return request<CrawlProgress>('/api/explore/progress', init)
 }
+
+// ---------------------------------------------------------------------------
+// The agent registry and run history (task P6-23, spec §11.3, §11.10)
+// ---------------------------------------------------------------------------
+
+/** Mirrors `AgentRowRead`. No key: §11.11 keeps them out of the database, and
+ * a screen that echoed one would undo that from the other end. `key_present`
+ * is the server's answer about its own environment. */
+export interface AgentRow {
+  agent_id: string
+  provider: string
+  model: string | null
+  task_types: string[] | null
+  quality_tier: number | null
+  cost_tier: string | null
+  availability: string | null
+  enabled: boolean
+  fallback_agent_id: string | null
+  endpoint: string | null
+  api_key_env_var: string | null
+  key_present: boolean
+  blocked_by: string[]
+}
+
+export const AGENT_ROW_FIELDS = [
+  'agent_id',
+  'provider',
+  'model',
+  'task_types',
+  'quality_tier',
+  'cost_tier',
+  'availability',
+  'enabled',
+  'fallback_agent_id',
+  'endpoint',
+  'api_key_env_var',
+  'key_present',
+  'blocked_by',
+] as const
+
+/** Mirrors `AgentsRead`. */
+export interface Agents {
+  rows: AgentRow[]
+  unserved_tasks: string[]
+}
+
+/** Mirrors `RunRowRead`. */
+export interface RunRow {
+  run_id: number
+  started_at: string | null
+  completed_at: string | null
+  stage: string | null
+  status: string
+  agent_id: string | null
+  tokens_used: number
+  cost_usd: number | null
+  edges_added: number
+  tags_added: number
+  seeds_emitted: number
+  last_chunk_id: number | null
+  heartbeat_at: string | null
+  error: string | null
+}
+
+export const RUN_ROW_FIELDS = [
+  'run_id',
+  'started_at',
+  'completed_at',
+  'stage',
+  'status',
+  'agent_id',
+  'tokens_used',
+  'cost_usd',
+  'edges_added',
+  'tags_added',
+  'seeds_emitted',
+  'last_chunk_id',
+  'heartbeat_at',
+  'error',
+] as const
+
+/** Mirrors `RunsRead`. */
+export interface Runs {
+  rows: RunRow[]
+  total: number
+  active: RunRow | null
+}
+
+export function getAgents(init?: RequestInit): Promise<Agents> {
+  return request<Agents>('/api/admin/agents', init)
+}
+
+/** Enable or disable one agent. Returns the whole registry, because
+ * `unserved_tasks` is computed across rows — disabling the only agent that
+ * declares a task type changes a fact about every other row's screen. */
+export function editAgent(agentId: string, enabled: boolean, init?: RequestInit): Promise<Agents> {
+  return request<Agents>(`/api/admin/agents/${encodeURIComponent(agentId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+    ...init,
+  })
+}
+
+export function getRuns(params: { limit?: number } = {}, init?: RequestInit): Promise<Runs> {
+  const query = params.limit ? `?limit=${params.limit}` : ''
+  return request<Runs>(`/api/admin/runs${query}`, init)
+}

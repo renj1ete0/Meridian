@@ -44,12 +44,9 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    as a service, and a dry cycle over the real corpus reports the 40 passages
    and 47,840 characters it would send.
 
-**Buildable today** is two entries.
+**Buildable today** is one entry, plus whatever the next run turns up.
 
-1. **`P6-23`** — admin: agent registry and run history. `runs` now holds real
-   rows with stages, statuses, heartbeats and counters, and `agents` is where
-   somebody enables the agent that produces the first edge.
-2. **`B-30`** — the vector arm draws 42% of its top ten from the probe
+1. **`B-30`** — the vector arm draws 42% of its top ten from the probe
    chunk's own source, about four distinct sources per ten hits. Whether to cap
    per source, diversify after fusion, or leave it to the lexical half wants
    `P0-15`'s questions to judge against, so it is a decision before it is code.
@@ -57,7 +54,7 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 `P5-01` stays open on its own argument — entity co-occurrence has no consumer until
 `P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
 
-Done this stretch, for the record: `P4-16`, `P4-17`, `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
+Done this stretch, for the record: `P4-16`, `P4-17`, `P6-23`, `P4-10`, `P4-13`, `P4-14`, `P4-12`, `P3-06`,
 `P3-10`, `P3-11`, `B-07`, `B-09`, `B-11`, `P2-20`, `P5-07`, and phase 4's spine —
 `P4-01` through `P4-04`, `P4-06` through `P4-09`, `P4-11` and `P4-15`. `P1-35` (a
 Semantic Scholar key, ten minutes) is still ⚑ human and is felt during the 48h run.
@@ -1193,12 +1190,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       resolved, learned — because a value a reader cannot find anywhere to change
       is this screen's characteristic failure. `seed_allowed` is `P4-12`'s column
       and is not built yet
-- [ ] `P6-23` Admin: agent registry and run history. **Left open deliberately,
-      on the task's own argument**: both tables are empty until phase 4 has run
+- [x] `P6-23` **Admin: agent registry and run history** — `v0.109.0`. Held
+      open on its own argument — both tables are empty until phase 4 runs
       something, and "an empty screen teaches nothing about what the full one
-      should look like" is its own sentence. Building it now would mean
-      designing a run-history view against zero runs and discovering its real
-      shape the first time one exists
+      should look like" — and the argument held: what the screens needed was
+      decided by what the first runs actually did, which is mostly *stop for
+      reasons*. So the registry leads with `unserved_tasks`, the failure that
+      lives between the rows rather than in one: routing picks by task type, an
+      undeclared type defers every run, and every row looks correct while it
+      happens. Each row carries routing's own reasons for skipping it, because
+      an enabled agent with an unset key is indistinguishable from a working
+      one until a run defers hours later. Enabling is the only write; models
+      and endpoints stay reviewable configuration with migrations behind them.
+      Run history shows counters rather than a verdict (§11.9) and explains
+      that deferred is a retry, not a failure (§13.4). **No key is returned or
+      rendered** (§11.11)
 - [x] `P6-14` Figures panel with page-accurate raw file links — `v0.56.0`.
       No thumbnails, because nothing downloads figure images (`P1-10`) and a
       placeholder grid would promise what the corpus cannot keep; the caption is

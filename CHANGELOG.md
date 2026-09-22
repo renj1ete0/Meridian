@@ -234,6 +234,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.109.0] — 2026-09-22
+
+**Admin can see the registry and the runs.**
+
+### Added
+
+- `P6-23`: `GET/PATCH /api/admin/agents` and `GET /api/admin/runs`, with two
+  Admin panels behind them. Enabling is the only writable field — models,
+  endpoints and task types are reviewable configuration with migrations behind
+  them; enabling is the switch that starts spending
+- `unserved_tasks`: the task types no enabled, usable agent declares. This is
+  the failure the screen exists for, and it lives *between* the rows — routing
+  picks by task type, so an undeclared one defers every run while every row on
+  the screen looks correct
+- Each row carries the reasons routing would skip it, computed server-side. A
+  client deriving its own would eventually show a green light for an agent
+  nothing can reach
+
+### Why it is shaped this way
+
+- **No key is ever returned or rendered** (§11.11). The row names the variable;
+  the response says only whether it is set where the API runs
+- **Run history reports counters, not a verdict** (§11.9). A column saying
+  "successful" would hide the run that finished having written nothing
+- **A deferred run is explained as a retry** (§13.4), because it reads like an
+  error and is a scheduled continuation, and the error text is shown in full —
+  it names the condition, and its first forty characters do not
+
 ## [0.108.1] — 2026-09-22
 
 ### Added
