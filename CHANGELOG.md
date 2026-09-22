@@ -234,6 +234,34 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.106.0] — 2026-09-22
+
+**Something runs the synthesis cycle.**
+
+### Added
+
+- `P4-17`: `services/orchestrator/Dockerfile` — the image that may call a
+  model. Same package as the worker, built with `--extra agent` and without
+  `--extra embed`, running `python -m worker.orchestrate --daemon`
+- `worker.orchestrate --daemon`: §6.3's schedule — a run at startup, daily
+  thereafter, and early when the backlog past the high-water mark crosses
+  `--early-at` (500). It beats the liveness file each poll, so a wedged run is
+  distinguishable from a quiet corpus
+- `meridian-worker[agent]`, so one package builds two ways
+- The compose `orchestrator` service is no longer profile-gated, in production
+  and locally. The raw store is mounted read-only (§11.4)
+
+### Why
+
+- A timetable row would have been simpler and is impossible: the scheduler
+  spawns jobs as subprocesses of its own container, which is the worker image
+  — built without the SDK precisely so §2.1's "the fast loop never calls a
+  model" is mechanical. Synthesis would have run in the one image that cannot
+  do it
+- Verified in containers, not only in tests: the worker image raises
+  `ModuleNotFoundError: anthropic`, the orchestrator image walks a full cycle
+  over the real corpus and reports what it would send
+
 ## [0.105.4] — 2026-09-22
 
 ### Fixed

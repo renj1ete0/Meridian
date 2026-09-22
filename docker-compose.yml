@@ -411,19 +411,20 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
 
-  # Phase 4, and `services/orchestrator/Dockerfile` does not exist yet.
+  # §11.10's synthesis cycle, on §6.3's schedule (`P4-17`).
   #
-  # **Profile-gated for that reason alone.** Compose does not skip a service
-  # whose Dockerfile is missing — it fails the whole command with an `lstat ...
-  # no such file or directory`, so an unprofiled orchestrator meant
-  # `docker compose up -d` could not bring up the stack at all. The same shape
-  # as `web`, which had no Dockerfile either until `B-05` wrote one.
+  # **Its own image, and that is the whole point.** The scheduler spawns its
+  # jobs as subprocesses of its own container — the worker image — which is
+  # built without `meridian-core[agent]` so that §2.1's "the fast loop never
+  # calls a model" is mechanical rather than remembered. A timetable row for
+  # synthesis would therefore run it in the one image that cannot do it, so
+  # this is a service with its own timer: daily, and early when the backlog
+  # past the high-water mark crosses `--early-at`.
   #
-  # Remove the profile when the image exists; `tests/unit/test_compose_
-  # topology.py` will start requiring it at that point rather than allowing it.
+  # It reads the raw store read-only (§11.4): a run cites chunks and never
+  # rewrites what they were drawn from.
   orchestrator:
     <<: *common
-    profiles: [phase4]
     build: { context: ., dockerfile: services/orchestrator/Dockerfile }
     env_file: .env
     # `network_mode` and `networks` are mutually exclusive and compose refuses a
@@ -435,6 +436,15 @@ services:
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
     cap_add: [NET_RAW]            # wake-on-LAN magic packets
+    healthcheck:
+      test: ["CMD", "python", "-c", "import anthropic, worker.orchestrate"]
+      interval: 5m
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
 
   api:
     <<: *common

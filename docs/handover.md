@@ -1646,11 +1646,19 @@ neither is code: **a registry row with a working key**, and **a budget row**,
 because an unconfigured token cap refuses rather than reading as unlimited. A
 run with neither defers at `extract` and says which one is missing.
 
-Then `P4-17`: nothing *runs* the orchestrator. `services/orchestrator/` has no
-Dockerfile and `config/schedule.yaml` has no synthesis job, so a run is
-something a person types. Note the constraint that shapes it — the worker image
-deliberately lacks `meridian-core[agent]`, so this is a different image rather
-than the worker under another command.
+`P4-17` closed the rest. The orchestrator has its own image
+(`services/orchestrator/Dockerfile`: same package, `--extra agent`, no
+`--extra embed`) and runs §6.3's schedule as a service — at startup, daily, and
+early when the backlog past the mark crosses `--early-at`.
+
+**A timetable row was impossible, not merely worse**, and it is worth knowing
+why before somebody simplifies it back: the scheduler spawns its jobs as
+subprocesses of its own container, which is the worker image, which is built
+without the SDK so that §2.1 is mechanical rather than remembered. A synthesis
+row would have run in the one image that cannot call a model.
+`tests/unit/test_orchestrator_image.py` reads the two Dockerfiles against each
+other, because one `--extra agent` in the wrong file either ends the invariant
+or defers every run with a provider error that reads as an outage.
 
 **The parse was the load-bearing half of `P4-16`, not the prompt**, and it
 stayed that way: §11.8's position is that a model's output is untrusted, so it

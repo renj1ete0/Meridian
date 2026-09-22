@@ -25,7 +25,9 @@
 #   cloudflared   — it publishes to the internet and needs a tunnel token. A
 #                   local stack must not be reachable from outside, so it is
 #                   absent rather than disabled.
-#   orchestrator  — phase 4. `services/orchestrator/Dockerfile` does not exist.
+#   orchestrator  — present since `P4-17`. It needs a key to do anything, and
+#                   without one it defers each run saying so, which is the
+#                   correct behaviour for a stack nobody has configured.
 #
 # Usage:
 #
@@ -335,6 +337,43 @@ services:
     networks: [internal, egress]
     depends_on:
       postgres: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  # §11.10's synthesis cycle, on §6.3's schedule (`P4-17`).
+  #
+  # **Its own image, and that is the whole point.** The scheduler spawns its
+  # jobs as subprocesses of its own container — the worker image — which is
+  # built without `meridian-core[agent]` so that §2.1's "the fast loop never
+  # calls a model" is mechanical rather than remembered. A timetable row for
+  # synthesis would therefore run it in the one image that cannot do it, so
+  # this is a service with its own timer: daily, and early when the backlog
+  # past the high-water mark crosses `--early-at`.
+  #
+  # It reads the raw store read-only (§11.4): a run cites chunks and never
+  # rewrites what they were drawn from.
+  orchestrator:
+    <<: *common
+    build: { context: ., dockerfile: services/orchestrator/Dockerfile }
+    networks: [internal, egress]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: [*pg-credentials, *db-urls]
+      # The key the registry row names (§11.11). Absent is a supported state:
+      # the run defers at `extract` saying which agent could not be reached,
+      # which is what a local stack without a key should do.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ${DATA_ROOT:-./.localdata}/raw:/data/raw:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import anthropic, worker.orchestrate"]
+      interval: 5m
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]

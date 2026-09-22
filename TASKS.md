@@ -39,14 +39,16 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    writes edges, tags, entities and the mark. **What has never happened is a
    call to a real one**, and two things stand in the way — a registry row with
    a working key, and a budget row, since an unconfigured cap refuses rather
-   than reading as unlimited. Neither is code. After that, `P4-17`: nothing
-   *runs* the orchestrator on a timetable, because `services/orchestrator/`
-   still has no Dockerfile and `config/schedule.yaml` has no synthesis job.
+   than reading as unlimited. **Neither is code**, and as of `P4-17` nothing
+   else is either: the orchestrator has its own image and runs §6.3's schedule
+   as a service, and a dry cycle over the real corpus reports the 40 passages
+   and 47,840 characters it would send.
 
 **Buildable today** is two entries.
 
-1. **`P4-17`** — give the orchestrator a service and a place in the timetable.
-   Until it has one, a synthesis run is something a person types.
+1. **`B-23`** — shape gates for redirector hosts and site furniture. Two fifths
+   of the first real corpus was neither: 244 DOI redirector rows (134 of them
+   resolving to nothing readable) and 106 pages of one site's own help section.
 2. **`P6-23`** — admin: agent registry and run history. Its own argument was that both
    tables stay empty until phase 4 runs something and "an empty screen teaches nothing";
    `runs` now holds real rows with stages, statuses, heartbeats and counters, so there
@@ -840,16 +842,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       non-overlap as *disagreement*, sinking an exact name match to 0.43 and
       founding a new node for every passage; §5.5 says an absent signal is
       dropped, and a mention seen once has no neighbourhood to compare
-- [ ] `P4-17` **The orchestrator has no service and no place in the timetable.**
-      `worker.orchestrate` runs its stages when somebody types it, and nothing
-      types it: `services/orchestrator/Dockerfile` does not exist (the compose
-      service is profile-gated behind `phase4` for that reason) and
-      `config/schedule.yaml` has no synthesis job. §6.3 wants a daily run,
-      early-triggered when unprocessed novel chunks cross a threshold. Note the
-      invariant this must not break — the worker image deliberately lacks
-      `meridian-core[agent]` (§2.1), so the orchestrator is a *different* image
-      rather than the worker under another command, which is what every other
-      `python -m worker.<x>` service is
+- [x] `P4-17` **The orchestrator has a service and a schedule** — `v0.106.0`.
+      `services/orchestrator/Dockerfile` is the image that may call a model:
+      the same package as the worker, built `--extra agent` and *not*
+      `--extra embed`, entry point `worker.orchestrate --daemon`. **A timetable
+      row was impossible rather than merely worse** — the scheduler spawns jobs
+      as subprocesses of its own container, which is the worker image, built
+      without the SDK so §2.1 is mechanical; a synthesis row would have run in
+      the one image that cannot do it. So the daemon carries §6.3's schedule
+      itself: a run at startup, daily after that, early when the backlog past
+      the mark crosses `--early-at`. Drift tests read the two Dockerfiles
+      against each other, because one `--extra agent` in the wrong file either
+      ends the invariant or defers every run with a provider error nobody can
+      explain. Verified in containers: the worker image raises
+      `ModuleNotFoundError: anthropic`; the orchestrator image walked a whole
+      cycle over the real corpus. **What is left before an edge exists is a
+      key** — no code
 - [x] `P4-05` `validation.py` — server-side guards, node existence, domain
       allowlist, caps — `v0.76.0`. Built before the write tools that call it
       (`P4-04`), because §11.8 specifies the rules precisely enough for the test

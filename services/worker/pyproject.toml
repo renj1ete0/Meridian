@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.105.4"
+version = "0.106.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 license = "MIT"
@@ -22,6 +22,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The orchestrator's build, not the crawl's (`P4-17`). `worker.orchestrate`
+# lives in this package and is the one entry point that may call a model, so
+# the image that runs it needs `meridian-core[agent]` while the image that
+# runs `worker.main` must not have it (§2.1). An extra is how one package
+# builds two ways: `services/worker/Dockerfile` never asks for this and
+# `services/orchestrator/Dockerfile` asks for nothing else.
+agent = ["meridian-core[agent]"]
+
 embed = [
     "sentence-transformers>=3.0",
     # `P2-17`'s sidecar serves the same model over HTTP, from this image rather

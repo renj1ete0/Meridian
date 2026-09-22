@@ -65,6 +65,7 @@ import asyncio
 import contextlib
 import dataclasses
 import datetime as dt
+import signal
 import time
 from collections.abc import AsyncIterator
 from typing import Final
@@ -98,9 +99,12 @@ from meridian_core.runs import (
     begin_or_resume,
     defer,
     finish,
+    unfinished,
 )
 from meridian_core.validation import ValidationError
 from meridian_core.writes import add_edge, tag_entity
+
+from .liveness import beat
 
 log = get_logger(__name__)
 
@@ -724,6 +728,105 @@ async def _cycles(
             break
 
 
+#: How long between synthesis runs when nothing forces one sooner (§6.3, daily).
+DEFAULT_INTERVAL_S: Final[int] = 86_400
+
+#: Chunks past the mark that justify waking early. §6.3 offers the early
+#: trigger as an option, and this is the number it left open: below it a run
+#: spends a frontier model's attention on a handful of passages, which is the
+#: expensive way to learn very little.
+DEFAULT_EARLY_AT: Final[int] = 500
+
+#: Ceiling on the wait between wake-ups. The daily timer is the schedule; this
+#: is how often the backlog is *looked at*, so an early trigger fires within
+#: the hour rather than at whatever moment the day happens to turn over.
+POLL_S: Final[int] = 900
+
+
+async def waiting_chunks() -> int:
+    """How many chunks sit past the current run's mark, for the early trigger.
+
+    Its own session, because this is asked between runs rather than inside
+    one, and holding a transaction open across a sleep would pin a connection
+    for the day.
+    """
+    async with get_sessionmaker("rw")() as sess:
+        run = await unfinished(sess)
+        if run is None:
+            return int(await sess.scalar(select(func.count()).select_from(Chunk)) or 0)
+        return await pending_work(sess, run)
+
+
+async def serve(
+    *,
+    interval_s: int = DEFAULT_INTERVAL_S,
+    early_at: int = DEFAULT_EARLY_AT,
+    poll_s: int = POLL_S,
+    max_cycles: int = 10,
+    agent_id: str | None = None,
+    stop: asyncio.Event | None = None,
+) -> None:
+    """Run synthesis on §6.3's schedule until told to stop.
+
+    **A service rather than a row in the timetable, and not by preference.**
+    The scheduler spawns its jobs as subprocesses of its own container, which
+    is the worker image — and the worker image deliberately does not carry
+    `meridian-core[agent]`, because §2.1 makes "the fast loop never calls a
+    model" mechanical rather than remembered. A timetable row would therefore
+    run this in the one image that cannot do it.
+
+    **Early, not sooner.** §6.3 asks for a daily run "optionally
+    early-triggered when unprocessed novel chunk count crosses a threshold",
+    so the backlog is checked every `poll_s` and a run starts early when it is
+    large enough to be worth a model's attention. The daily timer still runs
+    on a quiet corpus, because a run that found little is also the run that
+    reports the corpus is quiet.
+    """
+    stopping = stop or asyncio.Event()
+    next_run = 0.0  # the first cycle happens at startup, not a day later
+
+    while not stopping.is_set():
+        beat()
+        now = time.monotonic()
+        waiting = await waiting_chunks()
+        due = now >= next_run
+        early = waiting >= early_at
+
+        if due or early:
+            log.info(
+                "synthesis run starting",
+                extra={"waiting": waiting, "reason": "scheduled" if due else "backlog"},
+            )
+            journal = await run_orchestrator(max_cycles=max_cycles, agent_id=agent_id)
+            for line in journal.render().splitlines():
+                log.info("synthesis", extra={"line": line})
+            next_run = time.monotonic() + interval_s
+        else:
+            log.info("synthesis idle", extra={"waiting": waiting, "early_at": early_at})
+
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stopping.wait(), timeout=poll_s)
+
+
+async def _serve(args: argparse.Namespace) -> None:
+    """The daemon, with signals wired and the pool closed once."""
+    stopping = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for signame in ("SIGINT", "SIGTERM"):
+        with contextlib.suppress(NotImplementedError, AttributeError):
+            loop.add_signal_handler(getattr(signal, signame), stopping.set)
+    try:
+        await serve(
+            interval_s=args.interval_seconds,
+            early_at=args.early_at,
+            max_cycles=args.max_cycles,
+            agent_id=args.agent,
+            stop=stopping,
+        )
+    finally:
+        await dispose_engines()
+
+
 async def _main(args: argparse.Namespace) -> Journal:
     """Run, then close the pool — both inside one event loop.
 
@@ -773,10 +876,30 @@ def main() -> None:
         help="a ceiling on cycles per invocation, so a loop cannot run away unattended",
     )
     parser.add_argument("--agent", default=None, help="record this agent on the run")
+    parser.add_argument(
+        "--daemon",
+        action="store_true",
+        help="stay up and run on §6.3's schedule, rather than running now and exiting",
+    )
+    parser.add_argument(
+        "--interval-seconds",
+        type=int,
+        default=DEFAULT_INTERVAL_S,
+        help="how long between scheduled runs in --daemon (default: daily)",
+    )
+    parser.add_argument(
+        "--early-at",
+        type=int,
+        default=DEFAULT_EARLY_AT,
+        help="chunks past the mark that trigger a run before the timer (§6.3)",
+    )
     args = parser.parse_args()
 
     configure_logging("orchestrate")
     with bind_run_id(f"orch-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
+        if args.daemon:
+            asyncio.run(_serve(args))
+            return
         journal = asyncio.run(_main(args))
         print(journal.render())
 

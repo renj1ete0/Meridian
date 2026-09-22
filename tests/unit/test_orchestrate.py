@@ -8,9 +8,12 @@ transaction, and are in `tests/integration/test_orchestrate.py`.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from meridian_core.runs import FINAL_STAGE, STAGES
+from worker import orchestrate
 from worker.orchestrate import BUILT_BY, RUNNERS, Journal, cycle
 
 
@@ -93,3 +96,73 @@ async def test_an_unknown_stop_stage_is_refused_before_anything_starts() -> None
     """
     with pytest.raises(ValueError, match="not a stage"):
         await cycle(None, journal=Journal(), now=None, stop_after="taging")
+
+
+# --------------------------------------------------------------------------
+# The daemon's schedule (task `P4-17`, §6.3)
+# --------------------------------------------------------------------------
+#
+# §6.3: "Cron-triggered daily, optionally early-triggered when unprocessed
+# novel chunk count crosses a threshold." Both halves matter and they fail
+# differently — a missing timer means a quiet corpus is never reasoned over at
+# all, and a missing early trigger means a day's crawl waits for the clock
+# while the backlog it should have consumed keeps growing.
+
+
+async def drive_serve(monkeypatch, *, waiting: int, polls: int = 1, **kwargs) -> tuple[int, int]:
+    """Run `serve` for a fixed number of polls; report (polls, runs).
+
+    The stop event is set from inside the backlog query, which is the first
+    thing each iteration does — so `polls` is exactly the number of times round
+    the loop, with no timing in the test at all. An earlier version patched
+    `asyncio.wait_for` to make the sleep instant and hung, which is the usual
+    reward for being clever about a loop.
+    """
+    polled: list[int] = []
+    ran: list[int] = []
+    stopping = asyncio.Event()
+
+    async def counted() -> int:
+        polled.append(1)
+        if len(polled) >= polls:
+            stopping.set()
+        return waiting
+
+    async def orchestrated(**_) -> Journal:
+        ran.append(1)
+        return Journal()
+
+    monkeypatch.setattr(orchestrate, "waiting_chunks", counted)
+    monkeypatch.setattr(orchestrate, "run_orchestrator", orchestrated)
+    monkeypatch.setattr(orchestrate, "beat", lambda *a, **k: None)
+
+    await orchestrate.serve(stop=stopping, poll_s=0, **kwargs)
+    return len(polled), len(ran)
+
+
+async def test_the_first_cycle_happens_at_startup(monkeypatch) -> None:
+    """Not a day later. A container that came up after a crash would otherwise
+    do nothing until the next scheduled slot, and the state it came up in is
+    exactly the one worth reasoning over."""
+    polls, ran = await drive_serve(monkeypatch, waiting=0, early_at=10_000)
+
+    assert (polls, ran) == (1, 1)
+
+
+async def test_a_large_backlog_runs_before_the_timer(monkeypatch) -> None:
+    """§6.3's early trigger. The second poll comes long before the daily
+    interval and runs anyway, because the backlog crossed the threshold."""
+    polls, ran = await drive_serve(
+        monkeypatch, waiting=5_000, early_at=500, polls=2, interval_s=86_400
+    )
+
+    assert (polls, ran) == (2, 2)
+
+
+async def test_a_small_backlog_waits_for_the_timer(monkeypatch) -> None:
+    """The other half of the threshold. A run over a handful of passages
+    spends a frontier model's attention to learn very little, which is the
+    expense the registry exists to avoid."""
+    polls, ran = await drive_serve(monkeypatch, waiting=3, early_at=500, polls=3, interval_s=86_400)
+
+    assert (polls, ran) == (3, 1), "only the startup run should have happened"
