@@ -1498,7 +1498,12 @@ Things worth doing that don't belong to a phase yet.
       unfiltered when that topic is momentarily empty so a lane never stalls.
       A pinned `MERIDIAN_WORKER_TOPICS` is not widened by the draw. **This is
       the consumption half only**: `P5-04`'s gap-driven seed emission is still
-      what introduces material a link graph would never reach
+      what introduces material a link graph would never reach. Refined in
+      `v0.105.3`: the first version fell straight through to an unfiltered
+      claim when a drawn topic was empty, which handed that topic's share to
+      whichever topic had most queued — 45% of the weight, on the live stack,
+      because three of six active topics had no rows. An empty topic is now
+      dropped from the pool and another drawn
 - [x] `B-25` **Embedding runs continuously instead of hourly** — `v0.104.0`.
       `worker.embed` has had a `run_forever` mode all along and
       `docs/handover.md` has always listed it among four long-running

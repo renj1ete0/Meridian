@@ -234,6 +234,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.105.3] — 2026-09-22
+
+### Fixed
+
+- `B-26`'s fallback gave an empty topic's share to whichever topic had most
+  queued — the concentration the feature exists to correct, arriving by the
+  back door. Measured live: three of six active topics held no frontier rows,
+  so 45% of the weight was being handed to the largest pile. A drawn topic
+  with nothing claimable is now dropped from the pool and another is drawn;
+  only an exhausted pool falls through to an unfiltered claim
+
 ## [0.105.2] — 2026-09-22
 
 ### Fixed

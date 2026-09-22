@@ -541,64 +541,78 @@ class Worker:
             or getattr(self, CONDITIONAL_TASK_TYPES[name]) is not None
         ]
 
-    async def _draw_topic(self, sess) -> str | None:
-        """The topic this claim should prefer, drawn from the weights (§10).
+    async def _shares(self, sess) -> dict[str, float]:
+        """What fraction of claims each topic should get right now (§10).
 
-        Read per claim rather than cached: the timetable is a handful of rows
-        and this is one small query against a lane that is about to spend a
-        second or more on a network fetch. A cache here would buy nothing and
-        would mean a steering change taking effect at a time nobody could
-        predict, which is the opposite of what §10 promises — "steer back
-        later" has to mean now.
-
-        An operator-pinned topic list wins outright. `MERIDIAN_WORKER_TOPICS`
-        is somebody saying what this worker is for, and a weight vector must
-        not quietly widen it.
+        Read per claim rather than cached: the topic table is a handful of rows
+        and this is one small query against a lane about to spend a second or
+        more on a network fetch. A cache would buy nothing and would mean a
+        steering change landing at a time nobody could predict, which is the
+        opposite of what §10 promises — "steer back later" has to mean now.
         """
-        if self._settings.topics:
-            return None
         try:
-            shares = draw_shares(await steering_topics(sess), now=dt.datetime.now(dt.UTC))
+            return draw_shares(await steering_topics(sess), now=dt.datetime.now(dt.UTC))
         except Exception:
             # Steering is a preference, not a precondition. A worker that
             # stopped claiming because it could not read the weight vector
             # would trade the whole crawl for the shape of it.
             log.exception("could not read the steering vector; claiming unfiltered")
-            return None
-        return draw_topic(shares)
+            return {}
 
     async def _claim(self) -> Claim | None:
+        """One task, preferring the topics the attention vector prefers (§10).
+
+        **An empty topic is redrawn, not surrendered.** The first version fell
+        straight through to an unfiltered claim, and on a real frontier that
+        gave the share of every topic with nothing queued to whichever topic
+        had most queued — which is the concentration this exists to correct,
+        arriving by the back door. Measured on the live stack: three of six
+        active topics held no rows at all, so 45% of the weight was being
+        handed to the largest pile.
+
+        So a drawn topic that has nothing claimable is dropped from the pool
+        and another is drawn. Only when the pool is exhausted does the claim go
+        unfiltered, which is still the right last resort: a lane that idled
+        while the queue held work would trade the crawl for the shape of it.
+        """
         async with self._session_factory() as sess:
-            drawn = await self._draw_topic(sess)
-            topics = list(self._settings.topics) if self._settings.topics else None
-            task = await claim_next(
-                sess,
-                worker_id=self._settings.worker_id,
-                lease_seconds=self._settings.lease_seconds,
-                topics=[drawn] if drawn else topics,
-                task_types=self._claimable_task_types(),
-            )
-            if task is None and drawn is not None:
-                # The drawn topic had nothing claimable. Falling back rather
-                # than idling: a topic whose frontier is momentarily empty must
-                # not stop a lane, or a corpus with one starved topic crawls at
-                # a fraction of its concurrency and looks merely slow.
-                task = await claim_next(
-                    sess,
-                    worker_id=self._settings.worker_id,
-                    lease_seconds=self._settings.lease_seconds,
-                    topics=None,
-                    task_types=self._claimable_task_types(),
-                )
-            if task is None:
-                return None
-            return Claim(
-                task_id=task.task_id,
-                url=task.url_or_query,
-                attempts=task.attempts,
-                topic=task.topic,
-                task_type=task.task_type,
-            )
+            if self._settings.topics:
+                # An operator said what this worker is for. The vector does not
+                # get to widen that.
+                return await self._claim_within(sess, list(self._settings.topics))
+
+            shares = await self._shares(sess)
+            while shares:
+                topic = draw_topic(shares)
+                if topic is None:
+                    break
+                claim = await self._claim_within(sess, [topic])
+                if claim is not None:
+                    return claim
+                # Nothing claimable under it *right now* — in backoff, held by
+                # another worker, or genuinely empty. Either way another draw
+                # spent on it is a draw wasted.
+                shares.pop(topic, None)
+
+            return await self._claim_within(sess, None)
+
+    async def _claim_within(self, sess, topics: list[str] | None) -> Claim | None:
+        task = await claim_next(
+            sess,
+            worker_id=self._settings.worker_id,
+            lease_seconds=self._settings.lease_seconds,
+            topics=topics,
+            task_types=self._claimable_task_types(),
+        )
+        if task is None:
+            return None
+        return Claim(
+            task_id=task.task_id,
+            url=task.url_or_query,
+            attempts=task.attempts,
+            topic=task.topic,
+            task_type=task.task_type,
+        )
 
     async def _process(self, claim: Claim) -> None:
         """Fetch one claimed task and settle it.

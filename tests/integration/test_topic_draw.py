@@ -162,3 +162,36 @@ async def test_a_pinned_topic_list_is_not_widened_by_the_draw(frontier) -> None:
         assert claim is not None
         task = await sess.get(QueueTask, claim.task_id)
         assert task.topic == light, "the draw overrode an operator's own topic list"
+
+
+async def test_an_empty_topic_does_not_donate_its_share_to_the_biggest_pile(
+    frontier, session_for, marker
+) -> None:
+    """The refinement, and the reason it matters.
+
+    Falling straight through to an unfiltered claim gives the share of every
+    topic with nothing queued to whichever topic has most queued — which is
+    the concentration this feature exists to correct, arriving by the back
+    door. On the live stack three of six active topics held no rows, so 45% of
+    the weight was being handed to the largest frontier.
+
+    Here `heavy` is weighted nine to one and has nothing claimable, so every
+    claim must come from `light` rather than from the unrelated rows the dev
+    corpus is full of.
+    """
+    sess, heavy, light = frontier
+    await sess.execute(delete(QueueTask).where(QueueTask.topic == heavy))
+    await sess.flush()
+    worker = worker_for(sess)
+
+    topics = []
+    for _ in range(10):
+        claim = await worker._claim()
+        assert claim is not None
+        task = await sess.get(QueueTask, claim.task_id)
+        topics.append(task.topic)
+
+    assert set(topics) == {light}, (
+        f"claims went to {sorted(set(topics))}; an empty topic's share was "
+        "spent outside the attention pool"
+    )
