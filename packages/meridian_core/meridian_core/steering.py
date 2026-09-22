@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import random
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -205,6 +206,47 @@ def draw_shares(rows, *, now: dt.datetime) -> dict[str, float]:
             for row in active
         ]
     )
+
+
+def draw_topic(shares: dict[str, float], *, rng: random.Random | None = None) -> str | None:
+    """One topic, chosen with probability equal to its share (`B-26`, §10).
+
+    §10's first line is that attention is a weight vector and seeds are drawn
+    proportionally. Until this existed, nothing in the acquisition path read
+    the vector at all: `steering.py` was the only module that touched those
+    weights, and the crawl claimed by priority and age alone.
+
+    **What that costs is not subtle, and it compounds.** A link discovered on a
+    page inherits that page's topic, so whatever the crawl happens to be
+    working on produces more of itself. One real run finished with 97% of a
+    44,000-row frontier on a single topic — the one weighted *lowest* of the
+    three — because an early citation trail went that way and nothing pulled it
+    back. Claiming proportionally closes the loop in the other direction: a
+    topic that is crawled produces successors in its own topic, so consumption
+    is what makes a frontier grow.
+
+    Returns None for an empty pool, which is the signal to claim without a
+    topic filter rather than to stop. A deployment can legitimately have no
+    active topics for a moment — during a re-topic, or before the seed runs —
+    and a crawl that stalled for it would be choosing purity over the work.
+
+    The generator is a parameter so a test can be exact rather than
+    statistical: proportions are the kind of thing that look right in ten
+    thousand draws and are wrong by a factor of two in the code.
+    """
+    pool = {topic: share for topic, share in shares.items() if share > 0}
+    if not pool:
+        return None
+
+    total = sum(pool.values())
+    point = (rng or random).random() * total
+    cumulative = 0.0
+    for topic, share in sorted(pool.items()):
+        cumulative += share
+        if point < cumulative:
+            return topic
+    # Only reachable through floating-point drift at the very top of the range.
+    return sorted(pool)[-1]
 
 
 # ---------------------------------------------------------------------------

@@ -321,3 +321,45 @@ async def test_max_batches_bounds_a_first_run(session_for, url, cleanup) -> None
 
     assert stats.batches == 2
     assert stats.embedded == 4
+
+
+# --------------------------------------------------------------------------
+# The pass is observable while it runs (task `B-28`)
+# --------------------------------------------------------------------------
+#
+# `B-25` gave the pass a service and the worker's liveness probe. It had never
+# touched the heartbeat file, so the container reported `unhealthy` from the
+# moment it started and stayed there while doing its job perfectly — a probe
+# that is always red is one everybody learns to ignore, which is the same
+# failure `liveness.py` designs against from the other direction.
+
+
+async def test_the_pass_says_it_is_alive_before_the_batch_not_after(
+    session_for, url, cleanup, tmp_path, monkeypatch
+) -> None:
+    """A batch is minutes of CPU on this hardware.
+
+    A heartbeat written only on completion goes stale *during* normal work, so
+    the probe fires at a healthy process — and a restart then kills the batch,
+    which makes the next one go stale in the same place. The embedder here
+    reports whether the heartbeat was already on disk when it was called,
+    which is the whole claim: before, not after.
+    """
+    path = tmp_path / "alive"
+    monkeypatch.setenv("MERIDIAN_LIVENESS_PATH", str(path))
+    seen: list[bool] = []
+
+    class Watching(LocalEmbedder):
+        async def embed(self, texts):
+            seen.append(path.exists())
+            return await super().embed(texts)
+
+    sess = await session_for("rw")
+    await a_source_with_chunks(sess, url, 2)
+    await sess.commit()
+
+    backfill = Backfill(Watching(FakeEmbedder()), batch_size=1, max_batches=1)
+    await backfill.run_once()
+
+    assert seen, "no batch ran; the test proves nothing"
+    assert seen[0], "the pass embedded a batch before saying it was alive"

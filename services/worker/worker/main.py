@@ -44,6 +44,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import datetime as dt
 import os
 import signal
 import socket
@@ -81,6 +82,8 @@ from meridian_core.queueing import (
     release_worker_claims,
 )
 from meridian_core.sources import get_source, touch_source, upsert_source
+from meridian_core.steering import draw_shares, draw_topic
+from meridian_core.steering import topics as steering_topics
 from meridian_core.tiering import is_tier_mapped, priority_with_urgency
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
@@ -538,15 +541,55 @@ class Worker:
             or getattr(self, CONDITIONAL_TASK_TYPES[name]) is not None
         ]
 
+    async def _draw_topic(self, sess) -> str | None:
+        """The topic this claim should prefer, drawn from the weights (§10).
+
+        Read per claim rather than cached: the timetable is a handful of rows
+        and this is one small query against a lane that is about to spend a
+        second or more on a network fetch. A cache here would buy nothing and
+        would mean a steering change taking effect at a time nobody could
+        predict, which is the opposite of what §10 promises — "steer back
+        later" has to mean now.
+
+        An operator-pinned topic list wins outright. `MERIDIAN_WORKER_TOPICS`
+        is somebody saying what this worker is for, and a weight vector must
+        not quietly widen it.
+        """
+        if self._settings.topics:
+            return None
+        try:
+            shares = draw_shares(await steering_topics(sess), now=dt.datetime.now(dt.UTC))
+        except Exception:
+            # Steering is a preference, not a precondition. A worker that
+            # stopped claiming because it could not read the weight vector
+            # would trade the whole crawl for the shape of it.
+            log.exception("could not read the steering vector; claiming unfiltered")
+            return None
+        return draw_topic(shares)
+
     async def _claim(self) -> Claim | None:
         async with self._session_factory() as sess:
+            drawn = await self._draw_topic(sess)
+            topics = list(self._settings.topics) if self._settings.topics else None
             task = await claim_next(
                 sess,
                 worker_id=self._settings.worker_id,
                 lease_seconds=self._settings.lease_seconds,
-                topics=list(self._settings.topics) if self._settings.topics else None,
+                topics=[drawn] if drawn else topics,
                 task_types=self._claimable_task_types(),
             )
+            if task is None and drawn is not None:
+                # The drawn topic had nothing claimable. Falling back rather
+                # than idling: a topic whose frontier is momentarily empty must
+                # not stop a lane, or a corpus with one starved topic crawls at
+                # a fraction of its concurrency and looks merely slow.
+                task = await claim_next(
+                    sess,
+                    worker_id=self._settings.worker_id,
+                    lease_seconds=self._settings.lease_seconds,
+                    topics=None,
+                    task_types=self._claimable_task_types(),
+                )
             if task is None:
                 return None
             return Claim(

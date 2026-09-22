@@ -37,7 +37,27 @@ from .logging import get_logger
 
 log = get_logger(__name__)
 
+#: How long to wait on a *query* — one short string, on the read path, with a
+#: reader watching. Deliberately impatient: a search that hangs for a minute is
+#: worse than one that reports a degraded arm.
 DEFAULT_TIMEOUT_S = 30.0
+
+#: How long one text may take before the wait is considered exceeded, used to
+#: size the timeout for a batch (`B-27`).
+#:
+#: **This exists because the two defaults contradicted each other.** The
+#: backfill batches `MERIDIAN_EMBED_CHUNK_BATCH` chunks — 256 — into one
+#: request, and a real chunk of about a thousand characters takes the better
+#: part of half a second on CPU. So every batch call asked a thirty-second
+#: client to wait two minutes, timed out at exactly thirty seconds, and the
+#: caller fell back to loading the model in its own process (`P2-19`). It
+#: worked, which is why nobody noticed: the vectors were correct, and the only
+#: symptom was a second copy of 2.3 GB of weights on a machine chosen for being
+#: small — the precise thing the sidecar exists to prevent (`P2-17`, `B-14`).
+#:
+#: Generous rather than measured: over-waiting on a sidecar that is working
+#: costs nothing, and the failure this replaces was under-waiting.
+SECONDS_PER_TEXT = 2.0
 
 #: A query is one short string. This cap is about batch calls from a backfill,
 #: and exists so a caller cannot ask one HTTP request to hold a corpus.
@@ -154,7 +174,13 @@ class RemoteEmbedder:
 
         try:
             response = await self._http().post(
-                f"{self.base_url}/embed", json={"texts": list(texts)}
+                f"{self.base_url}/embed",
+                json={"texts": list(texts)},
+                # Sized to the request rather than fixed. A batch is not a
+                # query that got longer: it is N times the work, and a timeout
+                # that ignores N is a timeout that only fits the smallest call
+                # anybody makes.
+                timeout=self._batch_timeout(len(texts)),
             )
             response.raise_for_status()
             body = response.json()
@@ -184,6 +210,14 @@ class RemoteEmbedder:
                 f"{len(vectors) if isinstance(vectors, list) else 'none'}"
             )
         return vectors
+
+    def _batch_timeout(self, count: int) -> float:
+        """The configured timeout, or what this many texts plausibly need.
+
+        A floor rather than a replacement, so setting `MERIDIAN_EMBEDDER_TIMEOUT_S`
+        higher for a slow box still raises it for every call.
+        """
+        return max(self._timeout, count * SECONDS_PER_TEXT)
 
     async def embed_one(self, text: str) -> list[float]:
         """One vector, for the query path."""

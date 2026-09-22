@@ -52,6 +52,7 @@ from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .embeddings import EmbeddingError
+from .liveness import beat
 from .vectors import AsyncEmbedder, build_embedder
 
 log = get_logger(__name__)
@@ -131,6 +132,11 @@ class Backfill:
         after_id = self._start_after
 
         while not self._stopping.is_set():
+            # Before the batch, not after it (`B-28`). A batch is minutes of
+            # CPU on this hardware, so a heartbeat written only on completion
+            # goes stale *during normal work* — which is the probe firing at a
+            # healthy process, the failure `liveness.py` is explicit about.
+            beat()
             if self._max_batches is not None and stats.batches >= self._max_batches:
                 break
 
@@ -197,6 +203,11 @@ class Backfill:
             if self._stopping.is_set():
                 break
             if stats.embedded == 0:
+                # An idle pass is still a live one: with the backlog at zero
+                # `run_once` returns immediately and the loop sleeps, so
+                # without this the heartbeat would go stale precisely when
+                # there is nothing wrong.
+                beat()
                 await self._sleep(self._idle_sleep_s)
         return total
 

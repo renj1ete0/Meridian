@@ -1466,6 +1466,18 @@ Things worth doing that don't belong to a phase yet.
       row exists rather than after, and a help/about/contact path is a shape a
       prefilter can recognise. Worth deciding against real numbers rather than
       a rule list, and the numbers now exist
+- [x] `B-26` **The crawl claims in proportion to the attention vector** —
+      `v0.105.0`. §10 opens with "attention is a weight vector over topics;
+      seeds are drawn proportionally", and nothing in acquisition had ever read
+      it: `steering.py` was the only module that touched those weights. The
+      cost compounds — a discovered link inherits its parent's topic, so the
+      crawl makes more of whatever it is already doing, and a real run finished
+      97% concentrated on the topic weighted *lowest* of three. `draw_topic`
+      picks a topic per claim and the worker claims within it, falling back
+      unfiltered when that topic is momentarily empty so a lane never stalls.
+      A pinned `MERIDIAN_WORKER_TOPICS` is not widened by the draw. **This is
+      the consumption half only**: `P5-04`'s gap-driven seed emission is still
+      what introduces material a link graph would never reach
 - [x] `B-25` **Embedding runs continuously instead of hourly** — `v0.104.0`.
       `worker.embed` has had a `run_forever` mode all along and
       `docs/handover.md` has always listed it among four long-running

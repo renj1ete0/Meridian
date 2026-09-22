@@ -234,6 +234,31 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.105.0] — 2026-09-22
+
+**The crawl reads the attention vector.**
+
+### Added
+
+- `B-26`: `steering.draw_topic` — one topic, drawn with probability equal to
+  its normalised share (§10). The worker draws before each claim and claims
+  within that topic, falling back to an unfiltered claim when the drawn topic
+  has nothing pending, so a momentarily empty topic cannot stall a lane
+- An operator's `MERIDIAN_WORKER_TOPICS` still wins outright: a weight vector
+  must not quietly widen what somebody said this worker is for
+
+### Why
+
+- Nothing in the acquisition path had ever read the weights — `steering.py`
+  was the only module that touched them — and the gap compounds rather than
+  merely existing. A discovered link inherits its parent's topic, so the crawl
+  produces more of whatever it is already doing. A real 2h20m run ended with
+  97% of a 44,000-row frontier on one topic, and it was the topic weighted
+  *lowest* of the three
+- Claiming proportionally closes the loop the other way: a topic that is
+  crawled produces successors in its own topic, so consumption is what makes a
+  frontier grow
+
 ## [0.104.0] — 2026-09-22
 
 **Embedding keeps up, or says why it cannot.**

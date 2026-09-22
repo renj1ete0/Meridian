@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import random
 
 import pytest
 
+from meridian_core import steering
 from meridian_core.steering import (
     EPS,
     InfeasibleWeights,
@@ -287,3 +289,71 @@ def test_no_active_topics_draws_nothing_rather_than_raising() -> None:
     # down — and it must not make the screen that would let them restart it
     # throw.
     assert draw_shares([Row("a", 0.5, status="archived")], now=NOW) == {}
+
+
+# --------------------------------------------------------------------------
+# Drawing a topic proportionally (task `B-26`, §10)
+# --------------------------------------------------------------------------
+#
+# §10's opening line is that attention is a weight vector and seeds are drawn
+# proportionally. Nothing in the acquisition path read the vector until this
+# existed: the crawl claimed by priority and age, a discovered link inherited
+# its parent's topic, and so whatever the crawl was already doing produced more
+# of itself. One real run ended with 97% of a 44,000-row frontier on a single
+# topic — the one weighted *lowest* of the three.
+
+
+def test_a_draw_respects_the_shares() -> None:
+    """Exact, not statistical. A generator with a known sequence lands each
+    draw in a known band, so a factor-of-two error in the arithmetic fails
+    here rather than looking like variance."""
+    shares = {"alpha": 0.5, "beta": 0.3, "gamma": 0.2}
+
+    class Fixed(random.Random):
+        def __init__(self, value: float) -> None:
+            super().__init__()
+            self._value = value
+
+        def random(self) -> float:
+            return self._value
+
+    # Sorted order is alpha, beta, gamma, so the cumulative bands are
+    # [0, 0.5), [0.5, 0.8), [0.8, 1.0).
+    assert steering.draw_topic(shares, rng=Fixed(0.0)) == "alpha"
+    assert steering.draw_topic(shares, rng=Fixed(0.49)) == "alpha"
+    assert steering.draw_topic(shares, rng=Fixed(0.5)) == "beta"
+    assert steering.draw_topic(shares, rng=Fixed(0.79)) == "beta"
+    assert steering.draw_topic(shares, rng=Fixed(0.8)) == "gamma"
+    assert steering.draw_topic(shares, rng=Fixed(0.999)) == "gamma"
+
+
+def test_the_draw_is_proportional_over_many_trials() -> None:
+    """The other half: the bands above could be right and the selection still
+    biased. A seeded generator makes this deterministic."""
+    shares = {"heavy": 0.8, "light": 0.2}
+    rng = random.Random(20260922)
+
+    drawn = [steering.draw_topic(shares, rng=rng) for _ in range(2000)]
+
+    heavy = drawn.count("heavy") / len(drawn)
+    assert 0.76 < heavy < 0.84, f"heavy drew {heavy:.2%} of a nominal 80%"
+
+
+def test_a_topic_with_no_share_is_never_drawn() -> None:
+    """A paused topic normalises to zero, and zero has to mean never rather
+    than rarely — §10's maintenance mode stops *new* seeds for a topic while
+    its queue keeps draining, and a draw that still picked it would undo that.
+    """
+    shares = {"on": 1.0, "off": 0.0}
+    rng = random.Random(1)
+
+    assert {steering.draw_topic(shares, rng=rng) for _ in range(200)} == {"on"}
+
+
+def test_an_empty_pool_draws_nothing_rather_than_raising() -> None:
+    """Returned to a caller that will then claim unfiltered. A deployment can
+    legitimately have no active topics for a moment — mid re-topic, or before
+    the seed has run — and a crawl that stalled over it would be choosing the
+    shape of the work over the work."""
+    assert steering.draw_topic({}) is None
+    assert steering.draw_topic({"paused": 0.0}) is None

@@ -16,10 +16,12 @@ import pytest
 
 from meridian_core.embedder import (
     MAX_TEXTS,
+    SECONDS_PER_TEXT,
     EmbedderMismatch,
     EmbeddingUnavailable,
     RemoteEmbedder,
 )
+from meridian_core.models.source import EMBEDDING_DIM
 
 URL = "http://embedder.test"
 
@@ -202,9 +204,7 @@ async def test_no_expectation_means_no_check() -> None:
     # A deployment that has not said which model it uses gets the previous
     # behaviour rather than a refusal it cannot act on.
     transport = httpx.MockTransport(lambda request: _embedding_response("anything", ["a"]))
-    embedder = RemoteEmbedder(
-        "http://embedder.test", client=httpx.AsyncClient(transport=transport)
-    )
+    embedder = RemoteEmbedder("http://embedder.test", client=httpx.AsyncClient(transport=transport))
 
     assert len(await embedder.embed(["a"])) == 1
 
@@ -213,9 +213,7 @@ async def test_the_check_runs_on_every_response_not_once() -> None:
     # A sidecar can be restarted with a different model under a running client,
     # and the vectors it returns afterwards are valid floats of the right width.
     served = {"model": "bge-m3"}
-    transport = httpx.MockTransport(
-        lambda request: _embedding_response(served["model"], ["a"])
-    )
+    transport = httpx.MockTransport(lambda request: _embedding_response(served["model"], ["a"]))
     embedder = RemoteEmbedder(
         "http://embedder.test",
         client=httpx.AsyncClient(transport=transport),
@@ -233,9 +231,7 @@ async def test_describe_reports_what_the_sidecar_says_it_is() -> None:
     transport = httpx.MockTransport(
         lambda request: httpx.Response(200, json={"model": "bge-m3", "loaded": True})
     )
-    embedder = RemoteEmbedder(
-        "http://embedder.test", client=httpx.AsyncClient(transport=transport)
-    )
+    embedder = RemoteEmbedder("http://embedder.test", client=httpx.AsyncClient(transport=transport))
 
     assert (await embedder.describe())["model"] == "bge-m3"
 
@@ -249,3 +245,63 @@ async def test_describe_is_none_when_the_sidecar_is_down() -> None:
     )
 
     assert await embedder.describe() is None
+
+
+# --------------------------------------------------------------------------
+# A batch is not a query that got longer (task `B-27`)
+# --------------------------------------------------------------------------
+#
+# The backfill sends `MERIDIAN_EMBED_CHUNK_BATCH` chunks — 256 — in one
+# request, against a client whose timeout was fixed at 30 seconds. A real chunk
+# takes the better part of half a second on CPU, so every batch call asked for
+# two minutes of work and gave up at thirty seconds. The caller then fell back
+# to loading the model in its own process, correctly and silently, and the only
+# symptom was a second copy of 2.3 GB of weights on the machine the sidecar
+# exists to spare.
+
+
+def test_a_batch_waits_in_proportion_to_its_size() -> None:
+    client = RemoteEmbedder(URL, timeout_s=30.0)
+
+    assert client._batch_timeout(256) == 256 * SECONDS_PER_TEXT
+    assert client._batch_timeout(256) > 30.0, (
+        "a 256-chunk batch must not be held to a timeout sized for one query"
+    )
+
+
+def test_the_configured_timeout_is_a_floor_not_a_cap() -> None:
+    """An operator who raised it for a slow box meant every call, including the
+    single-text query path."""
+    client = RemoteEmbedder(URL, timeout_s=120.0)
+
+    assert client._batch_timeout(1) == 120.0
+    assert client._batch_timeout(256) == 256 * SECONDS_PER_TEXT
+
+
+async def test_a_real_batch_is_given_more_than_the_default_thirty_seconds() -> None:
+    """The regression, end to end through the transport.
+
+    Asserting on the timeout the request actually carries, because the failure
+    was never in the arithmetic — it was that the arithmetic was never done.
+    Thirty-two texts, so the computed wait clears the floor and the assertion
+    is about the sizing rather than about the default.
+    """
+    texts = [f"passage {n}" for n in range(32)]
+    seen: list[float | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions.get("timeout", {}).get("read"))
+        return httpx.Response(
+            200,
+            json={
+                "vectors": [[0.1] * EMBEDDING_DIM] * len(texts),
+                "model": "BAAI/bge-m3",
+                "dimensions": EMBEDDING_DIM,
+            },
+        )
+
+    client = RemoteEmbedder(URL, timeout_s=30.0, client=responder(handler))
+    await client.embed(texts)
+
+    assert seen and seen[0] == len(texts) * SECONDS_PER_TEXT
+    assert seen[0] > 30.0, "the batch was held to the query timeout"
