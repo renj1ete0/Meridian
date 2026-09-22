@@ -13,7 +13,7 @@ add it here.
 
 ## 1. Where the build actually is
 
-**`v0.103.0`. 2863 backend tests against a real Postgres, 317 frontend.**
+**`v0.110.0`. 2940 backend tests against a real Postgres, 335 frontend.**
 
 Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
 complete except its human checkpoint: the corpus is searchable over HTTP, through
@@ -22,12 +22,21 @@ Cloudflare account. **Phase 4 now reasons, against a fake model only.** The
 graph store, entity resolution, the write tools, the run state machine, the
 cycle, the model client and — since `P4-16` — the prompts, the parse and the
 mention-to-node step all exist. A cycle over a scripted answer writes entities,
-edges, tags and the mark. No run has called a *real* model: that needs a
-registry row with a working key and a budget row, and then `P4-17`, because
-nothing schedules a run.
+edges, tags and the mark, and since `P4-17` the orchestrator has its own image
+and runs §6.3's schedule as a service.
+
+**No run has called a real model, and what is left is a key.** `B-32` found the
+last piece of code in the way: no deployment had ever had a budget row, and
+`P4-13` refuses to start a run without one, so every install's first act was to
+refuse. With that seeded, a run on the live stack pulls its batch and defers at
+`extract` saying which variable is unset — which is the whole chain working.
 
 The single thing standing between here and phase 2's go/no-go is `P1-16`: the
-48-hour unattended run. It has not happened.
+48-hour unattended run. It has not happened, and everything it would exercise
+now exists — a crawl that reads the attention vector, an embedder that keeps
+pace and reports when it does not, frontier gates that skip identifiers and
+site furniture, and a snapshot that captures what the run produced rather than
+a catalogue of it.
 
 ### The four processes
 

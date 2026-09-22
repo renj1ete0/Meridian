@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.103.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2863 backend tests
-against a real Postgres, 317 frontend.
+**`v0.110.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2940 backend tests
+against a real Postgres, 335 frontend.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
 sitemaps, search and citations. The corpus is **searchable**: hybrid retrieval over
@@ -32,7 +32,7 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    `P0-15`'s held-out question set must be written *before* that judgement, not after.
 2. **A Cloudflare account**, for `P3-05` and the rest of `P3-09`. The code side is done
    and tested; what is missing is a tunnel, an Access application and an AUD tag.
-3. **An agent with a key, and something that schedules a run.** Phase 4's first
+3. **An agent with a key.** Phase 4's first
    three stages are built as of `P4-16`: `pull` chooses a batch, `extract` and
    `tag` each send a prompt, parse the answer and write through the four tools,
    and a batch survives a malformed answer. Against a fake model the whole path
