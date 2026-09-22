@@ -1440,6 +1440,19 @@ Things worth doing that don't belong to a phase yet.
       it now sweeps those field names too, which is the hole all three
       recurrences of this came through. Found in a live scheduler's log, not by
       the suite
+- [ ] `B-23` **The frontier has no notion of site furniture or of a redirector
+      host.** Measured on a real run: of 775 sources, 244 were `doi.org` URLs —
+      a DOI is an identifier that redirects, so 134 of those resolved to
+      nothing readable and became empty source rows — and 106 were
+      `info.arxiv.org` pages (`/help`, `/about/ourmembers.html`), which is a
+      site's own scaffolding rather than anything anybody would cite. Add 65
+      pages of unrelated statute and roughly two fifths of the corpus is not
+      research material. The existing shape gates drop social links, shorteners
+      and assets, which is a different question. Two candidates, and they are
+      separable: a redirector should resolve to its target *before* a source
+      row exists rather than after, and a help/about/contact path is a shape a
+      prefilter can recognise. Worth deciding against real numbers rather than
+      a rule list, and the numbers now exist
 - [ ] `B-22` **A backlog larger than one job window never drains.** Found in a
       live run: the embedding backfill sends `MERIDIAN_EMBED_CHUNK_BATCH` (256)
       chunks per request against a 30s client timeout, and while the crawl is
