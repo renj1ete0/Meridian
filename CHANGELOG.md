@@ -234,6 +234,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.103.2] — 2026-09-22
+
+### Fixed
+
+- `B-24`: the vector arm of hybrid search returned about a third of the
+  candidates it asked for. pgvector's HNSW index yields at most
+  `hnsw.ef_search` tuples per scan and the default is 40, so `LIMIT 100`
+  returned 33 on a live corpus while the lexical arm returned its full
+  hundred. Fusion can only reorder what the arms hand it, so the vector side
+  was systematically under-weighted — and a recall figure at k=100 would have
+  been capped at 40% by arithmetic rather than by the index. `_vector` now
+  sets the depth from the pool it is asking for, twice over, because a
+  filtered query spends candidates on rows the filter then discards
+- Set per transaction through `set_config(..., is_local => true)`: `SET` takes
+  no bind parameters, and a session-level setting would carry one caller's
+  depth into the next one's query on a pooled connection
+
 ## [0.103.1] — 2026-09-22
 
 ### Fixed

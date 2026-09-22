@@ -1440,6 +1440,19 @@ Things worth doing that don't belong to a phase yet.
       it now sweeps those field names too, which is the hole all three
       recurrences of this came through. Found in a live scheduler's log, not by
       the suite
+- [x] `B-24` **The vector arm answered short and nothing said so** —
+      `v0.103.2`. pgvector's HNSW index returns at most `hnsw.ef_search` rows
+      per scan, default 40, so the arm asked for 100 candidates and got 33 on a
+      live corpus while the lexical arm returned 100. Two consequences, both
+      silent: RRF sees arms of different depths and under-weights the vector
+      side, and `scripts/benchmark_search.py` at k=100 could not have exceeded
+      40% recall whatever the index did — a fourth way a benchmark lies, and
+      the only one that does not need a small corpus. `_vector` now sets the
+      depth from the pool it asks for, doubled, because the index cannot see
+      `_conditions()` and spends candidates on rows the filter discards. The
+      test pins the mechanism rather than the row count: a few hundred vectors
+      is too few for the planner to use the index at all, so the obvious
+      assertion passes against the bug
 - [ ] `B-23` **The frontier has no notion of site furniture or of a redirector
       host.** Measured on a real run: of 775 sources, 244 were `doi.org` URLs —
       a DOI is an identifier that redirects, so 134 of those resolved to

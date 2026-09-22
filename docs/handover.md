@@ -521,6 +521,41 @@ rather than by the thing being measured.
   "fusion is buying nothing", which is a strong conclusion drawn from a corpus
   that cannot support one.
 
+### An HNSW scan returns at most `ef_search` rows, whatever the LIMIT says
+
+`hnsw.ef_search` reads like a quality knob and behaves like a ceiling: the
+index scan yields at most that many tuples, default 40. So the vector arm asked
+for 100 candidates and got 33 on a live corpus, while the lexical arm returned
+its hundred. Nothing reported it. `SearchResult.degraded` says an arm is
+*absent*; there was no signal for one that answered short, which is the harder
+failure to see because the results look fine — there are simply fewer of them
+than fusion was designed around.
+
+Two things follow, and the second is worse than the first:
+
+- Fusion can only reorder what the arms hand it, so a third-depth arm is
+  systematically under-weighted against a full one.
+- A recall benchmark at k=100 is capped at 40% by arithmetic. That is a
+  **fourth** way a benchmark lies here, and unlike the other three it does not
+  need a small corpus — it gets worse as the corpus grows.
+
+Fixed in `_vector` by setting the depth from the pool being asked for. Two
+details worth keeping: `SET` takes no bind parameters, so it goes through
+`set_config(..., is_local => true)`, which is also what keeps one caller's
+depth off the next caller's pooled connection; and the factor is 2 because the
+index cannot see `_conditions()` — a filtered query spends candidates on rows
+the filter then discards.
+
+**Testing it is where the time went.** The obvious assertion — ask for 100,
+get 100 — passes against the bug on any fixture small enough to build quickly,
+because a few hundred vectors is below the size at which the planner uses the
+index at all, and `enable_seqscan = off` does not save it either: a graph that
+small is traversed almost entirely however the candidate list is bounded. The
+test therefore pins the mechanism (the arm sets `ef_search`, derived from
+`candidates`) and cites the live measurement for the behaviour. If you are
+tempted to strengthen it, seed thousands of vectors first and check `EXPLAIN`
+names the index before believing whatever it tells you.
+
 ### pgvector values need pgvector's type on the way in *and* out
 
 Two separate traps, an hour apart:

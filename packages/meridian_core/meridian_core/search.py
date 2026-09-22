@@ -66,6 +66,22 @@ TS_CONFIG = "english"
 #: tuning it against a corpus this small would be fitting to noise.
 RRF_K = 60
 
+#: How many neighbours the HNSW index is allowed to consider, as a multiple of
+#: the candidates asked for.
+#:
+#: **pgvector's default is 40, and it is a ceiling on rows returned, not a
+#: quality knob.** An index scan yields at most `hnsw.ef_search` tuples, so a
+#: `LIMIT 100` over this index returns 40 or fewer however large the corpus is
+#: — measured at 33 on a real one. The lexical arm meanwhile returns its full
+#: hundred, so fusion sees two arms of different depths and systematically
+#: under-weights the vector side, and a recall benchmark at k=100 is capped at
+#: 40% by arithmetic rather than by the index.
+#:
+#: Twice the candidate pool, because a filtered query spends candidates on rows
+#: the filter then discards: the index cannot see `_conditions()`, so
+#: `ef_search` has to cover the misses as well as the hits.
+EF_SEARCH_FACTOR = 2
+
 #: How deep each arm goes before fusion. Larger than any sane `limit` on
 #: purpose — fusion can only reorder what the arms handed it, so a candidate
 #: pool the size of the result set makes RRF a no-op.
@@ -295,6 +311,15 @@ async def _vector(
     it by a filtered index scan or by a sequential scan depending on selectivity;
     what it will not do is hand back a top-k drawn from the unfiltered corpus.
     """
+    # `set_config(..., is_local => true)` rather than `SET LOCAL`: `SET` takes
+    # no bind parameters in Postgres, so the literal spelling would mean
+    # interpolating a number into SQL for no reason. Local, so the setting
+    # lasts this transaction and cannot leak to the next caller on a pooled
+    # connection.
+    await sess.execute(
+        select(func.set_config("hnsw.ef_search", str(max(candidates * EF_SEARCH_FACTOR, 40)), True))
+    )
+
     distance = Chunk.embedding.cosine_distance(list(vector))
     stmt = (
         _arm(filters)
