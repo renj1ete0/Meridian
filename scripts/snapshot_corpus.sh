@@ -45,12 +45,41 @@ $COMPOSE exec -T postgres pg_dump \
 # differently.
 
 # --- the raw store -----------------------------------------------------------
-if [ -d "$RAW_ROOT" ]; then
-  tar -czf "$OUT/raw.tar.gz" -C "$(dirname "$RAW_ROOT")" "$(basename "$RAW_ROOT")"
-else
+#
+# **Archived from inside a container when the host cannot read it** (`B-31`).
+# The raw store is written by services running as uid 1001 (`B-16`), so on a
+# real deployment the files are not readable by whoever is running this script
+# — and `tar` reports each one, exits non-zero, and leaves a 15KB archive
+# beside a 113MB dump. That is precisely the "catalogue, not a corpus" this
+# file's own header warns about, produced by the tool meant to prevent it.
+#
+# Same reasoning as `pg_dump` running in the container: the thing that can read
+# the data should be the thing that reads it.
+if [ ! -d "$RAW_ROOT" ]; then
   echo "meridian: WARNING — no raw store at $RAW_ROOT." >&2
   echo "  The dump will restore, and every raw_file_path in it will dangle." >&2
   : > "$OUT/raw.tar.gz"
+elif [ -n "$(find "$RAW_ROOT" ! -readable -print -quit 2>/dev/null)" ]; then
+  echo "meridian: the raw store is not readable from here; archiving in a container."
+  # shellcheck disable=SC2086
+  $COMPOSE run --rm --no-deps -T worker \
+    tar -czf - -C "$(dirname /data/raw)" "$(basename /data/raw)" > "$OUT/raw.tar.gz"
+else
+  tar -czf "$OUT/raw.tar.gz" -C "$(dirname "$RAW_ROOT")" "$(basename "$RAW_ROOT")"
+fi
+
+# --- is the archive plausible? -----------------------------------------------
+# `B-31`. The failure above was silent in the direction that matters: an empty
+# archive is a successful-looking snapshot whose every citation dangles. So the
+# file count is compared against what the database expects, and a shortfall is
+# reported here rather than discovered on another machine months later.
+expected="$(meridian_psql -c "SELECT count(*) FROM sources WHERE raw_file_path IS NOT NULL")"
+archived="$(tar -tzf "$OUT/raw.tar.gz" 2>/dev/null | grep -vc '/$' || true)"
+if [ "${expected:-0}" -gt 0 ] && [ "${archived:-0}" -lt "$(( expected / 2 ))" ]; then
+  echo "meridian: WARNING — raw.tar.gz holds $archived files; the database" >&2
+  echo "  expects about $expected. This snapshot is a catalogue, not a corpus." >&2
+else
+  echo "meridian: raw archive holds $archived files (database expects ~$expected)."
 fi
 
 # --- does this corpus fit in one archive? ------------------------------------
@@ -58,13 +87,20 @@ fi
 # raw stores, and this script tars one. Without the check the snapshot succeeds,
 # is quietly missing files, and only `restore_corpus.sh`'s sampling notices —
 # on another machine, later, when it is too late to go back for them.
+# Distinct roots, not roots that differ from this one (`B-31`). The store is a
+# bind mount, so the services record the path they see — `/data/raw` — while
+# this script is given the host's name for the same directory. Comparing the
+# two strings reported every containerised snapshot as incomplete, which is a
+# warning that is wrong every time it appears and therefore never read. What
+# `P1-45` is actually about is a corpus written into *two* stores, and that is
+# what more than one distinct root means.
 roots="$(meridian_psql -c "
   SELECT DISTINCT raw_root FROM sources
-  WHERE raw_file_path IS NOT NULL AND raw_root IS NOT NULL AND raw_root <> '${RAW_ROOT}'")"
-if [ -n "$roots" ]; then
-  echo "meridian: WARNING — sources reference raw stores this snapshot does not include:" >&2
+  WHERE raw_file_path IS NOT NULL AND raw_root IS NOT NULL")"
+if [ "$(echo "$roots" | grep -c .)" -gt 1 ]; then
+  echo "meridian: WARNING — this corpus was written into more than one raw store:" >&2
   echo "$roots" | sed 's/^/    /' >&2
-  echo "  Their files are NOT in raw.tar.gz. Snapshot those roots too, or the" >&2
+  echo "  This snapshot archives one of them. Snapshot the others too, or the" >&2
   echo "  restored corpus will have citations that cannot open." >&2
 fi
 

@@ -1460,6 +1460,18 @@ Things worth doing that don't belong to a phase yet.
       test pins the mechanism rather than the row count: a few hundred vectors
       is too few for the planner to use the index at all, so the obvious
       assertion passes against the bug
+- [x] `B-31` **The snapshot could not read the corpus it was snapshotting** —
+      `v0.107.1`. `P1-16`'s stated deliverable is `make snapshot-corpus`, and on
+      a real deployment it produced a 15KB `raw.tar.gz` beside a 113MB dump:
+      the raw store belongs to uid 1001 (`B-16`) and host `tar` could not read
+      a file of it. Every citation in that snapshot would have dangled, and the
+      script says so in its own header — "a dump whose `sources.raw_path`
+      values point at files you did not keep is not a corpus, it is a
+      catalogue". Archived from a container now, with the file count checked
+      against the database so an empty archive cannot pass quietly. Also fixed
+      `P1-45`'s warning, which compared the container's path to the host's and
+      therefore fired on every containerised snapshot — a warning that is
+      wrong every time is one nobody reads
 - [x] `B-23` **The frontier routes identifiers and skips site furniture** —
       `v0.107.0`. A `doi.org` link is an identifier wearing a URL's clothes:
       fetched, it redirects to a publisher and yields a paywall or a landing

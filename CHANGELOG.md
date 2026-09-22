@@ -234,6 +234,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.107.1] — 2026-09-22
+
+### Fixed
+
+- `B-31`: `make snapshot-corpus` produced a catalogue rather than a corpus on
+  any real deployment. The raw store is written by services running as uid
+  1001 (`B-16`), so `tar` on the host could not read it — 15 KB of archive
+  beside a 113 MB dump, which is the exact failure the script's own header
+  warns about. It now archives from inside a container when the host cannot
+  read the store, the same reasoning that already put `pg_dump` there
+- The archive is compared against what the database expects, because an empty
+  one is a successful-looking snapshot whose every citation dangles
+- `P1-45`'s multi-store warning fired on every containerised snapshot: it
+  compared the path the services record (`/data/raw`) with the host's name for
+  the same bind mount. It now warns on more than one *distinct* root, which is
+  what "a corpus written into two stores" actually looks like
+
 ## [0.107.0] — 2026-09-22
 
 **The frontier stops fetching identifiers and site furniture.**
