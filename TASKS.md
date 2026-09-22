@@ -1430,6 +1430,16 @@ Things worth doing that don't belong to a phase yet.
       not hit `--timeout-seconds` — and the timeout is what keeps it honest.
       Generalised: a long-running service overriding its image's command must
       declare a healthcheck or disable one explicitly
+- [x] `B-21` **The nightly acronym harvest raised on every run** — `v0.103.1`.
+      `HarvestStats.created` became an `extra` key, and `logging` raises rather
+      than dropping a key that shadows a `LogRecord` attribute — `created` is
+      the record's timestamp. The pass settled `failed` in half a second every
+      night, in the one line that reports what it did. Renamed to
+      `terms_created`. The existing guard reads literal `extra={...}` dicts out
+      of the source and could not see a dataclass arriving through `as_dict()`;
+      it now sweeps those field names too, which is the hole all three
+      recurrences of this came through. Found in a live scheduler's log, not by
+      the suite
 - [ ] `B-01` Qdrant migration path, if pgvector recall becomes the measured bottleneck
 - [ ] `B-02` App-level auth and roles, when Cloudflare Access stops being sufficient
 - [ ] `B-03` Multimodal embeddings for figure similarity search

@@ -299,7 +299,7 @@ async def test_an_existing_term_is_corroborated_not_duplicated(clean, prefix) ->
     stats = await harvest(clean, [source.source_id])
     rows = await terms_for(clean, EXPANSION)
 
-    assert stats.created == 0
+    assert stats.terms_created == 0
     assert len(rows) == 1
     assert rows[0].occurrence_count == 1
 

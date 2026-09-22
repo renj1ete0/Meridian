@@ -234,6 +234,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.103.1] — 2026-09-22
+
+### Fixed
+
+- `B-21`: the nightly acronym harvest raised on every run. `HarvestStats` is
+  logged as `extra=stats.as_dict()` and one of its fields was `created`, which
+  is a `LogRecord`'s own timestamp — `logging` refuses a shadowed key by
+  *raising*, so the line whose only job was to report what the pass had done
+  killed the pass. Renamed to `terms_created`. Found by reading a live
+  scheduler's log, where the job settled `failed` in 562ms
+- The guard for this family only read literal `extra={...}` dicts, so a
+  dataclass reaching the same place through `as_dict()` was invisible to it.
+  It now also sweeps every stats dataclass's field names — the third time this
+  failure has shipped, and the first time the guard covers the way it arrived
+
 ## [0.103.0] — 2026-09-22
 
 **A run can write an edge.**

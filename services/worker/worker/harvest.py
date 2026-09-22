@@ -71,7 +71,12 @@ HARVEST_SOURCE = "auto_acronym"
 class HarvestStats:
     documents: int = 0
     definitions: int = 0
-    created: int = 0
+    #: `terms_created`, not `created`. These fields are logged as an `extra`
+    #: mapping, and `logging` *raises* when a key shadows a `LogRecord`
+    #: attribute — `created` is the record's own timestamp. The nightly
+    #: harvest died on it every night, in a line whose only job was to say
+    #: what the pass had done (`B-21`).
+    terms_created: int = 0
     corroborated: int = 0
     approved: int = 0
     ambiguous: int = 0
@@ -162,7 +167,7 @@ async def record(
             occurrence_count=documents,
         )
         sess.add(row)
-        stats.created += 1
+        stats.terms_created += 1
     else:
         row.occurrence_count = (row.occurrence_count or 0) + documents
         stats.corroborated += 1
@@ -264,13 +269,13 @@ def render(stats: HarvestStats) -> None:
     print("=== Acronym harvest (§5.6) ===")
     print(f"  documents read     {stats.documents}")
     print(f"  definitions found  {stats.definitions}")
-    print(f"  new terms          {stats.created}")
+    print(f"  new terms          {stats.terms_created}")
     print(f"  corroborated       {stats.corroborated}")
     print(f"  auto-approved      {stats.approved}  (>= {APPROVAL_THRESHOLD} documents agreeing)")
     print(f"  flagged ambiguous  {stats.ambiguous}")
     if stats.already_rejected:
         print(f"  already rejected   {stats.already_rejected}  (left alone)")
-    if stats.created or stats.corroborated:
+    if stats.terms_created or stats.corroborated:
         print("\n  New terms wait for approval. Approved ones override statistical NER.")
 
 

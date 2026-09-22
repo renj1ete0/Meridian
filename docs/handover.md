@@ -424,7 +424,7 @@ Two consequences worth holding on to:
   (they come from the DOM, not the text) and a page's own identifier survives
   (meta tags), but a bare DOI in a sidebar does not.
 
-### `extra={"module": ...}` raises at runtime
+### `extra={"module": ...}` raises at runtime — and `as_dict()` hides it
 
 `logging` refuses to let an `extra` key shadow a `LogRecord` attribute, and it
 raises rather than dropping the key. `module` is one; so are `name`, `args`,
@@ -436,6 +436,20 @@ moment it tried to say which module it was about to run. The traceback points at
 `logging/__init__.py` and names the key, which is the one mercy.
 
 Prefix them — `job_module`, not `module`.
+
+**`tests/unit/test_logging.py` sweeps the source for this**, and it has now
+caught the same failure three times — which is also how the third one got
+through. The sweep reads literal `extra={...}` dicts out of the AST, and the
+third arrival was `extra=stats.as_dict()`: the keys are a dataclass's field
+names, a file away, and one of them was `created` — a `LogRecord`'s own
+timestamp. The nightly acronym harvest settled `failed` in 562ms every night,
+in the one line whose job was to report what the pass had done, and the suite
+was green throughout (`B-21`, `v0.103.1`).
+
+The sweep now also walks every dataclass with an `as_dict`, because that is the
+convention here for "this is going into an `extra`". If a third route into
+`extra` appears — a dict built by a helper, say — assume this failure will
+arrive through it, and extend the test before the route is used.
 
 ### Two ways a benchmark lies on a small corpus
 

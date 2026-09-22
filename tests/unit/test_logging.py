@@ -177,6 +177,60 @@ def test_the_reserved_set_was_actually_derived() -> None:
     assert {"name", "module", "args", "levelname", "lineno"} <= RESERVED
 
 
+def _dataclasses_logged_as_extra():
+    """Every dataclass in the tree that offers `as_dict`.
+
+    The convention in this codebase is that such a class exists to be passed
+    as `extra=stats.as_dict()`, and every one of them currently is.
+    """
+    import dataclasses
+    import importlib
+    import pkgutil
+
+    import meridian_core
+    import worker
+
+    found = []
+    for package in (meridian_core, worker):
+        for info in pkgutil.walk_packages(package.__path__, f"{package.__name__}."):
+            try:
+                module = importlib.import_module(info.name)
+            except Exception:  # noqa: BLE001 - an optional extra, not this test's business
+                continue
+            for name, obj in vars(module).items():
+                if dataclasses.is_dataclass(obj) and hasattr(obj, "as_dict"):
+                    found.append((f"{info.name}.{name}", obj))
+    return found
+
+
+def test_no_stats_dataclass_field_shadows_a_logrecord_attribute() -> None:
+    """The hole the sweep below cannot see through.
+
+    `extra={"created": ...}` is caught by reading the source. `extra=stats.
+    as_dict()` is not — the keys are field names, a file away — and that is how
+    the same failure reached production a third time: the nightly acronym
+    harvest raised on `created`, which is a `LogRecord`'s own timestamp, in the
+    one line whose job was to report what the pass had done. It settled
+    `failed` every night and the pass never ran (`B-21`).
+    """
+    import dataclasses
+
+    logged = _dataclasses_logged_as_extra()
+    assert logged, "found no stats dataclasses; the sweep would pass over everything"
+
+    offences = [
+        f"{name}.{field.name}"
+        for name, klass in logged
+        for field in dataclasses.fields(klass)
+        if field.name in RESERVED
+    ]
+
+    assert not offences, (
+        "these fields become `extra` keys through `as_dict()` and will raise "
+        f"when the line is reached with logging configured: {offences}"
+    )
+
+
 def test_no_log_call_shadows_a_logrecord_attribute() -> None:
     """A shadowed key is not dropped — it raises, on the line that logs it.
 
