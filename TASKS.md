@@ -1466,6 +1466,29 @@ Things worth doing that don't belong to a phase yet.
       row exists rather than after, and a help/about/contact path is a shape a
       prefilter can recognise. Worth deciding against real numbers rather than
       a rule list, and the numbers now exist
+- [ ] `B-30` **The vector arm returns the same document to itself.** Measured
+      on the first real corpus: of the vector arm's top ten, **42% come from
+      the probe chunk's own source**, and ten hits span about four distinct
+      sources. It is not wrong — adjacent chunks of one document *are* the
+      nearest neighbours — but it means a reader who searches a concept gets
+      one paper four times, and it is most of why the two arms overlap only
+      13%. The decision is a product one and should be made against the
+      question set, not guessed: cap hits per source in the vector arm, diversify
+      after fusion (MMR-style), or leave it and let fusion's lexical half carry
+      the spread. Worth revisiting when `P0-15` exists, because "better" here
+      is only answerable against questions somebody wrote down first
+- [x] `B-29` **Arm agreement was measuring two different questions** —
+      `v0.105.4`. `scripts/benchmark_search.py` paired a sampled chunk's vector
+      with an unrelated frequent word, so the arms could not agree and the
+      figure was 0% by construction — and it printed a warning blaming the
+      text-search configuration, which would send somebody after a bug that
+      does not exist. Both arms now answer one probe: a chunk's own distinctive
+      terms against its own vector, with the probe chunk excluded so it cannot
+      match itself in both. **Two wrong versions before one right one**, both
+      of which read as findings about the corpus: the second used ANDed terms,
+      which co-occur only in the probe chunk, and reported the lexical arm
+      finding nothing at all. With `or` the real figure is 13.3% agreement —
+      fusion earns its second query
 - [x] `B-28` **The embedding service was permanently unhealthy** —
       `v0.105.2`. `B-25` gave it the worker's liveness probe, and
       `worker.embed` had never written the heartbeat file — so the container

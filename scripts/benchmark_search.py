@@ -17,10 +17,20 @@ vector answers it.
 **Latency — yes, today**, though the number only means something at corpus size.
 
 **Arm overlap — yes, today.** How often the lexical and vector arms return the
-same chunks. This is the cheapest evidence about whether hybrid search is
-earning its second query: perfect agreement means fusion is decoration, and no
-agreement at all usually means one arm is misconfigured rather than that the two
-are beautifully complementary.
+same chunks *for the same question*. This is the cheapest evidence about
+whether hybrid search is earning its second query: perfect agreement means
+fusion is decoration, and no agreement at all usually means one arm is
+misconfigured rather than that the two are beautifully complementary.
+
+**The pairing is the whole measurement, and it was wrong.** Until `B-29` this
+asked the vector arm to find neighbours of a randomly sampled chunk while
+asking the lexical arm for an unrelated frequent word — two different
+questions, so the arms could not agree and the figure was 0% by construction.
+It then printed the warning about a misconfigured arm, which sends somebody
+hunting a text-search bug that does not exist. Both arms now answer the same
+probe: a chunk's own distinctive terms against its own vector, with the probe
+chunk itself excluded, because a chunk trivially matching itself in both arms
+would inflate agreement rather than measure it.
 
 **Retrieval quality — no.** Does hybrid actually answer questions better? That
 needs `P0-15`'s held-out questions, and it needs them written *before* the
@@ -179,7 +189,97 @@ async def latency(sess: AsyncSession, vectors: list[list[float]], terms: list[st
     return timings
 
 
-async def arm_overlap(sess: AsyncSession, vectors, terms: list[str], k: int) -> dict[str, float]:
+#: Words too short or too common to distinguish a passage. Deliberately tiny —
+#: `websearch_to_tsquery` ANDs its terms, so every word added to a probe makes
+#: the lexical arm stricter, and a list long enough to be principled would
+#: leave probes with nothing to search for.
+_STOPWORDS = frozenset(
+    [
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "to",
+        "in",
+        "for",
+        "on",
+        "with",
+        "that",
+        "this",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "by",
+        "as",
+        "at",
+        "from",
+        "it",
+        "its",
+        "their",
+        "have",
+        "has",
+        "had",
+        "not",
+        "but",
+        "which",
+        "we",
+        "our",
+        "can",
+        "may",
+    ]
+)
+
+
+def probe_terms(text_value: str, *, count: int = 3) -> str:
+    """A few distinctive words from a chunk, as a lexical query.
+
+    Longest-first rather than TF-IDF: the ranking only has to be better than
+    "the first three words", and a scoring pass over the corpus to choose probe
+    terms would be a second retrieval system inside the benchmark for it.
+
+    **Joined with `or`, and that is not a detail.** `websearch_to_tsquery` ANDs
+    bare terms, so three rare words co-occur in exactly one chunk — the probe
+    itself, which the overlap count excludes. The first version of this did
+    that and reported the lexical arm finding *nothing*, 100% vector-only,
+    which looks like a broken tsvector and was a broken probe. `or` asks the
+    lexical arm the question the vector arm is being asked: passages about any
+    of these things, not the one passage about all of them.
+    """
+    seen: list[str] = []
+    for word in sorted(set(text_value.lower().split()), key=len, reverse=True):
+        stripped = "".join(ch for ch in word if ch.isalnum())
+        if len(stripped) > 4 and stripped not in _STOPWORDS:
+            seen.append(stripped)
+        if len(seen) >= count:
+            break
+    return " or ".join(seen)
+
+
+async def sample_probes(sess: AsyncSession, trials: int) -> list[tuple[int, str, list[float]]]:
+    """Chunks to ask both arms about: id, distinctive terms, and vector.
+
+    One row gives all three, which is the point — the arms have to be answering
+    the same question or their overlap is a coincidence rather than a finding.
+    """
+    rows = await sess.execute(
+        select(Chunk.chunk_id, Chunk.text, Chunk.embedding)
+        .where(Chunk.embedding.is_not(None))
+        .order_by(func.random())
+        .limit(trials)
+    )
+    probes = []
+    for chunk_id, text_value, vector in rows:
+        terms = probe_terms(text_value or "")
+        if terms:
+            probes.append((chunk_id, terms, [float(x) for x in vector]))
+    return probes
+
+
+async def arm_overlap(sess: AsyncSession, probes, k: int) -> dict[str, float]:
     """How often the two arms agree, and how often each finds something alone.
 
     The number that matters is the middle one. Total agreement means the second
@@ -187,12 +287,13 @@ async def arm_overlap(sess: AsyncSession, vectors, terms: list[str], k: int) -> 
     arm than genuine complementarity.
     """
     both = only_lexical = only_vector = 0
-    for i, vector in enumerate(vectors):
-        term = terms[i % len(terms)] if terms else ""
-        if not term:
-            continue
-        result = await search(sess, term, query_vector=vector, limit=k)
+    for chunk_id, terms, vector in probes:
+        result = await search(sess, terms, query_vector=vector, limit=k)
         for hit in result.hits:
+            if hit.chunk_id == chunk_id:
+                # The probe finds itself in both arms, always. Counting it
+                # would report agreement the corpus did not produce.
+                continue
             if hit.lexical_rank and hit.vector_rank:
                 both += 1
             elif hit.lexical_rank:
@@ -311,7 +412,11 @@ async def main() -> None:
         for method, samples in (await latency(sess, vectors, terms, args.k)).items():
             print(f"  {method:8} {percentiles(samples)}")
 
-        overlap = await arm_overlap(sess, vectors, terms, args.k)
+        # Probes rather than the sampled vectors and frequent terms used
+        # above: those are deliberately unrelated to each other, which is right
+        # for latency and meaningless for agreement (`B-29`).
+        probes = await sample_probes(sess, args.trials)
+        overlap = await arm_overlap(sess, probes, args.k)
         if overlap:
             print("\n=== Arm agreement ===")
             for label, share in overlap.items():
@@ -332,8 +437,13 @@ async def main() -> None:
             elif overlap.get("found by both", 0) > 0.95:
                 print("  ! The arms almost always agree — fusion is buying very little here.")
             elif overlap.get("found by both", 0) < 0.02:
-                print("  ! The arms almost never agree, which is more often a misconfigured")
-                print("  ! arm than genuine complementarity. Check the text-search config.")
+                print("  ! The arms almost never agree. Two explanations needing")
+                print("  ! different responses: a misconfigured text-search arm, or a")
+                print("  ! vector arm answering a narrower question than it looks.")
+                print("  ! On this corpus it was the second — 42% of the vector arm's")
+                print("  ! top ten came from the probe's own document, about four")
+                print("  ! distinct sources per ten hits (`B-30`). Measure the source")
+                print("  ! concentration before changing the tsvector configuration.")
 
         if args.questions:
             await score_questions(sess, args.questions, args.k)

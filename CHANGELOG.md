@@ -234,6 +234,24 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.105.4] — 2026-09-22
+
+### Fixed
+
+- `B-29`: `scripts/benchmark_search.py` measured arm agreement between two
+  different questions — a sampled chunk's vector against an unrelated frequent
+  word — so the figure was 0% by construction, and the script blamed the
+  text-search configuration for it. Both arms now answer the same probe, with
+  the probe chunk excluded so it cannot match itself in both. The real figure
+  on the first corpus is 13.3%
+
+### Added
+
+- `B-30`, open: the vector arm's top ten draw 42% of their hits from the probe
+  chunk's own source and span about four distinct sources. Recorded with the
+  numbers rather than fixed — whether to cap per source, diversify after
+  fusion, or leave it is a product decision that wants `P0-15`'s questions
+
 ## [0.105.3] — 2026-09-22
 
 ### Fixed

@@ -282,3 +282,59 @@ def test_the_tools_image_pins_match_the_lockfile() -> None:
             f"{package} is pinned at {version} in deploy/tools/Dockerfile "
             f"but uv.lock resolves {locked_version(package)}"
         )
+
+
+# --------------------------------------------------------------------------
+# The arm-agreement probe (task `B-29`)
+# --------------------------------------------------------------------------
+#
+# Two versions of this measurement were wrong before one was right, and both
+# failures looked like findings about the corpus rather than bugs in the probe.
+# The first paired a sampled chunk's vector with an unrelated frequent word and
+# reported 0% agreement — two different questions cannot agree. The second used
+# the chunk's own rare terms, which `websearch_to_tsquery` ANDs, so they
+# co-occur only in the probe chunk itself; with that chunk excluded the lexical
+# arm found nothing and the figure read 100% vector-only.
+
+
+def probe_terms():
+    """`probe_terms` out of the benchmark script, which is not a package.
+
+    The module is registered in `sys.modules` *before* it is executed, and that
+    is not optional: `@dataclass` resolves a field's type through
+    `sys.modules[cls.__module__]`, and a module loaded from a file path is not
+    there yet — so the decorator dereferences None and the traceback names
+    dataclasses rather than the import that caused it.
+    """
+    import importlib.util
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location("bench", repo / "scripts" / "benchmark_search.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.probe_terms
+
+
+def test_a_probe_asks_for_any_of_its_terms_not_all_of_them() -> None:
+    """`or`, because bare terms are ANDed. Three rare words that all appear in
+    one passage appear together in that passage and nowhere else, so an ANDed
+    probe can only match the chunk it came from."""
+    query = probe_terms()("congestion pricing reduced vehicle kilometres travelled substantially")
+
+    assert " or " in query, f"{query!r} would be ANDed and match only its own chunk"
+
+
+def test_a_probe_skips_words_too_short_or_too_common_to_distinguish() -> None:
+    query = probe_terms()("the and for with that this is are was were")
+
+    assert query == "", "a probe of stopwords asks the lexical arm for everything"
+
+
+def test_a_probe_is_bounded() -> None:
+    """Every term added narrows the vector-arm comparison and lengthens the
+    query; the number is a balance, not a maximum."""
+    text = " ".join(f"distinctive{n}word" for n in range(50))
+
+    assert len(probe_terms()(text).split(" or ")) <= 3
