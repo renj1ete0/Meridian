@@ -44,12 +44,13 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
    as a service, and a dry cycle over the real corpus reports the 40 passages
    and 47,840 characters it would send.
 
-**Buildable today** is one entry, plus whatever the next run turns up.
+**Buildable today** is one entry, and it is a run rather than code.
 
-1. **`B-30`** — the vector arm draws 42% of its top ten from the probe
-   chunk's own source, about four distinct sources per ten hits. Whether to cap
-   per source, diversify after fusion, or leave it to the lexical half wants
-   `P0-15`'s questions to judge against, so it is a decision before it is code.
+1. **`P1-16`** — the 48h unattended run. Everything it would exercise now
+   exists: a crawl that reads the attention vector (`B-26`), an embedder that
+   keeps pace and says when it does not (`B-25`, `B-22`), gates that skip
+   identifiers and site furniture (`B-23`), and a snapshot that actually
+   captures what the run produced (`B-31`).
 
 `P5-01` stays open on its own argument — entity co-occurrence has no consumer until
 `P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
@@ -1467,6 +1468,30 @@ Things worth doing that don't belong to a phase yet.
       test pins the mechanism rather than the row count: a few hundred vectors
       is too few for the planner to use the index at all, so the obvious
       assertion passes against the bug
+- [~] `B-30` **A page can be spread across sources, and is not yet** —
+      `v0.110.0`. Measured: 45% of a page's hits come from the probe chunk's
+      own document, and ten hits span about four and a half sources. Not a
+      broken arm — adjacent chunks genuinely *are* its nearest neighbours — so
+      the mechanism ships and the decision does not. `search(max_per_source=)`
+      is off by default, exactly as `P2-20`'s decay is: `P2-04`'s benchmark and
+      `P2-09`'s go/no-go measure the current baseline, and turning it on first
+      would mean judging something else. Held-back hits are backfilled rather
+      than dropped, and `held_back` is reported for the reason the decay's
+      adjustment is shown. The trade is a number now — a cap of 2 spans 77%
+      distinct sources and displaces about four hits per page. **Stays `[~]`
+      until `P0-15` exists**: which setting is better is only answerable
+      against questions somebody wrote down first
+- [x] `B-29` **Arm agreement was measuring two different questions** —
+      `v0.105.4`. `scripts/benchmark_search.py` paired a sampled chunk's vector
+      with an unrelated frequent word, so the arms could not agree and the
+      figure was 0% by construction — and it blamed the text-search config for
+      it, which would send somebody after a bug that does not exist. Both arms
+      now answer one probe, with the probe chunk excluded so it cannot match
+      itself in both. **Two wrong versions before one right one**, each looking
+      like a finding about the corpus: the second ANDed its terms, which
+      co-occur only in the probe chunk, and reported the lexical arm finding
+      nothing at all. With `or` the real figure is 13–16%: fusion earns its
+      second query
 - [x] `B-32` **Nothing ever created a budget, so nothing could ever run** —
       `v0.108.0`. `P4-13` refuses a synthesis run without a budget row and
       §16 requires caps "before first autonomous run"; the ordering was

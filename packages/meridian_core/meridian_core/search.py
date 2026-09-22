@@ -232,6 +232,12 @@ class SearchResult:
     arms: frozenset[str]
     lexical_candidates: int
     vector_candidates: int
+    #: How many hits the per-source cap displaced from this page (`B-30`).
+    #: Shown rather than applied silently, for the reason `P2-20`'s decay is
+    #: shown: a result that was demoted is one the reader cannot audit
+    #: otherwise, and "why is this paper not here" has no answer without it.
+    #: Zero when the cap is off, which is the default.
+    held_back: int = 0
 
     @property
     def degraded(self) -> bool:
@@ -344,6 +350,46 @@ def fuse(*ranked: Sequence[int], k: int = RRF_K) -> dict[int, float]:
     return scores
 
 
+def cap_per_source(
+    ordered: Sequence[int], source_of: dict[int, int], *, cap: int, limit: int
+) -> tuple[list[int], int]:
+    """Take the best `limit` chunks, no more than `cap` from any one source.
+
+    Measured on the first real corpus: the vector arm drew 42% of its top ten
+    from the probe chunk's own document, and ten hits spanned about four
+    sources. That is not wrong — adjacent chunks of one document genuinely are
+    its nearest neighbours — but a reader searching a concept gets one paper
+    four times, and the spread has to come from somewhere.
+
+    **Held-back hits are backfilled rather than dropped.** A page of six
+    results where twenty exist is worse than one that repeats a source: the cap
+    is about what leads, not about withholding the corpus. So the walk keeps
+    rank order, sets aside what exceeds the cap, and puts those back at the end
+    only if the page would otherwise be short.
+
+    Returns the ids and how many the cap displaced, so a caller can say so.
+    """
+    kept: list[int] = []
+    seen: dict[int, int] = {}
+    overflow: list[int] = []
+
+    for chunk_id in ordered:
+        source = source_of.get(chunk_id)
+        if source is None or seen.get(source, 0) < cap:
+            if source is not None:
+                seen[source] = seen.get(source, 0) + 1
+            kept.append(chunk_id)
+        else:
+            overflow.append(chunk_id)
+        if len(kept) >= limit:
+            break
+
+    displaced = sum(1 for chunk_id in overflow if chunk_id in set(ordered[:limit]))
+    if len(kept) < limit:
+        kept.extend(overflow[: limit - len(kept)])
+    return kept[:limit], displaced
+
+
 async def search(
     sess: AsyncSession,
     query: str,
@@ -353,8 +399,15 @@ async def search(
     limit: int = DEFAULT_LIMIT,
     candidates: int = DEFAULT_CANDIDATES,
     k: int = RRF_K,
+    max_per_source: int | None = None,
 ) -> SearchResult:
     """Hybrid retrieval over the chunk corpus.
+
+    ``max_per_source`` caps how many chunks one document may contribute, and is
+    **off by default** for the reason `P2-20`'s decay is: it changes what search
+    returns, and `P2-04`'s benchmark and `P2-09`'s go/no-go are measured against
+    the current baseline. Turning it on before those are judged would mean
+    judging something else (`B-30`).
 
     ``query_vector`` is supplied by the caller rather than computed here on
     purpose: `meridian_core` is imported by the API and the orchestrator, and
@@ -392,7 +445,22 @@ async def search(
     # chunks found at the same rank by one arm and by neither the other is
     # common in a small corpus, and a result set that reshuffles between
     # identical queries is indistinguishable from one that changed.
-    ordered = sorted(scores, key=lambda cid: (-scores[cid], cid))[:limit]
+    ranked = sorted(scores, key=lambda cid: (-scores[cid], cid))
+    held_back = 0
+    if max_per_source is None:
+        ordered = ranked[:limit]
+    else:
+        # One indexed lookup over the fused candidates, because the cap needs
+        # each candidate's source *before* the page is cut — the row join below
+        # happens after, and by then the decision is made.
+        source_of = dict(
+            (
+                await sess.execute(
+                    select(Chunk.chunk_id, Chunk.source_id).where(Chunk.chunk_id.in_(ranked))
+                )
+            ).all()
+        )
+        ordered, held_back = cap_per_source(ranked, source_of, cap=max_per_source, limit=limit)
 
     rows = (
         await sess.execute(
@@ -439,7 +507,7 @@ async def search(
     # result list whose order disagrees with its own scores.
     hits.sort(key=lambda hit: hit.score, reverse=True)
 
-    return SearchResult(hits, frozenset(arms), len(lexical), len(vectorial))
+    return SearchResult(hits, frozenset(arms), len(lexical), len(vectorial), held_back=held_back)
 
 
 def _decay_for(source: Source, filters: SearchFilters) -> float:

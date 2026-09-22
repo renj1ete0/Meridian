@@ -234,6 +234,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.110.0] — 2026-09-22
+
+### Added
+
+- `B-30`: `search(max_per_source=...)` caps how many chunks one document may
+  contribute to a page, and `SearchResult.held_back` reports how many hits the
+  cap displaced. **Off by default**, for the reason `P2-20`'s decay is: it
+  changes what search returns, and `P2-04`'s benchmark and `P2-09`'s go/no-go
+  are measured against the current baseline
+- `scripts/benchmark_search.py` reports source concentration, which is the
+  measurement the decision needs. On the first real corpus: 45% of a page's
+  hits come from the probe chunk's own document, and a page of ten spans about
+  four and a half sources
+- Measured with the cap on, so the trade is a number rather than a preference:
+  at `max_per_source=2` a page spans 77% distinct sources, displacing about
+  four hits per page
+
 ## [0.109.0] — 2026-09-22
 
 **Admin can see the registry and the runs.**

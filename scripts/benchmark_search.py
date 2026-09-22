@@ -311,6 +311,42 @@ async def arm_overlap(sess: AsyncSession, probes, k: int) -> dict[str, float]:
     }
 
 
+async def source_concentration(sess: AsyncSession, probes, k: int) -> dict[str, float]:
+    """How much of a page one document fills (`B-30`).
+
+    The number behind the decision this measurement exists to inform: adjacent
+    chunks of a document are genuinely its nearest neighbours, so a vector arm
+    returning four of them is working correctly and a reader searching a
+    concept still gets one paper four times. Whether that is right is a product
+    question, and it should be answered against numbers rather than taste.
+
+    The probe's own source is counted separately, because "the passage I asked
+    about comes from a document, and so do its neighbours" is a different fact
+    from "ten hits came from three papers".
+    """
+    own = []
+    distinct = []
+    for chunk_id, terms, vector in probes:
+        result = await search(sess, terms, query_vector=vector, limit=k)
+        hits = [hit for hit in result.hits if hit.chunk_id != chunk_id]
+        if not hits:
+            continue
+        probe_source = next(
+            (hit.source_id for hit in result.hits if hit.chunk_id == chunk_id), None
+        )
+        sources = [hit.source_id for hit in hits]
+        if probe_source is not None:
+            own.append(sum(1 for s in sources if s == probe_source) / len(sources))
+        distinct.append(len(set(sources)) / len(sources))
+
+    if not distinct:
+        return {}
+    out = {"distinct sources per hit": statistics.fmean(distinct)}
+    if own:
+        out["from the probe's own source"] = statistics.fmean(own)
+    return out
+
+
 async def frequent_terms(sess: AsyncSession, n: int = 12) -> list[str]:
     """Real terms from the corpus, so the lexical arm has something to find.
 
@@ -444,6 +480,16 @@ async def main() -> None:
                 print("  ! top ten came from the probe's own document, about four")
                 print("  ! distinct sources per ten hits (`B-30`). Measure the source")
                 print("  ! concentration before changing the tsvector configuration.")
+
+        concentration = await source_concentration(sess, probes, args.k)
+        if concentration:
+            print("\n=== Source concentration ===")
+            for label, value in concentration.items():
+                print(f"  {label:28} {value:6.1%}")
+            print("  ! A page drawn from few documents is not a broken arm — adjacent")
+            print("  ! chunks are genuinely nearest neighbours. It is a question about")
+            print("  ! what a page should look like, and `search(max_per_source=...)`")
+            print("  ! is the answer if the answer is yes. Off by default (`B-30`).")
 
         if args.questions:
             await score_questions(sess, args.questions, args.k)
