@@ -20,7 +20,7 @@ summarised in `TASKS.md`; the branches:
 | Task | Branch / worktree | What it was told |
 |---|---|---|
 | `P2-21` topics from content | `worktree-agent-ae5c754b3e8137972` · `.claude/worktrees/agent-ae5c754b3e8137972` | **Handed over partial: commit `9c574d8`** — labeller, migration `71de4a6d0c50`, `retopic` rewrite, map changes; calibrated, integration tests not written, `make test` not run. Calibration reports: `~/Documents/gh/meridian-calibration/p2-21/report_*.txt`. See `TASKS.md` `P2-21` for the remaining list and the operator's two decisions |
-| `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | **Handed over partial: commit `60b025d`** — the cleaners and the drop-aware chunker, tested, not wired in. The remaining list is in `TASKS.md` `B-43` and the commit body; fix `B-46` before its re-chunk pass runs. Reproduction scripts from that session's scratch folder are gone; the commit body has the numbers |
+| `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | **Handed over partial: commit `60b025d`** — the cleaners and the drop-aware chunker, tested, not wired in. The remaining list is in `TASKS.md` `B-43` and the commit body; fix `B-46` before its re-chunk pass runs. Its measurement scripts are in `~/Documents/gh/meridian-calibration/b-43/`; the commit body has the numbers |
 
 To pick them up: `git log --oneline main..<branch>`. A commit there → read its body
 (the calibration report), cherry-pick onto `main` with `--no-commit`, resolve (both
