@@ -16,8 +16,14 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.112.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 3010 backend tests
+**`v0.113.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 3022 backend tests
 against a real Postgres, 380 frontend.
+
+**The graph has its first edges.** `P4-18`'s relay agent let an interactive session
+stand in for an API key: chunks 1–40 produced 20 edges and 2 tags on the live
+stack, and the re-run exposed `B-35`. An API key is no longer the only way to
+synthesise — but a session answers about one batch of forty passages at a time, so
+at corpus scale it is a key or a local model.
 
 **Two screens to look at the corpus with.** `/map` (`P6-26`) draws the embedding
 space — a sample of passages placed by PCA, coloured by topic, hover to read,
@@ -68,7 +74,9 @@ not `P1-16`; that wants a decision about whether to start clean. Stop it with
 `docker compose -f docker-compose.local.yml stop worker`; the rest can stay up,
 and the site is at `http://localhost:21116`.
 
-Done 2026-09-23: `B-33`, `P6-26`, `P6-25`, `B-34`.
+Done 2026-09-23: `B-33`, `P6-26`, `P6-25`, `B-34`, `P4-18`, `B-35`. The daily jobs
+(`digest`, `sweep`, `harvest`) were run by hand against the live corpus and all
+exited cleanly; `harvest` left 1,035 ambiguous gazetteer terms for review.
 
 Done this stretch: `P4-16`, `P4-17`, `P6-23`, and twelve defects the first real
 corpus turned up (`B-21`–`B-32`). **Six of those were found by watching the stack

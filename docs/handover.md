@@ -1501,6 +1501,29 @@ Seen twice while a delegated agent ran the suite in parallel: one error in a
 shared tables the other run was writing. Both passed on rerun. Parallel agents
 are fine for writing code; run the full suite from one of them at a time.
 
+### `compose run --build` and `up -d --build <service>` can restart Postgres
+
+Migrating the live stack with `docker compose run --rm --build tools alembic
+upgrade head`, and later `up -d --build orchestrator`, each took Postgres down
+under a running worker: "the database system is shutting down", then refused
+connections for a few seconds. The worker survived it — lanes back off and
+expired leases are reclaimed — but thirteen ERROR lines and a handful of
+unrecorded failures are the cost. During a run that matters, stop the worker
+first, or build images with `docker compose build <service>` and then
+`up -d --no-deps <service>`.
+
+### The relay agent, and how to drive it
+
+`P4-18`. Enable `claude-code-session` in Admin → Agents, then run
+`docker exec meridian-local-orchestrator-1 python -m worker.orchestrate --once`.
+A cycle that defers leaves `<key>.prompt.json` in `.localdata/relay`; write
+the answer with `docker exec -i meridian-local-orchestrator-1 sh -c 'cat >
+/relay/<key>.answer.txt' < answer.json` and run another cycle — or two, since
+the first only closes the deferred run and the second re-pulls the batch.
+Each batch needs two answers, `extract` then `tag`. **While it is enabled with
+nobody answering, the orchestrator service's own schedule defers every run**;
+disable it when the session ends.
+
 ## 4. What is verified live, and what is only tested
 
 Tests are hermetic by design, so "the tests pass" and "it works against the real web"
