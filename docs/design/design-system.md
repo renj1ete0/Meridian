@@ -167,6 +167,25 @@ product colour and must not appear in the UI.
 | Edge, second hop (hint) | `#1B2C4A`, 1.0 |
 | Node label | Archivo 12, `#C9D3E6`, with a 3.5 `#070B14` halo (`paint-order: stroke`) |
 
+### Canvas tokens
+
+The colours above that are not already dark tokens, named so code can use them
+(`P6-01`). The canvas has no light column: it stays dark in both themes, like
+`ground.deep`. The meridian ring, second-hop dots and type captions come from the
+Explore artboard, where they are drawn but not listed above.
+
+| Token | Hex | Role |
+|---|---|---|
+| `canvas.graticule` | `#16233D` | Straight graticule lines |
+| `canvas.meridian` | `#132038` | The circle and meridian ellipse behind the focus |
+| `canvas.neighbour` | `#8FA0C0` | Neighbour node |
+| `canvas.hint` | `#3B4C6E` | Second-hop dot |
+| `canvas.edge` | `#2E93A0` | Edge from the focus |
+| `canvas.edge.contested` | `#B98737` | Contested edge |
+| `canvas.edge.hint` | `#1B2C4A` | Edge to a second-hop dot |
+| `canvas.label` | `#C9D3E6` | Node label |
+| `canvas.caption` | `#6E7C9C` | Mono type caption under a label |
+
 ---
 
 ## 3. Typography

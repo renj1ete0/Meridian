@@ -1,7 +1,7 @@
 {
   "name": "meridian-web",
   "private": true,
-  "version": "0.116.0",
+  "version": "0.117.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,8 +11,10 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
+    "graphology": "^0.26.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "sigma": "^3.0.3",
     "three": "^0.186.0"
   },
   "devDependencies": {

@@ -1156,9 +1156,21 @@ deploy runbook whose first two commands could not work (`B-17`).
 
 *Checkpoint: reading the graph is genuinely better than reading the sources.*
 
-- [ ] `P6-01` Sigma.js canvas, focus + expand, depth-1 neighbours capped and ranked
-- [ ] `P6-02` Canvas filters: topic, attribute, source tier, date, contested-only
-- [ ] `P6-03` Path mode between two nodes
+- [x] `P6-01` **Sigma.js canvas, focus + expand, depth-1 neighbours capped and ranked** — `v0.117.0`.
+      `/nodes/{id}` is the workspace: a deterministic radial Sigma canvas of the
+      focus and its depth-1 neighbours in both directions, capped (30, up to
+      100) and ranked by supporting passages — there is no weight column, so the
+      UI says what it ranks by — with second-hop hints, hover cards, breadcrumb,
+      Fit/zoom, a table view, and the node panel from the Explore artboard. The
+      canvas stays dark in both themes. Built by a delegated agent
+- [x] `P6-02` **Canvas filters: topic, attribute, source tier, date, contested-only** — `v0.117.0`.
+      Applied server-side to the evidence — one passage must satisfy them all,
+      an undated passage fails a date bound — with facets counted before
+      filtering; state lives in the query string
+- [x] `P6-03` **Path mode between two nodes** — `v0.117.0`. Bounded
+      breadth-first search (default 4, at most 6 hops), best-supported route
+      among equal lengths, never through a merged node; "no route within N
+      hops" is a result
 - [x] `P6-04` Node detail panel: grouped tags with overflow, attribute list with
       confidence — `v0.73.0`. Built before the graph on purpose: the hard parts
       are about how a claim is presented, and waiting for rows does not make them

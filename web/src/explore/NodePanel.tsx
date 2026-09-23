@@ -1,221 +1,484 @@
-import { NoteComposer, NoteList } from './Annotations'
-import { ResultList } from './ResultList'
-import type { NodeAttribute, NodeDetail, NoteDraft } from '../lib/api'
+import { useState } from 'react'
+
+import type { GraphNodeDetail, ContestedPair, Evidence } from './graph/api'
+import type { NodeAttribute, NoteDraft, SearchHit } from '../lib/api'
+import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
+import { DAGGER } from '../ui/Contested'
+import { TIER_LABEL, type SourceTier } from '../ui/Tier'
 
 /**
- * The node detail panel (task P6-04, spec §12.5, §7).
+ * The node panel beside the canvas (tasks P6-04, P6-01; spec §12.5; design
+ * `Explore`).
  *
  * §12.5 asks for "description, attribute tags with confidence, supporting
- * chunks with source and tier, contested edges". Three decisions carry it.
+ * chunks with source and tier, contested edges, own annotations", and the
+ * artboard gives each its block, in that order, over one opaque surface —
+ * opaque because this is what a reader reads (design-system.md §5): citations,
+ * provenance and confidence values do not go on glass over a live graph.
  *
- * **Tags are grouped by scope.** §7.1 splits attributes into ones that apply
- * across the corpus and ones that only mean something inside a topic, and a
- * flat row of tags says they are the same kind of claim. They are not: a
- * topic-local dimension compared across topics is a comparison nobody made.
+ * Three rules from the older panel survive the redesign because they are about
+ * honesty rather than layout:
  *
- * **Confidence is on the tag, not behind it.** §7 makes it first-class. A tag
- * whose confidence a reader has to hover for is a claim rendered as a fact, and
- * this is a corpus whose whole argument is that claims should be checkable.
- *
- * **Overflow expands rather than truncating.** A dozen attributes is the cap
- * (§7.3), so the list is short by design — but an entity near the cap in both
- * scopes is still more than a panel should open with. `<details>` because it
- * needs no state and works with the keyboard, and because a "+7 more" that is
- * not reachable is the same as not having the tags.
- *
- * §12.5 ends the panel with "own annotations", and `P6-05` put them there: the
- * reader's own thinking about this node, and the affordance to add to it,
- * last — after the evidence, because a note written before reading the passages
- * is a note about the title.
+ * - **Confidence is on the chip**, as a number. §7 makes it first-class, and a
+ *   confidence a reader has to hover for is a claim rendered as a fact.
+ * - **A tag with no evidence says so.** §2 principle 3: nothing is assertable
+ *   without a citation, so an empty citation list is a data problem to show.
+ * - **Nothing is invented to fill a block.** No description, no annotation, no
+ *   contested pair: the block is absent or states the absence. The artboard's
+ *   sample prose is sample data, not a template to pad with.
  */
 
-export interface NodePanelProps {
-  node: NodeDetail
-  /** How many tags each group shows before folding the rest away. */
-  visible?: number
-  /**
-   * Writing a note about this node. Optional, and the panel renders without it
-   * — `P6-04` built this screen to be readable before anything could write to
-   * it, and a panel that needed a write handler to render would have made the
-   * read path depend on the control surface being reachable.
-   */
-  onWrite?: (draft: NoteDraft) => void
-  writing?: boolean
-  writeError?: string | null
+export const LBL =
+  'font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint'
+
+/** How many passages the panel opens with; the rest are one click away. */
+export const EVIDENCE_VISIBLE = 4
+
+export function formatConfidence(value: number | null): string {
+  // Two decimals, as the artboard shows: a probability, not a word. Rounding
+  // to "high" throws away the difference between 0.61 and 0.94.
+  return value === null ? '—' : value.toFixed(2)
 }
 
-export const DEFAULT_VISIBLE = 6
+/** At or above this a confidence reads in the accent; below, it is faint. */
+export const CONFIDENT = 0.5
 
-/** §7.1's two scopes, in the order they should be read. */
-const GROUPS: { scope: string; label: string; hint: string }[] = [
-  { scope: 'global', label: 'across the corpus', hint: 'Compared against every entity.' },
-  { scope: 'topic_local', label: 'within a topic', hint: 'Only meaningful inside its topic.' },
-]
-
-export function describeConfidence(value: number | null): string {
-  // A number, not a word. §7's confidence is a probability and rounding it to
-  // "high" throws away the difference between 0.61 and 0.94 — which is most of
-  // what a reader weighing two contradictory tags has to go on.
-  if (value === null) return 'no confidence recorded'
-  return `${Math.round(value * 100)}%`
+export function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
 }
 
-export function groupByScope(
-  attributes: readonly NodeAttribute[],
-): { scope: string; label: string; hint: string; items: NodeAttribute[] }[] {
-  return GROUPS.map((group) => ({
-    ...group,
-    items: attributes.filter((a) => a.scope === group.scope),
-  })).filter((group) => group.items.length > 0)
+/** `YYYY-MM`. Dates stay strings (see `lib/api.ts`) — no timezone to shift them. */
+export function monthOf(date: string | null): string | null {
+  return date ? date.slice(0, 7) : null
 }
 
-function Tag({ attribute }: { attribute: NodeAttribute }) {
+export function excerpt(text: string, max = 240): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  if (flat.length <= max) return flat
+  const cut = flat.slice(0, max)
+  return `${cut.slice(0, cut.lastIndexOf(' ') > max * 0.6 ? cut.lastIndexOf(' ') : max)}…`
+}
+
+/** `Intervention · walkability · SG` — type, topics, jurisdiction, as known. */
+export function metaLine(detail: GraphNodeDetail): string {
+  const parts = [detail.entity.node_type.replaceAll('_', ' ')]
+  parts.push(...detail.home_topics)
+  if (detail.entity.jurisdiction) parts.push(detail.entity.jurisdiction)
+  if (detail.entity.is_annotation) parts.push('yours')
+  return parts.join(' · ')
+}
+
+/**
+ * A plain-text citation for the node. The node's own URL is the anchor —
+ * `/nodes/{id}` is addressable, which is what makes citing it possible.
+ */
+export function citationFor(detail: GraphNodeDetail, origin: string): string {
+  const e = detail.entity
+  const bits = [`${e.canonical_name} (${e.node_type.replaceAll('_', ' ')}`]
+  if (e.jurisdiction) bits.push(`, ${e.jurisdiction}`)
+  bits.push(`). Meridian node #${e.entity_id}. ${origin}${hrefForNode(e.entity_id)}`)
+  return bits.join('')
+}
+
+function Chip({ attribute }: { attribute: NodeAttribute }) {
+  const value = attribute.value ?? (attribute.value_numeric !== null ? String(attribute.value_numeric) : null)
+  const strong = attribute.confidence !== null && attribute.confidence >= CONFIDENT
   return (
-    <li className="flex items-baseline gap-2 border border-line-strong px-2 py-1">
-      <span className="font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-        {attribute.name}
-      </span>
-      <span className="font-sans text-[length:var(--text-small)]">
-        {attribute.value ?? attribute.value_numeric ?? '—'}
-      </span>
-      <span className="font-mono text-[length:var(--text-label)] text-text-muted">
-        {describeConfidence(attribute.confidence)}
+    <li
+      className="border border-line bg-surface-raised px-2 py-1 font-mono text-[10px] text-text-muted"
+      title={
+        attribute.scope === 'topic_local' && attribute.topic
+          ? `Only meaningful within ${attribute.topic}.`
+          : 'Compared across the corpus.'
+      }
+    >
+      {attribute.name.replaceAll('_', ' ')}
+      {value ? <span className="text-text"> {value}</span> : null}{' '}
+      <span className={strong ? 'text-accent-graph' : 'text-text-faint'}>
+        {formatConfidence(attribute.confidence)}
       </span>
       {attribute.supporting_chunk_ids.length === 0 ? (
-        // §2 principle 3: nothing is assertable without a citation. A tag with
-        // no supporting chunk should not exist — the schema requires the array
-        // — so an empty one is a data problem, and saying so beats hiding it.
-        <span className="font-mono text-[length:var(--text-label)] text-accent-attention">
-          no evidence
-        </span>
+        <span className="text-accent-attention"> · no evidence</span>
       ) : null}
     </li>
   )
 }
 
+function SourceLine({ hit, certainty }: { hit: SearchHit; certainty?: string | null }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <a
+        href={hrefForSource(hit.source_id)}
+        onClick={onInternalClick(hrefForSource(hit.source_id))}
+        className="font-mono text-[10px] text-accent-graph"
+      >
+        {domainOf(hit.url)}
+      </a>
+      <span className="border border-line px-1.5 py-px font-mono text-[9px] uppercase tracking-[0.1em] text-text-faint">
+        {TIER_LABEL[hit.source_tier as SourceTier] ?? hit.source_tier}
+      </span>
+      {hit.publication_date ? (
+        <span className="font-mono text-[10px] text-text-faint">{monthOf(hit.publication_date)}</span>
+      ) : (
+        <span className="font-mono text-[10px] text-text-faint">undated</span>
+      )}
+      {certainty ? (
+        <span
+          className={`ml-auto font-mono text-[10px] ${
+            certainty === 'hedged' ? 'text-accent-attention' : 'text-text-faint'
+          }`}
+        >
+          {certainty}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function Passage({ evidence }: { evidence: Evidence }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <blockquote className="font-mono text-[11.5px] italic leading-[1.6] text-text-muted">
+        “{excerpt(evidence.hit.text)}”
+      </blockquote>
+      <SourceLine hit={evidence.hit} certainty={evidence.certainty} />
+    </div>
+  )
+}
+
+function otherSide(pair: ContestedPair, here: number) {
+  const t = pair.theirs
+  return t.from_entity_id === here
+    ? { id: t.to_entity_id, name: t.to_name }
+    : { id: t.from_entity_id, name: t.from_name }
+}
+
+function ContestedBlock({ pair, here }: { pair: ContestedPair; here: number }) {
+  const [comparing, setComparing] = useState(false)
+  const other = otherSide(pair, here)
+  const theirs = pair.theirs.evidence
+  const ours = pair.ours.evidence
+  return (
+    <div className="flex flex-col gap-2.5">
+      <p className="text-[13px] leading-[1.55] text-text">
+        <a
+          href={hrefForNode(other.id)}
+          onClick={onInternalClick(hrefForNode(other.id))}
+          className="text-text underline decoration-line-strong underline-offset-2"
+        >
+          {other.name}
+        </a>
+        <span className="text-text-muted">
+          {' '}
+          — {pair.theirs.relation_type.replaceAll('_', ' ')}
+          {pair.theirs.stance ? `, ${pair.theirs.stance}` : ''}
+          {theirs ? `: “${excerpt(theirs.text, 140)}”` : '.'}
+        </span>
+      </p>
+      <div className="flex items-center gap-2">
+        {theirs ? (
+          <span className="font-mono text-[10px] text-text-faint">
+            {domainOf(theirs.url)} · {(TIER_LABEL[theirs.source_tier as SourceTier] ?? theirs.source_tier).toLowerCase()}
+            {theirs.publication_date ? ` · ${monthOf(theirs.publication_date)}` : ''}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setComparing((v) => !v)}
+          aria-expanded={comparing}
+          className="ml-auto font-mono text-[10.5px] text-accent-attention"
+        >
+          {comparing ? 'Close ←' : 'Compare →'}
+        </button>
+      </div>
+      {comparing ? (
+        // §9: both edges are kept, and both are shown. Side by side, this
+        // node's evidence first, because the reader arrived from here.
+        <div className="grid grid-cols-2 gap-3 border-t border-accent-attention-deep pt-3">
+          {[
+            { side: pair.ours, hit: ours, label: 'This node' },
+            { side: pair.theirs, hit: theirs, label: other.name },
+          ].map(({ side, hit, label }) => (
+            <div key={side.edge_id} className="flex min-w-0 flex-col gap-1.5">
+              <span className={LBL}>{label}</span>
+              <span className="font-mono text-[10px] text-text-faint">
+                {side.relation_type.replaceAll('_', ' ')}
+                {side.certainty ? ` · ${side.certainty}` : ''}
+              </span>
+              {hit ? (
+                <>
+                  <blockquote className="font-mono text-[11px] italic leading-[1.55] text-text-muted">
+                    “{excerpt(hit.text, 200)}”
+                  </blockquote>
+                  <SourceLine hit={hit} />
+                </>
+              ) : (
+                <span className="text-[12px] text-text-faint">No passage resolves for this edge.</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export interface NodePanelProps {
+  detail: GraphNodeDetail
+  /** Expand neighbours: shows the next batch past the cap. */
+  onExpand?: () => void
+  /** Why Expand is unavailable, when it is — e.g. every neighbour is shown. */
+  expandBlocked?: string | null
+  onWrite?: (draft: NoteDraft) => void
+  writing?: boolean
+  writeError?: string | null
+  origin?: string
+}
+
 export function NodePanel({
-  node,
-  visible = DEFAULT_VISIBLE,
+  detail,
+  onExpand,
+  expandBlocked = null,
   onWrite,
   writing = false,
   writeError = null,
+  origin = typeof window === 'undefined' ? '' : window.location.origin,
 }: NodePanelProps) {
-  const groups = groupByScope(node.attributes)
-  const here = {
-    entity_id: node.entity.entity_id,
-    canonical_name: node.entity.canonical_name,
-    node_type: node.entity.node_type,
+  const [allEvidence, setAllEvidence] = useState(false)
+  const [composing, setComposing] = useState(false)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [cited, setCited] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const entity = detail.entity
+  const evidence = allEvidence ? detail.evidence : detail.evidence.slice(0, EVIDENCE_VISIBLE)
+  const latest = detail.annotations[0] ?? null
+
+  function cite() {
+    const text = citationFor(detail, origin)
+    const done = (state: 'copied' | 'failed') => {
+      setCited(state)
+      window.setTimeout(() => setCited('idle'), 2000)
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => done('copied'),
+        () => done('failed'),
+      )
+    } else {
+      done('failed')
+    }
   }
 
   return (
-    <article>
-      <header>
-        <h1 className="font-sans text-[length:var(--text-heading)] font-semibold">
-          {node.entity.canonical_name}
-        </h1>
-        <p className="mt-1 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-          {node.entity.node_type}
-          {node.entity.jurisdiction ? ` · ${node.entity.jurisdiction}` : ''}
-          {node.entity.is_annotation ? ' · yours' : ''}
-        </p>
-        {node.entity.aliases && node.entity.aliases.length > 0 ? (
-          <p className="mt-1 font-mono text-[length:var(--text-small)] text-text-muted">
-            also: {node.entity.aliases.join(' · ')}
-          </p>
-        ) : null}
-      </header>
+    <aside
+      aria-label={`Node: ${entity.canonical_name}`}
+      className="flex h-full min-h-0 w-[384px] shrink-0 flex-col border-l border-line bg-surface"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <header className="relative flex flex-col gap-3 border-b border-line px-5 pb-4 pt-5">
+          {detail.contested ? (
+            // §6: the detail-panel badge — leading dagger, nbsp, the word.
+            <span className="absolute right-5 top-5 border border-accent-attention-deep bg-accent-attention-deep/40 px-2 py-1 font-mono text-[9.5px] uppercase tracking-[0.1em] text-accent-attention">
+              {DAGGER}
+              {'\u00a0 '}Contested
+            </span>
+          ) : null}
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h1
+              className={`text-[21px] font-semibold leading-[1.15] tracking-[-0.006em] text-text ${
+                detail.contested ? 'pr-[112px]' : ''
+              }`}
+            >
+              {entity.canonical_name}
+            </h1>
+            <p className="font-mono text-[9.5px] uppercase tracking-[0.15em] text-text-faint">
+              {metaLine(detail)}
+            </p>
+            {entity.aliases && entity.aliases.length > 0 ? (
+              <p className="font-mono text-[10.5px] text-text-faint">
+                also {entity.aliases.join(' · ')}
+              </p>
+            ) : null}
+          </div>
+          {entity.description ? (
+            <p className="text-[13.5px] leading-[1.6] text-text-muted">{entity.description}</p>
+          ) : null}
+        </header>
 
-      {node.entity.description ? (
-        <p className="mt-4 max-w-prose">{node.entity.description}</p>
-      ) : null}
-
-      {node.contested_edges > 0 ? (
-        <p className="mt-4 border border-accent-attention bg-surface p-3 text-[length:var(--text-small)] text-accent-attention">
-          {/* §9: a contested pair is two sources disagreeing, which is a finding
-              rather than an error — but it is the thing a reader most needs to
-              know before quoting this node. */}
-          {node.contested_edges === 1
-            ? 'One connection here is contested — sources disagree.'
-            : `${node.contested_edges} connections here are contested — sources disagree.`}
-        </p>
-      ) : null}
-
-      {groups.length === 0 ? (
-        <p className="mt-6 text-text-muted">
-          Nothing has been tagged on this node yet. Attributes are assigned by the slow loop, so a
-          node can exist with none.
-        </p>
-      ) : (
-        groups.map((group) => (
-          <section key={group.scope} className="mt-6">
-            <h2 className="font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-              {group.label}
-            </h2>
-            <p className="mt-1 text-[length:var(--text-small)] text-text-muted">{group.hint}</p>
-
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {group.items.slice(0, visible).map((attribute) => (
-                <Tag key={attribute.value_id} attribute={attribute} />
+        <section className="flex flex-col gap-3 border-b border-line px-5 py-4">
+          <h2 className={LBL}>Attributes · confidence</h2>
+          {detail.attributes.length === 0 ? (
+            <p className="text-[12.5px] text-text-faint">
+              None tagged. Attributes come from the slow loop, so a node can exist with none.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {detail.attributes.map((a) => (
+                <Chip key={a.value_id} attribute={a} />
               ))}
             </ul>
+          )}
+        </section>
 
-            {group.items.length > visible ? (
-              <details className="mt-2">
-                <summary className="cursor-pointer font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-                  {group.items.length - visible} more
-                </summary>
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {group.items.slice(visible).map((attribute) => (
-                    <Tag key={attribute.value_id} attribute={attribute} />
-                  ))}
-                </ul>
-              </details>
-            ) : null}
-          </section>
-        ))
-      )}
-
-      <section className="mt-8">
-        <h2 className="font-sans text-[length:var(--text-body)] font-semibold">Evidence</h2>
-        {node.supporting.length === 0 ? (
-          <p className="mt-2 text-text-muted">
-            No passages behind these tags. That is a gap rather than an absence of material — every
-            tag is supposed to name the chunk it came from.
-          </p>
-        ) : (
-          <>
-            <p className="mt-1 max-w-prose text-[length:var(--text-small)] text-text-muted">
-              {/* `P1-32`: this is the one place superseded chunks are shown. The
-                  tag was derived from this text, and the page may since have
-                  changed — which is exactly why the row is kept. */}
-              The passages these tags were drawn from, as they read when they were read. A page may
-              have changed since.
+        <section className="flex flex-col gap-3 border-b border-line px-5 py-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className={LBL}>Supporting chunks</h2>
+            <span className="font-mono text-[10px] text-text-faint">{detail.evidence_total}</span>
+          </div>
+          {detail.evidence.length === 0 ? (
+            <p className="text-[12.5px] text-text-faint">
+              No passage cites this node yet. Its edges and attributes carry the evidence, and it
+              has none of either.
             </p>
-            <div className="mt-3">
-              <ResultList hits={node.supporting} />
-            </div>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              {evidence.map((e, i) => (
+                <div key={e.hit.chunk_id} className="flex flex-col gap-3">
+                  {i > 0 ? <div className="h-px bg-line" /> : null}
+                  <Passage evidence={e} />
+                </div>
+              ))}
+              {detail.evidence.length > EVIDENCE_VISIBLE ? (
+                <button
+                  type="button"
+                  onClick={() => setAllEvidence((v) => !v)}
+                  className="self-start font-mono text-[10.5px] text-accent-graph"
+                >
+                  {allEvidence ? 'Show fewer' : `Show all ${detail.evidence.length}`}
+                </button>
+              ) : null}
+              {detail.evidence_total > detail.evidence.length ? (
+                <p className="font-mono text-[10px] text-text-faint">
+                  {detail.evidence_total - detail.evidence.length} more not carried by this panel.
+                </p>
+              ) : null}
+            </>
+          )}
+        </section>
 
-      <section className="mt-8">
-        <h2 className="font-sans text-[length:var(--text-body)] font-semibold">Your notes</h2>
-        <p className="mt-1 max-w-prose text-[length:var(--text-small)] text-text-muted">
-          {/* §12.5 expects this to become the highest-quality layer in the
-              system over months. Saying whose it is matters: everything else on
-              this panel was derived by something, and this was not. */}
-          Yours, not the corpus's. Everything else here was derived from a source; this was not.
-        </p>
-        <NoteList notes={node.annotations} inContextOf={node.entity.entity_id} />
-        <div className="mt-3">
-          <NoteComposer
-            about={[here]}
-            busy={writing}
-            error={writeError}
-            onWrite={onWrite}
-          />
-        </div>
-      </section>
-    </article>
+        {detail.contested_with.length > 0 ? (
+          <section className="flex flex-col gap-2.5 border-b border-line bg-accent-attention-deep/15 px-5 py-4">
+            <h2 className={`${LBL} !text-accent-attention`}>Contested with</h2>
+            {detail.contested_with.map((pair) => (
+              <ContestedBlock
+                key={`${pair.ours.edge_id}:${pair.theirs.edge_id}`}
+                pair={pair}
+                here={entity.entity_id}
+              />
+            ))}
+          </section>
+        ) : null}
+
+        <section className="flex flex-col gap-2.5 px-5 py-3.5">
+          <div className="flex items-baseline justify-between">
+            <h2 className={LBL}>My annotation</h2>
+            {latest?.produced_at ? (
+              <span className="font-mono text-[10px] text-text-faint">{latest.produced_at.slice(0, 10)}</span>
+            ) : null}
+          </div>
+          {latest ? (
+            <div className="border border-line bg-ground px-3 py-2.5 text-[12.5px] leading-[1.55] text-text-muted">
+              <p className="font-semibold text-text">{latest.title}</p>
+              {latest.body ? <p className="mt-1 whitespace-pre-line">{latest.body}</p> : null}
+              {detail.annotations.length > 1 ? (
+                <p className="mt-2 font-mono text-[10px] text-text-faint">
+                  {detail.annotations.length - 1} earlier note
+                  {detail.annotations.length === 2 ? '' : 's'} on this node.
+                </p>
+              ) : null}
+            </div>
+          ) : !composing ? (
+            <p className="text-[12.5px] text-text-faint">
+              No note on this node. Yours is the one layer here nothing else can write.
+            </p>
+          ) : null}
+          {composing ? (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const trimmed = title.trim()
+                if (!trimmed) return
+                onWrite?.({
+                  title: trimmed,
+                  body: body.trim() || null,
+                  about: [entity.entity_id],
+                  supporting_chunk_ids: [],
+                })
+                setTitle('')
+                setBody('')
+                setComposing(false)
+              }}
+            >
+              <input
+                aria-label="Title for this note"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="What is this?"
+                disabled={writing}
+                className="h-8 border border-line-strong bg-ground px-2 text-[12.5px] text-text"
+              />
+              <textarea
+                aria-label="The note itself"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={3}
+                disabled={writing}
+                className="border border-line-strong bg-ground px-2 py-1 text-[12.5px] text-text"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={writing || !title.trim()}
+                  className="border border-line-strong bg-surface-raised px-3 py-1.5 text-[12px] text-text"
+                >
+                  Keep it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComposing(false)}
+                  className="px-2 py-1.5 text-[12px] text-text-faint"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : null}
+          {writeError ? <p className="text-[12px] text-accent-attention">{writeError}</p> : null}
+        </section>
+      </div>
+
+      <footer className="flex items-center gap-2 border-t border-line px-5 py-3.5">
+        <button
+          type="button"
+          onClick={onExpand}
+          disabled={!onExpand || Boolean(expandBlocked)}
+          title={expandBlocked ?? undefined}
+          className="whitespace-nowrap border border-accent-graph bg-accent-graph px-3 py-2 text-[12.5px] font-medium text-surface disabled:opacity-50"
+        >
+          Expand neighbours
+        </button>
+        <button
+          type="button"
+          onClick={() => setComposing(true)}
+          disabled={!onWrite}
+          className="border border-line-strong bg-surface-raised px-3 py-2 text-[12.5px] text-text-muted"
+        >
+          Annotate
+        </button>
+        <button
+          type="button"
+          onClick={cite}
+          className="border border-line-strong bg-surface-raised px-3 py-2 text-[12.5px] text-text-muted"
+        >
+          {cited === 'copied' ? 'Copied' : cited === 'failed' ? 'Not copied' : 'Cite'}
+        </button>
+        <span className="ml-auto font-mono text-[10px] text-text-faint">node #{entity.entity_id}</span>
+      </footer>
+    </aside>
   )
 }

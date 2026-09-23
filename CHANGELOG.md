@@ -234,6 +234,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.117.0] — 2026-09-23
+
+### Added
+
+- `P6-01`/`P6-02`/`P6-03`: `/nodes/{id}` is the graph workspace — a Sigma
+  canvas of the focus and its depth-1 neighbours, capped and ranked by
+  supporting passages; filters by topic, tier, published range, attribute and
+  contested-only, applied server-side to evidence; path mode between two
+  nodes; a table view; the redesigned node panel. New read-only routes under
+  `/api/explore/graph/*`. `sigma` and `graphology` added (MIT)
+
 ## [0.116.0] — 2026-09-23
 
 ### Added

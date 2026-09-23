@@ -83,6 +83,22 @@
   --light-series-7: #4A3AA7;
   --light-series-8: #E34948;
 
+  /* --- the graph canvas (design-system.md §2, "Canvas tokens"; P6-01) ----
+   * Dark only, in both themes: the canvas is a dark ground whatever the
+   * surrounding chrome is, as `ground-deep` already is. Read by the Sigma
+   * renderer through getComputedStyle, since WebGL takes colour strings rather
+   * than CSS, so they are palette entries and not Tailwind roles.
+   */
+  --dark-canvas-graticule: #16233D;
+  --dark-canvas-meridian: #132038;
+  --dark-canvas-neighbour: #8FA0C0;
+  --dark-canvas-hint: #3B4C6E;
+  --dark-canvas-edge: #2E93A0;
+  --dark-canvas-edge-contested: #B98737;
+  --dark-canvas-edge-hint: #1B2C4A;
+  --dark-canvas-label: #C9D3E6;
+  --dark-canvas-caption: #6E7C9C;
+
   /* --- roles: dark, the flagship default -------------------------------- */
   --ground-deep: var(--dark-ground-deep);
   --ground: var(--dark-ground);

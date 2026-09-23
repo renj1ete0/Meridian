@@ -73,6 +73,9 @@ describe('the palette in code matches the palette in the design system', () => {
   it.each([
     ['Dark tokens (flagship)', 'dark'],
     ['Light tokens', 'light'],
+    // The graph canvas (P6-01): dark in both themes, so its tokens are dark
+    // palette entries.
+    ['Canvas tokens', 'dark'],
   ] as const)('%s', (heading, prefix) => {
     const published = publishedTokens(heading)
     const inCode = colours(':root')
@@ -88,6 +91,7 @@ describe('the palette in code matches the palette in the design system', () => {
     const publishedValues = new Set([
       ...publishedTokens('Dark tokens (flagship)').values(),
       ...publishedTokens('Light tokens').values(),
+      ...publishedTokens('Canvas tokens').values(),
     ])
 
     for (const [token, hex] of colours(':root')) {

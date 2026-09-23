@@ -75,17 +75,21 @@ decision is recorded here so it is not re-made differently later.
 
 ## Web dependencies
 
-The licence gate reads Python metadata only, so the web build's packages are
-recorded here by hand. Each was read off `node_modules/<package>/package.json`.
+The licence gate (`tests/unit/test_licences.py`) reads Python distribution
+metadata only, so the web build's runtime packages are recorded here by hand,
+from each package's `license` field.
 
 | Package | Licence | Why it is here |
 |---|---|---|
-| `three` | MIT | The 3D corpus map (`P6-29`). Runtime; ships in its own lazily-loaded chunk. |
+| `react`, `react-dom` | MIT | The UI. |
+| `sigma` | MIT | The graph canvas (`P6-01`), which spec §12.1 names. Loaded lazily, so only the graph workspace pays for it. |
+| `graphology` | MIT | Sigma's graph model (§12.1). |
+| `graphology-types`, `graphology-utils`, `events` | MIT | Pulled in by the two above. |
+| `three` | MIT | The 3D corpus map (`P6-29`). Ships in its own lazily-loaded chunk. |
 | `@types/three` | MIT | Types only, development. Pulls in `@types/stats.js`, `@types/webxr`, `@tweenjs/tween.js`, `fflate`, `meshoptimizer` (all MIT) and `@dimforge/rapier3d-compat` (Apache-2.0), none of which reach the built bundle. |
 
-The rest of `web/package.json` (React, Vite, Tailwind, Vitest, Testing
-Library, jsdom) predates this section and has not been audited package by
-package — see *What is not covered*.
+Other development-only packages (the build, the tests) do not ship in the
+bundle and have not been audited package by package — see *What is not covered*.
 
 ## Services and images
 

@@ -1,260 +1,216 @@
+// @vitest-environment jsdom
 /**
- * The node detail panel (task P6-04, spec §12.5, §7, §9).
+ * The node panel beside the canvas (tasks P6-04, P6-01; spec §12.5, §7, §9;
+ * design `Explore`).
  *
- * Nothing renders this yet — there are no entities, because `P4-01` has not run
- * and nothing has ever written an edge. That is deliberate rather than
- * premature: the panel's hard parts are about *how a claim is presented*, and
- * those do not get easier by waiting for data.
+ * The redesign moved the blocks; these tests hold the rules that are about
+ * honesty rather than layout, which survive any redesign:
  *
- * Three of them.
- *
- * **Scope is not decoration.** §7.1 splits attributes into ones that apply
- * across the corpus and ones that only mean something inside a topic. A flat row
- * of tags asserts they are the same kind of claim, and comparing a topic-local
- * dimension across topics is a comparison nobody made.
- *
- * **Confidence is on the tag.** §7 makes it first-class, and a tag whose
- * confidence a reader must hover for is a claim rendered as a fact.
- *
- * **Overflow expands.** A "+7 more" that cannot be reached is the same as not
- * having the tags at all.
+ * - confidence is on the chip, as a number;
+ * - a tag with no evidence says so;
+ * - nothing is invented to fill a block — no description, no block;
+ * - §6: the contested badge carries the dagger, and only appears when an edge
+ *   is actually contested;
+ * - §9: a contested pair shows *both* sides.
  */
-import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_VISIBLE, NodePanel, describeConfidence, groupByScope } from '../src/explore/NodePanel'
-import type { Entity, NodeAttribute, NodeDetail, SearchHit } from '../src/lib/api'
+import {
+  EVIDENCE_VISIBLE,
+  NodePanel,
+  citationFor,
+  domainOf,
+  excerpt,
+  formatConfidence,
+  metaLine,
+} from '../src/explore/NodePanel'
+import { attribute, detail, entity, evidence, hit, pair } from './graph-fixtures'
 
-function text(markup: string): string {
-  return markup
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&#x27;/g, "'")
-    .replace(/&[a-z]+;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
-function entity(over: Partial<Entity> = {}): Entity {
-  return {
-    entity_id: 1,
-    canonical_name: 'Silver Zone',
-    node_type: 'scheme',
-    jurisdiction: 'SG',
-    aliases: null,
-    topic_labels: ['walkability'],
-    description: null,
-    confidence: null,
-    merged_from: null,
-    redirects_to: null,
-    is_annotation: false,
-    supporting_chunk_ids: [],
-    produced_by: null,
-    model: null,
-    quality_tier: null,
-    produced_at: null,
-    schema_version: 1,
-    created_at: '2026-09-15T00:00:00Z',
-    ...over,
-  }
-}
-
-function attribute(over: Partial<NodeAttribute> = {}): NodeAttribute {
-  return {
-    value_id: Math.floor(Math.random() * 1e9),
-    name: 'maturity',
-    scope: 'global',
-    topic: null,
-    value: 'piloted',
-    value_numeric: null,
-    confidence: 0.8,
-    quality_tier: 3,
-    supporting_chunk_ids: [12],
-    ...over,
-  }
-}
-
-function hit(): SearchHit {
-  return {
-    chunk_id: 12,
-    source_id: 3,
-    text: 'The scheme was piloted in four precincts.',
-    page_or_offset: 2,
-    chunk_index: 0,
-    url: 'https://example.test/a.pdf',
-    title: 'A report',
-    source_tier: 'government',
-    publication_date: '2025-01-01',
-    language: 'en',
-    topic_labels: ['walkability'],
-    page_unit: 'page',
-    media_type: 'application/pdf',
-    duplicate_of: null,
-    score: 0,
-    lexical_rank: null,
-    vector_rank: null,
-    age_days: null,
-    decay: 1,
-    score_before_decay: 0,
-  }
-}
-
-function node(over: Partial<NodeDetail> = {}): NodeDetail {
-  return {
-    entity: entity(over.entity),
-    attributes: [attribute()],
-    supporting: [hit()],
-    contested_edges: 0,
-    annotations: [],
-    ...over,
-  }
-}
-
-// --------------------------------------------------------------------------
-// Scope (§7.1)
-// --------------------------------------------------------------------------
-
-describe('tags are grouped by what they can be compared against', () => {
-  it('separates corpus-wide dimensions from topic-local ones', () => {
-    const groups = groupByScope([
-      attribute({ scope: 'global', name: 'maturity' }),
-      attribute({ scope: 'topic_local', name: 'footfall', topic: 'walkability' }),
-    ])
-
-    expect(groups.map((g) => g.scope)).toEqual(['global', 'topic_local'])
-    expect(groups[0]!.items).toHaveLength(1)
+describe('helpers', () => {
+  it('confidence is two decimals, and absent is a dash, not zero', () => {
+    expect(formatConfidence(0.806)).toBe('0.81')
+    expect(formatConfidence(0)).toBe('0.00')
+    expect(formatConfidence(null)).toBe('—')
   })
 
-  it('omits a group with nothing in it', () => {
-    // An empty heading reads as a group that failed to load.
-    const groups = groupByScope([attribute({ scope: 'global' })])
-
-    expect(groups).toHaveLength(1)
+  it('a domain drops www and survives a bad URL', () => {
+    expect(domainOf('https://www.agency.test/x')).toBe('agency.test')
+    expect(domainOf('not a url')).toBe('not a url')
   })
 
-  it('says what each scope means, rather than naming the enum', () => {
-    // `topic_local` is a column value. A reader needs to know that comparing it
-    // across topics is a comparison nobody made.
-    const rendered = text(
-      renderToStaticMarkup(
-        <NodePanel node={node({ attributes: [attribute({ scope: 'topic_local' })] })} />,
-      ),
+  it('an excerpt cuts at a word and marks the cut', () => {
+    const long = 'word '.repeat(100)
+    const cut = excerpt(long, 50)
+    expect(cut.endsWith('…')).toBe(true)
+    expect(cut.length).toBeLessThanOrEqual(51)
+    expect(excerpt('short text', 50)).toBe('short text')
+  })
+
+  it('the meta line is type, topics, jurisdiction — only what is known', () => {
+    expect(metaLine(detail())).toBe('intervention · walkability · SG')
+    expect(metaLine(detail({ home_topics: [], entity: entity({ jurisdiction: null, node_type: 'use_case' }) }))).toBe(
+      'use case',
     )
+  })
 
-    expect(rendered).toContain('within a topic')
-    expect(rendered).toContain('Only meaningful inside its topic')
-    expect(rendered).not.toContain('topic_local')
+  it('a citation names the node and its address', () => {
+    expect(citationFor(detail(), 'https://m.test')).toBe(
+      'Focus (intervention, SG). Meridian node #1. https://m.test/nodes/1',
+    )
   })
 })
 
-// --------------------------------------------------------------------------
-// Confidence (§7)
-// --------------------------------------------------------------------------
-
-describe('a tag carries its confidence', () => {
-  it('shows it as a number', () => {
-    // Rounding to "high" throws away the difference between 0.61 and 0.94,
-    // which is most of what a reader weighing two contradictory tags has.
-    expect(describeConfidence(0.61)).toBe('61%')
-    expect(describeConfidence(0.94)).toBe('94%')
+describe('the panel', () => {
+  it('shows the description when there is one, and nothing when there is not', () => {
+    render(<NodePanel detail={detail({ entity: entity({ description: 'A scheme.' }) })} />)
+    expect(screen.getByText('A scheme.')).toBeTruthy()
+    cleanup()
+    const { container } = render(<NodePanel detail={detail()} />)
+    // The header holds the title and meta only: no invented prose.
+    expect(container.querySelector('header')!.querySelectorAll('p')).toHaveLength(1)
   })
 
-  it('says so when there is none rather than showing nothing', () => {
-    expect(describeConfidence(null)).toContain('no confidence')
+  it('§6: the badge appears only when contested, with the dagger', () => {
+    render(<NodePanel detail={detail()} />)
+    expect(screen.queryByText(/Contested$/)).toBeNull()
+    cleanup()
+    render(<NodePanel detail={detail({ contested: true })} />)
+    const badge = screen.getByText(/Contested$/)
+    expect(badge.textContent!.startsWith('†')).toBe(true)
   })
 
-  it('renders it beside the value', () => {
-    const rendered = text(renderToStaticMarkup(<NodePanel node={node()} />))
-
-    expect(rendered).toContain('piloted')
-    expect(rendered).toContain('80%')
-  })
-
-  it('marks a tag with no evidence behind it', () => {
-    // §2 principle 3. The schema requires the array, so an empty one is a data
-    // problem — and saying so beats rendering an unsupported claim silently.
-    const rendered = text(
-      renderToStaticMarkup(
-        <NodePanel node={node({ attributes: [attribute({ supporting_chunk_ids: [] })] })} />,
-      ),
+  it('puts confidence on each chip, in the accent only when confident', () => {
+    render(
+      <NodePanel
+        detail={detail({
+          attributes: [attribute({ value_id: 1, confidence: 0.81 }), attribute({ value_id: 2, name: 'shade', confidence: 0.29 })],
+        })}
+      />,
     )
-
-    expect(rendered).toContain('no evidence')
-  })
-})
-
-// --------------------------------------------------------------------------
-// Overflow (§7.3's cap is a dozen, and a dozen is still a lot in a panel)
-// --------------------------------------------------------------------------
-
-describe('overflow folds away rather than truncating', () => {
-  const many = Array.from({ length: DEFAULT_VISIBLE + 3 }, (_, i) =>
-    attribute({ name: `attr-${i}`, value_id: i }),
-  )
-
-  it('shows the count of what is folded', () => {
-    const rendered = text(renderToStaticMarkup(<NodePanel node={node({ attributes: many })} />))
-
-    expect(rendered).toContain('3 more')
+    expect(screen.getByText('0.81').className).toContain('text-accent-graph')
+    expect(screen.getByText('0.29').className).toContain('text-text-faint')
   })
 
-  it('keeps the folded tags in the document', () => {
-    // A "+3 more" that drops the tags is truncation wearing a disclosure's
-    // clothes: the reader is told there is more and cannot reach it.
-    const markup = renderToStaticMarkup(<NodePanel node={node({ attributes: many })} />)
-
-    expect(markup).toContain('<details')
-    for (const a of many) expect(text(markup)).toContain(a.name)
+  it('says when a tag has no evidence', () => {
+    render(<NodePanel detail={detail({ attributes: [attribute({ supporting_chunk_ids: [] })] })} />)
+    expect(screen.getByText(/no evidence/)).toBeTruthy()
   })
 
-  it('folds nothing when everything fits', () => {
-    const markup = renderToStaticMarkup(<NodePanel node={node()} />)
-
-    expect(markup).not.toContain('<details')
-  })
-})
-
-// --------------------------------------------------------------------------
-// Contested edges (§9) and the empty states
-// --------------------------------------------------------------------------
-
-describe('what the panel says when something is wrong or missing', () => {
-  it('warns that sources disagree, in the singular', () => {
-    const rendered = text(renderToStaticMarkup(<NodePanel node={node({ contested_edges: 1 })} />))
-
-    expect(rendered).toContain('One connection here is contested')
+  it('states an empty attribute list and an empty evidence list', () => {
+    render(<NodePanel detail={detail({ attributes: [], evidence: [], evidence_total: 0 })} />)
+    expect(screen.getByText(/None tagged/)).toBeTruthy()
+    expect(screen.getByText(/No passage cites this node yet/)).toBeTruthy()
   })
 
-  it('and in the plural', () => {
-    const rendered = text(renderToStaticMarkup(<NodePanel node={node({ contested_edges: 4 })} />))
-
-    expect(rendered).toContain('4 connections here are contested')
-  })
-
-  it('says nothing about contest when there is none', () => {
-    expect(text(renderToStaticMarkup(<NodePanel node={node()} />))).not.toContain('contested')
-  })
-
-  it('explains an untagged node rather than showing a blank', () => {
-    const rendered = text(
-      renderToStaticMarkup(<NodePanel node={node({ attributes: [], supporting: [] })} />),
+  it('opens with a few passages and reaches the rest', () => {
+    const many = Array.from({ length: EVIDENCE_VISIBLE + 3 }, (_, i) =>
+      evidence({ hit: hit({ chunk_id: 100 + i, text: `passage ${i}` }) }),
     )
-
-    expect(rendered).toContain('Nothing has been tagged')
+    render(<NodePanel detail={detail({ evidence: many, evidence_total: many.length })} />)
+    expect(screen.queryByText(/passage 6/)).toBeNull()
+    fireEvent.click(screen.getByText(`Show all ${many.length}`))
+    expect(screen.getByText(/passage 6/)).toBeTruthy()
   })
 
-  it('calls missing evidence a gap', () => {
-    // Not "no results". Every tag is supposed to name the chunk it came from,
-    // so an empty evidence section is a defect and reads as one.
-    const rendered = text(renderToStaticMarkup(<NodePanel node={node({ supporting: [] })} />))
-
-    expect(rendered).toContain('a gap')
+  it('says how many passages the panel did not carry', () => {
+    render(<NodePanel detail={detail({ evidence_total: 55 })} />)
+    expect(screen.getByText('54 more not carried by this panel.')).toBeTruthy()
   })
 
-  it('warns that the evidence may predate the current page', () => {
-    // `P1-32`: this is the one place superseded chunks are shown, because the
-    // tag was derived from this text and the page may have changed since.
-    const rendered = text(renderToStaticMarkup(<NodePanel node={node()} />))
+  it('shows hedged certainty in brass, and none for an attribute citation', () => {
+    render(
+      <NodePanel
+        detail={detail({
+          evidence: [
+            evidence({ certainty: 'hedged' }),
+            evidence({ hit: hit({ chunk_id: 13 }), via: 'attribute', certainty: null }),
+          ],
+          evidence_total: 2,
+        })}
+      />,
+    )
+    expect(screen.getByText('hedged').className).toContain('text-accent-attention')
+    expect(screen.getAllByText(/hedged|asserted|qualified|measured/)).toHaveLength(1)
+  })
 
-    expect(rendered).toContain('as they read when they were read')
+  it('§9: a contested pair names the other side and compares both', () => {
+    render(<NodePanel detail={detail({ contested: true, contested_with: [pair()] })} />)
+    expect(screen.getByText('Walking trips')).toBeTruthy()
+    fireEvent.click(screen.getByText('Compare →'))
+    // Both passages, this node's first.
+    const quotes = screen.getAllByText(/Schemes may reduce severity|No measurable change in walking trips/)
+    expect(quotes.map((q) => q.textContent!.includes('Schemes'))).toContain(true)
+    expect(screen.getByText('This node')).toBeTruthy()
+  })
+
+  it('shows the latest note, and states the absence of one', () => {
+    render(<NodePanel detail={detail()} />)
+    expect(screen.getByText(/No note on this node/)).toBeTruthy()
+    cleanup()
+    const note = (title: string, at: string) => ({
+      entity_id: 90,
+      title,
+      body: `${title} body`,
+      about: [],
+      supporting_chunk_ids: [],
+      topic_labels: null,
+      produced_by: 'human',
+      produced_at: at,
+      created_at: at,
+    })
+    render(
+      <NodePanel
+        detail={detail({ annotations: [note('Latest', '2026-08-31T10:00:00Z'), note('Older', '2026-08-01T10:00:00Z')] })}
+      />,
+    )
+    expect(screen.getByText('Latest')).toBeTruthy()
+    expect(screen.getByText('2026-08-31')).toBeTruthy()
+    expect(screen.getByText('1 earlier note on this node.')).toBeTruthy()
+    expect(screen.queryByText('Older')).toBeNull()
+  })
+
+  it('Annotate opens a composer that writes a note about this node', () => {
+    const onWrite = vi.fn()
+    render(<NodePanel detail={detail()} onWrite={onWrite} />)
+    fireEvent.click(screen.getByText('Annotate'))
+    fireEvent.change(screen.getByLabelText('Title for this note'), { target: { value: '  Check  ' } })
+    fireEvent.change(screen.getByLabelText('The note itself'), { target: { value: '' } })
+    fireEvent.click(screen.getByText('Keep it'))
+    expect(onWrite).toHaveBeenCalledWith({ title: 'Check', body: null, about: [1], supporting_chunk_ids: [] })
+  })
+
+  it('refuses a note with no title', () => {
+    const onWrite = vi.fn()
+    render(<NodePanel detail={detail()} onWrite={onWrite} />)
+    fireEvent.click(screen.getByText('Annotate'))
+    expect((screen.getByText('Keep it') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('Expand is disabled with the reason when nothing more can be shown', () => {
+    const onExpand = vi.fn()
+    render(<NodePanel detail={detail()} onExpand={onExpand} expandBlocked="All 4 neighbours are shown." />)
+    const button = screen.getByText('Expand neighbours') as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.title).toBe('All 4 neighbours are shown.')
+  })
+
+  it('Cite copies the citation', async () => {
+    const writeText = vi.fn(async () => {})
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    render(<NodePanel detail={detail()} origin="https://m.test" />)
+    fireEvent.click(screen.getByText('Cite'))
+    expect(writeText).toHaveBeenCalledWith(citationFor(detail(), 'https://m.test'))
+    expect(await screen.findByText('Copied')).toBeTruthy()
+  })
+
+  it('names the node id in the action bar', () => {
+    render(<NodePanel detail={detail()} />)
+    expect(screen.getByText('node #1')).toBeTruthy()
   })
 })
