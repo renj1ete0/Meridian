@@ -19,7 +19,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .annotations import AnnotationRead
-from .enums import PageUnit, SearchArm, SourceTier
+from .enums import FetchOutcome, LivenessState, PageUnit, SearchArm, SourceTier, TaskStatus
 from .graph import EntityRead
 from .runs import NotificationRead
 from .source import ChunkRead
@@ -327,3 +327,76 @@ class CrawlProgressRead(BaseModel):
     #: same attempt count and want opposite reactions from the reader.
     attempts_last_hour: int = 0
     successes_last_hour: int = 0
+
+
+class HourBucketRead(BaseModel):
+    """Mirrors ``meridian_core.crawlhealth.HourBucket``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    start: dt.datetime
+    succeeded: int
+    failed: int
+
+
+class OutcomeCountRead(BaseModel):
+    """Mirrors ``meridian_core.crawlhealth.OutcomeCount``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    outcome: FetchOutcome
+    count: int
+
+
+class DomainCountRead(BaseModel):
+    """Mirrors ``meridian_core.crawlhealth.DomainCount``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    domain: str
+    attempts: int
+    succeeded: int
+
+
+class LivenessRead(BaseModel):
+    """Mirrors ``meridian_core.crawlhealth.Liveness``.
+
+    The state and the numbers behind it, not a sentence. The words belong to
+    the screen, and a server that sent prose would leave every other consumer
+    parsing it back into the numbers it started from.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    state: LivenessState
+    last_attempt_at: dt.datetime | None
+    quiet_seconds: int | None
+    ready: int
+    pending: int
+
+
+class CrawlHealthRead(BaseModel):
+    """What a long crawl has been doing, and whether it still is (task `P6-25`).
+
+    Mirrors ``meridian_core.crawlhealth.CrawlHealth``. `CrawlProgressRead` is
+    the first hour; this is the second week — a day of history, the outcome mix,
+    and a verdict on whether anything is still fetching.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    as_of: dt.datetime
+    #: The verdict's threshold, so the screen can say what "stalled" means
+    #: rather than repeating a number that lives in Python.
+    stall_after_seconds: int
+    #: Oldest first, one per hour, empty hours included.
+    hours: list[HourBucketRead]
+    #: Every fetch outcome, zeros included, most frequent first.
+    outcomes: list[OutcomeCountRead]
+    #: Every queue status, zeros included.
+    queue: dict[TaskStatus, int]
+    #: Live chunks with no vector yet — the embedder's queue.
+    embedding_backlog: int
+    #: The busiest domains in the last hour.
+    top_domains: list[DomainCountRead]
+    liveness: LivenessRead

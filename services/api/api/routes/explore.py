@@ -27,6 +27,7 @@ from sqlalchemy import func, or_, select
 
 from meridian_core import annotations
 from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
+from meridian_core.crawlhealth import crawl_health
 from meridian_core.export import to_bibtex, to_markdown
 from meridian_core.models import (
     AttributeDefinition,
@@ -48,6 +49,7 @@ from meridian_core.schemas.graph import EntityRead
 from meridian_core.schemas.runs import NotificationRead
 from meridian_core.schemas.search import (
     CorpusStatsRead,
+    CrawlHealthRead,
     CrawlProgressRead,
     FigureRefRead,
     NodeAttributeRead,
@@ -719,3 +721,19 @@ async def explore_progress(sess: ReadSession) -> CrawlProgressRead:
         attempts_last_hour=attempts,
         successes_last_hour=successes,
     )
+
+
+@router.get("/crawl-health", response_model=CrawlHealthRead)
+async def explore_crawl_health(sess: ReadSession) -> CrawlHealthRead:
+    """A day of fetching and a verdict on whether it has stopped (task `P6-25`).
+
+    Behind Admin's crawl-health panel, and here rather than under
+    `/api/admin/*` on purpose. Everything it does is read, and the scaffold
+    rule is that `/api/admin/*` exists for the routes that write — a read
+    placed there takes the writable role for no reason, and inherits the
+    admin gate, which is closed exactly on the deployments nobody has finished
+    configuring. The person watching an unattended crawl on one of those needs
+    this most. It is `/progress`'s sibling, over the same tables, on the same
+    read-only role.
+    """
+    return CrawlHealthRead.model_validate(await crawl_health(sess))

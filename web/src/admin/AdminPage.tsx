@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { AgentsPanel } from './AgentsPanel'
+import { CrawlHealthPanel } from './CrawlHealthPanel'
 import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
 import { GazetteerQueue } from './GazetteerQueue'
@@ -16,6 +17,7 @@ import {
   editTopic,
   getFetchPolicy,
   getAgents,
+  getCrawlHealth,
   getFirstRun,
   getGazetteerQueue,
   getRuns,
@@ -23,6 +25,7 @@ import {
   getTopics,
   removeSeed,
   type Agents,
+  type CrawlHealth,
   type FirstRun,
   type Runs,
   type GazetteerEntityType,
@@ -60,11 +63,20 @@ import {
 
 type Phase = 'loading' | 'ready' | 'failed'
 
-type Section = 'gazetteer' | 'topics' | 'domains' | 'agents' | 'runs' | 'seeds'
+/** How often the crawl-health panel refetches while it is open (`P6-25`).
+ * Its finest grain is a minute of silence, so faster than this redraws the
+ * same screen; much slower and a stall that began while somebody watched
+ * goes unshown for minutes after it could have been. */
+export const HEALTH_REFRESH_MS = 30_000
+
+type Section = 'gazetteer' | 'topics' | 'health' | 'domains' | 'agents' | 'runs' | 'seeds'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'gazetteer', label: 'Gazetteer' },
   { key: 'topics', label: 'Topics' },
+  // `P6-25`. Beside Domains because they are read together: an outcome mix
+  // full of refusals is answered by that domain's policy row.
+  { key: 'health', label: 'Crawl' },
   { key: 'domains', label: 'Domains' },
   // `P6-23`. Adjacent because they are read together: a run that deferred and
   // the registry row that made it defer are one question asked twice.
@@ -94,6 +106,7 @@ export function AdminPage() {
 
   const [agents, setAgents] = useState<Agents | null>(null)
   const [runs, setRuns] = useState<Runs | null>(null)
+  const [health, setHealth] = useState<CrawlHealth | null>(null)
 
   const [run, setRun] = useState<FirstRun | null>(null)
   const [seedBusy, setSeedBusy] = useState<number | null>(null)
@@ -168,6 +181,21 @@ export function AdminPage() {
       })
   }, [])
 
+  const loadHealth = useCallback((signal?: AbortSignal) => {
+    return getCrawlHealth({ signal })
+      .then((body) => {
+        setHealth(body)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        // The last good reading stays on screen under the error. A refresh
+        // that failed says nothing about the crawl, and blanking the panel
+        // would make an unreachable API look like a crawl with nothing to show.
+        setError(cause instanceof ApiError ? cause.message : 'Crawl health could not be loaded.')
+      })
+  }, [])
+
   const loadRun = useCallback(async (signal?: AbortSignal) => {
     try {
       setRun(await getFirstRun({ signal }))
@@ -206,9 +234,29 @@ export function AdminPage() {
     else if (section === 'seeds') void loadRun(controller.signal)
     else if (section === 'agents') void loadAgents(controller.signal)
     else if (section === 'runs') void loadRuns(controller.signal)
+    else if (section === 'health') void loadHealth(controller.signal)
     else void loadPolicy(domainStatus, controller.signal)
     return () => controller.abort()
-  }, [domainStatus, load, loadAgents, loadPolicy, loadRuns, loadTopics, section, state])
+  }, [domainStatus, load, loadAgents, loadHealth, loadPolicy, loadRuns, loadTopics, section, state])
+
+  // Crawl health refreshes itself, and only while it can be seen: the panel is
+  // for watching a long run, and a background tab polling all night is load
+  // with nobody reading it. Returning to the tab refreshes at once rather than
+  // showing a reading up to half a minute stale.
+  useEffect(() => {
+    if (section !== 'health') return
+    const controller = new AbortController()
+    const tick = () => {
+      if (document.visibilityState === 'visible') void loadHealth(controller.signal)
+    }
+    const timer = window.setInterval(tick, HEALTH_REFRESH_MS)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      controller.abort()
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [loadHealth, section])
 
   async function act(termId: number, run: () => Promise<unknown>) {
     setBusy(termId)
@@ -346,6 +394,14 @@ export function AdminPage() {
               })
             }
           />
+        ) : (
+          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
+        )
+      ) : null}
+
+      {section === 'health' ? (
+        health ? (
+          <CrawlHealthPanel health={health} />
         ) : (
           <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
         )

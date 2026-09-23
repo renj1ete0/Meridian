@@ -234,6 +234,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.112.0] — 2026-09-23
+
+### Added
+
+- `P6-25`: Admin gains a Crawl health panel for watching a long unattended
+  run: fetches per hour over the last 24 hours (succeeded vs failed), the
+  outcome mix, the queue by status, the embedding backlog, the busiest
+  domains in the last hour, and a plain-words liveness verdict (crawling /
+  stalled / waiting / idle). It refreshes every 30 seconds while visible. The
+  data comes from a new read-only `GET /api/explore/crawl-health`. A crawl is
+  called stalled when there is ready work and no fetch attempt for one claim
+  lease (15 min); a queue whose pending rows are all backing off reads as
+  waiting, not stalled
+
 ## [0.111.0] — 2026-09-23
 
 ### Added

@@ -1223,6 +1223,18 @@ deploy runbook whose first two commands could not work (`B-17`).
       Run history shows counters rather than a verdict (§11.9) and explains
       that deferred is a retry, not a failure (§13.4). **No key is returned or
       rendered** (§11.11)
+- [x] `P6-25` **Crawl health dashboard in Admin** — `v0.112.0`.
+      `meridian_core/crawlhealth.py`, `GET /api/explore/crawl-health`,
+      `web/src/admin/CrawlHealthPanel.tsx`. A day of hourly fetches, the
+      outcome mix, queue and embedding backlog, the last hour's busiest
+      domains, and a liveness verdict computed on the server by one pure
+      `judge()`. Stalled means no attempt for one claim lease while work is
+      ready; `waiting` keeps a queue that is only backing off from reading as
+      an outage — which is also what a `B-33` retry held behind robots.txt
+      looks like. Read-only role, next to `/progress`, so it still works when
+      the admin gate is closed. Every query is bounded by `now`, which is how
+      the tests assert verdicts against a shared database. Built by a
+      delegated agent in a worktree and reviewed on merge
 - [x] `P6-26` **The corpus map: the vectors, seen** — `v0.111.0`. `/map`
       draws a sample of searchable passages placed by their embeddings,
       coloured by topic, with the passage on hover and its source on click.

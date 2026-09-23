@@ -111,3 +111,13 @@ SearchArm = Literal["lexical", "vector"]
 
 #: What a hit's `page_or_offset` counts (§5.3, `P2-18`).
 PageUnit = Literal["page", "offset"]
+
+#: Whether the crawl is alive (`P6-25`). Not a column: a verdict computed from
+#: `fetch_attempts` and `queue` at read time, defined in `crawlhealth.judge`.
+#:
+#: ``waiting`` is the one easy to mistake for ``stalled``: there is pending
+#: work and nothing is fetching, but every pending row is inside its backoff.
+#: That is the queue doing what its backoff exists to do, and a screen that
+#: called it a stall would send someone to restart a worker that has nothing it
+#: is allowed to do.
+LivenessState = Literal["crawling", "stalled", "waiting", "idle"]

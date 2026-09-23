@@ -1442,6 +1442,100 @@ export function getCrawlProgress(init?: RequestInit): Promise<CrawlProgress> {
   return request<CrawlProgress>('/api/explore/progress', init)
 }
 
+// --------------------------------------------------------------------------
+// Whether a long crawl is still alive (task P6-25)
+
+/** `LivenessState` in `schemas/enums.py`. A verdict computed at read time, not
+ * a column, so there is no CHECK constraint to drift against — the states are
+ * the four branches of `crawlhealth.judge`. */
+export type LivenessState = 'crawling' | 'stalled' | 'waiting' | 'idle'
+
+export const HOUR_BUCKET_FIELDS = ['start', 'succeeded', 'failed'] as const
+
+/** Mirrors `HourBucketRead`. `start` is the bucket's first instant; each is
+ * exactly one hour, and they run oldest first. */
+export interface HourBucket {
+  start: string
+  succeeded: number
+  failed: number
+}
+
+export const OUTCOME_COUNT_FIELDS = ['outcome', 'count'] as const
+
+/** Mirrors `OutcomeCountRead`. `outcome` is kept a string: the value set is
+ * `FETCH_OUTCOME`, read off the model server-side, and the screen shows it as
+ * written rather than keeping a second copy of the list here. */
+export interface OutcomeCount {
+  outcome: string
+  count: number
+}
+
+export const DOMAIN_COUNT_FIELDS = ['domain', 'attempts', 'succeeded'] as const
+
+/** Mirrors `DomainCountRead`. */
+export interface DomainCount {
+  domain: string
+  attempts: number
+  succeeded: number
+}
+
+export const LIVENESS_FIELDS = [
+  'state',
+  'last_attempt_at',
+  'quiet_seconds',
+  'ready',
+  'pending',
+] as const
+
+/** Mirrors `LivenessRead`. */
+export interface Liveness {
+  state: LivenessState
+  last_attempt_at: string | null
+  quiet_seconds: number | null
+  ready: number
+  pending: number
+}
+
+export const CRAWL_HEALTH_FIELDS = [
+  'as_of',
+  'stall_after_seconds',
+  'hours',
+  'outcomes',
+  'queue',
+  'embedding_backlog',
+  'top_domains',
+  'liveness',
+] as const
+
+/** Mirrors `CrawlHealthRead`. */
+export interface CrawlHealth {
+  as_of: string
+  stall_after_seconds: number
+  hours: readonly HourBucket[]
+  outcomes: readonly OutcomeCount[]
+  queue: Record<string, number>
+  embedding_backlog: number
+  top_domains: readonly DomainCount[]
+  liveness: Liveness
+}
+
+export type AssertHourBucket = Expect<Equal<keyof HourBucket, (typeof HOUR_BUCKET_FIELDS)[number]>>
+export type AssertOutcomeCount = Expect<
+  Equal<keyof OutcomeCount, (typeof OUTCOME_COUNT_FIELDS)[number]>
+>
+export type AssertDomainCount = Expect<
+  Equal<keyof DomainCount, (typeof DOMAIN_COUNT_FIELDS)[number]>
+>
+export type AssertLiveness = Expect<Equal<keyof Liveness, (typeof LIVENESS_FIELDS)[number]>>
+export type AssertCrawlHealth = Expect<
+  Equal<keyof CrawlHealth, (typeof CRAWL_HEALTH_FIELDS)[number]>
+>
+
+/** Read-only, and under `/api/explore` for that reason — see the route. */
+export function getCrawlHealth(init?: RequestInit): Promise<CrawlHealth> {
+  return request<CrawlHealth>('/api/explore/crawl-health', init)
+}
+
 // ---------------------------------------------------------------------------
 // The agent registry and run history (task P6-23, spec §11.3, §11.10)
 // ---------------------------------------------------------------------------

@@ -25,12 +25,18 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
 import {
   ANNOTATIONS_FIELDS,
   ANNOTATION_FIELDS,
   ANNOTATION_TARGET_FIELDS,
   ApiError,
   CHUNK_FIELDS,
+  CRAWL_HEALTH_FIELDS,
+  DOMAIN_COUNT_FIELDS,
+  HOUR_BUCKET_FIELDS,
+  LIVENESS_FIELDS,
+  OUTCOME_COUNT_FIELDS,
   GAZETTEER_QUEUE_FIELDS,
   GAZETTEER_ROW_FIELDS,
   FETCH_POLICY_FIELDS,
@@ -120,6 +126,11 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['FetchPolicyRowRead', 'admin.py', FETCH_POLICY_ROW_FIELDS],
     ['FetchPolicyPage', 'admin.py', FETCH_POLICY_PAGE_FIELDS],
     ['ChunkRead', 'source.py', CHUNK_FIELDS],
+    ['CrawlHealthRead', 'search.py', CRAWL_HEALTH_FIELDS],
+    ['HourBucketRead', 'search.py', HOUR_BUCKET_FIELDS],
+    ['OutcomeCountRead', 'search.py', OUTCOME_COUNT_FIELDS],
+    ['DomainCountRead', 'search.py', DOMAIN_COUNT_FIELDS],
+    ['LivenessRead', 'search.py', LIVENESS_FIELDS],
   ] as const
 
   it('parses real field names out of the schemas', () => {
@@ -134,6 +145,22 @@ describe('the client types match the DTOs across the language boundary', () => {
 
   it.each(pairs)('%s', (className, file, declared) => {
     expect([...declared].sort()).toEqual(pydanticFields(file, className).sort())
+  })
+})
+
+describe('the crawl-health states match the server (P6-25)', () => {
+  it('has a word for exactly the states `LivenessState` declares', () => {
+    // Parsed from the Python, not listed: a state added there and not here
+    // would render as a blank headline over a sentence that says nothing.
+    // `STATE_LABELS` is keyed by the TypeScript union, so this also holds the
+    // union to the Literal.
+    const source = readFileSync(join(SCHEMAS, 'enums.py'), 'utf8')
+    const match = source.match(/^LivenessState = Literal\[([^\]]+)\]/m)
+    expect(match).not.toBeNull()
+    const declared = [...match![1]!.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
+
+    expect(declared.length).toBeGreaterThan(1)
+    expect(Object.keys(STATE_LABELS).sort()).toEqual(declared.sort())
   })
 })
 
