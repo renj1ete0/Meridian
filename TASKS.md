@@ -1264,6 +1264,16 @@ deploy runbook whose first two commands could not work (`B-17`).
       the admin gate is closed. Every query is bounded by `now`, which is how
       the tests assert verdicts against a shared database. Built by a
       delegated agent in a worktree and reviewed on merge
+- [x] `P6-29` **The corpus map in three dimensions** — `v0.115.0`. Three PCA
+      components (subspace iteration widened and pinned against the exact
+      decomposition on all three axes), drawn as one three.js `Points` cloud on
+      a dark-pinned canvas: orbit, zoom, pan, fit, idle rotation, screen-space
+      picking for hover cards, click to the source. The flat view stays as a
+      toggle and as the fallback when WebGL is missing or lost. three.js loads
+      only on this page. The caption names the three variance shares. Topic
+      colours hash from the name so a new topic cannot repaint the rest — at
+      the cost of the strongest first slots, a trade left open. Built by a
+      delegated agent after the operator expected a 3D view of the vectors
 - [x] `P6-27` **The application shell and the Explore landing, as designed** —
       `v0.114.0`. One 54px top bar on every screen with the §5 cluster: a
       status pill (queue, fetch health, a brass dot and the words "run failed"

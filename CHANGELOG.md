@@ -234,6 +234,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.115.0] — 2026-09-23
+
+### Added
+
+- `P6-29`: the corpus map is three-dimensional. The projection keeps three
+  principal components (`z` on each point, three variance shares), and `/map`
+  draws them as a WebGL point cloud with orbit, zoom and pan, hover cards,
+  click-through to the source, topic toggles, a sample-size control and a
+  table panel. The flat view remains as a toggle and as the fallback without
+  WebGL. Topic colours come from a hash of the topic name. `three` added to
+  the web dependencies (MIT)
+
 ## [0.114.0] — 2026-09-23
 
 ### Added

@@ -1483,10 +1483,32 @@ the same check.
 
 On this machine, host and container alike, while the matrix product that built
 it took 30 ms. Found by timing the corpus map on the real corpus; nothing in the
-suite runs at that size. The map needs two components, so `corpusmap.project`
-uses seeded subspace iteration, pinned against the exact decomposition by a
-test. Anything else reaching for a full decomposition of embedding-sized
-matrices should measure first.
+suite runs at that size. The map needs three components (two until `P6-29`),
+so `corpusmap.project` uses seeded subspace iteration, pinned against the exact
+decomposition by a test. Anything else reaching for a full decomposition of
+embedding-sized matrices should measure first.
+
+### The 3D corpus map: what is not obvious from the code
+
+`P6-29`. `web/src/explore/map/`. Four things that each cost a round trip:
+
+- **The canvas is a dark island.** Its wrapper carries `data-theme="dark"`, so
+  every token inside it — series, surface, text — resolves to the dark value
+  in both themes, like the graph canvas (§2 publishes canvas colours for dark
+  only). The palette is read with `getComputedStyle` *on that element*, not on
+  `:root`; read it from the root in light mode and the dots take light-theme
+  series values meant for white paper.
+- **A zero `gl_PointSize` is not invisible everywhere.** SwiftShader (headless
+  Chromium) clamps it to one pixel, so a hidden topic stayed on screen as
+  dust. Hidden points are moved outside the clip volume instead.
+- **Picking is in screen pixels, not by `Raycaster`.** A ray threshold is in
+  scene units and changes meaning with zoom. `geometry.pick` projects every
+  visible point through the camera matrix — a small fraction of a frame at the
+  8000-point ceiling, and testable in jsdom, which has no WebGL.
+- **three.js is loaded lazily** (`React.lazy`), about 560 kB minified in its
+  own chunk; Vite's size warning on that chunk is expected. Headless Chromium
+  renders it through SwiftShader at 60 fps with 8000 points, so the
+  screenshot tool sees the real 3D view.
 
 ### Tailwind drops a colour utility it cannot resolve, silently
 

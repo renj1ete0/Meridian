@@ -469,13 +469,15 @@ export function corpusStats(
   return request<CorpusStats>(`/api/explore/stats${suffix}`, init)
 }
 
-/** Mirrors `MapPointRead` (`P6-26`). */
+/** Mirrors `MapPointRead` (`P6-26`, `P6-29`). */
 export interface MapPoint {
   chunk_id: number
   source_id: number
-  /** Both in [-1, 1]: the widest point on each axis sits at the edge. */
+  /** All three in [-1, 1]: the widest point on each axis sits at the edge. */
   x: number
   y: number
+  /** The third principal component (`P6-29`); the flat view ignores it. */
+  z: number
   /** The source's first topic label; null when nothing examined it. */
   topic: string | null
   title: string | null
@@ -488,20 +490,21 @@ export const MAP_POINT_FIELDS = [
   'source_id',
   'x',
   'y',
+  'z',
   'topic',
   'title',
   'url',
   'snippet',
 ] as const
 
-/** Mirrors `CorpusMapRead` (`P6-26`). */
+/** Mirrors `CorpusMapRead` (`P6-26`, `P6-29`). */
 export interface CorpusMap {
   as_of: string
   points: MapPoint[]
   /** How many passages matched before sampling. Above `points.length` means a sample. */
   eligible: number
-  /** Share of variance each axis carries — how much of the space the picture shows. */
-  explained_variance: [number, number]
+  /** Share of variance each axis carries, in axis order — how much of the space the picture shows. */
+  explained_variance: [number, number, number]
 }
 
 export const CORPUS_MAP_FIELDS = ['as_of', 'points', 'eligible', 'explained_variance'] as const

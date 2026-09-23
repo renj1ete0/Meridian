@@ -200,7 +200,7 @@ async def explore_map(
     sample: Annotated[int, Query(ge=1, le=MAX_SAMPLE)] = DEFAULT_SAMPLE,
     topic: Annotated[list[str] | None, Query()] = None,
 ) -> CorpusMapRead:
-    """The embedding space, projected to two dimensions (`P6-26`).
+    """The embedding space, projected to three dimensions (`P6-26`, `P6-29`).
 
     Read-only and recomputed per request: a projection of a few thousand
     vectors is well under a second, and caching it would mean a map that lags

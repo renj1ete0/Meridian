@@ -1,4 +1,4 @@
-"""The corpus map's wire shape (task P6-26). Mirrors ``meridian_core.corpusmap``."""
+"""The corpus map's wire shape (tasks P6-26, P6-29). Mirrors ``meridian_core.corpusmap``."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ class MapPointRead(BaseModel):
     source_id: int
     x: float
     y: float
+    z: float
     topic: str | None
     title: str | None
     url: str
@@ -24,7 +25,8 @@ class CorpusMapRead(BaseModel):
     """A projected sample of the embedding space.
 
     ``eligible`` beside ``len(points)`` is what tells a reader the picture is a
-    sample, and ``explained_variance`` how much of the space two axes can show —
+    sample, and ``explained_variance`` how much of the space each of the three
+    axes can show —
     both there so the map cannot be mistaken for more than it is.
     """
 
@@ -33,4 +35,4 @@ class CorpusMapRead(BaseModel):
     as_of: dt.datetime
     points: list[MapPointRead]
     eligible: int
-    explained_variance: tuple[float, float]
+    explained_variance: tuple[float, float, float]

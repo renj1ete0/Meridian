@@ -73,6 +73,20 @@ licence:
 `tld` is the only one that requires a decision rather than a reading, and the
 decision is recorded here so it is not re-made differently later.
 
+## Web dependencies
+
+The licence gate reads Python metadata only, so the web build's packages are
+recorded here by hand. Each was read off `node_modules/<package>/package.json`.
+
+| Package | Licence | Why it is here |
+|---|---|---|
+| `three` | MIT | The 3D corpus map (`P6-29`). Runtime; ships in its own lazily-loaded chunk. |
+| `@types/three` | MIT | Types only, development. Pulls in `@types/stats.js`, `@types/webxr`, `@tweenjs/tween.js`, `fflate`, `meshoptimizer` (all MIT) and `@dimforge/rapier3d-compat` (Apache-2.0), none of which reach the built bundle. |
+
+The rest of `web/package.json` (React, Vite, Tailwind, Vitest, Testing
+Library, jsdom) predates this section and has not been audited package by
+package — see *What is not covered*.
+
 ## Services and images
 
 | Component | Licence | Evidence | Verdict |
@@ -149,6 +163,8 @@ Stated so the gaps are visible rather than implied:
 - **`en_core_web_sm`**, which is not installed here — it arrives with the
   `ner` extra. Apache AGE was in this list and has since been verified from the
   source tarball; it is in the table above.
+- **The web build's dependency tree**, beyond the packages listed under *Web
+  dependencies*. No test gates npm licences yet.
 - **Content licences.** This audit is about software. What a crawler may fetch,
   store and redistribute is §14.2 and a different question — `MERIDIAN_SERVE_RAW`
   defaults to off for that reason.

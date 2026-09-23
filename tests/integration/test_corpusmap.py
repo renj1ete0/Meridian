@@ -1,4 +1,4 @@
-"""The corpus map against a real Postgres (task P6-26).
+"""The corpus map against a real Postgres (tasks P6-26, P6-29).
 
 The claim worth checking is that the map draws the corpus *search* sees. Every
 exclusion it inherits — superseded passages, near-duplicates, junk, chunks the
@@ -127,8 +127,8 @@ async def test_the_same_corpus_samples_and_draws_the_same_way(session_for, topic
     first = await corpus_map(sess, topics=[topic], sample=2)
     second = await corpus_map(sess, topics=[topic], sample=2)
 
-    assert [(p.chunk_id, p.x, p.y) for p in first.points] == [
-        (p.chunk_id, p.x, p.y) for p in second.points
+    assert [(p.chunk_id, p.x, p.y, p.z) for p in first.points] == [
+        (p.chunk_id, p.x, p.y, p.z) for p in second.points
     ]
 
 
@@ -137,7 +137,7 @@ async def test_a_topic_with_nothing_in_it_is_an_empty_map(session_for) -> None:
     result = await corpus_map(sess, topics=[f"absent-{uuid.uuid4().hex}"])
 
     assert result.points == [] and result.eligible == 0
-    assert result.explained_variance == (0.0, 0.0)
+    assert result.explained_variance == (0.0, 0.0, 0.0)
 
 
 @pytest.mark.parametrize("sample", [0, -1, MAX_SAMPLE + 1])
@@ -161,9 +161,10 @@ async def test_the_endpoint_serves_the_map_through_the_read_only_role(
     body = response.json()
     assert sorted(p["chunk_id"] for p in body["points"]) == sorted(corpus)
     assert body["eligible"] == 3
-    assert len(body["explained_variance"]) == 2
+    assert len(body["explained_variance"]) == 3
     for point in body["points"]:
-        assert -1.0 <= point["x"] <= 1.0 and -1.0 <= point["y"] <= 1.0
+        for axis in ("x", "y", "z"):
+            assert -1.0 <= point[axis] <= 1.0, (axis, point)
 
 
 @pytest.mark.parametrize("sample", ["0", str(MAX_SAMPLE + 1), "many"])
