@@ -169,6 +169,9 @@ async def resolve_mention(
     match: Entity | None = None
     for candidate in candidates:
         verdict = score(probe, candidate.entity, expansions=expansions)
+        # Strictly greater, over candidates in id order: a tie goes to the
+        # oldest node, the same one on every read (`B-37`). A resumed batch
+        # depends on resolving each name exactly as it did the first time.
         if best is None or verdict.score > best.score:
             best, match = verdict, candidate.entity
 

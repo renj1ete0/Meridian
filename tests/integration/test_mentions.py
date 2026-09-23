@@ -248,3 +248,31 @@ async def test_a_name_too_short_to_tokenise_still_finds_itself(sess, marker: str
         assert again.entity.entity_id == first.entity.entity_id
     finally:
         await sess.rollback()
+
+
+async def test_two_nodes_with_the_same_name_resolve_to_the_same_one_every_time(
+    sess, marker: str
+) -> None:
+    """`B-37`. With two exact matches — a duplicate made before `B-35` — the
+    candidates came back in whatever order the table scan found them, and a
+    tie went to whichever was first. Updating a row moves it in the heap, so
+    the choice flipped between reads: a resumed batch resolved the name to
+    the other node, the entity list in its `tag` prompt changed, and the batch
+    could never complete. Ties now go to the oldest node, always.
+    """
+    name = f"{marker} Duplicate"
+    older = Entity(canonical_name=name, node_type="concept", supporting_chunk_ids=[1])
+    newer = Entity(canonical_name=name, node_type="concept", supporting_chunk_ids=[2])
+    sess.add(older)
+    await sess.flush()
+    sess.add(newer)
+    await sess.flush()
+    # Rewriting the older row moves its tuple past the newer one, which is
+    # exactly what happens to a node every time a mention adds its chunks.
+    older.supporting_chunk_ids = [1, 3]
+    await sess.flush()
+
+    for chunk in (10, 11, 12):
+        resolved = await resolve(sess, name, marker, chunks=[chunk], node_type="concept")
+        assert not resolved.created
+        assert resolved.entity.entity_id == older.entity_id

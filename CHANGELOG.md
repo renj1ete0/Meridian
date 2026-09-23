@@ -234,6 +234,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.113.2] — 2026-09-23
+
+### Fixed
+
+- `B-37`: when two entities shared a name exactly, resolution chose between
+  them by table-scan order, which changes as rows are updated. Candidates are
+  now ordered by id, and a tie always resolves to the oldest node
+
 ## [0.113.1] — 2026-09-23
 
 ### Fixed

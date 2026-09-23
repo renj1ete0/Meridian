@@ -1565,6 +1565,15 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [x] `B-37` **Two nodes with one name resolved to either, by heap order** —
+      `v0.113.2`. With two exact matches, `block` returned them in table-scan
+      order and the first won the tie; updating a row moves it in the heap, so
+      the choice flipped between reads. A resumed batch then resolved a name
+      differently from the first pass, the entity list in its `tag` prompt
+      changed, and the batch could never complete. Candidates are now ordered
+      by id and a tie goes to the oldest. Found by the relay agent after
+      fourteen batches, on the duplicate `B-35` had left behind — which was
+      then merged into the older node with `resolution.merge` (reversible)
 - [x] `B-36` **Every synthesis run started again from chunk 1** —
       `v0.113.1`. §6.3 keeps one mark for the system, but `begin_or_resume`
       created each run with none, and `pull` reads no mark as "from the

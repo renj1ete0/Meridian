@@ -339,9 +339,18 @@ async def block(
     exact = func.lower(Entity.canonical_name) == name.strip().lower()
     if name.strip():
         # Exact matches first, so a common word's ILIKE hits can never push the
-        # node this name already has past the candidate limit.
+        # node this name already has past the candidate limit. Then by id, so
+        # the order — and with it which of two equal candidates wins a tie — is
+        # the same on every read (`B-37`); without it the table scan decided,
+        # and an updated row moves in the heap.
         by_name = (
-            (await sess.execute(base.where(or_(exact, *like)).order_by(exact.desc()).limit(limit)))
+            (
+                await sess.execute(
+                    base.where(or_(exact, *like))
+                    .order_by(exact.desc(), Entity.entity_id)
+                    .limit(limit)
+                )
+            )
             .scalars()
             .all()
         )
