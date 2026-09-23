@@ -34,6 +34,7 @@ being wrong is a page that silently never enters the corpus.
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Iterable, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -191,6 +192,47 @@ FURNITURE_SEGMENTS = frozenset(
     }
 )
 
+#: Whole-segment phrases that mean the same thing as `FURNITURE_SEGMENTS`
+#: (`B-42`). The single-word rule caught `/privacy` and let `/privacy-policy`,
+#: `/terms-of-use`, `privacy_policy.html` and `/contact-us/` through — every one
+#: of which reached a real corpus. A segment matches only when its *entire*
+#: word sequence is one of these, so `/terms-of-reference-for-the-review` and
+#: `/contact-lens-associated-problems` stay documents.
+FURNITURE_PHRASES = frozenset(
+    {
+        ("privacy", "policy"),
+        ("privacy", "notice"),
+        ("privacy", "statement"),
+        ("privacy", "request"),
+        ("terms", "of", "use"),
+        ("terms", "of", "service"),
+        ("terms", "and", "conditions"),
+        ("terms", "conditions"),
+        ("cookie", "policy"),
+        ("cookies", "policy"),
+        ("contact", "us"),
+        ("accessibility", "statement"),
+        ("accessibility", "assistance"),
+        ("web", "accessibility"),
+        ("site", "map"),
+        ("sitemap",),
+        ("legal", "notice"),
+        ("disclaimer",),
+        ("copyright",),
+        ("imprint",),
+        ("impressum",),
+    }
+)
+
+#: Last segments that are a search engine's result page when they carry a
+#: query (`B-42`). A query-less `/results` is a section — often a study's
+#: findings — and stays a document.
+SEARCH_SEGMENTS = frozenset({"search", "results", "advanced-search", "advancedsearch"})
+
+#: Page suffixes stripped before a segment is read as words.
+_PAGE_SUFFIX = re.compile(r"\.(html?|php|aspx?|cfm|jsp)$")
+_WORD_SPLIT = re.compile(r"[-_\s]+")
+
 #: Default ports, dropped so `https://x.test:443/a` and `https://x.test/a` are
 #: one URL rather than two.
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
@@ -275,8 +317,15 @@ def is_site_furniture(url: str) -> bool:
     A substring rule would drop `/about-congestion-pricing`, which is an
     article, and the two are told apart by nothing else.
     """
-    segments = [segment.lower() for segment in urlsplit(url).path.split("/") if segment]
-    return any(segment in FURNITURE_SEGMENTS for segment in segments)
+    split = urlsplit(url)
+    segments = [segment.lower() for segment in split.path.split("/") if segment]
+    if any(segment in FURNITURE_SEGMENTS for segment in segments):
+        return True
+    for segment in segments:
+        words = tuple(word for word in _WORD_SPLIT.split(_PAGE_SUFFIX.sub("", segment)) if word)
+        if words in FURNITURE_PHRASES or (len(words) == 1 and words[0] in FURNITURE_SEGMENTS):
+            return True
+    return bool(segments and split.query and segments[-1] in SEARCH_SEGMENTS)
 
 
 def has_skipped_extension(url: str) -> bool:

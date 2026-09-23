@@ -264,6 +264,21 @@ def test_an_identifier_is_recognised_without_fetching_it(url: str, expected: str
         "https://agency.test/en/help/contact.html",
         "https://agency.test/careers",
         "https://agency.test/privacy",
+        # `B-42`: the whole segment is a furniture *phrase*, however it is
+        # punctuated or suffixed. Every one of these reached the corpus.
+        "https://hospital.test/terms-of-use",
+        "https://hospital.test/patient-care/app/privacy-policy",
+        "https://library.test/lii/terms/privacy_policy",
+        "https://preprints.test/help/policies/privacy_policy.html",
+        "https://preprints.test/about/accessibility.html",
+        "https://university.test/accessibility-assistance.cfm",
+        "https://academy.test/contact-us/",
+        "https://hospital.test/sitemap",
+        "https://university.test/legal/",
+        "https://agency.test/Privacy-Statement.aspx",
+        # A search engine's result page is a query, not a document.
+        "https://index.test/Results?txtKeywords=&specificTerms=926",
+        "https://agency.test/search?q=walking",
     ],
 )
 def test_site_furniture_is_recognised(url: str) -> None:
@@ -279,6 +294,15 @@ def test_site_furniture_is_recognised(url: str) -> None:
         "https://agency.test/research/helping-older-pedestrians",
         "https://agency.test/reports/2026/terms-of-reference-for-the-review",
         "https://agency.test/",
+        # `B-42`'s phrases match a whole segment, never its start: these are
+        # documents whose slugs merely begin with a furniture word.
+        "https://hospital.test/find-a-condition/contact-lens-associated-problems",
+        "https://journal.test/article/privacy-policy-effects-on-location-sharing",
+        "https://agency.test/research/search-behaviour-of-commuters",
+        # A results page with no query is a section, and a study's results
+        # are the opposite of furniture.
+        "https://agency.test/study/results",
+        "https://agency.test/results/2025-walkability-audit.pdf",
     ],
 )
 def test_an_article_is_not_furniture(url: str) -> None:

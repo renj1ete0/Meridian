@@ -234,6 +234,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.117.1] — 2026-09-23
+
+### Fixed
+
+- `B-42`: the frontier's site-furniture rule now recognises furniture phrases
+  inside a path segment (`privacy-policy`, `terms_of_use.html`, `contact-us`,
+  `sitemap`) and search-result pages, while a slug that merely begins with one
+  stays a document. New `python -m worker.furniture` moves furniture already in
+  the corpus to the junk tier, never touching a page the graph cites.
+  Synthesis batches skip junk
+
 ## [0.117.0] — 2026-09-23
 
 ### Added

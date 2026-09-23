@@ -291,7 +291,13 @@ async def _pull(
     stmt = (
         select(Chunk, Source)
         .join(Source, Chunk.source_id == Source.source_id)
-        .where(Chunk.superseded_at.is_(None), Chunk.duplicate_of.is_(None))
+        .where(
+            Chunk.superseded_at.is_(None),
+            Chunk.duplicate_of.is_(None),
+            # Junk is material a sweep will drop — site furniture, for one
+            # (`B-42`). Reasoning over it spends a batch to extract nothing.
+            Source.retention_tier != "junk",
+        )
         .order_by(Chunk.chunk_id)
         .limit(BATCH)
     )

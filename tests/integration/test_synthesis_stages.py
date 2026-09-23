@@ -32,6 +32,7 @@ from meridian_core.models import (
     Entity,
     Notification,
     Run,
+    Source,
 )
 from meridian_core.provider import Completion, ProviderError
 from meridian_core.routing import NoAgentAvailable
@@ -590,3 +591,20 @@ async def test_a_relay_agent_defers_then_writes_what_it_was_told(
     assert (edge.produced_by, edge.model, edge.quality_tier) == (AGENT, "claude-opus-5-5", 4)
     assert edge.supporting_chunk_ids == [ids[0]]
     assert run.tokens_used and run.tokens_used > 0, "a relay answer is charged, not free"
+
+
+async def test_pull_leaves_junk_out_of_the_batch(corpus, monkeypatch) -> None:
+    """`B-42`: site furniture demoted to junk had still been fed to the model —
+    whole batches of privacy policies and search pages with nothing to extract."""
+    sess, ids, marker = corpus
+    source = await sess.scalar(
+        select(Source)
+        .join(Chunk, Chunk.source_id == Source.source_id)
+        .where(Chunk.chunk_id == ids[0])
+    )
+    source.retention_tier = "junk"
+    await sess.flush()
+
+    _, journal, batch = await drive(sess, ids, FakeModel(), monkeypatch)
+
+    assert not {passage.chunk_id for passage in batch.passages} & set(ids)

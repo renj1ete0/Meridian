@@ -1624,6 +1624,19 @@ Things worth doing that don't belong to a phase yet.
       vector, older ones are backfilled a batch per stage, and an unreachable
       embedder degrades to words alone as before. The orchestrator is given
       `MERIDIAN_EMBEDDER_URL` in both compose files
+- [x] `B-42` **Privacy policies, terms and search pages reached the corpus** —
+      `v0.117.1`. `B-23`'s furniture rule matched whole path segments only, so
+      `/privacy` was caught and `/privacy-policy`, `/terms-of-use`,
+      `privacy_policy.html`, `/contact-us/` and `/sitemap` were not; nor were a
+      search engine's result pages. Segments are now also read as words, and
+      match when the *whole* word sequence is a furniture phrase — so
+      `/terms-of-reference-for-the-review` stays a document — and a query-
+      carrying `search`/`results` page is furniture. `python -m
+      worker.furniture` demotes what is already in the corpus to the junk tier
+      (report by default, `--apply`, `--domain`), and **never demotes a page
+      the graph cites**: the rule reads an address, and evidence outranks it.
+      Synthesis no longer pulls junk. Chunk-level boilerplate inside content
+      pages (footers, banners) is a separate problem, not addressed here
 - [ ] `B-41` **A merge leaves identical edges side by side** — merging #27 into
       #9 moved edge 21 onto the same subject, relation and object as edge 6,
       and nothing combined them. `add_edge` treats that triple as one claim
