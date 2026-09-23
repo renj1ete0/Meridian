@@ -180,3 +180,37 @@ describe('no colour literal escapes the token file', () => {
     expect(offenders, 'use a token, not a literal').toEqual([])
   })
 })
+
+describe('every colour utility names a role that exists', () => {
+  // `border-border` shipped on two Admin panels and rendered fine in review —
+  // Tailwind does not reject a utility it cannot resolve, it drops the colour,
+  // and the border fell back to `currentColor`: full text-colour outlines on
+  // every card. A missing role fails nowhere else, so it fails here.
+  const SIDES_AND_KEYWORDS = new Set(['t', 'b', 'l', 'r', 'x', 'y', 'transparent', 'none', 'offset'])
+
+  function sources(dir: string): string[] {
+    return readdirSync(dir).flatMap((entry) => {
+      const path = join(dir, entry)
+      if (statSync(path).isDirectory()) return sources(path)
+      return /\.tsx?$/.test(entry) ? [path] : []
+    })
+  }
+
+  it('across every component', () => {
+    const roles = new Set(
+      [...appCss.matchAll(/--color-([a-z-]+):/g)].map((match) => match[1]!),
+    )
+    expect(roles.size).toBeGreaterThan(5) // the parse must not silently yield nothing
+
+    const unknown: string[] = []
+    for (const path of sources(join(WEB, 'src'))) {
+      const body = readFileSync(path, 'utf8')
+      for (const match of body.matchAll(/\b(?:border|bg|fill|stroke|divide|ring|outline)-([a-z][a-z-]*[a-z])\b/g)) {
+        const name = match[1]!
+        if (SIDES_AND_KEYWORDS.has(name) || roles.has(name)) continue
+        unknown.push(`${relative(REPO, path)}: ${match[0]}`)
+      }
+    }
+    expect(unknown, 'a colour utility with no --color-* role behind it').toEqual([])
+  })
+})

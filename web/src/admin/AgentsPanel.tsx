@@ -80,7 +80,7 @@ export function AgentsPanel({ rows, unserved, busy, onToggle }: AgentsPanelProps
         {rows.map((row) => {
           const state = rowState(row)
           return (
-            <li key={row.agent_id} className="border border-border bg-surface p-4">
+            <li key={row.agent_id} className="border border-line bg-surface p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-mono text-[length:var(--text-body)] text-text">
                   {row.agent_id}
@@ -122,7 +122,7 @@ export function AgentsPanel({ rows, unserved, busy, onToggle }: AgentsPanelProps
                 type="button"
                 disabled={busy === row.agent_id}
                 onClick={() => onToggle?.(row.agent_id, !row.enabled)}
-                className="mt-3 border border-border px-3 py-1 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text disabled:text-text-muted"
+                className="mt-3 border border-line px-3 py-1 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text disabled:text-text-muted"
               >
                 {row.enabled ? 'disable' : 'enable'}
               </button>

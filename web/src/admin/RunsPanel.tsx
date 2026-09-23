@@ -73,7 +73,7 @@ export function RunsPanel({ rows, total, active }: RunsPanelProps) {
 
       <ul className="space-y-4">
         {rows.map((row) => (
-          <li key={row.run_id} className="border border-border bg-surface p-4">
+          <li key={row.run_id} className="border border-line bg-surface p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="font-mono text-[length:var(--text-body)] text-text">
                 run {row.run_id}

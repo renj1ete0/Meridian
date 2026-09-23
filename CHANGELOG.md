@@ -234,6 +234,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.112.1] — 2026-09-23
+
+### Fixed
+
+- `B-34`: the agent registry and run history cards used `border-border`, a
+  utility with no token behind it, and so drew their borders in the text
+  colour. Now `border-line`; a new drift test in `tests/tokens.test.ts` fails
+  any colour utility that names a role `app.css` does not define
+
 ## [0.112.0] — 2026-09-23
 
 ### Added

@@ -1536,6 +1536,13 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [x] `B-34` **Two Admin panels drew borders in the text colour** —
+      `v0.112.1`. `RunsPanel` and `AgentsPanel` used `border-border`, which
+      names no role. Tailwind does not reject a utility it cannot resolve; it
+      drops the colour, and the border fell back to `currentColor` — full
+      text-colour outlines on every card, on screens that passed review and
+      tests. Now `border-line`, and a drift test fails any colour utility with
+      no `--color-*` role behind it. Spotted by the agent building `P6-25`
 - [x] `B-33` **An unreadable robots.txt was filed as the site saying no** —
       `v0.110.1`. Found on the local stack after a reboot: the worker came up
       before DNS, every robots.txt it asked for was unreachable, and RFC 9309
