@@ -702,6 +702,10 @@ async def _cycles(
 ) -> None:
     for iteration in range(max_cycles):
         async with _scope(dry_run=dry_run) as sess:
+            # The system's mark before this cycle. Since `B-36` a new run
+            # inherits it, so "the run has a mark" says nothing about whether
+            # this cycle got anywhere — only the mark *moving* does.
+            before = await sess.scalar(select(func.max(Run.last_chunk_id)))
             try:
                 run = await cycle(
                     sess, journal=journal, now=moment, agent_id=agent_id, stop_after=stop_after
@@ -712,10 +716,18 @@ async def _cycles(
                 journal.note("run", f"another orchestrator holds the run: {exc}")
                 break
 
-            progressed = run.last_chunk_id is not None or run.edges_added or run.tags_added
+            deferred = run.status == "deferred"
+            progressed = (run.last_chunk_id or 0) > (before or 0)
             waiting = await pending_work(sess, run)
 
         if once or stop_after is not None:
+            break
+        if deferred:
+            # Nothing can answer, and asking again within the same wake-up only
+            # closes the deferred run with no batch and opens another that
+            # defers the same way — five throwaway runs per tick, found on the
+            # relay agent's first afternoon. The next wake-up retries.
+            journal.note("run", "deferred; stopping until something can answer")
             break
         if not waiting:
             journal.note("run", "nothing past the mark; stopping")

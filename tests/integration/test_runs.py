@@ -30,7 +30,6 @@ from meridian_core.runs import (
     RunLocked,
     advance,
     advancing,
-    beat,
     begin_or_resume,
     defer,
     fail,
@@ -290,6 +289,41 @@ async def test_the_mark_survives_a_resume(clean) -> None:
     resumed_run, _ = await begin_or_resume(clean, now=NOW + STALE_AFTER * 2)
 
     assert resumed_run.last_chunk_id == 4242
+
+
+async def test_a_new_run_starts_where_the_last_one_reached(clean) -> None:
+    """`B-36`. §6.3: "the Pi tracks the last chunk ID consumed" — one mark,
+    for the system. A new run was created with no mark, which `pull` reads as
+    "from the beginning", so every run re-read the first batch of the corpus
+    and none ever got past it. With a paid model that is the same forty
+    passages bought on every scheduled run, for ever."""
+    far = 9_000_000_000  # past any chunk the dev corpus holds
+    first, _ = await begin_or_resume(clean, now=NOW)
+    await mark(clean, first, far, now=NOW)
+    await finish(clean, first, now=NOW)
+    await clean.commit()
+
+    second, resumed = await begin_or_resume(clean, now=NOW + dt.timedelta(days=1))
+
+    assert resumed is False
+    assert second.last_chunk_id == far
+
+
+async def test_a_new_run_takes_the_furthest_mark_not_the_latest(clean) -> None:
+    """A failed run's mark counts: it only moved over writes that committed.
+    Taking the most recent run's mark instead would step back past them."""
+    far = 9_000_000_100
+    first, _ = await begin_or_resume(clean, now=NOW)
+    await mark(clean, first, far, now=NOW)
+    await fail(clean, first, "provider gave up", now=NOW)
+    await clean.commit()
+
+    between, _ = await begin_or_resume(clean, now=NOW + dt.timedelta(hours=1))
+    await finish(clean, between, now=NOW + dt.timedelta(hours=1))
+    await clean.commit()
+
+    latest, _ = await begin_or_resume(clean, now=NOW + dt.timedelta(hours=2))
+    assert latest.last_chunk_id == far
 
 
 # --------------------------------------------------------------------------

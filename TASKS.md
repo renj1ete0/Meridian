@@ -1565,6 +1565,18 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [x] `B-36` **Every synthesis run started again from chunk 1** —
+      `v0.113.1`. §6.3 keeps one mark for the system, but `begin_or_resume`
+      created each run with none, and `pull` reads no mark as "from the
+      beginning" — so every run re-read the first forty passages and none
+      got further. With a paid model, the same batch bought on every run.
+      The tests set the mark by hand, which is why none noticed. A new run now
+      inherits the furthest mark any run reached. That broke the loop's
+      progress check ("the run has a mark"), which would then have run every
+      wake-up to `max_cycles`; progress is now the mark moving within the
+      cycle, and a deferral ends the wake-up instead of opening and closing
+      throwaway runs — five per tick, seen live. Found by the relay agent's
+      second batch
 - [x] `B-35` **Re-reading an acronym founded another node for it** —
       `v0.112.2`. With a gazetteer expansion, `resolution.block` searched only
       the expanded words, so "ODD" looked for "operational design domain" and

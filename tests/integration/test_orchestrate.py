@@ -289,3 +289,39 @@ async def test_max_cycles_is_a_ceiling_nothing_can_exceed(clean) -> None:
     journal = await run_orchestrator(dry_run=True, max_cycles=1, now=NOW)
 
     assert sum(1 for line in journal.entries if "started run" in line) == 1
+
+
+async def test_a_deferral_ends_the_wake_up_rather_than_churning_runs(clean) -> None:
+    """With nothing able to answer, each further cycle in the same wake-up
+    closed the deferred run with no batch and opened another that deferred the
+    same way — five throwaway runs per tick on the live stack."""
+    before = await run_count(clean)
+
+    journal = await run_orchestrator(dry_run=False, max_cycles=5, now=NOW)
+
+    assert any("deferred; stopping" in line for line in journal.entries), journal.render()
+    assert await run_count(clean) == before + 1
+
+
+async def test_an_inherited_mark_is_not_progress(clean) -> None:
+    """`B-36` gives every new run the system's mark. The loop's progress check
+    used to be "the run has a mark", which that made permanently true — so it
+    would have run to `max_cycles` on every wake-up."""
+    first = await clean.scalar(select(func.min(Chunk.chunk_id)))
+    if first is None:
+        pytest.skip("with no chunks the loop stops for a different reason")
+    # A mark with work still behind it, so the loop can only stop by judging
+    # that nothing moved — not because there is nothing left.
+    earlier = Run(
+        started_at=NOW - dt.timedelta(days=1),
+        stage="done",
+        status="done",
+        last_chunk_id=first,
+    )
+    clean.add(earlier)
+    await clean.commit()
+
+    journal = await run_orchestrator(dry_run=True, max_cycles=5, now=NOW)
+
+    assert any("changed nothing" in line for line in journal.entries), journal.render()
+    assert sum(1 for line in journal.entries if "started run" in line) == 1

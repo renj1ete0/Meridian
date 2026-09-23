@@ -50,7 +50,7 @@ import datetime as dt
 from collections.abc import AsyncIterator
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -181,12 +181,20 @@ async def begin_or_resume(
         await sess.flush()
         return existing, True
 
+    # One mark for the system, not one per run (§6.3, `B-36`): a new run starts
+    # where the furthest earlier run reached. Left unset, `pull` reads "no
+    # mark" as "from the beginning", and every run re-read the first batch of
+    # the corpus — paid for each time, and never getting past it. The furthest
+    # rather than the latest, because a failed run's mark only ever moved over
+    # writes that had committed.
+    reached = await sess.scalar(select(func.max(Run.last_chunk_id)))
     run = Run(
         started_at=now,
         stage=STAGES[0],
         status="running",
         heartbeat_at=now,
         agent_id=agent_id,
+        last_chunk_id=reached,
     )
     sess.add(run)
     try:

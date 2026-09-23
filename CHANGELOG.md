@@ -234,6 +234,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.113.1] — 2026-09-23
+
+### Fixed
+
+- `B-36`: each synthesis run began with no high-water mark, so every run
+  re-read the corpus from its first chunk and none ever advanced. A new run
+  now inherits the furthest mark reached. The orchestrator's loop now counts
+  progress as the mark moving during a cycle, and stops a wake-up at the
+  first deferral rather than opening and closing runs until `max_cycles`
+
 ## [0.113.0] — 2026-09-23
 
 ### Added
