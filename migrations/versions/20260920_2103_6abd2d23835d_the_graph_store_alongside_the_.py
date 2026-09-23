@@ -108,6 +108,12 @@ def upgrade() -> None:
         $$
         """.replace("{GRAPH}", GRAPH)
     )
+    # `SET LOCAL` lasts until the transaction ends, and Alembic runs a whole
+    # `upgrade head` in one transaction — so without this, every revision after
+    # this one inherits `ag_catalog` as its first writable schema. On a fresh
+    # database that put the next revision's `merge_log` inside AGE's catalog
+    # (`B-38`). Restored as soon as `create_graph` no longer needs it.
+    op.execute("SET LOCAL search_path TO DEFAULT")
 
     # The extension is created by the owner; the application connects as
     # `meridian_rw` and reads as `meridian_ro`. Without this every Cypher call
@@ -153,4 +159,5 @@ def downgrade() -> None:
     # drops it is data loss and should become a refusal instead.
     op.execute('SET LOCAL search_path = ag_catalog, "$user", public')
     op.execute(f"SELECT ag_catalog.drop_graph('{GRAPH}', true)".replace("{GRAPH}", GRAPH))
+    op.execute("SET LOCAL search_path TO DEFAULT")
     op.execute("DROP EXTENSION IF EXISTS age")

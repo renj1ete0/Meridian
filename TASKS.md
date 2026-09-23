@@ -1565,6 +1565,18 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [x] `B-38` **On a fresh database, `merge_log` was created inside AGE's catalog** —
+      `v0.113.3`. The graph-store revision set `ag_catalog` first on the
+      search path with `SET LOCAL`, and Alembic runs a whole `upgrade head`
+      in one transaction, so the next revision's table landed in
+      `ag_catalog`: present, ungranted, and invisible to the application roles
+      — every merge failed with "relation does not exist". The revision's own
+      comment warned of exactly this and reasoned that `SET LOCAL` avoided it.
+      The dev database, migrated a revision at a time, never showed it; the
+      live stack, migrated from empty, did. Now the revision restores the path
+      after `create_graph`, a repair migration moves and grants the table where
+      it is misplaced, and **a new test migrates a scratch database from empty
+      in one run** — the first test of what a first deployment actually does
 - [x] `B-37` **Two nodes with one name resolved to either, by heap order** —
       `v0.113.2`. With two exact matches, `block` returned them in table-scan
       order and the first won the tie; updating a row moves it in the heap, so

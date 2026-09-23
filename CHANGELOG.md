@@ -234,6 +234,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.113.3] — 2026-09-23
+
+### Fixed
+
+- `B-38`: a database migrated from empty had `merge_log` inside AGE's
+  `ag_catalog` schema, without grants, so entity merges failed. The graph-store
+  migration no longer leaks its search path into later revisions, migration
+  `525b10621a92` repairs affected databases, and
+  `tests/integration/test_fresh_migration.py` migrates a scratch database from
+  empty in one run
+
 ## [0.113.2] — 2026-09-23
 
 ### Fixed
