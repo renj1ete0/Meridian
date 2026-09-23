@@ -36,3 +36,4 @@ fixtures/
 
 # Logs
 *.log
+.claude/worktrees/

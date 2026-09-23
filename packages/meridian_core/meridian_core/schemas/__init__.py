@@ -47,6 +47,7 @@ from .config import (
     TopicConfigCreate,
     TopicConfigRead,
 )
+from .corpusmap import CorpusMapRead, MapPointRead
 from .enums import (
     AgentAvailability,
     AttributeScope,
@@ -140,6 +141,8 @@ __all__ = [
     "SearchHitRead",
     "SearchResponse",
     "CorpusStatsRead",
+    "CorpusMapRead",
+    "MapPointRead",
     "SourceChunksRead",
     # source / chunk / figure
     "SourceCreate",

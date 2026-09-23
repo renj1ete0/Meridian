@@ -1223,6 +1223,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       Run history shows counters rather than a verdict (§11.9) and explains
       that deferred is a retry, not a failure (§13.4). **No key is returned or
       rendered** (§11.11)
+- [x] `P6-26` **The corpus map: the vectors, seen** — `v0.111.0`. `/map`
+      draws a sample of searchable passages placed by their embeddings,
+      coloured by topic, with the passage on hover and its source on click.
+      **PCA, not UMAP**: linear and deterministic, so distance on the map is
+      distance in the space and the same corpus draws the same picture — and
+      the caption says how much of the space two axes carry (about 9% on the
+      first real corpus), so the picture cannot pass for more than a shadow.
+      Drawn through search's own filters, so it shows exactly what search can
+      return. Two measured fixes before it was usable: sampling sorted whole
+      rows, embeddings included, and a full eigendecomposition took seven
+      seconds to produce the two components drawn — replaced by seeded subspace
+      iteration that agrees with it to four decimals in a tenth of a second.
+      Series colours are new to the design system and were validated for
+      colour-vision separation in both themes; light mode's three low-contrast
+      hues are why the legend is labelled and a table view exists
 - [x] `P6-14` Figures panel with page-accurate raw file links — `v0.56.0`.
       No thumbnails, because nothing downloads figure images (`P1-10`) and a
       placeholder grid would promise what the corpus cannot keep; the caption is

@@ -19,6 +19,7 @@ export type Route =
   | { name: 'source'; sourceId: number }
   | { name: 'node'; entityId: number }
   | { name: 'admin' }
+  | { name: 'map' }
 
 const SOURCE = /^\/sources\/(\d+)\/?$/
 
@@ -29,12 +30,15 @@ const NODE = /^\/nodes\/(\d+)\/?$/
 
 const ADMIN = /^\/admin(\/|$)/
 
+const MAP = /^\/map\/?$/
+
 export function parseRoute(pathname: string): Route {
   const match = SOURCE.exec(pathname)
   if (match) return { name: 'source', sourceId: Number(match[1]) }
   const node = NODE.exec(pathname)
   if (node) return { name: 'node', entityId: Number(node[1]) }
   if (ADMIN.test(pathname)) return { name: 'admin' }
+  if (MAP.test(pathname)) return { name: 'map' }
   return { name: 'explore' }
 }
 

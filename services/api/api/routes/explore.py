@@ -26,6 +26,7 @@ from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
 
 from meridian_core import annotations
+from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
 from meridian_core.export import to_bibtex, to_markdown
 from meridian_core.models import (
     AttributeDefinition,
@@ -41,6 +42,7 @@ from meridian_core.models import (
 )
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
+from meridian_core.schemas.corpusmap import CorpusMapRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
 from meridian_core.schemas.runs import NotificationRead
@@ -188,6 +190,21 @@ async def explore_stats(
     one number for both erases exactly that.
     """
     return CorpusStatsRead.model_validate(await corpus_stats(sess, since=since))
+
+
+@router.get("/map", response_model=CorpusMapRead)
+async def explore_map(
+    sess: ReadSession,
+    sample: Annotated[int, Query(ge=1, le=MAX_SAMPLE)] = DEFAULT_SAMPLE,
+    topic: Annotated[list[str] | None, Query()] = None,
+) -> CorpusMapRead:
+    """The embedding space, projected to two dimensions (`P6-26`).
+
+    Read-only and recomputed per request: a projection of a few thousand
+    vectors is well under a second, and caching it would mean a map that lags
+    the corpus it claims to show.
+    """
+    return CorpusMapRead.model_validate(await corpus_map(sess, sample=sample, topics=topic))
 
 
 @router.get("/sources/{source_id}", response_model=SourceRead)

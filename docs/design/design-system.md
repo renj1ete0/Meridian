@@ -104,6 +104,14 @@ pass/fail, and colour must not imply a verdict.
 | `accent.graph.deep` | `#0C646A` | — | Edges at rest, unfocused neighbours, fills |
 | `accent.attention` | `#E6B061` | 8.5 | Contested, stale, flagged — nothing else |
 | `accent.attention.deep` | `#654617` | — | Contested fills and badge grounds |
+| `series.1` | `#3987E5` | — | Chart series 1, blue — identity only (§2 series) |
+| `series.2` | `#D95926` | — | Chart series 2, orange — identity only (§2 series) |
+| `series.3` | `#199E70` | — | Chart series 3, aqua — identity only (§2 series) |
+| `series.4` | `#C98500` | — | Chart series 4, yellow — identity only (§2 series) |
+| `series.5` | `#D55181` | — | Chart series 5, magenta — identity only (§2 series) |
+| `series.6` | `#008300` | — | Chart series 6, green — identity only (§2 series) |
+| `series.7` | `#9085E9` | — | Chart series 7, violet — identity only (§2 series) |
+| `series.8` | `#E66767` | — | Chart series 8, red — identity only (§2 series) |
 
 ¹ Measured against `surface` `#151E33`.
 
@@ -120,8 +128,25 @@ pass/fail, and colour must not imply a verdict.
 | `text.faint` | `#5C6A85` | 4.9 | Mono labels — floor for text |
 | `accent.graph` | `#0D6F7C` | 5.3 | Links and controls |
 | `accent.attention` | `#805A28` | 5.5 | Contested and flagged, on paper |
+| `series.1` | `#2A78D6` | — | Chart series 1, blue |
+| `series.2` | `#EB6834` | — | Chart series 2, orange |
+| `series.3` | `#1BAF7A` | — | Chart series 3, aqua |
+| `series.4` | `#EDA100` | — | Chart series 4, yellow |
+| `series.5` | `#E87BA4` | — | Chart series 5, magenta |
+| `series.7` | `#4A3AA7` | — | Chart series 7, violet |
+| `series.8` | `#E34948` | — | Chart series 8, red |
 
 ² Measured against `paper` `#F1F3F7`.
+
+**Series colours** (`P6-26`) are for charts and the corpus map, where a colour
+means *which one* and nothing else. Eight hues in a fixed order, assigned to a
+series by a stable key and never by rank, so a filter that removes a series
+does not repaint the rest. Checked for colour-vision separation between
+neighbours and for contrast against `surface` in each mode: dark passes every
+check; on light, aqua, yellow and magenta sit below 3:1, so a chart using them
+always carries a labelled legend and a table view. `series.6` (green) is the
+same in both modes and is published once, in the dark table. A ninth series is
+never a new hue — it folds into "Other" in `text.faint`.
 
 Documentation-only: `#B03A38` marks misuse examples in the usage guide. It is not a
 product colour and must not appear in the UI.

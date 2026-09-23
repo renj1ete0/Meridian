@@ -469,6 +469,57 @@ export function corpusStats(
   return request<CorpusStats>(`/api/explore/stats${suffix}`, init)
 }
 
+/** Mirrors `MapPointRead` (`P6-26`). */
+export interface MapPoint {
+  chunk_id: number
+  source_id: number
+  /** Both in [-1, 1]: the widest point on each axis sits at the edge. */
+  x: number
+  y: number
+  /** The source's first topic label; null when nothing examined it. */
+  topic: string | null
+  title: string | null
+  url: string
+  snippet: string
+}
+
+export const MAP_POINT_FIELDS = [
+  'chunk_id',
+  'source_id',
+  'x',
+  'y',
+  'topic',
+  'title',
+  'url',
+  'snippet',
+] as const
+
+/** Mirrors `CorpusMapRead` (`P6-26`). */
+export interface CorpusMap {
+  as_of: string
+  points: MapPoint[]
+  /** How many passages matched before sampling. Above `points.length` means a sample. */
+  eligible: number
+  /** Share of variance each axis carries — how much of the space the picture shows. */
+  explained_variance: [number, number]
+}
+
+export const CORPUS_MAP_FIELDS = ['as_of', 'points', 'eligible', 'explained_variance'] as const
+
+export type AssertMapPoint = Expect<Equal<keyof MapPoint, (typeof MAP_POINT_FIELDS)[number]>>
+export type AssertCorpusMap = Expect<Equal<keyof CorpusMap, (typeof CORPUS_MAP_FIELDS)[number]>>
+
+export function getCorpusMap(
+  params: { topic?: string[]; sample?: number } = {},
+  init?: RequestInit,
+): Promise<CorpusMap> {
+  const query = new URLSearchParams()
+  if (params.sample !== undefined) query.set('sample', String(params.sample))
+  for (const topic of params.topic ?? []) query.append('topic', topic)
+  const suffix = query.size ? `?${query}` : ''
+  return request<CorpusMap>(`/api/explore/map${suffix}`, init)
+}
+
 export function getSource(sourceId: number, init?: RequestInit): Promise<Source> {
   return request<Source>(`/api/explore/sources/${sourceId}`, init)
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { AdminPage } from './admin/AdminPage'
 import { ExplorePage } from './explore/ExplorePage'
+import { MapPage } from './explore/MapPage'
 import { onInternalClick, useRoute } from './lib/route'
 import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
@@ -10,9 +11,15 @@ import { Lockup } from './ui/Mark'
 
 const LABEL: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
-/** §12.6's two halves. A source page belongs to Explore, so it marks Explore. */
+/**
+ * §12.6's two halves, and the map between them. A source page belongs to
+ * Explore, so it marks Explore. The map is a way into the corpus rather than a
+ * setting, but it is its own destination: it wants the full width, and a reader
+ * returning to it wants one click, not a toggle inside search.
+ */
 const NAV = [
   { path: '/', label: 'Explore', name: 'explore' },
+  { path: '/map', label: 'Map', name: 'map' },
   { path: '/admin', label: 'Admin', name: 'admin' },
 ] as const
 
@@ -34,7 +41,7 @@ export function App() {
   // A source page belongs to Explore. Marking neither destination while a
   // reader is two clicks into the corpus would say the header does not know
   // where they are.
-  const section = route.name === 'admin' ? 'admin' : 'explore'
+  const section = route.name === 'admin' || route.name === 'map' ? route.name : 'explore'
 
   // On the root element, not on a wrapper div. The reader's preference has to
   // reach `color-scheme`, which the browser reads from the document element to
@@ -82,13 +89,18 @@ export function App() {
         </button>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      {/* The map is the one screen that is a picture rather than prose, and a
+          reading column would draw it at the size of a thumbnail. */}
+      <main
+        className={`mx-auto px-6 py-10 ${route.name === 'map' ? 'max-w-6xl' : 'max-w-3xl'}`}
+      >
         {/* Real URLs for every screen. A source page that could not be linked
             would be a corpus insisting everything be checkable while making its
             own documents unaddressable. */}
         {route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
         {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
         {route.name === 'admin' ? <AdminPage /> : null}
+        {route.name === 'map' ? <MapPage /> : null}
         {route.name === 'explore' ? <ExplorePage /> : null}
       </main>
     </div>

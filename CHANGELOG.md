@@ -234,6 +234,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.111.0] — 2026-09-23
+
+### Added
+
+- `P6-26`: the corpus map at `/map`, and `GET /api/explore/map` behind it. A
+  deterministic sample (default 3000) of the passages search can return,
+  projected to two dimensions by PCA over their embeddings, coloured by topic.
+  Hover reads a passage, click opens its source, the legend hides and shows
+  topics, and a table view carries the same data. The response reports how
+  many passages were eligible and how much variance each axis carries, and the
+  page says both
+- Design system: eight `series.*` colours for charts, published in both token
+  tables and validated for colour-vision separation and contrast
+- `numpy` declared on `meridian-core`. It had only ever arrived through the
+  worker's dependencies, so the API image did not have it
+
 ## [0.110.1] — 2026-09-23
 
 ### Fixed

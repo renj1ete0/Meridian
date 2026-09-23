@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.110.1"
+version = "0.111.0"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 license = "MIT"
@@ -23,6 +23,10 @@ dependencies = [
     # The rule the comment was protecting still holds: a package declares what
     # it imports, and this one imports httpx.
     "httpx>=0.28",
+    # `corpusmap.py` projects embeddings for the map (`P6-26`). It already rode
+    # in on the worker's closure, which is why the API image was the first to
+    # notice it was missing — the same accident `pyyaml` and `httpx` document.
+    "numpy>=2.0",
 ]
 
 [build-system]

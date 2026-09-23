@@ -52,6 +52,14 @@
   --dark-accent-graph-deep: #0C646A;
   --dark-accent-attention: #E6B061;
   --dark-accent-attention-deep: #654617;
+  --dark-series-1: #3987E5;
+  --dark-series-2: #D95926;
+  --dark-series-3: #199E70;
+  --dark-series-4: #C98500;
+  --dark-series-5: #D55181;
+  --dark-series-6: #008300;
+  --dark-series-7: #9085E9;
+  --dark-series-8: #E66767;
 
   /* --- the light palette (design-system.md §2) --------------------------
    * Nine published tokens against dark's thirteen. The design system names
@@ -67,6 +75,13 @@
   --light-text-faint: #5C6A85;
   --light-accent-graph: #0D6F7C;
   --light-accent-attention: #805A28;
+  --light-series-1: #2A78D6;
+  --light-series-2: #EB6834;
+  --light-series-3: #1BAF7A;
+  --light-series-4: #EDA100;
+  --light-series-5: #E87BA4;
+  --light-series-7: #4A3AA7;
+  --light-series-8: #E34948;
 
   /* --- roles: dark, the flagship default -------------------------------- */
   --ground-deep: var(--dark-ground-deep);
@@ -82,6 +97,14 @@
   --accent-graph-deep: var(--dark-accent-graph-deep);
   --accent-attention: var(--dark-accent-attention);
   --accent-attention-deep: var(--dark-accent-attention-deep);
+  --series-1: var(--dark-series-1);
+  --series-2: var(--dark-series-2);
+  --series-3: var(--dark-series-3);
+  --series-4: var(--dark-series-4);
+  --series-5: var(--dark-series-5);
+  --series-6: var(--dark-series-6);
+  --series-7: var(--dark-series-7);
+  --series-8: var(--dark-series-8);
 
   /* --- type scale (design-system.md §3) ---------------------------------
    * The split is strict: Archivo carries anything written for a reader, Plex
@@ -147,6 +170,14 @@
     --text-faint: var(--light-text-faint);
     --accent-graph: var(--light-accent-graph);
     --accent-attention: var(--light-accent-attention);
+    --series-1: var(--light-series-1);
+    --series-2: var(--light-series-2);
+    --series-3: var(--light-series-3);
+    --series-4: var(--light-series-4);
+    --series-5: var(--light-series-5);
+    --series-6: var(--dark-series-6);
+    --series-7: var(--light-series-7);
+    --series-8: var(--light-series-8);
   }
 }
 
@@ -162,6 +193,14 @@
   --text-faint: var(--light-text-faint);
   --accent-graph: var(--light-accent-graph);
   --accent-attention: var(--light-accent-attention);
+  --series-1: var(--light-series-1);
+  --series-2: var(--light-series-2);
+  --series-3: var(--light-series-3);
+  --series-4: var(--light-series-4);
+  --series-5: var(--light-series-5);
+  --series-6: var(--dark-series-6);
+  --series-7: var(--light-series-7);
+  --series-8: var(--light-series-8);
 }
 
 /*
@@ -181,4 +220,12 @@
   --text-faint: var(--dark-text-faint);
   --accent-graph: var(--dark-accent-graph);
   --accent-attention: var(--dark-accent-attention);
+  --series-1: var(--dark-series-1);
+  --series-2: var(--dark-series-2);
+  --series-3: var(--dark-series-3);
+  --series-4: var(--dark-series-4);
+  --series-5: var(--dark-series-5);
+  --series-6: var(--dark-series-6);
+  --series-7: var(--dark-series-7);
+  --series-8: var(--dark-series-8);
 }
