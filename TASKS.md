@@ -1509,6 +1509,17 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [x] `B-33` **An unreadable robots.txt was filed as the site saying no** —
+      `v0.110.1`. Found on the local stack after a reboot: the worker came up
+      before DNS, every robots.txt it asked for was unreachable, and RFC 9309
+      §2.3.1.3 correctly refused those origins — but the refusal was recorded
+      as `robots_denied`, which abandons the task, with an error claiming the
+      site had disallowed a URL it never saw. Now `robots_unreachable`, retried.
+      **The obvious fix would not have been one**: the retry backoff is seconds
+      and the cached refusal lasts ten minutes, so all three attempts would have
+      been told the same cached "no". Retries are held back past the cache, and
+      the refusal carries no domain signal — one failed read is served to every
+      task on the origin, and counting each would block the domain over a blip
 - [x] `B-32` **Nothing ever created a budget, so nothing could ever run** —
       `v0.108.0`. `P4-13` refuses a synthesis run without a budget row and
       §16 requires caps "before first autonomous run"; the ordering was

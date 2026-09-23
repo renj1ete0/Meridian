@@ -182,6 +182,16 @@ class Crawler:
             # still advertises its sitemap, and the file is the site's own
             # statement of what it wants crawled.
             sitemaps = rules.sitemaps
+            if rules.unreachable:
+                # Refused all the same (RFC 9309 §2.3.1.3), but not *denied*: the
+                # site has said nothing yet. Recorded as its own outcome so the
+                # URL is retried once robots.txt can be read, rather than
+                # abandoned as though the site had asked to be left alone.
+                return _refused(
+                    url,
+                    "robots_unreachable",
+                    "robots.txt could not be read; origin refused until it can be",
+                )
             if not rules.allows(url):
                 log.info(
                     "robots.txt refuses this path",

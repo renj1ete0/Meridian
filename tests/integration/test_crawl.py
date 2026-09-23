@@ -167,6 +167,49 @@ async def test_robots_can_be_turned_off_per_domain(
     assert [r.url.path for r in rec.requests] == ["/anything"]
 
 
+@pytest.mark.parametrize("failure", ["dns", "503"])
+async def test_an_unreadable_robots_refuses_without_claiming_the_site_said_no(
+    session_for, resolver, crawl_domain, cleanup, failure
+) -> None:
+    """RFC 9309 §2.3.1.3 refuses the origin; it does not make the refusal final.
+
+    `B-33`: a worker starting before DNS was up read every robots.txt as
+    unreachable, and recorded each refusal as ``robots_denied`` — which abandons
+    the task, with an error saying the site disallowed a URL it never saw.
+    ``dns`` is that incident; ``503`` is the same verdict from a live server.
+
+    Five refusals on a domain that blocks after three, to show the cached
+    verdict is not counted once per task: that would turn one failed read into
+    a blocked domain.
+    """
+    sess = await session_for("rw")
+    sess.add(
+        FetchPolicy(
+            domain=crawl_domain,
+            settings={"blocked_after_failures": 3, "delay_per_domain_ms": 0, "delay_jitter_ms": 0},
+            status="active",
+        )
+    )
+    await sess.flush()
+
+    def unavailable(request: httpx.Request) -> httpx.Response:
+        return streamed(503, headers={"content-type": "text/plain"})
+
+    dns = resolver(fail={crawl_domain}) if failure == "dns" else resolver({crawl_domain: [PUBLIC]})
+    crawler, rec = build(sess, unavailable, crawl_domain, robots_rules=None, resolver=dns)
+
+    results = [await crawler.fetch(f"https://{crawl_domain}/page/{i}") for i in range(5)]
+
+    assert {r.outcome for r in results} == {"robots_unreachable"}
+    assert "disallowed" not in results[0].detail
+    assert all(r.url.path == "/robots.txt" for r in rec.requests), "a page was requested"
+    # The CHECK constraint accepts the value — the row is written, not rejected.
+    assert [a.outcome for a in await _attempts(sess, crawl_domain)] == ["robots_unreachable"] * 5
+    row = await _policy_row(sess, crawl_domain)
+    assert row.status == "active"
+    assert row.consecutive_failures == 0
+
+
 async def test_a_crawl_delay_in_robots_slows_the_domain_down(
     session_for, resolver, crawl_domain, cleanup
 ) -> None:

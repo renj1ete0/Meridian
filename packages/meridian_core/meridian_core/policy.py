@@ -316,8 +316,10 @@ DOMAIN_UNREACHABLE = frozenset(
 #: No request went out, so there is nothing to conclude. Counting a robots
 #: denial as a failure would auto-block every well-behaved site with a
 #: restrictive robots.txt, and counting a refusal to fetch an already-blocked
-#: domain would make the block deepen itself.
-DOMAIN_NO_SIGNAL = frozenset({"robots_denied", "blocked"})
+#: domain would make the block deepen itself. ``robots_unreachable`` is the same
+#: shape: one failed read of robots.txt is cached and served to every task on
+#: the origin, so counting each refusal would turn one failure into dozens.
+DOMAIN_NO_SIGNAL = frozenset({"robots_denied", "robots_unreachable", "blocked"})
 
 # `http_error` is deliberately in none of the three: the status code decides it.
 # 5xx is the server failing, and 429 is the server saying stop, which is a

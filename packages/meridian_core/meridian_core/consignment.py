@@ -14,7 +14,7 @@ what they share is that the content exists and this fetcher cannot have it.
 Everything else abandoned is a correct answer about a URL, and asking a third
 party to try harder produces nothing.
 
-**Two outcomes are never eligible, and the line is absolute rather than a
+**Three outcomes are never eligible, and the line is absolute rather than a
 default.**
 
 ``robots_denied``
@@ -24,6 +24,9 @@ default.**
     itself and honouring robots, and a consignment path that can launder a
     robots refusal makes that commitment decorative. It is refused before any
     other check runs and no argument to this function can reach past it.
+    ``robots_unreachable`` stands with it: a robots.txt that could not be read
+    is not permission, and a third party fetching the page would be answering
+    for the site a question the site has not yet answered.
 
 ``unsafe_target``
     `netguard` refused the address because it resolved to a private range, a
@@ -45,7 +48,7 @@ import dataclasses
 #: Refused before anything else, and not reachable by configuration.
 #: See the module docstring — both have an argument behind them that no
 #: deployment preference outranks.
-NEVER_ELIGIBLE = frozenset({"robots_denied", "unsafe_target"})
+NEVER_ELIGIBLE = frozenset({"robots_denied", "robots_unreachable", "unsafe_target"})
 
 #: A refusal to serve *this client*, for content that exists.
 ELIGIBLE_OUTCOMES = frozenset(

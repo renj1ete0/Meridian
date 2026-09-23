@@ -80,6 +80,7 @@ from meridian_core.queueing import (
     queue_disposition,
     reclaim_expired,
     release_worker_claims,
+    retry_floor_s,
 )
 from meridian_core.sources import get_source, touch_source, upsert_source
 from meridian_core.steering import draw_shares, draw_topic
@@ -660,7 +661,7 @@ class Worker:
         elif disposition == "done":
             await self._record_freshness(claim)
 
-        await self._settle(claim, disposition, detail)
+        await self._settle(claim, disposition, detail, floor_s=retry_floor_s(result.outcome))
 
         log.info(
             "task settled",
@@ -687,6 +688,7 @@ class Worker:
         detail: str,
         *,
         fetched_status: str = "fetched",
+        floor_s: float = 0.0,
     ) -> None:
         """Apply one disposition to the queue row and drop the lease.
 
@@ -721,6 +723,7 @@ class Worker:
                     detail,
                     max_retries=self._settings.max_retries,
                     backoff_base_s=self._settings.backoff_base_s,
+                    floor_s=floor_s,
                 )
                 if retrying:
                     self._stats.retried += 1
@@ -764,7 +767,13 @@ class Worker:
                 queued = await self._queue_sitemap_entries(claim, parsed, base)
                 self._stats.queued += queued
 
-        await self._settle(claim, disposition, detail, fetched_status="done")
+        await self._settle(
+            claim,
+            disposition,
+            detail,
+            fetched_status="done",
+            floor_s=retry_floor_s(result.outcome),
+        )
 
         log.info(
             "sitemap settled",

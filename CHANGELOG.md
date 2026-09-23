@@ -234,6 +234,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.110.1] — 2026-09-23
+
+### Fixed
+
+- `B-33`: an unreadable robots.txt was recorded as `robots_denied`, which
+  abandons the task. RFC 9309 §2.3.1.3 is right to refuse the origin until the
+  file can be read, but the refusal is not the site's answer and must not be
+  final: a worker that came up before DNS after a reboot dropped URLs for good,
+  each with an error saying the site had disallowed them. New outcome
+  `robots_unreachable` (migration `8ac105dc7faf`) is retried, held back past the
+  ten-minute cached refusal — ordinary backoff is seconds, so every retry would
+  otherwise be served the same cached "no". It carries no domain signal, since
+  one failed read is served to every task on the origin, and is never eligible
+  for consignment
+
 ## [0.110.0] — 2026-09-22
 
 ### Added

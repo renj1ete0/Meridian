@@ -35,6 +35,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import robotscache
 from .logging import get_logger
 from .models import QueueTask
 from .policy import BACKOFF_STATUS
@@ -152,6 +153,7 @@ async def fail(
     *,
     max_retries: int = DEFAULT_MAX_RETRIES,
     backoff_base_s: int = DEFAULT_BACKOFF_BASE_S,
+    floor_s: float = 0.0,
     rng: random.Random | None = None,
 ) -> bool:
     """Record a failure. Returns True if the task will be retried.
@@ -159,6 +161,9 @@ async def fail(
     Past ``max_retries`` the task is marked ``failed`` and left in place rather
     than deleted — the error text is the only record of why a URL never made it
     in, and §12.5's health line depends on being able to see it.
+
+    ``floor_s`` holds the retry back at least that long, for a failure whose
+    cause is cached (:func:`retry_floor_s`); the usual backoff comes on top.
     """
     task.attempts += 1
     task.error = error[:2000]
@@ -171,7 +176,10 @@ async def fail(
         await sess.flush()
         return False
 
-    delay = backoff_delay_s(task.attempts, base_s=backoff_base_s, rng=rng)
+    # Added to the backoff, not max()ed with it: every task refused on one
+    # origin would otherwise come back at the same instant, on the very edge of
+    # the cache expiring — the synchronised herd the jitter exists to break up.
+    delay = floor_s + backoff_delay_s(task.attempts, base_s=backoff_base_s, rng=rng)
     task.next_attempt_at = _now() + dt.timedelta(seconds=delay)
     await sess.flush()
     return True
@@ -251,7 +259,20 @@ TASK_FETCHED = frozenset({"success"})
 TASK_UNCHANGED = frozenset({"not_modified"})
 
 #: Nothing came back, but asking again later could plausibly change that.
-TASK_RETRY = frozenset({"timeout", "connection_error"})
+TASK_RETRY = frozenset({"timeout", "connection_error", "robots_unreachable"})
+
+#: The earliest a retry may come back, for outcomes whose cause is cached.
+#: An unreadable robots.txt refuses its origin for ``ERROR_TTL_S``, and the
+#: ordinary backoff (seconds) would spend every retry inside that window being
+#: told the cached "no" — so the URL would fail permanently over one blip, which
+#: is the `robots_denied` bug again with a different label.
+RETRY_FLOOR_S: dict[str, float] = {"robots_unreachable": robotscache.ERROR_TTL_S}
+
+
+def retry_floor_s(outcome: str) -> float:
+    """The minimum retry delay this outcome needs; 0 for most."""
+    return RETRY_FLOOR_S.get(outcome, 0.0)
+
 
 #: A refusal, not a failure. Every member is deterministic in the retry window:
 #: robots.txt and the block list will say the same thing in five seconds, the

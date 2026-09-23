@@ -33,6 +33,12 @@ OK = "ok"
 MISSING = "missing"
 UNREACHABLE = "unreachable"
 
+#: How long an `unreachable` verdict stands before robots.txt is asked again.
+#: Here rather than in the worker because the queue needs it too: a task refused
+#: over an unreadable robots.txt must not come back before the refusal expires,
+#: or every retry is served the same cached "no" and the URL fails over one blip.
+ERROR_TTL_S = 600
+
 
 @dataclasses.dataclass(frozen=True)
 class CachedRobots:

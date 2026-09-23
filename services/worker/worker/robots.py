@@ -52,8 +52,9 @@ ROBOTS_TTL_S = 86_400
 
 # A refusal caused by an unreachable server is cached far more briefly. The
 # alternative — caching "refuse everything" for a day because of one 503 — takes
-# a domain out of the crawl for a day over a blip.
-ROBOTS_ERROR_TTL_S = 600
+# a domain out of the crawl for a day over a blip. Owned by `robotscache` because
+# the queue's retry floor for `robots_unreachable` has to agree with it.
+ROBOTS_ERROR_TTL_S = robotscache.ERROR_TTL_S
 
 # Google's documented parse limit, and a sane bound on a file that should be a
 # few hundred lines. Beyond this the remainder is ignored rather than the file

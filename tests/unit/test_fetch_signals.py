@@ -58,6 +58,9 @@ def test_the_three_sets_do_not_overlap() -> None:
         ("unsafe_target", "unreachable"),
         # No request went out, so there is nothing to conclude either way.
         ("robots_denied", "none"),
+        # One failed read of robots.txt, served from cache to every task on the
+        # origin. Counting each would block a domain over a single blip.
+        ("robots_unreachable", "none"),
         ("blocked", "none"),
     ],
 )

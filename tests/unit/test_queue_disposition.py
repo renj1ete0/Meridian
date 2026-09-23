@@ -15,13 +15,16 @@ import logging
 
 import pytest
 
+from meridian_core import robotscache
 from meridian_core.models.queue import FETCH_OUTCOME
 from meridian_core.queueing import (
+    RETRY_FLOOR_S,
     TASK_ABANDON,
     TASK_FETCHED,
     TASK_RETRY,
     TASK_UNCHANGED,
     queue_disposition,
+    retry_floor_s,
 )
 
 
@@ -59,6 +62,8 @@ def test_the_four_sets_do_not_overlap() -> None:
         ("not_modified", "done"),
         ("timeout", "retry"),
         ("connection_error", "retry"),
+        # The site has not said no; robots.txt simply could not be read yet.
+        ("robots_unreachable", "retry"),
         # Deterministic in the retry window — asking again in five seconds gets
         # the same answer from the same code path.
         ("robots_denied", "abandon"),
@@ -138,3 +143,22 @@ def test_an_unknown_outcome_is_retried_and_says_so() -> None:
         logger.removeHandler(handler)
 
     assert [r for r in records if r.levelno == logging.WARNING and "unclassified" in r.getMessage()]
+
+
+def test_a_retry_floor_only_names_outcomes_that_retry() -> None:
+    """Drift: a floor on an outcome that never retries is configuration nothing
+    reads, and one on an outcome that does not exist is a typo that silently
+    reverts to the ordinary backoff."""
+    for outcome in RETRY_FLOOR_S:
+        assert outcome in FETCH_OUTCOME.enums, f"{outcome} is not a fetch outcome"
+        assert queue_disposition(outcome) == "retry", f"{outcome} has a floor and never retries"
+
+
+def test_the_robots_floor_outlasts_the_cached_refusal() -> None:
+    """`B-33`: a retry sooner than the cache expiry is told the same cached "no".
+
+    Read from `robotscache` rather than restated, so shortening the floor or
+    lengthening the cache fails here instead of in a crawl.
+    """
+    assert retry_floor_s("robots_unreachable") >= robotscache.ERROR_TTL_S
+    assert retry_floor_s("timeout") == 0

@@ -115,6 +115,10 @@ FETCH_OUTCOME = constrained(
     "timeout",
     "too_large",
     "robots_denied",
+    # robots.txt could not be read, so the origin is refused until it can be.
+    # Not `robots_denied`: that is the site's answer and is final, this is the
+    # absence of one — a DNS failure at boot must not drop a URL for good.
+    "robots_unreachable",
     "blocked",  # domain marked blocked by policy before the request went out
     "connection_error",
     "parse_error",

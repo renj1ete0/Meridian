@@ -13,11 +13,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import datetime as dt
 import logging
 from contextlib import asynccontextmanager
 
 import pytest
 
+from meridian_core import robotscache
 from worker.fetch import FetchResult
 from worker.main import (
     CONDITIONAL_TASK_TYPES,
@@ -237,6 +239,39 @@ async def test_a_transient_failure_is_retried_rather_than_failed(monkeypatch) ->
     assert task.attempts == 1
     assert task.next_attempt_at is not None  # backed off, not immediately eligible
     assert stats.retried == 1 and stats.abandoned == 0
+
+
+async def test_an_unreadable_robots_is_retried_after_its_refusal_expires(monkeypatch) -> None:
+    """`B-33`: the retry must outlive the cached refusal, or it is no retry.
+
+    The ordinary backoff is seconds, and an unreadable robots.txt refuses its
+    origin for ten minutes. Retried on the ordinary schedule, every attempt is
+    served the same cached "no" and the URL fails for good over one blip —
+    ``robots_denied``'s abandonment with extra steps.
+    """
+    task = FakeTask(task_id=8)
+    store = FakeStore([task])
+    worker = build(store, FakeCrawler([outcome("robots_unreachable")]), monkeypatch, max_tasks=1)
+
+    before = dt.datetime.now(dt.UTC)
+    stats = await worker.run()
+
+    assert task.status == "pending"
+    assert task.attempts == 1
+    assert task.next_attempt_at >= before + dt.timedelta(seconds=robotscache.ERROR_TTL_S)
+    assert stats.retried == 1 and stats.abandoned == 0
+
+
+async def test_only_a_cached_cause_holds_a_retry_back(monkeypatch) -> None:
+    """A timeout keeps the ordinary backoff; the floor is not a global slowdown."""
+    task = FakeTask(task_id=9)
+    store = FakeStore([task])
+    worker = build(store, FakeCrawler([outcome("timeout")]), monkeypatch, max_tasks=1)
+
+    before = dt.datetime.now(dt.UTC)
+    await worker.run()
+
+    assert task.next_attempt_at < before + dt.timedelta(seconds=robotscache.ERROR_TTL_S)
 
 
 async def test_a_refusal_is_abandoned_without_spending_retries(monkeypatch) -> None:
