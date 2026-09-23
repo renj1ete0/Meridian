@@ -276,3 +276,107 @@ async def test_two_nodes_with_the_same_name_resolve_to_the_same_one_every_time(
         resolved = await resolve(sess, name, marker, chunks=[chunk], node_type="concept")
         assert not resolved.created
         assert resolved.entity.entity_id == older.entity_id
+
+
+def _near(cos: float) -> list[float]:
+    """A unit vector at a chosen cosine from the first axis."""
+    import math
+
+    from meridian_core.models.source import EMBEDDING_DIM
+
+    vector = [0.0] * EMBEDDING_DIM
+    vector[0] = cos
+    vector[1] = math.sqrt(1 - cos * cos)
+    return vector
+
+
+async def test_two_wordings_of_one_thing_reach_a_person_once_embedded(sess, marker) -> None:
+    """`B-40`. Resolution was built to weigh meaning as well as words (§5.5),
+    but no mention or entity ever carried a vector, so two names for the same
+    thing that share few words scored as strangers and became separate nodes
+    with nobody asked. With the embedding they land in the middle band: a
+    separate node, and a notice for a person — never a silent merge."""
+    first = await resolve(
+        sess,
+        "autonomous shuttlecraft",
+        marker,
+        chunks=[1],
+        node_type="failure_mode",
+        embedding=_near(1.0),
+    )
+    assert first.entity.embedding is not None, "a new node keeps the vector it was resolved with"
+
+    second = await resolve(
+        sess,
+        "driverless shuttlecraft",
+        marker,
+        chunks=[2],
+        node_type="failure_mode",
+        embedding=_near(0.93),
+    )
+
+    assert second.created
+    assert second.band == "adjudicate"
+    asked = await sess.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.title == "Possible duplicate: driverless shuttlecraft")
+    )
+    assert asked == 1
+
+
+async def test_without_the_embedding_the_same_pair_is_judged_on_words_alone(sess, marker) -> None:
+    """The contrast that makes the case above mean something: the words alone
+    put this pair below the middle band."""
+    await resolve(sess, "autonomous shuttlecraft", marker, chunks=[1], node_type="failure_mode")
+    second = await resolve(
+        sess, "driverless shuttlecraft", marker, chunks=[2], node_type="failure_mode"
+    )
+    assert second.created and second.band == "separate"
+
+
+async def test_an_unrelated_name_with_a_distant_vector_stays_separate(sess, marker) -> None:
+    await resolve(
+        sess,
+        "autonomous shuttlecraft",
+        marker,
+        chunks=[1],
+        node_type="failure_mode",
+        embedding=_near(1.0),
+    )
+    other = await resolve(
+        sess,
+        "rainfall intensity",
+        marker,
+        chunks=[2],
+        node_type="failure_mode",
+        embedding=_near(0.1),
+    )
+    assert other.created and other.band == "separate"
+
+
+async def test_an_older_node_gains_a_vector_when_resolved_with_one(sess, marker) -> None:
+    """Nodes made before `B-40` have none; the first embedded mention fills it."""
+    old = await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    assert old.entity.embedding is None
+
+    again = await resolve(sess, f"{marker} Authority", marker, chunks=[2], embedding=_near(1.0))
+
+    assert again.entity.entity_id == old.entity.entity_id
+    assert again.entity.embedding is not None
+
+
+async def test_backfill_embeds_entities_that_have_no_vector(sess, marker) -> None:
+    from meridian_core.mentions import embed_missing_entities
+
+    made = await resolve(sess, f"{marker} Registry", marker, chunks=[1])
+
+    class Fake:
+        async def embed(self, texts):
+            return [_near(1.0) for _ in texts]
+
+    done = await embed_missing_entities(sess, Fake(), limit=10_000)
+
+    assert done >= 1
+    await sess.refresh(made.entity)
+    assert made.entity.embedding is not None

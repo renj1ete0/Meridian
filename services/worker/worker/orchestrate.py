@@ -75,8 +75,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.budget import BudgetError, load_budget
 from meridian_core.db import dispose_engines, get_sessionmaker
+from meridian_core.embedder import RemoteEmbedder
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
-from meridian_core.mentions import resolve_mention
+from meridian_core.mentions import embed_missing_entities, embed_names, resolve_mention
 from meridian_core.models import Agent, AttributeDefinition, Chunk, Entity, Run, Source, TopicConfig
 from meridian_core.proposals import (
     CitationOutOfRange,
@@ -363,6 +364,31 @@ async def _ask(
     return completion
 
 
+async def _mention_vectors(
+    sess: AsyncSession, names: list[str], *, journal: Journal, stage: str
+) -> dict[str, list[float]]:
+    """Vectors for this batch's mention names, and for entities still without one.
+
+    `B-40`: without these, resolution compares names by their words alone and
+    cannot see that two differently-worded names mean the same thing — so
+    they became separate nodes and never reached a person's adjudication.
+    An unreachable embedder degrades to names alone, as it always did.
+    """
+    embedder = RemoteEmbedder.from_env()
+    if embedder is None:
+        return {}
+    try:
+        backfilled = await embed_missing_entities(sess, embedder)
+        if backfilled:
+            journal.note(stage, f"embedded {backfilled} entities that had no vector")
+        vectors = await embed_names(embedder, names)
+    finally:
+        await embedder.aclose()
+    if names and not vectors:
+        journal.note(stage, "embedder unavailable; resolving mentions by name alone")
+    return vectors
+
+
 async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now) -> None:
     """Relations, from the passages that state them (§5.4, §11.6).
 
@@ -401,6 +427,12 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
         journal.note("extract", f"dropped — {rejection}")
 
     expansions = await expansions_from_gazetteer(sess)
+    vectors = await _mention_vectors(
+        sess,
+        [name for p in parsed.accepted for name in (p.subject.name, p.object.name)],
+        journal=journal,
+        stage="extract",
+    )
     for proposal in parsed.accepted:
         try:
             chunk_ids = chunk_ids_for(proposal.citations, batch.passages)
@@ -419,6 +451,7 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
                 model=batch.model,
                 quality_tier=batch.quality_tier,
                 expansions=expansions,
+                embedding=vectors.get(proposal.subject.name.strip()),
                 now=now,
             )
             target = await resolve_mention(
@@ -431,6 +464,7 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
                 model=batch.model,
                 quality_tier=batch.quality_tier,
                 expansions=expansions,
+                embedding=vectors.get(proposal.object.name.strip()),
                 now=now,
             )
             journal.call(
@@ -520,6 +554,9 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
         journal.note("tag", f"dropped — {rejection}")
 
     expansions = await expansions_from_gazetteer(sess)
+    vectors = await _mention_vectors(
+        sess, [p.entity.name for p in parsed.accepted], journal=journal, stage="tag"
+    )
     for proposal in parsed.accepted:
         try:
             cited = chunk_ids_for(proposal.citations, batch.passages)
@@ -538,6 +575,7 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
                 model=completion.model,
                 quality_tier=quality_tier,
                 expansions=expansions,
+                embedding=vectors.get(proposal.entity.name.strip()),
                 now=now,
             )
             journal.call(

@@ -234,6 +234,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.113.4] — 2026-09-23
+
+### Fixed
+
+- `B-40`: entity resolution now uses the embedding signal it was designed
+  with. Mention names are embedded through the sidecar during `extract` and
+  `tag`, new entities keep their vector, entities without one are backfilled,
+  and blocking considers the nearest entities by meaning. Differently-worded
+  names for one thing now reach adjudication instead of silently becoming two
+  nodes. Without an embedder, resolution works on names alone as before
+
 ## [0.113.3] — 2026-09-23
 
 ### Fixed

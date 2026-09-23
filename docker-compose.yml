@@ -437,6 +437,10 @@ services:
     environment:
       # Where a relay agent leaves prompts and finds answers (`P4-18`).
       MERIDIAN_RELAY_DIR: /relay
+      # Entity resolution weighs what a name means as well as its words (`B-40`).
+      # Absent, it degrades to words alone — which is how two names for one
+      # thing became separate nodes that no person was ever asked about.
+      MERIDIAN_EMBEDDER_URL: http://embedder:8100
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       # Written by this container as uid 1001. An answer is written into it

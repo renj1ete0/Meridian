@@ -35,9 +35,11 @@ import dataclasses
 import datetime as dt
 from collections.abc import Sequence
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .annotations import ANNOTATION
+from .embedder import MAX_TEXTS, EmbeddingUnavailable
 from .logging import get_logger
 from .models import Entity, Notification
 from .resolution import Verdict, block, score
@@ -120,9 +122,15 @@ async def resolve_mention(
     quality_tier: int | None,
     jurisdiction: str | None = None,
     expansions: dict[str, str] | None = None,
+    embedding: Sequence[float] | None = None,
     now: dt.datetime,
 ) -> Resolved:
     """The node this mention refers to, creating one if it refers to nothing yet.
+
+    ``embedding`` is the mention name's vector (`B-40`). With it, blocking
+    also considers the nearest entities by meaning and scoring weighs §5.5's
+    embedding signal; without it both fall back to the name alone, which
+    cannot see that two differently-worded names mean the same thing.
 
     Flushes so the id exists; does not commit. The caller's transaction owns
     whether any of this survives, which is what lets `--dry-run` cover a stage
@@ -139,7 +147,9 @@ async def resolve_mention(
 
     candidates = [
         candidate
-        for candidate in await block(sess, cleaned, node_type, expansions=expansions)
+        for candidate in await block(
+            sess, cleaned, node_type, embedding=embedding, expansions=expansions
+        )
         if _compatible(candidate.entity, jurisdiction)
     ]
 
@@ -158,11 +168,13 @@ async def resolve_mention(
     # happened to share a chunk, which is the fragmentation this whole module
     # exists to prevent. The chunks are still recorded on the row below; they
     # are what gives the *entity* a neighbourhood for next time.
+    vector = list(embedding) if embedding is not None else None
     probe = Entity(
         canonical_name=cleaned,
         node_type=node_type,
         jurisdiction=jurisdiction,
         supporting_chunk_ids=[],
+        embedding=vector,
     )
 
     best: Verdict | None = None
@@ -180,6 +192,10 @@ async def resolve_mention(
         # overlap — §5.5's strongest signal — get better with every mention
         # rather than staying at whatever the first one happened to see.
         match.supporting_chunk_ids = sorted({*match.supporting_chunk_ids, *supporting_chunk_ids})
+        if match.embedding is None and vector is not None:
+            # A node made before entities were embedded gets its vector the
+            # first time a mention of it is resolved with one.
+            match.embedding = vector
         if cleaned.casefold() != match.canonical_name.casefold():
             aliases = list(match.aliases or [])
             if not any(alias.casefold() == cleaned.casefold() for alias in aliases):
@@ -197,6 +213,7 @@ async def resolve_mention(
         node_type=node_type,
         jurisdiction=jurisdiction,
         supporting_chunk_ids=sorted(set(supporting_chunk_ids)),
+        embedding=vector,
         produced_by=produced_by,
         model=model,
         quality_tier=quality_tier,
@@ -210,3 +227,64 @@ async def resolve_mention(
         await _adjudication(sess, mention=cleaned, kept=entity, other=match)
 
     return Resolved(entity=entity, created=True, band=band, verdict=best)
+
+
+#: Entities embedded per backfill call. Small, because it runs inside a
+#: synthesis stage and names are short; a corpus with thousands of unembedded
+#: entities catches up over a few runs rather than stalling one.
+BACKFILL_BATCH = 256
+
+
+async def embed_names(embedder, names: Sequence[str]) -> dict[str, list[float]]:
+    """One vector per distinct name, in as few requests as the cap allows.
+
+    Returns an empty mapping when there is no embedder or it cannot answer:
+    resolution then runs on names alone, as it always did — degraded, not
+    stopped, the same position search takes (§11.3).
+    """
+    if embedder is None:
+        return {}
+    distinct = sorted({name.strip() for name in names if name and name.strip()})
+    if not distinct:
+        return {}
+    vectors: dict[str, list[float]] = {}
+    try:
+        for start in range(0, len(distinct), MAX_TEXTS):
+            chunk = distinct[start : start + MAX_TEXTS]
+            for name, vector in zip(chunk, await embedder.embed(chunk), strict=True):
+                vectors[name] = vector
+    except EmbeddingUnavailable as exc:
+        log.warning(
+            "mention names not embedded; resolving by name alone", extra={"detail": str(exc)}
+        )
+        return {}
+    return vectors
+
+
+async def embed_missing_entities(
+    sess: AsyncSession, embedder, *, limit: int = BACKFILL_BATCH
+) -> int:
+    """Give entities with no vector one, from their canonical name. Returns how many.
+
+    Entities made before `B-40` have none, so the embedding half of blocking
+    and scoring cannot see them; this closes that gap a batch at a time.
+    """
+    if embedder is None:
+        return 0
+    rows = list(
+        await sess.scalars(
+            select(Entity)
+            .where(Entity.embedding.is_(None), Entity.redirects_to.is_(None))
+            .order_by(Entity.entity_id)
+            .limit(limit)
+        )
+    )
+    vectors = await embed_names(embedder, [row.canonical_name for row in rows])
+    done = 0
+    for row in rows:
+        vector = vectors.get(row.canonical_name.strip())
+        if vector is not None:
+            row.embedding = vector
+            done += 1
+    await sess.flush()
+    return done
