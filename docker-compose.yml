@@ -200,11 +200,12 @@ services:
     # omitting the key puts it on compose's default bridge — which has a route
     # out, and this is the one container here running as root.
     network_mode: none
-    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models"]
+    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay"]
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
       - ${DATA_ROOT:-/srv/meridian}/models:/models
+      - ${DATA_ROOT:-/srv/meridian}/relay:/relay
     restart: "no"
     logging: *logging
 
@@ -433,8 +434,14 @@ services:
     networks: [internal, egress, lan]
     depends_on:
       postgres: { condition: service_healthy }
+    environment:
+      # Where a relay agent leaves prompts and finds answers (`P4-18`).
+      MERIDIAN_RELAY_DIR: /relay
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
+      # Written by this container as uid 1001. An answer is written into it
+      # with `docker exec`, so supplying one takes the operator's Docker access.
+      - ${DATA_ROOT:-/srv/meridian}/relay:/relay
     cap_add: [NET_RAW]            # wake-on-LAN magic packets
     healthcheck:
       test: ["CMD", "python", "-c", "import anthropic, worker.orchestrate"]

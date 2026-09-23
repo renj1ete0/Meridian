@@ -20,13 +20,17 @@ import yaml
 
 from meridian_core.models import Agent
 from meridian_core.provider import (
+    _SHAPES,
     CHARS_PER_TOKEN,
     DEFAULT_MAX_TOKENS,
+    RELAY_DIR_ENV,
     Completion,
     NotConfigured,
+    ProviderError,
     _api_key,
+    _call_relay,
     _estimate,
-    _SHAPES,
+    relay_key,
 )
 from meridian_core.routing import TASK_TYPES
 
@@ -169,3 +173,124 @@ def test_a_task_type_maps_to_a_real_task() -> None:
     # `complete` is called with a task type; an unknown one raises from
     # `resolve_chain` rather than reaching a provider.
     assert "relation_extraction" in TASK_TYPES
+
+
+# --------------------------------------------------------------------------
+# The relay: an attended model, through files (`P4-18`)
+# --------------------------------------------------------------------------
+
+
+def relay_agent() -> Agent:
+    return agent(agent_id="session", provider="relay", model="claude-opus-5-5")
+
+
+async def ask(prompt: str = "extract from these passages", system: str | None = "be precise"):
+    return await _call_relay(
+        relay_agent(), prompt=prompt, system=system, max_tokens=100, timeout_s=1.0
+    )
+
+
+async def test_an_unanswered_prompt_is_left_for_somebody_and_the_call_fails(
+    monkeypatch, tmp_path
+) -> None:
+    """Fails as an unreachable provider does, so the run defers (§13.4) rather
+    than proceeding as if an empty answer had come back."""
+    monkeypatch.setenv(RELAY_DIR_ENV, str(tmp_path))
+
+    with pytest.raises(ProviderError, match="waiting for"):
+        await ask()
+
+    (left,) = tmp_path.glob("*.prompt.json")
+    body = __import__("json").loads(left.read_text())
+    assert body["prompt"] == "extract from these passages"
+    assert body["system"] == "be precise"
+    assert body["model"] == "claude-opus-5-5"
+    assert left.name == f"{relay_key('extract from these passages', 'be precise')}.prompt.json"
+
+
+async def test_asking_again_does_not_leave_a_second_copy(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(RELAY_DIR_ENV, str(tmp_path))
+    for _ in range(3):
+        with pytest.raises(ProviderError):
+            await ask()
+    assert len(list(tmp_path.glob("*.prompt.json"))) == 1
+
+
+async def test_the_answer_to_the_same_question_is_found_on_the_next_ask(
+    monkeypatch, tmp_path
+) -> None:
+    """How a deferred batch resumes: the mark has not moved, `pull` chooses the
+    same passages, the prompt is the same bytes, so the key is the same."""
+    monkeypatch.setenv(RELAY_DIR_ENV, str(tmp_path))
+    with pytest.raises(ProviderError):
+        await ask()
+    key = relay_key("extract from these passages", "be precise")
+    (tmp_path / f"{key}.answer.txt").write_text('{"edges": []}', encoding="utf-8")
+
+    text, used_in, used_out = await ask()
+
+    assert text == '{"edges": []}'
+    # Charged, not free: a relay run must show on §11.9's comparison.
+    assert used_in > 0 and used_out > 0
+
+
+async def test_an_answer_to_a_different_question_is_not_used(monkeypatch, tmp_path) -> None:
+    """The failure this design has to rule out: an answer about one batch
+    applied to another, citing passages by numbers that now mean different
+    text."""
+    monkeypatch.setenv(RELAY_DIR_ENV, str(tmp_path))
+    other = relay_key("a different batch", "be precise")
+    (tmp_path / f"{other}.answer.txt").write_text("stale", encoding="utf-8")
+
+    with pytest.raises(ProviderError):
+        await ask()
+
+
+async def test_an_empty_answer_file_is_still_waiting(monkeypatch, tmp_path) -> None:
+    """A file created and not yet written — an editor's first save, a copy in
+    progress — must not be read as the model answering nothing."""
+    monkeypatch.setenv(RELAY_DIR_ENV, str(tmp_path))
+    key = relay_key("extract from these passages", "be precise")
+    (tmp_path / f"{key}.answer.txt").write_text("  \n", encoding="utf-8")
+
+    with pytest.raises(ProviderError, match="waiting for"):
+        await ask()
+
+
+def test_the_key_covers_the_system_prompt_as_well() -> None:
+    """Two questions that differ only in their instructions are two questions."""
+    assert relay_key("same", "extract") != relay_key("same", "tag")
+    assert relay_key("same", None) == relay_key("same", "")
+
+
+async def test_a_relay_with_nowhere_to_leave_prompts_is_a_configuration_error(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv(RELAY_DIR_ENV, raising=False)
+    with pytest.raises(NotConfigured, match=RELAY_DIR_ENV):
+        await ask()
+
+
+def test_the_relay_row_ships_disabled() -> None:
+    """Enabled with nobody answering, it defers every run. Turning it on is a
+    decision somebody makes while they are watching the directory."""
+    rows = yaml.safe_load(REGISTRY.read_text())["agents"]
+    (relay,) = [row for row in rows if row["provider"] == "relay"]
+    assert relay["enabled"] is False
+    assert not relay.get("api_key_env_var")
+
+
+def test_the_same_passages_under_a_fresh_fence_are_the_same_question() -> None:
+    """Found by the end-to-end test: every framing draws a new random
+    delimiter, so a digest of the raw prompt never matched the resumed batch
+    and every relay run deferred for ever."""
+    from meridian_core.framing import new_delimiter
+
+    first, second = new_delimiter(), new_delimiter()
+    assert first != second
+    template = "begins after {d}\n{d}\n[1] a passage\n/{d}"
+
+    assert relay_key(template.format(d=first), None) == relay_key(template.format(d=second), None)
+    assert relay_key(template.format(d=first), None) != relay_key(
+        template.format(d=first).replace("a passage", "another passage"), None
+    ), "only the fence is ignored; the passages still count"

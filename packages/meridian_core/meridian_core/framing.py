@@ -34,6 +34,7 @@ context when the payload arrives.
 
 from __future__ import annotations
 
+import re
 import secrets
 from collections.abc import Iterable, Sequence
 from typing import Any, Protocol
@@ -84,6 +85,20 @@ def new_delimiter() -> str:
     every subsequent call in that worker's lifetime.
     """
     return f"untrusted-{secrets.token_hex(_DELIMITER_BYTES)}"
+
+
+_DELIMITER = re.compile(rf"untrusted-[0-9a-f]{{{2 * _DELIMITER_BYTES}}}")
+
+
+def without_delimiters(text: str) -> str:
+    """``text`` with every fence marker replaced by one fixed placeholder.
+
+    For recognising that two prompts ask the same question (`P4-18`). The
+    delimiter is random per call on purpose, so two framings of the same
+    passages never compare equal as written; with it masked they do. Only
+    ever used for comparison — what is *sent* keeps its random fence.
+    """
+    return _DELIMITER.sub("untrusted-*", text)
 
 
 def frame(content: str, *, delimiter: str | None = None) -> str:

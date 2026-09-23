@@ -234,6 +234,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.113.0] — 2026-09-23
+
+### Added
+
+- `P4-18`: a `relay` provider, and a disabled `claude-code-session` registry
+  row that uses it (seeded, and added by migration `5d2e9f1a7c30` to existing
+  databases). A relay agent leaves each prompt in `MERIDIAN_RELAY_DIR` and the
+  run defers until an answer file appears beside it, so an interactive session
+  can do synthesis where an API key would otherwise be needed. Answers pass
+  through the same parsing, validation and write tools as any provider's, and
+  are charged to the run's token ledger. Both compose files mount
+  `${DATA_ROOT}/relay` into the orchestrator, owned by the service uid
+- `framing.without_delimiters`, for comparing two framings of the same
+  passages; what is sent keeps its random fence
+
 ## [0.112.2] — 2026-09-23
 
 ### Fixed

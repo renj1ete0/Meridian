@@ -801,6 +801,20 @@ deploy runbook whose first two commands could not work (`B-17`).
       from a redirect and into one. The log row survives reversal and is
       stamped: "merged then reversed" is the signal a threshold is wrong, which
       is what `P7-10` samples for
+- [x] `P4-18` **A relay agent: an attended model instead of an API key** —
+      `v0.113.0`. Provider `relay` writes each prompt to `MERIDIAN_RELAY_DIR`
+      as `<key>.prompt.json` and defers the run until `<key>.answer.txt`
+      exists; the answer then goes through the same parser, guards and write
+      tools as any model's, stamped with the registry row's model. The key is
+      a digest of the question, because a deferred batch is asked again from
+      an unmoved mark — **with the fence nonce masked**, which the end-to-end
+      test found: every framing draws a fresh random delimiter, so a raw
+      digest never matched and every run would have deferred for ever. Chosen
+      over putting write tools on the MCP port, which `P4-04` deliberately
+      keeps read-only; here nothing new is network-reachable, and supplying an
+      answer takes the operator's Docker access. `claude-code-session` ships
+      disabled. **First live batch**: chunks 1–40, 20 edges and 2 tags, and
+      the re-run it forced found `B-35`
 - [x] `P4-04` Write tools: `add_edge`, `tag_entity`, `enqueue_seed`,
       `advance_mark` — `v0.101.0`. §11.6's "narrow, validated, orchestrator
       scope only", where each word was decided elsewhere: narrow is these four

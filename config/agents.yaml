@@ -43,6 +43,27 @@ agents:
     availability: on_demand
     wake_mac: null
 
+  # An operator-attended model: prompts are written to MERIDIAN_RELAY_DIR and
+  # the run defers until an answer file appears beside each one (`P4-18`). The
+  # model string is what provenance records, so it names whoever answers.
+  # Disabled until somebody is going to answer; enabling it with nobody
+  # watching the directory just defers every run.
+  - agent_id: claude-code-session
+    provider: relay
+    model: claude-opus-5-5
+    api_key_env_var: null
+    task_types: [relation_extraction, tag_attributes]
+    token_scope: read_write
+    cost_tier: free
+    quality_tier: 4
+    max_context: 200000
+    enabled: false
+    fallback_agent_id: null
+    endpoint: null
+    health_url: null
+    availability: on_demand
+    wake_mac: null
+
   - agent_id: local-llamacpp
     provider: openai_compatible
     model: "<fill in — dedicated Meridian process, not the interactive one>"

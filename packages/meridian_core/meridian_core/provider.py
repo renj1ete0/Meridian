@@ -35,7 +35,9 @@ error worth deferring on.
 **Two shapes, not one client.** §11.7 is right that Ollama, llama.cpp and vLLM
 all speak an OpenAI-compatible protocol, so the local tier is one HTTP call.
 Anthropic is not that protocol and is not approximated with a shim — it goes
-through the official SDK.
+through the official SDK. A third, `relay` (`P4-18`), is not a protocol at
+all: it leaves the prompt in a directory for an operator-attended model and
+reads the answer back, so a session can stand in for an API key.
 
 **What comes back is data.** The caller frames what goes in (`P4-06`) and
 validates every write that comes out (`P4-05`). Nothing here interprets the
@@ -47,12 +49,16 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import hashlib
+import json
 import os
+import pathlib
 from typing import Any, Final
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .budget import reserve_tokens, settle_tokens
+from .framing import without_delimiters
 from .logging import get_logger
 from .models import Agent, Run
 from .routing import NoAgentAvailable, chain_for
@@ -232,7 +238,90 @@ async def _call_openai_compatible(
     return text, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
 
 
-_SHAPES = {"anthropic": _call_anthropic, "openai_compatible": _call_openai_compatible}
+#: Where a relay agent's prompts and answers are exchanged (`P4-18`).
+RELAY_DIR_ENV: Final[str] = "MERIDIAN_RELAY_DIR"
+
+
+def relay_key(prompt: str, system: str | None) -> str:
+    """The name one exchange is filed under: a digest of exactly what was asked.
+
+    A digest rather than a run or batch id, because the orchestrator asks the
+    same question again after a deferral — the mark has not moved, so `pull`
+    chooses the same passages. The answer written for the first ask is
+    therefore found by the second, with no state kept anywhere but the files.
+
+    **Not quite byte-for-byte.** Each prompt fences its passages with a fresh
+    random delimiter (`framing.new_delimiter`), which is a defence and stays.
+    The digest is taken with the delimiter masked, so the same passages under a
+    different fence are the same question — and nothing else is ignored.
+    """
+    canonical = without_delimiters(f"{system or ''}\0{prompt}")
+    digest = hashlib.sha256(canonical.encode()).hexdigest()
+    return digest[:24]
+
+
+async def _call_relay(
+    agent: Agent, *, prompt: str, system: str | None, max_tokens: int, timeout_s: float
+) -> tuple[str, int, int]:
+    """A model that answers through files, not a network (`P4-18`).
+
+    For an operator-attended model — an interactive session reading the prompt
+    and writing the answer — standing in where an API key would otherwise be
+    needed. The prompt is written to ``<key>.prompt.json``; until
+    ``<key>.answer.txt`` exists, the call fails as an unreachable provider
+    does, and the run defers (§13.4). Once it exists, the answer goes through
+    the same parser, guards and write tools as any other model's, and the
+    registry row's model string is what provenance records.
+
+    Nothing is exposed by this: no port, no credential, no write tool outside
+    the orchestrator. What it trusts is the relay directory, which only the
+    operator can write to.
+    """
+    del max_tokens, timeout_s
+    root = os.environ.get(RELAY_DIR_ENV, "").strip()
+    if not root:
+        raise NotConfigured(
+            f"{agent.agent_id} is a relay agent and {RELAY_DIR_ENV} is unset, "
+            "so there is nowhere to leave its prompts."
+        )
+    relay = pathlib.Path(root)
+    key = relay_key(prompt, system)
+    answer = relay / f"{key}.answer.txt"
+
+    if answer.is_file():
+        text = answer.read_text(encoding="utf-8")
+        if text.strip():
+            # No provider reports usage here, so the ledger is charged the same
+            # estimate the reservation used. Counting nothing would make a
+            # relay run look free on the week-on-week comparison (§11.9).
+            used_in = max(1, (len(prompt) + len(system or "")) // CHARS_PER_TOKEN)
+            return text, used_in, max(1, len(text) // CHARS_PER_TOKEN)
+
+    pending = relay / f"{key}.prompt.json"
+    if not pending.exists():
+        relay.mkdir(parents=True, exist_ok=True)
+        pending.write_text(
+            json.dumps(
+                {
+                    "key": key,
+                    "agent_id": agent.agent_id,
+                    "model": agent.model,
+                    "system": system,
+                    "prompt": prompt,
+                },
+                ensure_ascii=False,
+                indent=1,
+            ),
+            encoding="utf-8",
+        )
+    raise ProviderError(f"{agent.agent_id}: waiting for {key}.answer.txt in the relay directory")
+
+
+_SHAPES = {
+    "anthropic": _call_anthropic,
+    "openai_compatible": _call_openai_compatible,
+    "relay": _call_relay,
+}
 
 
 async def complete(

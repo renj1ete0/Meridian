@@ -528,3 +528,65 @@ async def test_a_known_duplicate_is_not_reasoned_over(corpus, monkeypatch) -> No
     _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
 
     assert [passage.chunk_id for passage in batch.passages] == [ids[0], ids[1]]
+
+
+# --------------------------------------------------------------------------
+# The relay agent: a real `complete`, with a directory for a model (`P4-18`)
+# --------------------------------------------------------------------------
+
+
+async def test_a_relay_agent_defers_then_writes_what_it_was_told(
+    corpus, monkeypatch, tmp_path
+) -> None:
+    """The whole exchange through the real provider chain, budget and guards.
+
+    Asked once, the relay leaves the prompt and the stage defers, writing
+    nothing and leaving the mark alone. Answered, the same batch asks the same
+    question, finds the answer, and the edge is written with the relay row's
+    model as its provenance — the thing that makes a session-produced edge
+    distinguishable from an API-produced one for ever after.
+    """
+    sess, ids, marker = corpus
+    monkeypatch.setenv("MERIDIAN_RELAY_DIR", str(tmp_path))
+    agent = await sess.get(Agent, AGENT)
+    agent.provider, agent.model = "relay", "claude-opus-5-5"
+    await sess.flush()
+
+    journal = Journal(dry_run=False)
+    run, _ = await begin_or_resume(sess, agent_id=AGENT, now=NOW)
+    run.last_chunk_id = ids[0] - 1
+    await sess.flush()
+    batch = Batch()
+    await step(sess, run, journal=journal, now=NOW, batch=batch)  # pull
+
+    with pytest.raises(orchestrate.Deferred):
+        await step(sess, run, journal=journal, now=NOW, batch=batch)  # extract, unanswered
+
+    (left,) = tmp_path.glob("*.prompt.json")
+    asked = json.loads(left.read_text())
+    assert f"{marker} passage 0." in asked["prompt"], "the prompt carries the batch"
+    assert run.last_chunk_id == ids[0] - 1, "an unanswered batch must not move the mark"
+    assert not list(
+        await sess.scalars(select(Entity).where(Entity.canonical_name.like(f"{marker}%")))
+    )
+
+    (tmp_path / f"{asked['key']}.answer.txt").write_text(
+        answer(relation(f"{marker} Agency", f"{marker} Scheme")), encoding="utf-8"
+    )
+    # Resumed the way the next cycle resumes it. The batch object is kept only
+    # because a resumed run re-pulls from the unmoved mark, which is these
+    # same chunks — the property the relay key depends on.
+    run, resumed = await begin_or_resume(sess, agent_id=AGENT, now=NOW)
+    assert resumed and run.stage == "extract"
+    await step(sess, run, journal=journal, now=NOW, batch=batch)  # extract, answered
+
+    edge = (
+        await sess.scalars(
+            select(Edge)
+            .join(Entity, Edge.from_node == Entity.entity_id)
+            .where(Entity.canonical_name == f"{marker} Agency")
+        )
+    ).one()
+    assert (edge.produced_by, edge.model, edge.quality_tier) == (AGENT, "claude-opus-5-5", 4)
+    assert edge.supporting_chunk_ids == [ids[0]]
+    assert run.tokens_used and run.tokens_used > 0, "a relay answer is charged, not free"
