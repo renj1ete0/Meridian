@@ -11,6 +11,44 @@ add it here.
 
 ---
 
+## 0. In flight at the end of 2026-09-23 — read before starting
+
+Two delegated agents were still working in git worktrees when the session ended.
+Their reports went to that session, not this one, so check their branches directly:
+
+| Task | Branch / worktree | What it was told |
+|---|---|---|
+| `P2-21` topics from content | `worktree-agent-ae5c754b3e8137972` · `.claude/worktrees/agent-ae5c754b3e8137972` | Add `sources.crawled_for`; make `topic_labels` content-derived and multi-label; update every consumer; calibrate on the live corpus **read-only**; `--demote-offtopic` gated and **not applied**; one commit `P2-21: …` whose body carries the calibration numbers |
+| `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | Line cleaners, a per-host repetition table, a re-chunk pass that protects cited chunks; measured before/after on the live corpus **read-only**; one commit `B-43: …` |
+
+To pick them up: `git log --oneline main..<branch>`. A commit there → read its body
+(the calibration report), cherry-pick onto `main` with `--no-commit`, resolve (both
+may add Alembic revisions from the same head — re-parent the second onto the first),
+run `make test` and the web checks, then bump, changelog, `TASKS.md`, commit.
+**Apply to the live stack only after reading the numbers**: `P2-21`'s labels, then
+decide on off-topic demotion; `B-43`'s report, then `--apply`. No commit →
+`git -C <worktree> status` shows whether work was left uncommitted; if so, finish it
+in that worktree rather than starting over.
+
+Other state worth knowing before touching anything:
+
+- **Crawler stopped**, relay agent (`claude-code-session`) **disabled**, everything
+  else up at `v0.117.1`. The relay's next batch is chunk 3,360; the prompt file for it
+  may still be in `.localdata/relay` and is harmless.
+- **Deploying without restarting Postgres**: `docker compose -f docker-compose.local.yml
+  build <svc>` then `up -d --no-deps <svc>`; migrations via `run --rm --no-deps tools
+  alembic upgrade head` after `build tools`. Plain `up -d --build <svc>` restarted
+  Postgres twice under a running crawl (see §3).
+- **Looking at the UI**: the operator judges screens against `docs/design/*.dc.html`
+  and the design canvas <https://claude.ai/artifact/PJtF8cqTSnUvW7qGd5ozay>. A headless
+  screenshot needs Playwright (`npm i playwright && npx playwright install chromium`
+  in a scratch folder); the script used on 2026-09-23 lived in that session's scratch
+  directory and is gone. Screenshot dark and light, compare with the mock, before
+  calling UI work done.
+- **Operator decisions to honour**: fewer screens, each useful; a reworded attribute
+  value may replace the old one (`B-39`); matrix and coverage grid cut; right-click
+  steering on the map; circle size = passages collected, with a key.
+
 ## 1. Where the build actually is
 
 **`v0.110.0`. 2940 backend tests against a real Postgres, 335 frontend.**
@@ -1795,6 +1833,20 @@ carry about 9% of the variance, and the page says so. `/admin` → Crawl
 (`P6-25`) reports `crawling` against the live worker. **Neither page has been
 looked at in a browser by the session that built it** — no browser tooling was
 available — so layout is verified only by tests and a production build.
+
+### 2026-09-23 (afternoon): the relay, five resolver and pipeline defects, and a frontend rebuilt to its mocks
+
+The relay agent (`P4-18`) answered 74 batches through chunk 3,359: 257 entities and
+197 edges, every one through the validated write tools. Running it found `B-35`
+(acronym expansion hid the node a name already had), `B-36` (every run restarted at
+chunk 1), `B-37` (ties resolved by heap order), `B-38` (`merge_log` inside AGE's
+catalog on any database migrated from empty) and `B-40` (the embedding half of
+entity resolution had never run) — none visible to the suite, each now with a test
+that fails on the old code. Four delegated agents rebuilt the shell and landing
+(`P6-27`), Admin (`P6-28`), the graph workspace (`P6-01`–`P6-03`) and a 3D map
+(`P6-29`), each screenshotted against its mock; all deployed. 307 site-furniture
+pages were demoted to junk (`B-42`). The operator then set the direction recorded in
+`TASKS.md`'s "Resume here".
 
 ## 5. What to build next
 

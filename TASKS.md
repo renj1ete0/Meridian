@@ -16,67 +16,68 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.113.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 3022 backend tests
-against a real Postgres, 380 frontend.
+**`v0.117.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
+against a real Postgres, 616 frontend.
 
-**The graph has its first edges.** `P4-18`'s relay agent let an interactive session
-stand in for an API key: chunks 1–40 produced 20 edges and 2 tags on the live
-stack, and the re-run exposed `B-35`. An API key is no longer the only way to
-synthesise — but a session answers about one batch of forty passages at a time, so
-at corpus scale it is a key or a local model.
+## Resume here (written 2026-09-23, end of session)
 
-**Two screens to look at the corpus with.** `/map` (`P6-26`) draws the embedding
-space — a sample of passages placed by PCA, coloured by topic, hover to read,
-click to open. Admin → Crawl (`P6-25`) is the dashboard for a long run: hourly
-fetches, outcome mix, queue, embedding backlog and a liveness verdict that
-tells a stalled crawl from one that is only backing off.
+**The direction changed today, and it is the operator's.** The goal is a system that
+shows *how topics, terms and documents connect* — "walkability → transport → health →
+biology" — and **fewer screens, each of them useful**, rather than views that look
+good. The agreed shape, three screens and Admin:
 
-The crawl runs unattended and widens its own frontier through four channels — links,
-sitemaps, search and citations. The corpus is **searchable**: hybrid retrieval over
-pgvector and `tsvector` fused by reciprocal rank, behind an HTTP API, a web interface
-and an MCP surface. Admin steers topics, per-domain fetch policy and the gazetteer.
+- **Find** — search with a *neighbourhood panel* beside the results (inner ring:
+  concepts a passage states a link to; outer ring: near in meaning), and the node
+  page (`P6-01`–`P6-03`, built).
+- **Map** — the corpus as named, **nested areas** (region › area › sub-area, so any
+  number of subjects stays readable), circle area = passages collected (with a size
+  key), an outline for weak or stale areas; click a line for its *bridge*; **route is
+  a mode** (right-click → "Route from here…"); **steering by right-click** (more, less,
+  make a topic, watch) and right-click on empty space to **suggest a new term** to
+  crawl. The 3D point cloud (`P6-29`) becomes a toggle here, not a screen.
+- **Gaps** — one ranked list of concrete gaps, each with its reason and a one-click
+  action: thin or weak areas, routes with no cited link, question-set items that
+  score low.
+- **Admin** — as is.
 
-**Three things gate almost everything that is left.**
+**Cut, by decision:** the topic × topic matrix, the coverage grid (it would be
+near-empty — nine attribute values in the whole graph — and its axes are arbitrary),
+and separate Sources, Timeline, Geography and Frontier screens; those return, if at
+all, as map filters. The mockups for the kept views are on the design canvas at
+<https://claude.ai/artifact/PJtF8cqTSnUvW7qGd5ozay> (Areas zoomed out and in, Term
+neighbourhood; Route and Coverage boards there predate the cut).
 
-1. **`P1-16`, the 48-hour run.** It has not happened, and it is what `P2-09` — the
-   go/no-go on whether searching this corpus is useful with no model involved — has to
-   be judged against. Judging search quality over a corpus this small measures nothing.
-   `P0-15`'s held-out question set must be written *before* that judgement, not after.
-2. **A Cloudflare account**, for `P3-05` and the rest of `P3-09`. The code side is done
-   and tested; what is missing is a tunnel, an Access application and an AUD tag.
-3. **An agent with a key.** Phase 4's first
-   three stages are built as of `P4-16`: `pull` chooses a batch, `extract` and
-   `tag` each send a prompt, parse the answer and write through the four tools,
-   and a batch survives a malformed answer. Against a fake model the whole path
-   writes edges, tags, entities and the mark. **What has never happened is a
-   call to a real one**, and two things stand in the way — a registry row with
-   a working key, and a budget row, since an unconfigured cap refuses rather
-   than reading as unlimited. **Neither is code**, and as of `P4-17` nothing
-   else is either: the orchestrator has its own image and runs §6.3's schedule
-   as a service, and a dry cycle over the real corpus reports the 40 passages
-   and 47,840 characters it would send.
+**Build order** (tasks below): data quality first — clustering noise into "areas"
+makes useless areas — then the Map, then Find's panel, then Gaps.
 
-**Buildable today** is one entry, and it is a run rather than code.
+1. `P2-21` topics from content, multi-label — **an agent was mid-task at session
+   end**, see the handover's "In flight"
+2. `B-43` boilerplate inside pages — **an agent was mid-task**, same
+3. `B-44` duplicate documents, `B-45` soft-404 pages
+4. `P6-30` areas, `P6-31` bridges → `P6-34` Map screen and `P6-35` steering from it
+5. `P6-32` route, `P6-33` neighbourhood (+ Find panel)
+6. `P2-22` question-set runner, `P6-36` Gaps
 
-1. **`P1-16`** — the 48h unattended run. Everything it would exercise now
-   exists: a crawl that reads the attention vector (`B-26`), an embedder that
-   keeps pace and says when it does not (`B-25`, `B-22`), gates that skip
-   identifiers and site furniture (`B-23`), and a snapshot that actually
-   captures what the run produced (`B-31`).
+**Needs the operator:** review `eval/questions.yaml` (`P0-15`, drafted, 30 items,
+all `reviewed: false` — scope of robotics/biology/economics, the three gap items,
+one or two real questions of their own, the go/no-go threshold).
 
-`P5-01` stays open on its own argument — entity co-occurrence has no consumer until
-`P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
+**The local stack** is up at `v0.117.1` with the **crawler stopped** (`docker compose
+-f docker-compose.local.yml start worker` resumes it) and the relay agent
+**disabled**. The site is `http://localhost:21116`. The graph: 257 entities, 197
+edges, built by the relay through chunk 3,359; the next stretch is mostly
+engineering-handbook chapters and legal boilerplate, so resume the relay after
+`P2-21`'s off-topic demotion, not before.
 
-**The local stack is running as this was written**, at `v0.112.1`, crawling. The
-crawl left running on 2026-09-22 ran two minutes — the machine was shut down —
-and the stack came back on its own at boot, which is how `B-33` was found. It is
-not `P1-16`; that wants a decision about whether to start clean. Stop it with
-`docker compose -f docker-compose.local.yml stop worker`; the rest can stay up,
-and the site is at `http://localhost:21116`.
+The older gates still stand: **`P1-16`** (the 48h run, now likely 24h — see the
+handover), **a Cloudflare account** (`P3-05`, `P3-09`), and **an API key or local
+model** for synthesis at corpus scale — the relay (`P4-18`) answers one batch of
+forty passages at a time.
 
-Done 2026-09-23: `B-33`, `P6-26`, `P6-25`, `B-34`, `P4-18`, `B-35`. The daily jobs
-(`digest`, `sweep`, `harvest`) were run by hand against the live corpus and all
-exited cleanly; `harvest` left 1,035 ambiguous gazetteer terms for review.
+Done 2026-09-23: `B-33`–`B-38`, `B-40`, `B-42`, `P4-18`, `P6-01`–`P6-03`,
+`P6-25`–`P6-29`, `P0-15` drafted; `B-39` decided; `B-41` open. The daily jobs were
+run by hand against the live corpus and exited cleanly; `harvest` left 1,035
+ambiguous gazetteer terms for review; 307 furniture pages were demoted to junk.
 
 Done this stretch: `P4-16`, `P4-17`, `P6-23`, and twelve defects the first real
 corpus turned up (`B-21`–`B-32`). **Six of those were found by watching the stack
@@ -1153,6 +1154,56 @@ deploy runbook whose first two commands could not work (`B-17`).
       passes against a function that never suppresses anything
 
 ## Phase 6 · Interface — the payoff layer
+
+### The connections work (agreed 2026-09-23 — see "Resume here")
+
+- [~] `P2-21` **Topics come from what a page says, not why it was crawled** —
+      `sources.crawled_for` keeps the provenance; `topic_labels` becomes
+      content-derived and multi-label (source vector vs topic prototypes,
+      threshold + margin; `{}` = examined and off-topic); every consumer updated;
+      a gated `--demote-offtopic`. Agent in flight at session end
+- [~] `B-43` **Headers, footers, banners and menus inside extracted pages** —
+      measured: 17 site-wide lines recurring 1,937 times (one banner on 752 of a
+      site's 960 pages). Line cleaners (link-only, skip-links, menu blocks, PDF
+      running heads), a per-host repetition table the chunker consults, a
+      re-chunk pass that never loses a cited chunk. Agent in flight at session end
+- [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
+      embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
+      novelty gate: a PDF and its HTML page, listing pages under query-string
+      variants, `www.`/bare-host twins. Mark the later source as a duplicate of the
+      earlier at document level so it is neither searched nor synthesised twice
+- [ ] `B-45` **Soft-404 pages crawled as content** — pages titled "Page not found"
+      served with 200 and chunked. Detect at fetch (title/body shape) and demote
+      what is stored
+- [ ] `P6-30` **Areas: the corpus as nested clusters** — hierarchical clustering
+      of passage embeddings (2–3 levels), each area named by its most
+      distinctive terms, with per-area stats (passages, sources, tier mix,
+      recency) and a stable layout position; recomputed on a schedule; honest
+      about what an area is (a cluster, not a topic)
+- [ ] `P6-31` **Bridges between areas** — cited claims whose evidence spans the
+      two areas, plus the most similar cross-area passages and the terms both
+      share; the two kinds kept apart everywhere they are shown
+- [ ] `P6-32` **Route across claims and areas** — extends `P6-03`'s path search
+      to areas and terms; every hop labelled cited or similar; "no cited route
+      within N hops" is a result and feeds Gaps
+- [ ] `P6-33` **Neighbourhood** — term → nearest entities by claim and nearest
+      passages/terms by embedding; shown as a panel beside Find's results
+- [ ] `P6-34` **The Map screen** — areas zoomable by level, size key, weak/stale
+      outline, bridge panel, route mode, 3D toggle (`P6-29` moves inside it),
+      "jump to an area or term"
+- [ ] `P6-35` **Steering from the map** — right-click an area or term: more, less,
+      make a topic, watch; right-click empty space: suggest a term, queued as a
+      search seed. Through the existing boost/topic/seed machinery, so it is
+      reversible and in the steering audit
+- [ ] `P2-22` **Run the question set** — run `eval/questions.yaml`, record graded
+      scores per run in `eval/runs/`, compare runs; an agent's grades are a
+      proposal, the operator's are the score
+- [ ] `P6-36` **Gaps** — a ranked list from thin/weak areas, failed routes and low
+      question-set scores, each with its reason and an action
+- [-] Topic × topic matrix and a coverage grid — **cut** (2026-09-23): the grid
+      would be near-empty on nine attribute values and its axes are arbitrary; the
+      matrix does not scale and its question is answered by bridges and routes
+
 
 *Checkpoint: reading the graph is genuinely better than reading the sources.*
 
