@@ -1,0 +1,687 @@
+# Held-out question set (spec §14.1; task P0-15). Read eval/README.md first.
+#
+# HELD OUT: none of these questions may be used as a seed, a search-tuning
+# query, a benchmark query, a gazetteer prompt or a steering reason. They are
+# the test, not the training data. Editing a question changes the set: bump
+# `set_version` and record why in `changes`.
+#
+# Written without looking at the corpus: no searches, no API calls, no database
+# reads, no crawled text. Sources used: the spec (§1, §5, §7, §9, §10, §12,
+# §14), config/topics.yaml, config/attributes.yaml, docs/design-questions.md,
+# and the operator's stated goal.
+#
+# Every item is a draft by an agent. `reviewed: false` stays until the operator
+# has read the item and either accepted, corrected or removed it.
+
+set_version: 1
+status: draft            # draft -> reviewed -> frozen (frozen = in use for P2-09)
+changes:
+  - version: 1
+    date: 2026-09-23
+    note: first draft, written before any run against the corpus
+
+kinds:
+  lookup: a fact a single good source should state
+  evidence: what is the evidence that X affects Y; several sources, agreement and disagreement shown
+  connection: cross-topic; how A relates to B through intermediate concepts
+  comparison: does a finding from elsewhere transfer to Singapore, and on which attribute dimensions
+  gap: the right answer is that the corpus does not know, or only partly knows
+  contested: sources are expected to disagree; the disagreement is the answer
+
+# One scale for every item. The kind-specific anchors below say what each
+# point means for that kind; per-item `wrong_if` entries cap the score at 0.
+rubric:
+  scale: [0, 1, 2, 3]
+  general:
+    0: nothing usable found within the time budget, or what is presented as the answer is wrong, unsourced, or answers a different question
+    1: relevant material exists in the results but assembling an answer took digging well beyond the top results, or a required element is missing
+    2: the required elements are present and each is traceable to a source; minor gaps
+    3: everything in `what_a_good_answer_contains`, reached without fighting the tool, with source tier and date visible
+  by_kind:
+    lookup:
+      2: the fact is found in at least one source of the expected tier, with its date
+      3: as 2, and a superseded or conflicting version is either absent or clearly marked as such
+    evidence:
+      2: at least three independent sources, tiers visible, direction of each finding readable
+      3: as 2, and the study designs are distinguishable (association versus causal design) and any disagreement is shown rather than averaged away
+    connection:
+      2: a chain of at least three linked concepts from one topic to the other, every link backed by a source
+      3: as 2, and the kind of each link is clear (measured effect, mechanism, assertion) and at least one weak or missing link is identifiable
+    comparison:
+      2: the evidence from the other place is found, and at least one dimension of similarity is named against config/attributes.yaml
+      3: as 2, and at least one disanalogy is named with a source for it; the transfer is qualified, not asserted
+    gap:
+      0: unrelated or adjacent material is presented, or would be read, as though it answered the question
+      2: the absence is evident (empty or thin results, a degraded or coverage caveat) and nothing misleading ranks at the top
+      3: as 2, and the nearest real evidence is identifiable as nearest, not as the answer
+    contested:
+      2: sources on both sides are found, each with its tier
+      3: as 2, and the contested pair is visible as such (contested list, contested edge or side-by-side results), with enough provenance to see who argues which side (funding, institution, date)
+
+questions:
+
+  # ── lookup ──────────────────────────────────────────────────────────────
+
+  - id: Q01
+    kind: lookup
+    question: What must an organisation satisfy before it may trial an autonomous vehicle on public roads in Singapore, and which authority grants that permission?
+    topics: [autonomous-vehicle]
+    what_a_good_answer_contains:
+      sources: government-tier source (statute, regulation, or the regulator's own published guidance); press only as corroboration
+      concepts:
+        - "the approving authority"
+        - "the legal instrument"
+        - "conditions of the trial (e.g. insurance, safety operator, test areas)"
+        - "validity period"
+      must_show: the date of the rule, and whether it has been amended since
+      wrong_if:
+        - a press summary is the only source
+        - a superseded rule is presented as current without a date
+        - another jurisdiction's rule is presented as Singapore's
+    grading: {rubric: lookup}
+    notes: Baseline regulatory lookup. Tests that government sources outrank press for a factual question and that time (valid_from / valid_to) is visible.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q02
+    kind: lookup
+    question: Which on-demand or demand-responsive public bus services has Singapore trialled or run, over what periods, and what outcome did the authority or operator report?
+    topics: [on-demand-bus]
+    what_a_good_answer_contains:
+      sources: government or operator publications; press acceptable for dates if government is absent, marked as such
+      concepts:
+        - "service name or area"
+        - "start and end dates"
+        - "the operator"
+        - "a reported outcome such as ridership, cost, or the reason it ended or continued"
+      must_show: whether each service is still running, and the source's date
+      wrong_if:
+        - ride-hailing or private shuttle services are listed as public on-demand bus
+        - a trial is described as ongoing on the strength of a launch announcement alone
+    grading: {rubric: lookup}
+    notes: The on-demand-bus topic's core factual anchor. Also checks entity resolution; a service referred to by several names should not appear as several services.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q03
+    kind: lookup
+    question: What targets or standards has Singapore set for sheltered walkways, particularly between homes and transit stations?
+    topics: [walkability]
+    what_a_good_answer_contains:
+      sources: government-tier (planning or transport authority, design guidelines, programme announcements)
+      concepts:
+        - "the programme name"
+        - "the coverage target or distance"
+        - "the date set"
+        - "progress reported against it"
+      must_show: the target as stated by the source, not paraphrased into a different unit
+      wrong_if:
+        - a figure is given with no source
+        - a target and an achieved figure are conflated
+    grading: {rubric: lookup}
+    notes: Tests the shade_provision topic-local attribute and whether scheme names in the gazetteer help retrieval.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q04
+    kind: lookup
+    question: How does Singapore's road pricing work — what does the charge vary by, and what changes to its technology or charging basis have been announced?
+    topics: [economics]
+    what_a_good_answer_contains:
+      sources: government-tier for the mechanism; peer-reviewed or institutional for descriptions of design intent
+      concepts:
+        - "what the charge varies by (location, time, vehicle type, or others the sources give)"
+        - "how rates are revised"
+        - "the announced change and its date"
+      must_show: which description is current and which is historical
+      wrong_if:
+        - an announced change is presented as already in effect without a date
+    grading: {rubric: lookup}
+    notes: Anchors the economics topic in transport pricing, the link the operator named. Also a test of acronym handling in search.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q05
+    kind: lookup
+    question: What rules govern robots (delivery robots, service robots) operating on public footpaths in Singapore or a comparison city?
+    topics: [robotics, walkability]
+    what_a_good_answer_contains:
+      sources: government-tier regulation or guidance for at least one jurisdiction
+      concepts:
+        - "the jurisdiction"
+        - "what is permitted where"
+        - "speed or size limits if stated"
+        - "who is liable or who approves"
+      must_show: which jurisdiction each rule belongs to
+      wrong_if:
+        - rules for personal mobility devices or AVs on roads are presented as rules for footpath robots without saying so
+    grading: {rubric: lookup}
+    notes: One of few items anchoring the robotics topic in the transport and walkability focus. If robotics is meant more broadly, the operator should re-aim this.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q06
+    kind: lookup
+    question: Which indices are used to measure outdoor heat stress on pedestrians, and what does each one take into account?
+    topics: [biology, walkability]
+    what_a_good_answer_contains:
+      sources: peer-reviewed (biometeorology, physiology) or institutional standards bodies
+      concepts:
+        - "at least two named indices"
+        - "the inputs each uses (air temperature, humidity, radiation, wind, metabolic rate, clothing)"
+        - "what each is calibrated against"
+      must_show: that the indices differ, and on what
+      wrong_if:
+        - air temperature alone is presented as heat stress
+    grading: {rubric: lookup}
+    notes: The biology end of the walkability chain. A definitional question the corpus should answer from one good review.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  # ── evidence ────────────────────────────────────────────────────────────
+
+  - id: Q07
+    kind: evidence
+    question: What is the evidence that neighbourhood walkability increases adults' physical activity?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: several peer-reviewed studies, ideally including a review; at least one outside North America
+      concepts:
+        - "how walkability is measured (an index or its components)"
+        - "how activity is measured (self-report versus device)"
+        - "residential self-selection"
+        - "effect direction and size with units"
+      must_show: which studies are cross-sectional and which use longitudinal or natural-experiment designs
+      wrong_if:
+        - an association from cross-sectional studies is presented as an established causal effect
+        - only advocacy or press sources are cited
+    grading: {rubric: evidence}
+    notes: The most-studied link in the operator's walkability to health chain. If the corpus cannot do this one, it cannot do the chain.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q08
+    kind: evidence
+    question: What is the evidence that demand-responsive transit costs less per passenger than fixed-route buses, and under what conditions does that hold?
+    topics: [on-demand-bus, economics]
+    what_a_good_answer_contains:
+      sources: operator or authority evaluations, peer-reviewed cost studies, institutional reports
+      concepts:
+        - "cost per passenger or per trip"
+        - "demand density"
+        - "service area"
+        - "vehicle size"
+        - "subsidy"
+      must_show: the conditions (density, time of day, area type) each finding applies to
+      wrong_if:
+        - a single pilot's cost is generalised without its conditions
+        - vendor marketing is the main source and is not marked as such
+    grading: {rubric: evidence}
+    notes: Tests whether qualifiers (area type, time of day) are retrievable alongside the number, the reason observations.qualifiers exists.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q09
+    kind: evidence
+    question: What does the evidence show about how autonomous shuttles and buses perform in mixed traffic with pedestrians — interventions by safety operators, incidents, and interactions with people on foot?
+    topics: [autonomous-vehicle, robotics, walkability]
+    what_a_good_answer_contains:
+      sources: pilot evaluations (government or institutional), peer-reviewed field studies, incident reports
+      concepts:
+        - "disengagement or intervention rate"
+        - "incident types"
+        - "operating speed"
+        - "pedestrian behaviour around the vehicle"
+        - "the ODD of each pilot"
+      must_show: the ODD and date of each pilot, since results are not comparable across ODDs
+      wrong_if:
+        - rates from different ODDs are compared without saying so
+        - old pilot results are presented without dates
+    grading: {rubric: evidence}
+    notes: Connects the AV and robotics topics through the pedestrian. Ageing matters here; §9 notes AV results go stale fast.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q10
+    kind: evidence
+    question: What is the evidence that shade — tree canopy or covered walkways — increases walking in hot climates?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: peer-reviewed studies from hot or tropical cities; government design guidance as context, not as evidence
+      concepts:
+        - "shade measure"
+        - "walking outcome (counts, route choice, duration)"
+        - "thermal comfort"
+        - "climate of the study site"
+      must_show: the climate of each study, and whether the outcome is measured walking or stated preference
+      wrong_if:
+        - temperate-climate studies are presented as evidence for hot climates without saying so
+        - design guidance is cited as proof of an effect
+    grading: {rubric: evidence}
+    notes: The shade_provision attribute doing its job; also a filter test (climate).
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  # ── connection ──────────────────────────────────────────────────────────
+
+  - id: Q11
+    kind: connection
+    question: Trace how neighbourhood walkability connects to biological health outcomes. Which intermediate concepts link them, and what supports each link?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: a different source can back each link; peer-reviewed for the health and biological end
+      concepts:
+        - "a chain of at least three links, e.g. walkability or transit access to daily walking, walking to physical activity, activity to a physiological or clinical marker"
+      must_show: for each link whether it is a measured effect, a mechanism, or an assertion; where the chain is weakest
+      wrong_if:
+        - the chain is asserted end to end by a single advocacy source
+        - a link has no source
+    grading: {rubric: connection}
+    notes: The operator's own example (walkability to transport to health to biology). Path mode (§12.2) exists for this question.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q12
+    kind: connection
+    question: Does on-demand bus service change household car ownership or car use, and through what intermediate links (access to rail, ridership, trip substitution)?
+    topics: [on-demand-bus, economics]
+    what_a_good_answer_contains:
+      sources: evaluations of on-demand services, travel-behaviour studies, car-ownership studies
+      concepts:
+        - "first and last mile access"
+        - "ridership"
+        - "which trips it replaced (car, walking, cycling, fixed-route bus)"
+        - "car ownership or use"
+      must_show: which link has direct evidence and which is inferred; whether replaced trips were car trips or walking trips
+      wrong_if:
+        - ridership growth is presented as evidence of reduced car use without a source showing substitution
+    grading: {rubric: connection}
+    notes: The operator's second example chain. The substitution-from-walking step links it back to walkability.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q13
+    kind: connection
+    question: How do regulatory requirements shape the operational design domain of passenger AV deployments, and how does the ODD then limit which service models (fixed route, on-demand, mixed traffic) are viable?
+    topics: [autonomous-vehicle, on-demand-bus]
+    what_a_good_answer_contains:
+      sources: regulations or regulator guidance; deployment reports that state their ODD
+      concepts:
+        - "regulatory_requirement"
+        - "ODD"
+        - "service_model"
+        - "vehicle_class"
+        - "at least one concrete deployment as an example"
+      must_show: the direction of each link (rule limits ODD; ODD limits service model) with a source for each
+      wrong_if:
+        - ODD is treated as a vehicle capability only, with the regulatory side missing
+    grading: {rubric: connection}
+    notes: The operator's third example. Exercises the AV-specific node types (§5.4) end to end.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q14
+    kind: connection
+    question: How does transport pricing — fares, road pricing, parking charges — connect to walking behaviour and to land or property values near stations?
+    topics: [economics, walkability]
+    what_a_good_answer_contains:
+      sources: economics or transport-economics studies, land-value capture literature, travel-behaviour studies
+      concepts:
+        - "a price signal"
+        - "mode choice"
+        - "walking to or from transit"
+        - "station proximity"
+        - "land or property value"
+      must_show: which links are measured and in which city
+      wrong_if:
+        - a link is supported only by a source from an unrelated context and this is not stated
+    grading: {rubric: connection}
+    notes: Economics to walkability through transport pricing, as the operator framed it.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q15
+    kind: connection
+    question: How do sidewalk robots and AV pick-up and drop-off connect to pedestrian space — which concepts link robotics to sidewalk width, kerb use and pedestrian comfort?
+    topics: [robotics, autonomous-vehicle, walkability]
+    what_a_good_answer_contains:
+      sources: studies of pedestrian and robot interaction, kerb-management guidance, design guidance
+      concepts:
+        - "sidewalk_width"
+        - "kerb space"
+        - "pedestrian flow or comfort"
+        - "robot or vehicle behaviour"
+        - "a rule or design standard"
+      must_show: which links are observed and which are anticipated
+      wrong_if:
+        - speculative commentary is presented as observed effect
+    grading: {rubric: connection}
+    notes: Tests whether robotics connects to the transport topics at all, or sits as an island. An island here is a useful finding in itself.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q16
+    kind: connection
+    question: How does removing the driver change the cost structure of on-demand bus service, and which cost components do sources say dominate before and after?
+    topics: [autonomous-vehicle, on-demand-bus, economics]
+    what_a_good_answer_contains:
+      sources: cost models (peer-reviewed or institutional), operator data where public
+      concepts:
+        - "driver cost share"
+        - "vehicle and sensor cost"
+        - "remote supervision"
+        - "insurance"
+        - "fleet size"
+        - "utilisation"
+      must_show: whether cost figures are modelled or observed, and their date
+      wrong_if:
+        - modelled savings are presented as observed
+    grading: {rubric: connection}
+    notes: Three topics meeting at one question; the kind of cross-topic edge the graph exists to form.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q17
+    kind: connection
+    question: How does population ageing connect to the design of walkable streets and of on-demand or autonomous services — through which physical capacities (walking speed, walking distance, heat tolerance) and which design responses?
+    topics: [biology, walkability, on-demand-bus, autonomous-vehicle]
+    what_a_good_answer_contains:
+      sources: gerontology or physiology studies for capacities; design guidance and service evaluations for responses
+      concepts:
+        - "a measured capacity that declines with age"
+        - "a walking-environment design response"
+        - "a service-design response (stop spacing, door-to-door, boarding)"
+      must_show: that the biological premise is sourced separately from the design response
+      wrong_if:
+        - design claims are presented with no link to a sourced capacity
+    grading: {rubric: connection}
+    notes: A Singapore-relevant chain that makes biology load-bearing rather than decorative.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q18
+    kind: connection
+    question: How does tropical heat affect first- and last-mile mode choice (walk, feeder bus, on-demand bus) through the body's thermal stress?
+    topics: [biology, walkability, on-demand-bus]
+    what_a_good_answer_contains:
+      sources: thermal physiology or comfort studies; travel-behaviour studies in hot climates
+      concepts:
+        - "heat stress index or thermal comfort"
+        - "walking distance tolerance"
+        - "mode choice for access trips"
+        - "shade or shelter as mitigation"
+      must_show: the climate and city of each study
+      wrong_if:
+        - the physiological link is assumed with no source
+    grading: {rubric: connection}
+    notes: Joins the heat-stress lookup (Q06) to transport behaviour. A chain where every hop could plausibly be in the corpus but the whole chain might not be.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  # ── comparison / transfer ───────────────────────────────────────────────
+
+  - id: Q19
+    kind: comparison
+    question: Walkability and physical-activity findings mostly come from temperate cities. On which dimensions do they plausibly transfer to Singapore, and where does the comparison break down?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: the original studies, plus sources describing Singapore on the same dimensions
+      concepts:
+        - "climate"
+        - "density"
+        - "modal_share"
+        - "income_level"
+        - "at least one named source city"
+      must_show: a dimension of similarity and a disanalogy, each sourced (spec §7.2)
+      wrong_if:
+        - transfer is asserted on one shared dimension with no disanalogy considered
+    grading: {rubric: comparison}
+    notes: The spec's central caution about shallow analogy, applied to the most-studied link.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q20
+    kind: comparison
+    question: Would results from demand-responsive transit in low-density suburban or rural settings transfer to Singapore's dense, rail-served housing estates?
+    topics: [on-demand-bus]
+    what_a_good_answer_contains:
+      sources: evaluations from the source settings; descriptions of Singapore's estates and feeder network
+      concepts:
+        - "density"
+        - "land_constraint"
+        - "modal_share"
+        - "existing feeder bus coverage"
+        - "trip lengths"
+      must_show: that density and existing transit coverage differ, and which results survive that difference
+      wrong_if:
+        - a rural result is applied directly to Singapore
+    grading: {rubric: comparison}
+    notes: The on-demand literature is weighted to the settings least like Singapore; this checks the system says so.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q21
+    kind: comparison
+    question: Which cities with equatorial or tropical climates have published evidence on pedestrian thermal-comfort interventions, and how do they compare with Singapore on governance capacity and income?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: studies from at least two tropical cities other than Singapore; sources on those cities' governance or income
+      concepts:
+        - "climate"
+        - "governance_capacity"
+        - "income_level"
+        - "the intervention type"
+      must_show: the similarity (climate) and the disanalogies (governance, income) named separately
+      wrong_if:
+        - shared climate is treated as sufficient for transfer
+    grading: {rubric: comparison}
+    notes: Taken almost directly from spec §7.2's example of a shallow inference to guard against.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q22
+    kind: comparison
+    question: Do large-scale driverless ride-hailing or shuttle deployments in other countries' cities transfer to Singapore, given differences in road network, land constraint, governance and fleet scale?
+    topics: [autonomous-vehicle, economics]
+    what_a_good_answer_contains:
+      sources: deployment reports or evaluations from at least one other city; Singapore policy sources
+      concepts:
+        - "odd"
+        - "fleet_size"
+        - "land_constraint"
+        - "governance_capacity"
+        - "modal_share"
+      must_show: the ODD and fleet size of the comparison deployment, and at least one reason it might not transfer
+      wrong_if:
+        - a comparison city's fleet or ODD is described without a date
+    grading: {rubric: comparison}
+    notes: Uses both AV topic-local attributes and the global ones in one comparison.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q23
+    kind: comparison
+    question: Does evidence on congestion or road pricing from other cities transfer to Singapore, or Singapore's to them — on which dimensions?
+    topics: [economics]
+    what_a_good_answer_contains:
+      sources: evaluations of at least one other city's scheme; Singapore sources
+      concepts:
+        - "income_level"
+        - "modal_share"
+        - "governance_capacity"
+        - "public acceptance"
+        - "the scheme design"
+      must_show: that the direction of transfer is considered both ways
+      wrong_if:
+        - differences in scheme design are ignored when comparing outcomes
+    grading: {rubric: comparison}
+    notes: Singapore is a source as well as a target here; tests that comparison edges are not one-way.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  # ── gap ─────────────────────────────────────────────────────────────────
+
+  - id: Q24
+    kind: gap
+    question: What were the internal per-trip costs to the operators under Singapore's on-demand bus contracts, broken down by cost component?
+    topics: [on-demand-bus, economics]
+    what_a_good_answer_contains:
+      sources: none expected; internal operator data is out of scope (public sources only, spec §1)
+      concepts:
+        - "the absence itself"
+        - "at most, published contract values or aggregate subsidy figures, labelled as not the thing asked"
+      must_show: that no source gives the breakdown
+      wrong_if:
+        - a cost model from another city, or an aggregate figure, ranks at the top and reads as the answer
+    grading: {rubric: gap}
+    notes: Tests honesty at the scope boundary. If a public source genuinely gives this breakdown, the operator should move the item to lookup.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q25
+    kind: gap
+    question: Is there a randomised controlled trial showing that improving walkability in a Singapore housing estate changed residents' biomarkers, such as blood pressure or blood glucose?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: probably none; observational studies and trials elsewhere are the nearest evidence
+      concepts:
+        - "study design"
+        - "the difference between a trial and an observational study"
+      must_show: that nearby evidence is observational or from elsewhere, and is labelled that way
+      wrong_if:
+        - an observational study is presented as a trial
+        - a trial from another city is presented as a Singapore result
+    grading: {rubric: gap}
+    notes: A design-specific gap. The easy failure is to return the most similar studies and let the reader assume they answer it.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q26
+    kind: gap
+    question: What is Singapore residents' public acceptance of autonomous vehicles now, this year?
+    topics: [autonomous-vehicle]
+    what_a_good_answer_contains:
+      sources: surveys, with their fieldwork dates
+      concepts:
+        - "survey date"
+        - "sample"
+        - "the acceptance measure"
+      must_show: how old the newest survey is; if it is more than a year or two old, that the question is not answered for "now" (spec §9 on topic-dependent ageing)
+      wrong_if:
+        - an old survey is presented as current opinion
+        - the survey date is not visible
+    grading: {rubric: gap}
+    notes: A staleness gap rather than an absence gap. §9 names AV acceptance as the example of fast-ageing evidence.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  # ── contested ───────────────────────────────────────────────────────────
+
+  - id: Q27
+    kind: contested
+    question: At scale, do autonomous vehicles reduce or increase total vehicle-kilometres travelled and congestion?
+    topics: [autonomous-vehicle, economics]
+    what_a_good_answer_contains:
+      sources: modelling studies and empirical studies on both sides; institutional reports
+      concepts:
+        - "induced demand"
+        - "empty running"
+        - "pooling or shared use"
+        - "pricing"
+        - "value of travel time"
+      must_show: which results are modelled and which observed, and the assumptions that drive the sign (pooling rate, pricing)
+      wrong_if:
+        - only one direction is shown
+        - model results are presented as observed
+    grading: {rubric: contested}
+    notes: A known live debate; §9 says contested nodes locate where written output has something to argue. Also tests stance counter-seeding (§7.4).
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q28
+    kind: contested
+    question: Do on-demand or microtransit services complement fixed-route transit and walking, or draw riders away from them?
+    topics: [on-demand-bus, walkability]
+    what_a_good_answer_contains:
+      sources: evaluations finding complement and evaluations finding substitution
+      concepts:
+        - "mode substitution"
+        - "feeder role"
+        - "walking trips replaced"
+        - "network design"
+      must_show: the setting of each finding, since the answer may depend on it
+      wrong_if:
+        - vendor or operator promotional material is the only source on one side and is not marked
+    grading: {rubric: contested}
+    notes: The operator's interest in how topics connect includes where they pull against each other; this is where on-demand and walkability do.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q29
+    kind: contested
+    question: Does higher urban density improve or harm health — walkability and activity benefits against heat, air pollution and noise exposure?
+    topics: [walkability, biology]
+    what_a_good_answer_contains:
+      sources: epidemiological studies on both sides; reviews
+      concepts:
+        - "density"
+        - "physical activity"
+        - "urban heat island"
+        - "air pollution exposure"
+        - "a health outcome"
+      must_show: that the disagreement may be about which outcome is measured, not only about the sign
+      wrong_if:
+        - benefits and harms are netted into one verdict with no source doing that netting
+    grading: {rubric: contested}
+    notes: A contested question whose two sides sit in different literatures; tests whether the graph brings them together.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
+
+  - id: Q30
+    kind: contested
+    question: Is road pricing regressive — does it burden lower-income households more — or can the use of its revenue make it progressive?
+    topics: [economics]
+    what_a_good_answer_contains:
+      sources: economics studies, distributional analyses, government evaluations, advocacy on both sides
+      concepts:
+        - "incidence by income"
+        - "modal_share of low-income groups"
+        - "revenue use"
+        - "alternatives available"
+      must_show: provenance (institution, funder) of the sources on each side (spec §8)
+      wrong_if:
+        - one side is shown as settled fact
+    grading: {rubric: contested}
+    notes: Where stance and funding extraction (§8) should make bias readable as structure rather than a verdict.
+    reference_answer: null
+    drafted_by: agent
+    reviewed: false
