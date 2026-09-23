@@ -1469,6 +1469,38 @@ against the *merged* value, not against the presence of a key in some row.
 
 ---
 
+### A retry sooner than a cached refusal is the same refusal three times
+
+`B-33`. An unreadable robots.txt refuses its origin for `ERROR_TTL_S` (ten
+minutes); the queue's retry backoff is seconds. Making the outcome retryable was
+therefore not a fix on its own — all three attempts would have been served the
+cached "no" and the URL failed anyway under a new label. The general rule: when
+a failure's cause is cached, the retry has to outlive the cache
+(`queueing.retry_floor_s`). Anything else that caches a negative verdict wants
+the same check.
+
+### `numpy.linalg.eigh` on a 1024 × 1024 float32 matrix takes seven seconds
+
+On this machine, host and container alike, while the matrix product that built
+it took 30 ms. Found by timing the corpus map on the real corpus; nothing in the
+suite runs at that size. The map needs two components, so `corpusmap.project`
+uses seeded subspace iteration, pinned against the exact decomposition by a
+test. Anything else reaching for a full decomposition of embedding-sized
+matrices should measure first.
+
+### Tailwind drops a colour utility it cannot resolve, silently
+
+`B-34`. `border-border` compiled, rendered, and passed every test; the border
+fell back to `currentColor`. `tests/tokens.test.ts` now fails any colour utility
+whose role is not in `app.css`'s `@theme`.
+
+### Two sessions running `make test` against the dev database collide
+
+Seen twice while a delegated agent ran the suite in parallel: one error in a
+`runs` heartbeat test and one failure in `test_admin_agents.py`, both reading
+shared tables the other run was writing. Both passed on rerun. Parallel agents
+are fine for writing code; run the full suite from one of them at a time.
+
 ## 4. What is verified live, and what is only tested
 
 Tests are hermetic by design, so "the tests pass" and "it works against the real web"
@@ -1702,6 +1734,22 @@ model call. `P2-19`'s fallback moved again without being designed for — `B-27`
 found it had been carrying every backfill since the sidecar was built.
 
 ---
+
+### 2026-09-23: a reboot, a boot-race defect, and two new screens
+
+The crawl left running overnight did not run: the machine shut down two minutes
+after it started, and `restart: unless-stopped` brought the stack back at boot.
+The worker then came up before DNS, which is how `B-33` surfaced. After the fix,
+the live crawl produced a real `robots_unreachable` — an origin timing out —
+and the queue held the task roughly eleven minutes between attempts, re-reading
+robots.txt each time, before giving up with an error that says "could not be
+read" rather than "disallowed".
+
+`/map` (`P6-26`) serves 3000 of ~25,000 passages in about a second; the two axes
+carry about 9% of the variance, and the page says so. `/admin` → Crawl
+(`P6-25`) reports `crawling` against the live worker. **Neither page has been
+looked at in a browser by the session that built it** — no browser tooling was
+available — so layout is verified only by tests and a production build.
 
 ## 5. What to build next
 

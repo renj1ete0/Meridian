@@ -16,8 +16,14 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.110.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 2940 backend tests
-against a real Postgres, 335 frontend.
+**`v0.112.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 3010 backend tests
+against a real Postgres, 380 frontend.
+
+**Two screens to look at the corpus with.** `/map` (`P6-26`) draws the embedding
+space — a sample of passages placed by PCA, coloured by topic, hover to read,
+click to open. Admin → Crawl (`P6-25`) is the dashboard for a long run: hourly
+fetches, outcome mix, queue, embedding backlog and a liveness verdict that
+tells a stalled crawl from one that is only backing off.
 
 The crawl runs unattended and widens its own frontier through four channels — links,
 sitemaps, search and citations. The corpus is **searchable**: hybrid retrieval over
@@ -55,13 +61,14 @@ and an MCP surface. Admin steers topics, per-domain fetch policy and the gazette
 `P5-01` stays open on its own argument — entity co-occurrence has no consumer until
 `P5-03`, and a pass nothing reads is the shape `B-15` found five instances of.
 
-**The local stack is running as this was written.** A crawl started at 15:20Z on
-2026-09-22 with every fix from that day live, against the corpus the 2h20m run
-produced. It is not `P1-16` — that is a deliberate 48h run and wants a decision
-about whether to start clean — but it is the same stack doing the same work, so
-whatever state it is in when somebody next looks is evidence. Stop it with
-`docker compose -f docker-compose.local.yml stop worker`; the rest of the stack
-can stay up, and the corpus stays searchable at `http://localhost:21116`.
+**The local stack is running as this was written**, at `v0.112.1`, crawling. The
+crawl left running on 2026-09-22 ran two minutes — the machine was shut down —
+and the stack came back on its own at boot, which is how `B-33` was found. It is
+not `P1-16`; that wants a decision about whether to start clean. Stop it with
+`docker compose -f docker-compose.local.yml stop worker`; the rest can stay up,
+and the site is at `http://localhost:21116`.
+
+Done 2026-09-23: `B-33`, `P6-26`, `P6-25`, `B-34`.
 
 Done this stretch: `P4-16`, `P4-17`, `P6-23`, and twelve defects the first real
 corpus turned up (`B-21`–`B-32`). **Six of those were found by watching the stack
