@@ -1565,6 +1565,22 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [ ] `B-39` **A rephrased attribute value replaces the last one** — ⚑ human.
+      `tag_entity` keeps one value per entity and attribute, so a later
+      passage wording the same fact differently ("defined area or routes and
+      specified speed range" after "short predefined routes at low speed")
+      overwrites it, citations included in the replacement only. §11.12 says a
+      better model replaces a judgement and keeps every citation; nothing says
+      what an *equal-tier* rewording should do. Needs a decision: keep first,
+      keep both as observations, or accumulate citations under the newer
+      wording. Seen by the relay agent, batch 1
+- [ ] `B-40` **Near-duplicate names are not reaching adjudication** — "autonomous
+      shuttles" / "driverless shuttles", and "transit ridership" / "public
+      transport demand" / "public transport use", became separate nodes with no
+      middle-band notice. Scoring with no embedding on the mention probe leaves
+      only string similarity, which these pairs fail. Check whether entity
+      embeddings exist at resolution time (`block` accepts one; `resolve_mention`
+      passes none) before tuning thresholds
 - [x] `B-38` **On a fresh database, `merge_log` was created inside AGE's catalog** —
       `v0.113.3`. The graph-store revision set `ag_catalog` first on the
       search path with `SET LOCAL`, and Alembic runs a whole `upgrade head`
