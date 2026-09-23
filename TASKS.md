@@ -1543,6 +1543,17 @@ Things worth doing that don't belong to a phase yet.
       co-occur only in the probe chunk, and reported the lexical arm finding
       nothing at all. With `or` the real figure is 13–16%: fusion earns its
       second query
+- [x] `B-35` **Re-reading an acronym founded another node for it** —
+      `v0.112.2`. With a gazetteer expansion, `resolution.block` searched only
+      the expanded words, so "ODD" looked for "operational design domain" and
+      never found the node literally named "ODD"; the expansion's node scored
+      into the middle band and a new "ODD" was created, with an adjudication
+      notice, on every re-read. A name of two letters had no token long enough
+      to search by at all. Blocking now unions the written and expanded
+      tokens and always includes the exact name, sorted first. Found on the
+      first live synthesis run (`P4-18`), where a resumed batch re-ran
+      `extract` and changed the entity list the `tag` prompt carries. One
+      duplicate made before the fix is on the live stack, queued for a person
 - [x] `B-34` **Two Admin panels drew borders in the text colour** —
       `v0.112.1`. `RunsPanel` and `AgentsPanel` used `border-border`, which
       names no role. Tailwind does not reject a utility it cannot resolve; it

@@ -19,7 +19,7 @@ import datetime as dt
 import uuid
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from meridian_core.mentions import resolve_mention
 from meridian_core.models import Entity, Notification
@@ -202,3 +202,49 @@ async def test_a_run_may_not_create_an_annotation(sess, marker: str) -> None:
 async def test_a_blank_mention_is_refused(sess, marker: str) -> None:
     with pytest.raises(ValidationError):
         await resolve(sess, "   ", marker, chunks=[1])
+
+
+async def test_an_acronym_resolves_to_itself_even_when_it_has_an_expansion(
+    sess, marker: str
+) -> None:
+    """`B-35`. With a gazetteer expansion, blocking searched only the expanded
+    words — so the node literally named by the acronym was never a candidate,
+    the expansion's node scored into the middle band, and every re-read of the
+    acronym founded another copy of it. Found on the first live synthesis run,
+    where a resumed batch created a second node for a name it had already made.
+    """
+    acronym = marker.upper()
+    # The expansion shares no word with the acronym, as a real one does not —
+    # which is exactly why searching by the expansion alone cannot find it.
+    expansions = {marker: "operational design domain"}
+
+    first = await resolve(sess, acronym, marker, chunks=[1], node_type="odd", expansions=expansions)
+    await resolve(
+        sess,
+        f"operational design domains {marker}",
+        marker,
+        chunks=[2],
+        node_type="odd",
+        expansions=expansions,
+    )
+    again = await resolve(sess, acronym, marker, chunks=[3], node_type="odd", expansions=expansions)
+
+    assert not again.created, "re-reading a name that already has a node made another one"
+    assert again.entity.entity_id == first.entity.entity_id
+    count = await sess.scalar(
+        select(func.count()).select_from(Entity).where(Entity.canonical_name == acronym)
+    )
+    assert count == 1
+
+
+async def test_a_name_too_short_to_tokenise_still_finds_itself(sess, marker: str) -> None:
+    """Blocking drops tokens of two characters or fewer, so a two-letter name
+    produced no candidates at all and was re-created on every mention."""
+    name = "Q7"
+    first = await resolve(sess, name, marker, chunks=[1], node_type="concept")
+    try:
+        again = await resolve(sess, name, marker, chunks=[2], node_type="concept")
+        assert not again.created
+        assert again.entity.entity_id == first.entity.entity_id
+    finally:
+        await sess.rollback()

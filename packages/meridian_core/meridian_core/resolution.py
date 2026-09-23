@@ -32,7 +32,7 @@ import re
 import unicodedata
 from collections.abc import Sequence
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
@@ -309,8 +309,19 @@ async def block(
     Entities that already redirect are excluded: they are not destinations, and
     merging into one would build a chain somebody has to follow.
     """
-    normalised = normalise(name, expansions=expansions)
-    tokens = [token for token in normalised.split() if len(token) > 2]
+    # The name as written *and* as expanded (`B-35`). Expanded alone, "ODD"
+    # searched for "operational design domain" and never found the node
+    # literally named "ODD", so every re-read of an acronym founded another
+    # copy of it. The two token sets are unioned rather than chosen between:
+    # blocking is meant to over-include, and scoring decides.
+    tokens = sorted(
+        {
+            token
+            for variant in (normalise(name), normalise(name, expansions=expansions))
+            for token in variant.split()
+            if len(token) > 2
+        }
+    )
 
     base = select(Entity).where(
         Entity.node_type == node_type,
@@ -320,11 +331,20 @@ async def block(
     found: dict[int, str] = {}
     rows: list[Entity] = []
 
-    if tokens:
-        # Any shared token is enough to be *considered* — blocking is meant to
-        # be generous and cheap, and the scoring step is what is strict.
-        like = [Entity.canonical_name.ilike(f"%{token}%") for token in tokens]
-        by_name = (await sess.execute(base.where(or_(*like)).limit(limit))).scalars().all()
+    # Any shared token is enough to be *considered* — blocking is meant to be
+    # generous and cheap, and the scoring step is what is strict. The exact
+    # name is always a candidate, because a name of two letters has no token
+    # long enough to search by and was otherwise re-created on every mention.
+    like = [Entity.canonical_name.ilike(f"%{token}%") for token in tokens]
+    exact = func.lower(Entity.canonical_name) == name.strip().lower()
+    if name.strip():
+        # Exact matches first, so a common word's ILIKE hits can never push the
+        # node this name already has past the candidate limit.
+        by_name = (
+            (await sess.execute(base.where(or_(exact, *like)).order_by(exact.desc()).limit(limit)))
+            .scalars()
+            .all()
+        )
         for row in by_name:
             found[row.entity_id] = "name"
             rows.append(row)

@@ -234,6 +234,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.112.2] — 2026-09-23
+
+### Fixed
+
+- `B-35`: entity resolution missed the node a mention already had whenever
+  the name was a gazetteer acronym, or two characters long, and created a
+  duplicate on every re-read. Blocking now searches the name as written as
+  well as expanded, and always considers the exact name
+
 ## [0.112.1] — 2026-09-23
 
 ### Fixed
