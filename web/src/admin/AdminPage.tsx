@@ -1,67 +1,88 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { AgentsPanel } from './AgentsPanel'
+import type { BoostChange } from './BoostsTable'
 import { CrawlHealthPanel } from './CrawlHealthPanel'
 import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
-import { GazetteerQueue } from './GazetteerQueue'
+import { GazetteerQueue, PAGE_SIZE } from './GazetteerQueue'
+import { PinsPanel } from './PinsPanel'
 import { RunsPanel } from './RunsPanel'
-import { TopicPanel } from './TopicPanel'
+import {
+  DEFAULT_SECTION,
+  SECTIONS,
+  hrefForSection,
+  useAdminTheme,
+  usePathSection,
+  type Section,
+} from './sections'
+import { SteeringRail } from './SteeringRail'
+import { AddTopicDialog, ArchiveDialog, PREVIEW_DEBOUNCE_MS } from './TopicDialogs'
+import { TopicPanel, type Draft } from './TopicPanel'
+import { LABEL, Loading, PageHeader } from './ui'
 import {
   ApiError,
   actOnFetchPolicy,
   addSeed,
-  editAgent,
+  addTopic,
   decideGazetteerTerm,
+  decideGazetteerTerms,
+  editAgent,
   editGazetteerTerm,
   editTopic,
-  getFetchPolicy,
   getAgents,
   getCrawlHealth,
+  getFetchPolicy,
   getFirstRun,
   getGazetteerQueue,
   getRuns,
   getSteeringLog,
   getTopics,
+  previewAddTopic,
+  previewEditTopic,
   removeSeed,
   type Agents,
   type CrawlHealth,
-  type FirstRun,
-  type Runs,
-  type GazetteerEntityType,
-  type GazetteerQueue as Queue,
   type DomainStatus,
   type FetchPolicyPage,
+  type FirstRun,
+  type GazetteerEntityType,
+  type GazetteerQueue as Queue,
   type GazetteerState,
+  type RunRow,
+  type Runs,
   type SteeringEntry,
   type TopicStatus,
   type Topics,
 } from '../lib/api'
+import { onInternalClick } from '../lib/route'
 
 /**
- * Admin (task P6-13, spec §12.6).
+ * Admin (tasks P6-13, P6-28; spec §12.6; `AdminLight` mock).
  *
  * §12.6 splits the interface in two: Explore is where reading happens and Admin
  * is where configuration changes. Most of Admin is CRUD over tables that already
- * exist, and the spec says as much — "generated forms are fine; effort belongs
- * in Explore". So this screen is deliberately plain.
+ * exist — "generated forms are fine; effort belongs in Explore" — so the design
+ * is one plain, dense language used everywhere: a left section nav, a page
+ * header, bordered tables with mono heads, and on the steering pages a right
+ * rail with the audit and the last runs.
+ *
+ * **Paper by default.** Design-system §2: light "exists for docs, Admin and
+ * print". Admin renders on paper unless somebody has explicitly chosen dark,
+ * and then it follows them — see `adminTheme`.
  *
  * **A closed Admin is explained, not hidden.** These are the only routes that
  * write anything, and the API refuses them outright unless callers are
  * identified or somebody has said this instance is not exposed. That returns
- * 503, and a 503 rendered as "something went wrong" would send whoever deployed
- * it looking for an outage — so the message the API sends is shown as written,
- * because it names the two environment variables that fix it.
+ * 503, and the message the API sends is shown as written, because it names the
+ * two environment variables that fix it.
  *
- * **Lists are refetched after each change, not patched in place.** Both
- * surfaces here have the same property: one row's state is computed from all
- * the others. A gazetteer verdict depends on every other approved term, and a
- * topic's share depends on every other active topic — so updating only the row
- * that was clicked would leave the screen stating something that stopped being
- * true the moment it was clicked.
+ * **Lists are refetched after each change, not patched in place.** One row's
+ * state is computed from all the others — a gazetteer verdict depends on every
+ * other approved term, a topic's share on every other active topic — so
+ * updating only the row that was clicked would leave the screen stating
+ * something that stopped being true the moment it was clicked.
  */
-
-type Phase = 'loading' | 'ready' | 'failed'
 
 /** How often the crawl-health panel refetches while it is open (`P6-25`).
  * Its finest grain is a minute of silence, so faster than this redraws the
@@ -69,40 +90,49 @@ type Phase = 'loading' | 'ready' | 'failed'
  * goes unshown for minutes after it could have been. */
 export const HEALTH_REFRESH_MS = 30_000
 
-type Section = 'gazetteer' | 'topics' | 'health' | 'domains' | 'agents' | 'runs' | 'seeds'
+/** Sections that carry the steering rail. The rail answers "what moved, and
+ * what did it steer", which is a question about these pages only; on a table
+ * of thousands of terms it would be width taken from the table. */
+const WITH_RAIL: readonly Section[] = ['topics', 'boosts']
 
-const SECTIONS: { key: Section; label: string }[] = [
-  { key: 'gazetteer', label: 'Gazetteer' },
-  { key: 'topics', label: 'Topics' },
-  // `P6-25`. Beside Domains because they are read together: an outcome mix
-  // full of refusals is answered by that domain's policy row.
-  { key: 'health', label: 'Crawl' },
-  { key: 'domains', label: 'Domains' },
-  // `P6-23`. Adjacent because they are read together: a run that deferred and
-  // the registry row that made it defer are one question asked twice.
-  { key: 'agents', label: 'Agents' },
-  { key: 'runs', label: 'Runs' },
-  // Last, because it is the one section that stops mattering. It is also the
-  // first thing anybody needs on a fresh install, which is why `AdminPage`
-  // opens on it when nothing has been crawled yet rather than leaving somebody
-  // to find it.
-  { key: 'seeds', label: 'Seeds' },
-]
+/** Fetch-policy rows per page — the API's ceiling. */
+const DOMAIN_PAGE = 200
+
+function message(cause: unknown, fallback: string): string | null {
+  if (cause instanceof DOMException && cause.name === 'AbortError') return null
+  return cause instanceof ApiError ? cause.message : fallback
+}
 
 export function AdminPage() {
-  const [section, setSection] = useState<Section>('gazetteer')
-  const [state, setState] = useState<GazetteerState>('pending')
-  const [queue, setQueue] = useState<Queue | null>(null)
-  const [phase, setPhase] = useState<Phase>('loading')
+  const chosen = usePathSection()
+  const theme = useAdminTheme()
+  const [firstRun, setFirstRun] = useState(false)
+  const section: Section = chosen ?? (firstRun ? 'seeds' : DEFAULT_SECTION)
+
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const [state, setState] = useState<GazetteerState>('pending')
+  const [offset, setOffset] = useState(0)
+  const [queue, setQueue] = useState<Queue | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const [topics, setTopics] = useState<Topics | null>(null)
   const [entries, setEntries] = useState<readonly SteeringEntry[]>([])
+  const [recent, setRecent] = useState<readonly RunRow[] | null>(null)
   const [steering, setSteering] = useState<string | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [preview, setPreview] = useState<{ key: string; topics: Topics } | null>(null)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [archiving, setArchiving] = useState<string | null>(null)
 
   const [policy, setPolicy] = useState<FetchPolicyPage | null>(null)
   const [domainStatus, setDomainStatus] = useState<DomainStatus | null>(null)
+  const [domainQuery, setDomainQuery] = useState('')
+  const [domainSearch, setDomainSearch] = useState('')
+  const [domainOffset, setDomainOffset] = useState(0)
 
   const [agents, setAgents] = useState<Agents | null>(null)
   const [runs, setRuns] = useState<Runs | null>(null)
@@ -110,52 +140,58 @@ export function AdminPage() {
 
   const [run, setRun] = useState<FirstRun | null>(null)
   const [seedBusy, setSeedBusy] = useState<number | null>(null)
-  const [adding, setAdding] = useState(false)
+  const [seedAdding, setSeedAdding] = useState(false)
 
-  const load = useCallback(
-    (next: GazetteerState, signal?: AbortSignal) => {
-      setPhase('loading')
-      return getGazetteerQueue({ state: next }, { signal })
-        .then((body) => {
-          setQueue(body)
-          setPhase('ready')
-          setError(null)
-        })
-        .catch((cause: unknown) => {
-          if (cause instanceof DOMException && cause.name === 'AbortError') return
-          setError(
-            cause instanceof ApiError ? cause.message : 'The gazetteer queue could not be loaded.',
-          )
-          setPhase('failed')
-        })
-    },
-    [],
-  )
+  const load = useCallback((next: GazetteerState, from: number, signal?: AbortSignal) => {
+    return getGazetteerQueue({ state: next, limit: PAGE_SIZE, offset: from }, { signal })
+      .then((body) => {
+        setQueue(body)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        const text = message(cause, 'The gazetteer queue could not be loaded.')
+        if (text) setError(text)
+      })
+  }, [])
 
   const loadTopics = useCallback((signal?: AbortSignal) => {
-    return Promise.all([getTopics({ signal }), getSteeringLog({ limit: 20 }, { signal })])
+    return Promise.all([getTopics({ signal }), getSteeringLog({ limit: 60 }, { signal })])
       .then(([vector, log]) => {
         setTopics(vector)
         setEntries(log.entries)
         setError(null)
       })
       .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === 'AbortError') return
-        setError(cause instanceof ApiError ? cause.message : 'Steering could not be loaded.')
+        const text = message(cause, 'Steering could not be loaded.')
+        if (text) setError(text)
       })
   }, [])
 
-  const loadPolicy = useCallback((next: DomainStatus | null, signal?: AbortSignal) => {
-    return getFetchPolicy({ status: next ?? undefined, limit: 200 }, { signal })
-      .then((page) => {
-        setPolicy(page)
-        setError(null)
-      })
-      .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === 'AbortError') return
-        setError(cause instanceof ApiError ? cause.message : 'Domain policy could not be loaded.')
-      })
+  const loadRecent = useCallback((signal?: AbortSignal) => {
+    // The rail's runs. A failure leaves the rail saying it is loading rather
+    // than replacing the steering page's own error with one about a sidebar.
+    return getRuns({ limit: 4 }, { signal })
+      .then((body) => setRecent(body.rows))
+      .catch(() => undefined)
   }, [])
+
+  const loadPolicy = useCallback(
+    (next: DomainStatus | null, q: string, from: number, signal?: AbortSignal) => {
+      return getFetchPolicy(
+        { status: next ?? undefined, q: q || undefined, limit: DOMAIN_PAGE, offset: from },
+        { signal },
+      )
+        .then((page) => {
+          setPolicy(page)
+          setError(null)
+        })
+        .catch((cause: unknown) => {
+          const text = message(cause, 'Domain policy could not be loaded.')
+          if (text) setError(text)
+        })
+    },
+    [],
+  )
 
   const loadAgents = useCallback((signal?: AbortSignal) => {
     return getAgents({ signal })
@@ -164,8 +200,8 @@ export function AdminPage() {
         setError(null)
       })
       .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === 'AbortError') return
-        setError(cause instanceof ApiError ? cause.message : 'The registry could not be loaded.')
+        const text = message(cause, 'The registry could not be loaded.')
+        if (text) setError(text)
       })
   }, [])
 
@@ -176,8 +212,8 @@ export function AdminPage() {
         setError(null)
       })
       .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === 'AbortError') return
-        setError(cause instanceof ApiError ? cause.message : 'Run history could not be loaded.')
+        const text = message(cause, 'Run history could not be loaded.')
+        if (text) setError(text)
       })
   }, [])
 
@@ -188,37 +224,35 @@ export function AdminPage() {
         setError(null)
       })
       .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === 'AbortError') return
         // The last good reading stays on screen under the error. A refresh
         // that failed says nothing about the crawl, and blanking the panel
         // would make an unreachable API look like a crawl with nothing to show.
-        setError(cause instanceof ApiError ? cause.message : 'Crawl health could not be loaded.')
+        const text = message(cause, 'Crawl health could not be loaded.')
+        if (text) setError(text)
       })
   }, [])
 
   const loadRun = useCallback(async (signal?: AbortSignal) => {
     try {
       setRun(await getFirstRun({ signal }))
-      setPhase('ready')
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === 'AbortError') return
-      setError(cause instanceof ApiError ? cause.message : 'Could not read the seed list.')
-      setPhase('failed')
+      const text = message(cause, 'Could not read the seed list.')
+      if (text) setError(text)
     }
   }, [])
 
-  // A fresh install opens on Seeds rather than Gazetteer. The gazetteer queue
-  // is empty until something has been crawled, so the default section on a new
+  // A fresh install opens on Seeds rather than the gazetteer. The queue is
+  // empty until something has been crawled, so the default section on a new
   // machine is a screen with nothing on it and no hint that the thing worth
-  // doing is elsewhere. Runs once: after that, Admin remembers nothing and the
-  // person picks.
+  // doing is elsewhere. Only for bare `/admin`: a link to a section is a
+  // choice, and is kept.
   useEffect(() => {
     const controller = new AbortController()
     void (async () => {
       try {
         const first = await getFirstRun({ signal: controller.signal })
         setRun(first)
-        if (first.is_first_run) setSection('seeds')
+        setFirstRun(first.is_first_run)
       } catch {
         // Not worth surfacing. This is a convenience, and a failure here
         // leaves Admin exactly where it would have been anyway.
@@ -227,17 +261,52 @@ export function AdminPage() {
     return () => controller.abort()
   }, [])
 
+  // A domain search is sent once typing settles, and starts from the first page.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDomainSearch(domainQuery.trim())
+      setDomainOffset(0)
+    }, PREVIEW_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [domainQuery])
+
+  // Leaving a section drops anything staged on it and any sentence about it.
+  useEffect(() => {
+    setError(null)
+    setNotice(null)
+    setDraft(null)
+  }, [section])
+
   useEffect(() => {
     const controller = new AbortController()
-    if (section === 'gazetteer') void load(state, controller.signal)
-    else if (section === 'topics') void loadTopics(controller.signal)
-    else if (section === 'seeds') void loadRun(controller.signal)
-    else if (section === 'agents') void loadAgents(controller.signal)
-    else if (section === 'runs') void loadRuns(controller.signal)
-    else if (section === 'health') void loadHealth(controller.signal)
-    else void loadPolicy(domainStatus, controller.signal)
+    const signal = controller.signal
+    if (section === 'gazetteer') void load(state, offset, signal)
+    else if (section === 'topics' || section === 'boosts') {
+      void loadTopics(signal)
+      void loadRecent(signal)
+    } else if (section === 'seeds') void loadRun(signal)
+    else if (section === 'agents') void loadAgents(signal)
+    else if (section === 'runs') void loadRuns(signal)
+    else if (section === 'health') void loadHealth(signal)
+    else if (section === 'domains')
+      void loadPolicy(domainStatus, domainSearch, domainOffset, signal)
     return () => controller.abort()
-  }, [domainStatus, load, loadAgents, loadHealth, loadPolicy, loadRuns, loadTopics, section, state])
+  }, [
+    domainOffset,
+    domainSearch,
+    domainStatus,
+    load,
+    loadAgents,
+    loadHealth,
+    loadPolicy,
+    loadRecent,
+    loadRun,
+    loadRuns,
+    loadTopics,
+    offset,
+    section,
+    state,
+  ])
 
   // Crawl health refreshes itself, and only while it can be seen: the panel is
   // for watching a long run, and a background tab polling all night is load
@@ -258,11 +327,39 @@ export function AdminPage() {
     }
   }, [loadHealth, section])
 
-  async function act(termId: number, run: () => Promise<unknown>) {
+  // A staged weight is previewed by the server once the slider settles. The
+  // preview is keyed by the draft it answers, so a slow answer to an earlier
+  // position can never be applied as if it were the current one.
+  const draftKey = draft ? `${draft.topic}=${draft.weight}` : null
+  useEffect(() => {
+    setRefusal(null)
+    if (!draft) {
+      setPreview(null)
+      return
+    }
+    const controller = new AbortController()
+    const key = `${draft.topic}=${draft.weight}`
+    const timer = window.setTimeout(() => {
+      previewEditTopic(draft.topic, { weight: draft.weight }, { signal: controller.signal })
+        .then((body) => setPreview({ key, topics: body }))
+        .catch((cause: unknown) => {
+          const text = message(cause, 'That weight could not be previewed.')
+          if (text) setRefusal(text)
+        })
+    }, PREVIEW_DEBOUNCE_MS)
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [draft])
+  const current = preview && preview.key === draftKey ? preview.topics : null
+
+  async function act(termId: number, work: () => Promise<unknown>) {
     setBusy(termId)
+    setNotice(null)
     try {
-      await run()
-      await load(state)
+      await work()
+      await load(state, offset)
     } catch (cause: unknown) {
       setError(cause instanceof ApiError ? cause.message : 'That change was not saved.')
     } finally {
@@ -270,196 +367,372 @@ export function AdminPage() {
     }
   }
 
-  // Shared by both write surfaces: one in-flight key, one error, and the list
-  // refetched by the caller. Both have the same property — a row's state is
-  // computed from the others — so patching in place would leave the screen
-  // stating something that stopped being true the moment it was clicked.
-  async function steer(key: string, run: () => Promise<unknown>) {
+  async function bulk(termIds: number[], decision: 'approve' | 'reject' | 'restore') {
+    setBulkBusy(true)
+    setNotice(null)
+    try {
+      const { rows } = await decideGazetteerTerms(termIds, decision)
+      const verb =
+        decision === 'approve' ? 'Approved' : decision === 'reject' ? 'Turned down' : 'Put back'
+      // Collisions are reported here as well as on the rows, because in the
+      // waiting view the approved rows leave the page — and the collision
+      // with them.
+      const collided = rows.filter((row) => row.withheld_reason === 'collision').length
+      setNotice(
+        `${verb} ${rows.length}.` +
+          (collided
+            ? ` ${collided} claim wording another term already claims, so they match nothing yet; they are under Approved.`
+            : ''),
+      )
+      await load(state, offset)
+    } catch (cause: unknown) {
+      setError(cause instanceof ApiError ? cause.message : 'Those decisions were not saved.')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  // Shared by every steering write: one in-flight key, one error, and the list
+  // refetched after.
+  async function steer(key: string, work: () => Promise<unknown>) {
     setSteering(key)
     try {
-      await run()
+      await work()
+      return true
     } catch (cause: unknown) {
       // A refused steering change names the bound that refused it. Replacing
       // that with a generic line throws away the only thing that says what to
       // change.
       setError(cause instanceof ApiError ? cause.message : 'That change was not saved.')
+      return false
     } finally {
       setSteering(null)
     }
   }
 
+  const steerTopic = (topic: string, work: () => Promise<unknown>) => {
+    // Any other change moves the base a staged weight was previewed against.
+    setDraft(null)
+    void steer(topic, async () => {
+      await work()
+      await loadTopics()
+    })
+  }
+
+  const onStatus = (topic: string, status: TopicStatus) =>
+    steerTopic(topic, () => editTopic(topic, { status }))
+  const onPinned = (topic: string, pinned: boolean) =>
+    steerTopic(topic, () => editTopic(topic, { pinned }))
+  const onBoost = (topic: string, change: BoostChange) =>
+    steerTopic(topic, () => editTopic(topic, change))
+
+  const steeringPage = WITH_RAIL.includes(section)
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <nav className="mb-8 flex items-center gap-4">
-        {SECTIONS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setSection(key)}
-            aria-pressed={section === key}
-            className={`font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ${
-              section === key ? 'text-text' : 'text-text-muted'
-            }`}
+    <div
+      data-theme={theme}
+      data-admin-section={section}
+      className="flex min-h-[calc(100vh-54px)] flex-col bg-ground text-text lg:flex-row"
+    >
+      <nav
+        aria-label="Admin sections"
+        className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 lg:w-[196px] lg:flex-col lg:gap-[3px] lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-[18px]"
+      >
+        {(['steering', 'system'] as const).map((group) => (
+          <div
+            key={group}
+            className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch lg:gap-[3px]"
           >
-            {label}
-          </button>
+            <div
+              className={`${LABEL} hidden px-3.5 pb-2.5 lg:block ${group === 'system' ? 'lg:pt-5' : ''}`}
+            >
+              {group}
+            </div>
+            {SECTIONS.filter((s) => s.group === group).map((def) => {
+              const href = hrefForSection(def.key)
+              const on = section === def.key
+              return (
+                <a
+                  key={def.key}
+                  href={href}
+                  onClick={onInternalClick(href)}
+                  aria-current={on ? 'page' : undefined}
+                  title={def.unbuilt ? `Not built yet (${def.unbuilt})` : undefined}
+                  className={`whitespace-nowrap px-3 py-2 text-[13px] ${
+                    on
+                      ? 'border-l-2 border-accent-graph bg-surface pl-2.5 font-medium text-text'
+                      : def.unbuilt
+                        ? 'text-text-faint hover:text-text-muted'
+                        : 'text-text-muted hover:text-text'
+                  }`}
+                >
+                  {def.label}
+                </a>
+              )
+            })}
+          </div>
         ))}
       </nav>
 
-      {error ? (
-        // The API's own sentence, shown as written. For a closed Admin it names
-        // the variables that open it, and replacing it with a generic line would
-        // throw away the only actionable thing in the response.
-        <p className="mb-6 border border-accent-attention bg-surface p-4 text-[length:var(--text-small)] text-accent-attention">
-          {error}
-        </p>
+      <main className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 sm:px-8 sm:py-7">
+        {error ? (
+          // The API's own sentence, shown as written. For a closed Admin it
+          // names the variables that open it, and replacing it with a generic
+          // line would throw away the only actionable thing in the response.
+          <p
+            role="alert"
+            className="border border-accent-attention bg-surface px-[18px] py-3 text-[12.5px] text-accent-attention"
+          >
+            {error}
+          </p>
+        ) : null}
+        {notice ? (
+          <p
+            role="status"
+            className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text"
+          >
+            {notice}
+          </p>
+        ) : null}
+
+        {section === 'topics' ? (
+          topics ? (
+            <TopicPanel
+              rows={topics.rows}
+              sumsTo={topics.sums_to}
+              entries={entries}
+              busy={steering}
+              draft={draft}
+              preview={current}
+              refusal={refusal}
+              onDraft={(topic, weight) => setDraft({ topic, weight })}
+              onRevert={() => setDraft(null)}
+              onApply={() => {
+                if (!draft) return
+                const { topic, weight } = draft
+                void steer(topic, async () => {
+                  await editTopic(topic, { weight })
+                  setDraft(null)
+                  await loadTopics()
+                })
+              }}
+              onStatus={onStatus}
+              onPinned={onPinned}
+              onArchive={(topic) => setArchiving(topic)}
+              onAddTopic={() => setAdding(true)}
+              onBoost={onBoost}
+            />
+          ) : (
+            <Loading what="the topics" />
+          )
+        ) : null}
+
+        {section === 'boosts' ? (
+          topics ? (
+            <PinsPanel rows={topics.rows} busy={steering} onPinned={onPinned} onBoost={onBoost} />
+          ) : (
+            <Loading what="the topics" />
+          )
+        ) : null}
+
+        {section === 'seeds' ? (
+          run ? (
+            <FirstRunPanel
+              run={run}
+              busy={seedBusy}
+              adding={seedAdding}
+              onAdd={(url, kind, topic) =>
+                void (async () => {
+                  setSeedAdding(true)
+                  setError(null)
+                  try {
+                    await addSeed({ url_or_query: url, task_type: kind, topic })
+                    setRun(await getFirstRun())
+                  } catch (cause) {
+                    setError(cause instanceof ApiError ? cause.message : 'That seed was not added.')
+                  } finally {
+                    setSeedAdding(false)
+                  }
+                })()
+              }
+              onRemove={(taskId) =>
+                void (async () => {
+                  setSeedBusy(taskId)
+                  setError(null)
+                  try {
+                    await removeSeed(taskId)
+                    setRun(await getFirstRun())
+                  } catch (cause) {
+                    setError(
+                      cause instanceof ApiError ? cause.message : 'That seed was not removed.',
+                    )
+                  } finally {
+                    setSeedBusy(null)
+                  }
+                })()
+              }
+            />
+          ) : (
+            <Loading what="the seed list" />
+          )
+        ) : null}
+
+        {section === 'domains' ? (
+          policy ? (
+            <FetchPolicyPanel
+              rows={policy.rows}
+              counts={{ active: policy.active, paused: policy.paused, blocked: policy.blocked }}
+              status={domainStatus}
+              busy={steering}
+              query={domainQuery}
+              offset={policy.offset}
+              hasMore={policy.has_more}
+              pageSize={DOMAIN_PAGE}
+              onQuery={setDomainQuery}
+              onPage={setDomainOffset}
+              onStatusFilter={(next) => {
+                setDomainStatus(next)
+                setDomainOffset(0)
+              }}
+              onUnblock={(domain) =>
+                void steer(domain, async () => {
+                  await actOnFetchPolicy(domain, 'unblock')
+                  await loadPolicy(domainStatus, domainSearch, domainOffset)
+                })
+              }
+              onForgetRender={(domain) =>
+                void steer(domain, async () => {
+                  await actOnFetchPolicy(domain, 'forget-render')
+                  await loadPolicy(domainStatus, domainSearch, domainOffset)
+                })
+              }
+            />
+          ) : (
+            <Loading what="fetch policy" />
+          )
+        ) : null}
+
+        {section === 'agents' ? (
+          agents ? (
+            <AgentsPanel
+              rows={agents.rows}
+              unserved={agents.unserved_tasks}
+              busy={steering}
+              onToggle={(agentId, enabled) =>
+                void steer(agentId, async () => {
+                  // The whole registry comes back, because `unserved_tasks` is
+                  // a fact across rows: disabling the only agent that declares
+                  // a task type changes what every other row's screen says.
+                  setAgents(await editAgent(agentId, enabled))
+                })
+              }
+            />
+          ) : (
+            <Loading what="the registry" />
+          )
+        ) : null}
+
+        {section === 'health' ? (
+          health ? (
+            <CrawlHealthPanel health={health} />
+          ) : (
+            <Loading what="crawl health" />
+          )
+        ) : null}
+
+        {section === 'runs' ? (
+          runs ? (
+            <RunsPanel rows={runs.rows} total={runs.total} active={runs.active} />
+          ) : (
+            <Loading what="run history" />
+          )
+        ) : null}
+
+        {section === 'enrichment' ? (
+          <PageHeader title="Enrichment queue">
+            Not built yet. The table this screen will read exists, but nothing fills it until{' '}
+            <span className="font-mono">P7-07</span>: figure descriptions, OCR at a higher quality
+            tier and chart reading, each started by a person rather than on a schedule. There is
+            nothing queued to show.
+          </PageHeader>
+        ) : null}
+
+        {section === 'gazetteer' ? (
+          queue ? (
+            <GazetteerQueue
+              rows={queue.rows}
+              state={state}
+              counts={{
+                pending: queue.pending,
+                approved: queue.approved,
+                rejected: queue.rejected,
+              }}
+              busy={busy}
+              bulkBusy={bulkBusy}
+              offset={queue.offset}
+              hasMore={queue.has_more}
+              onState={(next) => {
+                setState(next)
+                setOffset(0)
+              }}
+              onPage={setOffset}
+              onDecide={(termId, decision) =>
+                void act(termId, () => decideGazetteerTerm(termId, decision))
+              }
+              onEdit={(termId, entityType: GazetteerEntityType) =>
+                void act(termId, () => editGazetteerTerm(termId, { entity_type: entityType }))
+              }
+              onBulk={(ids, decision) => void bulk(ids, decision)}
+            />
+          ) : error ? null : (
+            <Loading what="the gazetteer queue" />
+          )
+        ) : null}
+      </main>
+
+      {steeringPage ? (
+        <div className="shrink-0 border-t border-line bg-surface px-[22px] py-7 lg:w-[300px] lg:border-l lg:border-t-0">
+          <SteeringRail entries={entries} runs={recent} />
+        </div>
       ) : null}
 
-      {section === 'seeds' ? (
-        run ? (
-          <FirstRunPanel
-            run={run}
-            busy={seedBusy}
-            adding={adding}
-            onAdd={(url, kind, topic) =>
-              void (async () => {
-                setAdding(true)
-                setError(null)
-                try {
-                  await addSeed({ url_or_query: url, task_type: kind, topic })
-                  setRun(await getFirstRun())
-                } catch (cause) {
-                  setError(cause instanceof ApiError ? cause.message : 'That seed was not added.')
-                } finally {
-                  setAdding(false)
-                }
-              })()
-            }
-            onRemove={(taskId) =>
-              void (async () => {
-                setSeedBusy(taskId)
-                setError(null)
-                try {
-                  await removeSeed(taskId)
-                  setRun(await getFirstRun())
-                } catch (cause) {
-                  setError(
-                    cause instanceof ApiError ? cause.message : 'That seed was not removed.',
-                  )
-                } finally {
-                  setSeedBusy(null)
-                }
-              })()
-            }
-          />
-        ) : null
-      ) : section === 'domains' ? (
-        policy ? (
-          <FetchPolicyPanel
-            rows={policy.rows}
-            counts={{ active: policy.active, paused: policy.paused, blocked: policy.blocked }}
-            status={domainStatus}
-            busy={steering}
-            onStatusFilter={setDomainStatus}
-            onUnblock={(domain) =>
-              void steer(domain, async () => {
-                await actOnFetchPolicy(domain, 'unblock')
-                await loadPolicy(domainStatus)
-              })
-            }
-            onForgetRender={(domain) =>
-              void steer(domain, async () => {
-                await actOnFetchPolicy(domain, 'forget-render')
-                await loadPolicy(domainStatus)
-              })
-            }
-          />
-        ) : (
-          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
-        )
-      ) : null}
-
-      {section === 'agents' ? (
-        agents ? (
-          <AgentsPanel
-            rows={agents.rows}
-            unserved={agents.unserved_tasks}
-            busy={steering}
-            onToggle={(agentId, enabled) =>
-              void steer(agentId, async () => {
-                // The whole registry comes back, because `unserved_tasks` is a
-                // fact across rows: disabling the only agent that declares a
-                // task type changes what every other row's screen should say.
-                setAgents(await editAgent(agentId, enabled))
-              })
-            }
-          />
-        ) : (
-          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
-        )
-      ) : null}
-
-      {section === 'health' ? (
-        health ? (
-          <CrawlHealthPanel health={health} />
-        ) : (
-          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
-        )
-      ) : null}
-
-      {section === 'runs' ? (
-        runs ? (
-          <RunsPanel rows={runs.rows} total={runs.total} active={runs.active} />
-        ) : (
-          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
-        )
-      ) : null}
-
-      {section === 'topics' ? (
-        topics ? (
-          <TopicPanel
-            rows={topics.rows}
-            sumsTo={topics.sums_to}
-            entries={entries}
-            busy={steering}
-            onWeight={(topic, weight) =>
-              void steer(topic, async () => {
-                await editTopic(topic, { weight })
+      {adding && topics ? (
+        <AddTopicDialog
+          rows={topics.rows}
+          sumsTo={topics.sums_to}
+          busy={steering !== null}
+          preview={(body, signal) => previewAddTopic(body, { signal })}
+          onClose={() => setAdding(false)}
+          onAdd={(body) =>
+            void (async () => {
+              setDraft(null)
+              const ok = await steer(body.topic, async () => {
+                await addTopic(body)
                 await loadTopics()
               })
-            }
-            onStatus={(topic, status: TopicStatus) =>
-              void steer(topic, async () => {
-                await editTopic(topic, { status })
-                await loadTopics()
-              })
-            }
-          />
-        ) : (
-          <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
-        )
-      ) : null}
-
-      {section === 'gazetteer' && phase === 'loading' && !queue ? (
-        <p className="text-[length:var(--text-small)] text-text-muted">Loading.</p>
-      ) : null}
-
-      {section === 'gazetteer' && queue ? (
-        <GazetteerQueue
-          rows={queue.rows}
-          state={state}
-          counts={{
-            pending: queue.pending,
-            approved: queue.approved,
-            rejected: queue.rejected,
-          }}
-          busy={busy}
-          onState={setState}
-          onDecide={(termId, decision) =>
-            void act(termId, () => decideGazetteerTerm(termId, decision))
+              if (ok) setAdding(false)
+            })()
           }
-          onEdit={(termId, entityType: GazetteerEntityType) =>
-            void act(termId, () => editGazetteerTerm(termId, { entity_type: entityType }))
+        />
+      ) : null}
+
+      {archiving && topics ? (
+        <ArchiveDialog
+          topic={archiving}
+          rows={topics.rows}
+          sumsTo={topics.sums_to}
+          busy={steering !== null}
+          preview={(signal) => previewEditTopic(archiving, { status: 'archived' }, { signal })}
+          onClose={() => setArchiving(null)}
+          onArchive={() =>
+            void (async () => {
+              setDraft(null)
+              const ok = await steer(archiving, async () => {
+                await editTopic(archiving, { status: 'archived' })
+                await loadTopics()
+              })
+              if (ok) setArchiving(null)
+            })()
           }
         />
       ) : null}

@@ -1264,6 +1264,16 @@ deploy runbook whose first two commands could not work (`B-17`).
       the admin gate is closed. Every query is bounded by `now`, which is how
       the tests assert verdicts against a shared database. Built by a
       delegated agent in a worktree and reviewed on merge
+- [x] `P6-28` **Admin, as designed** — `v0.116.0`. Section nav with a URL per
+      section, paper by default (an explicit dark choice wins), topic weights
+      staged and previewed by a rolled-back server write before Apply, add and
+      archive dialogs showing the re-normalisation, a steering-audit rail,
+      table-first restyle of every section, bulk and keyboard gazetteer
+      decisions (paged, all-or-none), paged and searchable fetch policy. Two
+      places where the server disagrees with §8 are shown as the server does
+      them and are open: pause re-normalises rather than holding the share,
+      and pins are not held on a user re-normalisation. Built by a delegated
+      agent
 - [x] `P6-29` **The corpus map in three dimensions** — `v0.115.0`. Three PCA
       components (subspace iteration widened and pinned against the exact
       decomposition on all three axes), drawn as one three.js `Points` cloud on

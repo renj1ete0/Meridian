@@ -1,4 +1,7 @@
+import { Fragment } from 'react'
+
 import type { RunRow } from '../lib/api'
+import { PageHeader, ROW, TD, TDM, TH, TableCard, stamp } from './ui'
 
 /**
  * Synthesis run history (task P6-23, spec §11.9, §11.10, §13.4).
@@ -53,59 +56,73 @@ export function spent(row: RunRow): string {
 
 export function RunsPanel({ rows, total, active }: RunsPanelProps) {
   return (
-    <section>
-      <h2 className="mb-2 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-        Runs
-      </h2>
-
-      <p className="mb-6 text-[length:var(--text-small)] text-text-muted">
+    <section className="flex flex-col gap-5">
+      <PageHeader title="Run history">
         {active
           ? `Run ${active.run_id} is ${active.status} at ${active.stage ?? 'an unknown stage'}.`
           : 'Nothing is running.'}{' '}
-        {total} in total.
-      </p>
+        {total.toLocaleString()} in total.
+      </PageHeader>
 
       {rows.length === 0 ? (
-        <p className="text-[length:var(--text-small)] text-text-muted">
+        <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
           No runs yet. The orchestrator starts one when it comes up, and daily after that.
         </p>
-      ) : null}
-
-      <ul className="space-y-4">
-        {rows.map((row) => (
-          <li key={row.run_id} className="border border-line bg-surface p-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="font-mono text-[length:var(--text-body)] text-text">
-                run {row.run_id}
-              </span>
-              <span className="font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-                {row.status}
-                {row.stage ? ` · ${row.stage}` : ''}
-              </span>
-            </div>
-
-            <p className="mt-1 text-[length:var(--text-small)] text-text-muted">
-              {STATUS_NOTES[row.status] ?? ''}
-            </p>
-
-            <p className="mt-2 text-[length:var(--text-small)] text-text">{written(row)}</p>
-            <p className="mt-1 text-[length:var(--text-small)] text-text-muted">
-              {spent(row)}
-              {row.agent_id ? ` · ${row.agent_id}` : ''}
-            </p>
-
-            {row.error ? (
-              // In full, and not truncated. The reason a run deferred is the
-              // whole content of the row — "no enabled agent declares
-              // 'relation_extraction'" is a sentence somebody can act on, and
-              // its first forty characters are not.
-              <p className="mt-2 text-[length:var(--text-small)] text-accent-attention">
-                {row.error}
-              </p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      ) : (
+        <TableCard>
+          <thead>
+            <tr>
+              <th className={TH}>Run</th>
+              <th className={TH}>Started</th>
+              <th className={TH}>Status</th>
+              <th className={TH}>Written</th>
+              <th className={TH}>Spent</th>
+              <th className={TH}>Agent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <Fragment key={row.run_id}>
+                <tr className={ROW} data-run={row.run_id}>
+                  <td className={TDM}>{row.run_id}</td>
+                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>
+                    {stamp(row.started_at)}
+                  </td>
+                  <td className={TD}>
+                    <span className="font-mono text-[11.5px] text-text">
+                      {row.status}
+                      {row.stage ? ` · ${row.stage}` : ''}
+                    </span>
+                    <div className="text-[11.5px] text-text-faint">
+                      {STATUS_NOTES[row.status] ?? ''}
+                    </div>
+                  </td>
+                  <td className={`${TDM} whitespace-nowrap`}>{written(row)}</td>
+                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>{spent(row)}</td>
+                  <td className={`${TDM} text-text-muted`}>{row.agent_id ?? '—'}</td>
+                </tr>
+                {row.error ? (
+                  // In full, and not truncated. The reason a run deferred is
+                  // the whole content of the row — "no enabled agent declares
+                  // 'relation_extraction'" is a sentence somebody can act on,
+                  // and its first forty characters are not.
+                  <tr data-run-error={row.run_id}>
+                    <td />
+                    <td
+                      colSpan={5}
+                      className={`${TD} break-words pt-0 text-[12px] ${
+                        row.status === 'failed' ? 'text-accent-attention' : 'text-text-muted'
+                      }`}
+                    >
+                      {row.error}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            ))}
+          </tbody>
+        </TableCard>
+      )}
     </section>
   )
 }

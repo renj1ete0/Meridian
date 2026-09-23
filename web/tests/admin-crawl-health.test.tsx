@@ -117,7 +117,10 @@ describe('the verdict, in words', () => {
   it('does not call a queue that is only backing off a stall', () => {
     // The distinction the fourth state exists for: somebody told "stalled"
     // restarts a worker that has nothing it is allowed to claim.
-    const line = verdict(liveness({ state: 'waiting', quiet_seconds: 3600, ready: 0, pending: 5 }), 900)
+    const line = verdict(
+      liveness({ state: 'waiting', quiet_seconds: 3600, ready: 0, pending: 5 }),
+      900,
+    )
 
     expect(line).toMatch(/^Waiting/)
     expect(line).toContain('backing off')
@@ -125,7 +128,10 @@ describe('the verdict, in words', () => {
   })
 
   it('says an idle crawl has run out of work, and what to do', () => {
-    const line = verdict(liveness({ state: 'idle', quiet_seconds: 7200, ready: 0, pending: 0 }), 900)
+    const line = verdict(
+      liveness({ state: 'idle', quiet_seconds: 7200, ready: 0, pending: 0 }),
+      900,
+    )
 
     expect(line).toMatch(/^Idle — the queue is empty/)
     expect(line).toContain('2 h ago')
@@ -292,7 +298,9 @@ describe('refreshing while open', () => {
         ? health()
         : url.includes('/first-run')
           ? { is_first_run: false, seeds: [], topics: [], queue: {} }
-          : { rows: [], pending: 0, approved: 0, rejected: 0 }
+          : url.includes('/runs')
+            ? { rows: [], total: 0, active: null }
+            : { rows: [], pending: 0, approved: 0, rejected: 0 }
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -314,7 +322,7 @@ describe('refreshing while open', () => {
 
     render(<AdminPage />)
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Crawl' }))
+      fireEvent.click(screen.getByRole('link', { name: 'Crawl health' }))
     })
     await act(() => vi.advanceTimersByTimeAsync(0))
     expect(healthCalls()).toBe(1)
@@ -335,7 +343,7 @@ describe('refreshing while open', () => {
 
     // Another section: the polling stops with the panel.
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Runs' }))
+      fireEvent.click(screen.getByRole('link', { name: 'Run history' }))
     })
     const before = healthCalls()
     await act(() => vi.advanceTimersByTimeAsync(HEALTH_REFRESH_MS * 3))

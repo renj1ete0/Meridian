@@ -93,7 +93,9 @@ describe('the registry', () => {
 
   it('reports why a row cannot be routed to, rather than that it is enabled', () => {
     // The case that costs an afternoon: enabled, plausible, unreachable.
-    const state = rowState(agent({ enabled: true, blocked_by: ['ANTHROPIC_API_KEY is unset here'] }))
+    const state = rowState(
+      agent({ enabled: true, blocked_by: ['ANTHROPIC_API_KEY is unset here'] }),
+    )
 
     expect(state.label).toContain('unset here')
     expect(state.tone).toBe('blocked')
@@ -137,8 +139,9 @@ describe('the registry', () => {
       <AgentsPanel rows={[agent({ enabled: false })]} unserved={[]} />,
     )
 
-    expect(text(enabled)).toContain('disable')
-    expect(text(disabled)).toContain('enable')
+    expect(text(enabled)).toContain('Disable')
+    expect(text(disabled)).toContain('Enable')
+    expect(text(disabled)).not.toContain('Disable')
   })
 
   it('explains an empty registry instead of showing nothing', () => {
@@ -156,7 +159,11 @@ describe('the registry', () => {
 describe('run history', () => {
   it('answers "is something running" before anything else', () => {
     const markup = renderToStaticMarkup(
-      <RunsPanel rows={[run()]} total={3} active={run({ run_id: 9, status: 'running', stage: 'extract' })} />,
+      <RunsPanel
+        rows={[run()]}
+        total={3}
+        active={run({ run_id: 9, status: 'running', stage: 'extract' })}
+      />,
     )
 
     expect(text(markup)).toContain('Run 9 is running at extract')
@@ -175,7 +182,8 @@ describe('run history', () => {
   })
 
   it('shows the whole reason a run stopped', () => {
-    const reason = "every agent for 'relation_extraction' refused: hosted-frontier reads its key from ANTHROPIC_API_KEY, which is unset."
+    const reason =
+      "every agent for 'relation_extraction' refused: hosted-frontier reads its key from ANTHROPIC_API_KEY, which is unset."
     const markup = renderToStaticMarkup(
       <RunsPanel rows={[run({ status: 'deferred', error: reason })]} total={1} active={null} />,
     )

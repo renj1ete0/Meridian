@@ -20,6 +20,7 @@ claims the same string.
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -439,3 +440,38 @@ class RunsRead(BaseModel):
     #: happening right now" is the first question this screen is opened to
     #: answer, and scanning a status column for it is a worse way to find out.
     active: RunRowRead | None = None
+
+
+# ---------------------------------------------------------------------------
+# Admin as designed (task P6-28): deciding the gazetteer queue in bulk
+# ---------------------------------------------------------------------------
+
+#: The most terms one bulk decision may carry — the queue's own page ceiling,
+#: so a whole page can be decided at once and nothing larger than a page can.
+GAZETTEER_BULK_MAX = 200
+
+
+class GazetteerBulkDecision(BaseModel):
+    """One verdict for several terms.
+
+    The same three verdicts as the per-term routes, with the same meaning. A
+    queue of thousands of harvested terms is not a two-minute weekly task one
+    click at a time; the per-term routes stay because a single decision is
+    still the common case.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    term_ids: list[int] = Field(min_length=1, max_length=GAZETTEER_BULK_MAX)
+    decision: Literal["approve", "reject", "restore"]
+
+
+class GazetteerBulkRead(BaseModel):
+    """Every decided row, each with what the matcher will now do with it.
+
+    Rows rather than a count, because approving forty terms at once is exactly
+    how two of them come to claim the same wording, and the collision is only
+    visible on the rows.
+    """
+
+    rows: list[GazetteerRowRead]

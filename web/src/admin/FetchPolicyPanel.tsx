@@ -1,4 +1,5 @@
 import type { DomainStatus, FetchPolicyRow } from '../lib/api'
+import { BUTTON_ROW, FIELD, Filters, PAGER, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
  * Per-domain fetch policy (task P6-22, spec §6.4, §13.2).
@@ -29,6 +30,13 @@ export interface FetchPolicyPanelProps {
   onStatusFilter?: (status: DomainStatus | null) => void
   onUnblock?: (domain: string) => void
   onForgetRender?: (domain: string) => void
+  /** Paging and search (`P6-28`): a long crawl leaves thousands of rows. */
+  query?: string
+  offset?: number
+  hasMore?: boolean
+  pageSize?: number
+  onQuery?: (query: string) => void
+  onPage?: (offset: number) => void
 }
 
 const FILTERS: { key: DomainStatus | null; label: string }[] = [
@@ -65,6 +73,12 @@ export function FetchPolicyPanel({
   onStatusFilter,
   onUnblock,
   onForgetRender,
+  query = '',
+  offset = 0,
+  hasMore = false,
+  pageSize = 200,
+  onQuery,
+  onPage,
 }: FetchPolicyPanelProps) {
   const shown: Record<string, number> = {
     all: counts.active + counts.paused + counts.blocked,
@@ -74,123 +88,155 @@ export function FetchPolicyPanel({
   }
 
   return (
-    <section>
-      <h2 className="font-sans text-[length:var(--text-heading)] font-semibold">Domains</h2>
-      <p className="mt-2 max-w-prose text-[length:var(--text-small)] text-text-muted">
+    <section className="flex flex-col gap-5">
+      <PageHeader title="Fetch policy">
         How the crawler behaves towards each site: how long it waits between requests, how many it
         makes at once, and whether it needs a browser. Robots handling, the address guards and the
         crawler's identity are set in the deployment and cannot be changed from here.
-      </p>
+      </PageHeader>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {FILTERS.map(({ key, label }) => (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Filters
+          options={FILTERS.map(({ key, label }) => ({ key, label, count: shown[label] }))}
+          value={status}
+          onChange={onStatusFilter}
+        />
+        <input
+          type="search"
+          className={`${FIELD} h-[30px] w-64 font-mono text-[12px]`}
+          value={query}
+          placeholder="find a domain"
+          aria-label="Find a domain"
+          onChange={(event) => onQuery?.(event.target.value)}
+        />
+        <div className="ml-auto flex items-center gap-2 font-mono text-[11px] text-text-faint">
+          {/* An asterisk on values set on this row. Without it a reader cannot
+              tell a domain somebody tuned from one inheriting the default. */}
+          <span className="mr-3">* set on this row</span>
+          <span>
+            {rows.length === 0 ? 'none' : `${offset + 1}–${offset + rows.length}`}
+            {query ? ' matching' : ` of ${shown[status ?? 'all']!.toLocaleString()}`}
+          </span>
           <button
-            key={label}
             type="button"
-            onClick={() => onStatusFilter?.(key)}
-            aria-pressed={status === key}
-            className={`rounded-chip border px-2 py-0.5 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ${
-              status === key
-                ? 'border-accent-graph text-accent-graph'
-                : 'border-line-strong text-text-muted'
-            }`}
+            className={PAGER}
+            disabled={offset === 0}
+            onClick={() => onPage?.(Math.max(offset - pageSize, 0))}
           >
-            {label} ({shown[label]})
+            Previous
           </button>
-        ))}
+          <button
+            type="button"
+            className={PAGER}
+            disabled={!hasMore}
+            onClick={() => onPage?.(offset + pageSize)}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {rows.length === 0 ? (
-        <p className="mt-6 text-text-muted">
+        <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
           No domains here. A row appears once the crawler has fetched from a site, or when somebody
           sets policy for one.
         </p>
       ) : (
-        <ul className="mt-6 space-y-4">
-          {rows.map((row) => (
-            <li key={row.policy.domain} className="border border-line bg-surface p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="font-mono text-[length:var(--text-body)] font-semibold">
-                  {row.policy.domain === '*' ? 'every domain (default)' : row.policy.domain}
-                </h3>
-                <span
-                  className={`font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ${
-                    row.policy.status === 'blocked' ? 'text-accent-attention' : 'text-text-muted'
-                  }`}
-                >
-                  {row.policy.status}
-                </span>
-              </div>
-
-              <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-[length:var(--text-small)] text-text-muted">
-                {SUMMARY_KEYS.map((key) => (
-                  <div key={key} className="flex gap-1">
-                    <dt>{key.replace(/_/g, ' ')}</dt>
-                    <dd className={row.overridden.includes(key) ? 'text-text' : ''}>
+        <TableCard>
+          <thead>
+            <tr>
+              <th className={TH}>Domain</th>
+              <th className={TH}>Status</th>
+              {SUMMARY_KEYS.map((key) => (
+                <th key={key} className={`${TH} text-right`}>
+                  {key.replace(/_/g, ' ')}
+                </th>
+              ))}
+              <th className={TH}>
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const blocked = row.policy.status === 'blocked'
+              const learned = isLearnedRender(row)
+              return (
+                <tr key={row.policy.domain} className={ROW} data-domain={row.policy.domain}>
+                  <td className={`${TDM} min-w-[200px]`}>
+                    <div className="text-text">
+                      {row.policy.domain === '*' ? 'every domain (default)' : row.policy.domain}
+                    </div>
+                    {blocked ? (
+                      // §6.4 auto-blocks after consecutive failures, so this
+                      // can appear without anybody choosing it — and a blocked
+                      // domain produces no sources and no errors, which is why
+                      // it is said rather than left to the status column.
+                      <div className="font-sans text-[12px] text-accent-attention">
+                        Not being crawled. {row.policy.consecutive_failures} failures in a row.
+                      </div>
+                    ) : null}
+                    {learned ? (
+                      <div className="font-sans text-[12px] text-text-muted">
+                        The crawler worked out that this site needs a browser, after{' '}
+                        {row.policy.render_js_escalations} pages in a row. It re-checks on its own
+                        after a week.
+                      </div>
+                    ) : null}
+                    {row.policy.updated_by ? (
+                      <div className="text-[10.5px] text-text-faint">
+                        changed by {row.policy.updated_by}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td
+                    className={`${TDM} whitespace-nowrap ${
+                      blocked ? 'text-accent-attention' : 'text-text-muted'
+                    }`}
+                  >
+                    {row.policy.status}
+                  </td>
+                  {SUMMARY_KEYS.map((key) => (
+                    <td
+                      key={key}
+                      className={`${TDM} whitespace-nowrap text-right ${
+                        row.overridden.includes(key) ? 'text-text' : 'text-text-muted'
+                      }`}
+                    >
                       {String(row.resolved[key] ?? '—')}
-                      {/* An asterisk on values set on this row. Without it a
-                          reader cannot tell a domain somebody tuned from one
-                          inheriting the default. */}
                       {row.overridden.includes(key) ? '*' : ''}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-
-              {isLearnedRender(row) ? (
-                <p className="mt-3 text-[length:var(--text-small)] text-text-muted">
-                  The crawler worked out that this site needs a browser, after{' '}
-                  {row.policy.render_js_escalations} pages in a row. It re-checks on its own after a
-                  week.
-                </p>
-              ) : null}
-
-              {row.policy.status === 'blocked' ? (
-                <p className="mt-3 text-[length:var(--text-small)] text-accent-attention">
-                  {/* §6.4 auto-blocks after consecutive failures, so this can
-                      appear without anybody choosing it — and a blocked domain
-                      produces no sources and no errors, which is why it is said
-                      rather than left to the status chip. */}
-                  Not being crawled. {row.policy.consecutive_failures} failures in a row.
-                </p>
-              ) : null}
-
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                {row.policy.status === 'blocked' ? (
-                  <button
-                    type="button"
-                    disabled={busy === row.policy.domain}
-                    onClick={() => onUnblock?.(row.policy.domain)}
-                    className={ACTION}
-                  >
-                    Crawl it again
-                  </button>
-                ) : null}
-                {isLearnedRender(row) ? (
-                  <button
-                    type="button"
-                    disabled={busy === row.policy.domain}
-                    onClick={() => onForgetRender?.(row.policy.domain)}
-                    className={ACTION}
-                  >
-                    Check again now
-                  </button>
-                ) : null}
-                {row.policy.updated_by ? (
-                  <span className="font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-                    changed by {row.policy.updated_by}
-                  </span>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+                    </td>
+                  ))}
+                  <td className={`${TD} whitespace-nowrap text-right`}>
+                    <span className="inline-flex gap-1.5">
+                      {blocked ? (
+                        <button
+                          type="button"
+                          disabled={busy === row.policy.domain}
+                          onClick={() => onUnblock?.(row.policy.domain)}
+                          className={BUTTON_ROW}
+                        >
+                          Crawl it again
+                        </button>
+                      ) : null}
+                      {learned ? (
+                        <button
+                          type="button"
+                          disabled={busy === row.policy.domain}
+                          onClick={() => onForgetRender?.(row.policy.domain)}
+                          className={BUTTON_ROW}
+                        >
+                          Check again now
+                        </button>
+                      ) : null}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </TableCard>
       )}
     </section>
   )
 }
-
-const ACTION =
-  'h-[var(--control-height)] border border-line-strong bg-surface-raised px-3 ' +
-  'font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ' +
-  'disabled:opacity-50'

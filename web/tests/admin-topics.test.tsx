@@ -20,8 +20,16 @@ import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
+import { delta, reweightLines } from '../src/admin/Reweight'
+import {
+  SteeringRail,
+  auditGroups,
+  auditLine,
+  runCost,
+  runOutcome,
+} from '../src/admin/SteeringRail'
 import { STATUSES, TopicPanel, percent, shareNote } from '../src/admin/TopicPanel'
-import type { TopicConfig, TopicRow } from '../src/lib/api'
+import type { RunRow, SteeringEntry, TopicConfig, TopicRow } from '../src/lib/api'
 
 const REPO = join(fileURLToPath(new URL('..', import.meta.url)), '..')
 
@@ -65,18 +73,24 @@ function row(over: Partial<TopicRow> = {}): TopicRow {
 
 describe('a row says what it draws and what it stores', () => {
   it('shows both numbers', () => {
-    const rendered = text(renderToStaticMarkup(<TopicPanel rows={[row()]} sumsTo={1} />))
+    // The stored weight on the row, the share drawn beneath it. They differ
+    // exactly when something interesting is happening.
+    const rendered = text(
+      renderToStaticMarkup(
+        <TopicPanel rows={[row({ share: 0.339, topic: config({ weight: 0.4 }) })]} sumsTo={1} />,
+      ),
+    )
 
-    expect(rendered).toContain('40.0% of seeds')
-    expect(rendered).toContain('weight 0.400')
+    expect(rendered).toContain('walkability 0.40')
+    expect(rendered).toContain('draws 33.9% of seeds')
   })
 
   it('publishes what the pool adds up to', () => {
     // One number, and the whole screen rests on it. Assuming it would make a
     // vector that had drifted look exactly like one that had not.
-    const rendered = text(renderToStaticMarkup(<TopicPanel rows={[row()]} sumsTo={1} />))
+    const rendered = text(renderToStaticMarkup(<TopicPanel rows={[row()]} sumsTo={0.97} />))
 
-    expect(rendered).toContain('100.0% allocated')
+    expect(rendered).toContain('Normalised 0.97')
   })
 
   it('keeps one decimal, so a floor and a near-floor are different', () => {
@@ -161,37 +175,241 @@ describe('the copy does not describe a system that deletes', () => {
 // The audit log (§10.1)
 // --------------------------------------------------------------------------
 
-describe('the log explains weights nobody touched', () => {
-  it('says that is what it is for', () => {
+function entry(over: Partial<SteeringEntry> = {}): SteeringEntry {
+  return {
+    log_id: 1,
+    changed_at: '2026-09-15T10:00:00Z',
+    actor: 'user',
+    topic: 'robotics',
+    field: 'weight',
+    old_value: '0.150',
+    new_value: '0.127',
+    reason: "changed through admin: ['weight']",
+    ...over,
+  }
+}
+
+describe('the steering audit explains weights nobody touched', () => {
+  it('says that is what it is for, and shows the consequence', () => {
+    const rendered = text(renderToStaticMarkup(<SteeringRail entries={[entry()]} runs={[]} />))
+
+    expect(rendered).toContain('steering a different topic')
+    expect(rendered).toContain('robotics 0.15 → 0.13')
+  })
+
+  it('keeps a third decimal when two would make a change look like none', () => {
+    // 0.401 → 0.404 printed at two places is "0.40 → 0.40": a log line that
+    // says nothing moved, about a row that exists because something did.
+    expect(auditLine(entry({ old_value: '0.401', new_value: '0.404' }))).toBe(
+      'robotics 0.401 → 0.404',
+    )
+  })
+
+  it('groups the rows one change wrote, and keeps separate changes apart', () => {
+    // A single request writes one row per topic it moved, at one instant.
+    const same = '2026-09-15T10:00:00Z'
+    const groups = auditGroups([
+      entry({
+        log_id: 3,
+        topic: 'walkability',
+        old_value: '0.35',
+        new_value: '0.40',
+        changed_at: same,
+      }),
+      entry({
+        log_id: 2,
+        topic: 'robotics',
+        old_value: '0.20',
+        new_value: '0.15',
+        changed_at: same,
+      }),
+      entry({
+        log_id: 1,
+        field: 'pinned',
+        old_value: 'False',
+        new_value: 'True',
+        changed_at: '2026-09-14T08:00:00Z',
+      }),
+    ])
+
+    expect(groups.map((g) => g.lines)).toEqual([
+      ['walkability 0.35 → 0.40', 'robotics 0.20 → 0.15'],
+      ['robotics pinned'],
+    ])
+  })
+
+  it('shows a reason somebody wrote, and not the one the server filled in', () => {
+    const typed = auditGroups([entry({ reason: 'fetch problem on a portal' })])
+    const filled = auditGroups([entry()])
+
+    expect(typed[0]!.reason).toBe('fetch problem on a portal')
+    expect(filled[0]!.reason).toBeNull()
+  })
+
+  it('names the other writer when it was not a person', () => {
+    const rendered = text(
+      renderToStaticMarkup(<SteeringRail entries={[entry({ actor: 'orchestrator' })]} runs={[]} />),
+    )
+
+    expect(rendered).toContain('orchestrator')
+  })
+
+  it('has a line for every field the steering layer logs', () => {
+    // Drift: a field `steering.py` records and this file has no case for
+    // falls through to a generic line, which is the one that reads worst.
+    const source = readFileSync(
+      join(REPO, 'packages/meridian_core/meridian_core/steering.py'),
+      'utf8',
+    )
+    const fields = new Set([
+      ...[...source.matchAll(/field="([a-z_]+)"/g)].map((m) => m[1]!),
+      ...[...source.matchAll(/\("(boost_[a-z_]+)", /g)].map((m) => m[1]!),
+      ...[...source.matchAll(/BOUNDS = \(([^)]*)\)/g)].flatMap((m) =>
+        [...m[1]!.matchAll(/"([a-z_]+)"/g)].map((f) => f[1]!),
+      ),
+    ])
+    expect(fields.size).toBeGreaterThanOrEqual(5)
+    for (const field of fields) {
+      const line = auditLine(entry({ field, old_value: '1', new_value: '2' }))
+      expect(line, `no line for ${field}`).not.toContain(`${field} 1 → 2`)
+    }
+  })
+
+  it('says so when nothing has been steered, rather than drawing an empty list', () => {
+    const rendered = text(renderToStaticMarkup(<SteeringRail entries={[]} runs={[]} />))
+
+    expect(rendered).toContain('Nothing has been steered yet')
+    expect(rendered).toContain('No synthesis run yet')
+  })
+})
+
+describe('the last runs, beside the steering', () => {
+  function runRow(over: Partial<RunRow> = {}): RunRow {
+    return {
+      run_id: 7,
+      started_at: '2026-09-06T06:12:00Z',
+      completed_at: null,
+      stage: 'done',
+      status: 'done',
+      agent_id: null,
+      tokens_used: 0,
+      cost_usd: null,
+      edges_added: 318,
+      tags_added: 0,
+      seeds_emitted: 0,
+      last_chunk_id: null,
+      heartbeat_at: null,
+      error: null,
+      ...over,
+    }
+  }
+
+  it('reports what a finished run wrote, and what stopped one that did not finish', () => {
+    expect(runOutcome(runRow())).toBe('+318 edges')
+    expect(runOutcome(runRow({ status: 'deferred' }))).toBe('deferred')
+  })
+
+  it('never prints a cost nobody measured as zero', () => {
+    expect(runCost(runRow())).toBe('—')
+    expect(runCost(runRow({ tokens_used: 18915 }))).toBe('18.9k tok')
+    expect(runCost(runRow({ cost_usd: 0.84 }))).toBe('$0.84')
+  })
+
+  it('carries the newest stop reason in full as the note', () => {
+    const reason =
+      "every agent for 'tag_attributes' refused: waiting for an answer in the relay directory"
     const rendered = text(
       renderToStaticMarkup(
-        <TopicPanel
-          rows={[row()]}
-          sumsTo={1}
-          entries={[
-            {
-              log_id: 1,
-              changed_at: '2026-09-15T10:00:00Z',
-              actor: 'user',
-              topic: 'robotics',
-              field: 'weight',
-              old_value: '0.150',
-              new_value: '0.127',
-              reason: 'renormalised',
-            },
-          ]}
+        <SteeringRail
+          entries={[]}
+          runs={[runRow({ run_id: 44, status: 'deferred', stage: 'tag', error: reason })]}
         />,
       ),
     )
 
-    expect(rendered).toContain('steering a different topic')
-    expect(rendered).toContain('robotics weight 0.150 → 0.127')
+    expect(rendered).toContain('Run 44 deferred at tag')
+    expect(rendered).toContain('in the relay directory')
+  })
+})
+
+// --------------------------------------------------------------------------
+// The arithmetic before committing (design-system §8)
+// --------------------------------------------------------------------------
+
+describe('the re-normalisation preview', () => {
+  const before = [
+    row({ topic: config({ topic: 'walkability', weight: 0.4 }) }),
+    row({ topic: config({ topic: 'robotics', weight: 0.35, pinned: true }) }),
+    row({ topic: config({ topic: 'biology', weight: 0.25 }) }),
+    row({ topic: config({ topic: 'paused-one', weight: 0.2, status: 'paused' }) }),
+  ]
+
+  it('names a new topic new, and lists no topic outside the pool', () => {
+    const lines = reweightLines(
+      before,
+      {
+        rows: [
+          row({ topic: config({ topic: 'walkability', weight: 0.32 }) }),
+          row({ topic: config({ topic: 'robotics', weight: 0.35, pinned: true }) }),
+          row({ topic: config({ topic: 'biology', weight: 0.2 }) }),
+          row({ topic: config({ topic: 'kerbside', weight: 0.13 }) }),
+          before[3]!,
+        ],
+        sums_to: 1,
+      },
+      'kerbside',
+    )
+
+    expect(lines.map((l) => [l.topic, l.change])).toEqual([
+      ['walkability', '−0.08'],
+      ['robotics', 'pinned, held'],
+      ['biology', '−0.05'],
+      ['kerbside', 'new'],
+    ])
+    expect(lines.find((l) => l.topic === 'kerbside')!.focus).toBe(true)
   })
 
-  it('is absent rather than empty when there is nothing to show', () => {
-    const rendered = text(renderToStaticMarkup(<TopicPanel rows={[row()]} sumsTo={1} />))
+  it('does not call a pinned topic held when the server moved it', () => {
+    // The server re-normalises pinned topics too. "pinned, held" beside a
+    // number that changed would be the dialog lying on exactly the row
+    // somebody pinned to protect.
+    const [, pinned] = reweightLines(
+      before,
+      {
+        rows: [
+          row({ topic: config({ topic: 'walkability', weight: 0.35 }) }),
+          row({ topic: config({ topic: 'robotics', weight: 0.3, pinned: true }) }),
+          row({ topic: config({ topic: 'biology', weight: 0.35 }) }),
+        ],
+        sums_to: 1,
+      },
+      'biology',
+    )
 
-    expect(rendered).not.toContain('What changed')
+    expect(pinned!.change).toBe('−0.05 · pinned')
+  })
+
+  it('says an archived topic releases its weight', () => {
+    const lines = reweightLines(
+      before,
+      {
+        rows: [
+          row({ topic: config({ topic: 'walkability', weight: 0.53 }) }),
+          row({ topic: config({ topic: 'robotics', weight: 0.47, pinned: true }) }),
+          row({ topic: config({ topic: 'biology', weight: 0.25, status: 'archived' }) }),
+        ],
+        sums_to: 1,
+      },
+      'biology',
+    )
+
+    expect(lines.find((l) => l.topic === 'biology')!.change).toBe('released')
+  })
+
+  it('uses a real minus sign, so a column of changes lines up', () => {
+    expect(delta(-0.08)).toBe('−0.08')
+    expect(delta(0.04)).toBe('+0.04')
+    expect(delta(0.001)).toBe('0.00')
   })
 })
 

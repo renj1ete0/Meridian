@@ -1006,13 +1006,15 @@ export const FETCH_POLICY_PAGE_FIELDS = [
 ] as const
 
 export function getFetchPolicy(
-  params: { status?: DomainStatus; q?: string; limit?: number } = {},
+  params: { status?: DomainStatus; q?: string; limit?: number; offset?: number } = {},
   init?: RequestInit,
 ): Promise<FetchPolicyPage> {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
   if (params.q) query.set('q', params.q)
   if (params.limit !== undefined) query.set('limit', String(params.limit))
+  // P6-28: Admin pages through thousands of domains.
+  if (params.offset) query.set('offset', String(params.offset))
   const suffix = query.toString()
   return request<FetchPolicyPage>(`/api/admin/fetch-policy${suffix ? `?${suffix}` : ''}`, init)
 }
@@ -1645,4 +1647,72 @@ export function editAgent(agentId: string, enabled: boolean, init?: RequestInit)
 export function getRuns(params: { limit?: number } = {}, init?: RequestInit): Promise<Runs> {
   const query = params.limit ? `?limit=${params.limit}` : ''
   return request<Runs>(`/api/admin/runs${query}`, init)
+}
+
+// --------------------------------------------------------------------------
+// Admin as designed (task P6-28): previews and bulk decisions
+// --------------------------------------------------------------------------
+
+/** Mirrors `TopicAdd`. */
+export interface TopicAddBody {
+  topic: string
+  floor?: number
+  ceiling?: number
+  reason?: string
+}
+
+/**
+ * What adding this topic would leave the vector as — the write, rolled back on
+ * the server, so the dialog's arithmetic is the arithmetic that commits.
+ * Refused with the write's own 422 sentence.
+ */
+export function previewAddTopic(body: TopicAddBody, init?: RequestInit): Promise<Topics> {
+  return request<Topics>('/api/admin/topics/preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    ...init,
+  })
+}
+
+/** What this steering change would leave the vector as, committed nowhere. */
+export function previewEditTopic(
+  topic: string,
+  edit: TopicEdit,
+  init?: RequestInit,
+): Promise<Topics> {
+  return request<Topics>(`/api/admin/topics/${encodeURIComponent(topic)}/preview`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(edit),
+    ...init,
+  })
+}
+
+/** `GAZETTEER_BULK_MAX` in `schemas/admin.py`: one bulk decision is at most a page. */
+export const GAZETTEER_BULK_MAX = 200
+
+/** Mirrors `GazetteerBulkRead`. */
+export interface GazetteerBulk {
+  rows: GazetteerRow[]
+}
+
+export const GAZETTEER_BULK_FIELDS = ['rows'] as const
+
+export type AssertGazetteerBulk = Expect<
+  Equal<keyof GazetteerBulk, (typeof GAZETTEER_BULK_FIELDS)[number]>
+>
+
+/** One verdict for up to a page of terms, all or none (404 names unknown ids). */
+export function decideGazetteerTerms(
+  termIds: readonly number[],
+  decision: 'approve' | 'reject' | 'restore',
+  init?: RequestInit,
+): Promise<GazetteerBulk> {
+  return request<GazetteerBulk>('/api/admin/gazetteer/decide', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ term_ids: termIds, decision }),
+    ...init,
+  })
 }

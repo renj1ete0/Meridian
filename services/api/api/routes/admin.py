@@ -65,6 +65,8 @@ from meridian_core.schemas.admin import (
     FetchPolicyPage,
     FetchPolicyRowRead,
     FirstRunRead,
+    GazetteerBulkDecision,
+    GazetteerBulkRead,
     GazetteerQueueRead,
     GazetteerRowRead,
     GazetteerTermEdit,
@@ -362,7 +364,18 @@ def _refused(exc: Exception) -> HTTPException:
 async def edit_topic(
     topic: str, edit: TopicEdit, _: AdminAllowed, sess: WriteSession
 ) -> TopicsRead:
-    """Steer one topic. Returns the whole vector, because changing one moves all.
+    """Steer one topic. Returns the whole vector, because changing one moves all."""
+    fields = await _steer(sess, topic, edit)
+    await sess.commit()
+    log.info("topics steered", extra={"topic": topic, "fields": fields})
+    return await _topics_read(sess)
+
+
+async def _steer(sess, topic: str, edit: TopicEdit) -> list[str]:
+    """Apply a steering change to the session without committing it.
+
+    Shared by the write and by its preview (`P6-28`), so the arithmetic a
+    person is shown before committing is the arithmetic that commits.
 
     The order matters. Status first, so pausing and re-weighting in one request
     cannot try to set a share on a topic that is leaving the pool; bounds before
@@ -404,15 +417,20 @@ async def edit_topic(
         # vector as it was rather than partly steered.
         await sess.rollback()
         raise _refused(exc) from exc
-
-    await sess.commit()
-    log.info("topics steered", extra={"topic": topic, "fields": sorted(changes)})
-    return await _topics_read(sess)
+    return sorted(changes)
 
 
 @router.post("/topics", response_model=TopicsRead, status_code=201)
 async def add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> TopicsRead:
-    """§10.2's `add_topic` — insert and re-normalise.
+    """§10.2's `add_topic` — insert and re-normalise."""
+    await _add(sess, body)
+    await sess.commit()
+    log.info("topic added", extra={"topic": body.topic})
+    return await _topics_read(sess)
+
+
+async def _add(sess, body: TopicAdd) -> None:
+    """Insert a topic into the session without committing it.
 
     It starts at its floor rather than at a share somebody chose, because a new
     topic has no hand-seeded sources yet (§10.2 calls this "a small repeat of
@@ -432,10 +450,6 @@ async def add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> Topi
     except (ValueError, steering.InfeasibleWeights) as exc:
         await sess.rollback()
         raise _refused(exc) from exc
-
-    await sess.commit()
-    log.info("topic added", extra={"topic": body.topic})
-    return await _topics_read(sess)
 
 
 @router.get("/steering-log", response_model=SteeringLogPage)
@@ -1213,3 +1227,97 @@ async def list_runs(
         total=total,
         active=RunRowRead.model_validate(active) if active is not None else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin as designed (task P6-28)
+# ---------------------------------------------------------------------------
+#
+# Two small additions the designed Admin needs and nothing else did.
+#
+# **A preview that is the write, rolled back.** §8 of the design system says the
+# add-topic dialog "shows the arithmetic before you commit", and the arithmetic
+# is clamp-and-redistribute over every active topic's floor and ceiling. A
+# client that re-implemented it would one day show a number the server then
+# did not produce — so the preview runs the same `_steer` / `_add` the write
+# runs, reads the vector, and rolls back. Nothing is logged, because nothing
+# happened.
+#
+# **The gazetteer decided a page at a time.** The harvest files terms by the
+# thousand, and one POST per click makes that queue something nobody finishes.
+
+
+async def _preview(sess) -> TopicsRead:
+    """Read the vector as the session now has it, then discard the session."""
+    try:
+        return await _topics_read(sess)
+    finally:
+        await sess.rollback()
+
+
+@router.post("/topics/preview", response_model=TopicsRead)
+async def preview_add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> TopicsRead:
+    """What `POST /topics` would leave the vector as, without leaving it so.
+
+    Refused exactly as the write would be, with the same sentence, so a dialog
+    can say why before anybody presses the button.
+    """
+    await _add(sess, body)
+    return await _preview(sess)
+
+
+@router.post("/topics/{topic}/preview", response_model=TopicsRead)
+async def preview_edit_topic(
+    topic: str, edit: TopicEdit, _: AdminAllowed, sess: WriteSession
+) -> TopicsRead:
+    """What `PATCH /topics/{topic}` would leave the vector as, without leaving it so."""
+    await _steer(sess, topic, edit)
+    return await _preview(sess)
+
+
+@router.post("/gazetteer/decide", response_model=GazetteerBulkRead)
+async def decide_terms(
+    body: GazetteerBulkDecision, _: AdminAllowed, sess: WriteSession
+) -> GazetteerBulkRead:
+    """One verdict for up to a page of terms, all or none.
+
+    All or none because a partial bulk decision is a queue in a state nobody
+    chose: an unknown id refuses the whole request and names every id it could
+    not find, rather than deciding the rest and leaving the curator to work out
+    which ones took.
+    """
+    wanted = list(dict.fromkeys(body.term_ids))
+    found = list(await sess.scalars(select(GazetteerTerm).where(GazetteerTerm.term_id.in_(wanted))))
+    missing = sorted(set(wanted) - {term.term_id for term in found})
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No gazetteer term {', '.join(str(i) for i in missing)}. Nothing was decided.",
+        )
+
+    now = dt.datetime.now(dt.UTC)
+    for term in found:
+        # The same three transitions as the per-term routes, and for the same
+        # reasons: approving clears a tombstone, turning down keeps the row,
+        # putting back leaves it undecided rather than approved.
+        if body.decision == "approve":
+            term.approved = True
+            term.rejected_at = None
+        elif body.decision == "reject":
+            term.approved = False
+            term.rejected_at = now
+        else:
+            term.approved = False
+            term.rejected_at = None
+
+    await sess.commit()
+    for term in found:
+        await sess.refresh(term)
+    order = {term_id: i for i, term_id in enumerate(wanted)}
+    found.sort(key=lambda term: order[term.term_id])
+    rows = await _rows_for(sess, found)
+    log.info(
+        "gazetteer terms decided in bulk",
+        extra={"decision": body.decision, "count": len(found)},
+    )
+    return GazetteerBulkRead(rows=rows)

@@ -26,6 +26,8 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
+// P6-28: the bulk gazetteer decision.
+import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX } from '../src/lib/api'
 import {
   ANNOTATIONS_FIELDS,
   ANNOTATION_FIELDS,
@@ -318,5 +320,26 @@ describe('dates', () => {
 
     const result = await searchCorpus({ q: 'x' })
     expect(result.hits[0]!.publication_date).toBe('2025-12-03')
+  })
+})
+
+// --------------------------------------------------------------------------
+// Admin as designed (task P6-28)
+// --------------------------------------------------------------------------
+
+describe('the bulk gazetteer decision matches the server (P6-28)', () => {
+  it('mirrors GazetteerBulkRead', () => {
+    expect([...GAZETTEER_BULK_FIELDS].sort()).toEqual(
+      pydanticFields('admin.py', 'GazetteerBulkRead').sort(),
+    )
+  })
+
+  it('caps a bulk decision where the server does', () => {
+    // A client allowed to select more than the server accepts would build a
+    // selection it can only submit as a refusal.
+    const source = readFileSync(join(SCHEMAS, 'admin.py'), 'utf8')
+    const match = /^GAZETTEER_BULK_MAX = (\d+)$/m.exec(source)
+    expect(match, 'GAZETTEER_BULK_MAX is no longer written the way this test reads it').toBeTruthy()
+    expect(GAZETTEER_BULK_MAX).toBe(Number(match![1]))
   })
 })

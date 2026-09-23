@@ -1,4 +1,5 @@
 import type { AgentRow } from '../lib/api'
+import { BUTTON_ROW, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
  * The agent registry (task P6-23, spec §11.3, §11.11, §11.12).
@@ -53,83 +54,101 @@ export function tierLabel(tier: number | null): string {
 
 export function AgentsPanel({ rows, unserved, busy, onToggle }: AgentsPanelProps) {
   return (
-    <section>
-      <h2 className="mb-2 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-        Agents
-      </h2>
+    <section className="flex flex-col gap-5">
+      <PageHeader title="Agent registry">
+        Which model serves each stage. Routing picks an agent by task type, so what matters is
+        whether every type has one it can actually reach.
+      </PageHeader>
 
       {unserved.length > 0 ? (
-        <p className="mb-6 border border-accent-attention bg-surface p-4 text-[length:var(--text-small)] text-accent-attention">
-          Nothing serves {unserved.join(', ')}. A run reaching {unserved.length > 1 ? 'those' : 'that'}{' '}
-          stage will defer rather than fail, and the registry below will look fine while it does.
+        <p className="border border-accent-attention bg-surface px-[18px] py-3.5 text-[12.5px] text-accent-attention">
+          Nothing serves {unserved.join(', ')}. A run reaching{' '}
+          {unserved.length > 1 ? 'those' : 'that'} stage will defer rather than fail, and the
+          registry below will look fine while it does.
         </p>
       ) : (
-        <p className="mb-6 text-[length:var(--text-small)] text-text-muted">
+        <p className="text-[12.5px] text-text-muted">
           Every task type has an agent that can serve it.
         </p>
       )}
 
       {rows.length === 0 ? (
-        <p className="text-[length:var(--text-small)] text-text-muted">
+        <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
           No agents are registered. They are seeded from <code>config/agents.yaml</code> at first
           boot.
         </p>
-      ) : null}
-
-      <ul className="space-y-4">
-        {rows.map((row) => {
-          const state = rowState(row)
-          return (
-            <li key={row.agent_id} className="border border-line bg-surface p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-mono text-[length:var(--text-body)] text-text">
-                  {row.agent_id}
-                </span>
-                <span className="font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-                  {row.provider} · {tierLabel(row.quality_tier)}
-                  {row.cost_tier ? ` · ${row.cost_tier}` : ''}
-                </span>
-              </div>
-
-              <p className="mt-1 text-[length:var(--text-small)] text-text-muted">
-                {/* The exact string, because `P4-15` found the seeded registry
-                    shipping a placeholder — and a placeholder is only
-                    recognisable if it is shown as written. */}
-                {row.model ?? 'no model string'}
-                {row.task_types?.length ? ` — ${row.task_types.join(', ')}` : ' — declares nothing'}
-              </p>
-
-              <p
-                className={`mt-2 text-[length:var(--text-small)] ${
-                  state.tone === 'blocked'
-                    ? 'text-accent-attention'
-                    : state.tone === 'ready'
-                      ? 'text-text'
-                      : 'text-text-muted'
-                }`}
-              >
-                {state.label}
-              </p>
-
-              {row.api_key_env_var ? (
-                <p className="mt-1 text-[length:var(--text-small)] text-text-muted">
-                  Reads its key from <code>{row.api_key_env_var}</code>
-                  {row.key_present ? ', which is set here.' : ', which is not set here.'}
-                </p>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={busy === row.agent_id}
-                onClick={() => onToggle?.(row.agent_id, !row.enabled)}
-                className="mt-3 border border-line px-3 py-1 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text disabled:text-text-muted"
-              >
-                {row.enabled ? 'disable' : 'enable'}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      ) : (
+        <TableCard>
+          <thead>
+            <tr>
+              <th className={TH}>Agent</th>
+              <th className={TH}>Serves</th>
+              <th className={TH}>Provider</th>
+              <th className={TH}>Key</th>
+              <th className={TH}>Routing</th>
+              <th className={TH}>
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const state = rowState(row)
+              return (
+                <tr key={row.agent_id} className={ROW} data-agent={row.agent_id}>
+                  <td className={`${TDM} min-w-[180px]`}>
+                    <div className="text-text">{row.agent_id}</div>
+                    {/* The exact string, because `P4-15` found the seeded
+                        registry shipping a placeholder — and a placeholder is
+                        only recognisable if it is shown as written. */}
+                    <div className="text-[11px] text-text-faint">
+                      {row.model ?? 'no model string'}
+                    </div>
+                  </td>
+                  <td className={`${TDM} text-text-muted`}>
+                    {row.task_types?.length ? row.task_types.join(', ') : 'declares nothing'}
+                  </td>
+                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>
+                    {row.provider} · {tierLabel(row.quality_tier)}
+                    {row.cost_tier ? ` · ${row.cost_tier}` : ''}
+                  </td>
+                  <td className={`${TD} text-[12px] text-text-muted`}>
+                    {row.api_key_env_var ? (
+                      <>
+                        <code className="text-text">{row.api_key_env_var}</code>
+                        {row.key_present ? ', which is set here.' : ', which is not set here.'}
+                      </>
+                    ) : (
+                      'None needed.'
+                    )}
+                  </td>
+                  <td
+                    className={`${TD} text-[12px] ${
+                      state.tone === 'blocked'
+                        ? 'text-accent-attention'
+                        : state.tone === 'ready'
+                          ? 'text-text'
+                          : 'text-text-muted'
+                    }`}
+                  >
+                    {state.label}
+                  </td>
+                  <td className={`${TD} text-right`}>
+                    <button
+                      type="button"
+                      disabled={busy === row.agent_id}
+                      onClick={() => onToggle?.(row.agent_id, !row.enabled)}
+                      className={BUTTON_ROW}
+                    >
+                      {row.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </TableCard>
+      )}
     </section>
   )
 }

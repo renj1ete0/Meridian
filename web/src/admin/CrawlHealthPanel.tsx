@@ -1,4 +1,5 @@
 import type { CrawlHealth, HourBucket, Liveness, LivenessState } from '../lib/api'
+import { Card, LABEL, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
  * Crawl health (task P6-25, spec §12.5, §13.4).
@@ -129,7 +130,13 @@ export function HourlyChart({ hours }: { hours: readonly HourBucket[] }) {
                 {`${bucketLabel(i, hours.length)}: ${bucket.succeeded.toLocaleString()} succeeded, ${bucket.failed.toLocaleString()} failed`}
               </title>
               {/* A full-height hit target, so an empty hour still answers on hover. */}
-              <rect x={i * BAR_STEP} y={0} width={BAR_STEP} height={CHART_HEIGHT} fill="transparent" />
+              <rect
+                x={i * BAR_STEP}
+                y={0}
+                width={BAR_STEP}
+                height={CHART_HEIGHT}
+                fill="transparent"
+              />
               {ok > 0 ? (
                 <rect
                   data-part="succeeded"
@@ -175,9 +182,6 @@ export function HourlyChart({ hours }: { hours: readonly HourBucket[] }) {
 // --------------------------------------------------------------------------
 // The panel
 
-const heading =
-  'mb-2 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted'
-
 export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
   const { liveness } = health
   const attempted = health.hours.reduce((sum, b) => sum + b.succeeded + b.failed, 0)
@@ -185,102 +189,127 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
   const alarm = liveness.state === 'stalled'
 
   return (
-    <section>
-      <h2 className={heading}>Crawl health</h2>
+    <section className="flex flex-col gap-5">
+      <PageHeader title="Crawl health">
+        As of {health.as_of.slice(11, 16)} UTC. Refreshes every 30 seconds while this is open.
+      </PageHeader>
 
       <div
         data-state={liveness.state}
-        className={`border bg-surface p-4 ${alarm ? 'border-accent-attention' : 'border-line'}`}
+        className={`border bg-surface px-[18px] py-3.5 ${alarm ? 'border-accent-attention' : 'border-line'}`}
       >
         <p
-          className={`font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ${
-            alarm ? 'text-accent-attention' : 'text-text-muted'
+          className={`font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] ${
+            alarm ? 'text-accent-attention' : 'text-text-faint'
           }`}
         >
           {STATE_LABELS[liveness.state]}
         </p>
-        <p className="mt-1 text-[length:var(--text-body)] text-text">
+        <p className="mt-1 text-[14px] text-text">
           {verdict(liveness, health.stall_after_seconds)}
         </p>
       </div>
 
-      <p className="mt-2 text-[length:var(--text-small)] text-text-muted">
-        As of {health.as_of.slice(11, 16)} UTC. Refreshes every 30 seconds while this is open.
-      </p>
+      <Card className="px-[18px] py-3.5">
+        <h2 className={LABEL}>Fetches per hour, last 24 h</h2>
+        {attempted === 0 ? (
+          <p className="mt-2 text-[12.5px] text-text-muted">
+            No fetch attempts in the last 24 hours.
+          </p>
+        ) : null}
+        <HourlyChart hours={health.hours} />
+      </Card>
 
-      <h3 className={`mt-8 ${heading}`}>Fetches per hour, last 24 h</h3>
-      {attempted === 0 ? (
-        <p className="text-[length:var(--text-small)] text-text-muted">
-          No fetch attempts in the last 24 hours.
-        </p>
-      ) : null}
-      <HourlyChart hours={health.hours} />
+      <div className="grid items-start gap-5 md:grid-cols-2">
+        <TableCard>
+          <thead>
+            <tr>
+              <th className={`${TH} w-full`}>Outcomes, last 24 h</th>
+              <th className={`${TH} text-right`}>Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {outcomes.length === 0 ? (
+              <tr className={ROW}>
+                <td colSpan={2} className={`${TD} text-text-muted`}>
+                  None recorded.
+                </td>
+              </tr>
+            ) : (
+              outcomes.map((row) => (
+                <tr key={row.outcome} className={ROW}>
+                  <td className={TDM}>
+                    {row.outcome}
+                    {/* Share of the day, drawn. One hue: the outcome is named
+                        beside it, so colour carries no verdict. */}
+                    <div className="mt-1 h-1 w-full bg-surface-raised">
+                      <div
+                        className="h-full bg-accent-graph"
+                        style={{ width: `${(row.count / attempted) * 100}%` }}
+                      />
+                    </div>
+                  </td>
+                  <td className={`${TDM} text-right text-text-muted`}>
+                    {row.count.toLocaleString()}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </TableCard>
 
-      <div className="mt-8 grid gap-8 sm:grid-cols-2">
-        <div>
-          <h3 className={heading}>Outcomes, last 24 h</h3>
-          {outcomes.length === 0 ? (
-            <p className="text-[length:var(--text-small)] text-text-muted">None recorded.</p>
-          ) : (
-            <ul className="space-y-2">
-              {outcomes.map((row) => (
-                <li key={row.outcome}>
-                  <div className="flex justify-between gap-2 text-[length:var(--text-small)]">
-                    <span className="font-mono text-text">{row.outcome}</span>
-                    <span className="font-mono text-text-muted">{row.count.toLocaleString()}</span>
-                  </div>
-                  {/* Share of the day, drawn. One hue: the outcome is named
-                      beside it, so colour carries no verdict. */}
-                  <div className="mt-1 h-1.5 w-full bg-surface-raised">
-                    <div
-                      className="h-full bg-accent-graph"
-                      style={{ width: `${(row.count / attempted) * 100}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div>
-          <h3 className={heading}>Queue</h3>
-          <dl className="space-y-1 text-[length:var(--text-small)]">
+        <TableCard>
+          <thead>
+            <tr>
+              <th className={`${TH} w-full`}>Queue</th>
+              <th className={`${TH} text-right`}>Rows</th>
+            </tr>
+          </thead>
+          <tbody>
             {Object.entries(health.queue).map(([status, count]) => (
-              <div key={status} className="flex justify-between gap-2">
-                <dt className="font-mono text-text">{status}</dt>
-                <dd className="font-mono text-text-muted">{count.toLocaleString()}</dd>
-              </div>
+              <tr key={status} className={ROW}>
+                <td className={TDM}>{status}</td>
+                <td className={`${TDM} text-right text-text-muted`}>{count.toLocaleString()}</td>
+              </tr>
             ))}
             {/* Beside the queue because it is one: the crawl can be healthy
                 while none of what it fetches becomes searchable. */}
-            <div className="flex justify-between gap-2 border-t border-line pt-1">
-              <dt className="font-mono text-text">awaiting embedding</dt>
-              <dd className="font-mono text-text-muted">
+            <tr className="border-t border-line">
+              <td className={TDM}>awaiting embedding</td>
+              <td className={`${TDM} text-right text-text-muted`}>
                 {health.embedding_backlog.toLocaleString()}
-              </dd>
-            </div>
-          </dl>
-        </div>
+              </td>
+            </tr>
+          </tbody>
+        </TableCard>
       </div>
 
-      <h3 className={`mt-8 ${heading}`}>Busiest domains, last hour</h3>
-      {health.top_domains.length === 0 ? (
-        <p className="text-[length:var(--text-small)] text-text-muted">
-          Nothing fetched in the last hour.
-        </p>
-      ) : (
-        <ul className="space-y-1 text-[length:var(--text-small)]">
-          {health.top_domains.map((row) => (
-            <li key={row.domain} className="flex justify-between gap-2">
-              <span className="font-mono text-text">{row.domain}</span>
-              <span className="font-mono text-text-muted">
-                {row.succeeded.toLocaleString()} of {row.attempts.toLocaleString()} succeeded
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <TableCard>
+        <thead>
+          <tr>
+            <th className={`${TH} w-full`}>Busiest domains, last hour</th>
+            <th className={`${TH} text-right`}>Succeeded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {health.top_domains.length === 0 ? (
+            <tr className={ROW}>
+              <td colSpan={2} className={`${TD} text-text-muted`}>
+                Nothing fetched in the last hour.
+              </td>
+            </tr>
+          ) : (
+            health.top_domains.map((row) => (
+              <tr key={row.domain} className={ROW}>
+                <td className={TDM}>{row.domain}</td>
+                <td className={`${TDM} whitespace-nowrap text-right text-text-muted`}>
+                  {row.succeeded.toLocaleString()} of {row.attempts.toLocaleString()} succeeded
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </TableCard>
     </section>
   )
 }

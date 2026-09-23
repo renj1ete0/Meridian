@@ -234,6 +234,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.116.0] — 2026-09-23
+
+### Added
+
+- `P6-28`: Admin follows the AdminLight design: sectioned left nav with URLs,
+  paper by default, dense tables throughout, staged topic weights with a
+  server preview before Apply, add-topic and archive dialogs that show the
+  re-normalisation, a steering-audit rail, and a paged, bulk, keyboard-driven
+  gazetteer queue. New `POST /api/admin/topics[/{topic}]/preview` and
+  `POST /api/admin/gazetteer/decide`
+
 ## [0.115.0] — 2026-09-23
 
 ### Added
