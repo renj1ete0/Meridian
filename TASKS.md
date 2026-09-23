@@ -1163,10 +1163,28 @@ deploy runbook whose first two commands could not work (`B-17`).
       threshold + margin; `{}` = examined and off-topic); every consumer updated;
       a gated `--demote-offtopic`. Agent in flight at session end
 - [~] `B-43` **Headers, footers, banners and menus inside extracted pages** —
-      measured: 17 site-wide lines recurring 1,937 times (one banner on 752 of a
-      site's 960 pages). Line cleaners (link-only, skip-links, menu blocks, PDF
-      running heads), a per-host repetition table the chunker consults, a
-      re-chunk pass that never loses a cited chunk. Agent in flight at session end
+      **partial, on branch `worktree-agent-a017d2a680b2111d0` commit `60b025d`, not
+      yet on `main`**: `worker/extract/clean.py` (navigation affordances, menu
+      blocks, PDF running heads, site-repetition matching and hashing, an 80%
+      guard) and `chunk_text(drop=…)` / `chunk_pages(drop=…)`, which cut around
+      removed lines so every chunk is still an exact slice of the text. Nothing
+      calls it yet. Simulated read-only over all live chunks: 24,133 lines
+      (2.41M of 43.0M characters) would go; 1,348 sources would change, 33 of
+      them cited (to be skipped); the guard keeps 124 whole. **Remaining**, per
+      the commit body: the `page_lines` / `boilerplate_lines` tables and a
+      `worker.boilerplate --once` pass (count hashes from *uncleaned* text, or the
+      rule switches itself off; timetable row in the migration too); wire
+      `clean_text`/`clean_pages` into `main._chunk`; `worker.rechunk` (report,
+      `--apply`, `--domain`, `--limit`, skipping any source with a cited chunk);
+      integration tests; the 15 before/after samples and a judged 20-line
+      false-positive sample. Edge cases already seen: a legal site's "recent
+      decisions" sidebar taken as a menu, ISBN lines repeated across one book's
+      chapters taken as repeated
+- [ ] `B-46` **The superseded-chunk sweep ignores entity citations** —
+      `chunks._UNCITED` checks edges, observations and attribute values but not
+      `entities.supporting_chunk_ids`, so `sweep --apply` could delete a
+      superseded chunk that only an entity cites. Must be fixed before `B-43`'s
+      re-chunk pass runs, since that pass supersedes chunks
 - [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string

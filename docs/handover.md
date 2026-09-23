@@ -19,7 +19,7 @@ Their reports went to that session, not this one, so check their branches direct
 | Task | Branch / worktree | What it was told |
 |---|---|---|
 | `P2-21` topics from content | `worktree-agent-ae5c754b3e8137972` · `.claude/worktrees/agent-ae5c754b3e8137972` | Add `sources.crawled_for`; make `topic_labels` content-derived and multi-label; update every consumer; calibrate on the live corpus **read-only**; `--demote-offtopic` gated and **not applied**; one commit `P2-21: …` whose body carries the calibration numbers |
-| `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | Line cleaners, a per-host repetition table, a re-chunk pass that protects cited chunks; measured before/after on the live corpus **read-only**; one commit `B-43: …` |
+| `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | **Handed over partial: commit `60b025d`** — the cleaners and the drop-aware chunker, tested, not wired in. The remaining list is in `TASKS.md` `B-43` and the commit body; fix `B-46` before its re-chunk pass runs. Reproduction scripts from that session's scratch folder are gone; the commit body has the numbers |
 
 To pick them up: `git log --oneline main..<branch>`. A commit there → read its body
 (the calibration report), cherry-pick onto `main` with `--no-commit`, resolve (both
