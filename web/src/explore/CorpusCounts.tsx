@@ -1,7 +1,9 @@
-import { Contested } from '../ui/Contested'
+import { DAGGER } from '../ui/Contested'
 
 /**
- * §8's four counts — documents, nodes, edges, contested†.
+ * §8's four counts — documents, nodes, edges, contested† — as the landing
+ * artboard's stats row: four equal cells between hairlines, mono numerals at
+ * 27px, 9px mono labels beneath.
  *
  * **The absent value is a designed state, not a loading spinner.** `counts` is
  * nullable and a null renders an em dash per figure, because the alternative —
@@ -12,10 +14,9 @@ import { Contested } from '../ui/Contested'
  * Mono numerals with tabular figures (§3), so the four sit in a row that scans
  * as a column of numbers rather than as four differently-sized words.
  *
- * `contested` carries the dagger through the `Contested` primitive rather than a
- * brass tint, because §6's rule is that the tint never appears without the mark
- * — and a count is exactly where a reader colour-blind to brass would otherwise
- * lose the distinction.
+ * `contested` carries the dagger as text beside its brass figure, because §6's
+ * rule is that the tint never appears without the mark — and a count is exactly
+ * where a reader colour-blind to brass would otherwise lose the distinction.
  */
 
 export interface CorpusFigures {
@@ -37,26 +38,47 @@ function figure(value: number | undefined): string {
   return value === undefined ? UNKNOWN : value.toLocaleString('en')
 }
 
-export function CorpusCounts({ counts }: CorpusCountsProps) {
-  const cells: Array<{ key: keyof CorpusFigures; label: React.ReactNode }> = [
-    { key: 'documents', label: 'Documents' },
-    { key: 'nodes', label: 'Nodes' },
-    { key: 'edges', label: 'Edges' },
-    { key: 'contested', label: <Contested form="badge" /> },
-  ]
+const CELLS: ReadonlyArray<{ key: keyof CorpusFigures; label: string }> = [
+  { key: 'documents', label: 'Documents' },
+  { key: 'nodes', label: 'Nodes' },
+  { key: 'edges', label: 'Edges' },
+  { key: 'contested', label: 'Contested' },
+]
 
+export function CorpusCounts({ counts }: CorpusCountsProps) {
   return (
-    <dl className="flex flex-wrap justify-center gap-x-10 gap-y-4">
-      {cells.map(({ key, label }) => (
-        <div key={key} className="text-center">
-          <dd className="font-mono text-[length:var(--text-heading)] text-text">
-            {figure(counts?.[key])}
-          </dd>
-          <dt className="mt-1 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-            {label}
-          </dt>
-        </div>
-      ))}
+    <dl className="grid grid-cols-2 gap-y-5 border-y border-line/70 py-5 sm:flex sm:gap-y-0">
+      {CELLS.map(({ key, label }, index) => {
+        const contested = key === 'contested'
+        return (
+          <div
+            key={key}
+            className={`flex flex-1 basis-0 flex-col-reverse gap-2 ${
+              index > 0 ? 'sm:border-l sm:border-line/70 sm:pl-6' : ''
+            }`}
+          >
+            <dt
+              className={`font-mono text-[9px] font-medium uppercase leading-none tracking-[var(--tracking-label)] ${
+                contested ? 'text-accent-attention' : 'text-text-faint'
+              }`}
+            >
+              {label}
+            </dt>
+            <dd
+              className={`font-mono text-[27px] leading-none tracking-[-0.02em] tabular-nums ${
+                contested ? 'text-accent-attention' : 'text-text'
+              }`}
+            >
+              {figure(counts?.[key])}
+              {contested ? (
+                <sup className="relative -top-[7px] ml-px align-baseline text-[17px] leading-none" aria-label="contested">
+                  {DAGGER}
+                </sup>
+              ) : null}
+            </dd>
+          </div>
+        )
+      })}
     </dl>
   )
 }

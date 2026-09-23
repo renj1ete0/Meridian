@@ -141,22 +141,47 @@ describe('the entry points', () => {
   })
 
   it('draws them as siblings, so search does not swallow the other two', () => {
-    const markup = renderToStaticMarkup(<EntryPoints onOpen={noop} />)
+    const markup = renderToStaticMarkup(<EntryPoints actions={{ search: noop }} />)
     expect(markup.match(/<li>/g)).toHaveLength(3)
   })
 
-  it('says why an unavailable entry point is unavailable', () => {
-    // A disabled card that still shows its normal description tells the reader
-    // nothing about why it will not open, and §4 asks an error to name the cause
-    // and the recovery.
-    const markup = text(
-      renderToStaticMarkup(
-        <EntryPoints onOpen={noop} unavailable={{ coverage: 'Coverage scoring is not built yet.' }} />,
-      ),
+  it('says why an unavailable entry point is unavailable, and stops being a control', () => {
+    // A disabled card that says nothing tells the reader nothing about why it
+    // will not open, and §4 asks an error to name the cause.
+    const markup = renderToStaticMarkup(
+      <EntryPoints
+        actions={{ search: noop, coverage: noop }}
+        unavailable={{ coverage: 'Coverage scoring is not built yet.' }}
+      />,
     )
 
-    expect(markup).toContain('Coverage scoring is not built yet.')
-    expect(markup).not.toContain('Thin and ageing cells first.')
+    expect(text(markup)).toContain('Coverage scoring is not built yet.')
+    // Still says what the view is — the reason is added, not substituted.
+    expect(text(markup)).toContain(ENTRY_POINTS.find((e) => e.name === 'coverage')!.description)
+    // Only search is a button: the unavailable card is not, even with an action.
+    expect(markup.match(/<button/g)).toHaveLength(1)
+  })
+
+  it('draws a card with nowhere to go as a card, not a button', () => {
+    // A control that does nothing when pressed teaches a reader that the
+    // controls on this screen are unreliable.
+    const markup = renderToStaticMarkup(<EntryPoints actions={{ search: noop }} />)
+    expect(markup.match(/<button/g)).toHaveLength(1)
+  })
+
+  it('carries the dagger on the contested card, as text', () => {
+    const markup = renderToStaticMarkup(<EntryPoints />)
+    expect(markup.replace(/class="[^"]*"/g, '')).toContain(DAGGER)
+  })
+
+  it('shows a measured line only where one is given', () => {
+    // The artboard's "9 thin cells · 3 stale" needs coverage scoring, which
+    // does not exist. No default may stand in for it.
+    const bare = text(renderToStaticMarkup(<EntryPoints />))
+    expect(bare).not.toMatch(/thin cells ·|stale|new this week/)
+
+    const detailed = text(renderToStaticMarkup(<EntryPoints details={{ search: '38 passages' }} />))
+    expect(detailed).toContain('38 passages')
   })
 })
 
@@ -195,7 +220,32 @@ describe('where you were', () => {
       ),
     )
 
-    expect(markup).toContain('None opened yet.')
+    expect(markup).toContain('No node opened yet.')
+    expect(markup).not.toContain('No saved views yet.')
+  })
+
+  it('labels each row with what it is and when', () => {
+    const markup = text(
+      renderToStaticMarkup(
+        <WhereYouWere
+          savedViews={[{ id: 'v1', name: 'Kerbside pilots', at: '2026-09-20T10:00:00Z' }]}
+          recentNodes={[]}
+          now={new Date('2026-09-23T12:00:00Z')}
+        />,
+      ),
+    )
+
+    expect(markup).toContain('Saved view')
+    expect(markup).toContain('3 days ago')
+  })
+
+  it('carries the since-last-visit line at its head', () => {
+    // §5: one mono line of deltas, set with the list, not a separate widget.
+    const markup = renderToStaticMarkup(
+      <WhereYouWere savedViews={[]} recentNodes={[]} delta={<p>DELTA</p>} />,
+    )
+    expect(markup.indexOf('DELTA')).toBeGreaterThan(markup.indexOf('Where you were'))
+    expect(markup.indexOf('DELTA')).toBeLessThan(markup.indexOf('No saved views'))
   })
 
   it('marks a contested node with the dagger as text', () => {
@@ -230,7 +280,7 @@ describe('the copy holds the voice guide', () => {
   const rendered = [
     renderToStaticMarkup(<SearchField value="" onChange={noop} />),
     renderToStaticMarkup(<CorpusCounts counts={null} />),
-    renderToStaticMarkup(<EntryPoints onOpen={noop} />),
+    renderToStaticMarkup(<EntryPoints actions={{ search: noop }} />),
     renderToStaticMarkup(<WhereYouWere savedViews={[]} recentNodes={[]} />),
   ].map(text)
 

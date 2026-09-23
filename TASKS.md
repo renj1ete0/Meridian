@@ -1264,6 +1264,17 @@ deploy runbook whose first two commands could not work (`B-17`).
       the admin gate is closed. Every query is bounded by `now`, which is how
       the tests assert verdicts against a shared database. Built by a
       delegated agent in a worktree and reviewed on merge
+- [x] `P6-27` **The application shell and the Explore landing, as designed** —
+      `v0.114.0`. One 54px top bar on every screen with the §5 cluster: a
+      status pill (queue, fetch health, a brass dot and the words "run failed"
+      on a failed run, hollow when run history cannot be read), a bell and a
+      notifications panel grouped by day and filtered by type, and settings
+      holding the theme. ⌘K from anywhere. Pages set their own width. The
+      landing follows its artboard; where the mock shows numbers nothing
+      produces yet (coverage cells, weekly and edge deltas, recent nodes) the
+      screen says so instead. Results and source page restyled; long passages
+      clamp. Built by a delegated agent after the operator judged the previous
+      UI "not as per what we designed"; checked by screenshot against the mock
 - [x] `P6-26` **The corpus map: the vectors, seen** — `v0.111.0`. `/map`
       draws a sample of searchable passages placed by their embeddings,
       coloured by topic, with the passage on hover and its source on click.

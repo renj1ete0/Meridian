@@ -27,7 +27,7 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
     // finding — and "this document has no figures" and "figures were never
     // extracted from it" are different facts a reader may need to act on.
     return (
-      <p className="text-text-muted">
+      <p className="text-[12.5px] leading-[1.55] text-text-muted">
         No figures were extracted from this source. Captions are taken at ingestion; a document
         whose figures carry no caption or alt text yields none.
       </p>
@@ -36,14 +36,14 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
 
   return (
     <section>
-      <h3 className="font-sans text-[length:var(--text-subhead)] font-semibold">
+      <h3 className="font-mono text-[9px] font-medium uppercase leading-none tracking-[var(--tracking-label)] text-text-faint">
         Figures ({figures.length})
       </h3>
 
       <ul className="mt-3 space-y-4">
         {figures.map((figure) => (
-          <li key={figure.figure_id} className="border-l border-line pl-3">
-            <p className="text-text">{figure.caption ?? figure.alt_text}</p>
+          <li key={figure.figure_id} className="border-l border-line-strong pl-3">
+            <p className="text-[13px] leading-[1.55] text-text/90">{figure.caption ?? figure.alt_text}</p>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {figure.page !== null ? <DataChip>page {figure.page}</DataChip> : null}
@@ -55,7 +55,7 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
                   link rot is the binding reason, and a local copy is what keeps
                   a citation checkable years later. */}
               {figure.raw_url !== null ? (
-                <a href={figure.raw_url} className="text-accent-graph underline">
+                <a href={figure.raw_url} className="font-mono text-[10.5px] text-accent-graph hover:underline">
                   open in the stored copy
                 </a>
               ) : null}

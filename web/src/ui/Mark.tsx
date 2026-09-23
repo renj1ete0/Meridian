@@ -176,6 +176,14 @@ export interface LockupProps {
   /** Size of the mark within the lockup. */
   size?: number
   monochrome?: boolean
+  /**
+   * Wordmark size in px. Defaults to §1's proportion of the mark. The Explore
+   * landing sets it larger than that proportion (a 34px mark over a 26px
+   * wordmark), because there the lockup is a heading rather than a signature.
+   */
+  wordmarkSize?: number
+  /** The gap either side of the hairline. §1's 22px unless a screen says otherwise. */
+  gap?: number
   className?: string
 }
 
@@ -191,9 +199,12 @@ export function Lockup({
   orientation = 'horizontal',
   size = 40,
   monochrome = false,
+  wordmarkSize,
+  gap = 22,
   className,
 }: LockupProps) {
   const mark = <Mark size={size} monochrome={monochrome} />
+  const wordmark = wordmarkSize ?? size * 0.42
 
   if (orientation === 'stacked') {
     return (
@@ -205,7 +216,7 @@ export function Lockup({
         {mark}
         <span
           className="font-sans font-medium tracking-[-0.006em]"
-          style={{ fontSize: size * 0.42 }}
+          style={{ fontSize: wordmark }}
         >
           {WORDMARK}
         </span>
@@ -227,18 +238,23 @@ export function Lockup({
       style={{ minWidth: MIN_LOCKUP_WIDTH }}
     >
       {mark}
-      <span className="inline-block w-[22px]" />
-      {/* The hairline, at cap height. Archivo's cap height is ~0.72em, so the
-          rule is sized from the wordmark rather than from the mark — a rule as
-          tall as the drawing would read as a table border. */}
+      <span className="inline-block" style={{ width: gap }} />
+      {/* The hairline, sized from the wordmark rather than from the mark — a
+          rule as tall as the drawing would read as a table border. The
+          artboards draw it just under the wordmark's full height (24px beside
+          26px type on the Explore landing); an earlier cap-height rule came out
+          at half that and read as a stray tick. */}
       <span
         aria-hidden="true"
         className="inline-block w-px bg-line-strong"
-        style={{ height: size * 0.42 * 0.72 }}
+        style={{ height: wordmark * 0.92 }}
         data-role="hairline"
       />
-      <span className="inline-block w-[22px]" />
-      <span className="font-sans font-medium tracking-[-0.006em]" style={{ fontSize: size * 0.42 }}>
+      <span className="inline-block" style={{ width: gap }} />
+      <span
+        className="font-sans font-medium leading-none tracking-[-0.006em]"
+        style={{ fontSize: wordmark }}
+      >
         {WORDMARK}
       </span>
     </span>

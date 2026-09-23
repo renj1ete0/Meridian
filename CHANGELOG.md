@@ -234,6 +234,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `--skip-preflight` and `--rebuild` for the two cases where the default is
   wrong
 
+## [0.114.0] — 2026-09-23
+
+### Added
+
+- `P6-27`: the application shell and the Explore landing follow the design.
+  One top bar with the status pill, notifications bell and panel, and settings
+  (theme); ⌘K focuses search from any page; pages control their own width.
+  The landing matches its artboard — lockup, wide search, stats row, entry
+  cards, "where you were" — with honest states where data does not exist yet.
+  Search results count per retrieval arm and clamp long passages; the source
+  page is restyled
+
 ## [0.113.4] — 2026-09-23
 
 ### Fixed

@@ -123,13 +123,30 @@ describe('icons hold the published grid', () => {
     expect(Object.keys(NODE_GLYPHS)).toHaveLength(6)
   })
 
-  it.each(Object.keys(ICONS))('%s draws on the 24-unit grid at both weights', (name) => {
+  it.each(Object.keys(INTERFACE_ICONS))('%s draws on the 24-unit grid at the interface weight', (name) => {
     const markup = renderToStaticMarkup(<Icon name={name} />)
 
     expect(markup).toContain(`viewBox="0 0 ${GRID} ${GRID}"`)
     expect(markup).toContain(`stroke-width="${STROKE_SILHOUETTE}"`)
     expect(markup).toContain('stroke-linecap="round"')
     expect(markup).toContain('stroke-linejoin="round"')
+  })
+
+  it.each(Object.keys(NODE_GLYPHS))('%s is drawn at the secondary weight throughout', (name) => {
+    // §7: "node-type glyphs at the secondary weight". A glyph at the interface
+    // weight sits beside a node name heavier than the type it is labelling.
+    const markup = renderToStaticMarkup(<Icon name={name} size={24} />)
+
+    expect(markup).toContain(`viewBox="0 0 ${GRID} ${GRID}"`)
+    expect(markup).toContain(`stroke-width="${STROKE_DETAIL}"`)
+    expect(markup).not.toContain(`stroke-width="${STROKE_SILHOUETTE}"`)
+  })
+
+  it('keeps solid shapes at every size, where detail strokes are dropped', () => {
+    // The slider knobs are what make steering read as sliders rather than two
+    // lines; like the mark's nodes, they are filled so they survive at 16px.
+    const small = renderToStaticMarkup(<Icon name="steering" size={16} />)
+    expect(small).toContain('fill="currentColor"')
   })
 
   it('keeps the silhouette heavier than the detail inside it', () => {
@@ -142,8 +159,8 @@ describe('icons hold the published grid', () => {
     // The same rule the compact mark follows. At 16px a 1.35-unit stroke on a
     // 24-unit grid is under half a pixel: it renders as a smudge that makes the
     // silhouette look blurry rather than as detail.
-    const large = renderToStaticMarkup(<Icon name="search" size={DETAIL_FLOOR} />)
-    const small = renderToStaticMarkup(<Icon name="search" size={DETAIL_FLOOR - 4} />)
+    const large = renderToStaticMarkup(<Icon name="coverage" size={DETAIL_FLOOR} />)
+    const small = renderToStaticMarkup(<Icon name="coverage" size={DETAIL_FLOOR - 4} />)
 
     expect(large).toContain(`stroke-width="${STROKE_DETAIL}"`)
     expect(small).not.toContain(`stroke-width="${STROKE_DETAIL}"`)

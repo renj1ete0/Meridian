@@ -47,25 +47,35 @@ export const TIER_LABEL: Record<SourceTier, string> = {
   informal: 'Informal',
 }
 
-/** One shared appearance. See the module docstring for why there is only one. */
-const CHIP =
-  'inline-flex items-center rounded-chip border border-line-strong bg-surface-raised ' +
-  'px-2 py-0.5 font-mono text-[length:var(--text-label)] uppercase ' +
-  'tracking-[var(--tracking-label)] text-text-muted'
+/**
+ * One shared appearance. See the module docstring for why there is only one.
+ *
+ * Drawn as the Explore artboard draws the tier on a supporting chunk: 9px mono
+ * caps on a hairline border, no fill, faint ink. It is metadata beside a quote,
+ * and a filled chip would outweigh the passage it describes.
+ */
+const TIER_CHIP =
+  'inline-flex items-center border border-line px-1.5 py-px font-mono text-[9px] ' +
+  'uppercase leading-[1.5] tracking-[0.1em] text-text-faint'
 
 export function TierChip({ tier }: { tier: SourceTier }) {
   return (
-    <span className={CHIP} data-tier={tier}>
+    <span className={TIER_CHIP} data-tier={tier}>
       {TIER_LABEL[tier] ?? tier}
     </span>
   )
 }
 
 /**
- * A chip for anything else the system measured — an extractor name, a date, a
- * chunk id. Same form as a tier chip because it is the same kind of thing:
- * something the system recorded rather than something a person wrote.
+ * A chip for anything else the system measured — an extractor name, a chunk
+ * id, the retrieval mode. The same hairline form as a tier chip because it is
+ * the same kind of thing, but set in lower case: these are values (`hybrid`,
+ * `chunk 412`), and capitals would turn a value into a heading.
  */
+const DATA_CHIP =
+  'inline-flex items-center border border-line px-1.5 py-px font-mono text-[10px] ' +
+  'leading-[1.5] text-text-faint'
+
 export function DataChip({ children }: { children: React.ReactNode }) {
-  return <span className={CHIP}>{children}</span>
+  return <span className={DATA_CHIP}>{children}</span>
 }

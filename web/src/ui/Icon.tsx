@@ -1,4 +1,4 @@
-import { ICONS, type IconGeometry } from './icons'
+import { ICONS, isNodeGlyph, type IconGeometry } from './icons'
 
 /**
  * One icon, drawn to §7's grid (task P6-16).
@@ -26,6 +26,9 @@ export const LIVE_GLYPH = 16
  * detail, it renders as a smudge that makes the silhouette look blurry.
  */
 export const DETAIL_FLOOR = 20
+
+/** Coverage's lit cell, as drawn on the Icons artboard. */
+export const TINT_OPACITY = 0.4
 
 export interface IconProps {
   name: keyof typeof ICONS
@@ -59,8 +62,17 @@ export function Icon({ name, size = LIVE_INTERFACE, title, className }: IconProp
       focusable="false"
     >
       {title ? <title>{title}</title> : null}
-      <path d={geometry.silhouette} strokeWidth={STROKE_SILHOUETTE} />
+      {geometry.tint ? (
+        <path d={geometry.tint} fill="currentColor" stroke="none" opacity={TINT_OPACITY} />
+      ) : null}
+      {/* §7: node-type glyphs are drawn at the secondary weight throughout —
+          they sit beside text at node scale and must not outweigh it. */}
+      <path
+        d={geometry.silhouette}
+        strokeWidth={isNodeGlyph(String(name)) ? STROKE_DETAIL : STROKE_SILHOUETTE}
+      />
       {showDetail ? <path d={geometry.detail} strokeWidth={STROKE_DETAIL} /> : null}
+      {geometry.solid ? <path d={geometry.solid} fill="currentColor" stroke="none" /> : null}
     </svg>
   )
 }

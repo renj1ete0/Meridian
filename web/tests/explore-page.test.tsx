@@ -21,8 +21,9 @@ import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { ResultList } from '../src/explore/ResultList'
-import { RetrievalNotice, SearchOutcome } from '../src/explore/ExplorePage'
+import { CLAMP_OVER, ResultList } from '../src/explore/ResultList'
+import { RetrievalNotice, SearchOutcome, entryState, summaryLine } from '../src/explore/ExplorePage'
+import type { CorpusStats } from '../src/lib/api'
 import type { SearchHit, SearchResponse } from '../src/lib/api'
 
 const REPO = join(fileURLToPath(new URL('..', import.meta.url)), '..')
@@ -197,12 +198,23 @@ describe('a degraded search says what it did not do', () => {
     expect(rendered).not.toContain('different wording')
   })
 
-  it('draws the notice at attention weight only when empty', () => {
+  it('draws the notice as a bordered notice only when empty', () => {
     const withHits = renderToStaticMarkup(<RetrievalNotice reason="r" empty={false} />)
     const withNone = renderToStaticMarkup(<RetrievalNotice reason="r" empty />)
 
-    expect(withHits).not.toContain('border-accent-attention')
-    expect(withNone).toContain('border-accent-attention')
+    expect(withHits).toContain('data-weight="caveat"')
+    expect(withNone).toContain('data-weight="notice"')
+  })
+
+  it('does not paint the notice brass', () => {
+    // §6: the brass tint never appears without the dagger, and brass means
+    // contested, stale or flagged. A search that ran one arm is none of those,
+    // and a brass box would read as a verdict on the corpus.
+    for (const empty of [true, false]) {
+      expect(renderToStaticMarkup(<RetrievalNotice reason="r" empty={empty} />)).not.toContain(
+        'accent-attention',
+      )
+    }
   })
 
   it('names the query it found nothing for', () => {
@@ -283,5 +295,87 @@ describe('the page number is labelled, not hedged', () => {
       renderToStaticMarkup(<ResultList hits={[hit({ page_unit: null, media_type: null })]} />),
     )
     expect(rendered).toContain('page/offset 1')
+  })
+})
+
+// --------------------------------------------------------------------------
+// P6-27 — the results summary, long passages, the entry cards' honest states
+// --------------------------------------------------------------------------
+
+describe('the results summary', () => {
+  it('counts per arm, so a vector-only result does not read "20 of 0"', () => {
+    const line = summaryLine(
+      response({ arms: ['lexical', 'vector'], lexical_candidates: 0, vector_candidates: 100 }),
+    )
+    expect(line).toBe('1 shown · lexical 0 · vector 100')
+  })
+
+  it('names only the arms that ran', () => {
+    expect(summaryLine(response())).toBe('1 shown · lexical 9')
+  })
+})
+
+describe('a long passage', () => {
+  it('is clamped by CSS, never truncated in the markup', () => {
+    // Find-in-page, copying and a screen reader all need the verbatim chunk.
+    const long = 'x'.repeat(CLAMP_OVER + 1) + 'TAIL'
+    const markup = renderToStaticMarkup(<ResultList hits={[hit({ text: long })]} />)
+    expect(markup).toContain('TAIL')
+    expect(markup).toContain('line-clamp-[8]')
+    expect(text(markup)).toContain('whole passage')
+  })
+
+  it('offers no toggle for a short one', () => {
+    const markup = renderToStaticMarkup(<ResultList hits={[hit()]} />)
+    expect(markup).not.toContain('line-clamp')
+    expect(text(markup)).not.toContain('whole passage')
+  })
+})
+
+describe('what the entry cards claim', () => {
+  function stats(over: Partial<CorpusStats> = {}): CorpusStats {
+    return {
+      as_of: '2026-09-23T00:00:00Z',
+      sources: 10,
+      chunks: 100,
+      embedded_chunks: 100,
+      duplicate_chunks: 0,
+      searchable_chunks: 100,
+      entities: 5,
+      edges: 4,
+      contested_edges: 0,
+      new_sources: null,
+      new_chunks: null,
+      topics: [],
+      sources_without_topics: 0,
+      ...over,
+    }
+  }
+
+  it('always says coverage is not built, and invents no cell count', () => {
+    const { unavailable } = entryState(stats())
+    expect(unavailable.coverage).toMatch(/not built/i)
+    expect(unavailable.coverage).not.toMatch(/\d/)
+  })
+
+  it('says there is nothing to disagree about when there are no edges', () => {
+    expect(entryState(stats({ edges: 0 })).unavailable.contested).toMatch(/No edges yet/)
+  })
+
+  it('states a real zero when edges exist and none is contested', () => {
+    const { unavailable, descriptions } = entryState(stats({ edges: 4, contested_edges: 0 }))
+    expect(unavailable.contested).toBeUndefined()
+    expect(descriptions.contested).toMatch(/^No pair of sources disagrees across 4 edges/)
+  })
+
+  it('carries the real count when there is one, in the right number', () => {
+    expect(entryState(stats({ contested_edges: 1 })).descriptions.contested).toMatch(/^1 pair where/)
+    expect(entryState(stats({ contested_edges: 214 })).descriptions.contested).toMatch(/^214 pairs where/)
+  })
+
+  it('makes no claim about contested pairs before the counts arrive', () => {
+    const { unavailable, descriptions } = entryState(null)
+    expect(unavailable.contested).toBeUndefined()
+    expect(descriptions.contested).toBeUndefined()
   })
 })

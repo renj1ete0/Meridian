@@ -74,7 +74,7 @@ export function SaveView({ query, filters, busy = false, error = null, onSave }:
           onChange={(event) => setName(event.target.value)}
           placeholder="Name it"
           disabled={busy}
-          className="h-[var(--control-height)] border border-line-strong bg-surface-raised px-2 text-[length:var(--text-small)]"
+          className="h-8 w-64 border border-line-strong bg-surface px-2 text-[13px] text-text placeholder:text-text-faint focus:border-accent-graph/70 focus:outline-none"
         />
       </label>
       <button type="submit" disabled={busy || !name.trim()} className={CONTROL}>
@@ -87,13 +87,13 @@ export function SaveView({ query, filters, busy = false, error = null, onSave }:
         // The API's own sentence. On an instance without Access it names the two
         // environment variables that would allow this, which is the only
         // actionable thing in the response.
-        <span className="text-[length:var(--text-small)] text-accent-attention">{error}</span>
+        <span className="font-mono text-[10.5px] leading-[1.5] text-text-muted">{error}</span>
       ) : null}
     </form>
   )
 }
 
+/** §5's secondary control: `surface.raised` with a `line.strong` border. */
 const CONTROL =
-  'h-[var(--control-height)] border border-line-strong bg-surface-raised px-3 ' +
-  'font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ' +
-  'disabled:opacity-50'
+  'h-8 border border-line-strong bg-surface-raised px-3 font-sans text-[12.5px] ' +
+  'text-text/85 hover:text-text disabled:opacity-50'

@@ -87,7 +87,7 @@ export function NoteComposer({
 
   return (
     <form
-      className="flex flex-col gap-2 border border-line-strong bg-surface-raised p-3"
+      className="flex flex-col gap-2 border border-line bg-surface p-3"
       onSubmit={(event) => {
         event.preventDefault()
         const trimmed = title.trim()
@@ -112,7 +112,7 @@ export function NoteComposer({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="What is this?"
           disabled={busy}
-          className="h-[var(--control-height)] border border-line-strong bg-surface px-2 text-[length:var(--text-small)]"
+          className="h-[var(--control-height)] border border-line-strong bg-surface-raised px-2 text-[13px] text-text placeholder:text-text-faint focus:border-accent-graph/70 focus:outline-none"
         />
       </label>
 
@@ -124,11 +124,11 @@ export function NoteComposer({
           placeholder="Your thinking. This is the layer nothing else can write."
           rows={4}
           disabled={busy}
-          className="border border-line-strong bg-surface px-2 py-1 text-[length:var(--text-small)]"
+          className="border border-line-strong bg-surface-raised px-2 py-1.5 text-[13px] leading-[1.55] text-text placeholder:text-text-faint focus:border-accent-graph/70 focus:outline-none"
         />
       </label>
 
-      <p className="text-[length:var(--text-small)] text-text-muted">
+      <p className="font-mono text-[10.5px] text-text-faint">
         {describeAttachment(about, citing)}
       </p>
 
@@ -172,14 +172,14 @@ export function NoteList({ notes, inContextOf }: NoteListProps) {
   }
 
   return (
-    <ol className="mt-3 space-y-4">
+    <ol className="space-y-4">
       {notes.map((note) => {
         const elsewhere = note.about.filter((t) => t.entity_id !== inContextOf)
         return (
-          <li key={note.entity_id} className="border-l-2 border-accent-graph pl-3">
-            <h3 className="font-sans text-[length:var(--text-body)] font-semibold">{note.title}</h3>
+          <li key={note.entity_id} className="border-l-2 border-accent-graph/60 pl-3">
+            <h3 className="font-sans text-[13.5px] font-semibold text-text">{note.title}</h3>
             {note.body ? (
-              <p className="mt-1 max-w-prose whitespace-pre-wrap text-[length:var(--text-small)]">
+              <p className="mt-1 max-w-prose whitespace-pre-wrap text-[12.5px] leading-[1.55] text-text-muted">
                 {note.body}
               </p>
             ) : null}
@@ -199,7 +199,7 @@ export function NoteList({ notes, inContextOf }: NoteListProps) {
                   key={target.entity_id}
                   href={hrefForNode(target.entity_id)}
                   onClick={onInternalClick(hrefForNode(target.entity_id))}
-                  className="text-[length:var(--text-small)] text-accent-graph underline"
+                  className="font-mono text-[10.5px] text-accent-graph hover:underline"
                 >
                   {target.canonical_name}
                 </a>
@@ -232,9 +232,24 @@ export interface NotesPanelProps {
  */
 export function NotesPanel({ notes, total }: NotesPanelProps) {
   return (
-    <section>
-      <h2 className="font-sans text-[length:var(--text-heading)] font-semibold">Your notes</h2>
-      <p className="mt-1 text-[length:var(--text-small)] text-text-muted">
+    <section aria-labelledby="your-notes" className="flex flex-col gap-3.5">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2
+          id="your-notes"
+          className="font-mono text-[9px] font-medium uppercase leading-none tracking-[var(--tracking-label)] text-text-faint"
+        >
+          Your notes
+        </h2>
+        {total > 0 ? (
+          <a
+            href="/api/explore/export/annotations"
+            className="font-mono text-[10.5px] text-accent-graph hover:underline"
+          >
+            export as Markdown →
+          </a>
+        ) : null}
+      </div>
+      <p className="font-mono text-[11.5px] leading-[1.5] text-text-muted">
         {total === 0
           ? 'Nothing yet. A note is the only thing here that cannot be recovered by crawling again.'
           : `${total} note${total === 1 ? '' : 's'}${
@@ -243,22 +258,10 @@ export function NotesPanel({ notes, total }: NotesPanelProps) {
       </p>
 
       {notes.length > 0 ? <NoteList notes={notes} /> : null}
-
-      {total > 0 ? (
-        <p className="mt-4 font-mono text-[length:var(--text-data)]">
-          <a
-            href="/api/explore/export/annotations"
-            className="text-accent-graph underline"
-          >
-            export as Markdown
-          </a>
-        </p>
-      ) : null}
     </section>
   )
 }
 
 const CONTROL =
   'h-[var(--control-height)] border border-line-strong bg-surface-raised px-3 ' +
-  'font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ' +
-  'disabled:opacity-50'
+  'font-sans text-[12.5px] text-text/85 hover:text-text disabled:opacity-50'

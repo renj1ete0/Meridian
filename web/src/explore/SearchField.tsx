@@ -1,8 +1,8 @@
-import { DataChip } from '../ui/Tier'
+import { SEARCH_INPUT_ID } from '../lib/hotkeys'
 import { Icon } from '../ui/Icon'
 
 /**
- * The Explore search field — docs/design/design-system.md §8.
+ * The Explore search field — design-system.md §8, `ExploreLanding.dc.html`.
  *
  * §8 puts three things in this control and two of them are unusual enough to be
  * worth defending.
@@ -20,7 +20,7 @@ import { Icon } from '../ui/Icon'
  * behaviour; this says it where the query is typed.
  *
  * Takes props and holds no state. The field is controlled by whatever wires it
- * up, because the query belongs to the page's URL rather than to this control.
+ * up, because the query belongs to the page rather than to this control.
  */
 
 export interface SearchFieldProps {
@@ -36,11 +36,14 @@ export interface SearchFieldProps {
    * left to infer it from thin results.
    */
   note?: string
+  /** `large` on the landing, where the field is the page; `regular` above results. */
+  size?: 'large' | 'regular'
   id?: string
 }
 
 export const MODE_MARKER = 'hybrid'
 export const FILTER_NOTE = 'Filters apply before the vector search.'
+export const SHORTCUT_NOTE = '⌘K from anywhere'
 
 export function SearchField({
   value,
@@ -48,11 +51,15 @@ export function SearchField({
   onSubmit,
   disabled = false,
   note,
-  id = 'explore-search',
+  size = 'large',
+  id = SEARCH_INPUT_ID,
 }: SearchFieldProps) {
+  const large = size === 'large'
+
   return (
     <form
-      className="mx-auto w-full max-w-2xl"
+      className="flex w-full flex-col gap-3"
+      role="search"
       onSubmit={(event) => {
         event.preventDefault()
         onSubmit?.(value)
@@ -62,22 +69,37 @@ export function SearchField({
         Search the corpus
       </label>
 
-      <div className="flex items-center gap-3 border border-line-strong bg-surface-raised px-3">
-        <Icon name="search" size={20} />
+      <div
+        className={`flex items-center gap-[13px] border border-line-strong bg-surface focus-within:border-accent-graph/70 ${
+          large ? 'px-[18px] py-2.5' : 'px-3.5 py-1'
+        }`}
+      >
+        <span className="shrink-0 text-text-faint">
+          <Icon name="search" size={17} />
+        </span>
         <input
           id={id}
           type="search"
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Search the corpus"
-          className="h-[var(--control-height)] flex-1 bg-transparent font-sans text-[length:var(--text-body)] text-text placeholder:text-text-faint focus:outline-none"
+          placeholder="Search concepts, places, findings, sources"
+          autoComplete="off"
+          spellCheck={false}
+          className={`min-w-0 flex-1 bg-transparent font-sans text-text placeholder:text-text-faint focus:outline-none ${
+            large ? 'h-9 text-[15px]' : 'h-8 text-[14px]'
+          }`}
         />
-        <DataChip>{MODE_MARKER}</DataChip>
+        <span className="shrink-0 border border-line px-1.5 py-[3px] font-mono text-[9.5px] leading-none text-text-faint">
+          {MODE_MARKER}
+        </span>
       </div>
 
-      <p className="mt-2 text-center font-mono text-[length:var(--text-data)] text-text-faint">
-        {note ?? FILTER_NOTE}
+      <p className="flex justify-between gap-4 font-mono text-[10.5px] text-text-faint">
+        <span>{note ?? FILTER_NOTE}</span>
+        <span className="hidden shrink-0 sm:inline" aria-hidden="true">
+          {SHORTCUT_NOTE}
+        </span>
       </p>
     </form>
   )

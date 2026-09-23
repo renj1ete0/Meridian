@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { focusSearch } from '../lib/hotkeys'
 import { openSession } from '../lib/lastVisit'
+import { Lockup } from '../ui/Mark'
 import { NotesPanel } from './Annotations'
 import { CorpusCounts, type CorpusFigures } from './CorpusCounts'
 import { EntryPoints, type EntryPointName } from './EntryPoints'
+import { FirstHour } from './FirstHour'
 import { ResultList } from './ResultList'
 import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
@@ -14,34 +17,39 @@ import {
   ApiError,
   corpusStats,
   getAnnotations,
+  getCrawlProgress,
   getSavedViews,
   markViewOpened,
   saveView,
   searchCorpus,
   type Annotation,
   type CorpusStats,
+  type CrawlProgress,
   type SavedViewRecord,
   type SearchResponse,
 } from '../lib/api'
 
 /**
- * Explore, wired to the read surface (task P2-08, spec §12.5, design §8).
+ * Explore — the landing and the search results (tasks P2-08, P6-27; spec
+ * §12.5; design-system.md §8; `ExploreLanding.dc.html`).
  *
- * **The degraded flag is rendered, not logged.** `P2-07` has no embedder, so
- * only the lexical arm runs, and every response says so. A reader who searches
- * a topic, sees nothing, and is not told that meaning-based matching was off
- * will conclude the corpus lacks the topic — which is false, costly, and
- * exactly the confusion §12.5 exists to prevent: it asks the interface to make
- * *absence* visible, and "we did not look properly" is a different absence from
- * "it is not here".
+ * **The landing is §8's default state**, not a focus+expand view and never the
+ * whole graph: the lockup above a centred, wide search field; four counts; the
+ * three entry points as parallel cards; a short "where you were". Behind it,
+ * the mark's own circle-and-meridian scaled up and cropped — decoration, and
+ * nothing on it is corpus data.
  *
- * That is why the notice is loudest when there are no hits. A degraded search
- * that returned results is a caveat; a degraded search that returned nothing is
- * a claim about the corpus that the search is not entitled to make.
+ * **The degraded flag is rendered, not logged.** Without an embedder only the
+ * lexical arm runs, and every response says so. A reader who searches a topic,
+ * sees nothing, and is not told that meaning-based matching was off will
+ * conclude the corpus lacks the topic — which is false, costly, and exactly the
+ * confusion §12.5 exists to prevent. So the notice is loudest when there are no
+ * hits: a degraded search that returned nothing is a claim about the corpus the
+ * search is not entitled to make.
  *
  * **Searching happens on submit.** Not per keystroke: each query is a fused
  * ranking over two arms and a candidate pool, and firing one per character
- * spends the Pi's budget on queries nobody finished typing. A superseded
+ * spends the machine's budget on queries nobody finished typing. A superseded
  * request is aborted rather than left to land out of order.
  */
 
@@ -66,6 +74,33 @@ type Phase = 'idle' | 'searching' | 'done' | 'failed'
  */
 const NOTES_ON_LANDING = 5
 
+/** How many saved views "where you were" lists. §8: a *short* list. */
+const VIEWS_ON_LANDING = 6
+
+/** What each entry card says, derived from the counts rather than written once. */
+export function entryState(stats: CorpusStats | null): {
+  unavailable: Partial<Record<EntryPointName, string>>
+  descriptions: Partial<Record<EntryPointName, string>>
+} {
+  const unavailable: Partial<Record<EntryPointName, string>> = {
+    coverage: 'Not built yet — no cell is scored.',
+  }
+  const descriptions: Partial<Record<EntryPointName, string>> = {}
+  if (stats) {
+    if (stats.edges === 0) {
+      // Derived rather than hardcoded: once edges exist this stops claiming
+      // they do not, without anyone remembering to change it.
+      unavailable.contested = 'No edges yet, so no source disagrees with another.'
+    } else if (stats.contested_edges === 0) {
+      descriptions.contested = `No pair of sources disagrees across ${stats.edges.toLocaleString('en')} edges yet. When one does, both edges are kept; neither is resolved.`
+    } else {
+      const n = stats.contested_edges
+      descriptions.contested = `${n.toLocaleString('en')} ${n === 1 ? 'pair' : 'pairs'} where sources disagree. Both edges are kept; neither is resolved.`
+    }
+  }
+  return { unavailable, descriptions }
+}
+
 export function ExplorePage() {
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState('')
@@ -84,6 +119,7 @@ export function ExplorePage() {
 
   const [stats, setStats] = useState<CorpusStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<CrawlProgress | null>(null)
 
   // The reader's own layer (`P6-05`). Loaded beside the stats rather than
   // behind a click: §12.5's argument for building the affordance early is that
@@ -111,6 +147,18 @@ export function ExplorePage() {
     return () => controller.abort()
     // `since` is captured once and never changes, so this runs on mount only.
   }, [since])
+
+  // An empty corpus shows what the crawl is doing instead of three entry
+  // points into nothing (`B-09`). Asked for only when it is empty.
+  const empty = stats !== null && stats.sources === 0
+  useEffect(() => {
+    if (!empty) return
+    const controller = new AbortController()
+    getCrawlProgress({ signal: controller.signal })
+      .then(setProgress)
+      .catch(() => setProgress(null))
+    return () => controller.abort()
+  }, [empty])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -168,133 +216,236 @@ export function ExplorePage() {
       })
   }, [])
 
-  const unavailable: Partial<Record<EntryPointName, string>> = {
-    coverage: 'Coverage scoring is not built yet.',
-    // Derived rather than hardcoded: once edges exist this stops claiming they
-    // do not, without anyone remembering to change it.
-    ...(stats && stats.edges === 0
-      ? { contested: 'No edges yet, so no source disagrees with another.' }
-      : {}),
+  function clear() {
+    inFlight.current?.abort()
+    setQuery('')
+    setAsked('')
+    setResults(null)
+    setError(null)
+    setPhase('idle')
+  }
+
+  const idle = phase === 'idle'
+  const { unavailable, descriptions } = entryState(stats)
+
+  const field = (
+    <SearchField
+      value={query}
+      onChange={setQuery}
+      onSubmit={(text) => run(text, topics)}
+      size={idle ? 'large' : 'regular'}
+    />
+  )
+
+  const topicFilter = stats ? (
+    <TopicFilter
+      topics={stats.topics}
+      active={topics}
+      unexamined={stats.sources_without_topics > 0}
+      onToggle={(topic) => {
+        const next = topics.includes(topic) ? topics.filter((t) => t !== topic) : [...topics, topic]
+        setTopics(next)
+        // Re-run immediately, but only when there is a query to re-run.
+        // Changing the filter with an empty box is setting up a search, not
+        // performing one.
+        if (asked) run(asked, next)
+      }}
+      onClear={() => {
+        setTopics([])
+        if (asked) run(asked, [])
+      }}
+    />
+  ) : null
+
+  if (!idle) {
+    return (
+      <div className="mx-auto w-full max-w-[912px] px-4 pb-24 pt-8">
+        <div className="flex flex-col gap-3">
+          {field}
+          {topicFilter}
+        </div>
+
+        <section className="mt-8" aria-live="polite">
+          {phase === 'searching' ? (
+            <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>
+          ) : null}
+
+          {phase === 'failed' && error ? (
+            // §4: an error names the cause and the scope. The API's own message
+            // is the most specific thing available, so it is shown rather than
+            // replaced with a generic line.
+            <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{error}</p>
+          ) : null}
+
+          {phase === 'done' && results ? (
+            <SearchOutcome
+              asked={asked}
+              results={results}
+              aside={
+                <SaveView
+                  query={asked}
+                  filters={topics.length > 0 ? { topic: topics } : {}}
+                  busy={saving}
+                  error={saveError}
+                  onSave={(name, text, filters) => {
+                    setSaving(true)
+                    setSaveError(null)
+                    saveView({ name, query: text, filters })
+                      .then((view) => setViews((current) => [view, ...current]))
+                      .catch((cause: unknown) => {
+                        setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
+                      })
+                      .finally(() => setSaving(false))
+                  }}
+                />
+              }
+            />
+          ) : null}
+        </section>
+
+        <p className="mt-8">
+          <button
+            type="button"
+            onClick={clear}
+            className="font-mono text-[10.5px] text-accent-graph hover:underline"
+          >
+            ← back to the overview
+          </button>
+        </p>
+      </div>
+    )
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <SearchField value={query} onChange={setQuery} onSubmit={(text) => run(text, topics)} />
-
-      {stats ? (
-        <div className="mt-4">
-          <TopicFilter
-            topics={stats.topics}
-            active={topics}
-            unexamined={stats.sources_without_topics > 0}
-            onToggle={(topic) => {
-              const next = topics.includes(topic)
-                ? topics.filter((t) => t !== topic)
-                : [...topics, topic]
-              setTopics(next)
-              // Re-run immediately, but only when there is a query to re-run.
-              // Changing the filter with an empty box is setting up a search,
-              // not performing one.
-              if (asked) run(asked, next)
-            }}
-            onClear={() => {
-              setTopics([])
-              if (asked) run(asked, [])
-            }}
-          />
+    <>
+      <Geometry />
+      <div className="relative mx-auto flex w-full max-w-[812px] flex-col gap-[46px] px-4 pb-24 pt-12 sm:pt-24">
+        <div className="flex flex-col items-center gap-[26px]">
+          <Lockup size={34} wordmarkSize={26} gap={14} />
+          <div className="flex w-full flex-col gap-3">
+            {field}
+            {topicFilter}
+          </div>
         </div>
-      ) : null}
 
-      <div className="mt-12">
-        <CorpusCounts counts={stats ? figuresFrom(stats) : null} />
-        {stats ? (
-          <div className="mt-3 text-center">
-            <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} />
-          </div>
-        ) : null}
-        {statsError ? (
-          <p className="mt-3 text-center text-[length:var(--text-small)] text-accent-attention">
-            {statsError}
-          </p>
-        ) : null}
+        <div className="flex flex-col gap-3">
+          <CorpusCounts counts={stats ? figuresFrom(stats) : null} />
+          {statsError ? (
+            <p className="font-mono text-[10.5px] text-text-muted">{statsError}</p>
+          ) : null}
+        </div>
+
+        {empty ? (
+          progress ? (
+            <FirstHour progress={progress} />
+          ) : (
+            <p className="text-[13px] text-text-muted">
+              Nothing to search yet, and the crawl's progress could not be read.
+            </p>
+          )
+        ) : (
+          <EntryPoints
+            actions={{ search: () => focusSearch() }}
+            unavailable={unavailable}
+            descriptions={descriptions}
+          />
+        )}
+
+        <WhereYouWere
+          delta={
+            stats ? (
+              <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} since={since} />
+            ) : null
+          }
+          savedViews={views.slice(0, VIEWS_ON_LANDING).map((view) => ({
+            id: String(view.view_id),
+            name: view.name,
+            at: view.last_opened_at ?? view.created_at,
+          }))}
+          recentNodes={[]}
+          onOpenView={(id) => {
+            const view = views.find((v) => String(v.view_id) === id)
+            if (!view) return
+            // Recorded as a write, and failing to record it must not stop the
+            // view from opening — the ordering of a list is not worth refusing
+            // somebody the thing they clicked.
+            void markViewOpened(view.view_id).catch(() => {})
+            const saved = Array.isArray(view.filters.topic) ? (view.filters.topic as string[]) : []
+            setTopics(saved)
+            setQuery(view.query ?? '')
+            if (view.query) run(view.query, saved)
+          }}
+        />
+
+        <NotesPanel notes={notes} total={noteCount} />
       </div>
-
-      <section className="mt-12" aria-live="polite">
-        {phase === 'searching' ? (
-          <p className="text-[length:var(--text-small)] text-text-muted">Searching.</p>
-        ) : null}
-
-        {phase === 'failed' && error ? (
-          // §4: an error names the cause and the scope. The API's own message
-          // is the most specific thing available, so it is shown rather than
-          // replaced with a generic line.
-          <p className="border border-accent-attention bg-surface p-4 text-[length:var(--text-small)] text-accent-attention">
-            {error}
-          </p>
-        ) : null}
-
-        {phase === 'done' && results ? (
-          <>
-            <SearchOutcome asked={asked} results={results} />
-            <div className="mt-6">
-              <SaveView
-                query={asked}
-                filters={topics.length > 0 ? { topic: topics } : {}}
-                busy={saving}
-                error={saveError}
-                onSave={(name, text, filters) => {
-                  setSaving(true)
-                  setSaveError(null)
-                  saveView({ name, query: text, filters })
-                    .then((view) => setViews((current) => [view, ...current]))
-                    .catch((cause: unknown) => {
-                      setSaveError(
-                        cause instanceof ApiError ? cause.message : 'That view was not saved.',
-                      )
-                    })
-                    .finally(() => setSaving(false))
-                }}
-              />
-            </div>
-          </>
-        ) : null}
-      </section>
-
-      {phase === 'idle' ? (
-        <>
-          <div className="mt-12">
-            <EntryPoints onOpen={() => {}} unavailable={unavailable} />
-          </div>
-          <div className="mt-12">
-            <NotesPanel notes={notes} total={noteCount} />
-          </div>
-          <div className="mt-12">
-            <WhereYouWere
-              savedViews={views.map((view) => ({ id: String(view.view_id), name: view.name }))}
-              recentNodes={[]}
-              onOpenView={(id) => {
-                const view = views.find((v) => String(v.view_id) === id)
-                if (!view) return
-                // Recorded as a write, and failing to record it must not stop
-                // the view from opening — the ordering of a list is not worth
-                // refusing somebody the thing they clicked.
-                void markViewOpened(view.view_id).catch(() => {})
-                const saved = Array.isArray(view.filters.topic)
-                  ? (view.filters.topic as string[])
-                  : []
-                setTopics(saved)
-                setQuery(view.query ?? '')
-                if (view.query) run(view.query, saved)
-              }}
-            />
-          </div>
-        </>
-      ) : null}
-    </div>
+    </>
   )
 }
 
-export function SearchOutcome({ asked, results }: { asked: string; results: SearchResponse }) {
+/**
+ * The landing's background: the mark's circle-and-meridian, scaled up and
+ * cropped (§8). Decoration only — hidden from assistive technology, never
+ * interactive, and nothing on it is corpus data. Transcribed from the artboard
+ * in its 1440 × 900 frame and sliced to fill whatever the window is.
+ *
+ * Fixed rather than scrolling with the page, so it also sits under the
+ * translucent top bar the way the artboard draws it.
+ */
+export function Geometry() {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      data-role="geometry"
+      viewBox="0 0 1440 900"
+      preserveAspectRatio="xMidYMin slice"
+      fill="none"
+      className="pointer-events-none fixed inset-0 h-full w-full text-line"
+    >
+      <g stroke="currentColor" strokeWidth="1.2" opacity="0.55">
+        <circle cx="720" cy="1230" r="700" />
+        <ellipse cx="720" cy="1230" rx="258" ry="700" />
+        <path d="M720 530 L253 686 M720 530 L1187 686" strokeWidth="1" />
+      </g>
+      <g stroke="currentColor" strokeWidth="1.2" opacity="0.4">
+        <circle cx="188" cy="-190" r="420" />
+        <ellipse cx="188" cy="-190" rx="155" ry="420" />
+      </g>
+      <g fill="currentColor" opacity="0.7">
+        <circle cx="720" cy="530" r="7" />
+        <circle cx="253" cy="686" r="5" />
+        <circle cx="1187" cy="686" r="5" />
+        <circle cx="188" cy="230" r="5" opacity="0.8" />
+      </g>
+    </svg>
+  )
+}
+
+/**
+ * What was searched and what each arm found: `20 shown · lexical 0 · vector 100`.
+ *
+ * Per arm, because the old "20 of N candidates" took N from the lexical arm
+ * alone and read "20 of 0" whenever meaning-based matching found everything —
+ * a sentence that contradicts itself on a correct result.
+ */
+export function summaryLine(results: SearchResponse): string {
+  const parts = [`${results.hits.length} shown`]
+  if (results.arms.includes('lexical')) parts.push(`lexical ${results.lexical_candidates.toLocaleString('en')}`)
+  if (results.arms.includes('vector')) parts.push(`vector ${results.vector_candidates.toLocaleString('en')}`)
+  return parts.join(' · ')
+}
+
+export function SearchOutcome({
+  asked,
+  results,
+  aside,
+}: {
+  asked: string
+  results: SearchResponse
+  /** Controls set at the right of the summary line — saving the view. */
+  aside?: React.ReactNode
+}) {
   const empty = results.hits.length === 0
 
   return (
@@ -304,14 +455,15 @@ export function SearchOutcome({ asked, results }: { asked: string; results: Sear
       ) : null}
 
       {empty ? (
-        <p className="text-[length:var(--text-small)] text-text-muted">
-          Nothing matched {`"${asked}"`}.
-        </p>
+        <p className="text-[13.5px] text-text-muted">Nothing matched {`"${asked}"`}.</p>
       ) : (
         <>
-          <p className="mb-4 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-text-muted">
-            {results.hits.length} of {results.lexical_candidates} candidates
-          </p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
+              {summaryLine(results)}
+            </p>
+            {aside}
+          </div>
           <ResultList hits={results.hits} />
         </>
       )}
@@ -322,22 +474,23 @@ export function SearchOutcome({ asked, results }: { asked: string; results: Sear
 /**
  * What the search did not do.
  *
- * Bordered and at attention weight when the result set is empty, because that
- * is the case where silence becomes a false claim about the corpus. With hits
- * on screen it is a caveat and reads as one.
+ * Bordered and at full ink when the result set is empty, because that is the
+ * case where silence becomes a false claim about the corpus. With hits on
+ * screen it is a caveat and reads as one — a mono line above the list.
  */
 export function RetrievalNotice({ reason, empty }: { reason: string; empty: boolean }) {
   return (
     <div
+      data-weight={empty ? 'notice' : 'caveat'}
       className={
         empty
-          ? 'mb-4 border border-accent-attention bg-surface p-4 text-[length:var(--text-small)] text-accent-attention'
-          : 'mb-4 text-[length:var(--text-small)] text-text-muted'
+          ? 'mb-4 border border-line-strong bg-surface p-4 text-[13px] leading-[1.55] text-text'
+          : 'mb-3 font-mono text-[10.5px] leading-[1.5] text-text-faint'
       }
     >
       <p>{reason}</p>
       {empty ? (
-        <p className="mt-2">
+        <p className="mt-2 text-text-muted">
           Passages about this topic that use different wording were not searched. An empty result
           here is not evidence that the corpus lacks the subject.
         </p>

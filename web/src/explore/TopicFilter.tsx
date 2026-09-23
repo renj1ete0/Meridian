@@ -35,7 +35,10 @@ export function TopicFilter({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Narrow by topic">
+        <span className="mr-2 font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
+          Topic
+        </span>
         <button
           type="button"
           onClick={() => onClear?.()}
@@ -58,7 +61,7 @@ export function TopicFilter({
       </div>
 
       {active.length > 0 && unexamined ? (
-        <p className="mt-2 text-[length:var(--text-small)] text-text-muted">
+        <p className="mt-2 font-mono text-[10.5px] leading-[1.5] text-text-muted">
           {/* Said once, and only while narrowing. On every render it would be
               noise; never, it would be a silent omission a reader cannot see. */}
           Documents collected before topics were recorded are not included — narrowing here can
@@ -77,7 +80,9 @@ export function TopicFilter({
  * here is "this is on".
  */
 function chip(selected: boolean): string {
-  return `rounded-chip border px-2 py-0.5 font-mono text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] ${
-    selected ? 'border-accent-graph text-accent-graph' : 'border-line-strong text-text-muted'
+  return `border px-2 py-[3px] font-mono text-[10.5px] leading-[1.4] ${
+    selected
+      ? 'border-accent-graph/70 bg-accent-graph/10 text-accent-graph'
+      : 'border-line text-text-faint hover:border-line-strong hover:text-text-muted'
   }`
 }
