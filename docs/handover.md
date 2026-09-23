@@ -13,12 +13,13 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-23 — read before starting
 
-Two delegated agents were still working in git worktrees when the session ended.
-Their reports went to that session, not this one, so check their branches directly:
+Two delegated agents were asked to wrap up before shutdown and both committed a
+**tested partial** on their own branch (not on `main`). Their full reports are
+summarised in `TASKS.md`; the branches:
 
 | Task | Branch / worktree | What it was told |
 |---|---|---|
-| `P2-21` topics from content | `worktree-agent-ae5c754b3e8137972` · `.claude/worktrees/agent-ae5c754b3e8137972` | Add `sources.crawled_for`; make `topic_labels` content-derived and multi-label; update every consumer; calibrate on the live corpus **read-only**; `--demote-offtopic` gated and **not applied**; one commit `P2-21: …` whose body carries the calibration numbers |
+| `P2-21` topics from content | `worktree-agent-ae5c754b3e8137972` · `.claude/worktrees/agent-ae5c754b3e8137972` | **Handed over partial: commit `9c574d8`** — labeller, migration `71de4a6d0c50`, `retopic` rewrite, map changes; calibrated, integration tests not written, `make test` not run. Calibration reports: `~/Documents/gh/meridian-calibration/p2-21/report_*.txt`. See `TASKS.md` `P2-21` for the remaining list and the operator's two decisions |
 | `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | **Handed over partial: commit `60b025d`** — the cleaners and the drop-aware chunker, tested, not wired in. The remaining list is in `TASKS.md` `B-43` and the commit body; fix `B-46` before its re-chunk pass runs. Reproduction scripts from that session's scratch folder are gone; the commit body has the numbers |
 
 To pick them up: `git log --oneline main..<branch>`. A commit there → read its body

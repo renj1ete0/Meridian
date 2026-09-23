@@ -50,9 +50,10 @@ neighbourhood; Route and Coverage boards there predate the cut).
 **Build order** (tasks below): data quality first — clustering noise into "areas"
 makes useless areas — then the Map, then Find's panel, then Gaps.
 
-1. `P2-21` topics from content, multi-label — **an agent was mid-task at session
-   end**, see the handover's "In flight"
-2. `B-43` boilerplate inside pages — **an agent was mid-task**, same
+1. `P2-21` topics from content, multi-label — **partial commit `9c574d8` on its
+   branch**; finish (tests), merge, then the operator's two decisions
+2. `B-43` boilerplate inside pages — **partial commit `60b025d` on its branch**;
+   fix `B-46` first, then wire in and add the re-chunk pass
 3. `B-44` duplicate documents, `B-45` soft-404 pages
 4. `P6-30` areas, `P6-31` bridges → `P6-34` Map screen and `P6-35` steering from it
 5. `P6-32` route, `P6-33` neighbourhood (+ Find panel)
@@ -1158,10 +1159,30 @@ deploy runbook whose first two commands could not work (`B-17`).
 ### The connections work (agreed 2026-09-23 — see "Resume here")
 
 - [~] `P2-21` **Topics come from what a page says, not why it was crawled** —
-      `sources.crawled_for` keeps the provenance; `topic_labels` becomes
-      content-derived and multi-label (source vector vs topic prototypes,
-      threshold + margin; `{}` = examined and off-topic); every consumer updated;
-      a gated `--demote-offtopic`. Agent in flight at session end
+      **partial, on branch `worktree-agent-ae5c754b3e8137972` commit `9c574d8`, not
+      yet on `main`**. Built: migration `71de4a6d0c50` (after `525b10621a92`;
+      `sources.crawled_for`, `topics_examined_at`, `topic_basis`, `topic_scores`,
+      `topic_config.description`; old labels copied to `crawled_for`, then
+      `topic_labels` reset to NULL; an hourly `topics` timetable row);
+      `meridian_core/topiclabels.py` (source vector = mean of live chunks;
+      prototype = embedding of name, description and gazetteer phrases; both
+      measured from a fixed generic-phrase reference; label every topic ≥ 0.45 and
+      within 0.04 of the best; `{}` = examined, off-topic); `worker.retopic`
+      rewritten (report, `--apply`, gated `--demote-offtopic`); fetch path writes
+      `crawled_for` only; topic descriptions in the admin API; the map carries all
+      labels. **Calibrated read-only on the live corpus**: silver-set AUC 0.985;
+      ~85% precision on 20 random labelled sources; all 347 medical-condition
+      pages, 49 privacy/terms/contact pages and 94 search-result pages get `{}`;
+      227 sources labelled without descriptions, ~256 with. Reports and scripts:
+      `~/Documents/gh/meridian-calibration/p2-21/` (outside the repo — they name
+      real pages). **Remaining**: Postgres integration tests for the labeller,
+      the backfill and demotion; `make test` after migrating; an Admin field for
+      descriptions; `setup.md`/handover still describe `retopic` as a URL
+      backfill; the production scheduler gets `MERIDIAN_EMBEDDER_URL` only via
+      `.env`. **⚑ human**: set topic descriptions first (they raise recall from
+      0.70 to 0.82), and decide on `--demote-offtopic` — 2,231 sources at the
+      default floor 0.30, 1,023 at 0.25; junk lets the retention sweep delete
+      the raw file
 - [~] `B-43` **Headers, footers, banners and menus inside extracted pages** —
       **partial, on branch `worktree-agent-a017d2a680b2111d0` commit `60b025d`, not
       yet on `main`**: `worker/extract/clean.py` (navigation affordances, menu
