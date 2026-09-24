@@ -16,7 +16,10 @@ approved vocabulary, in a handful of shapes:
 - §7.4's counter-seeds (``criticism of …``, ``… problems``), because a crawl
   that only confirms its vocabulary walks toward consensus;
 - news, through SearXNG's ``!news`` category, so reporting reaches a corpus
-  that link-following from scholarly pages never would.
+  that link-following from scholarly pages never would;
+- §7.4's mechanism 5, forced non-English seeds: a concept in another language's
+  own words (`translations`, from Wikipedia), under SearXNG's ``:lang``
+  prefix, and as news in that language.
 
 Every query is new: the generator is handed every query already queued, in any
 status, and never repeats one. The order is shuffled by a seed the caller
@@ -47,6 +50,8 @@ class TopicSeedInput:
     topic: str
     description: str | None
     terms: tuple[str, ...]
+    #: ``(language, words)`` for this topic's concepts in other languages.
+    translations: tuple[tuple[str, str], ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -88,6 +93,9 @@ def candidates(topic: TopicSeedInput) -> list[Query]:
     for i, first in enumerate(terms):
         for second in terms[i + 1 :]:
             add(f"{first} {second}", "pair")
+    for lang, words in sorted(set(topic.translations)):
+        add(f":{lang} {words}", "language")
+        add(f"{NEWS_BANG} :{lang} {words}", "language_news")
     if topic.description:
         # The description's opening words: an outsider's phrasing of the topic,
         # §7.4's mechanism 3 in the operator's own words.
@@ -103,7 +111,7 @@ def plan(
     already: Iterable[str],
     per_topic: int,
     seed: int,
-    kinds_first: Sequence[str] = ("news", "counter", "concept", "evidence"),
+    kinds_first: Sequence[str] = ("news", "counter", "language", "concept", "evidence"),
 ) -> list[Query]:
     """``per_topic`` new queries for each topic.
 

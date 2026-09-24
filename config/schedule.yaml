@@ -111,3 +111,13 @@ jobs:
     # unanswered already.
     interval_seconds: 21600
     enabled: true
+
+  - name: translate
+    module: worker.translate
+    args: ["--once"]
+    # `B-52`, §7.4 mechanism 5: other-language names for the search
+    # vocabulary, from Wikipedia's interlanguage links, so `seedsearch` can
+    # write non-English queries in that language's own words. One request a
+    # second, bounded per run, and each phrase re-asked only after 90 days.
+    interval_seconds: 86400
+    enabled: true

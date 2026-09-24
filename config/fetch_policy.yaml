@@ -105,3 +105,9 @@ frontier:
     - google.com
     - bing.com
     - duckduckgo.com
+
+# Languages §7.4's forced non-English seeds are written in (`B-52`), as the codes
+# SearXNG's `:lang` prefix and Wikipedia's interlanguage links both use. The
+# words come from `worker.translate`; a concept with no article in a language
+# simply has no seed in it. An empty list switches the mechanism off.
+search_languages: [ja, ko, zh, de, fr, nl, id, ms, th]

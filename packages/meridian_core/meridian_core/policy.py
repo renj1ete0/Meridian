@@ -152,6 +152,9 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
     # request is made, and a ResolvedPolicy carrying it would invite callers to
     # treat "should this be crawled" as a per-request setting.
     settings.pop("frontier", None)
+    # And the languages search seeds are written in (`B-52`): what to ask, not
+    # how to fetch.
+    settings.pop("search_languages", None)
 
     # A per-domain row carries status; the global row's status is not inherited,
     # because blocking '*' would silently stop the entire crawl.

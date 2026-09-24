@@ -35,6 +35,7 @@ from .source import (
     HostScore,
     PageLine,
     Source,
+    TranslationLookup,
 )
 from .views import SavedView
 
@@ -75,4 +76,5 @@ __all__ = [
     "SteeringLog",
     "TimestampMixin",
     "TopicConfig",
+    "TranslationLookup",
 ]

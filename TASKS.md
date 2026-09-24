@@ -1205,10 +1205,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       link-following. `worker.seedsearch` (6-hourly) queues fresh per-topic queries,
       including news and §7.4 counter-seeds; results outrank same-tier links; Bing web
       search disabled (returned unrelated pages)
-- [ ] `B-52` **Non-English seeds (§7.4 mechanism 5)** — `:lang` prefixes with English
-      words return English pages (measured); a German query in German returned German
-      sources. Needs the words, not only the prefix: Wikipedia interlanguage titles for
-      each topic's concepts are a model-free, human-written source
+- [x] `B-52` **Non-English seeds (§7.4 mechanism 5)** — `v0.123.0`. A `:lang` prefix
+      on English words returns English pages (measured), so the words come from
+      Wikipedia interlanguage titles (`worker.translate`, daily) and `seedsearch`
+      writes queries in them. Not yet measured: how the content labeller scores
+      non-English pages against English topic prototypes — bge-m3 is cross-lingual,
+      but a lower score would read as off-topic and feed the host gate
 - [x] `B-50` **An academic domain is not peer review** — `v0.122.1`. `*.edu`-style
       suffixes (listed in the tier map's `needs_scholarly_evidence`) make a page
       `peer_reviewed` only with its own DOI, else `institutional`; links rank

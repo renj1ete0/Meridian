@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.123.0] — 2026-09-24
+
+### Added
+
+- `B-52`: §7.4's forced non-English seeds, in each language's own words.
+  `python -m worker.translate --once` (daily) looks up each search phrase's
+  Wikipedia article and its title in every configured `search_languages`
+  (interlanguage links — written by speakers, looked up, never generated),
+  one request a second with a contact User-Agent, into `translation_lookups`;
+  a phrase with no article gets no translation. `worker.seedsearch` then
+  writes `:lang <words>` and `!news :lang <words>` queries, and each run
+  leads with one. `search_languages` lives in the global policy row and is
+  not a fetch setting. Migration `92cba253bcb9`
+
 ## [0.122.2] — 2026-09-24
 
 ### Changed

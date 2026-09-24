@@ -510,3 +510,29 @@ class HostScore(Base):
     computed_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class TranslationLookup(Base):
+    """What one phrase is called in other languages, per Wikipedia (task `B-52`).
+
+    §7.4 makes non-English seeds mandatory, and a language prefix on English
+    words was measured to return English pages: the query needs the words. The
+    worker may not call a model, so the words come from Wikipedia's
+    interlanguage links — the title of the same article in another language,
+    written by people who speak it. A phrase with no article is recorded too
+    (``article`` NULL), so it is not looked up again until it is stale.
+    """
+
+    __tablename__ = "translation_lookups"
+
+    #: The phrase as the vocabulary holds it, case-folded.
+    phrase: Mapped[str] = mapped_column(Text, primary_key=True)
+    #: The English article it resolved to, after redirects; NULL if none.
+    article: Mapped[str | None] = mapped_column(Text)
+    #: Language code → that language's title for the article.
+    translations: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    looked_up_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

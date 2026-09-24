@@ -29,7 +29,8 @@ from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import GazetteerTerm, QueueTask, TopicConfig
 from meridian_core.queueing import enqueue
-from meridian_core.searchseeds import Query, TopicSeedInput, plan
+from meridian_core.searchseeds import Query, TopicSeedInput, plan, topic_words
+from meridian_core.translations import search_languages, translations_for
 
 log = get_logger(__name__)
 
@@ -80,7 +81,20 @@ async def topic_inputs(sess: AsyncSession) -> list[TopicSeedInput]:
             terms[topic].append(term.canonical)
             if not term.ambiguous:
                 terms[topic].extend(a for a in term.aliases or () if len(a) >= MIN_ALIAS)
-    return [TopicSeedInput(topic, description, tuple(terms[topic])) for topic, description in rows]
+    languages = await search_languages(sess)
+    concepts = {topic: [topic_words(topic), *terms[topic]] for topic, _ in rows}
+    known = await translations_for(
+        sess, [c for group in concepts.values() for c in group], languages
+    )
+    return [
+        TopicSeedInput(
+            topic,
+            description,
+            tuple(terms[topic]),
+            tuple(pair for concept in concepts[topic] for pair in known.get(concept, ())),
+        )
+        for topic, description in rows
+    ]
 
 
 def specific_enough(topic: TopicSeedInput) -> bool:
