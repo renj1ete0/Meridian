@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.121.1] — 2026-09-24
+
+### Changed
+
+- `B-48`: an on-topic host under a quarter of its pages on a topic has its
+  links' priority scaled by its share, so an institutional repository or a
+  preprint server's listings (5–8% on-topic on the live corpus) no longer rank
+  beside a research centre (25%+)
+
 ## [0.121.0] — 2026-09-24
 
 ### Added

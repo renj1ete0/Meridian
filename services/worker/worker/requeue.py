@@ -80,10 +80,10 @@ async def run_pass(*, apply: bool, session_factory=session) -> RequeueStats:
                 stats.held_hosts[host_key(url) or "?"] += 1
                 if priority != HELD_PRIORITY:
                     changes[HELD_PRIORITY].append(task_id)
-            elif decision.priority is not None and decision.priority != priority:
+            elif decision.applied_to(priority) != priority:
                 stats.downranked += 1
                 stats.reasons[decision.reason] += 1
-                changes[decision.priority].append(task_id)
+                changes[decision.applied_to(priority)].append(task_id)
             else:
                 stats.kept += 1
         if apply:

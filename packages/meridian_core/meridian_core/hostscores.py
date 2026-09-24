@@ -61,6 +61,14 @@ EXPLORE_PENDING = 50
 #: Queued links allowed to any one host.
 MAX_PENDING = 500
 
+#: At or above this share an on-topic host's links keep the priority their
+#: tier gives them; below it the priority scales down with the share. A host
+#: just over :data:`OFFTOPIC_SHARE` — an institutional repository of
+#: everything, a preprint server's listings for every field — is not off-topic,
+#: but one page in twenty is not a reason to rank its links beside a research
+#: centre's one in four.
+FULL_SHARE = 0.25
+
 #: The priority an off-topic *government* link is queued at: above nothing,
 #: below everything that earned its place.
 DOWNRANKED_PRIORITY = 1
@@ -95,6 +103,16 @@ class Decision:
     #: None keeps the priority the caller computed; a number replaces it.
     priority: int | None = None
     reason: str = "ok"
+    #: Multiplies the caller's priority when ``priority`` is None.
+    weight: float = 1.0
+
+    def applied_to(self, computed: int) -> int:
+        """The priority to queue at, given the one the tier and urgency gave."""
+        if self.priority is not None:
+            return self.priority
+        if self.weight >= 1.0:
+            return computed
+        return max(DOWNRANKED_PRIORITY + 1, round(computed * self.weight))
 
 
 def decide(score: Score, *, government: bool, pending: int) -> Decision:
@@ -113,6 +131,8 @@ def decide(score: Score, *, government: bool, pending: int) -> Decision:
     cap = EXPLORE_PENDING if standing is Standing.UNKNOWN else MAX_PENDING
     if pending >= cap:
         return Decision(False, reason=f"{standing.value}_capped")
+    if standing is Standing.ON_TOPIC and score.share < FULL_SHARE:
+        return Decision(True, reason="on_topic_thin", weight=score.share / FULL_SHARE)
     return Decision(True, reason=standing.value)
 
 

@@ -7,6 +7,7 @@ import pytest
 from meridian_core.hostscores import (
     DOWNRANKED_PRIORITY,
     EXPLORE_PENDING,
+    FULL_SHARE,
     MAX_PENDING,
     MIN_EXAMINED,
     OFFTOPIC_SHARE,
@@ -75,3 +76,24 @@ def test_a_fresh_read_resets_the_local_counts() -> None:
     policy.admit("https://a.test/1", government=False)
     policy.replace({"a.test": Score(0, 0, pending=0)})
     assert policy.admit("https://a.test/2", government=False).queue is True
+
+
+def test_a_thin_on_topic_hosts_links_are_scaled_by_its_share() -> None:
+    thin = Score(100, 10)  # 10%: on-topic, well under the full share
+    decision = decide(thin, government=False, pending=0)
+    assert decision.queue and decision.reason == "on_topic_thin"
+    assert decision.applied_to(60) == round(60 * 0.10 / FULL_SHARE)
+
+
+def test_a_host_at_the_full_share_keeps_its_tier_priority() -> None:
+    full = Score(100, int(FULL_SHARE * 100))
+    assert decide(full, government=False, pending=0).applied_to(60) == 60
+
+
+def test_scaling_never_sinks_a_kept_link_to_the_downranked_or_held_band() -> None:
+    barely = Score(100, int(OFFTOPIC_SHARE * 100))
+    assert decide(barely, government=False, pending=0).applied_to(3) > DOWNRANKED_PRIORITY
+
+
+def test_an_unknown_host_is_not_scaled() -> None:
+    assert decide(Score(0, 0), government=False, pending=0).applied_to(60) == 60

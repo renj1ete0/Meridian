@@ -1290,7 +1290,7 @@ class Worker:
                 url,
                 topic=claim.topic,
                 seed_source="frontier",
-                priority=decision.priority if decision.priority is not None else priority,
+                priority=decision.applied_to(priority),
             )
             queued += 1
 
