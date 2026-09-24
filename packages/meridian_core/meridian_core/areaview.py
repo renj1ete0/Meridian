@@ -20,14 +20,16 @@ from sqlalchemy import Select, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .areabuild import MIN_PASSAGES
+from .bridges import exact_distance
 from .corpusmap import SNIPPET_CHARS
-from .models import Area, AreaBuild, AreaMember, Chunk, Source
+from .models import Area, AreaBridge, AreaBuild, AreaMember, Chunk, Source
 from .schemas.areas import (
     AreaBuildRead,
     AreaCrumb,
     AreaDetailRead,
     AreaJumpHit,
     AreaJumpRead,
+    AreaLinkRead,
     AreaPassage,
     AreaRead,
     AreasRead,
@@ -155,7 +157,7 @@ async def areas_level(
         "weak_below_sources": WEAK_BELOW_SOURCES,
     }
     if build is None:
-        return AreasRead(build=None, level=1, parent=None, path=[], areas=[], **common)
+        return AreasRead(build=None, level=1, parent=None, path=[], areas=[], links=[], **common)
 
     parent_read = None
     path: list[AreaCrumb] = []
@@ -176,8 +178,37 @@ async def areas_level(
         parent=parent_read,
         path=path,
         areas=[to_read(area, int(children), now=now) for area, children in rows],
+        links=await links_between(sess, [area.area_id for area, _ in rows]),
         **common,
     )
+
+
+#: Shared terms carried on a map line; the bridge itself has them all.
+LINK_TERMS = 8
+
+
+def link_read(bridge: AreaBridge) -> AreaLinkRead:
+    return AreaLinkRead(
+        area_a=bridge.area_a,
+        area_b=bridge.area_b,
+        cited_claims=len(bridge.cited_edge_ids or ()),
+        cited_sources=bridge.cited_sources,
+        similar_pairs=len(bridge.similar_pairs or ()),
+        similarity=bridge.similarity,
+        shared_terms=list(bridge.shared_terms or ())[:LINK_TERMS],
+    )
+
+
+async def links_between(sess: AsyncSession, area_ids: list[int]) -> list[AreaLinkRead]:
+    """Every recorded bridge whose two ends are both among ``area_ids`` (P6-31)."""
+    if len(area_ids) < 2:
+        return []
+    rows = await sess.scalars(
+        select(AreaBridge)
+        .where(AreaBridge.area_a.in_(area_ids), AreaBridge.area_b.in_(area_ids))
+        .order_by(AreaBridge.area_a, AreaBridge.area_b)
+    )
+    return [link_read(row) for row in rows]
 
 
 async def area_detail(
@@ -201,7 +232,7 @@ async def area_detail(
             .join(AreaMember, AreaMember.chunk_id == Chunk.chunk_id)
             .join(Source, Source.source_id == Chunk.source_id)
             .where(AreaMember.build_id == area.build_id, AreaMember.area_id.in_(leaves))
-            .order_by(Chunk.embedding.cosine_distance(area.centroid), Chunk.chunk_id)
+            .order_by(exact_distance(Chunk.embedding, area.centroid), Chunk.chunk_id)
             .limit(PASSAGES_SHOWN)
         )
     ).all()

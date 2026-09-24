@@ -1363,7 +1363,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       distinctive terms, with per-area stats (passages, sources, tier mix,
       recency) and a stable layout position; recomputed on a schedule; honest
       about what an area is (a cluster, not a topic)
-- [ ] `P6-31` **Bridges between areas** — cited claims whose evidence spans the
+- [x] `P6-31` **Bridges between areas** — `v0.135.0` (delegated agent) — cited claims whose evidence spans the
       two areas, plus the most similar cross-area passages and the terms both
       share; the two kinds kept apart everywhere they are shown
 - [x] `P6-32` **Route across claims and areas** — `v0.129.0` (delegated agent), backend and API; its screen is the Map's route mode (`P6-34`); area hops plug in when `P6-30` lands — extends `P6-03`'s path search

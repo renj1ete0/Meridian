@@ -4,7 +4,7 @@ Importing this package registers every table on ``Base.metadata``, which is what
 Alembic autogenerate reflects against.
 """
 
-from .areas import Area, AreaBuild, AreaMember
+from .areas import Area, AreaBridge, AreaBuild, AreaMember
 from .config import (
     Agent,
     AgentToken,
@@ -49,6 +49,7 @@ __all__ = [
     "QUALITY_TIER_MIN",
     "Agent",
     "Area",
+    "AreaBridge",
     "AreaBuild",
     "AreaMember",
     "AgentToken",

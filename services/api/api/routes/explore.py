@@ -27,6 +27,7 @@ from sqlalchemy import func, or_, select
 
 from meridian_core import annotations
 from meridian_core.areaview import AreaNotFound, area_detail, areas_level, jump
+from meridian_core.bridgeview import bridge
 from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
 from meridian_core.crawlhealth import crawl_health
 from meridian_core.export import to_bibtex, to_markdown
@@ -45,7 +46,7 @@ from meridian_core.models import (
 from meridian_core.passagetopics import passage_topics_for
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
-from meridian_core.schemas.areas import AreaDetailRead, AreaJumpRead, AreasRead
+from meridian_core.schemas.areas import AreaDetailRead, AreaJumpRead, AreasRead, BridgeRead
 from meridian_core.schemas.corpusmap import CorpusMapRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
@@ -254,6 +255,18 @@ async def explore_area(area_id: int, sess: ReadSession) -> AreaDetailRead:
         return await area_detail(sess, area_id)
     except AreaNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/bridges/{area_a}/{area_b}", response_model=BridgeRead)
+async def explore_bridge(area_a: int, area_b: int, sess: ReadSession) -> BridgeRead:
+    """What connects two areas (`P6-31`): cited claims, similar passages and
+    shared terms, as three separate lists. Nothing recorded is an empty answer."""
+    try:
+        return await bridge(sess, area_a, area_b)
+    except AreaNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/sources/{source_id}", response_model=SourceRead)

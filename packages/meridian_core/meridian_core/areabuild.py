@@ -33,6 +33,7 @@ from sqlalchemy import Text, and_, cast, delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .areas import _normalise_rows, distinctive_terms, nest
+from .bridges import build_bridges
 from .corpusmap import project
 from .models import Area, AreaBuild, AreaMember, Chunk, Source
 from .search import SearchFilters, _conditions
@@ -158,6 +159,7 @@ class BuildReport:
     leaves: int
     inherited: int
     seconds: float
+    bridges: int = 0
 
 
 @dataclasses.dataclass
@@ -336,6 +338,9 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
             ],
         )
 
+    await sess.flush()
+    bridges = await build_bridges(sess, build.build_id)
+
     newest = select(AreaBuild.build_id).order_by(AreaBuild.build_id.desc()).limit(KEEP_BUILDS)
     await sess.execute(delete(AreaBuild).where(AreaBuild.build_id.not_in(newest.scalar_subquery())))
     await sess.flush()
@@ -347,4 +352,5 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
         len(leaf_vecs),
         inherited,
         round(time.monotonic() - started, 2),
+        bridges,
     )

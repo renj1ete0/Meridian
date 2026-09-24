@@ -65,6 +65,8 @@ class AreasRead(BaseModel):
     parent: AreaRead | None
     path: list[AreaCrumb]
     areas: list[AreaRead]
+    #: Bridges among ``areas`` (P6-31).
+    links: list[AreaLinkRead]
     levels: int
     passages_needed: int
     stale_after_days: int
@@ -99,3 +101,65 @@ class AreaJumpHit(BaseModel):
 class AreaJumpRead(BaseModel):
     query: str
     hits: list[AreaJumpHit]
+
+
+class AreaLinkRead(BaseModel):
+    """A bridge as a line on the map (task P6-31): counts only, kinds apart.
+
+    ``cited_claims`` are edges a source states whose evidence spans the two
+    areas — the only kind that says the two connect. ``similar_pairs`` counts
+    passage pairs that are merely near in meaning. The map draws them
+    differently and never adds one to the other.
+    """
+
+    area_a: int
+    area_b: int
+    cited_claims: int
+    cited_sources: int
+    similar_pairs: int
+    similarity: float
+    shared_terms: list[str]
+
+
+class BridgeClaimRead(BaseModel):
+    edge_id: int
+    from_node: int
+    from_name: str
+    relation_type: str
+    to_node: int
+    to_name: str
+    #: Distinct sources behind the edge's own passages.
+    sources: int
+    citations: int
+    tiers: list[str]
+
+
+class BridgePassageRead(BaseModel):
+    chunk_id: int
+    source_id: int
+    title: str | None
+    source_tier: str
+    snippet: str
+
+
+class BridgePairRead(BaseModel):
+    #: Cosine between the two passages' vectors.
+    score: float
+    a: BridgePassageRead
+    b: BridgePassageRead
+
+
+class BridgeRead(BaseModel):
+    """What connects two areas, in the three kinds, never merged.
+
+    Empty lists are an answer: two areas with nothing recorded between them
+    come back with no claims and no pairs rather than a 404.
+    """
+
+    a: AreaCrumb
+    b: AreaCrumb
+    claims: list[BridgeClaimRead]
+    cited_sources: int
+    similar: list[BridgePairRead]
+    shared_terms: list[str]
+    similarity: float

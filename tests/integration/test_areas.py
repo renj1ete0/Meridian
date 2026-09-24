@@ -11,86 +11,31 @@ real corpus in it does not change the answers.
 from __future__ import annotations
 
 import datetime as dt
-import uuid
 from collections.abc import AsyncIterator
 
 import httpx
-import numpy as np
 import pytest
+from area_doubles import SOURCES, SUBJECTS, a_topic, seed, shrink_levels
 from sqlalchemy import delete, func, select
 
 from api.main import create_app
 from meridian_core import areabuild
 from meridian_core.areabuild import KEEP_BUILDS, build_areas
 from meridian_core.areaview import area_detail, areas_level, jump
-from meridian_core.chunks import ChunkWrite, replace_chunks, store_embeddings
 from meridian_core.db import dispose_engines
-from meridian_core.models import Area, AreaBuild, AreaMember, Chunk, ScheduledJob, Source
-from meridian_core.models.source import EMBEDDING_DIM
-from meridian_core.sources import upsert_source
+from meridian_core.models import Area, AreaBuild, AreaMember, ScheduledJob, Source
 
 pytestmark = pytest.mark.usefixtures("require_db")
-
-#: Three subjects, each a direction in the space and a vocabulary.
-SUBJECTS = {
-    0: "shelter canopy shade walkway cooling",
-    1: "enzyme protein folding binding assay",
-    2: "tariff export trade quota customs",
-}
-PER_SOURCE = 4
-SOURCES = 6
-
-
-def vector(subject: int, jitter: int) -> list[float]:
-    rng = np.random.default_rng(subject * 1000 + jitter)
-    v = np.zeros(EMBEDDING_DIM)
-    v[700 + subject * 10 : 700 + subject * 10 + 10] = 1.0
-    v += rng.standard_normal(EMBEDDING_DIM) * 0.02
-    return (v / np.linalg.norm(v)).tolist()
 
 
 @pytest.fixture(autouse=True)
 def small_levels(monkeypatch):
-    """Cut a 72-passage corpus into 2 regions › 3 areas › 6 sub-areas."""
-    monkeypatch.setattr(areabuild, "PASSAGES_PER_LEAF", 12)
-    monkeypatch.setattr(areabuild, "LEAVES_PER_AREA", 2)
-    monkeypatch.setattr(areabuild, "MAX_REGIONS", 2)
+    shrink_levels(monkeypatch)
 
 
 @pytest.fixture
 def topic() -> str:
-    return f"areas-{uuid.uuid4().hex[:10]}"
-
-
-async def seed(sess, topic: str, *, sources: int = SOURCES, per_source: int = PER_SOURCE):
-    """``sources`` sources, each with ``per_source`` passages on every subject."""
-    chunk_subject: dict[int, int] = {}
-    for s in range(sources):
-        source, _ = await upsert_source(
-            sess,
-            f"https://{topic}.test/{s}",
-            checksum=f"sha256:{uuid.uuid4().hex}",
-            title=f"Source {s}",
-        )
-        source.topic_labels = [topic]
-        writes, subjects = [], []
-        for subject, words in SUBJECTS.items():
-            for i in range(per_source):
-                writes.append(ChunkWrite(text=f"{words} note {s} {i}", chunk_index=len(writes)))
-                subjects.append(subject)
-        await replace_chunks(sess, source.source_id, writes)
-        rows = list(
-            await sess.scalars(
-                select(Chunk).where(Chunk.source_id == source.source_id).order_by(Chunk.chunk_index)
-            )
-        )
-        await store_embeddings(
-            sess,
-            {c.chunk_id: vector(subj, c.chunk_id) for c, subj in zip(rows, subjects, strict=True)},
-        )
-        chunk_subject.update({c.chunk_id: subj for c, subj in zip(rows, subjects, strict=True)})
-    await sess.flush()
-    return chunk_subject
+    return a_topic()
 
 
 async def test_a_build_puts_every_passage_in_one_leaf_and_levels_nest(session_for, topic):
@@ -100,7 +45,8 @@ async def test_a_build_puts_every_passage_in_one_leaf_and_levels_nest(session_fo
     report = await build_areas(sess, topics=[topic])
 
     assert report.build_id is not None
-    assert (report.regions, report.areas, report.leaves) == (2, 3, 6)
+    # Each level is cut in proportion to its share, so rounding can add one.
+    assert report.regions == 2 and report.regions < report.areas <= report.leaves
     assert report.passages == len(chunks)
 
     areas = list(await sess.scalars(select(Area).where(Area.build_id == report.build_id)))

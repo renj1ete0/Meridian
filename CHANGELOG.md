@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.135.0] — 2026-09-25
+
+### Added
+
+- `P6-31`: **bridges** between areas, three kinds kept in separate columns
+  and never folded into one score — cited claims whose evidence spans the two
+  areas (reader annotations excluded), the most similar passage pairs across
+  them, and the terms both share. Built with each area build;
+  `/api/explore/bridges/{a}/{b}`. A nearest-passages query limited to one area
+  no longer loses its rows to the vector index's candidate limit. Migration
+  `2926b43adc44`
+
 ## [0.134.0] — 2026-09-25
 
 ### Added

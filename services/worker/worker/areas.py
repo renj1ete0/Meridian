@@ -52,6 +52,7 @@ async def run_once(*, write: bool) -> tuple[BuildReport, list[tuple[int, int, in
             "areas": report.areas,
             "leaves": report.leaves,
             "inherited": report.inherited,
+            "bridges": report.bridges,
             "seconds": report.seconds,
             "written": write,
         },
@@ -82,7 +83,8 @@ def main() -> None:
         return
     print(
         f"{report.passages} passages → {report.regions} regions, {report.areas} areas, "
-        f"{report.leaves} sub-areas in {report.seconds}s; {report.inherited} kept their position"
+        f"{report.leaves} sub-areas, {report.bridges} bridges in {report.seconds}s; "
+        f"{report.inherited} kept their position"
     )
     for level, passages, sources, terms in rows:
         indent = "  " if level == 2 else ""

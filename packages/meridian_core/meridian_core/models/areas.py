@@ -12,7 +12,18 @@ from __future__ import annotations
 import datetime as dt
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, Text, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -79,4 +90,43 @@ class AreaMember(Base):
     )
     area_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("areas.area_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class AreaBridge(Base):
+    """What connects two sibling areas of one build (task P6-31).
+
+    Three kinds, kept in separate columns because they are different claims:
+    ``cited_edge_ids`` are graph edges a source states, whose evidence spans
+    the two areas; ``similar_pairs`` are the most similar passages across
+    them, near in meaning and nothing more; ``shared_terms`` are distinctive
+    terms both carry. ``area_a`` is always the lower id, so a pair has one row.
+    """
+
+    __tablename__ = "area_bridges"
+
+    bridge_id: Mapped[int] = pk()
+    build_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("area_builds.build_id", ondelete="CASCADE"), nullable=False
+    )
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    area_a: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("areas.area_id", ondelete="CASCADE"), nullable=False
+    )
+    area_b: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("areas.area_id", ondelete="CASCADE"), nullable=False
+    )
+    #: Cosine between the two centroids.
+    similarity: Mapped[float] = mapped_column(Float, nullable=False)
+    cited_edge_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False)
+    #: Distinct sources behind the cited edges' own passages.
+    cited_sources: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: ``[{chunk_a, chunk_b, score}]``, best first; ``chunk_a`` is in ``area_a``.
+    similar_pairs: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
+    shared_terms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("area_a", "area_b"),
+        CheckConstraint("area_a < area_b", name="ordered"),
+        Index("ix_area_bridges_build_level", "build_id", "level"),
     )
