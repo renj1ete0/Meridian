@@ -68,6 +68,10 @@ run. Fill `operator: {grade, missing, sources}` by hand; only those grades are
 compared, and a grade off the 0–3 scale makes the next run refuse to compare.
 While any item is `reviewed: false` every run carries a DRAFT banner.
 
+`MERIDIAN_EVAL_RUNS_DIR`, when set, replaces `eval/runs/` for both the runner and
+Gaps (`P6-37`). A deployment has no checkout, so there it names a mounted
+directory the runner writes and the API reads (docs/deployment.md §7).
+
 ## The go/no-go (P2-09) — a proposal for the operator
 
 The threshold is the operator's decision, and should be set **before** the first

@@ -124,10 +124,11 @@ export function GapsPage() {
   )
 }
 
-const SOURCE_NAMES: Record<string, string> = {
+export const SOURCE_NAMES: Record<string, string> = {
   'topic-coverage': 'topic coverage',
   'place-coverage': 'place coverage',
-  'search-yield': 'search yield',
+  'search-queries': 'search queries',
+  'search-results': 'search results',
   'question-set': 'question set',
   areas: 'areas',
   routes: 'routes',

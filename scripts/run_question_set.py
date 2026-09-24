@@ -15,6 +15,11 @@ reader conclude the corpus is empty.
 Usage:
     uv run python scripts/run_question_set.py            # writes eval/runs/<date>.yaml
     uv run python scripts/run_question_set.py --stdout   # prints instead
+
+On a deployment, run it in the `tools` container, which mounts the directory the
+API reads and sets `MERIDIAN_EVAL_RUNS_DIR` to it (docs/deployment.md):
+
+    docker compose run --rm tools python scripts/run_question_set.py
 """
 
 from __future__ import annotations
@@ -38,6 +43,7 @@ from meridian_core.questionset import (
     previous_run,
     read_run,
     run_set,
+    runs_dir,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -77,7 +83,9 @@ async def build(
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--questions", type=Path, default=REPO / "eval" / "questions.yaml")
-    parser.add_argument("--runs-dir", type=Path, default=REPO / "eval" / "runs")
+    # `MERIDIAN_EVAL_RUNS_DIR` first: on a deployment it names the directory the
+    # API mounts for Gaps, and a run written anywhere else is a run Gaps never sees.
+    parser.add_argument("--runs-dir", type=Path, default=runs_dir(REPO / "eval" / "runs"))
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--lexical-only", action="store_true")
     parser.add_argument("--stdout", action="store_true", help="print the run, write nothing")

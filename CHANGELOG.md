@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.138.0] — 2026-09-25
+
+### Added
+
+- `P6-37`: Gaps per search query — a `search-queries` source reads each
+  answered query's recorded yield (`B-56`) and lists "found nothing" and
+  "found only what we had", grouped per topic and kind, with a rephrase-and-
+  seed action; a `search-results` source flags a topic whose search-found
+  pages turned out, by content, mostly off-topic. They replace the per-topic
+  `search-yield` source. Question-set runs are readable on a deployment: both
+  compose files mount `${DATA_ROOT}/eval-runs` (read-only into `api`,
+  read-write into `tools`) with `MERIDIAN_EVAL_RUNS_DIR`, and the runner
+  writes there by default
+
 ## [0.137.0] — 2026-09-25
 
 ### Added

@@ -17,8 +17,12 @@ session to a list of :class:`Gap`, registered under a name. What exists today:
 - ``place-coverage`` — per topic, the places of the comparison set (§7.2)
   with fewer than a few sources about them (`P2-23`). Unavailable until a
   source has been examined for places.
-- ``search-yield`` — a topic whose search seeds keep producing nothing that
-  survives the prefilter.
+- ``search-queries`` (`P6-37`) — answered searches that found nothing, or
+  only pages already queued, from each query's recorded yield (`B-56`);
+  grouped per topic and kind so repeated failures are one row.
+- ``search-results`` (`P6-37`) — topics whose search-found pages turned out,
+  by content, to be mostly about something else. Per topic: the queue does
+  not link a result to the query that found it.
 - ``question-set`` — items of the held-out set that score low in the newest
   run file. An operator grade counts; a heuristic proposal is shown as one and
   ranked below any real score.
@@ -36,13 +40,13 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 import yaml
 from sqlalchemy import false, func, select, true, union
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Chunk, ChunkTopics, QueueTask, Source, TopicConfig
@@ -59,9 +63,6 @@ WEAK_STRONG = 3
 
 #: The newest dated source older than this is stale.
 STALE_YEARS = 3
-
-#: Searches that ran for a topic before "none produced anything" is a finding.
-SEARCH_YIELD_MIN = 3
 
 #: A boost offered from Gaps: doubled for a week, then gone by itself (§10).
 BOOST_FACTOR = 2.0
@@ -536,60 +537,268 @@ async def place_coverage(sess: AsyncSession) -> list[Gap]:
 
 
 # ---------------------------------------------------------------------------
-# Search yield
+# Search queries — per query, from what each answered search yielded (`B-56`)
 # ---------------------------------------------------------------------------
+#
+# This replaces P6-36's per-topic "search-yield" source rather than sitting
+# beside it. That source could only say "no search for this topic ever queued
+# a page", because the queue did not record what a query returned. With the
+# yield on the row, the same finding falls out of the per-query source as the
+# case where every answered query failed (share 1.0, the top severity), and a
+# topic whose searches mostly work but where some words find nothing — which
+# the per-topic count could never see — becomes visible too. Keeping both
+# would list the all-failed topic twice.
+#
+# Queries answered before `B-56` have NULL yields. They are *not measured*,
+# not failures: counting a NULL as zero is the absent-signal-as-zero trap the
+# handover warns about.
+
+#: Failing queries quoted in a gap's reason; the rest are counted, not listed.
+QUERY_EXAMPLES = 3
+
+#: How search-found sources are judged off-topic: at least this many examined
+#: by the content labeller, and fewer than this share labelled with the topic
+#: they were searched for.
+OFF_TOPIC_MIN = 5
+OFF_TOPIC_SHARE = 0.5
+
+#: Query failure kinds, and how bad each is at its worst (every answered search
+#: for the topic failed that way). Nothing found outranks found-only-known:
+#: the second at least shows the words reach the topic, the crawl has simply
+#: been there. Both stay under an empty topic (1.0) and an operator-graded
+#: question (0.7–0.9) — a search that missed is a symptom; those are the gap.
+QUERY_KINDS: dict[str, tuple[float, float]] = {
+    # kind: (floor, span) — severity = floor + span * failing share
+    "search_empty": (0.3, 0.3),
+    "search_known": (0.2, 0.2),
+}
 
 
-@register("search-yield")
-async def search_yield(sess: AsyncSession) -> list[Gap]:
-    """Topics whose searches ran and queued nothing.
+@dataclasses.dataclass(frozen=True)
+class QueryYield:
+    task_id: int
+    query: str
+    results: int | None
+    queued: int | None
 
-    The queue does not link a result to the query that found it, so this is
-    per topic, not per query: searches done for the topic against URLs any
-    search queued for it. Coarser than per query, and honest about it.
+
+def query_failure(results: int | None, queued: int | None) -> str | None:
+    """Why one answered query is a gap, or None when it is not (or unmeasured)."""
+    if results is None or queued is None:
+        return None  # answered before its yield was recorded
+    if results == 0:
+        return "search_empty"
+    if queued == 0:
+        return "search_known"
+    return None
+
+
+def _quoted(queries: list[str]) -> str:
+    shown = ", ".join(f"“{q}”" for q in queries[:QUERY_EXAMPLES])
+    rest = len(queries) - QUERY_EXAMPLES
+    return shown + (f" and {rest} more" if rest > 0 else "")
+
+
+def query_gaps(
+    topic: str, *, description: str | None, answered: int, failing: list[QueryYield]
+) -> list[Gap]:
+    """The per-query findings for one topic, grouped by kind. Pure, so testable.
+
+    ``answered`` is every measured answered query for the topic; ``failing`` the
+    ones that failed, newest first. One gap per (topic, kind), however many
+    queries failed that way: fifty empty searches for one topic are one thing to
+    act on, and fifty rows would bury every other source's findings.
     """
-    done = dict(
+    by_kind: dict[str, list[QueryYield]] = {}
+    for q in failing:
+        kind = query_failure(q.results, q.queued)
+        if kind is not None:
+            by_kind.setdefault(kind, []).append(q)
+    out: list[Gap] = []
+    for kind, queries in by_kind.items():
+        n = len(queries)
+        share = n / answered if answered else 1.0
+        floor, span = QUERY_KINDS[kind]
+        texts = [q.query for q in queries]
+        latest = texts[0]
+        if kind == "search_empty":
+            title = f"“{latest}” found nothing" if n == 1 else f"{n} searches found nothing"
+            outcome = "came back with no results"
+            advice = "Other words may reach other pages."
+            evidence_kept = {"results": sum(q.results or 0 for q in queries)}
+        else:
+            title = (
+                f"“{latest}” found only what we had"
+                if n == 1
+                else f"{n} searches found only what we had"
+            )
+            outcome = "returned only pages the crawl already knew"
+            advice = "The words reach ground already covered; ask about what lies next to it."
+            evidence_kept = {"results": sum(q.results or 0 for q in queries), "results_queued": 0}
+        out.append(
+            Gap(
+                id=f"{kind.replace('_', '-')}:{topic}",
+                source="search-queries",
+                kind=kind,
+                subject=topic,
+                title=title,
+                reason=(
+                    f"{n} of {answered} answered {'search' if answered == 1 else 'searches'} "
+                    f"for {topic} {outcome}: "
+                    f"{_quoted(texts)}. {advice}"
+                ),
+                severity=round(floor + span * min(share, 1.0), 3),
+                evidence={
+                    "failed": n,
+                    "searches_done": answered,
+                    **evidence_kept,
+                    "queries": "; ".join(texts[:QUERY_EXAMPLES]),
+                    "task_ids": ", ".join(str(q.task_id) for q in queries[:QUERY_EXAMPLES]),
+                },
+                # Rephrase, prefilled with the newest failed words so the
+                # operator edits rather than starts from nothing. Submitting
+                # them unchanged is refused as already queued, which is right.
+                actions=(
+                    Action("seed_query", "Rephrase and seed", topic=topic, query=latest),
+                    _seed_and_boost(topic, description)[1],
+                ),
+            )
+        )
+    return out
+
+
+async def _live_descriptions(sess: AsyncSession) -> dict[str, str | None]:
+    return dict(
+        (
+            await sess.execute(
+                select(TopicConfig.topic, TopicConfig.description).where(
+                    TopicConfig.status.in_(LIVE_STATUSES)
+                )
+            )
+        ).all()
+    )
+
+
+@register("search-queries")
+async def search_queries(sess: AsyncSession) -> list[Gap]:
+    """Answered searches that found nothing, or nothing new, grouped per topic.
+
+    A query with no topic is left out: every action here acts on a topic, and
+    a gap with nothing to act on is a complaint, not a finding.
+    """
+    descriptions = await _live_descriptions(sess)
+    if not descriptions:
+        return []
+    answered = dict(
         (
             await sess.execute(
                 select(QueueTask.topic, func.count())
                 .where(QueueTask.task_type == "query", QueueTask.status == "done")
-                .where(QueueTask.topic.is_not(None))
+                .where(QueueTask.topic.in_(list(descriptions)))
+                .where(QueueTask.search_results.is_not(None))
+                .where(QueueTask.search_queued.is_not(None))
                 .group_by(QueueTask.topic)
             )
         ).all()
     )
-    found = dict(
-        (
-            await sess.execute(
-                select(QueueTask.topic, func.count())
-                .where(QueueTask.task_type == "url", QueueTask.seed_source == "search")
-                .group_by(QueueTask.topic)
-            )
-        ).all()
-    )
-    descriptions = dict(
-        (await sess.execute(select(TopicConfig.topic, TopicConfig.description))).all()
-    )
-    out = []
-    for topic, n in sorted(done.items()):
-        if n < SEARCH_YIELD_MIN or found.get(topic, 0) > 0 or topic not in descriptions:
-            continue
-        out.append(
-            Gap(
-                id=f"search-yield:{topic}",
-                source="search-yield",
-                kind="search_empty",
-                subject=topic,
-                title=f"{n} searches, no result kept",
-                reason=(
-                    f"{n} searches for {topic} have run and none queued a page that "
-                    "survived the prefilter. Different words may reach different pages."
-                ),
-                severity=0.5,
-                evidence={"searches_done": n, "results_queued": 0},
-                actions=_seed_and_boost(topic, descriptions.get(topic))[:1],
+    failing: dict[str, list[QueryYield]] = {}
+    for task_id, topic, query, results, queued in await sess.execute(
+        select(
+            QueueTask.task_id,
+            QueueTask.topic,
+            QueueTask.url_or_query,
+            QueueTask.search_results,
+            QueueTask.search_queued,
+        )
+        .where(QueueTask.task_type == "query", QueueTask.status == "done")
+        .where(QueueTask.topic.in_(list(descriptions)))
+        .where((QueueTask.search_results == 0) | (QueueTask.search_queued == 0))
+        .order_by(QueueTask.task_id.desc())
+    ):
+        failing.setdefault(topic, []).append(QueryYield(task_id, query, results, queued))
+    out: list[Gap] = []
+    for topic in sorted(failing):
+        out.extend(
+            query_gaps(
+                topic,
+                description=descriptions[topic],
+                answered=int(answered.get(topic, 0)),
+                failing=failing[topic],
             )
         )
+    return out
+
+
+def off_topic_gap(
+    topic: str, *, description: str | None, examined: int, on_topic: int
+) -> Gap | None:
+    """Search results that turned out, by their content, to be about something else.
+
+    Per topic, not per query, and that is the queue's limit, not a choice:
+    a result row carries its query's topic but not its query (`B-56` stored the
+    counts on the query, not a link from each result back to it). So "these
+    words find off-topic pages" is not answerable; "searches for this topic
+    do" is.
+    """
+    if examined < OFF_TOPIC_MIN:
+        return None
+    share = on_topic / examined
+    if share >= OFF_TOPIC_SHARE:
+        return None
+    return Gap(
+        id=f"search-off-topic:{topic}",
+        source="search-results",
+        kind="search_off_topic",
+        subject=topic,
+        title=f"{on_topic} of {examined} search results are about {topic}",
+        reason=(
+            f"Of {_plural(examined, 'page')} that searches for {topic} found and the "
+            f"content labeller has read, {on_topic} are labelled {topic}; under "
+            f"{OFF_TOPIC_SHARE:.0%} means the words are reaching something else. "
+            "Narrower words, or a description for the topic, would steer them."
+        ),
+        severity=round(0.3 + 0.3 * (1 - share / OFF_TOPIC_SHARE), 3),
+        evidence={
+            "examined": examined,
+            "on_topic": on_topic,
+            "on_topic_share": round(share, 3),
+        },
+        # No boost: boosting a topic whose searches land elsewhere spends more
+        # of the crawl landing elsewhere.
+        actions=(_seed_and_boost(topic, description)[0],),
+    )
+
+
+@register("search-results")
+async def search_results(sess: AsyncSession) -> list[Gap]:
+    """Topics whose search-found pages are, by content, mostly about other things.
+
+    Joined through the URL: a source is stored under the URL its queue row
+    carried, so a `search`-seeded row finds its source exactly. Only sources
+    the labeller has examined count (NULL labels are unread, not off-topic),
+    and document copies are left out so one page is not counted twice.
+    """
+    descriptions = await _live_descriptions(sess)
+    if not descriptions:
+        return []
+    on = Source.topic_labels.contains(array([QueueTask.topic]))
+    rows = await sess.execute(
+        select(QueueTask.topic, func.count(), func.count().filter(on))
+        .select_from(QueueTask)
+        .join(Source, Source.url == QueueTask.url_or_query)
+        .where(QueueTask.task_type == "url", QueueTask.seed_source == "search")
+        .where(QueueTask.topic.in_(list(descriptions)))
+        .where(Source.topic_labels.is_not(None), Source.duplicate_of.is_(None))
+        .group_by(QueueTask.topic)
+        .order_by(QueueTask.topic)
+    )
+    out = []
+    for topic, examined, on_topic in rows:
+        gap = off_topic_gap(
+            topic, description=descriptions[topic], examined=examined, on_topic=on_topic
+        )
+        if gap is not None:
+            out.append(gap)
     return out
 
 
@@ -694,8 +903,9 @@ async def boost_topic(
 
 
 def runs_dir() -> Path:
-    configured = os.environ.get("MERIDIAN_EVAL_RUNS_DIR", "").strip()
-    return Path(configured) if configured else Path.cwd() / "eval" / "runs"
+    from .questionset import runs_dir as configured
+
+    return configured(Path.cwd() / "eval" / "runs")
 
 
 LEXICAL_NOTE = " The run was lexical-only (no embedder), so an empty result is weak evidence."

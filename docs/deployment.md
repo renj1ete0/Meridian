@@ -397,3 +397,40 @@ MERIDIAN_COMPOSE="docker compose -f docker-compose.local.yml" DATA_ROOT=.localda
 
 Keep both or neither — a dump whose `sources.raw_path` values point at files you
 did not keep is not a corpus, it is a catalogue.
+
+---
+
+## 7. The question set on a deployment (`P6-37`)
+
+Gaps lists low-scoring items from the newest question-set run file
+(`eval/README.md`). In a checkout those live in `eval/runs/`; a deployment has
+no checkout, so both compose files mount one directory for them:
+
+| Service | Mount | `MERIDIAN_EVAL_RUNS_DIR` |
+|---|---|---|
+| `api` | `$DATA_ROOT/eval-runs:/data/eval-runs:ro` | `/data/eval-runs` — Gaps reads the newest run here |
+| `tools` | `$DATA_ROOT/eval-runs:/data/eval-runs` | `/data/eval-runs` — the runner writes here |
+| `datadirs` | the same directory | chowns it to uid 1001 with the others |
+
+**The runner writes to the mounted directory, on the server.** It reads the
+database it is measuring, so it runs where that database is, in `tools`:
+
+```bash
+docker compose run --rm datadirs      # once, if this directory is new
+docker compose run --rm tools python scripts/run_question_set.py
+```
+
+`scripts/run_question_set.py` takes its output directory from
+`MERIDIAN_EVAL_RUNS_DIR` when set, the same variable Gaps reads, so a run cannot
+land somewhere Gaps does not look. Without the embedder URL (from `.env`) the
+run says it is lexical-only, and Gaps notes that under every item it lists.
+
+**Grading.** The operator's grade goes into the run file by hand. The file is
+written by the `tools` container (root), so edit it with `sudo` on the server,
+or copy it to a checkout, grade it there and copy it back into
+`$DATA_ROOT/eval-runs/`. Gaps re-reads on every request; nothing needs a
+restart.
+
+Without the mount, or with an empty directory, Gaps shows the question-set
+source as **unavailable** and names the directory it looked in. That is the
+check: open Gaps after the first run and the source should read `ok`.

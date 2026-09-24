@@ -373,6 +373,15 @@ It reports index recall, latency and how often the two search arms agree — and
 refuses to report numbers a small corpus cannot support, which is most of what
 it does before `P1-16`.
 
+**Run the held-out question set** once there is a corpus, and after changes
+that should move retrieval (`P2-22`). On the server it runs in `tools` and
+writes where the API reads it, so Gaps can list what scored low
+(docs/deployment.md §7):
+
+```bash
+docker compose run --rm tools python scripts/run_question_set.py
+```
+
 **Hybrid search needs the embedding sidecar** (`P2-17`). It is the worker's own
 image with a different command:
 

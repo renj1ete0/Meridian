@@ -133,8 +133,14 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
   if (has('newest')) out.push(`newest ${evidence.newest ?? '—'}`)
   if (has('crawl_share')) out.push(`crawl share ${pct(evidence.crawl_share)}`)
   if (has('corpus_share')) out.push(`corpus share ${pct(evidence.corpus_share)}`)
+  if (has('failed')) out.push(`failed ${evidence.failed}`)
   if (has('searches_done')) out.push(`searches ${evidence.searches_done}`)
+  if (has('results')) out.push(`results ${evidence.results}`)
   if (has('results_queued')) out.push(`results kept ${evidence.results_queued}`)
+  if (has('examined')) out.push(`read ${evidence.examined}`)
+  if (has('on_topic')) out.push(`on topic ${evidence.on_topic}`)
+  if (has('on_topic_share')) out.push(`on-topic share ${pct(evidence.on_topic_share)}`)
+  if (has('task_ids') && evidence.task_ids) out.push(`tasks ${evidence.task_ids}`)
   if (has('grade')) out.push(`grade ${evidence.grade}/3 · ${evidence.basis}`)
   if (has('topics') && evidence.topics) out.push(`topics ${evidence.topics}`)
   if (has('run')) out.push(`run ${evidence.run}`)
@@ -145,10 +151,16 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
 export type GapGroup = 'coverage' | 'search' | 'questions' | 'other'
 
 export function groupOf(gap: Gap): GapGroup {
-  // Place coverage is coverage by another axis (`P2-23`), so it sits beside it.
-  if (gap.source === 'topic-coverage' || gap.source === 'place-coverage' || gap.source === 'areas')
+  // Place coverage is coverage by another axis (`P2-23`), and routes are
+  // coverage between topics: what the corpus cannot connect (`P6-36`).
+  if (
+    gap.source === 'topic-coverage' ||
+    gap.source === 'place-coverage' ||
+    gap.source === 'areas' ||
+    gap.source === 'routes'
+  )
     return 'coverage'
-  if (gap.source === 'search-yield') return 'search'
+  if (gap.source === 'search-queries' || gap.source === 'search-results') return 'search'
   if (gap.source === 'question-set') return 'questions'
   return 'other'
 }

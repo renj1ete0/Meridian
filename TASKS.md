@@ -1312,7 +1312,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       backlog by the same rule. Unpaywall is not the bottleneck: without a contact
       email the resolver still uses OpenAlex (which carries most of Unpaywall's
       open-access data), Europe PMC, Semantic Scholar and the preprint rule
-- [ ] `P6-37` **Gaps per query, and runs on a deployment** — Gaps' search-yield
+- [x] `P6-37` **Gaps per query, and runs on a deployment** — `v0.138.0` (delegated agent). Open: per-query off-topic needs a result→query link on the queue; old failed queries have no "answered at" and stay listed; run files written by the tools container are root-owned — Gaps' search-yield
       source counts per topic; `B-56` now records each query's yield, so a query
       that found nothing can be its own gap. Also `eval/runs` is not mounted into the
       API container, so on a deployment the question-set source reports

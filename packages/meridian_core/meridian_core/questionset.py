@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import os
 import re
 import statistics
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -317,6 +318,18 @@ def read_run(path: Path) -> dict:
                 f"{path}: {item.get('id')}: operator grade must be one of {SCALE}, got {op!r}"
             )
     return dict(run)
+
+
+#: Where run files live when not in the checkout's `eval/runs/` (`P6-37`). The
+#: runner writes there and Gaps reads there, so on a deployment both point at
+#: the one mounted directory rather than each at its own working tree.
+RUNS_DIR_ENV = "MERIDIAN_EVAL_RUNS_DIR"
+
+
+def runs_dir(default: Path) -> Path:
+    """``$MERIDIAN_EVAL_RUNS_DIR`` when set (and not blank), else ``default``."""
+    configured = os.environ.get(RUNS_DIR_ENV, "").strip()
+    return Path(configured) if configured else default
 
 
 def previous_run(runs_dir: Path, *, excluding: Path | None = None) -> Path | None:

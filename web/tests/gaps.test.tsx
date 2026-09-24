@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App, sectionOf } from '../src/App'
-import { FLAG_AT, GapsPage } from '../src/explore/GapsPage'
+import { FLAG_AT, GapsPage, SOURCE_NAMES } from '../src/explore/GapsPage'
 import {
   GAP_ACTION_FIELDS,
   GAP_FIELDS,
@@ -144,8 +144,9 @@ describe('helpers', () => {
       for (const key of block[1]!.matchAll(/"([a-z_]+)"\s*:/g)) keys.add(key[1]!)
     }
     expect(keys.size).toBeGreaterThan(5)
-    // A question's kind is already the first word of its title.
-    const shownElsewhere = new Set(['kind'])
+    // A question's kind is already the first word of its title, and a failed
+    // search group's queries are quoted in its reason (P6-37).
+    const shownElsewhere = new Set(['kind', 'queries'])
     const missing = [...keys].filter(
       (k) =>
         !shownElsewhere.has(k) &&
@@ -169,9 +170,34 @@ describe('helpers', () => {
   it('groups by source', () => {
     expect(groupOf(gap())).toBe('coverage')
     expect(groupOf(gap({ source: 'question-set' }))).toBe('questions')
-    expect(groupOf(gap({ source: 'search-yield' }))).toBe('search')
     // Place coverage is coverage along another axis (P2-23), not "other".
     expect(groupOf(gap({ source: 'place-coverage' }))).toBe('coverage')
+    expect(groupOf(gap({ source: 'search-queries' }))).toBe('search')
+    expect(groupOf(gap({ source: 'search-results' }))).toBe('search')
+    expect(groupOf(gap({ source: 'something-new' }))).toBe('other')
+  })
+
+  it('names and groups every source the server registers or lists as pending', () => {
+    // Drift (P6-37): a source added in gaps.py and missed here shows under its
+    // raw name and in no filter but "all". Read from the Python, not a list.
+    const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/gaps.py'), 'utf8')
+    const registered = [...source.matchAll(/^@register\("([a-z-]+)"\)/gm)].map((m) => m[1]!)
+    const pendingBlock = source.slice(source.indexOf('PENDING: dict[str, str] = {'))
+    const pending = [...pendingBlock.slice(0, pendingBlock.indexOf('}')).matchAll(/^ {4}"([a-z-]+)":/gm)].map(
+      (m) => m[1]!,
+    )
+    expect(registered.length).toBeGreaterThan(3)
+    for (const name of [...registered, ...pending]) {
+      expect(SOURCE_NAMES[name], name).toBeTruthy()
+      expect(groupOf(gap({ source: name })), name).not.toBe('other')
+    }
+  })
+
+  it('prints a failed search group with its counts and task ids', () => {
+    const line = evidenceLine({ failed: 3, searches_done: 8, results: 0, queries: 'a; b', task_ids: '9, 7, 4' })
+    expect(line).toEqual(['failed 3', 'searches 8', 'results 0', 'tasks 9, 7, 4'])
+    const off = evidenceLine({ examined: 10, on_topic: 2, on_topic_share: 0.2 })
+    expect(off).toEqual(['read 10', 'on topic 2', 'on-topic share 20%'])
   })
 })
 

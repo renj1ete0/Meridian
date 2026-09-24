@@ -45,7 +45,15 @@ def test_every_action_kind_a_source_can_emit_is_a_dto_kind():
 
     from meridian_core.schemas.gaps import ActionKind
 
-    emitted = {a.kind for a in gaps._seed_and_boost("t", None)} | {"open_search"}
+    q = gaps.QueryYield(1, "some words", 0, 0)
+    per_query = gaps.query_gaps("t", description=None, answered=1, failing=[q])
+    off_topic = gaps.off_topic_gap("t", description=None, examined=10, on_topic=0)
+    emitted = (
+        {a.kind for a in gaps._seed_and_boost("t", None)}
+        | {"open_search"}
+        | {a.kind for g in per_query for a in g.actions}
+        | {a.kind for a in off_topic.actions}
+    )
     assert emitted <= set(get_args(ActionKind))
 
 
@@ -177,13 +185,20 @@ async def test_find_gaps_reports_an_unavailable_source_and_keeps_the_rest():
 
 
 def test_the_built_sources_and_the_pending_ones_do_not_overlap():
-    assert set(gaps.SOURCES) == {
+    assert not set(gaps.SOURCES) & set(gaps.PENDING)
+    built = {
         "topic-coverage",
         "place-coverage",
-        "search-yield",
+        "search-queries",
+        "search-results",
         "question-set",
     }
-    assert set(gaps.PENDING) == {"areas", "routes"}
+    assert built <= set(gaps.SOURCES)
+
+
+def test_the_per_topic_search_yield_source_is_replaced_not_duplicated():
+    """P6-37 subsumes it: an all-failed topic would otherwise be listed twice."""
+    assert "search-yield" not in gaps.SOURCES
 
 
 def test_registering_a_pending_source_takes_it_off_the_pending_list(monkeypatch):
@@ -280,3 +295,119 @@ def test_a_place_gap_names_its_place_and_offers_reading_and_seeding():
     assert "a place" in kinds["seed_query"].query
     # The seed passes the same validation a person's seed does.
     GapSeed(topic="t", query=kinds["seed_query"].query, gap_id=gap.id)
+
+
+# -- search queries (P6-37) --------------------------------------------------------
+
+
+def qy(task_id, results, queued, query=None):
+    return gaps.QueryYield(task_id, query or f"words {task_id}", results, queued)
+
+
+@pytest.mark.parametrize(
+    ("results", "queued", "kind"),
+    [
+        (0, 0, "search_empty"),
+        (7, 0, "search_known"),
+        (7, 3, None),  # productive: not a gap
+        (None, None, None),  # answered before B-56: unmeasured, not a failure
+        (None, 0, None),
+        (0, None, None),
+    ],
+)
+def test_query_failure_classifies_and_refuses_the_unmeasured(results, queued, kind):
+    assert gaps.query_failure(results, queued) == kind
+
+
+def test_productive_and_unmeasured_queries_make_no_gap():
+    assert gaps.query_gaps("t", description=None, answered=2, failing=[qy(1, 5, 2)]) == []
+    assert gaps.query_gaps("t", description=None, answered=0, failing=[qy(1, None, None)]) == []
+
+
+def test_repeated_failures_are_one_gap_per_kind_not_one_per_query():
+    failing = [qy(n, 0, 0) for n in range(9, 3, -1)] + [qy(2, 4, 0), qy(1, 6, 0)]
+    found = {
+        g.kind: g for g in gaps.query_gaps("t", description=None, answered=10, failing=failing)
+    }
+    assert set(found) == {"search_empty", "search_known"}
+    empty = found["search_empty"]
+    assert empty.evidence["failed"] == 6 and empty.evidence["searches_done"] == 10
+    assert empty.id == "search-empty:t" and found["search_known"].id == "search-known:t"
+    # Quoted up to the limit, the rest counted; the newest failure first.
+    assert "and 3 more" in empty.reason
+    assert empty.reason.count("“") == gaps.QUERY_EXAMPLES
+    assert empty.evidence["task_ids"].startswith("9")
+    assert found["search_known"].evidence["results"] == 10
+
+
+def test_one_failed_query_is_named_in_the_title():
+    (g,) = gaps.query_gaps("t", description=None, answered=4, failing=[qy(3, 0, 0, "odd words")])
+    assert "odd words" in g.title
+    assert "1 of 4 answered searches" in g.reason
+
+
+def test_the_rephrase_seed_is_prefilled_with_the_newest_failed_words_and_a_boost_follows():
+    (g,) = gaps.query_gaps(
+        "t", description="d", answered=3, failing=[qy(8, 0, 0, "newest"), qy(2, 0, 0, "older")]
+    )
+    seed, boost = g.actions
+    assert (seed.kind, seed.query, seed.topic) == ("seed_query", "newest", "t")
+    assert boost.kind == "boost_topic"
+
+
+def test_query_severity_rises_with_the_failing_share_and_stays_under_an_empty_topic():
+    def sev(kind_yield, n, answered):
+        failing = [qy(i, *kind_yield) for i in range(n)]
+        (g,) = gaps.query_gaps("t", description=None, answered=answered, failing=failing)
+        return g.severity
+
+    assert sev((0, 0), 1, 20) < sev((0, 0), 10, 20) < sev((0, 0), 20, 20)
+    # Found-nothing outranks found-only-known at the same share.
+    assert sev((5, 0), 20, 20) < sev((0, 0), 20, 20)
+    # An empty topic (coverage) and an operator's low grade outrank any of these.
+    assert sev((0, 0), 20, 20) < cover(sources=0)["thin"].severity
+    assert sev((0, 0), 20, 20) < 0.7
+
+
+# -- search results off topic (P6-37) ----------------------------------------------
+
+
+def test_off_topic_needs_enough_read_results_and_a_minority_on_topic():
+    too_few = gaps.OFF_TOPIC_MIN - 1
+    assert gaps.off_topic_gap("t", description=None, examined=too_few, on_topic=0) is None
+    n = gaps.OFF_TOPIC_MIN * 2
+    at_threshold = int(n * gaps.OFF_TOPIC_SHARE)
+    assert gaps.off_topic_gap("t", description=None, examined=n, on_topic=at_threshold) is None
+    g = gaps.off_topic_gap("t", description=None, examined=n, on_topic=at_threshold - 1)
+    assert g is not None and g.evidence == {
+        "examined": n,
+        "on_topic": at_threshold - 1,
+        "on_topic_share": round((at_threshold - 1) / n, 3),
+    }
+
+
+def test_off_topic_severity_is_worst_when_nothing_found_was_on_topic():
+    none_on = gaps.off_topic_gap("t", description=None, examined=10, on_topic=0)
+    some_on = gaps.off_topic_gap("t", description=None, examined=10, on_topic=4)
+    assert none_on.severity > some_on.severity
+
+
+def test_off_topic_offers_no_boost():
+    """Boosting a topic whose searches land elsewhere spends more crawl elsewhere."""
+    g = gaps.off_topic_gap("t", description="d", examined=10, on_topic=0)
+    assert [a.kind for a in g.actions] == ["seed_query"]
+
+
+# -- the runs directory (P6-37) ---------------------------------------------------
+
+
+def test_runs_dir_prefers_the_environment_and_ignores_a_blank_one(monkeypatch, tmp_path):
+    from meridian_core.questionset import RUNS_DIR_ENV, runs_dir
+
+    monkeypatch.setenv(RUNS_DIR_ENV, str(tmp_path))
+    assert runs_dir(tmp_path / "default") == tmp_path
+    assert gaps.runs_dir() == tmp_path
+    monkeypatch.setenv(RUNS_DIR_ENV, "   ")
+    assert runs_dir(tmp_path / "default") == tmp_path / "default"
+    monkeypatch.delenv(RUNS_DIR_ENV)
+    assert runs_dir(tmp_path / "default") == tmp_path / "default"

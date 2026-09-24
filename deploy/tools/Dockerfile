@@ -66,6 +66,12 @@ COPY migrations/ migrations/
 COPY scripts/ scripts/
 COPY config/ config/
 
+# The held-out question set and the version it is run against (`P6-37`), for
+# `scripts/run_question_set.py` on a stack with no checkout. The questions
+# only: past run files live in the mounted runs directory, not in the image.
+COPY VERSION ./
+COPY eval/questions.yaml eval/
+
 # No CMD. This image is only ever run with an explicit command — `alembic
 # upgrade head` or `python scripts/seed.py` — and a default would make it
 # ambiguous which of the two a bare `run` performs.

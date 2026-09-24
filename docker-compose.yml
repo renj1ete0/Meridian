@@ -177,6 +177,13 @@ services:
     networks: [internal]
     depends_on:
       postgres: { condition: service_healthy }
+    # `scripts/run_question_set.py` runs here too (`P6-37`), writing into the
+    # directory the API mounts read-only, so a run lands where Gaps reads it.
+    # The embedder URL comes from `.env`, as the API's does.
+    environment:
+      MERIDIAN_EVAL_RUNS_DIR: /data/eval-runs
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/eval-runs:/data/eval-runs
     restart: "no"
     logging: *logging
 
@@ -200,12 +207,13 @@ services:
     # omitting the key puts it on compose's default bridge — which has a route
     # out, and this is the one container here running as root.
     network_mode: none
-    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay"]
+    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay /data/eval-runs"]
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
       - ${DATA_ROOT:-/srv/meridian}/models:/models
       - ${DATA_ROOT:-/srv/meridian}/relay:/relay
+      - ${DATA_ROOT:-/srv/meridian}/eval-runs:/data/eval-runs
     restart: "no"
     logging: *logging
 
@@ -469,9 +477,18 @@ services:
     networks: [internal]          # cloudflared fronts it; it needs no egress
     depends_on:
       postgres: { condition: service_healthy }
+    # A container path, not configuration: set here beside the mount it names
+    # rather than in `.env`, where it could drift from the volume below.
+    environment:
+      MERIDIAN_EVAL_RUNS_DIR: /data/eval-runs
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures:ro
+      # The question-set run files (`P6-37`), read-only: Gaps reads the newest
+      # one, and the only writer is the runner in `tools`. Without the mount
+      # the question-set source reports "unavailable" on every deployment,
+      # because `eval/runs/` exists only in a checkout.
+      - ${DATA_ROOT:-/srv/meridian}/eval-runs:/data/eval-runs:ro
     # No `ports:`. There was one — `127.0.0.1:21114:8000`, commented "loopback
     # only" — and it published nothing: a container on an `internal: true`
     # network has no gateway for the host to forward to, so the line was inert

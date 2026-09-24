@@ -165,23 +165,181 @@ async def test_archived_topics_are_not_gaps(session_for):
     assert not [g for g in await gaps.topic_coverage(sess) if g.subject == topic]
 
 
-# -- search yield ---------------------------------------------------------------
+# -- search queries (P6-37) -------------------------------------------------------
 
 
-async def test_searches_that_queued_nothing_are_a_gap_and_one_result_clears_it(session_for):
+async def add_query(
+    sess,
+    topic: str | None,
+    *,
+    status: str = "done",
+    results: int | None = None,
+    queued: int | None = None,
+) -> QueueTask:
+    task = QueueTask(
+        url_or_query=f"{topic} {uuid.uuid4().hex[:8]}",
+        task_type="query",
+        status=status,
+        topic=topic,
+        search_results=results,
+        search_queued=queued,
+    )
+    sess.add(task)
+    await sess.flush()
+    return task
+
+
+def of_topic(found: list[gaps.Gap], topic: str) -> dict[str, gaps.Gap]:
+    return {g.kind: g for g in found if g.subject == topic}
+
+
+async def test_a_query_that_found_nothing_is_a_gap_counted_against_every_answered_one(
+    session_for,
+):
     sess = await session_for("rw")
     topic = marker()
     await add_topic(sess, topic)
-    for i in range(gaps.SEARCH_YIELD_MIN):
+    empty = await add_query(sess, topic, results=0, queued=0)
+    await add_query(sess, topic, results=8, queued=3)
+    await add_query(sess, topic, results=5, queued=1)
+
+    gap = of_topic(await gaps.search_queries(sess), topic)["search_empty"]
+    assert gap.evidence["failed"] == 1 and gap.evidence["searches_done"] == 3
+    assert empty.url_or_query in gap.title
+    assert gap.actions[0].query == empty.url_or_query
+
+
+async def test_a_query_still_pending_is_not_a_gap(session_for):
+    """Pending rows have no answer yet — even a zero written early is not one."""
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    await add_query(sess, topic, status="pending")
+    await add_query(sess, topic, status="pending", results=0, queued=0)
+    await add_query(sess, topic, status="failed", results=0, queued=0)
+    assert of_topic(await gaps.search_queries(sess), topic) == {}
+
+
+async def test_a_productive_query_is_not_a_gap(session_for):
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    await add_query(sess, topic, results=10, queued=1)
+    assert of_topic(await gaps.search_queries(sess), topic) == {}
+
+
+async def test_a_query_answered_before_yields_were_recorded_is_neither_gap_nor_denominator(
+    session_for,
+):
+    """NULL is unmeasured. Counting it as zero would invent a failure (and as an
+    answered search, would dilute the real failures' share)."""
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    await add_query(sess, topic)  # done, NULL yields
+    assert of_topic(await gaps.search_queries(sess), topic) == {}
+    await add_query(sess, topic, results=0, queued=0)
+    gap = of_topic(await gaps.search_queries(sess), topic)["search_empty"]
+    assert gap.evidence["searches_done"] == 1
+
+
+async def test_repeated_failures_group_per_topic_and_kind(session_for):
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    for _ in range(5):
+        await add_query(sess, topic, results=0, queued=0)
+    for _ in range(2):
+        await add_query(sess, topic, results=6, queued=0)
+    found = [g for g in await gaps.search_queries(sess) if g.subject == topic]
+    assert sorted(g.kind for g in found) == ["search_empty", "search_known"]
+    by_kind = {g.kind: g for g in found}
+    assert by_kind["search_empty"].evidence["failed"] == 5
+    assert by_kind["search_known"].evidence["results"] == 12
+    assert by_kind["search_empty"].severity > by_kind["search_known"].severity
+
+
+async def test_query_gaps_leave_out_archived_topics_and_untopiced_queries(session_for):
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic, status="archived")
+    await add_query(sess, topic, results=0, queued=0)
+    await add_query(sess, None, results=0, queued=0)
+    assert of_topic(await gaps.search_queries(sess), topic) == {}
+    assert not [g for g in await gaps.search_queries(sess) if g.subject is None]
+
+
+# -- search results off topic (P6-37) ----------------------------------------------
+
+
+async def add_search_result(sess, topic: str, labels: list[str] | None) -> None:
+    url = f"https://{uuid.uuid4().hex[:10]}.test/{topic}"
+    sess.add(QueueTask(url_or_query=url, seed_source="search", topic=topic, status="done"))
+    sess.add(
+        Source(
+            url=url,
+            source_tier="institutional",
+            retention_tier="primary",
+            checksum=f"sha256:{uuid.uuid4().hex}",
+            text_available=True,
+            topic_labels=labels,
+        )
+    )
+    await sess.flush()
+
+
+async def test_search_results_labelled_elsewhere_are_a_gap_for_the_topic(session_for):
+    sess = await session_for("rw")
+    topic, other = marker(), marker()
+    await add_topic(sess, topic)
+    for _ in range(gaps.OFF_TOPIC_MIN):
+        await add_search_result(sess, topic, [other])
+    await add_search_result(sess, topic, [topic, other])
+
+    gap = by_id(await gaps.search_results(sess))[f"search-off-topic:{topic}"]
+    assert gap.evidence["examined"] == gaps.OFF_TOPIC_MIN + 1
+    assert gap.evidence["on_topic"] == 1
+
+
+async def test_unread_results_do_not_count_as_off_topic(session_for):
+    """NULL labels are the labeller's queue, not a verdict (models/source.py)."""
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    for _ in range(gaps.OFF_TOPIC_MIN * 2):
+        await add_search_result(sess, topic, None)
+    assert f"search-off-topic:{topic}" not in by_id(await gaps.search_results(sess))
+
+
+async def test_mostly_on_topic_results_are_not_a_gap(session_for):
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    for _ in range(gaps.OFF_TOPIC_MIN):
+        await add_search_result(sess, topic, [topic])
+    await add_search_result(sess, topic, [])
+    assert f"search-off-topic:{topic}" not in by_id(await gaps.search_results(sess))
+
+
+async def test_results_reached_another_way_are_not_counted_as_search_results(session_for):
+    sess = await session_for("rw")
+    topic = marker()
+    await add_topic(sess, topic)
+    for _ in range(gaps.OFF_TOPIC_MIN * 2):
+        url = f"https://{uuid.uuid4().hex[:10]}.test/{topic}"
+        sess.add(QueueTask(url_or_query=url, seed_source="frontier", topic=topic))
         sess.add(
-            QueueTask(url_or_query=f"{topic} q{i}", task_type="query", status="done", topic=topic)
+            Source(
+                url=url,
+                source_tier="institutional",
+                retention_tier="primary",
+                checksum=f"sha256:{uuid.uuid4().hex}",
+                text_available=True,
+                topic_labels=[],
+            )
         )
     await sess.flush()
-    assert f"search-yield:{topic}" in by_id(await gaps.search_yield(sess))
-
-    sess.add(QueueTask(url_or_query=f"https://{topic}.test/r", seed_source="search", topic=topic))
-    await sess.flush()
-    assert f"search-yield:{topic}" not in by_id(await gaps.search_yield(sess))
+    assert f"search-off-topic:{topic}" not in by_id(await gaps.search_results(sess))
 
 
 # -- the API ---------------------------------------------------------------------
