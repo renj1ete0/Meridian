@@ -93,6 +93,12 @@ class QueueTask(Base, TimestampMixin):
     claimed_by: Mapped[str | None] = mapped_column(Text)
     fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+    #: For a `query` task, what the search answered with (`B-56`): how many
+    #: result URLs came back, and how many of them were new to the queue. NULL
+    #: until answered. Without it "this question found nothing" was invisible,
+    #: and that is exactly the signal a gap list wants.
+    search_results: Mapped[int | None] = mapped_column(Integer)
+    search_queued: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (
         # The claim query: eligible tasks, highest priority first, oldest first.

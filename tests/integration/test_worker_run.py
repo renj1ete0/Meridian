@@ -2553,3 +2553,29 @@ async def test_a_page_that_turns_into_a_soft_404_retires_its_old_chunks(
         .where(Chunk.source_id == source.source_id, Chunk.superseded_at.is_(None))
     )
     assert live == 0
+
+
+async def test_an_answered_query_keeps_its_yield(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-56`: a question that found nothing is a fact the queue holds."""
+    sess = await session_for("rw")
+    task = await enqueue_query(sess, "a question with two answers", run_topic)
+    urls = (f"https://{run_domain}/one", f"https://{run_domain}/two")
+    backend = FakeSearx(SearchResults(query="q", urls=urls))
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    await sess.refresh(task)
+    assert (task.search_results, task.search_queued) == (2, 2)
+
+
+async def test_an_impossible_yield_is_refused(session_for, run_topic, cleanup) -> None:
+    from meridian_core.queueing import record_search_yield
+
+    sess = await session_for("rw")
+    task = await enqueue_query(sess, "q", run_topic)
+    for results, queued in ((-1, 0), (1, 2), (0, -1)):
+        with pytest.raises(ValueError):
+            await record_search_yield(sess, task.task_id, results=results, queued=queued)

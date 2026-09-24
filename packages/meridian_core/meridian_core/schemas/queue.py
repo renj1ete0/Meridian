@@ -43,6 +43,9 @@ class QueueTaskRead(BaseModel):
     claimed_by: str | None
     fetched_at: dt.datetime | None
     error: str | None
+    #: What an answered query produced (`B-56`); NULL for other tasks.
+    search_results: int | None = None
+    search_queued: int | None = None
     created_at: dt.datetime
 
 

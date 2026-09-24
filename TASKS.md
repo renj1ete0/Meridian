@@ -1279,7 +1279,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       writes no `steering_log` row, so the map's "suggest a term" and Gaps' actions
       would be steering nobody can see or undo from the log (found by the Map and Gaps
       agents)
-- [ ] `B-56` **A search's yield is not recorded** — `_settle` stores no result count and
+- [x] `B-56` **A search's yield is not recorded** — `v0.124.2`, `queue.search_results`/`search_queued`; `_settle` stores no result count and
       result rows do not link to their query, so "a query that found nothing" cannot
       feed Gaps; add the count to the query row (a migration)
 - [ ] `P6-30` **Areas: the corpus as nested clusters** — hierarchical clustering

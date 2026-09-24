@@ -83,6 +83,7 @@ from meridian_core.queueing import (
     queue_depth,
     queue_disposition,
     reclaim_expired,
+    record_search_yield,
     release_worker_claims,
     retry_floor_s,
 )
@@ -924,6 +925,13 @@ class Worker:
             # came from. A discovery channel missing from it would make the run
             # summary understate exactly the thing the run was for.
             self._stats.queued += queued
+            async with self._session_factory() as sess:
+                # `B-56`: the yield stays on the row, so a question that found
+                # nothing is a fact the database holds, not a log line.
+                await record_search_yield(
+                    sess, claim.task_id, results=len(results.urls), queued=queued
+                )
+                await sess.commit()
 
         await self._settle(claim, disposition, detail)
 

@@ -386,3 +386,16 @@ async def already_queued(sess: AsyncSession, urls: Sequence[str]) -> set[str]:
         select(QueueTask.url_or_query).where(QueueTask.url_or_query.in_(list(urls)))
     )
     return set(rows.scalars())
+
+
+async def record_search_yield(
+    sess: AsyncSession, task_id: int, *, results: int, queued: int
+) -> None:
+    """Store what one answered query produced (`B-56`). Flushes; does not commit."""
+    if results < 0 or queued < 0 or queued > results:
+        raise ValueError("a search yield is two counts, queued never more than returned")
+    await sess.execute(
+        update(QueueTask)
+        .where(QueueTask.task_id == task_id)
+        .values(search_results=results, search_queued=queued)
+    )

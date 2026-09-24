@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.124.2] — 2026-09-24
+
+### Added
+
+- `B-56`: an answered search query keeps its yield on the queue row
+  (`search_results`, `search_queued`), so a question that found nothing — or
+  found only what was already queued — is visible to Gaps and to whoever tunes
+  the seeds. Migration `f5b9328b0df8`
+
 ## [0.124.1] — 2026-09-24
 
 ### Added
