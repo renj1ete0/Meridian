@@ -1209,10 +1209,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       words return English pages (measured); a German query in German returned German
       sources. Needs the words, not only the prefix: Wikipedia interlanguage titles for
       each topic's concepts are a model-free, human-written source
-- [ ] `B-50` **An academic domain is not peer review** — `*.edu`/`*.edu.sg`/`*.ac.*` map
-      to `peer_reviewed`, so a law school's statute pages, a hospital's condition pages
-      and a university's HR pages rank and read as scholarship. Peer review needs
-      document evidence (a DOI, citation metadata, a known publisher)
+- [x] `B-50` **An academic domain is not peer review** — `v0.122.1`. `*.edu`-style
+      suffixes (listed in the tier map's `needs_scholarly_evidence`) make a page
+      `peer_reviewed` only with its own DOI, else `institutional`; links rank
+      accordingly; `worker.retier` fixes stored sources
 - [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string

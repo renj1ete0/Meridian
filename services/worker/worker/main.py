@@ -69,7 +69,7 @@ from meridian_core.hostscores import load as load_host_scores
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
 from meridian_core.novelty import novelty_health
-from meridian_core.policy import frontier_settings, resolve_source_tier, source_tier_map
+from meridian_core.policy import frontier_settings, source_tier_map
 from meridian_core.queueing import (
     DEFAULT_BACKOFF_BASE_S,
     DEFAULT_LEASE_SECONDS,
@@ -89,7 +89,13 @@ from meridian_core.queueing import (
 from meridian_core.sources import get_source, touch_source, upsert_source
 from meridian_core.steering import draw_shares, draw_topic
 from meridian_core.steering import topics as steering_topics
-from meridian_core.tiering import is_tier_mapped, priority_with_urgency, resolve_tier
+from meridian_core.tiering import (
+    document_tier,
+    is_tier_mapped,
+    link_tier,
+    priority_with_urgency,
+    resolve_tier,
+)
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
 from . import rawstore
@@ -1137,7 +1143,11 @@ class Worker:
         """
         try:
             async with self._session_factory() as sess:
-                tier = await resolve_source_tier(sess, result.domain)
+                tiers = await source_tier_map(sess)
+                # Before extraction there is only the domain to go on, so an
+                # academic institution's page is stored as its own
+                # publication until the document shows otherwise (`B-50`).
+                tier = link_tier(result.domain, tiers)
                 existing = await get_source(sess, claim.url)
                 current_retention = existing.retention_tier if existing else None
 
@@ -1149,6 +1159,11 @@ class Worker:
                 current_retention=current_retention,
             )
             document = await self._extract(claim, result)
+            # `B-50`: the document's own DOI is the evidence that confirms a
+            # scholarly tier the domain alone could only guess at.
+            tier = document_tier(
+                result.domain, tiers, scholarly=bool(document is not None and document.doi)
+            )
             screening = self._screen(claim, result, document)
             if screening is not None and screening.suspicious:
                 self._stats.flagged += 1

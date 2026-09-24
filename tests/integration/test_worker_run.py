@@ -2437,3 +2437,55 @@ async def test_a_search_result_outranks_a_frontier_link_of_the_same_tier(
     tier_priority = priority_with_urgency(url, await source_tier_map(sess), HALF_LIFE_DAYS)
     assert SEARCH_RESULT_BONUS > 0
     assert row.priority == tier_priority + SEARCH_RESULT_BONUS
+
+
+# --------------------------------------------------------------------------
+# An academic domain is not peer review (`B-50`)
+# --------------------------------------------------------------------------
+
+
+async def set_academic(sess, domain: str) -> None:
+    """Map ``domain`` by pattern as scholarly, and as needing document evidence."""
+    glob = await sess.scalar(select(FetchPolicy).where(FetchPolicy.domain == GLOBAL_DOMAIN))
+    tiers = dict(glob.settings.get("source_tiers") or {})
+    patterns = {k: list(v or []) for k, v in (tiers.get("patterns") or {}).items()}
+    patterns.setdefault("peer_reviewed", []).append(f"*.{domain}")
+    tiers["patterns"] = patterns
+    tiers["needs_scholarly_evidence"] = [
+        *(tiers.get("needs_scholarly_evidence") or []),
+        f"*.{domain}",
+    ]
+    glob.settings = {**glob.settings, "source_tiers": tiers}
+    await sess.flush()
+
+
+def page_with_head(head: str) -> bytes:
+    return (
+        f'<!doctype html><html lang="en"><head><title>A page</title>{head}</head>'
+        f"<body><article><p>{ARTICLE}</p></article></body></html>"
+    ).encode()
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        ("", "institutional"),
+        ('<meta name="citation_doi" content="10.1234/abcd.5678">', "peer_reviewed"),
+    ],
+)
+async def test_an_academic_domains_page_is_scholarly_only_with_its_own_doi(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, head, expected
+) -> None:
+    sess = await session_for("rw")
+    await set_academic(sess, run_domain)
+    await enqueue(sess, run_domain, run_topic)
+    body = page_with_head(head)
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source is not None and source.source_tier == expected

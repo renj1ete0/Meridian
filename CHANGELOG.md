@@ -68,6 +68,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.122.1] — 2026-09-24
+
+### Fixed
+
+- `B-50`: an academic institution's domain no longer makes a page
+  `peer_reviewed` on its own. The tier map gains `needs_scholarly_evidence`
+  (university and academy suffixes, not publishers); a page on one of those
+  domains is `peer_reviewed` only when it names its own DOI, otherwise
+  `institutional`, and links to them are queued at institutional priority.
+  `python -m worker.retier` re-tiers stored sources the same way (report by
+  default, `--apply` writes; tier only). Migration `5c15e30affb6` adds the key
+  to a running install's tier map only where it is absent
+
 ## [0.122.0] — 2026-09-24
 
 ### Added

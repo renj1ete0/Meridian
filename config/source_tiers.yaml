@@ -57,6 +57,23 @@ patterns:
     - "*.org"          # broad, and deliberately below the two above
     - "*.int"
 
+# Academic *institutions'* suffixes, whose `peer_reviewed` tier is a guess a
+# document has to confirm (`B-50`). A university's domain serves its journals
+# and its theses — and also its admissions pages, its hospital's condition
+# pages, its law school's statute library and its HR policies, all of which
+# ranked and read as scholarship. A page on one of these counts as
+# `peer_reviewed` only when it names its own DOI; otherwise it is the
+# institution's own publication, `institutional`. Publishers are not listed:
+# their domain is the evidence.
+needs_scholarly_evidence:
+  - "*.edu"
+  - "*.ac.uk"
+  - "*.ac.jp"
+  - "*.ac.kr"
+  - "*.edu.sg"
+  - "*.edu.au"
+  - "*.edu.hk"
+
 # Exact domains, checked before patterns.
 #
 # **Only list a domain if the entry changes the outcome.** Everything else is

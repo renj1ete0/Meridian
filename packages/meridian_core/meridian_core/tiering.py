@@ -55,6 +55,52 @@ def resolve_tier(domain: str, mapping: dict[str, Any]) -> str:
     return best_tier
 
 
+#: The tier a domain whose scholarly tier needs evidence falls to without it.
+WITHOUT_EVIDENCE = "institutional"
+
+
+def _matches(host: str, pattern: str) -> bool:
+    pattern = pattern.lower()
+    suffix = pattern[1:] if pattern.startswith("*") else "." + pattern
+    return host.endswith(suffix) or host == suffix.lstrip(".")
+
+
+def needs_evidence(domain: str, mapping: dict[str, Any]) -> bool:
+    """Whether ``domain``'s scholarly tier is a guess that a document must confirm (`B-50`).
+
+    An academic *institution's* domain serves its journals and its theses, and
+    also its admissions pages, its hospital's condition pages, its law school's
+    statute library and its HR policies. The suffix says who runs the site, not
+    whether a page was peer reviewed. `needs_scholarly_evidence` in the tier map
+    lists those suffixes; a publisher's domain is not in it, and neither is a
+    domain named exactly, since naming it is somebody's judgement about it.
+    """
+    if resolve_tier(domain, mapping) != "peer_reviewed":
+        return False
+    host = registrable_domain(domain)
+    for names in (mapping.get("exact") or {}).values():
+        if host in {n.lower() for n in names or []}:
+            return False
+    return any(_matches(host, p) for p in mapping.get("needs_scholarly_evidence") or [])
+
+
+def link_tier(domain: str, mapping: dict[str, Any]) -> str:
+    """The tier to rank a *link* by, before any document exists to show evidence."""
+    return WITHOUT_EVIDENCE if needs_evidence(domain, mapping) else resolve_tier(domain, mapping)
+
+
+def document_tier(domain: str, mapping: dict[str, Any], *, scholarly: bool) -> str:
+    """The tier of a fetched document: the domain's, confirmed by evidence where needed.
+
+    ``scholarly`` is document evidence of scholarship — today, that the page
+    names its own DOI. Absent it, an academic institution's page is that
+    institution's publication: `institutional`, which is what it is.
+    """
+    if scholarly:
+        return resolve_tier(domain, mapping)
+    return link_tier(domain, mapping)
+
+
 def is_tier_mapped(domain: str, mapping: dict[str, Any]) -> bool:
     """Whether the curated map actually names this domain (task `P4-14`).
 
@@ -95,8 +141,12 @@ def priority_for_tier(tier: str, mapping: dict[str, Any]) -> int:
 
 
 def priority_for_domain(domain: str, mapping: dict[str, Any]) -> int:
-    """Convenience: resolve the tier and return its priority in one step."""
-    return priority_for_tier(resolve_tier(domain, mapping), mapping)
+    """Convenience: the priority a link to ``domain`` is queued at.
+
+    By `link_tier` (`B-50`): an academic institution's domain is not ranked as
+    scholarship before a document shows it is.
+    """
+    return priority_for_tier(link_tier(domain, mapping), mapping)
 
 
 #: How much a short half-life lifts a seed's place in the queue (`P2-20`).
@@ -147,7 +197,7 @@ def priority_with_urgency(
     is what a test or an admin screen wants when asking "what does the tier map
     say" without the ageing opinion mixed in.
     """
-    tier = resolve_tier(domain, mapping)
+    tier = link_tier(domain, mapping)
     return priority_for_tier(tier, mapping) + urgency_for_tier(tier, half_lives)
 
 
