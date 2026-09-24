@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.136.0] — 2026-09-25
+
+### Added
+
+- `P6-34`: **the Map screen** — areas one level at a time (`?area=` in the
+  URL), circle area = passages collected with a key drawn to the canvas's
+  scale, a dashed outline for weak or stale areas, solid lines for cited
+  bridges (thickness by sources) and dashed for similar-only, a bridge panel
+  that keeps the three kinds under separate headings, a jump box for an area
+  or a term, and the 3D point cloud as a "Passages in 3D" tab
+  (`?view=points`). "Open in Find" hands an area's terms to Find
+
 ## [0.135.0] — 2026-09-25
 
 ### Added

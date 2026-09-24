@@ -29,6 +29,14 @@ import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
 // P6-28: the bulk gazetteer decision.
 import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX } from '../src/lib/api'
 import {
+  AREA_BUILD_FIELDS,
+  AREA_FIELDS,
+  AREA_LINK_FIELDS,
+  AREAS_LEVEL_FIELDS,
+  BRIDGE_CLAIM_FIELDS,
+  BRIDGE_FIELDS,
+} from '../src/lib/areas'
+import {
   ANNOTATIONS_FIELDS,
   ANNOTATION_FIELDS,
   ANNOTATION_TARGET_FIELDS,
@@ -136,6 +144,12 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['OutcomeCountRead', 'search.py', OUTCOME_COUNT_FIELDS],
     ['DomainCountRead', 'search.py', DOMAIN_COUNT_FIELDS],
     ['LivenessRead', 'search.py', LIVENESS_FIELDS],
+    ['AreaRead', 'areas.py', AREA_FIELDS],
+    ['AreasRead', 'areas.py', AREAS_LEVEL_FIELDS],
+    ['AreaBuildRead', 'areas.py', AREA_BUILD_FIELDS],
+    ['AreaLinkRead', 'areas.py', AREA_LINK_FIELDS],
+    ['BridgeRead', 'areas.py', BRIDGE_FIELDS],
+    ['BridgeClaimRead', 'areas.py', BRIDGE_CLAIM_FIELDS],
   ] as const
 
   it('parses real field names out of the schemas', () => {

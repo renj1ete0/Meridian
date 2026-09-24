@@ -1371,7 +1371,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       within N hops" is a result and feeds Gaps
 - [x] `P6-33` **Neighbourhood** — `v0.128.0` (delegated agent; screenshotted dark and light against the Term neighbourhood board with live responses). Open: the board's caption says CLAIMED where the build says CITED — term → nearest entities by claim and nearest
       passages/terms by embedding; shown as a panel beside Find's results
-- [ ] `P6-34` **The Map screen** — areas zoomable by level, size key, weak/stale
+- [x] `P6-34` **The Map screen** — `v0.136.0` (delegated agent; screenshotted dark and light against the Areas boards, in `~/Documents/gh/meridian-calibration/p6-30/`). Route mode ships disabled pending wiring to `P6-32`, which is now on main — areas zoomable by level, size key, weak/stale
       outline, bridge panel, route mode, 3D toggle (`P6-29` moves inside it),
       "jump to an area or term"
 - [ ] `P6-35` **Steering from the map** — right-click an area or term: more, less,

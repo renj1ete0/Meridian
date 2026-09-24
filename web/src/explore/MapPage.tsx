@@ -12,6 +12,7 @@ import {
   type TopicCount,
 } from '../lib/corpusmap'
 import { hrefForSource, navigate } from '../lib/route'
+import { AreasScreen, type MapActions } from './map/AreasScreen'
 import { coloursOf, positionsOf, visibilityOf } from './map/geometry'
 import { SwatchChip, topicLabel } from './map/HoverCard'
 import { readPalette, type CanvasPalette } from './map/palette'
@@ -35,8 +36,73 @@ type Load =
   | { status: 'error'; message: string }
   | { status: 'ready'; map: CorpusMap }
 
+type Mode = 'areas' | 'points'
+
+/** `?view=points` opens the passage cloud; anything else is the areas. */
+export function modeFromSearch(search: string): Mode {
+  return new URLSearchParams(search).get('view') === 'points' ? 'points' : 'areas'
+}
+
 /**
- * The corpus map (tasks P6-26, P6-29): every sampled passage placed by its
+ * The Map screen (task P6-34): the corpus as nested, named areas, with the
+ * passage cloud (`P6-26`, `P6-29`) as a toggle inside it rather than a screen
+ * of its own — the operator's "fewer screens, each useful".
+ */
+export function MapPage({ actions }: { actions?: MapActions } = {}) {
+  const [mode, setMode] = useState<Mode>(() => modeFromSearch(window.location.search))
+
+  useEffect(() => {
+    const onPop = () => setMode(modeFromSearch(window.location.search))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  function choose(next: Mode) {
+    const search = new URLSearchParams(window.location.search)
+    if (next === 'points') search.set('view', 'points')
+    else search.delete('view')
+    const query = search.toString()
+    navigate(`/map${query ? `?${query}` : ''}`)
+    setMode(next)
+  }
+
+  return (
+    <Workspace>
+      <nav
+        aria-label="Map views"
+        className="flex h-11 shrink-0 items-center gap-[22px] border-b border-line bg-surface px-5"
+      >
+        <span className="font-mono text-[9.5px] uppercase tracking-[var(--tracking-label)] text-text-faint">Map</span>
+        {(
+          [
+            ['areas', 'Areas'],
+            ['points', 'Passages in 3D'],
+          ] as const
+        ).map(([value, label]) => (
+          <a
+            key={value}
+            href={value === 'points' ? '/map?view=points' : '/map'}
+            aria-current={mode === value ? 'page' : undefined}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+              event.preventDefault()
+              choose(value)
+            }}
+            className={`border-b-2 px-0.5 pb-[11px] pt-3 text-[13px] no-underline ${
+              mode === value ? 'border-accent-graph text-text' : 'border-transparent text-text-muted hover:text-text'
+            }`}
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+      {mode === 'areas' ? <AreasScreen actions={actions} /> : <PointsPage />}
+    </Workspace>
+  )
+}
+
+/**
+ * The passage cloud (tasks P6-26, P6-29): every sampled passage placed by its
  * embedding, in three dimensions by default and two on request.
  *
  * What it is for is seeing the corpus as the vector arm sees it — whether
@@ -45,7 +111,7 @@ type Load =
  * of that space the axes carry, so the picture cannot pass for more than a
  * shadow of it.
  */
-export function MapPage() {
+export function PointsPage() {
   const [sample, setSample] = useState<number>(DEFAULT_SAMPLE)
   const [state, setState] = useState<Load>({ status: 'loading' })
 
@@ -68,16 +134,16 @@ export function MapPage() {
 
   if (state.status === 'error') {
     return (
-      <Workspace>
+      <Inner>
         <p className="p-6 text-text">{state.message}</p>
-      </Workspace>
+      </Inner>
     )
   }
   if (!state.map) {
     return (
-      <Workspace>
+      <Inner>
         <p className="p-6 font-mono text-[length:var(--text-data)] text-text-muted">Projecting the corpus.</p>
-      </Workspace>
+      </Inner>
     )
   }
   return (
@@ -93,6 +159,11 @@ export function MapPage() {
 /** Full width and full height under the top bar; the shell supplies the bar. */
 function Workspace({ children }: { children: React.ReactNode }) {
   return <div className="flex h-[calc(100dvh-54px)] min-h-[480px] w-full flex-col bg-ground">{children}</div>
+}
+
+/** The cloud's frame inside the Map screen: whatever the sub-bar leaves. */
+function Inner({ children }: { children: React.ReactNode }) {
+  return <div className="flex min-h-0 w-full flex-1 flex-col bg-ground">{children}</div>
 }
 
 /** Can this browser draw WebGL at all? Asked once, without keeping a context. */
@@ -190,7 +261,7 @@ export function MapView({
   const empty = map.points.length === 0
 
   return (
-    <Workspace>
+    <Inner>
       <header className="flex items-center gap-x-5 border-b border-line bg-surface px-[18px] py-2">
         <div className="flex shrink-0 flex-col">
           <h1 className="text-[length:var(--text-subhead)] font-semibold leading-[var(--leading-subhead)] text-text">
@@ -321,7 +392,7 @@ export function MapView({
           ) : null}
         </div>
       )}
-    </Workspace>
+    </Inner>
   )
 }
 
