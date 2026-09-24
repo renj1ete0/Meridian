@@ -204,7 +204,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `P0-13` Structured logging setup (`meridian_core/logging.py`), `run_id` on every record
 - [x] `P0-14` ⚑ human — the ten questions, traced against the schema → `docs/design-questions.md`.
       Found five gaps; fixed in `P0-20`
-- [ ] `P0-15` ⚑ human — held-out question set. Deferred through phase 1 by
+- [~] `P0-15` ⚑ human — held-out question set. **2026-09-24: the operator wrote eleven questions of their own (Q31–Q41, set version 2); they are reviewed by definition, their grading criteria are agent drafts (`criteria_reviewed: false`). Q01–Q30 remain agent drafts to accept, correct or drop.** Deferred through phase 1 by
       decision — §14.1 uses it to measure whether the graph improves month to
       month, and there was nothing to measure until a corpus existed — with
       "re-open when phase 2 starts" as the condition. **Phase 2 has started, so

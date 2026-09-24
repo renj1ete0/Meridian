@@ -13,12 +13,18 @@
 # Every item is a draft by an agent. `reviewed: false` stays until the operator
 # has read the item and either accepted, corrected or removed it.
 
-set_version: 1
+set_version: 2
 status: draft            # draft -> reviewed -> frozen (frozen = in use for P2-09)
 changes:
   - version: 1
     date: 2026-09-23
     note: first draft, written before any run against the corpus
+  - version: 2
+    date: 2026-09-24
+    note: >-
+      the operator's own questions added as Q31-Q41 (their wording, reviewed by
+      definition); the criteria under each were drafted by the agent and are
+      marked criteria_reviewed false. Written before any graded run.
 
 kinds:
   lookup: a fact a single good source should state
@@ -685,3 +691,283 @@ questions:
     reference_answer: null
     drafted_by: agent
     reviewed: false
+
+  # ── the operator's own questions (set version 2) ─────────────────────────
+
+  - id: Q31
+    kind: evidence
+    question: How do we assess walkability in tropical Singapore?
+    topics:
+    - walkability
+    - biology
+    what_a_good_answer_contains:
+      sources: research on walkability indices and audit tools, government design guidance, studies of walking
+        in hot-humid climates
+      concepts:
+      - walkability index or audit method
+      - what the measure includes (connectivity, destinations, footpath quality, shelter, crossings)
+      - climate-specific factors (shade, shelter, heat exposure)
+      - whether the method has been validated in a tropical city
+      must_show: which measures come from temperate cities and which were built or adapted for a tropical
+        one
+      wrong_if:
+      - a temperate-city index is presented as fitting Singapore without saying what it leaves out
+      - heat and shelter are absent from the answer
+    grading:
+      rubric: evidence
+    notes: Operator's question. Tests whether a method question finds methods, and whether the climate qualification
+      surfaces on its own.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q32
+    kind: comparison
+    question: What are the regulations governing autonomous vehicle deployment around the world, and what
+      are the key approaches used and the differences between them?
+    topics:
+    - autonomous-vehicle
+    what_a_good_answer_contains:
+      sources: government-tier sources (statutes, regulations, regulators' guidance) from several jurisdictions;
+        research or institutional comparisons of regimes
+      concepts:
+      - at least three jurisdictions' regimes
+      - the approach each takes (permit-based trials, type approval, national framework versus local permits,
+        liability rules)
+      - who regulates in each
+      - how the regimes differ
+      must_show: the date of each rule, and which regimes are trials versus full deployment
+      wrong_if:
+      - one jurisdiction's rules are presented as general
+      - press summaries are the only sources
+      - a superseded rule is shown as current without a date
+    grading:
+      rubric: comparison
+    notes: Operator's question (their second phrasing, replacing a shorter one). Tests breadth across jurisdictions
+      and dated, government-tier sourcing.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q33
+    kind: connection
+    question: What are the different types, operating models and business models of autonomous vehicles,
+      and how do they impact health?
+    topics:
+    - autonomous-vehicle
+    - economics
+    - biology
+    what_a_good_answer_contains:
+      sources: research and institutional reports on AV service and business models; health-impact studies
+        (safety, activity, emissions, access)
+      concepts:
+      - vehicle types (passenger car, shuttle, bus, freight, delivery)
+      - operating models (private ownership, fleet ride-hailing, shuttle service, fixed route)
+      - business models (who owns, who pays, revenue sources)
+      - health pathways (crash safety, physical activity displacement, emissions, access for non-drivers)
+      must_show: which health effects are measured and which are projected, and which model each claim is
+        about
+      wrong_if:
+      - projected health effects are presented as measured
+      - health impact is asserted without a pathway
+    grading:
+      rubric: connection
+    notes: Operator's question. A three-topic chain from model to behaviour to health.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q34
+    kind: comparison
+    question: Tell me about the technology behind autonomous vehicles and the different approaches used
+      across the world.
+    topics:
+    - autonomous-vehicle
+    - robotics
+    what_a_good_answer_contains:
+      sources: technical research, institutional overviews, manufacturer and operator technical publications
+      concepts:
+      - the sensing stack (camera, lidar, radar) and the approaches that differ on it
+      - mapping approach (high-definition maps versus map-light)
+      - perception and planning approaches
+      - how approaches differ by company or region
+      must_show: which claims come from the developers themselves and which from independent sources
+      wrong_if:
+      - a single company's approach is presented as the technology
+      - marketing claims are presented without an independent source
+    grading:
+      rubric: comparison
+    notes: Operator's question. Tests technical depth and whether developer claims are distinguishable from
+      independent evidence.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q35
+    kind: evidence
+    question: What are the scaling approaches of autonomous vehicle companies around the world?
+    topics:
+    - autonomous-vehicle
+    - economics
+    what_a_good_answer_contains:
+      sources: business press, industry analyses, institutional reports, company disclosures
+      concepts:
+      - distinct scaling strategies (city-by-city launches, partnerships with operators or manufacturers,
+        fleet ownership versus licensing)
+      - examples per strategy
+      - what limits scaling (regulation, cost per vehicle, operations)
+      must_show: dates, since this changes quickly
+      wrong_if:
+      - undated claims about fleet sizes or launches
+      - one company's strategy stands in for the field
+    grading:
+      rubric: evidence
+    notes: Operator's question. Fast-ageing material; tests recency and the press tier.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q36
+    kind: gap
+    question: How do cities around the world design and encourage cycling and cycling infrastructure?
+    topics:
+    - walkability
+    what_a_good_answer_contains:
+      sources: none expected in depth; cycling is not a configured topic, so only incidental coverage through
+        walkability and street design
+      concepts:
+      - the absence of a dedicated body of evidence
+      - at most, street-design sources that also cover cycling, labelled as adjacent
+      must_show: that the corpus does not cover cycling as a topic
+      wrong_if:
+      - walkability material is presented as the answer about cycling
+    grading:
+      rubric: gap
+    notes: Operator's question. Cycling has no topic; this tests honesty at the scope boundary, and whether
+      the operator wants a cycling topic added.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q37
+    kind: comparison
+    question: How do we enhance walkability in the United Kingdom?
+    topics:
+    - walkability
+    what_a_good_answer_contains:
+      sources: UK government and local-authority guidance, research on UK interventions, institutional reports
+      concepts:
+      - interventions used in UK cities (low-traffic neighbourhoods, street redesign, crossing design, pavement
+        standards)
+      - the evidence on their effect
+      - the UK policy framework that governs them
+      must_show: which evidence is from the UK and which is from elsewhere
+      wrong_if:
+      - evidence from another country is presented as UK evidence
+      - interventions are listed without any evidence of effect
+    grading:
+      rubric: comparison
+    notes: Operator's question. A comparison place in the comparison set; tests place-scoped retrieval.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q38
+    kind: lookup
+    question: How much does it cost to run a bus service?
+    topics:
+    - on-demand-bus
+    - economics
+    what_a_good_answer_contains:
+      sources: government and operator reports, transport-economics studies, contract and subsidy data
+      concepts:
+      - cost per vehicle-hour or per vehicle-kilometre
+      - main cost components (driver labour, vehicle, fuel or energy, maintenance, overheads)
+      - cost per passenger and how ridership changes it
+      - fixed-route versus on-demand where available
+      must_show: the place and year of each figure
+      wrong_if:
+      - a single figure is given without place, year or what it includes
+    grading:
+      rubric: lookup
+    notes: Operator's question. Tests that numbers come with their basis.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q39
+    kind: evidence
+    question: What are the economics of building and operating an autonomous vehicle?
+    topics:
+    - autonomous-vehicle
+    - economics
+    what_a_good_answer_contains:
+      sources: research, institutional cost studies, industry analyses
+      concepts:
+      - vehicle and sensor cost
+      - operating costs (remote supervision, maintenance, insurance, cleaning, depots)
+      - cost per kilometre or per trip against a human-driven equivalent
+      - what changes at scale
+      must_show: which figures are estimates or projections and which are reported
+      wrong_if:
+      - projections are presented as measured costs
+      - undated cost figures
+    grading:
+      rubric: evidence
+    notes: Operator's question. Pairs with Q16 (removing the driver) but asks about the vehicle and fleet,
+      not the bus service.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q40
+    kind: lookup
+    question: What are the models of autonomous robotaxis?
+    topics:
+    - autonomous-vehicle
+    what_a_good_answer_contains:
+      sources: industry and institutional overviews, company disclosures, business press
+      concepts:
+      - service models (fully driverless ride-hailing, safety-driver pilots, partnerships with ride-hailing
+        platforms)
+      - ownership and operation models
+      - where each operates
+      must_show: dates and places for each deployment
+      wrong_if:
+      - undated or unsourced deployment claims
+    grading:
+      rubric: lookup
+    notes: Operator's question. Short and broad; tests whether a concise overview can be assembled from
+      sources.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
+  - id: Q41
+    kind: evidence
+    question: What are the cybersecurity measures and concerns around connected and autonomous vehicles,
+      and what are their implications?
+    topics:
+    - autonomous-vehicle
+    what_a_good_answer_contains:
+      sources: standards bodies and regulators (vehicle cybersecurity regulations and standards), security
+        research, government and institutional reports
+      concepts:
+      - the attack surfaces (vehicle networks, remote/over-the-air updates, sensors, vehicle-to-everything
+        communication, fleet back ends)
+      - documented incidents or demonstrated attacks
+      - the required or recommended measures (standards, type-approval rules, security management systems)
+      - implications for safety, privacy, liability and fleet operation
+      must_show: which concerns rest on demonstrated attacks and which are hypothetical, and the date and
+        jurisdiction of each rule
+      wrong_if:
+      - hypothetical attacks are presented as documented incidents
+      - one jurisdiction's rule is presented as universal
+    grading:
+      rubric: evidence
+    notes: Operator's question. A topic the vocabulary does not name; tests whether the corpus reaches security
+      material at all.
+    reference_answer: null
+    drafted_by: operator
+    reviewed: true
+    criteria_reviewed: false
