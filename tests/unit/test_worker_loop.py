@@ -79,6 +79,7 @@ class FakeTask:
     attempts: int = 0
     topic: str | None = None
     task_type: str = "url"
+    priority: int = 0
     status: str = "pending"
     error: str | None = None
     next_attempt_at: object = None

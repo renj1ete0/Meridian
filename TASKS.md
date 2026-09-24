@@ -1309,7 +1309,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       rule (2026-09-24): an English version if the site offers one, the original
       language otherwise. Declared `hreflang="en"` alternates are fetched first and
       the original becomes a `translation` copy via `worker.docdupes`
-- [ ] `B-58` **DOI resolution has never run** — every queued `doi` task sits at the
+- [x] `B-58` **DOI resolution has never run** — `v0.140.0` (delegated agent). Live report (read-only replay): about 1,400 of ~5,000 distinct backlog DOIs would rise; the rest were cited by off-topic or about-nothing pages. Run `worker.requeue_dois` report, then `--apply`, then enable its timetable row. Open: resolved copies bypass the host gate; duplicate DOI rows are left in place — every queued `doi` task sits at the
       lowest priority below all links and search results, so none has ever been
       claimed (found 2026-09-24). Raising them wholesale would re-import the drift:
       many were cited by off-topic pages before the host gate, and the queue does not

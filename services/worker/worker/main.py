@@ -51,7 +51,7 @@ import signal
 import socket
 import uuid
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
@@ -62,9 +62,10 @@ from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
 from meridian_core.boilerplate import host_key
 from meridian_core.chunks import as_writes, chunk_count, replace_chunks
+from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
 from meridian_core.db import dispose_engines, session
 from meridian_core.figures import FigureWrite, replace_figures
-from meridian_core.hostscores import Decision, HostPolicy
+from meridian_core.hostscores import Decision, HostPolicy, Standing
 from meridian_core.hostscores import load as load_host_scores
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
@@ -79,6 +80,7 @@ from meridian_core.queueing import (
     already_queued,
     claim_next,
     enqueue,
+    enqueue_dois,
     fail,
     queue_depth,
     queue_disposition,
@@ -197,13 +199,10 @@ SEARCH_RESULT_BONUS = 5
 #: through one literature. Capped, in the order the document listed them.
 MAX_CITATIONS_PER_PAGE = 30
 
-#: Where a resolved paper goes in the queue.
-#:
-#: Above the frontier's default of 0 and below the tier ranking: an
-#: open-access copy of a work something already cited is more likely to be
-#: worth reading than an arbitrary outbound link, and less likely than a
-#: government publication.
-RESOLVED_PAPER_PRIORITY = 3
+#: The least a resolved paper's copy is queued at: the floor a DOI waits at
+#: when nothing recommends it. A DOI ranked higher by the page that cited it
+#: (`B-58`, :mod:`meridian_core.citedpapers`) passes its own rank on instead.
+RESOLVED_PAPER_PRIORITY = FLOOR_PRIORITY
 
 SITEMAP_POLICY_OVERRIDES = {
     "allowed_content_types": [],
@@ -314,6 +313,9 @@ class Claim:
     #: page — it is neither stored, extracted, chunked nor embedded, and putting
     #: one through the page path would file XML in the corpus as a document.
     task_type: str = "url"
+    #: What the row was queued at. A resolved DOI's open-access copy inherits
+    #: it (`B-58`): the copy is the paper the DOI was ranked for.
+    priority: int = 0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -628,6 +630,7 @@ class Worker:
             attempts=task.attempts,
             topic=task.topic,
             task_type=task.task_type,
+            priority=task.priority,
         )
 
     async def _process(self, claim: Claim) -> None:
@@ -1028,7 +1031,10 @@ class Worker:
                 verdict.kept[0],
                 topic=claim.topic,
                 seed_source="doi",
-                priority=RESOLVED_PAPER_PRIORITY,
+                # `B-58`: the copy is what the DOI was ranked for. Queued at
+                # the floor, a DOI claimed because an on-topic page cited it
+                # would resolve and then wait behind every link in the queue.
+                priority=max(claim.priority, RESOLVED_PAPER_PRIORITY),
             )
             await sess.commit()
         return 1
@@ -1266,8 +1272,8 @@ class Worker:
                     # A site serving one page under a thousand URLs would
                     # otherwise approve itself on volume alone.
                     await record_novel_fetch(sess, result.domain)
-                queued = await self._expand_frontier(sess, claim, document)
-                queued += await self._seed_citations(sess, claim, document)
+                queued = await self._expand_frontier(sess, claim, document, source)
+                queued += await self._seed_citations(sess, claim, document, source)
                 await sess.commit()
         except Exception as exc:
             log.exception(
@@ -1292,7 +1298,11 @@ class Worker:
         )
 
     async def _expand_frontier(
-        self, sess: AsyncSession, claim: Claim, document: ExtractedDocument | None
+        self,
+        sess: AsyncSession,
+        claim: Claim,
+        document: ExtractedDocument | None,
+        source: Source | None = None,
     ) -> int:
         """Turn this page's outbound links into queue rows (`P1-06`, §6.1).
 
@@ -1330,22 +1340,14 @@ class Worker:
         # channel had been doing this correctly all along, so the frontier was
         # asking the wrong question about the same thing — 244 rows of it on
         # the first real corpus, 134 with no extractable text.
-        for identifier in verdict.dois:
-            await enqueue(
-                sess,
-                identifier,
-                topic=claim.topic,
-                seed_source="frontier",
-                task_type="doi",
-                priority=RESOLVED_PAPER_PRIORITY,
-            )
+        dois = await self._queue_dois(sess, claim, source, verdict.dois, seed_source="frontier")
 
         if not verdict.kept:
             log.debug(
                 "frontier expansion queued nothing",
-                extra={"url": claim.url, "dropped": verdict.dropped, "dois": len(verdict.dois)},
+                extra={"url": claim.url, "dropped": verdict.dropped, "dois": dois},
             )
-            return len(verdict.dois)
+            return dois
 
         tiers = await source_tier_map(sess)
         queued = 0
@@ -1377,13 +1379,13 @@ class Worker:
                 "task_id": claim.task_id,
                 "considered": verdict.considered,
                 "queued": queued,
-                "dois": len(verdict.dois),
+                "dois": dois,
                 "dropped": verdict.dropped,
                 "held_by_host": dict(held),
                 "english_alternate": alternate,
             },
         )
-        return queued + len(verdict.dois) + alternate
+        return queued + dois + alternate
 
     async def _queue_english_alternate(
         self, sess: AsyncSession, claim: Claim, document: ExtractedDocument
@@ -1428,7 +1430,11 @@ class Worker:
             self._hosts.replace(await load_host_scores(sess))
 
     async def _seed_citations(
-        self, sess: AsyncSession, claim: Claim, document: ExtractedDocument | None
+        self,
+        sess: AsyncSession,
+        claim: Claim,
+        document: ExtractedDocument | None,
+        source: Source | None = None,
     ) -> int:
         """Turn this page's reference list into `doi` rows (`P1-14`, §6.1).
 
@@ -1468,21 +1474,7 @@ class Worker:
             if len(dois) >= MAX_CITATIONS_PER_PAGE:
                 break
 
-        if not dois:
-            return 0
-
-        known = await already_queued(sess, list(dois))
-        fresh = [doi for doi in dois if doi not in known]
-        for doi in fresh:
-            await enqueue(
-                sess,
-                doi,
-                topic=claim.topic,
-                seed_source="citation",
-                task_type="doi",
-                priority=RESOLVED_PAPER_PRIORITY,
-            )
-
+        fresh = await self._queue_dois(sess, claim, source, list(dois), seed_source="citation")
         if fresh:
             log.info(
                 "citations queued for resolution",
@@ -1490,11 +1482,60 @@ class Worker:
                     "url": claim.url,
                     "task_id": claim.task_id,
                     "cited": len(document.citations),
-                    "queued": len(fresh),
-                    "already_known": len(dois) - len(fresh),
+                    "queued": fresh,
+                    "already_known": len(dois) - fresh,
                 },
             )
-        return len(fresh)
+        return fresh
+
+    async def _queue_dois(
+        self,
+        sess: AsyncSession,
+        claim: Claim,
+        source: Source | None,
+        identifiers: Sequence[str],
+        *,
+        seed_source: str,
+    ) -> int:
+        """Queue DOIs this page named, ranked by the page (`B-58`). Returns how many are new.
+
+        The page is usually not labelled yet — labels come from vectors that
+        arrive after the fetch — so most DOIs are queued at the unjudged rank
+        and `worker.requeue_dois` settles them once it is. A re-fetched page
+        that already carries labels is ranked on them now.
+
+        Normalised here for the frontier's sake as much as the citations': a
+        `doi.org` link's path is whatever case the page wrote it in, and until
+        this the frontier queued it as written, beside the citation channel's
+        lower-cased copy of the same DOI — and without asking whether it was
+        already queued at all.
+        """
+        dois: dict[str, None] = {}
+        for raw in identifiers:
+            try:
+                dois[normalise_doi(raw)] = None
+            except DoiError:
+                continue
+        if not dois:
+            return 0
+        standing = (
+            self._hosts.score(host_key(claim.url)).standing
+            if self._hosts is not None
+            else Standing.UNKNOWN
+        )
+        priority = cited_priority(
+            source.topic_labels if source is not None else None,
+            standing,
+            await source_tier_map(sess),
+        )
+        return await enqueue_dois(
+            sess,
+            list(dois),
+            topic=claim.topic,
+            seed_source=seed_source,
+            priority=priority,
+            parent_source_id=source.source_id if source is not None else None,
+        )
 
     async def _chunk(
         self,

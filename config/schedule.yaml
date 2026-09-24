@@ -165,3 +165,15 @@ jobs:
     # proposal applies within the hour its window ends.
     interval_seconds: 3600
     enabled: true
+
+  - name: requeue_dois
+    module: worker.requeue_dois
+    args: ["--apply"]
+    # `B-58`: ranks each pending DOI by the page that cited it — its content
+    # labels and its host's standing. A citing page is labelled an hour or more
+    # after it is fetched, so a DOI is queued at a provisional rank and this
+    # settles it. Moves priorities only and deletes nothing; hourly, after
+    # `topics` and `hostscore`. Ships disabled: read the first
+    # `python -m worker.requeue_dois` report, then enable it.
+    interval_seconds: 3600
+    enabled: false

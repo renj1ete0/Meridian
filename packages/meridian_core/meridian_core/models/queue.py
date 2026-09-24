@@ -115,6 +115,17 @@ class QueueTask(Base, TimestampMixin):
     #: and that is exactly the signal a gap list wants.
     search_results: Mapped[int | None] = mapped_column(Integer)
     search_queued: Mapped[int | None] = mapped_column(Integer)
+    #: For a `doi` task, the page whose reference list or links named it
+    #: (`B-58`). A cited paper is worth what the page citing it is worth: one
+    #: named by an on-topic page is the best material the crawl can reach, and
+    #: one named by an off-topic page is the drift `B-48` stopped. NULL for
+    #: every other task type, and for a DOI queued before this was recorded or
+    #: whose citing source was since deleted — it is a ranking input, not
+    #: provenance anything depends on, so it lets go rather than blocking a
+    #: source's deletion.
+    parent_source_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sources.source_id", ondelete="SET NULL"), index=True
+    )
 
     __table_args__ = (
         # The claim query: eligible tasks, highest priority first, oldest first.

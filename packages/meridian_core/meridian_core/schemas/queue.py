@@ -48,6 +48,8 @@ class QueueTaskRead(BaseModel):
     #: What an answered query produced (`B-56`); NULL for other tasks.
     search_results: int | None = None
     search_queued: int | None = None
+    #: For a `doi` task, the page that cited it (`B-58`).
+    parent_source_id: int | None = None
     created_at: dt.datetime
 
 

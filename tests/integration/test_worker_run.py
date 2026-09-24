@@ -22,6 +22,7 @@ import pytest
 from http_doubles import RecordingTransport, streamed
 from sqlalchemy import delete, func, select
 
+from meridian_core.citedpapers import FLOOR_PRIORITY, UNJUDGED_PRIORITY, on_topic_priority
 from meridian_core.hostscores import (
     DOWNRANKED_PRIORITY,
     EXPLORE_PENDING,
@@ -30,7 +31,7 @@ from meridian_core.hostscores import (
     Score,
 )
 from meridian_core.models import Chunk, FetchAttempt, FetchPolicy, Figure, QueueTask, Source
-from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier
+from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier, source_tier_map
 from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
 from worker.extract.pdf import available as pdf_available
@@ -2316,6 +2317,168 @@ async def test_a_worker_with_no_resolver_leaves_doi_rows_alone(
     assert url_task.status == "fetched", "the worker did not claim the row it could do"
     assert doi_task.status == "pending"
     assert doi_task.claimed_by is None
+
+
+# --------------------------------------------------------------------------
+# Cited papers ranked by the page that cited them (`B-58`)
+# --------------------------------------------------------------------------
+
+
+def fresh_dois(n: int = 2) -> list[str]:
+    """DOIs no other test uses: a shared one would already be queued."""
+    return [f"10.5555/b58-{uuid.uuid4().hex[:10]}" for _ in range(n)]
+
+
+async def labelled_page(sess, run_domain: str, labels) -> Source:
+    """The page the worker is about to re-fetch, already labelled."""
+    source, _ = await upsert_source(sess, f"https://{run_domain}/a", checksum="sha256:before")
+    source.topic_labels = labels
+    await sess.flush()
+    return source
+
+
+async def doi_rows(sess, dois: list[str]) -> list[QueueTask]:
+    rows = await sess.scalars(select(QueueTask).where(QueueTask.url_or_query.in_(dois)))
+    return list(rows)
+
+
+async def test_an_on_topic_pages_citations_are_queued_above_the_floor(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The point of `B-58`: a paper an on-topic page cites is claimed, not
+    parked under every link in the queue, and the row says which page it was."""
+    sess = await session_for("rw")
+    source = await labelled_page(sess, run_domain, [run_topic])
+    await enqueue(sess, run_domain, run_topic)
+    dois = fresh_dois()
+    body = citing_page(*dois)
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    worker._hosts = HostPolicy({run_domain: judged(10)})
+    await worker.run()
+
+    rows = await doi_rows(sess, dois)
+    assert len(rows) == len(dois)
+    wanted = on_topic_priority(await source_tier_map(sess))
+    assert {row.priority for row in rows} == {wanted}
+    assert wanted > FLOOR_PRIORITY
+    assert {row.parent_source_id for row in rows} == {source.source_id}
+
+
+async def test_an_off_topic_hosts_citations_are_not_queued_above_the_floor(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Labelled on-topic or not, a page on an off-topic host is `B-48`'s drift."""
+    sess = await session_for("rw")
+    await labelled_page(sess, run_domain, [run_topic])
+    await enqueue(sess, run_domain, run_topic)
+    dois = fresh_dois()
+    body = citing_page(*dois)
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    worker._hosts = HostPolicy({run_domain: judged(0)})
+    await worker.run()
+
+    assert all(row.priority <= FLOOR_PRIORITY for row in await doi_rows(sess, dois))
+
+
+async def test_an_unlabelled_pages_citations_wait_at_the_unjudged_rank(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The usual case: labels arrive after the fetch, so the rank is provisional
+    and the parent is what lets `worker.requeue_dois` settle it."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    dois = fresh_dois()
+    body = citing_page(*dois)
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/a")
+    rows = await doi_rows(sess, dois)
+    assert {row.priority for row in rows} == {UNJUDGED_PRIORITY}
+    assert {row.parent_source_id for row in rows} == {source.source_id}
+
+
+async def test_a_page_about_nothing_puts_its_citations_at_the_floor(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await labelled_page(sess, run_domain, [])
+    await enqueue(sess, run_domain, run_topic)
+    dois = fresh_dois()
+    body = citing_page(*dois)
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    assert {row.priority for row in await doi_rows(sess, dois)} == {FLOOR_PRIORITY}
+
+
+async def test_a_doi_link_is_one_row_whatever_case_the_page_wrote_it_in(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The frontier queued a `doi.org` path as written and without asking
+    whether it was queued; the citation channel queued the normal form. The
+    same paper, two rows, two resolutions."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    (value,) = fresh_dois(1)
+    body = linking_page(external=f"https://doi.org/{value.upper()}")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_resolver(
+        sess, html, run_domain, run_topic, FakeResolver(), resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    rows = await sess.scalars(
+        select(QueueTask).where(func.lower(QueueTask.url_or_query) == value.lower())
+    )
+    assert [row.url_or_query for row in rows] == [value]
+
+
+async def test_a_resolved_copy_keeps_the_rank_its_doi_was_claimed_at(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Queued at the floor, a paper claimed because an on-topic page cited it
+    would resolve and then wait behind every link in the queue."""
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, fresh_dois(1)[0], run_topic)
+    task.priority = 57
+    await sess.flush()
+    chain = FakeResolver(OpenAccessCopy(url=f"https://{run_domain}/oa.pdf", provider="openalex"))
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    (copy,) = await rows_for(sess, run_domain, "doi")
+    assert copy.priority == 57
 
 
 # --------------------------------------------------------------------------

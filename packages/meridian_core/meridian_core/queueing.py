@@ -341,6 +341,7 @@ async def enqueue(
     task_type: str = "url",
     priority: int = 0,
     seed_mechanism: str | None = None,
+    parent_source_id: int | None = None,
 ) -> QueueTask:
     """Add one task to the queue. Flushes; does not commit.
 
@@ -370,6 +371,7 @@ async def enqueue(
         task_type=task_type,
         priority=priority,
         seed_mechanism=seed_mechanism,
+        parent_source_id=parent_source_id,
     )
     sess.add(task)
     await sess.flush()
@@ -391,6 +393,57 @@ async def already_queued(sess: AsyncSession, urls: Sequence[str]) -> set[str]:
         select(QueueTask.url_or_query).where(QueueTask.url_or_query.in_(list(urls)))
     )
     return set(rows.scalars())
+
+
+async def enqueue_dois(
+    sess: AsyncSession,
+    dois: Sequence[str],
+    *,
+    topic: str | None,
+    seed_source: str,
+    priority: int,
+    parent_source_id: int | None,
+) -> int:
+    """Queue DOIs one page named, each recording that page (`B-58`). Returns how many are new.
+
+    ``dois`` must already be normalised: this compares them as strings, and two
+    spellings of one DOI would be two rows, two resolutions and two fetches.
+
+    A DOI already queued is not queued again, but a *pending* one ranked below
+    ``priority`` is raised to it and takes this page as its parent. A paper a
+    second page cites is worth what the better of the two is worth, and the
+    first page to name it is often the weaker one — a listing or a tag page
+    reaches a reference before the article that discusses it. A row that is not
+    pending is left alone: it has been answered, and re-ranking an answer does
+    nothing.
+    """
+    if not dois:
+        return 0
+    unique = list(dict.fromkeys(dois))
+    known = await already_queued(sess, unique)
+    if known:
+        await sess.execute(
+            update(QueueTask)
+            .where(
+                QueueTask.url_or_query.in_(list(known)),
+                QueueTask.task_type == "doi",
+                QueueTask.status == "pending",
+                QueueTask.priority < priority,
+            )
+            .values(priority=priority, parent_source_id=parent_source_id)
+        )
+    fresh = [doi for doi in unique if doi not in known]
+    for doi in fresh:
+        await enqueue(
+            sess,
+            doi,
+            topic=topic,
+            seed_source=seed_source,
+            task_type="doi",
+            priority=priority,
+            parent_source_id=parent_source_id,
+        )
+    return len(fresh)
 
 
 async def record_search_yield(

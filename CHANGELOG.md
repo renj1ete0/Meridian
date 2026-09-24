@@ -68,6 +68,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.0] — 2026-09-25
+
+### Fixed
+
+- `B-58`: cited papers are finally looked up, ranked by the page that cited
+  them. A queued DOI records its citing source (`queue.parent_source_id`); a
+  DOI cited by an on-topic page on a host that is not off-topic ranks with
+  peer-reviewed links, one cited by an unlabelled page provisionally above
+  low-tier links, and one cited by an off-topic page stays at the floor. A
+  better citing page raises an already-queued DOI. `python -m
+  worker.requeue_dois` ranks the backlog the same way (report by default,
+  `--apply`; never deletes); its hourly timetable row ships **disabled**
+  until the first report is read. A resolved open-access copy inherits its
+  DOI's priority, and frontier DOI links are normalised and de-duplicated
+  before queueing. Migration `740a4f79888c`
+
 ## [0.139.0] — 2026-09-25
 
 ### Added
