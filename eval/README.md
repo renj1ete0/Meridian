@@ -59,6 +59,15 @@ itself, it will pass. So:
 Grading is by the operator. An agent may run the set and propose scores, but its
 scores are not the result.
 
+**`scripts/run_question_set.py`** (`P2-22`) does steps 1, 2 and the mechanical
+half of 5: it asks each question as typed through hybrid search (lexical-only
+when no embedder answers, and the file says so), and writes
+`eval/runs/<date>.yaml` with the context, the top hits per item, a heuristic
+`proposed` grade, an empty `operator` field and a comparison with the previous
+run. Fill `operator: {grade, missing, sources}` by hand; only those grades are
+compared, and a grade off the 0–3 scale makes the next run refuse to compare.
+While any item is `reviewed: false` every run carries a DRAFT banner.
+
 ## The go/no-go (P2-09) — a proposal for the operator
 
 The threshold is the operator's decision, and should be set **before** the first

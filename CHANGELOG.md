@@ -68,6 +68,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.126.0] — 2026-09-24
+
+### Added
+
+- `P2-22`: the held-out question set runs. `scripts/run_question_set.py` asks
+  every item in `eval/questions.yaml` through hybrid search exactly as typed
+  (lexical-only, and labelled so, when no embedder answers) and writes
+  `eval/runs/<date>.yaml`: the run's context, a DRAFT banner while any item is
+  unreviewed, the top hits with excerpts, which graph claims already cite
+  them, a heuristic `proposed` grade kept apart from an empty `operator`
+  grade, and a comparison with the previous run that reads operator grades
+  only (`meridian_core.questionset`)
+
 ## [0.125.2] — 2026-09-24
 
 ### Fixed

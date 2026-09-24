@@ -1328,7 +1328,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       make a topic, watch; right-click empty space: suggest a term, queued as a
       search seed. Through the existing boost/topic/seed machinery, so it is
       reversible and in the steering audit
-- [ ] `P2-22` **Run the question set** — run `eval/questions.yaml`, record graded
+- [x] `P2-22` **Run the question set** — `v0.126.0`, `scripts/run_question_set.py` (built by a delegated agent). **First live run not yet made**: it needs the live database's read-only role and the embedder, which the agent was not permitted to reach — run `eval/questions.yaml`, record graded
       scores per run in `eval/runs/`, compare runs; an agent's grades are a
       proposal, the operator's are the score
 - [ ] `P6-36` **Gaps** — a ranked list from thin/weak areas, failed routes and low
