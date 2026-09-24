@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.124.1] — 2026-09-24
+
+### Added
+
+- `B-54`: `worker.docdupes --apply` is on the timetable (daily), **disabled**
+  until the first live report has been read, since a mark hides a source from
+  search. Migration `4870251e4296`
+
 ## [0.124.0] — 2026-09-24
 
 ### Added

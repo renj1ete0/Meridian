@@ -1273,8 +1273,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       Measure on real non-English sources once `B-52` seeds have fetched some;
       options are per-language prototypes from `translation_lookups` or a
       language-aware floor
-- [ ] `B-54` **Schedule `worker.docdupes`** — built and tested but not on the timetable
-      and not yet applied live
+- [x] `B-54` **Schedule `worker.docdupes`** — `v0.124.1`, timetable row shipped
+      *disabled*: read the first live report, then enable it in Admin
+- [ ] `B-55` **Seeds and watches are not in the steering audit** — `POST /api/admin/seeds`
+      writes no `steering_log` row, so the map's "suggest a term" and Gaps' actions
+      would be steering nobody can see or undo from the log (found by the Map and Gaps
+      agents)
+- [ ] `B-56` **A search's yield is not recorded** — `_settle` stores no result count and
+      result rows do not link to their query, so "a query that found nothing" cannot
+      feed Gaps; add the count to the query row (a migration)
 - [ ] `P6-30` **Areas: the corpus as nested clusters** — hierarchical clustering
       of passage embeddings (2–3 levels), each area named by its most
       distinctive terms, with per-area stats (passages, sources, tier mix,

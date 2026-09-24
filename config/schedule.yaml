@@ -121,3 +121,13 @@ jobs:
     # second, bounded per run, and each phrase re-asked only after 90 days.
     interval_seconds: 86400
     enabled: true
+
+  - name: docdupes
+    module: worker.docdupes
+    args: ["--apply"]
+    # `B-44`/`B-54`: marks sources that copy an earlier one, and clears marks
+    # that no longer hold. Wholesale and non-destructive, so a daily run is
+    # safe — but a mark hides a source from search, so this ships disabled:
+    # read the first `python -m worker.docdupes` report, then enable it.
+    interval_seconds: 86400
+    enabled: false
