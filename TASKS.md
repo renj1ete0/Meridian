@@ -1348,6 +1348,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       repeated claim, but two concurrent calls could still insert two rows: there is
       no unique index on (from, relation, to). Add it after `worker.edgedupes --apply`
       has folded the live graph's existing duplicate (found by the `B-41` agent)
+- [ ] `P6-39` **The Map's route mode** — "Route from here…" still ships disabled. Routes
+      (`P6-32`) run between nodes and terms; the Map works in areas. Needs an
+      area-hop source for `route()` (its `HopSource` protocol takes one), the
+      two-click pick on the canvas, the route drawn with cited and similar hops
+      distinguished, and screenshots against the Route board on the design canvas
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
