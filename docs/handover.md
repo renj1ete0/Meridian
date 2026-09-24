@@ -1157,6 +1157,17 @@ Nothing local notices, because `uv run` re-locks in place. It had been stale
 across a dozen commits before anyone looked. `tests/unit/test_lockfile.py` now
 catches it; **run `uv lock` in the same commit as the bump.**
 
+### An `exists()` on a table the outer query also joins has no FROM
+
+SQLAlchemy auto-correlates every table a subquery shares with its enclosing
+statement. `exists().where(ChunkTopics.chunk_id == Chunk.chunk_id, …)` inside a
+select that already *outer-joins* `chunk_topics` correlates both tables away, and
+the statement fails at compile time with "returned no FROM clauses due to
+auto-correlation". Used inside a select that does not join it, the same
+predicate works — so it breaks only for the caller that reuses it. Alias the
+table inside the predicate (`aliased(ChunkTopics)`), as
+`meridian_core.passagetopics` does, and it works in both.
+
 ### Walking `app.routes` finds nothing in FastAPI 0.141
 
 `include_router` stores an `_IncludedRouter`, which exposes neither `path` nor
