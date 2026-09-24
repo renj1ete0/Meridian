@@ -68,6 +68,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.129.0] — 2026-09-24
+
+### Added
+
+- `P6-32`: **routes** between two terms or nodes, every hop labelled *cited*
+  (an edge, with relation, direction, support and first passage) or
+  *similar* (a name-vector score). `meridian_core.route.route()` and `GET
+  /api/explore/route` (read-only role). The claims-only answer is always
+  computed beside it (`cited_only`), so "no cited route within N hops" is a
+  value Gaps can read. Shortest first, then fewest similar hops, then best
+  support; merged nodes and the reader's own notes are never stops; kinds of
+  hop are pluggable, so areas (`P6-30`) join without changing the search
+
 ## [0.128.0] — 2026-09-24
 
 ### Added

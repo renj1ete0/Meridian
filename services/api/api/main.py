@@ -35,7 +35,7 @@ from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
-from .routes import admin, explore, gaps, graph, neighbourhood
+from .routes import admin, connect, explore, gaps, graph, neighbourhood
 
 log = get_logger(__name__)
 
@@ -206,6 +206,8 @@ def create_app() -> FastAPI:
     app.include_router(graph.router)
     # A term's neighbourhood (`P6-33`), read-only for the same reason.
     app.include_router(neighbourhood.router)
+    # Routes across claims and resemblance (`P6-32`), read-only likewise.
+    app.include_router(connect.router)
 
     # `/api/admin/*` — the only routes that change anything (`P6-13`). Mounted
     # unconditionally, but every handler depends on `admin_is_allowed`, which

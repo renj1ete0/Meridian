@@ -1345,7 +1345,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `P6-31` **Bridges between areas** — cited claims whose evidence spans the
       two areas, plus the most similar cross-area passages and the terms both
       share; the two kinds kept apart everywhere they are shown
-- [ ] `P6-32` **Route across claims and areas** — extends `P6-03`'s path search
+- [x] `P6-32` **Route across claims and areas** — `v0.129.0` (delegated agent), backend and API; its screen is the Map's route mode (`P6-34`); area hops plug in when `P6-30` lands — extends `P6-03`'s path search
       to areas and terms; every hop labelled cited or similar; "no cited route
       within N hops" is a result and feeds Gaps
 - [x] `P6-33` **Neighbourhood** — `v0.128.0` (delegated agent; screenshotted dark and light against the Term neighbourhood board with live responses). Open: the board's caption says CLAIMED where the build says CITED — term → nearest entities by claim and nearest
