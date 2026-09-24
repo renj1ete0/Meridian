@@ -53,6 +53,16 @@ told to; check).
   `worker.translate` ran on an image built before `B-52`. The timetable row
   runs it daily; to run it now, `docker compose -f docker-compose.local.yml
   run --rm --no-deps scheduler python -m worker.translate --once`.
+- **Check the last deploy landed.** At handover `v0.124.4` was building,
+  followed by `worker.requeue --apply` with the fix that recomputes queued
+  links' tier priority. The first minutes of the widened crawl were still
+  fetching followed links from academic hosts at the old top priority, queued
+  before `B-50`. Verify: `SELECT priority, count(*) FROM queue WHERE
+  status='pending' AND seed_source='frontier' GROUP BY 1` should show no
+  academic-domain links at the old top value, and search results should now
+  make up a real share of fetches. About half the first search results that
+  failed were Cloudflare challenges, which the crawler does not try to beat
+  (§6.4).
 - **Translations need a contact.** `MERIDIAN_CONTACT_EMAIL` is unset on the
   local stack, Wikimedia answers anonymous clients 403, and `worker.translate`
   now refuses to run without it. So there are no non-English seeds until it is
