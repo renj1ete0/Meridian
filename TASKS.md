@@ -1358,7 +1358,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-56` **A search's yield is not recorded** — `v0.124.2`, `queue.search_results`/`search_queued`; `_settle` stores no result count and
       result rows do not link to their query, so "a query that found nothing" cannot
       feed Gaps; add the count to the query row (a migration)
-- [ ] `P6-30` **Areas: the corpus as nested clusters** — hierarchical clustering
+- [x] `P6-30` **Areas: the corpus as nested clusters** — `v0.134.0` (delegated agent; calibrated on a read-only copy of the live corpus: regions of a few hundred to a few thousand passages, stable positions across rebuilds, ~1.5 min per build). Open: some region names are still source furniture; English-only stop words — hierarchical clustering
       of passage embeddings (2–3 levels), each area named by its most
       distinctive terms, with per-area stats (passages, sources, tier mix,
       recency) and a stable layout position; recomputed on a schedule; honest

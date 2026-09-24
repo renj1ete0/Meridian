@@ -26,6 +26,7 @@ from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
 
 from meridian_core import annotations
+from meridian_core.areaview import AreaNotFound, area_detail, areas_level, jump
 from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
 from meridian_core.crawlhealth import crawl_health
 from meridian_core.export import to_bibtex, to_markdown
@@ -44,6 +45,7 @@ from meridian_core.models import (
 from meridian_core.passagetopics import passage_topics_for
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
+from meridian_core.schemas.areas import AreaDetailRead, AreaJumpRead, AreasRead
 from meridian_core.schemas.corpusmap import CorpusMapRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
@@ -220,6 +222,38 @@ async def explore_map(
     return CorpusMapRead.model_validate(
         await corpus_map(sess, sample=sample, topics=topic, places=place)
     )
+
+
+@router.get("/areas", response_model=AreasRead)
+async def explore_areas(
+    sess: ReadSession, parent: Annotated[int | None, Query(ge=1)] = None
+) -> AreasRead:
+    """One level of the map (`P6-30`): the regions, or the children of ``parent``.
+
+    From the newest build of `worker.areas`; an empty build list is an answer
+    (``build`` is null), not an error, so the map can say what it waits for.
+    """
+    try:
+        return await areas_level(sess, parent_id=parent)
+    except AreaNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/areas/jump", response_model=AreaJumpRead)
+async def explore_area_jump(
+    sess: ReadSession, q: Annotated[str, Query(min_length=1, max_length=200)]
+) -> AreaJumpRead:
+    """Areas named by a term, then sub-areas whose passages mention it."""
+    return await jump(sess, q)
+
+
+@router.get("/areas/{area_id}", response_model=AreaDetailRead)
+async def explore_area(area_id: int, sess: ReadSession) -> AreaDetailRead:
+    """One area: its stats, where it sits, and its most typical passages."""
+    try:
+        return await area_detail(sess, area_id)
+    except AreaNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/sources/{source_id}", response_model=SourceRead)

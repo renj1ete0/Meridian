@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.134.0] — 2026-09-25
+
+### Added
+
+- `P6-30`: **areas** — the corpus as nested clusters of passages (regions ›
+  areas › sub-areas), rebuilt daily by `python -m worker.areas --once`
+  (`--report` prints without writing). Top-down clustering of passage
+  embeddings; each area named by its most distinctive terms (from text with
+  link targets and addresses stripped), with passages, sources, tier mix and
+  recency, and flags for weak (few sources) or stale (nothing new) areas with
+  the reason in words. Positions carry over from the previous build so the
+  map holds still. `/api/explore/areas`, `/areas/{id}`, `/areas/jump` on the
+  read-only role. Migration `e7ea586f5d02`
+
 ## [0.133.0] — 2026-09-24
 
 ### Added

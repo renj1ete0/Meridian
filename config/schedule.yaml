@@ -50,6 +50,15 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: areas
+    module: worker.areas
+    args: ["--once"]
+    # `P6-30`: the corpus as nested clusters of passages, for the map.
+    # Derived and rebuilt wholesale; daily, because an area moves only when a
+    # meaningful share of the corpus does.
+    interval_seconds: 86400
+    enabled: true
+
   - name: boilerplate
     module: worker.boilerplate
     args: ["--once"]

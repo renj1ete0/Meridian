@@ -1,0 +1,321 @@
+"""Areas against a real Postgres (task P6-30).
+
+A build is derived, global and replaced wholesale, so what matters is that it
+is *consistent*: every searchable passage in exactly one leaf, each level the
+sum of the one below, parents that nest, names that come from the passages,
+positions that survive a rebuild, and old builds pruned. Each test builds over
+its own passages by a topic label unique to the run, so a dev database with a
+real corpus in it does not change the answers.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import uuid
+from collections.abc import AsyncIterator
+
+import httpx
+import numpy as np
+import pytest
+from sqlalchemy import delete, func, select
+
+from api.main import create_app
+from meridian_core import areabuild
+from meridian_core.areabuild import KEEP_BUILDS, build_areas
+from meridian_core.areaview import area_detail, areas_level, jump
+from meridian_core.chunks import ChunkWrite, replace_chunks, store_embeddings
+from meridian_core.db import dispose_engines
+from meridian_core.models import Area, AreaBuild, AreaMember, Chunk, ScheduledJob, Source
+from meridian_core.models.source import EMBEDDING_DIM
+from meridian_core.sources import upsert_source
+
+pytestmark = pytest.mark.usefixtures("require_db")
+
+#: Three subjects, each a direction in the space and a vocabulary.
+SUBJECTS = {
+    0: "shelter canopy shade walkway cooling",
+    1: "enzyme protein folding binding assay",
+    2: "tariff export trade quota customs",
+}
+PER_SOURCE = 4
+SOURCES = 6
+
+
+def vector(subject: int, jitter: int) -> list[float]:
+    rng = np.random.default_rng(subject * 1000 + jitter)
+    v = np.zeros(EMBEDDING_DIM)
+    v[700 + subject * 10 : 700 + subject * 10 + 10] = 1.0
+    v += rng.standard_normal(EMBEDDING_DIM) * 0.02
+    return (v / np.linalg.norm(v)).tolist()
+
+
+@pytest.fixture(autouse=True)
+def small_levels(monkeypatch):
+    """Cut a 72-passage corpus into 2 regions › 3 areas › 6 sub-areas."""
+    monkeypatch.setattr(areabuild, "PASSAGES_PER_LEAF", 12)
+    monkeypatch.setattr(areabuild, "LEAVES_PER_AREA", 2)
+    monkeypatch.setattr(areabuild, "MAX_REGIONS", 2)
+
+
+@pytest.fixture
+def topic() -> str:
+    return f"areas-{uuid.uuid4().hex[:10]}"
+
+
+async def seed(sess, topic: str, *, sources: int = SOURCES, per_source: int = PER_SOURCE):
+    """``sources`` sources, each with ``per_source`` passages on every subject."""
+    chunk_subject: dict[int, int] = {}
+    for s in range(sources):
+        source, _ = await upsert_source(
+            sess,
+            f"https://{topic}.test/{s}",
+            checksum=f"sha256:{uuid.uuid4().hex}",
+            title=f"Source {s}",
+        )
+        source.topic_labels = [topic]
+        writes, subjects = [], []
+        for subject, words in SUBJECTS.items():
+            for i in range(per_source):
+                writes.append(ChunkWrite(text=f"{words} note {s} {i}", chunk_index=len(writes)))
+                subjects.append(subject)
+        await replace_chunks(sess, source.source_id, writes)
+        rows = list(
+            await sess.scalars(
+                select(Chunk).where(Chunk.source_id == source.source_id).order_by(Chunk.chunk_index)
+            )
+        )
+        await store_embeddings(
+            sess,
+            {c.chunk_id: vector(subj, c.chunk_id) for c, subj in zip(rows, subjects, strict=True)},
+        )
+        chunk_subject.update({c.chunk_id: subj for c, subj in zip(rows, subjects, strict=True)})
+    await sess.flush()
+    return chunk_subject
+
+
+async def test_a_build_puts_every_passage_in_one_leaf_and_levels_nest(session_for, topic):
+    sess = await session_for("rw")
+    chunks = await seed(sess, topic)
+
+    report = await build_areas(sess, topics=[topic])
+
+    assert report.build_id is not None
+    assert (report.regions, report.areas, report.leaves) == (2, 3, 6)
+    assert report.passages == len(chunks)
+
+    areas = list(await sess.scalars(select(Area).where(Area.build_id == report.build_id)))
+    by_id = {a.area_id: a for a in areas}
+    members = dict(
+        (
+            await sess.execute(
+                select(AreaMember.chunk_id, AreaMember.area_id).where(
+                    AreaMember.build_id == report.build_id
+                )
+            )
+        ).all()
+    )
+    assert set(members) == set(chunks), "every passage, and only these, in exactly one leaf"
+    assert all(by_id[a].level == 3 for a in members.values())
+
+    for area in areas:
+        if area.level == 1:
+            assert area.parent_id is None
+        else:
+            assert by_id[area.parent_id].level == area.level - 1
+        children = [c for c in areas if c.parent_id == area.area_id]
+        if area.level < 3:
+            assert children, "no empty region or area"
+            assert area.passages == sum(c.passages for c in children)
+        assert sum(area.tier_mix.values()) == area.passages
+        assert area.sources <= SOURCES and area.newest_at is not None
+        assert -1.0001 <= area.x <= 1.0001 and -1.0001 <= area.y <= 1.0001
+
+    # A leaf holds one subject: the clusters follow the vectors.
+    for leaf in (a for a in areas if a.level == 3):
+        subjects = {chunks[c] for c, a in members.items() if a == leaf.area_id}
+        assert len(subjects) == 1
+
+
+async def test_areas_are_named_by_their_own_passages(session_for, topic):
+    sess = await session_for("rw")
+    chunks = await seed(sess, topic)
+    report = await build_areas(sess, topics=[topic])
+
+    members = (
+        await sess.execute(
+            select(AreaMember.chunk_id, Area.terms)
+            .join(Area, Area.area_id == AreaMember.area_id)
+            .where(AreaMember.build_id == report.build_id)
+        )
+    ).all()
+    for chunk_id, terms in members:
+        vocabulary = set(SUBJECTS[chunks[chunk_id]].split())
+        assert terms, "a leaf with passages from several sources has a name"
+        assert set(terms[0].split()) <= vocabulary, (terms, vocabulary)
+
+
+async def test_too_few_passages_write_nothing(session_for, topic):
+    sess = await session_for("rw")
+    await seed(sess, topic, sources=1, per_source=2)  # six passages
+    before = await sess.scalar(select(func.count()).select_from(AreaBuild))
+
+    report = await build_areas(sess, topics=[topic])
+
+    assert report.build_id is None and report.passages == 6
+    assert await sess.scalar(select(func.count()).select_from(AreaBuild)) == before
+
+
+async def test_a_rebuild_keeps_positions_and_prunes_old_builds(session_for, topic):
+    sess = await session_for("rw")
+    await seed(sess, topic)
+
+    builds = [await build_areas(sess, topics=[topic]) for _ in range(KEEP_BUILDS + 1)]
+
+    def placed(build_id):
+        return select(Area.level, Area.passages, Area.x, Area.y).where(Area.build_id == build_id)
+
+    first = sorted((await sess.execute(placed(builds[-2].build_id))).all())
+    second = sorted((await sess.execute(placed(builds[-1].build_id))).all())
+    assert first == second, "an unchanged corpus draws the same map"
+    assert builds[-1].inherited == builds[-1].regions + builds[-1].areas + builds[-1].leaves
+
+    remaining = set(await sess.scalars(select(AreaBuild.build_id)))
+    assert builds[0].build_id not in remaining
+    assert {b.build_id for b in builds[1:]} <= remaining
+    assert not await sess.scalar(
+        select(func.count()).select_from(Area).where(Area.build_id == builds[0].build_id)
+    ), "an old build's areas go with it"
+
+
+async def test_reading_levels_details_and_jumps(session_for, topic):
+    sess = await session_for("rw")
+    await seed(sess, topic)
+    report = await build_areas(sess, topics=[topic])
+
+    top = await areas_level(sess)
+    assert top.build is not None and top.build.build_id == report.build_id
+    assert top.level == 1 and len(top.areas) == 2
+    assert [a.passages for a in top.areas] == sorted((a.passages for a in top.areas), reverse=True)
+
+    region = top.areas[0]
+    inside = await areas_level(sess, parent_id=region.area_id)
+    assert inside.level == 2 and inside.parent.area_id == region.area_id
+    assert [c.area_id for c in inside.path] == [region.area_id]
+    assert sum(a.passages for a in inside.areas) == region.passages
+    assert region.children == len(inside.areas)
+
+    leaf = (await areas_level(sess, parent_id=inside.areas[0].area_id)).areas[0]
+    detail = await area_detail(sess, leaf.area_id)
+    assert [c.level for c in detail.path] == [1, 2, 3]
+    assert 0 < len(detail.passages) <= 5
+    assert all(p.snippet for p in detail.passages)
+
+    found = await jump(sess, "enzyme")
+    assert found.hits and found.hits[0].match == "name"
+    assert "enzyme" in " ".join(found.hits[0].area.terms)
+    assert not (await jump(sess, "   ")).hits
+
+
+async def test_old_build_and_unknown_areas_are_refused_with_a_reason(session_for, topic):
+    from meridian_core.areaview import AreaNotFound
+
+    sess = await session_for("rw")
+    await seed(sess, topic)
+    old = await build_areas(sess, topics=[topic])
+    await build_areas(sess, topics=[topic])
+    old_area = await sess.scalar(select(Area.area_id).where(Area.build_id == old.build_id))
+
+    with pytest.raises(AreaNotFound, match="earlier build"):
+        await area_detail(sess, old_area)
+    with pytest.raises(AreaNotFound, match="No area"):
+        await areas_level(sess, parent_id=10**12)
+
+
+async def test_no_build_is_an_answer_not_an_error(session_for):
+    sess = await session_for("rw")
+    await sess.execute(delete(AreaBuild))  # rolled back by the fixture
+    empty = await areas_level(sess)
+    assert empty.build is None and empty.areas == []
+    assert empty.passages_needed == areabuild.MIN_PASSAGES
+
+
+async def test_weak_and_stale_carry_their_reasons(session_for, topic):
+    sess = await session_for("rw")
+    await seed(sess, topic)
+    await build_areas(sess, topics=[topic])
+    later = dt.datetime.now(dt.UTC) + dt.timedelta(days=400)
+
+    fresh = await areas_level(sess)
+    stale = await areas_level(sess, now=later)
+    assert not any(a.stale for a in fresh.areas)
+    assert all(a.stale and any("days" in r for r in a.reasons) for a in stale.areas)
+
+
+async def test_the_timetable_runs_the_build():
+    """The migration inserts the row; `seed.py` is insert-only (as `B-43`)."""
+    from meridian_core.db import session
+
+    async with session() as sess:
+        job = await sess.scalar(select(ScheduledJob).where(ScheduledJob.name == "areas"))
+    await dispose_engines()
+    assert job is not None and job.module == "worker.areas" and job.args == ["--once"]
+
+
+# ---------------------------------------------------------------------------
+# Over HTTP, on the read-only role
+
+
+@pytest.fixture
+async def client() -> AsyncIterator[httpx.AsyncClient]:
+    app = create_app()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://api.test"
+    ) as c:
+        yield c
+    await dispose_engines()
+
+
+@pytest.fixture
+async def committed(session_for, topic):
+    sess = await session_for("rw")
+    await seed(sess, topic)
+    report = await build_areas(sess, topics=[topic])
+    await sess.commit()
+    yield report
+    await sess.execute(delete(AreaBuild).where(AreaBuild.build_id == report.build_id))
+    await sess.execute(delete(Source).where(Source.url.like(f"https://{topic}.test/%")))
+    await sess.commit()
+
+
+async def test_the_api_serves_the_newest_build(client, committed):
+    top = (await client.get("/api/explore/areas")).json()
+    assert top["build"]["build_id"] == committed.build_id
+    assert top["level"] == 1 and len(top["areas"]) == 2
+    assert {"weak", "stale", "reasons", "tier_mix", "x", "y", "name"} <= set(top["areas"][0])
+
+    region = top["areas"][0]["area_id"]
+    inside = (await client.get("/api/explore/areas", params={"parent": region})).json()
+    assert inside["level"] == 2 and inside["path"][0]["area_id"] == region
+
+    detail = await client.get(f"/api/explore/areas/{inside['areas'][0]['area_id']}")
+    assert detail.status_code == 200 and detail.json()["path"][-1]["level"] == 2
+
+    hits = (await client.get("/api/explore/areas/jump", params={"q": "tariff"})).json()["hits"]
+    assert hits and "tariff" in " ".join(hits[0]["area"]["terms"])
+
+
+async def test_the_api_refuses_what_it_cannot_answer(client, committed):
+    assert (await client.get("/api/explore/areas/999999999999")).status_code == 404
+    assert (
+        await client.get("/api/explore/areas", params={"parent": 999999999999})
+    ).status_code == 404
+    assert (await client.get("/api/explore/areas", params={"parent": 0})).status_code == 422
+    assert (await client.get("/api/explore/areas/jump", params={"q": ""})).status_code == 422
+
+
+async def test_the_read_only_role_cannot_write_areas(session_for):
+    from sqlalchemy.exc import DBAPIError
+
+    sess = await session_for("ro")
+    with pytest.raises(DBAPIError):
+        await sess.execute(delete(AreaBuild))
