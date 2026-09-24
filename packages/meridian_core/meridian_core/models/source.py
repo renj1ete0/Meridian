@@ -487,3 +487,26 @@ class BoilerplateLine(Base):
     computed_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class HostScore(Base):
+    """How much of what a host serves is about the corpus's topics (task `B-48`).
+
+    Derived, wholesale, by `worker.hostscore` from the content labels `P2-21`
+    writes and from the pending queue. Read by the fetch loop to decide whether
+    a link to the host is worth queueing — the loop never computes it, so no
+    model or vector is anywhere near the crawl.
+    """
+
+    __tablename__ = "host_scores"
+
+    host: Mapped[str] = mapped_column(Text, primary_key=True)
+    #: Sources from this host whose content has been examined, and how many of
+    #: those carry at least one topic.
+    examined: Mapped[int] = mapped_column(Integer, nullable=False)
+    on_topic: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: URL tasks waiting for this host when the score was computed.
+    pending: Mapped[int] = mapped_column(Integer, nullable=False)
+    computed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

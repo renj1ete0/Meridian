@@ -1193,6 +1193,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       chunk in ten was over 30% URL, so pages clustered by link shape. The embedder
       now gets a view with link syntax reduced to its visible text; stored text is
       untouched. `worker.reembed` brings existing vectors up to the view in place
+- [x] `B-48` **The frontier followed links into whatever big site a seed touched** —
+      `v0.121.0`. 98% of fetched pages came from link-following, each link inheriting
+      its parent's topic and ranked by domain tier; by content (`P2-21`) 94% of the
+      corpus was about none of its topics. Hosts are now scored from content labels
+      (`worker.hostscore`, hourly); off-topic hosts are not followed into or out of,
+      unjudged ones are explored up to a cap, every host is capped. `worker.requeue`
+      applies it to the existing queue
 - [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string

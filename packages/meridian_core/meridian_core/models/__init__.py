@@ -27,7 +27,15 @@ from .mixins import (
 from .queue import FetchAttempt, QueueTask
 from .robots import RobotsCacheEntry
 from .runs import EnrichmentItem, Notification, Report, Run
-from .source import EMBEDDING_DIM, BoilerplateLine, Chunk, Figure, PageLine, Source
+from .source import (
+    EMBEDDING_DIM,
+    BoilerplateLine,
+    Chunk,
+    Figure,
+    HostScore,
+    PageLine,
+    Source,
+)
 from .views import SavedView
 
 __all__ = [
@@ -48,6 +56,7 @@ __all__ = [
     "FetchPolicy",
     "Figure",
     "GazetteerTerm",
+    "HostScore",
     "Notification",
     "PageLine",
     "Observation",

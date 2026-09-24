@@ -22,6 +22,13 @@ import pytest
 from http_doubles import RecordingTransport, streamed
 from sqlalchemy import delete, select
 
+from meridian_core.hostscores import (
+    DOWNRANKED_PRIORITY,
+    EXPLORE_PENDING,
+    MIN_EXAMINED,
+    HostPolicy,
+    Score,
+)
 from meridian_core.models import FetchAttempt, FetchPolicy, Figure, QueueTask, Source
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier
 from meridian_core.sources import get_source, upsert_source
@@ -2309,3 +2316,101 @@ async def test_a_worker_with_no_resolver_leaves_doi_rows_alone(
     assert url_task.status == "fetched", "the worker did not claim the row it could do"
     assert doi_task.status == "pending"
     assert doi_task.claimed_by is None
+
+
+# --------------------------------------------------------------------------
+# The host gate (`B-48`)
+# --------------------------------------------------------------------------
+
+
+def judged(on_topic: int, *, examined: int = MIN_EXAMINED, pending: int = 0) -> Score:
+    return Score(examined=examined, on_topic=on_topic, pending=pending)
+
+
+async def test_a_page_on_an_off_topic_host_has_its_links_left_alone(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """What an off-topic site links to is, almost always, more of itself."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/more-of-the-same", "/and-more")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._hosts = HostPolicy({run_domain: judged(0)})
+
+    stats = await worker.run()
+
+    assert stats.queued == 0
+    assert await queued_urls(sess, run_topic) == []
+
+
+async def test_a_link_into_an_off_topic_host_is_not_queued_and_the_rest_are(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    elsewhere = f"off-{run_domain}"
+    body = linking_page("/on-this-site", external=f"https://{elsewhere}/page")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._hosts = HostPolicy({run_domain: judged(10), elsewhere: judged(0)})
+
+    await worker.run()
+
+    assert await queued_urls(sess, run_topic) == [f"https://{run_domain}/on-this-site"]
+
+
+async def test_an_unjudged_host_is_explored_only_up_to_its_budget(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/one", "/two", "/three")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._hosts = HostPolicy({run_domain: judged(0, examined=0, pending=EXPLORE_PENDING - 2)})
+
+    stats = await worker.run()
+
+    assert stats.queued == 2
+    assert len(await queued_urls(sess, run_topic)) == 2
+
+
+async def test_an_off_topic_government_link_is_queued_downranked_not_dropped(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Official sources label poorly — landing pages — and missing one is worse."""
+    sess = await session_for("rw")
+    official = f"gov-{run_domain}"
+    await set_tier(sess, official, "government")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/local", external=f"https://{official}/policy")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._hosts = HostPolicy({run_domain: judged(10), official: judged(0)})
+
+    await worker.run()
+
+    rows = dict(
+        (
+            await sess.execute(
+                select(QueueTask.url_or_query, QueueTask.priority).where(
+                    QueueTask.topic == run_topic, QueueTask.seed_source == "frontier"
+                )
+            )
+        ).all()
+    )
+    assert rows[f"https://{official}/policy"] == DOWNRANKED_PRIORITY
+    assert rows[f"https://{run_domain}/local"] > DOWNRANKED_PRIORITY

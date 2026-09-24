@@ -42,6 +42,7 @@ systemd unit (§13.4). Nothing in here tries to be its own supervisor.
 from __future__ import annotations
 
 import asyncio
+import collections
 import contextlib
 import dataclasses
 import datetime as dt
@@ -63,6 +64,8 @@ from meridian_core.boilerplate import host_key
 from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.figures import FigureWrite, replace_figures
+from meridian_core.hostscores import Decision, HostPolicy
+from meridian_core.hostscores import load as load_host_scores
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
 from meridian_core.novelty import novelty_health
@@ -86,7 +89,7 @@ from meridian_core.queueing import (
 from meridian_core.sources import get_source, touch_source, upsert_source
 from meridian_core.steering import draw_shares, draw_topic
 from meridian_core.steering import topics as steering_topics
-from meridian_core.tiering import is_tier_mapped, priority_with_urgency
+from meridian_core.tiering import is_tier_mapped, priority_with_urgency, resolve_tier
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
 from . import rawstore
@@ -367,6 +370,7 @@ class Worker:
         topics: TopicVocabulary | None = None,
         search: SearxClient | None = None,
         resolver: DoiResolver | None = None,
+        hosts: HostPolicy | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
@@ -386,6 +390,10 @@ class Worker:
         # As with `search`: absent is a supported state, and the loop simply
         # stops claiming the rows it could not answer.
         self._resolver = resolver
+        # `B-48`: which hosts are worth following links into, from content
+        # labels a scheduled pass turned into per-host scores. None follows
+        # every link, which is what a one-shot fetch or a test wants.
+        self._hosts = hosts
         self._stopping = asyncio.Event()
         self._stats = WorkerStats()
         self._reserved = 0
@@ -823,6 +831,9 @@ class Worker:
                     # because it is the thing that reveals the actual URLs.
                     topic, priority = claim.topic, priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
                 else:
+                    decision = self._admit(url, tiers)
+                    if not decision.queue:
+                        continue
                     topic = self._topics.best_topic(url)
                     if topic is not None:
                         matched += 1
@@ -1227,6 +1238,12 @@ class Worker:
         """
         if document is None or not document.links or self._prefilter is None:
             return 0
+        if self._hosts is not None and not self._hosts.follows_links_from(claim.url):
+            # `B-48`: what an off-topic site links to is, almost always, more
+            # of itself — and a page's links inherit its topic, so following
+            # them is how one detour becomes a subtree.
+            log.info("frontier not expanded: off-topic host", extra={"url": claim.url})
+            return 0
 
         verdict = await self._prefilter.keep(sess, document.links)
 
@@ -1255,19 +1272,27 @@ class Worker:
             return len(verdict.dois)
 
         tiers = await source_tier_map(sess)
+        queued = 0
+        held: collections.Counter[str] = collections.Counter()
         for url in verdict.kept:
+            # §5.2: a government link outranks a blog without anyone
+            # curating a seed list. `priority_for_domain` had existed since
+            # P1-17 with no caller; this was it, and `P2-20` added the
+            # second opinion — a page whose kind rots fast is worth
+            # fetching sooner, and is likelier to be gone if it is not.
+            priority = priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
+            decision = self._admit(url, tiers)
+            if not decision.queue:
+                held[decision.reason] += 1
+                continue
             await enqueue(
                 sess,
                 url,
                 topic=claim.topic,
                 seed_source="frontier",
-                # §5.2: a government link outranks a blog without anyone
-                # curating a seed list. `priority_for_domain` had existed since
-                # P1-17 with no caller; this was it, and `P2-20` added the
-                # second opinion — a page whose kind rots fast is worth
-                # fetching sooner, and is likelier to be gone if it is not.
-                priority=priority_with_urgency(url, tiers, HALF_LIFE_DAYS),
+                priority=decision.priority if decision.priority is not None else priority,
             )
+            queued += 1
 
         log.info(
             "frontier expanded",
@@ -1275,12 +1300,27 @@ class Worker:
                 "url": claim.url,
                 "task_id": claim.task_id,
                 "considered": verdict.considered,
-                "queued": len(verdict.kept),
+                "queued": queued,
                 "dois": len(verdict.dois),
                 "dropped": verdict.dropped,
+                "held_by_host": dict(held),
             },
         )
-        return len(verdict.kept) + len(verdict.dois)
+        return queued + len(verdict.dois)
+
+    def _admit(self, url: str, tiers: dict) -> Decision:
+        """Whether one more link to ``url``'s host is worth queueing (`B-48`)."""
+        if self._hosts is None:
+            return Decision(True)
+        hostname = urlsplit(url).hostname or ""
+        return self._hosts.admit(url, government=resolve_tier(hostname, tiers) == "government")
+
+    async def refresh_hosts(self) -> None:
+        """Re-read `host_scores`, which a scheduled pass rewrites hourly."""
+        if self._hosts is None:
+            return
+        async with self._session_factory() as sess:
+            self._hosts.replace(await load_host_scores(sess))
 
     async def _seed_citations(
         self, sess: AsyncSession, claim: Claim, document: ExtractedDocument | None
@@ -1304,6 +1344,10 @@ class Worker:
         of it that applies, and it is applied directly.
         """
         if document is None or not document.citations or self._resolver is None:
+            return 0
+        if self._hosts is not None and not self._hosts.follows_links_from(claim.url):
+            # `B-48`, as for links: an off-topic page's reference list is
+            # references about something else.
             return 0
 
         dois: dict[str, None] = {}
@@ -1558,6 +1602,7 @@ class Worker:
 
     async def housekeep(self) -> None:
         """One housekeeping pass. Public so a test — or an operator — can run it."""
+        await self.refresh_hosts()
         async with self._session_factory() as sess:
             pruned = await prune_attempts(
                 sess, older_than_days=self._settings.attempt_retention_days
@@ -1727,6 +1772,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
 
     prefilter = await build_prefilter()
     topics = await build_topic_vocabulary()
+    hosts = HostPolicy()
 
     search = SearxClient.from_env()
     if search is None:
@@ -1756,7 +1802,9 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
             topics=topics,
             search=search,
             resolver=resolver,
+            hosts=hosts,
         )
+        await worker.refresh_hosts()
         install_signal_handlers(worker)
         try:
             return await worker.run()

@@ -89,3 +89,13 @@ jobs:
     # nothing new to read costs an index scan that returns no rows.
     interval_seconds: 86400
     enabled: true
+
+  - name: hostscore
+    module: worker.hostscore
+    args: ["--once"]
+    # `B-48`: per-host on-topic share from the content labels `topics` writes,
+    # plus each host's pending links. The fetch loop re-reads it on every
+    # housekeeping tick and stops queueing links into hosts whose pages are
+    # almost never about a topic. Hourly, like `topics`, which it trails.
+    interval_seconds: 3600
+    enabled: true

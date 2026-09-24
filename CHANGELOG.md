@@ -68,6 +68,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.121.0] — 2026-09-24
+
+### Added
+
+- `B-48`: the frontier stops following links into sites the corpus has found
+  to be off-topic. `python -m worker.hostscore --once` (hourly) scores each
+  host by the share of its examined pages that carry a content label, plus its
+  pending links, into `host_scores`; the fetch loop re-reads it every
+  housekeeping tick. A link to an off-topic host (≥20 pages examined, <5% on a
+  topic) is not queued — a government host is down-ranked instead — and a
+  page on one does not have its links or citations followed. Unjudged hosts
+  are explored up to 50 queued links, and no host holds more than 500.
+  `python -m worker.requeue` applies the same verdict to links already
+  queued, moving held ones to priority 0: report by default, `--apply` writes,
+  nothing is deleted, search and user rows are left alone. Migration
+  `68fd9387a022`
+
 ## [0.120.0] — 2026-09-24
 
 ### Changed
