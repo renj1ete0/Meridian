@@ -143,6 +143,13 @@ class SearchFilters:
     languages: Sequence[str] | None = None
     #: Match a source carrying any of these topics (§12.5, §12.3).
     topics: Sequence[str] | None = None
+    #: Match a source about any of these places (`P2-23`) — codes as
+    #: `sources.places` stores them. Overlap, like topics, and for the same
+    #: reason; and a source never examined for places (NULL) is excluded by a
+    #: place filter, because nothing has established where it is about.
+    #: Naming a country finds its cities' sources too: a city is only ever
+    #: tagged beside its country.
+    places: Sequence[str] | None = None
     published_after: dt.date | None = None
     published_before: dt.date | None = None
     #: Near-duplicates are out unless asked for. The gate marked them for a reason.
@@ -237,6 +244,11 @@ class SearchHit:
     #: The fused score before decay, so the adjustment can be undone by eye.
     score_before_decay: float = 0.0
 
+    #: Which places the source is about (`P2-23`), for the reason the hit
+    #: carries its topics: a place filter a reader cannot see on the result is
+    #: one they have to trust rather than check. None means never examined.
+    places: list[str] | None = None
+
 
 @dataclasses.dataclass(frozen=True)
 class SearchResult:
@@ -289,6 +301,8 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
                 on_topic_passage(filters.topics),
             )
         )
+    if filters.places:
+        where.append(Source.places.op("&&")([p.strip().upper() for p in filters.places]))
     if filters.published_after is not None:
         where.append(Source.publication_date >= filters.published_after)
     if filters.published_before is not None:
@@ -518,6 +532,7 @@ async def search(
                 language=source.language,
                 topic_labels=source.topic_labels,
                 passage_topics=list(passage) if passage is not None else None,
+                places=source.places,
                 duplicate_of=chunk.duplicate_of,
                 media_type=(source.extra or {}).get("media_type"),
                 page_unit=page_unit_for((source.extra or {}).get("media_type")),

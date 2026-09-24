@@ -163,6 +163,7 @@ async def corpus_map(
     *,
     sample: int = DEFAULT_SAMPLE,
     topics: list[str] | None = None,
+    places: list[str] | None = None,
 ) -> CorpusMap:
     """A deterministic sample of searchable, embedded chunks, projected to 3D.
 
@@ -174,7 +175,10 @@ async def corpus_map(
     if not 1 <= sample <= MAX_SAMPLE:
         raise ValueError(f"sample must be between 1 and {MAX_SAMPLE}")
 
-    conditions = [*_conditions(SearchFilters(topics=topics or None)), Chunk.embedding.is_not(None)]
+    conditions = [
+        *_conditions(SearchFilters(topics=topics or None, places=places or None)),
+        Chunk.embedding.is_not(None),
+    ]
     eligible = (
         await sess.scalar(
             select(func.count())

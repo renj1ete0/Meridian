@@ -90,6 +90,11 @@ export interface SearchHit {
    * labelled with something else shows why it is in a filtered set.
    */
   passage_topics: string[] | null
+  /**
+   * Which places the source is about (`P2-23`): ISO 3166-1 alpha-2 for a
+   * country, UN/LOCODE without its space for a city. Null means never examined.
+   */
+  places?: string[] | null
 
   /**
    * What `page_or_offset` counts (`P2-18`). §5.3 makes it a page for paginated
@@ -132,6 +137,7 @@ export const SEARCH_HIT_FIELDS = [
   'language',
   'topic_labels',
   'passage_topics',
+  'places',
   'page_unit',
   'media_type',
   'duplicate_of',
@@ -195,7 +201,19 @@ export interface CorpusStats {
   topics: string[]
   /** Sources nothing has examined for topics — a topic filter excludes them. */
   sources_without_topics: number
+  /** The comparison set's places, for a place filter to offer (`P2-23`). */
+  places?: Place[]
+  /** Sources nothing has examined for places — a place filter excludes them. */
+  sources_without_places?: number
 }
+
+/** Mirrors `PlaceRead`: a stored place code and the name to show for it. */
+export interface Place {
+  code: string
+  name: string
+}
+
+export const PLACE_FIELDS = ['code', 'name'] as const
 
 export const CORPUS_STATS_FIELDS = [
   'as_of',
@@ -211,6 +229,8 @@ export const CORPUS_STATS_FIELDS = [
   'new_chunks',
   'topics',
   'sources_without_topics',
+  'places',
+  'sources_without_places',
 ] as const
 
 /** Mirrors `ChunkRead`. No `embedding` — a 1024-float vector is not a payload. */
@@ -290,6 +310,13 @@ export interface Source {
   topic_basis: string | null
   /** Each topic's similarity to the content: what the labels were decided from. */
   topic_scores: Record<string, number> | null
+  /** Which places the content is about, most-evidenced first (`P2-23`). Null: never examined. */
+  places: string[] | null
+  /** When the place pass last examined it, and under which basis (`P2-23`). */
+  places_examined_at: string | null
+  place_basis: string | null
+  /** What the places were decided from, and which signals decided each. */
+  place_evidence: Record<string, unknown> | null
   /**
    * What screening concluded about this page (`P4-14`). Shown to the operator
    * on purpose: a passage from something quarantined should be visible here,
@@ -333,6 +360,10 @@ export const SOURCE_FIELDS = [
   'topics_examined_at',
   'topic_basis',
   'topic_scores',
+  'places',
+  'places_examined_at',
+  'place_basis',
+  'place_evidence',
   'trust_state',
   'acronyms_harvested_at',
   'extra',
@@ -452,6 +483,8 @@ export interface SearchParams {
   language?: readonly string[]
   /** Keep sources carrying any of these topics (`P2-14`). */
   topic?: readonly string[]
+  /** Keep sources about any of these places — stored codes (`P2-23`). */
+  place?: readonly string[]
   published_after?: string
   published_before?: string
   include_duplicates?: boolean
@@ -491,6 +524,7 @@ export function searchQuery(params: SearchParams): string {
   for (const tier of params.source_tier ?? []) query.append('source_tier', tier)
   for (const language of params.language ?? []) query.append('language', language)
   for (const topic of params.topic ?? []) query.append('topic', topic)
+  for (const place of params.place ?? []) query.append('place', place)
 
   return query.toString()
 }

@@ -180,6 +180,33 @@ class Source(Base, TimestampMixin):
     #: labelling did rather than recomputing them.
     topic_scores: Mapped[dict | None] = mapped_column(JSONB)
 
+    #: Which places this source's content is about (task P2-23, §7.2).
+    #:
+    #: Normalised codes, most-evidenced first: ISO 3166-1 alpha-2 for a
+    #: country (``EU`` for the union), UN/LOCODE without its space for a city
+    #: — five characters whose first two are the country, so a city always
+    #: implies its country and the country is tagged beside it. Written by
+    #: ``python -m worker.places``; see `meridian_core.places` for the method.
+    #:
+    #: **NULL and `{}` are different**, exactly as for `topic_labels`: NULL is
+    #: "nothing has examined this", `{}` is "examined, and it names no place
+    #: often enough to be about one".
+    places: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+
+    #: When the place pass last examined this source. NULL is the queue; a
+    #: live chunk newer than this means the text changed under the tags.
+    places_examined_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: The basis the places were decided under — the method, the thresholds
+    #: and the vocabulary, including gazetteer terms. Opaque: compare, never
+    #: parse. A different basis puts the source back in the queue.
+    place_basis: Mapped[str | None] = mapped_column(Text)
+
+    #: What the places were decided from, and which signals decided each: the
+    #: name and gazetteer counts, cited place entities, the domain's country
+    #: and the language. Kept so a tag can be checked by reading it.
+    place_evidence: Mapped[dict | None] = mapped_column(JSONB)
+
     #: When §5.6's acronym harvest last read this document (task P5-02).
     #:
     #: NULL is the whole queue, exactly like ``chunks.novelty_checked_at``. A
@@ -256,6 +283,8 @@ class Source(Base, TimestampMixin):
         # a btree cannot answer it at all, and without this the topic filter is
         # a sequential scan over every source in the corpus.
         Index("ix_sources_topic_labels", "topic_labels", postgresql_using="gin"),
+        # The place filter is array overlap too (`P2-23`).
+        Index("ix_sources_places", "places", postgresql_using="gin"),
         Index(
             "ix_sources_harvest_pending",
             "source_id",

@@ -155,6 +155,13 @@ describe('helpers', () => {
     expect(missing).toEqual([])
   })
 
+  it('prints a place gap with its place first and the topic total (P2-23)', () => {
+    const line = evidenceLine({ place: 'JP', sources: 1, strong_sources: 0, topic_sources: 40 })
+    expect(line[0]).toBe('place JP')
+    expect(line).toContain('sources 1')
+    expect(line).toContain('in the topic 40')
+  })
+
   it('links a question to Find with the search already asked', () => {
     expect(findHref('a b&c')).toBe('/?q=a%20b%26c')
   })
@@ -163,6 +170,8 @@ describe('helpers', () => {
     expect(groupOf(gap())).toBe('coverage')
     expect(groupOf(gap({ source: 'question-set' }))).toBe('questions')
     expect(groupOf(gap({ source: 'search-yield' }))).toBe('search')
+    // Place coverage is coverage along another axis (P2-23), not "other".
+    expect(groupOf(gap({ source: 'place-coverage' }))).toBe('coverage')
   })
 })
 

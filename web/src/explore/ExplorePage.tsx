@@ -111,6 +111,8 @@ export function ExplorePage() {
   // would show the top 20 of an unfiltered ranking with most of them removed,
   // which looks like a topic with almost nothing in it (`P6-24`).
   const [topics, setTopics] = useState<string[]>([])
+  // Places narrow the same way topics do (`P2-23`), as codes.
+  const [places, setPlaces] = useState<string[]>([])
 
   const [views, setViews] = useState<readonly SavedViewRecord[]>([])
   const [saving, setSaving] = useState(false)
@@ -224,7 +226,7 @@ export function ExplorePage() {
     return () => controller.abort()
   }, [])
 
-  const run = useCallback((text: string, within: readonly string[] = []) => {
+  const run = useCallback((text: string, within: readonly string[] = [], where: readonly string[] = []) => {
     const trimmed = text.trim()
     if (!trimmed) return
 
@@ -237,7 +239,7 @@ export function ExplorePage() {
     setPicked(null)
     setError(null)
 
-    searchCorpus({ q: trimmed, topic: within }, { signal: controller.signal })
+    searchCorpus({ q: trimmed, topic: within, place: where }, { signal: controller.signal })
       .then((response) => {
         setResults(response)
         setPhase('done')
@@ -275,7 +277,7 @@ export function ExplorePage() {
     <SearchField
       value={query}
       onChange={setQuery}
-      onSubmit={(text) => run(text, topics)}
+      onSubmit={(text) => run(text, topics, places)}
       size={idle ? 'large' : 'regular'}
     />
   )
@@ -291,14 +293,37 @@ export function ExplorePage() {
         // Re-run immediately, but only when there is a query to re-run.
         // Changing the filter with an empty box is setting up a search, not
         // performing one.
-        if (asked) run(asked, next)
+        if (asked) run(asked, next, places)
       }}
       onClear={() => {
         setTopics([])
-        if (asked) run(asked, [])
+        if (asked) run(asked, [], places)
       }}
     />
   ) : null
+
+  const placeList = stats?.places ?? []
+  const placeFilter =
+    placeList.length > 0 ? (
+      <TopicFilter
+        label="Place"
+        every="every place"
+        topics={placeList.map((p) => p.code)}
+        names={Object.fromEntries(placeList.map((p) => [p.code, p.name]))}
+        active={places}
+        unexamined={(stats?.sources_without_places ?? 0) > 0}
+        caveat="Documents not yet examined for places are not included, and a document is tagged only when it names a place often enough to be about it."
+        onToggle={(code) => {
+          const next = places.includes(code) ? places.filter((p) => p !== code) : [...places, code]
+          setPlaces(next)
+          if (asked) run(asked, topics, next)
+        }}
+        onClear={() => {
+          setPlaces([])
+          if (asked) run(asked, topics, [])
+        }}
+      />
+    ) : null
 
   if (!idle) {
     const shown = new Set(results?.hits.map((hit) => hit.chunk_id) ?? [])
@@ -307,6 +332,7 @@ export function ExplorePage() {
         <div className="flex max-w-[912px] flex-col gap-3">
           {field}
           {topicFilter}
+          {placeFilter}
         </div>
 
         {/* Results and the neighbourhood side by side (`P6-33`); stacked,
@@ -380,6 +406,7 @@ export function ExplorePage() {
           <div className="flex w-full flex-col gap-3">
             {field}
             {topicFilter}
+            {placeFilter}
           </div>
         </div>
 

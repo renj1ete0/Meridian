@@ -1327,6 +1327,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       about a third of live passages (those of listing pages): read it before
       `--apply`. Untested on live: the news and citation-meta rules (the raw files
       were unreadable from the agent's account)
+- [x] `P2-23` **Which places a source is about** — `v0.132.0` (delegated agent).
+      Calibrated read-only: most tags right on a hand-read sample; the main error is
+      a publisher's own country on its listing pages (`B-59` removes most of those
+      from the corpus). Open: saved views look like they cannot save a topic filter
+      (the web sends `topic`, the server expects `topics`) — read from code, not
+      reproduced; comparison *cities* are not listed explicitly, so Gaps reports per
+      country; the MCP search tool does not take `places` yet
 - [ ] `P6-38` **Steering proposals that apply by default** — the operator's request
       (2026-09-24): the system proposes what to steer, and if the operator does not
       object within a window (default 12h, in the global policy row) it is applied,

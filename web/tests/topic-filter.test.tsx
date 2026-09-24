@@ -104,3 +104,51 @@ describe('§2 — colour carries no verdict', () => {
     expect(markup).not.toContain('accent-attention')
   })
 })
+
+describe('the same control over places (P2-23)', () => {
+  const PLACES = ['JP', 'SG']
+  const NAMES = { JP: 'First place', SG: 'Second place' }
+  const place = (active: string[], unexamined = false) =>
+    renderToStaticMarkup(
+      <TopicFilter
+        topics={PLACES}
+        names={NAMES}
+        active={active}
+        unexamined={unexamined}
+        label="Place"
+        every="every place"
+        caveat="Not yet examined for places."
+      />,
+    )
+
+  it('shows names rather than stored codes, and keeps the code in reach', () => {
+    const markup = place([])
+    const rendered = text(markup)
+
+    expect(rendered).toContain('First place')
+    expect(rendered).toContain('Second place')
+    expect(rendered).not.toContain('JP')
+    // The code is still there for a reader who needs it.
+    expect(markup).toContain('title="JP"')
+    expect(markup).toContain('aria-label="Narrow by place"')
+  })
+
+  it('says its own caveat, not the topic one', () => {
+    const rendered = text(place(['JP'], true))
+
+    expect(rendered).toContain('Not yet examined for places.')
+    expect(rendered).not.toContain('before topics were recorded')
+  })
+
+  it('offers its own way back', () => {
+    expect(text(place(['JP']))).toContain('every place')
+    expect(text(place(['JP']))).not.toContain('every topic')
+  })
+
+  it('falls back to the value when a name is missing', () => {
+    const markup = renderToStaticMarkup(
+      <TopicFilter topics={['KR']} names={{}} active={[]} label="Place" />,
+    )
+    expect(text(markup)).toContain('KR')
+  })
+})

@@ -22,6 +22,16 @@ export interface TopicFilterProps {
   unexamined?: boolean
   onToggle?: (topic: string) => void
   onClear?: () => void
+  /**
+   * The same control over another axis (`P2-23`): places are chips too, and a
+   * second component would drift from this one in exactly the caveat that
+   * matters. `names` shows a stored code as a name; the value toggled is
+   * still the code.
+   */
+  label?: string
+  every?: string
+  names?: Readonly<Record<string, string>>
+  caveat?: string
 }
 
 export function TopicFilter({
@@ -30,14 +40,22 @@ export function TopicFilter({
   unexamined = false,
   onToggle,
   onClear,
+  label = 'Topic',
+  every = 'every topic',
+  names,
+  caveat = 'Documents collected before topics were recorded are not included — narrowing here can hide material that is relevant.',
 }: TopicFilterProps) {
   if (topics.length === 0) return null
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Narrow by topic">
+      <div
+        className="flex flex-wrap items-center gap-1.5"
+        role="group"
+        aria-label={`Narrow by ${label.toLowerCase()}`}
+      >
         <span className="mr-2 font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
-          Topic
+          {label}
         </span>
         <button
           type="button"
@@ -45,7 +63,7 @@ export function TopicFilter({
           aria-pressed={active.length === 0}
           className={chip(active.length === 0)}
         >
-          every topic
+          {every}
         </button>
         {topics.map((topic) => (
           <button
@@ -54,8 +72,9 @@ export function TopicFilter({
             onClick={() => onToggle?.(topic)}
             aria-pressed={active.includes(topic)}
             className={chip(active.includes(topic))}
+            title={names?.[topic] ? topic : undefined}
           >
-            {topic}
+            {names?.[topic] ?? topic}
           </button>
         ))}
       </div>
@@ -64,8 +83,7 @@ export function TopicFilter({
         <p className="mt-2 font-mono text-[10.5px] leading-[1.5] text-text-muted">
           {/* Said once, and only while narrowing. On every render it would be
               noise; never, it would be a silent omission a reader cannot see. */}
-          Documents collected before topics were recorded are not included — narrowing here can
-          hide material that is relevant.
+          {caveat}
         </p>
       ) : null}
     </div>

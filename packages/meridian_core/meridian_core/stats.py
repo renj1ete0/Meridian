@@ -26,6 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Chunk, Edge, Entity, Source, TopicConfig
+from .places import Place, comparison_set
 
 
 @dataclasses.dataclass(frozen=True)
@@ -80,6 +81,14 @@ class CorpusStats:
     #: number on the landing page that will be felt first.
     sources_without_topics: int = 0
 
+    #: The comparison set's places, for a place filter to offer (`P2-23`).
+    #: From configuration — the government suffixes and the gazetteer's
+    #: jurisdictions — not from a scan, for the reason `topics` is.
+    places: list[Place] = dataclasses.field(default_factory=list)
+
+    #: Sources nothing has examined for places — `places IS NULL` (`P2-23`).
+    sources_without_places: int = 0
+
     @property
     def searchable_chunks(self) -> int:
         """Chunks a default search can return: everything not marked duplicate."""
@@ -124,6 +133,10 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
         topics=topics,
         sources_without_topics=await count(
             select(func.count()).select_from(Source).where(Source.topic_labels.is_(None))
+        ),
+        places=await comparison_set(sess),
+        sources_without_places=await count(
+            select(func.count()).select_from(Source).where(Source.places.is_(None))
         ),
         sources=await count(select(func.count()).select_from(Source)),
         # Live chunks only (`P1-32`). "How much is in here" means the text on the

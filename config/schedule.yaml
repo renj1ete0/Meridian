@@ -76,6 +76,17 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: places
+    module: worker.places
+    args: ["--apply"]
+    # `P2-23`: which places each source's content is about — country and city
+    # names, jurisdictional gazetteer terms, cited place entities, the
+    # publisher's domain. Reads words, not vectors, so it does not wait for
+    # `embed`. Re-examines what a re-crawl, a new place edge or a gazetteer
+    # change made stale; a pass with nothing stale is one query.
+    interval_seconds: 3600
+    enabled: true
+
   - name: sweep
     module: worker.sweep
     # NO `--apply`. Reports what could be reclaimed and deletes nothing: this is

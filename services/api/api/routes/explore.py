@@ -124,6 +124,14 @@ async def explore_search(
             "Sources crawled before topics were recorded carry none and are excluded."
         ),
     ] = None,
+    place: Annotated[
+        list[str] | None,
+        Query(
+            description="Repeat to allow several; a source about any of them is kept. Codes as "
+            "`sources.places` stores them: ISO 3166-1 alpha-2 for a country, UN/LOCODE without "
+            "its space for a city. Sources never examined for places are excluded.",
+        ),
+    ] = None,
     published_after: Annotated[dt.date | None, Query()] = None,
     published_before: Annotated[dt.date | None, Query()] = None,
     include_duplicates: Annotated[
@@ -162,6 +170,7 @@ async def explore_search(
         source_tiers=source_tier,
         languages=language,
         topics=topic,
+        places=place,
         published_after=published_after,
         published_before=published_before,
         include_duplicates=include_duplicates,
@@ -200,6 +209,7 @@ async def explore_map(
     sess: ReadSession,
     sample: Annotated[int, Query(ge=1, le=MAX_SAMPLE)] = DEFAULT_SAMPLE,
     topic: Annotated[list[str] | None, Query()] = None,
+    place: Annotated[list[str] | None, Query()] = None,
 ) -> CorpusMapRead:
     """The embedding space, projected to three dimensions (`P6-26`, `P6-29`).
 
@@ -207,7 +217,9 @@ async def explore_map(
     vectors is well under a second, and caching it would mean a map that lags
     the corpus it claims to show.
     """
-    return CorpusMapRead.model_validate(await corpus_map(sess, sample=sample, topics=topic))
+    return CorpusMapRead.model_validate(
+        await corpus_map(sess, sample=sample, topics=topic, places=place)
+    )
 
 
 @router.get("/sources/{source_id}", response_model=SourceRead)
@@ -584,6 +596,7 @@ async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
             language=source.language,
             topic_labels=source.topic_labels,
             passage_topics=passages.get(chunk.chunk_id),
+            places=source.places,
             page_unit=page_unit_for((source.extra or {}).get("media_type")),
             media_type=(source.extra or {}).get("media_type"),
             duplicate_of=chunk.duplicate_of,

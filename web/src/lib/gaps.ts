@@ -123,11 +123,13 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
   const pct = (v: unknown) => (typeof v === 'number' ? `${(v * 100).toFixed(v < 0.01 && v > 0 ? 1 : 0)}%` : '—')
   const out: string[] = []
   const has = (k: string) => Object.prototype.hasOwnProperty.call(evidence, k)
+  if (has('place')) out.push(`place ${evidence.place}`)
   if (has('sources')) out.push(`sources ${evidence.sources}`)
   if (has('strong_sources')) out.push(`gov/peer-reviewed ${evidence.strong_sources}`)
   if (has('passages')) out.push(`passages ${evidence.passages}`)
   if (has('passage_sources') && evidence.passage_sources)
     out.push(`in other documents ${evidence.passage_sources}`)
+  if (has('topic_sources')) out.push(`in the topic ${evidence.topic_sources}`)
   if (has('newest')) out.push(`newest ${evidence.newest ?? '—'}`)
   if (has('crawl_share')) out.push(`crawl share ${pct(evidence.crawl_share)}`)
   if (has('corpus_share')) out.push(`corpus share ${pct(evidence.corpus_share)}`)
@@ -143,7 +145,9 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
 export type GapGroup = 'coverage' | 'search' | 'questions' | 'other'
 
 export function groupOf(gap: Gap): GapGroup {
-  if (gap.source === 'topic-coverage' || gap.source === 'areas') return 'coverage'
+  // Place coverage is coverage by another axis (`P2-23`), so it sits beside it.
+  if (gap.source === 'topic-coverage' || gap.source === 'place-coverage' || gap.source === 'areas')
+    return 'coverage'
   if (gap.source === 'search-yield') return 'search'
   if (gap.source === 'question-set') return 'questions'
   return 'other'

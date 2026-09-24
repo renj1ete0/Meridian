@@ -68,6 +68,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.132.0] — 2026-09-24
+
+### Added
+
+- `P2-23`: sources record which places they are about — `sources.places`
+  (ISO 3166-1 alpha-2 for countries, UN/LOCODE for cities, a city always
+  with its country), derived mechanically by `python -m worker.places`
+  (hourly; report by default, `--apply` writes) from place names in the
+  text, cited place entities, and the publisher's domain as supporting
+  evidence only; reference lists and names-in-titles-of-other-things are not
+  counted; every tag records which signals decided it. A `place` filter in
+  search and the map, place counts in stats, and a `place-coverage` Gaps
+  source (topic × comparison place with too few sources) ranked below a
+  topic's own gaps. Migration `b3f1c7d2e8a4`
+
 ## [0.131.0] — 2026-09-24
 
 ### Added

@@ -58,6 +58,7 @@ import {
   CORPUS_MAP_FIELDS,
   CORPUS_STATS_FIELDS,
   DOC_KINDS,
+  PLACE_FIELDS,
   FIGURE_REF_FIELDS,
   MAP_POINT_FIELDS,
   NOTIFICATIONS_FIELDS,
@@ -101,6 +102,7 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['SearchHitRead', 'search.py', SEARCH_HIT_FIELDS],
     ['SearchResponse', 'search.py', SEARCH_RESPONSE_FIELDS],
     ['CorpusStatsRead', 'search.py', CORPUS_STATS_FIELDS],
+    ['PlaceRead', 'search.py', PLACE_FIELDS],
     ['MapPointRead', 'corpusmap.py', MAP_POINT_FIELDS],
     ['CorpusMapRead', 'corpusmap.py', CORPUS_MAP_FIELDS],
     ['SourceChunksRead', 'search.py', SOURCE_CHUNKS_FIELDS],
@@ -219,6 +221,16 @@ describe('the query string', () => {
     // "No tier filter" and "a filter matching no tiers" are different requests,
     // and a cleared filter control means the first.
     expect(searchQuery({ q: 'x', source_tier: [] })).not.toContain('source_tier')
+  })
+
+  it('repeats the place key the route reads, and omits it when empty (P2-23)', () => {
+    // The route's parameter is `place`, singular and repeated, like `topic`.
+    // A plural or joined key would arrive as nothing and filter nothing.
+    const query = searchQuery({ q: 'x', place: ['JP', 'KRSEL'] })
+    expect(query).toContain('place=JP')
+    expect(query).toContain('place=KRSEL')
+    expect(query).not.toContain('places')
+    expect(searchQuery({ q: 'x', place: [] })).toBe('q=x')
   })
 
   it('omits absent scalars rather than sending undefined', () => {

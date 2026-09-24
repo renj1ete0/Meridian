@@ -14,6 +14,9 @@ session to a list of :class:`Gap`, registered under a name. What exists today:
   finding also counts on-topic *passages* (`P2-24`), including those inside
   documents labelled with something else. Per *area* joins when `P6-30`'s
   areas land: register another source.
+- ``place-coverage`` — per topic, the places of the comparison set (§7.2)
+  with fewer than a few sources about them (`P2-23`). Unavailable until a
+  source has been examined for places.
 - ``search-yield`` — a topic whose search seeds keep producing nothing that
   survives the prefilter.
 - ``question-set`` — items of the held-out set that score low in the newest
@@ -389,6 +392,147 @@ async def _passage_counts(sess: AsyncSession) -> tuple[dict[str, int], dict[str,
         ).all()
     )
     return passages, elsewhere
+
+
+# ---------------------------------------------------------------------------
+# Place coverage
+# ---------------------------------------------------------------------------
+
+#: Fewer sources than this about a topic *and* a place is thin for that pair.
+#: Lower than :data:`THIN_SOURCES` because it is a cell of a table, not a row:
+#: a comparison needs a few sources per place, not ten.
+PLACE_THIN = 3
+
+
+def place_gaps(
+    topic: str,
+    place: str,
+    place_name: str,
+    *,
+    sources: int,
+    strong: int,
+    topic_sources: int,
+) -> list[Gap]:
+    """The finding for one topic in one place. Pure, so the threshold is testable.
+
+    Ranked below the topic's own coverage gaps on purpose: a topic with nothing
+    at all is the first thing to fix, and a table of empty cells under it would
+    bury that.
+    """
+    if sources >= PLACE_THIN:
+        return []
+    words = f"{topic_words(topic)} {place_name}"
+    evidence = {
+        "place": place,
+        "sources": sources,
+        "strong_sources": strong,
+        "topic_sources": topic_sources,
+    }
+    return [
+        Gap(
+            id=f"place-thin:{topic}:{place}",
+            source="place-coverage",
+            kind="place_thin",
+            subject=f"{topic} · {place_name}",
+            title=(
+                f"No {topic} sources about {place_name}"
+                if sources == 0
+                else f"{_plural(sources, 'source')} about {place_name}"
+            ),
+            reason=(
+                f"{_plural(sources, 'source')} labelled {topic} are about {place_name} "
+                f"({place}), of {topic_sources} labelled {topic} in all; fewer than "
+                f"{PLACE_THIN} leaves this place out of any comparison."
+            ),
+            severity=round(0.25 + 0.2 * (1 - sources / PLACE_THIN), 3),
+            evidence=evidence,
+            actions=(
+                Action("seed_query", "Seed a search", topic=topic, query=words),
+                Action("open_search", "Search it in Find", query=words),
+            ),
+        )
+    ]
+
+
+@register("place-coverage")
+async def place_coverage(sess: AsyncSession) -> list[Gap]:
+    """Per topic, the comparison set's places with few sources (`P2-23`, §7.2).
+
+    The comparison set is :func:`meridian_core.places.comparison_set` — the
+    places the configuration already names. Unavailable, rather than empty,
+    until some source has been examined for places: with nothing examined,
+    every cell would read as a gap and none of them would be one.
+    """
+    from .places import comparison_set
+
+    places = await comparison_set(sess)
+    if not places:
+        raise SourceUnavailable(
+            "no comparison set: no government domain pattern or gazetteer jurisdiction names a "
+            "place"
+        )
+    examined = await sess.scalar(
+        select(func.count()).select_from(Source).where(Source.places.is_not(None))
+    )
+    if not examined:
+        raise SourceUnavailable(
+            "no source has been examined for places yet — run python -m worker.places --apply"
+        )
+    rows = list(
+        await sess.execute(
+            select(TopicConfig.topic, TopicConfig.description)
+            .where(TopicConfig.status.in_(LIVE_STATUSES))
+            .order_by(TopicConfig.topic)
+        )
+    )
+    if not rows:
+        return []
+
+    label = func.unnest(Source.topic_labels).table_valued("value").render_derived("t")
+    place = func.unnest(Source.places).table_valued("value").render_derived("p")
+    codes = [p.code for p in places]
+    cells = {
+        (topic, code): (n, strong)
+        for topic, code, n, strong in await sess.execute(
+            select(
+                label.c.value,
+                place.c.value,
+                func.count(),
+                func.count().filter(Source.source_tier.in_(STRONG_TIERS)),
+            )
+            .select_from(Source)
+            .join(label, true())
+            .join(place, true())
+            .where(place.c.value.in_(codes))
+            .group_by(label.c.value, place.c.value)
+        )
+    }
+    per_topic = dict(
+        (
+            await sess.execute(
+                select(label.c.value, func.count())
+                .select_from(Source)
+                .join(label, true())
+                .group_by(label.c.value)
+            )
+        ).all()
+    )
+
+    out: list[Gap] = []
+    for topic, _description in rows:
+        for p in places:
+            n, strong = cells.get((topic, p.code), (0, 0))
+            out.extend(
+                place_gaps(
+                    topic,
+                    p.code,
+                    p.name,
+                    sources=n,
+                    strong=strong,
+                    topic_sources=int(per_topic.get(topic, 0)),
+                )
+            )
+    return out
 
 
 # ---------------------------------------------------------------------------

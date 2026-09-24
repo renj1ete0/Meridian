@@ -57,6 +57,10 @@ class SearchHitRead(BaseModel):
     #: A topic filter matches on either list, so a hit whose document is about
     #: something else shows here why it matched.
     passage_topics: list[str] | None = None
+    #: Which places the source is about (`P2-23`): ISO 3166-1 alpha-2 codes for
+    #: countries, UN/LOCODE without its space for cities. None means never
+    #: examined, `[]` examined and about no place it could name.
+    places: list[str] | None = None
 
     #: What `page_or_offset` counts, and what it was derived from. §5.3's rule
     #: is "page for paginated documents, offset otherwise", and before `P2-18`
@@ -132,6 +136,15 @@ class SearchResponse(BaseModel):
     vector_candidates: int
 
 
+class PlaceRead(BaseModel):
+    """A place as a filter offers it: the stored code and a name to show (`P2-23`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    name: str
+
+
 class CorpusStatsRead(BaseModel):
     """Mirrors ``meridian_core.stats.CorpusStats``, plus its derived count."""
 
@@ -163,6 +176,16 @@ class CorpusStatsRead(BaseModel):
     #: Sources nothing has examined for topics (`P6-24`). What lets a topic
     #: filter tell a reader that narrowing may be hiding unexamined material.
     sources_without_topics: int = 0
+
+    #: The comparison set's places, for a place filter to offer (`P2-23`) —
+    #: derived from configuration, not from a scan of the corpus, for the
+    #: reason `topics` is: a place with no sources yet filters to nothing,
+    #: which is the true answer.
+    places: list[PlaceRead] = Field(default_factory=list)
+
+    #: Sources nothing has examined for places (`P2-23`) — excluded by a place
+    #: filter, as unexamined sources are by a topic filter.
+    sources_without_places: int = 0
 
 
 class SourceChunksRead(BaseModel):

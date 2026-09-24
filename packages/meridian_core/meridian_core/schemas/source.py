@@ -88,6 +88,15 @@ class SourceRead(BaseModel):
     #: Each topic's similarity to the content under that basis: what the labels
     #: were decided from (`P2-21`).
     topic_scores: dict[str, float] | None = None
+    #: Which places the content is about, most-evidenced first (`P2-23`): ISO
+    #: 3166-1 alpha-2 for a country, UN/LOCODE without its space for a city.
+    #: NULL means never examined; `[]` examined and about no place it names.
+    places: list[str] | None = None
+    #: When the place pass last examined it, and under which basis (`P2-23`).
+    places_examined_at: dt.datetime | None = None
+    place_basis: str | None = None
+    #: What the places were decided from, and which signals decided each.
+    place_evidence: dict | None = None
     #: What screening concluded about this page (`P4-14`). Published rather than
     #: hidden: a reader looking at their own corpus should be able to see that a
     #: passage came from something quarantined, which is how a false positive

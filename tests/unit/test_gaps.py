@@ -177,7 +177,12 @@ async def test_find_gaps_reports_an_unavailable_source_and_keeps_the_rest():
 
 
 def test_the_built_sources_and_the_pending_ones_do_not_overlap():
-    assert set(gaps.SOURCES) == {"topic-coverage", "search-yield", "question-set"}
+    assert set(gaps.SOURCES) == {
+        "topic-coverage",
+        "place-coverage",
+        "search-yield",
+        "question-set",
+    }
     assert set(gaps.PENDING) == {"areas", "routes"}
 
 
@@ -242,3 +247,36 @@ def test_no_passages_elsewhere_says_nothing_about_them():
 def test_a_weak_topic_mentions_passages_elsewhere():
     weak = cover(sources=gaps.THIN_SOURCES, strong=0, passages=50, passage_sources=2)["weak"]
     assert "2 other documents" in weak.reason
+
+
+# -- place coverage (P2-23) ---------------------------------------------------
+
+
+def place(sources: int, strong: int = 0) -> list[gaps.Gap]:
+    return gaps.place_gaps("t", "JP", "a place", sources=sources, strong=strong, topic_sources=40)
+
+
+def test_a_place_with_enough_sources_for_the_topic_is_not_a_gap():
+    assert place(gaps.PLACE_THIN) == []
+    assert len(place(gaps.PLACE_THIN - 1)) == 1
+
+
+def test_an_empty_place_ranks_above_a_thin_one_and_below_an_empty_topic():
+    """A topic with nothing at all is the first thing to fix; a table of empty
+    cells under it must not bury that."""
+    empty, thin = place(0)[0], place(gaps.PLACE_THIN - 1)[0]
+    no_topic = cover(sources=0)["thin"]
+    assert no_topic.severity > empty.severity > thin.severity > 0
+
+
+def test_a_place_gap_names_its_place_and_offers_reading_and_seeding():
+    gap = place(1, strong=1)[0]
+    assert gap.id == "place-thin:t:JP"
+    assert gap.source == "place-coverage"
+    assert gap.evidence == {"place": "JP", "sources": 1, "strong_sources": 1, "topic_sources": 40}
+    kinds = {a.kind: a for a in gap.actions}
+    assert set(kinds) == {"seed_query", "open_search"}
+    assert kinds["seed_query"].topic == "t"
+    assert "a place" in kinds["seed_query"].query
+    # The seed passes the same validation a person's seed does.
+    GapSeed(topic="t", query=kinds["seed_query"].query, gap_id=gap.id)
