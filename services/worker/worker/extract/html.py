@@ -133,6 +133,7 @@ def extract_html(
         # A page can name its own language more reliably than a guess from a
         # paragraph of it, and the extractors often decline to say.
         language=document.language or _language_from_html(html_text),
+        english_alternate=english_alternate(html_text, url),
     )
 
 
@@ -441,6 +442,41 @@ def _citations(
 # --------------------------------------------------------------------------
 # Odds and ends
 # --------------------------------------------------------------------------
+
+
+_LINK_TAG = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+_ATTR = re.compile(r"""([a-zA-Z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
+
+
+def english_alternate(html_text: str, url: str) -> str | None:
+    """The page's declared English version, as an absolute URL, or None (`B-57`).
+
+    From `<link rel="alternate" hreflang="en…" href="…">` in the head — the
+    standard way a site says "this page, in another language". Any English
+    region counts (`en`, `en-GB`, `en-SG`); `x-default` does not, since it
+    names a fallback, not a language. A link to the page itself is not an
+    alternate. Only the head is read: an alternate declared in the body is a
+    link like any other.
+    """
+    head = html_text[
+        : html_text.lower().find("</head>") if "</head>" in html_text.lower() else 20000
+    ]
+    for tag in _LINK_TAG.findall(head):
+        attrs = {
+            m.group(1).lower(): next(g for g in m.groups()[1:] if g is not None)
+            for m in _ATTR.finditer(tag)
+        }
+        rel = attrs.get("rel", "").lower().split()
+        lang = attrs.get("hreflang", "").lower()
+        href = attrs.get("href", "").strip()
+        if "alternate" not in rel or not href or not (lang == "en" or lang.startswith("en-")):
+            continue
+        absolute = urljoin(url, href)
+        if absolute.split("#")[0].rstrip("/") == url.split("#")[0].rstrip("/"):
+            return None
+        if absolute.startswith(("http://", "https://")):
+            return absolute
+    return None
 
 
 def _language_from_html(html_text: str) -> str | None:

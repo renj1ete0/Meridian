@@ -180,6 +180,10 @@ UNMATCHED_SITEMAP_PRIORITY = -10
 
 #: How many of one page's citations become `doi` rows (`P1-14`, §6.1).
 #:
+#: Added to a declared English version's priority (`B-57`), so it is fetched
+#: ahead of the other links on the page that declared it.
+ENGLISH_ALTERNATE_BONUS = 10
+
 #: Added to a search result's tier priority (`B-51`). A result is an answer to a
 #: question somebody — or §7.4's seeding — asked about a topic; a frontier link
 #: is whatever a page carried. At the same tier the answer goes first.
@@ -1298,6 +1302,7 @@ class Worker:
             log.info("frontier not expanded: off-topic host", extra={"url": claim.url})
             return 0
 
+        alternate = await self._queue_english_alternate(sess, claim, document)
         verdict = await self._prefilter.keep(sess, document.links)
 
         # Identifiers first, and as `doi` tasks (`B-23`). A `doi.org` link
@@ -1357,9 +1362,38 @@ class Worker:
                 "dois": len(verdict.dois),
                 "dropped": verdict.dropped,
                 "held_by_host": dict(held),
+                "english_alternate": alternate,
             },
         )
-        return queued + len(verdict.dois)
+        return queued + len(verdict.dois) + alternate
+
+    async def _queue_english_alternate(
+        self, sess: AsyncSession, claim: Claim, document: ExtractedDocument
+    ) -> int:
+        """Queue a non-English page's declared English version first (`B-57`).
+
+        The operator's preference: an English version where one exists, the
+        original otherwise. So the original is kept as it is, and its English
+        version goes ahead of every other link the page carries; once both are
+        in the corpus `worker.docdupes` hides the original behind it.
+        """
+        url = document.english_alternate
+        language = (document.language or "").lower()
+        if not url or language.startswith("en") or await already_queued(sess, [url]):
+            return 0
+        tiers = await source_tier_map(sess)
+        decision = self._admit(url, tiers)
+        if not decision.queue:
+            return 0
+        await enqueue(
+            sess,
+            url,
+            topic=claim.topic,
+            seed_source="frontier",
+            priority=decision.applied_to(priority_with_urgency(url, tiers, HALF_LIFE_DAYS))
+            + ENGLISH_ALTERNATE_BONUS,
+        )
+        return 1
 
     def _admit(self, url: str, tiers: dict) -> Decision:
         """Whether one more link to ``url``'s host is worth queueing (`B-48`)."""
@@ -1919,6 +1953,10 @@ def _bibliography(
     }
     if document.citations:
         extra["citations"] = [{"kind": c.kind, "value": c.value} for c in document.citations]
+    if document.english_alternate:
+        # `B-57`: what `worker.docdupes` reads to hide this page behind its
+        # English version once that is in the corpus.
+        extra["english_alternate"] = document.english_alternate
     if extra:
         fields["extra"] = extra
     return fields

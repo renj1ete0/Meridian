@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.125.0] — 2026-09-24
+
+### Added
+
+- `B-57`: English where it exists, the original otherwise. A non-English page
+  that declares its English version (`<link rel="alternate" hreflang="en">`)
+  has that version queued ahead of its other links, and records it; once both
+  are in the corpus, `worker.docdupes` marks the original a `translation` copy
+  of the English page, so search shows the English one. A page with no English
+  version is kept as it is
+
 ## [0.124.5] — 2026-09-24
 
 ### Changed

@@ -21,7 +21,7 @@ from sqlalchemy import select, update
 
 from meridian_core.chunks import cited_source_ids
 from meridian_core.db import dispose_engines, session
-from meridian_core.docdupes import Pair, canonical, exact_pairs, near_pairs
+from meridian_core.docdupes import Pair, canonical, exact_pairs, near_pairs, translation_pairs
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.topiclabels import source_vectors
@@ -36,6 +36,7 @@ class DupeStats:
     examined: int = 0
     exact: int = 0
     near: int = 0
+    translation: int = 0
     cleared: int = 0
     protected: int = 0
     examples: list[tuple[str, str, str, float]] = dataclasses.field(default_factory=list)
@@ -46,9 +47,13 @@ async def run_pass(*, apply: bool, session_factory=session) -> DupeStats:
     async with session_factory() as sess:
         sources = (
             await sess.execute(
-                select(Source.source_id, Source.url, Source.title, Source.duplicate_of).where(
-                    Source.retention_tier != "junk"
-                )
+                select(
+                    Source.source_id,
+                    Source.url,
+                    Source.title,
+                    Source.duplicate_of,
+                    Source.extra,
+                ).where(Source.retention_tier != "junk")
             )
         ).all()
         ids = [s.source_id for s in sources]
@@ -68,13 +73,23 @@ async def run_pass(*, apply: bool, session_factory=session) -> DupeStats:
         protected = await cited_source_ids(sess)
 
         stats.examined = len(passages)
-        pairs: list[Pair] = exact_pairs(passages) + near_pairs(
-            {s.source_id: s.title for s in sources}, vectors, lengths
+        pairs: list[Pair] = (
+            exact_pairs(passages)
+            + near_pairs({s.source_id: s.title for s in sources}, vectors, lengths)
+            + translation_pairs(
+                {
+                    s.source_id: (s.extra or {})["english_alternate"]
+                    for s in sources
+                    if (s.extra or {}).get("english_alternate")
+                },
+                {s.source_id: (s.url, (s.extra or {}).get("final_url")) for s in sources},
+            )
         )
         stats.protected = len({p.later for p in pairs} & protected)
         verdicts = canonical(pairs, protected=protected)
         stats.exact = sum(1 for p in verdicts.values() if p.reason == "exact")
         stats.near = sum(1 for p in verdicts.values() if p.reason == "near")
+        stats.translation = sum(1 for p in verdicts.values() if p.reason == "translation")
         urls = {s.source_id: s.url for s in sources}
         for pair in list(verdicts.values())[:EXAMPLES]:
             stats.examples.append((urls[pair.later], urls[pair.earlier], pair.reason, pair.score))
@@ -126,7 +141,8 @@ def main() -> None:
     with bind_run_id(f"docdupes-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         stats = asyncio.run(go())
     print(
-        f"examined {stats.examined}; copies: exact {stats.exact}, near {stats.near}; "
+        f"examined {stats.examined}; copies: exact {stats.exact}, near {stats.near}, "
+        f"translations {stats.translation}; "
         f"cited and left alone {stats.protected}; marks cleared {stats.cleared}"
     )
     for later, earlier, reason, score in stats.examples:

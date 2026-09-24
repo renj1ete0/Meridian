@@ -102,6 +102,10 @@ class ExtractedDocument:
     excerpt: str | None = None
     #: This document's *own* identifier, from its metadata — not one it cites.
     doi: str | None = None
+    #: The page's own English version, when it declares one with
+    #: `<link rel="alternate" hreflang="en">` (`B-57`). The operator prefers
+    #: an English version where one exists and accepts the original otherwise.
+    english_alternate: str | None = None
     links: tuple[str, ...] = ()
     citations: tuple[Citation, ...] = ()
     #: Populated only by paginated formats. Empty means `page_or_offset` on this

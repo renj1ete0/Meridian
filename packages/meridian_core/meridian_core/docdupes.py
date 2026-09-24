@@ -138,6 +138,30 @@ def near_pairs(
     return out
 
 
+def translation_pairs(
+    alternates: Mapping[int, str], urls: Mapping[int, Iterable[str]]
+) -> list[Pair]:
+    """A non-English source whose declared English version is in the corpus (`B-57`).
+
+    ``alternates`` maps a source to the English URL it declares; ``urls`` maps
+    each source to the addresses it is known by (its URL and the one it was
+    finally served from). The English source is canonical whatever the ids —
+    the operator's preference is the English version where one exists — so
+    ``later``/``earlier`` here mean copy and canonical, not fetch order.
+    """
+    by_url: dict[str, int] = {}
+    for sid, addresses in urls.items():
+        for address in addresses:
+            if address:
+                by_url.setdefault(address.split("#")[0].rstrip("/"), sid)
+    out: list[Pair] = []
+    for sid, english in alternates.items():
+        target = by_url.get(english.split("#")[0].rstrip("/"))
+        if target is not None and target != sid:
+            out.append(Pair(sid, target, "translation", 1.0))
+    return out
+
+
 def canonical(pairs: Iterable[Pair], *, protected: set[int] = frozenset()) -> dict[int, Pair]:
     """One verdict per later source, pointing at the chain's root.
 
@@ -145,8 +169,10 @@ def canonical(pairs: Iterable[Pair], *, protected: set[int] = frozenset()) -> di
     marked, and a chain through one stops there: its copies point at it.
     """
 
+    order = {"exact": 0, "translation": 1, "near": 2}
+
     def rank(pair: Pair) -> tuple[int, int]:
-        return (0 if pair.reason == "exact" else 1, pair.earlier)
+        return (order.get(pair.reason, 3), pair.earlier)
 
     best: dict[int, Pair] = {}
     for pair in pairs:

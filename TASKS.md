@@ -1270,6 +1270,10 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-45` **Soft-404 pages crawled as content** — `v0.123.1`; title-segment and opening-text rules, junk at fetch, `worker.furniture` for stored ones — pages titled "Page not found"
       served with 200 and chunked. Detect at fetch (title/body shape) and demote
       what is stored
+- [x] `B-57` **English version preferred where one exists** — `v0.125.0`. The operator's
+      rule (2026-09-24): an English version if the site offers one, the original
+      language otherwise. Declared `hreflang="en"` alternates are fetched first and
+      the original becomes a `translation` copy via `worker.docdupes`
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns

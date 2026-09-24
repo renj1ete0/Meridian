@@ -2579,3 +2579,38 @@ async def test_an_impossible_yield_is_refused(session_for, run_topic, cleanup) -
     for results, queued in ((-1, 0), (1, 2), (0, -1)):
         with pytest.raises(ValueError):
             await record_search_yield(sess, task.task_id, results=results, queued=queued)
+
+
+async def test_a_non_english_pages_english_version_is_queued_first(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-57`: English where it exists, the original otherwise."""
+    from worker.main import ENGLISH_ALTERNATE_BONUS
+
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = (
+        f'<!doctype html><html lang="de"><head><title>Seite</title>'
+        f'<link rel="alternate" hreflang="en" href="/en/page"></head>'
+        f'<body><article><p>{ARTICLE}</p><a href="/other">x</a></article></body></html>'
+    ).encode()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    rows = dict(
+        (
+            await sess.execute(
+                select(QueueTask.url_or_query, QueueTask.priority).where(
+                    QueueTask.topic == run_topic, QueueTask.seed_source == "frontier"
+                )
+            )
+        ).all()
+    )
+    english, other = f"https://{run_domain}/en/page", f"https://{run_domain}/other"
+    assert rows[english] == rows[other] + ENGLISH_ALTERNATE_BONUS
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source.extra["english_alternate"] == english
