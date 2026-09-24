@@ -2654,3 +2654,120 @@ async def test_a_page_refetched_as_a_scan_retires_its_old_chunks(
         .where(Chunk.source_id == source.source_id, Chunk.superseded_at.is_(None))
     )
     assert live == 0
+
+
+# --------------------------------------------------------------------------
+# What kind of document it is (B-59)
+# --------------------------------------------------------------------------
+
+
+def a_feed(n: int = 20) -> bytes:
+    """New items, one record each: an identifier link, a title, a summary."""
+    records = "".join(
+        f'<dt><a href="/items/{i}">[{i}]</a> <a href="/items/{i}">item:{i:04d}</a></dt>'
+        f"<dd><div>Title: Findings on question {i}</div><p>{ARTICLE}</p></dd>"
+        for i in range(n)
+    )
+    return (
+        "<!doctype html><html lang='en'><head><title>New items</title></head>"
+        f"<body><main><h1>New items</h1><dl>{records}</dl></main></body></html>"
+    ).encode()
+
+
+async def test_a_listing_is_followed_and_not_chunked(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Its links are its value, and its text is other documents' summaries run together.
+
+    Through `_keep` to the committed row: the kind and the rule on the
+    source, no chunks under it, and its records' links in the queue.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = a_feed()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    stats = await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/a")
+    assert source.doc_kind == "listing"
+    assert source.extra["doc_kind"]["rule"] == "record_rows"
+    assert source.extra["doc_kind"]["links"]["record_groups"] >= 10
+    assert rows == [] and stats.chunks == 0
+    # Its text is still text: the page is not metadata-only, it is a hub.
+    assert source.text_available is True
+    queued = set(await queued_urls(sess, run_topic))
+    assert f"https://{run_domain}/items/3" in queued
+
+
+async def test_an_article_is_classified_and_chunked_as_before(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "government")
+    await enqueue(sess, run_domain, run_topic)
+    body = long_page()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/a")
+    assert source.doc_kind is not None and source.doc_kind != "listing"
+    assert source.extra["doc_kind"]["kind"] == source.doc_kind
+    assert len(rows) > 1
+
+
+async def test_a_page_with_no_text_still_gets_a_kind(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """NULL is the backfill's queue; a page the fetch path examined must not stay in it."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+
+    def shell(request: httpx.Request) -> httpx.Response:
+        return streamed(
+            200,
+            headers={"content-type": "text/html"},
+            chunks=[b"<html><body><nav>menu</nav></body></html>"],
+        )
+
+    worker, _ = build_worker(sess, shell, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source.doc_kind == "other"
+
+
+async def test_a_page_that_becomes_a_listing_retires_its_old_chunks(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Superseded, never deleted: something may have cited what the page used to say."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    pages = [long_page("real"), a_feed()]
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[pages[0]])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+    source, before = await chunks_of(sess, f"https://{run_domain}/a")
+    assert before and source.doc_kind != "listing"
+
+    pages.pop(0)
+    await enqueue(sess, run_domain, run_topic, path="/a", status="pending")
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    await sess.refresh(source)
+    _, live = await chunks_of(sess, f"https://{run_domain}/a")
+    _, every = await chunks_of(sess, f"https://{run_domain}/a", live_only=False)
+    assert source.doc_kind == "listing"
+    assert live == []
+    assert {c.chunk_id for c in before} <= {c.chunk_id for c in every}, "old chunks were deleted"

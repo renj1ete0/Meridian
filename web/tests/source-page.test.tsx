@@ -44,6 +44,7 @@ const SOURCE = {
   crawled_for: ['walkability'],
   duplicate_of: null,
   duplicate_reason: null,
+  doc_kind: null,
   topics_examined_at: '2026-09-02T00:00:00Z',
   topic_basis: 'v1:test',
   topic_scores: { walkability: 0.6 },

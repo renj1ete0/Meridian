@@ -1322,6 +1322,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       widen search but do not lift a topic out of "thin" in Gaps. Topic descriptions
       would help more than thresholds. Open: should graph filters and the question
       set's topic match read passage labels too (it would move the eval baseline)
+- [x] `B-59` **What kind of document a source is; listings as hubs** — `v0.131.0`
+      (delegated agent). The backfill's report on the live corpus would supersede
+      about a third of live passages (those of listing pages): read it before
+      `--apply`. Untested on live: the news and citation-meta rules (the raw files
+      were unreadable from the agent's account)
 - [ ] `P6-38` **Steering proposals that apply by default** — the operator's request
       (2026-09-24): the system proposes what to steer, and if the operator does not
       object within a window (default 12h, in the global policy row) it is applied,

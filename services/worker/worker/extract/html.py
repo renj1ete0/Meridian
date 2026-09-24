@@ -134,6 +134,8 @@ def extract_html(
         # paragraph of it, and the extractors often decline to say.
         language=document.language or _language_from_html(html_text),
         english_alternate=english_alternate(html_text, url),
+        og_type=og_type(html_text),
+        scholarly_meta=has_scholarly_meta(html_text),
     )
 
 
@@ -477,6 +479,55 @@ def english_alternate(html_text: str, url: str) -> str | None:
         if absolute.startswith(("http://", "https://")):
             return absolute
     return None
+
+
+#: Highwire-style tags a publisher writes for a scholarly work — the ones
+#: indexers read. Their presence says the page describes one work of
+#: scholarship; a reference list never produces them, because they are head
+#: metadata about the page itself.
+_SCHOLARLY_META = (
+    "citation_title",
+    "citation_journal_title",
+    "citation_conference_title",
+    "citation_doi",
+    "citation_pdf_url",
+)
+
+
+def _head(html_text: str) -> str:
+    lower = html_text.lower()
+    end = lower.find("</head>")
+    return html_text[: end if end != -1 else 20000]
+
+
+def _meta_tags(html_text: str) -> list[dict[str, str]]:
+    tags = []
+    for tag in re.finditer(r"<meta\b[^>]*>", _head(html_text), re.IGNORECASE):
+        tags.append(
+            {
+                m.group(1).lower(): next(g for g in m.groups()[1:] if g is not None)
+                for m in _ATTR.finditer(tag.group(0))
+            }
+        )
+    return tags
+
+
+def og_type(html_text: str) -> str | None:
+    """The page's declared `og:type` (`article`, `website`, …), lower-cased (`B-59`)."""
+    for attrs in _meta_tags(html_text):
+        if (attrs.get("property") or attrs.get("name") or "").lower() == "og:type":
+            value = (attrs.get("content") or "").strip().lower()
+            return value or None
+    return None
+
+
+def has_scholarly_meta(html_text: str) -> bool:
+    """Whether the head carries `citation_*` tags describing one work (`B-59`)."""
+    return any(
+        (attrs.get("name") or attrs.get("property") or "").lower() in _SCHOLARLY_META
+        and (attrs.get("content") or "").strip()
+        for attrs in _meta_tags(html_text)
+    )
 
 
 def _language_from_html(html_text: str) -> str | None:

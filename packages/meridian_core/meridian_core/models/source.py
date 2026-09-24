@@ -49,6 +49,14 @@ RETENTION_TIER = constrained("primary", "background", "junk", name="retention_ti
 
 OCR_TIER = constrained("none", "cheap", "quality", name="ocr_tier")
 
+# What a document *is* (task B-59), beside `source_tier`'s who published it.
+# Assigned mechanically at fetch from the document's own structure, never by a
+# model. `listing` is a page whose value is its links — an index, a feed of new
+# items, a search result page — and is followed but not chunked.
+DOC_KIND = constrained(
+    "paper", "report", "news", "legal", "profile", "listing", "other", name="doc_kind"
+)
+
 
 class Source(Base, TimestampMixin):
     __tablename__ = "sources"
@@ -198,6 +206,16 @@ class Source(Base, TimestampMixin):
     )
 
     extra: Mapped[dict | None] = mapped_column(JSONB)
+
+    #: What kind of document this is (task B-59): a paper, a report, a news
+    #: article, legal text, an organisation's own page, a listing, or other.
+    #:
+    #: **NULL means nothing has classified it** — the backfill's queue — and is
+    #: not `other`, which means the rules looked and none applied. The rule
+    #: that decided, and the link measurements behind a listing verdict, are in
+    #: ``extra["doc_kind"]`` so a verdict can be audited without re-deriving it.
+    #: Overwritten on every fetch: it describes the page as it is now.
+    doc_kind: Mapped[str | None] = mapped_column(DOC_KIND, index=True)
 
     #: The earlier source this one is a copy of (`B-44`) — the same document
     #: under another URL, or its PDF and its HTML page. Document-level, where

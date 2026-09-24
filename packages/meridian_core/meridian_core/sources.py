@@ -83,6 +83,7 @@ async def upsert_source(
     extractor: str | None = None,
     text_available: bool | None = None,
     crawled_for: Sequence[str] | None = None,
+    doc_kind: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> tuple[Source, bool]:
     """Create or update the source row for ``url``. Flushes; does not commit.
@@ -164,6 +165,10 @@ async def upsert_source(
         # redesign — and leaving it True would leave the corpus claiming text it
         # cannot produce.
         row.text_available = text_available
+    if doc_kind is not None:
+        # Overwrites (`B-59`): the kind is read off the page as it is now, and
+        # a site that turned an article into an index has changed what it is.
+        row.doc_kind = doc_kind
 
     row.accessed_at = accessed_at or _now()
 

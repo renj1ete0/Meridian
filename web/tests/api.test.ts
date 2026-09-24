@@ -57,6 +57,7 @@ import {
   TOPIC_ROW_FIELDS,
   CORPUS_MAP_FIELDS,
   CORPUS_STATS_FIELDS,
+  DOC_KINDS,
   FIGURE_REF_FIELDS,
   MAP_POINT_FIELDS,
   NOTIFICATIONS_FIELDS,
@@ -163,6 +164,24 @@ describe('the crawl-health states match the server (P6-25)', () => {
 
     expect(declared.length).toBeGreaterThan(1)
     expect(Object.keys(STATE_LABELS).sort()).toEqual(declared.sort())
+  })
+})
+
+describe('the document kinds match the database (B-59)', () => {
+  it('lists exactly the values the CHECK constraint allows', () => {
+    // Read from the model, where `constrained()` also generates the CHECK. A
+    // kind added there and not here would type as impossible in the client
+    // while the API served it.
+    const model = readFileSync(
+      join(REPO, 'packages/meridian_core/meridian_core/models/source.py'),
+      'utf8',
+    )
+    const declaration = /DOC_KIND = constrained\(([\s\S]*?)name="doc_kind"/.exec(model)
+    expect(declaration, 'DOC_KIND is no longer declared the way this test reads it').toBeTruthy()
+    const inDatabase = [...declaration![1]!.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
+
+    expect(inDatabase.length).toBeGreaterThan(1)
+    expect([...DOC_KINDS].sort()).toEqual(inDatabase.sort())
   })
 })
 

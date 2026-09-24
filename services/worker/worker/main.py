@@ -103,6 +103,7 @@ from . import rawstore
 from .cleancut import clean_cut
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
+from .extract.dockind import Evidence, classify, evidence_from, record_doc_kind
 from .extract.document import extract_document
 from .extract.document import supports as supports_document
 from .extract.errorpage import error_page_reason
@@ -1245,7 +1246,20 @@ class Worker:
                 # In the same transaction as the source row. A source whose
                 # checksum says one thing and whose chunks were cut from another
                 # is a corpus that cites text it does not hold.
-                chunks_written = await self._chunk(sess, source, document, changed=changed)
+                # `B-59`: what the document is, decided in `_chunk` from the text
+                # it would be chunked from. A listing is followed, not chunked.
+                chunks_written = await self._chunk(
+                    sess,
+                    source,
+                    document,
+                    changed=changed,
+                    evidence=evidence_from(
+                        result.final_url or claim.url,
+                        document,
+                        media_type=result.media_type,
+                        tier=tier,
+                    ),
+                )
                 if changed:
                     # `P4-12`: a domain earns its seeding allowance on *novel*
                     # documents, so this is counted here rather than per fetch.
@@ -1489,6 +1503,7 @@ class Worker:
         document: ExtractedDocument | None,
         *,
         changed: bool,
+        evidence: Evidence | None = None,
     ) -> int:
         """Cut the extracted text into chunks and make them the source's set.
 
@@ -1502,8 +1517,13 @@ class Worker:
         text not chunked now is text that needs the page fetched again.
         """
         if document is None or not document.has_text:
+            if evidence is not None:
+                record_doc_kind(source, classify(evidence))
             return 0
         if not changed and await chunk_count(sess, source.source_id):
+            # The kind is left alone too (`B-59`): it was read off these same
+            # bytes, or, for a source stored before kinds, `worker.dockind`
+            # reads it from these chunks.
             log.debug(
                 "content unchanged; chunks left alone",
                 extra={"url": source.url, "source_id": source.source_id},
@@ -1522,6 +1542,36 @@ class Worker:
             cut = await clean_cut(sess, source.source_id, host, pages=document.pages)
         else:
             cut = await clean_cut(sess, source.source_id, host, text=document.text)
+
+        # `B-59`: classified from what would be chunked — the text with the
+        # site's furniture left out — so a footer of links cannot make an
+        # article look like an index, and so the fetch path reads the same
+        # text `worker.dockind` reads back from stored chunks.
+        if evidence is not None:
+            verdict = classify(
+                dataclasses.replace(evidence, text="\n".join(c.text for c in cut.chunks))
+            )
+            record_doc_kind(source, verdict)
+            if verdict.kind == "listing":
+                # A listing's value is its links, which `_expand_frontier`
+                # follows. Its text is other documents' titles and summaries
+                # run together, and as chunks it would be searched, embedded,
+                # labelled and synthesised as if it said something. Not chunked
+                # at all, rather than chunked and filtered: every downstream
+                # pass reads chunks, so this is the one place the exclusion
+                # cannot be missed by a pass that forgot a filter. What an
+                # earlier fetch cut is superseded, never deleted.
+                _, retired = await replace_chunks(sess, source.source_id, [])
+                log.info(
+                    "listing: links followed, text not chunked",
+                    extra={
+                        "url": source.url,
+                        "source_id": source.source_id,
+                        "rule": verdict.rule,
+                        "retired": retired,
+                    },
+                )
+                return 0
         written, deleted = await replace_chunks(sess, source.source_id, as_writes(cut.chunks))
 
         # In the same transaction as the chunks and the source row (`P1-10`). A

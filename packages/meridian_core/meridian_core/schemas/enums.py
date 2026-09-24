@@ -45,7 +45,7 @@ from meridian_core.models.runs import (
     RUN_STAGE,
     RUN_STATUS,
 )
-from meridian_core.models.source import OCR_TIER, RETENTION_TIER, SOURCE_TIER
+from meridian_core.models.source import DOC_KIND, OCR_TIER, RETENTION_TIER, SOURCE_TIER
 
 # queue.py
 TaskStatus = Literal[*TASK_STATUS.enums]
@@ -57,6 +57,7 @@ FetchOutcome = Literal[*FETCH_OUTCOME.enums]
 SourceTier = Literal[*SOURCE_TIER.enums]
 RetentionTier = Literal[*RETENTION_TIER.enums]
 OcrTier = Literal[*OCR_TIER.enums]
+DocKind = Literal[*DOC_KIND.enums]
 
 # graph.py
 NodeType = Literal[*NODE_TYPE.enums]

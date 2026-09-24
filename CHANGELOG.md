@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.131.0] — 2026-09-24
+
+### Added
+
+- `B-59`: sources say what kind of document they are — `sources.doc_kind`:
+  paper, report, news, legal, profile, listing or other, classified
+  mechanically at fetch with the deciding rule recorded — and **listing pages
+  are followed, not chunked**: their links still grow the frontier, but no
+  passage of theirs is embedded, searched, labelled or synthesised. Link
+  density counts a link by its visible text, not its URL.
+  `python -m worker.dockind` classifies stored sources (report by default;
+  `--apply` supersedes listings' chunks, never a cited source's; nothing is
+  deleted). Migration `9c34c91de722`
+
 ## [0.130.0] — 2026-09-24
 
 ### Added

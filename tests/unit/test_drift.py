@@ -30,6 +30,7 @@ ENUM_PAIRS = [
     ("SourceTier", models.source.SOURCE_TIER),
     ("RetentionTier", models.source.RETENTION_TIER),
     ("OcrTier", models.source.OCR_TIER),
+    ("DocKind", models.source.DOC_KIND),
     ("NodeType", models.graph.NODE_TYPE),
     ("Stance", models.graph.STANCE),
     ("Certainty", models.graph.CERTAINTY),

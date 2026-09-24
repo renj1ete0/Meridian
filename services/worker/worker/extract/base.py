@@ -106,6 +106,11 @@ class ExtractedDocument:
     #: `<link rel="alternate" hreflang="en">` (`B-57`). The operator prefers
     #: an English version where one exists and accepts the original otherwise.
     english_alternate: str | None = None
+    #: The page's declared `og:type`, lower-cased (`B-59`), and whether its
+    #: head carries scholarly `citation_*` metadata. Evidence for what kind of
+    #: document this is; neither is ever guessed from the text.
+    og_type: str | None = None
+    scholarly_meta: bool = False
     links: tuple[str, ...] = ()
     citations: tuple[Citation, ...] = ()
     #: Populated only by paginated formats. Empty means `page_or_offset` on this

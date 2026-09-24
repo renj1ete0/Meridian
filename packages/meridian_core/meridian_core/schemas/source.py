@@ -9,7 +9,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase
-from .enums import OcrTier, RetentionTier, SourceTier, TrustState
+from .enums import DocKind, OcrTier, RetentionTier, SourceTier, TrustState
 
 
 class SourceCreate(CreateBase):
@@ -77,6 +77,10 @@ class SourceRead(BaseModel):
     #: The earlier source this one copies, and the rule that said so (`B-44`).
     duplicate_of: int | None = None
     duplicate_reason: str | None = None
+    #: What kind of document this is (`B-59`). NULL means nothing has
+    #: classified it yet; `extra["doc_kind"]` names the rule that decided. A
+    #: `listing` is followed for its links and holds no chunks.
+    doc_kind: DocKind | None = None
     #: When the content labeller last examined it, and under which basis — a
     #: fingerprint that changes when the topics or the method do (`P2-21`).
     topics_examined_at: dt.datetime | None = None

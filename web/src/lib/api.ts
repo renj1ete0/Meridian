@@ -58,6 +58,10 @@ export type RetentionTier = 'primary' | 'background' | 'junk'
 /** `OCR_TIER` in `models/source.py`. */
 export type OcrTier = 'none' | 'cheap' | 'quality'
 
+/** `DOC_KIND` in `models/source.py` (`B-59`): what a document is. */
+export const DOC_KINDS = ['paper', 'report', 'news', 'legal', 'profile', 'listing', 'other'] as const
+export type DocKind = (typeof DOC_KINDS)[number]
+
 /** Which retrieval arms ran. Lexical-only is a legitimate, reported mode. */
 export type PageUnit = 'page' | 'offset'
 
@@ -276,6 +280,11 @@ export interface Source {
   /** The earlier source this one copies (`B-44`); hidden from search and the map. */
   duplicate_of: number | null
   duplicate_reason: string | null
+  /**
+   * What kind of document this is (`B-59`). Null means nothing has classified
+   * it yet; a `listing` is followed for its links and holds no passages.
+   */
+  doc_kind: DocKind | null
   /** When the content labeller last examined it, and under which basis (`P2-21`). */
   topics_examined_at: string | null
   topic_basis: string | null
@@ -320,6 +329,7 @@ export const SOURCE_FIELDS = [
   'crawled_for',
   'duplicate_of',
   'duplicate_reason',
+  'doc_kind',
   'topics_examined_at',
   'topic_basis',
   'topic_scores',
