@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from mcp.server.auth.settings import AuthSettings
@@ -34,7 +35,7 @@ from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
-from .routes import admin, explore, graph
+from .routes import admin, explore, gaps, graph
 
 log = get_logger(__name__)
 
@@ -210,6 +211,10 @@ def create_app() -> FastAPI:
     # instance is not exposed. Mounting conditionally instead would make the
     # symptom of a misconfiguration a 404, which reads as "not built yet".
     app.include_router(admin.router)
+    # Gaps (`P6-36`): the list reads on `/api/explore`, the actions write on
+    # `/api/admin` — one module, two routers, the prefix still the role boundary.
+    app.include_router(gaps.explore_router)
+    app.include_router(gaps.admin_router)
 
     # §11.1's agent-initiated direction (`P3-01`). Mounted on the same app on
     # purpose: it is the same corpus, the same read-only role and the same
@@ -264,9 +269,13 @@ def create_app() -> FastAPI:
                 if location
                 else error.get("msg", "invalid")
             )
+        # A `field_validator` that raises puts the exception object itself in
+        # `ctx`, which JSON cannot encode — the refusal became a 500 (found by
+        # `P6-36`'s seed validator). Encoded with exceptions as their message.
+        errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
         return JSONResponse(
             status_code=422,
-            content={"detail": "; ".join(parts) or "invalid request", "errors": exc.errors()},
+            content={"detail": "; ".join(parts) or "invalid request", "errors": errors},
         )
 
     @app.get("/health", tags=["ops"])

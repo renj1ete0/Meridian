@@ -68,6 +68,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.127.0] — 2026-09-24
+
+### Added
+
+- `P6-36`: **Gaps** — one ranked list of what the corpus cannot yet answer,
+  each with its reason and a one-click, reversible action. `GET
+  /api/explore/gaps` (read-only role) gathers pluggable sources: topic
+  coverage (thin, weak on government/peer-reviewed evidence, stale), search
+  yield per topic, and low question-set items (operator grades above
+  heuristic proposals); areas and routes report "pending" until `P6-30` and
+  `P6-32` land, so an empty list is never read as "no gaps". Actions: `POST
+  /api/admin/gaps/seed` (a search query, logged to the steering audit as a
+  `seed`) and `/gaps/boost` (a time-limited topic boost); an action from a
+  held-out question is refused. A `/gaps` screen and nav item; Find accepts
+  `/?q=`. A validator error that raised is now a 422, not a 500
+
 ## [0.126.0] — 2026-09-24
 
 ### Added

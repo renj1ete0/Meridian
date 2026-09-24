@@ -216,6 +216,15 @@ export function ExplorePage() {
       })
   }, [])
 
+  // `/?q=…` opens with that search run (`P6-36`): Gaps' "Search it in Find"
+  // links here, and a search that can be linked is one that can be shared.
+  useEffect(() => {
+    const linked = new URLSearchParams(window.location.search).get('q')?.trim()
+    if (!linked) return
+    setQuery(linked)
+    run(linked)
+  }, [run])
+
   function clear() {
     inFlight.current?.abort()
     setQuery('')

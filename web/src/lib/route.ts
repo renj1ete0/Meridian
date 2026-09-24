@@ -20,6 +20,7 @@ export type Route =
   | { name: 'node'; entityId: number }
   | { name: 'admin' }
   | { name: 'map' }
+  | { name: 'gaps' }
 
 const SOURCE = /^\/sources\/(\d+)\/?$/
 
@@ -32,6 +33,8 @@ const ADMIN = /^\/admin(\/|$)/
 
 const MAP = /^\/map\/?$/
 
+const GAPS = /^\/gaps\/?$/
+
 export function parseRoute(pathname: string): Route {
   const match = SOURCE.exec(pathname)
   if (match) return { name: 'source', sourceId: Number(match[1]) }
@@ -39,6 +42,7 @@ export function parseRoute(pathname: string): Route {
   if (node) return { name: 'node', entityId: Number(node[1]) }
   if (ADMIN.test(pathname)) return { name: 'admin' }
   if (MAP.test(pathname)) return { name: 'map' }
+  if (GAPS.test(pathname)) return { name: 'gaps' }
   return { name: 'explore' }
 }
 

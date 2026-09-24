@@ -49,6 +49,7 @@ import { Mark, WORDMARK } from './Mark'
 export const NAV = [
   { path: '/', label: 'Explore', name: 'explore' },
   { path: '/map', label: 'Map', name: 'map' },
+  { path: '/gaps', label: 'Gaps', name: 'gaps' },
   { path: '/admin', label: 'Admin', name: 'admin' },
 ] as const
 
@@ -159,7 +160,7 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
   return (
     <header
       data-surface={translucent ? 'translucent' : 'opaque'}
-      className={`sticky top-0 z-40 flex h-[54px] shrink-0 items-center gap-5 border-b border-line px-[18px] ${
+      className={`sticky top-0 z-40 flex h-[54px] shrink-0 items-center gap-3 border-b border-line px-3 sm:gap-5 sm:px-[18px] ${
         translucent ? 'bg-surface/90 backdrop-blur-[10px]' : 'bg-surface'
       }`}
     >
@@ -173,7 +174,7 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
             the compact mark and a 15px wordmark read as one signature, and a
             rule between them would sit beside the divider that follows. */}
         <Mark size={22} />
-        <span className="font-sans text-[15px] font-medium leading-none tracking-[-0.004em]">{WORDMARK}</span>
+        <span className="hidden font-sans text-[15px] font-medium sm:inline leading-none tracking-[-0.004em]">{WORDMARK}</span>
       </a>
 
       <span aria-hidden="true" className="h-[22px] w-px shrink-0 bg-line" />
@@ -185,7 +186,7 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
             href={path}
             onClick={onInternalClick(path)}
             aria-current={section === name ? 'page' : undefined}
-            className={`px-3 py-1.5 font-sans text-[12.5px] leading-[1.35] ${
+            className={`px-2 py-1.5 sm:px-3 font-sans text-[12.5px] leading-[1.35] ${
               section === name ? 'bg-surface-raised text-text' : 'text-text-faint hover:text-text-muted'
             }`}
           >

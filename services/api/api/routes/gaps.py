@@ -1,0 +1,102 @@
+"""Gaps (task P6-36): the ranked list on Explore, the actions on Admin.
+
+The list is a read, so it lives under `/api/explore` on the read-only role; the
+two actions change what the crawl does, so they live under `/api/admin`, behind
+the admin gate, on the writable role. Both actions go through existing
+machinery — the queue and :mod:`meridian_core.steering` — and each writes a
+`steering_log` row, so "why is the crawl doing this" has an answer (§10.1).
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+
+from fastapi import APIRouter, HTTPException
+
+from meridian_core import gaps
+from meridian_core.logging import get_logger
+from meridian_core.schemas.gaps import (
+    GapActionResult,
+    GapBoost,
+    GapRead,
+    GapSeed,
+    GapSourceRead,
+    GapsRead,
+)
+
+from ..deps import AdminAllowed, ReadSession, WriteSession
+
+log = get_logger(__name__)
+
+explore_router = APIRouter(prefix="/api/explore", tags=["explore"])
+admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
+@explore_router.get("/gaps", response_model=GapsRead)
+async def list_gaps(sess: ReadSession) -> GapsRead:
+    """Every gap the registered sources find, most severe first."""
+    found, statuses = await gaps.find_gaps(sess)
+    return GapsRead(
+        gaps=[GapRead.model_validate(g) for g in found],
+        sources=[GapSourceRead.model_validate(s) for s in statuses],
+        computed_at=_now(),
+    )
+
+
+def _refuse(exc: Exception) -> HTTPException:
+    if isinstance(exc, LookupError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, ValueError) and "already queued" in str(exc):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+@admin_router.post("/gaps/seed", response_model=GapActionResult, status_code=201)
+async def seed_from_gap(body: GapSeed, _: AdminAllowed, sess: WriteSession) -> GapActionResult:
+    try:
+        task = await gaps.seed_query(
+            sess, topic=body.topic, query=body.query, gap_id=body.gap_id, now=_now()
+        )
+    except (LookupError, ValueError) as exc:
+        await sess.rollback()
+        raise _refuse(exc) from exc
+    await sess.commit()
+    log.info("gap seeded", extra={"gap": body.gap_id, "topic": body.topic, "task_id": task.task_id})
+    return GapActionResult(
+        kind="seed_query",
+        topic=body.topic,
+        task_id=task.task_id,
+        detail=f"queued as a search seed · task {task.task_id}",
+        undo="remove it in Admin › Seeds while it is still pending",
+    )
+
+
+@admin_router.post("/gaps/boost", response_model=GapActionResult)
+async def boost_from_gap(body: GapBoost, _: AdminAllowed, sess: WriteSession) -> GapActionResult:
+    from meridian_core import steering
+
+    try:
+        expires = await gaps.boost_topic(
+            sess,
+            topic=body.topic,
+            factor=body.factor,
+            days=body.days,
+            gap_id=body.gap_id,
+            now=_now(),
+        )
+    except (LookupError, ValueError, steering.InfeasibleWeights) as exc:
+        await sess.rollback()
+        raise _refuse(exc) from exc
+    await sess.commit()
+    log.info("gap boosted", extra={"gap": body.gap_id, "topic": body.topic})
+    return GapActionResult(
+        kind="boost_topic",
+        topic=body.topic,
+        expires_at=expires,
+        detail=f"boost ×{body.factor:g} until {expires:%Y-%m-%d %H:%M} UTC",
+        undo="expires by itself; clear it sooner in Admin › Topics",
+    )

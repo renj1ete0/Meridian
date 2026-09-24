@@ -1331,7 +1331,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `P2-22` **Run the question set** — `v0.126.0`, `scripts/run_question_set.py` (built by a delegated agent). **First live run not yet made**: it needs the live database's read-only role and the embedder, which the agent was not permitted to reach — run `eval/questions.yaml`, record graded
       scores per run in `eval/runs/`, compare runs; an agent's grades are a
       proposal, the operator's are the score
-- [ ] `P6-36` **Gaps** — a ranked list from thin/weak areas, failed routes and low
+- [x] `P6-36` **Gaps** — `v0.127.0` (delegated agent). There was no mock; it follows the pre-cut Coverage board's gap panel and was screenshotted against a test database only, so **look at it on the live corpus before calling it done**. Areas and routes are pending sources — a ranked list from thin/weak areas, failed routes and low
       question-set scores, each with its reason and an action
 - [-] Topic × topic matrix and a coverage grid — **cut** (2026-09-23): the grid
       would be near-empty on nine attribute values and its axes are arbitrary; the

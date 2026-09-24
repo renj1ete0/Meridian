@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { AdminPage } from './admin/AdminPage'
 import { ExplorePage } from './explore/ExplorePage'
+import { GapsPage } from './explore/GapsPage'
 import { MapPage } from './explore/MapPage'
 import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
@@ -16,7 +17,9 @@ import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
  * would say the bar does not know where they are.
  */
 export function sectionOf(route: Route): Section {
-  return route.name === 'admin' || route.name === 'map' ? route.name : 'explore'
+  return route.name === 'admin' || route.name === 'map' || route.name === 'gaps'
+    ? route.name
+    : 'explore'
 }
 
 /**
@@ -85,6 +88,7 @@ export function App() {
           {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
           {route.name === 'admin' ? <AdminPage /> : null}
           {route.name === 'map' ? <MapPage /> : null}
+          {route.name === 'gaps' ? <GapsPage /> : null}
           {route.name === 'explore' ? <ExplorePage /> : null}
         </main>
       </div>
