@@ -31,6 +31,8 @@ import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX } from '../src/lib/api'
 import {
   AREA_BUILD_FIELDS,
   AREA_FIELDS,
+  AREA_STEERING_FIELDS,
+  MAP_STEER_FIELDS,
   AREA_LINK_FIELDS,
   AREAS_LEVEL_FIELDS,
   BRIDGE_CLAIM_FIELDS,
@@ -150,6 +152,8 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['AreaLinkRead', 'areas.py', AREA_LINK_FIELDS],
     ['BridgeRead', 'areas.py', BRIDGE_FIELDS],
     ['BridgeClaimRead', 'areas.py', BRIDGE_CLAIM_FIELDS],
+    ['AreaSteeringRead', 'areas.py', AREA_STEERING_FIELDS],
+    ['MapSteerRead', 'areas.py', MAP_STEER_FIELDS],
   ] as const
 
   it('parses real field names out of the schemas', () => {

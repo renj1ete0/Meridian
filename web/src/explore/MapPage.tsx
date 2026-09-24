@@ -13,6 +13,7 @@ import {
 } from '../lib/corpusmap'
 import { hrefForSource, navigate } from '../lib/route'
 import { AreasScreen, type MapActions } from './map/AreasScreen'
+import { mapActions } from './map/Steer'
 import { coloursOf, positionsOf, visibilityOf } from './map/geometry'
 import { SwatchChip, topicLabel } from './map/HoverCard'
 import { readPalette, type CanvasPalette } from './map/palette'
@@ -38,6 +39,9 @@ type Load =
 
 type Mode = 'areas' | 'points'
 
+/** Right-click steering (P6-35); a test may pass none. */
+const STEERING = mapActions()
+
 /** `?view=points` opens the passage cloud; anything else is the areas. */
 export function modeFromSearch(search: string): Mode {
   return new URLSearchParams(search).get('view') === 'points' ? 'points' : 'areas'
@@ -48,7 +52,7 @@ export function modeFromSearch(search: string): Mode {
  * passage cloud (`P6-26`, `P6-29`) as a toggle inside it rather than a screen
  * of its own — the operator's "fewer screens, each useful".
  */
-export function MapPage({ actions }: { actions?: MapActions } = {}) {
+export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
   const [mode, setMode] = useState<Mode>(() => modeFromSearch(window.location.search))
 
   useEffect(() => {

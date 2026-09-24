@@ -840,7 +840,28 @@ function ContextMenu({
     }
   }, [onClose])
 
-  const style = { left: Math.max(8, menu.x), top: Math.max(8, menu.y) }
+  // Kept inside the canvas: flipped left or up from the cursor when it would
+  // overflow, re-measured whenever the menu's content changes size.
+  const [style, setStyle] = useState({ left: Math.max(8, menu.x), top: Math.max(8, menu.y) })
+  useLayoutEffect(() => {
+    const element = ref.current
+    const frame = element?.parentElement
+    if (!element || !frame) return
+    const place = () => {
+      const w = element.offsetWidth
+      const h = element.offsetHeight
+      const maxX = frame.clientWidth - w - 8
+      const maxY = frame.clientHeight - h - 8
+      const left = menu.x > maxX ? Math.max(8, menu.x - w) : Math.max(8, menu.x)
+      const top = menu.y > maxY ? Math.max(8, Math.min(maxY, menu.y - h)) : Math.max(8, menu.y)
+      setStyle((s) => (s.left === left && s.top === top ? s : { left, top }))
+    }
+    place()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(place)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [menu.x, menu.y])
 
   if (menu.kind === 'empty') {
     const content = actions?.emptySpace?.({ x: menu.x, y: menu.y }, level.areas, onClose)

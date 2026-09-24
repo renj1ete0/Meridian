@@ -390,3 +390,13 @@ describe('auditLine for seeds (B-55)', () => {
     )
   })
 })
+
+describe('auditLine for watches (P6-35)', () => {
+  it('says what is being watched', async () => {
+    const { auditLine } = await import('../src/admin/SteeringRail')
+    const base = { log_id: 1, changed_at: '2026-09-25T00:00:00Z', actor: 'user', topic: 'walkability', reason: null }
+    expect(auditLine({ ...base, field: 'watch', old_value: null, new_value: 'an area' } as never)).toBe(
+      'walkability watching: an area',
+    )
+  })
+})

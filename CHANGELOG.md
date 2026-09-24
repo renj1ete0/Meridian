@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.137.0] — 2026-09-25
+
+### Added
+
+- `P6-35`: **steering from the map** — right-click an area for more, less,
+  make a topic, or watch; right-click empty space to suggest a term, queued
+  as a search. `GET /api/explore/areas/{id}/steering` says what each action
+  would change before it runs; `POST /api/admin/map/areas/{id}/steer` and
+  `/map/suggest` act through the existing machinery (a ×1.5 or ×0.5 topic
+  boost for 14 days plus a seed from the area's terms; the add-topic route; a
+  saved view), all in the steering audit — seeds as `seed`, watches as
+  `watch`, each with its own line in the Admin rail. "Less" is refused in
+  words when no configured topic holds at least half the area
+
 ## [0.136.0] — 2026-09-25
 
 ### Added

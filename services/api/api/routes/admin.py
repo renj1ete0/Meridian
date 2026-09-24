@@ -31,7 +31,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
-from meridian_core import annotations, steering
+from meridian_core import annotations, mapsteer, steering
+from meridian_core.areaview import AreaNotFound
 from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
@@ -85,6 +86,7 @@ from meridian_core.schemas.annotations import (
     AnnotationEdit,
     AnnotationRead,
 )
+from meridian_core.schemas.areas import MapSteerCreate, MapSteerRead, MapSuggestCreate
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
@@ -1341,3 +1343,54 @@ async def decide_terms(
         extra={"decision": body.decision, "count": len(found)},
     )
     return GazetteerBulkRead(rows=rows)
+
+
+# ---------------------------------------------------------------------------
+# Steering from the map (task P6-35)
+# ---------------------------------------------------------------------------
+#
+# Right-click on the map writes through the steering that already exists — a
+# topic boost with an expiry, a search on the queue, a saved view — so each
+# steer is reversible where those are and lands in `steering_log`. What it
+# refuses, it refuses in words: "less" of an area about no topic has nothing
+# to turn down.
+
+
+def _steer_refused(exc: Exception) -> HTTPException:
+    if isinstance(exc, AreaNotFound):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, mapsteer.AlreadyDone):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/map/areas/{area_id}/steer", response_model=MapSteerRead)
+async def steer_area(
+    area_id: int, body: MapSteerCreate, _: AdminAllowed, sess: WriteSession
+) -> MapSteerRead:
+    """More, less or watch one area of the map."""
+    try:
+        result = await mapsteer.steer_area(sess, area_id, body.action, actor=ACTOR, now=_now())
+    except (AreaNotFound, ValueError, steering.InfeasibleWeights) as exc:
+        await sess.rollback()
+        raise _steer_refused(exc) from exc
+    await sess.commit()
+    log.info("map steer", extra={"area_id": area_id, "action": body.action})
+    return MapSteerRead.model_validate(result)
+
+
+@router.post("/map/suggest", response_model=MapSteerRead, status_code=201)
+async def suggest_search(
+    body: MapSuggestCreate, _: AdminAllowed, sess: WriteSession
+) -> MapSteerRead:
+    """Queue something new to search for, from empty space on the map."""
+    try:
+        result = await mapsteer.suggest_seed(
+            sess, body.text, topic=body.topic, actor=ACTOR, now=_now()
+        )
+    except ValueError as exc:
+        await sess.rollback()
+        raise _steer_refused(exc) from exc
+    await sess.commit()
+    log.info("map suggestion", extra={"seed_task_ids": result.seed_task_ids})
+    return MapSteerRead.model_validate(result)

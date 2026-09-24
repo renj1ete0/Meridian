@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AreaBuildRead(BaseModel):
@@ -163,3 +163,59 @@ class BridgeRead(BaseModel):
     similar: list[BridgePairRead]
     shared_terms: list[str]
     similarity: float
+
+
+# ---------------------------------------------------------------------------
+# Steering from the map (task P6-35)
+
+
+class AreaTopicShare(BaseModel):
+    #: A source's primary topic, or None for passages about none of them.
+    topic: str | None
+    passages: int
+
+
+class AreaSteeringRead(BaseModel):
+    """What steering this area would move, before anybody moves it.
+
+    ``topic`` is the topic that holds at least ``dominant_share`` of the
+    area's passages, or None: an area about no topic has no weight to turn.
+    """
+
+    area_id: int
+    topic: str | None
+    dominant_share: float
+    topics: list[AreaTopicShare]
+    more_factor: float
+    less_factor: float
+    boost_days: int
+    search: str
+
+
+class MapSteerCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["more", "less", "watch"]
+
+
+class MapSuggestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=400)
+    topic: str | None = None
+
+
+class MapSteerRead(BaseModel):
+    """What a steer did, where to undo it, and the rows it wrote."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    action: str
+    area_id: int | None
+    topic: str | None
+    boost_factor: float | None
+    boost_expires_at: dt.datetime | None
+    seed_task_ids: list[int]
+    view_id: int | None
+    message: str
+    undo: str

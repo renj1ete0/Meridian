@@ -460,3 +460,94 @@ export function levelCaption(level: AreasLevel): string {
   }
   return `${level.parent.name} · level ${level.level} of ${level.levels} · ${count} ${count === 1 ? noun.replace(/s$/, '') : noun}`
 }
+
+// --------------------------------------------------------------------------
+// Steering from the map (P6-35) — mirrors the steering schemas in areas.py
+
+export interface AreaTopicShare {
+  topic: string | null
+  passages: number
+}
+
+export interface AreaSteering {
+  area_id: number
+  /** The topic holding at least `dominant_share` of the area, or null: then nothing weights it. */
+  topic: string | null
+  dominant_share: number
+  topics: AreaTopicShare[]
+  more_factor: number
+  less_factor: number
+  boost_days: number
+  /** What "more" queues as a search. */
+  search: string
+}
+
+export interface MapSteerResult {
+  action: string
+  area_id: number | null
+  topic: string | null
+  boost_factor: number | null
+  boost_expires_at: string | null
+  seed_task_ids: number[]
+  view_id: number | null
+  message: string
+  undo: string
+}
+
+export type SteerAction = 'more' | 'less' | 'watch'
+
+export const AREA_STEERING_FIELDS = [
+  'area_id',
+  'topic',
+  'dominant_share',
+  'topics',
+  'more_factor',
+  'less_factor',
+  'boost_days',
+  'search',
+] as const
+export const MAP_STEER_FIELDS = [
+  'action',
+  'area_id',
+  'topic',
+  'boost_factor',
+  'boost_expires_at',
+  'seed_task_ids',
+  'view_id',
+  'message',
+  'undo',
+] as const
+export type AssertAreaSteering = Expect<Equal<keyof AreaSteering, (typeof AREA_STEERING_FIELDS)[number]>>
+export type AssertMapSteer = Expect<Equal<keyof MapSteerResult, (typeof MAP_STEER_FIELDS)[number]>>
+
+export function getAreaSteering(areaId: number, init?: RequestInit): Promise<AreaSteering> {
+  return getJson<AreaSteering>(`/api/explore/areas/${areaId}/steering`, init)
+}
+
+function postJson<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
+  return getJson<T>(path, {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    ...init,
+  })
+}
+
+export function steerArea(areaId: number, action: SteerAction, init?: RequestInit): Promise<MapSteerResult> {
+  return postJson<MapSteerResult>(`/api/admin/map/areas/${areaId}/steer`, { action }, init)
+}
+
+export function suggestSearch(text: string, topic: string | null, init?: RequestInit): Promise<MapSteerResult> {
+  return postJson<MapSteerResult>('/api/admin/map/suggest', { text, topic }, init)
+}
+
+/** A topic name from an area's terms: lower-case words joined by hyphens, as topics are named. */
+export function topicNameFrom(terms: readonly string[]): string {
+  return terms
+    .slice(0, 2)
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+}

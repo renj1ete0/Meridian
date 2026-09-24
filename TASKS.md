@@ -1374,7 +1374,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `P6-34` **The Map screen** — `v0.136.0` (delegated agent; screenshotted dark and light against the Areas boards, in `~/Documents/gh/meridian-calibration/p6-30/`). Route mode ships disabled pending wiring to `P6-32`, which is now on main — areas zoomable by level, size key, weak/stale
       outline, bridge panel, route mode, 3D toggle (`P6-29` moves inside it),
       "jump to an area or term"
-- [ ] `P6-35` **Steering from the map** — right-click an area or term: more, less,
+- [x] `P6-35` **Steering from the map** — `v0.137.0` (delegated agent). Open for the operator: is "watch" as a saved view enough (no notification)? Should "less" work on areas no topic holds (most of the old drift), which would need host or term demotion? — right-click an area or term: more, less,
       make a topic, watch; right-click empty space: suggest a term, queued as a
       search seed. Through the existing boost/topic/seed machinery, so it is
       reversible and in the steering audit

@@ -49,6 +49,9 @@ export function auditLine(entry: SteeringEntry): string {
       return next === null
         ? `${topic} boost expiry cleared`
         : `${topic} boost until ${next.slice(0, 10)}`
+    case 'watch':
+      // `P6-35`: a saved view of an area's terms, from the map.
+      return next === null ? `${topic} stopped watching: ${old ?? '—'}` : `${topic} watching: ${next}`
     case 'seed':
       // `B-55`: a seed is steering too — what the crawl is sent to look at.
       return next === null ? `${topic} seed withdrawn: ${old ?? '—'}` : `${topic} seed: ${next}`

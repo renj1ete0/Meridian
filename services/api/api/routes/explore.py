@@ -31,6 +31,7 @@ from meridian_core.bridgeview import bridge
 from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
 from meridian_core.crawlhealth import crawl_health
 from meridian_core.export import to_bibtex, to_markdown
+from meridian_core.mapsteer import area_steering
 from meridian_core.models import (
     AttributeDefinition,
     AttributeValue,
@@ -46,7 +47,13 @@ from meridian_core.models import (
 from meridian_core.passagetopics import passage_topics_for
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
-from meridian_core.schemas.areas import AreaDetailRead, AreaJumpRead, AreasRead, BridgeRead
+from meridian_core.schemas.areas import (
+    AreaDetailRead,
+    AreaJumpRead,
+    AreasRead,
+    AreaSteeringRead,
+    BridgeRead,
+)
 from meridian_core.schemas.corpusmap import CorpusMapRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
@@ -253,6 +260,17 @@ async def explore_area(area_id: int, sess: ReadSession) -> AreaDetailRead:
     """One area: its stats, where it sits, and its most typical passages."""
     try:
         return await area_detail(sess, area_id)
+    except AreaNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/areas/{area_id}/steering", response_model=AreaSteeringRead)
+async def explore_area_steering(area_id: int, sess: ReadSession) -> AreaSteeringRead:
+    """Which topic steering this area would move (`P6-35`), read before acting,
+    so the map's menu can say what "more" and "less" will do — or why "less"
+    cannot do anything for an area about no topic."""
+    try:
+        return await area_steering(sess, area_id)
     except AreaNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
