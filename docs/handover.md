@@ -1695,6 +1695,23 @@ Each batch needs two answers, `extract` then `tag`. **While it is enabled with
 nobody answering, the orchestrator service's own schedule defers every run**;
 disable it when the session ends.
 
+### A listing is measured from the extracted text, and a bare link list never gets there
+
+`B-59` decides whether a page is a listing from `document.text`, where
+trafilatura leaves links as markdown — not from the HTML. Two consequences.
+A plain `<ul>` of links with nothing else extracts to almost nothing (trafilatura
+reads it as navigation), so the page is metadata-only and never reaches the
+rule; test fixtures for listings need structure (`<dl>`, an `<article>`, a
+count beside each link) to survive extraction at all. And the fetch path
+classifies the text *after* `clean_cut` has left furniture out, because that is
+what `worker.dockind` reads back from stored chunks — classify the uncleaned
+text and a footer of links can turn an article into an index at fetch time
+and not in the backfill.
+
+The raw store under `.localdata/raw` is written by the container user and is
+not readable from the host account, so calibrating against the live corpus
+means reading chunk text through `psql`, not re-extracting raw files.
+
 ## 4. What is verified live, and what is only tested
 
 Tests are hermetic by design, so "the tests pass" and "it works against the real web"
