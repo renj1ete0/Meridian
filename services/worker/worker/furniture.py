@@ -40,6 +40,7 @@ from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import Source
 
+from .extract.errorpage import title_says_missing
 from .prefilter import is_site_furniture
 
 log = get_logger(__name__)
@@ -56,8 +57,14 @@ class FurnitureStats:
 
 
 def is_furniture_source(source: Source) -> bool:
+    """About the website itself: its furniture by URL (`B-42`), or a page whose
+    title says it is not there (`B-45`)."""
     final = (source.extra or {}).get("final_url")
-    return is_site_furniture(source.url) or bool(final and is_site_furniture(final))
+    return (
+        is_site_furniture(source.url)
+        or bool(final and is_site_furniture(final))
+        or title_says_missing(source.title)
+    )
 
 
 async def cited_source_ids(sess) -> set[int]:

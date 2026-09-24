@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.123.1] — 2026-09-24
+
+### Fixed
+
+- `B-45`: a page served with 200 that says it is not there ("Page not found",
+  "404", "Oops…", judged per title segment so "Rule 404" and "Harmless Error"
+  are left alone, or an unmistakable sentence in the opening text) is stored
+  as junk with nothing chunked and no links followed, and a page that turns
+  into one retires its old chunks. `worker.furniture` demotes stored ones
+
 ## [0.123.0] — 2026-09-24
 
 ### Added

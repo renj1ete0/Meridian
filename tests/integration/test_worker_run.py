@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 import httpx
 import pytest
 from http_doubles import RecordingTransport, streamed
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from meridian_core.hostscores import (
     DOWNRANKED_PRIORITY,
@@ -29,7 +29,7 @@ from meridian_core.hostscores import (
     HostPolicy,
     Score,
 )
-from meridian_core.models import FetchAttempt, FetchPolicy, Figure, QueueTask, Source
+from meridian_core.models import Chunk, FetchAttempt, FetchPolicy, Figure, QueueTask, Source
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier
 from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
@@ -2422,7 +2422,6 @@ async def test_a_search_result_outranks_a_frontier_link_of_the_same_tier(
     """`B-51`: an answer to a question goes before a link a page carried."""
     from meridian_core.policy import source_tier_map
     from meridian_core.tiering import priority_with_urgency
-
     from worker.main import HALF_LIFE_DAYS, SEARCH_RESULT_BONUS
 
     sess = await session_for("rw")
@@ -2489,3 +2488,68 @@ async def test_an_academic_domains_page_is_scholarly_only_with_its_own_doi(
 
     source = await get_source(sess, f"https://{run_domain}/a")
     assert source is not None and source.source_tier == expected
+
+
+# --------------------------------------------------------------------------
+# A page that says it is not there (`B-45`)
+# --------------------------------------------------------------------------
+
+
+def error_page(title: str = "Page not found | A Faculty") -> bytes:
+    menu = "".join(f'<li><a href="/menu-{i}">Menu item {i}</a></li>' for i in range(8))
+    return (
+        f'<!doctype html><html lang="en"><head><title>{title}</title></head>'
+        f"<body><nav><ul>{menu}</ul></nav><article><p>{ARTICLE}</p></article></body></html>"
+    ).encode()
+
+
+async def test_a_soft_404_is_stored_as_junk_with_nothing_chunked_or_followed(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = error_page()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    stats = await worker.run()
+
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert source is not None and source.retention_tier == "junk"
+    live = await sess.scalars(
+        select(Chunk).where(Chunk.source_id == source.source_id, Chunk.superseded_at.is_(None))
+    )
+    assert list(live) == []
+    assert stats.queued == 0 and await queued_urls(sess, run_topic) == []
+
+
+async def test_a_page_that_turns_into_a_soft_404_retires_its_old_chunks(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    pages = [long_page("real"), error_page()]
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[pages[0]])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert await sess.scalar(
+        select(func.count()).select_from(Chunk).where(Chunk.source_id == source.source_id)
+    )
+
+    pages.pop(0)
+    await enqueue(sess, run_domain, run_topic, path="/a", status="pending")
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    live = await sess.scalar(
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.source_id == source.source_id, Chunk.superseded_at.is_(None))
+    )
+    assert live == 0

@@ -104,6 +104,7 @@ from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
 from .extract.document import extract_document
 from .extract.document import supports as supports_document
+from .extract.errorpage import error_page_reason
 from .extract.injection import Screening, screen
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
@@ -1167,6 +1168,12 @@ class Worker:
             screening = self._screen(claim, result, document)
             if screening is not None and screening.suspicious:
                 self._stats.flagged += 1
+            # `B-45`: a page answering 200 that says it is not there. Stored as
+            # junk with no chunks and no links followed — its text is the
+            # site's template, and its links are the site's menu.
+            missing = (
+                error_page_reason(document.title, document.text) if document is not None else None
+            )
 
             async with self._session_factory() as sess:
                 # `P4-14`: fold this fetch into the domain's verdict before the
@@ -1190,7 +1197,7 @@ class Worker:
                     trust_state=page_state(
                         domain_trust, flagged=bool(screening and screening.suspicious)
                     ),
-                    retention_tier=stored.retention_tier,
+                    retention_tier="junk" if missing else stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,
                     crawled_for=self._crawled_for(claim),
@@ -1205,6 +1212,20 @@ class Worker:
                     await mark_scanned(sess, source)
                     await enqueue_ocr(sess, source.source_id)
                     self._stats.scanned += 1
+                if missing:
+                    log.info(
+                        "page says it is not there; stored as junk",
+                        extra={"url": claim.url, "reason": missing, "title": document.title},
+                    )
+                    # A page that was real and is now an error page: what it
+                    # said before is superseded, not left live under a title
+                    # that says there is nothing here.
+                    await replace_chunks(sess, source.source_id, [])
+                    await sess.commit()
+                    self._stats.stored += 1
+                    return Kept(
+                        stored=stored, changed=changed, document=document, chunks=0, queued=0
+                    )
                 # In the same transaction as the source row. A source whose
                 # checksum says one thing and whose chunks were cut from another
                 # is a corpus that cites text it does not hold.

@@ -102,3 +102,30 @@ async def test_the_domain_option_does_not_reach_other_sites(site, session_for) -
     host, made = site
     stats = await furniture.run_pass(apply=False, domain=f"other-{host}")
     assert stats.examined == 0
+
+
+async def test_a_stored_page_titled_as_missing_is_demoted_and_a_statute_is_not(
+    session_for,
+) -> None:
+    """`B-45`: the title decides, one segment at a time."""
+    host = f"e{uuid.uuid4().hex[:10]}.test"
+    sess = await session_for("rw")
+    missing, _ = await upsert_source(
+        sess, f"https://{host}/gone", checksum="sha256:m", title="Page not found – A Faculty"
+    )
+    statute, _ = await upsert_source(
+        sess, f"https://{host}/rule", checksum="sha256:s", title="Rule 9005. Harmless Error"
+    )
+    ids = {"missing": missing.source_id, "statute": statute.source_id}
+    await sess.commit()
+    await dispose_engines()
+    try:
+        await furniture.run_pass(apply=True, domain=host)
+        after = await tiers(session_for, ids)
+        assert after["missing"] == "junk"
+        assert after["statute"] != "junk"
+    finally:
+        sess = await session_for("rw")
+        await sess.execute(delete(Source).where(Source.url.like(f"https://{host}/%")))
+        await sess.commit()
+        await dispose_engines()

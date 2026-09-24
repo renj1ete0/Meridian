@@ -1220,7 +1220,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       novelty gate: a PDF and its HTML page, listing pages under query-string
       variants, `www.`/bare-host twins. Mark the later source as a duplicate of the
       earlier at document level so it is neither searched nor synthesised twice
-- [ ] `B-45` **Soft-404 pages crawled as content** — pages titled "Page not found"
+- [x] `B-45` **Soft-404 pages crawled as content** — `v0.123.1`; title-segment and opening-text rules, junk at fetch, `worker.furniture` for stored ones — pages titled "Page not found"
       served with 200 and chunked. Detect at fetch (title/body shape) and demote
       what is stored
 - [ ] `P6-30` **Areas: the corpus as nested clusters** — hierarchical clustering
