@@ -12,7 +12,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase
-from .enums import FetchOutcome, SeedSource, TaskStatus, TaskType
+from .enums import FetchOutcome, SeedMechanism, SeedSource, TaskStatus, TaskType
 
 
 class QueueTaskCreate(CreateBase):
@@ -35,6 +35,8 @@ class QueueTaskRead(BaseModel):
     priority: int
     topic: str | None
     seed_source: SeedSource
+    #: Which §7.4 diversity mechanism asked for this query (`P5-05`), if any.
+    seed_mechanism: SeedMechanism | None = None
     attempts: int
     # Operational state, surfaced so the Admin queue view can show why a task is
     # waiting — a backoff window and a held lease look identical otherwise.

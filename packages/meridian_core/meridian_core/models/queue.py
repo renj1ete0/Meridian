@@ -54,6 +54,21 @@ SEED_SOURCE = constrained(
     name="seed_source",
 )
 
+#: Which of §7.4's five diversity mechanisms wrote a `diversity` query (task
+#: `P5-05`). NULL for every other row, and for a diversity query that only
+#: widens a topic (a concept, a pair of concepts) rather than answering one of
+#: the five failure modes. Kept on the row, not in a log, because the question
+#: it exists for — "which mechanism's questions find anything" — joins it to
+#: `search_results` / `search_queued`, which are on the row too.
+SEED_MECHANISMS = (
+    "counter_seed",  # 1: counter-phrasings ("criticism of …")
+    "tier_imbalance",  # 2: a node evidenced by one tier, asked for the others
+    "naive_phrasing",  # 3: an outsider's words for a topic
+    "distant_walk",  # 4: a node far from where the crawl has been
+    "non_english",  # 5: a concept in another language's own words
+)
+SEED_MECHANISM = constrained(*SEED_MECHANISMS, name="seed_mechanism")
+
 
 class QueueTask(Base, TimestampMixin):
     __tablename__ = "queue"
@@ -76,6 +91,7 @@ class QueueTask(Base, TimestampMixin):
     seed_source: Mapped[str] = mapped_column(
         SEED_SOURCE, nullable=False, default="frontier", server_default="frontier"
     )
+    seed_mechanism: Mapped[str | None] = mapped_column(SEED_MECHANISM)
 
     attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")

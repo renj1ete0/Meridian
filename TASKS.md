@@ -1186,7 +1186,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       validation: measure whether an emitted seed closed its gap on the next run,
       and down-rank query shapes that never do. That is the re-run loop's job
       (see Resume here)
-- [ ] `P5-05` Diversity seeding — stance-imbalance counter-seeds first (spec §7.4)
+- [x] `P5-05` Diversity seeding — `v0.139.0` (delegated agent): mechanisms 2 (tier imbalance) and 4 (distant walks) from the graph, 1/3/5 covered by `B-51`/`B-52` at topic level; node-level stance imbalance is a hook waiting for per-source stance. Open: should it read `edges.stance` (filled by one model session) meanwhile; `!science` not checked against the live search instance
 - [x] `P5-06` Scheduler reads its timetable from the DB — no cron files,
       `v0.59.0`. `scheduled_jobs` plus `python -m worker.scheduler`, reusing the
       queue's `SKIP LOCKED` + lease so two schedulers cannot both run the same

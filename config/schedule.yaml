@@ -130,7 +130,8 @@ jobs:
     # phrasings, pairs of concepts, and news. Without it the crawl ran five
     # seed queries and then only followed links, which converges on the same
     # few sites. At most 6 per topic per run, and none for a topic with 24
-    # unanswered already.
+    # unanswered already. Since `P5-05` the same run also reads the graph:
+    # up to 6 tier counter-seeds and 2 distant walks (§7.4 mechanisms 2, 4).
     interval_seconds: 21600
     enabled: true
 

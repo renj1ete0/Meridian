@@ -11,7 +11,21 @@ then compete on their own tier. A topic that already has :data:`MAX_PENDING`
 unanswered queries gets none this run: a worker that is not keeping up with
 search should not come back to a backlog of hundreds.
 
-``--report`` prints what would be queued and writes nothing.
+Since `P5-05` the same pass also reads the graph (`meridian_core.diversity`):
+§7.4 mechanism 2, counter-seeds for nodes evidenced by one source tier, and
+mechanism 4, walks from nodes far from where the crawl has been. They share
+this pass's timetable, its no-repeat rule (one set of seen queries across
+both) and its backlog rule, and have per-run caps of their own, so the graph's
+share of the reserved budget stays fixed however large the graph grows. A
+sibling job was the alternative and was not taken: two passes writing
+`diversity` queries on two timetables could each repeat what the other queued
+in between.
+
+Every row records its mechanism in ``queue.seed_mechanism`` — NULL for the
+shapes that only widen a topic — so what each mechanism's questions found can
+be read off the queue with the yield columns beside it.
+
+``--report`` prints what would be queued and why, and writes nothing.
 """
 
 from __future__ import annotations
@@ -21,10 +35,12 @@ import asyncio
 import contextlib
 import dataclasses
 import time
+from collections import Counter
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core import diversity
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import GazetteerTerm, QueueTask, TopicConfig
@@ -120,6 +136,9 @@ class SeedRun:
     vague: list[str]
     #: Active topics left out because their queries are not being answered.
     backlogged: list[str]
+    #: Queries read off the graph (`P5-05`), after the topic ones.
+    graph: list[diversity.GraphQuery] = dataclasses.field(default_factory=list)
+    summary: diversity.GraphSummary | None = None
 
 
 async def run_once(
@@ -127,6 +146,7 @@ async def run_once(
 ) -> SeedRun:
     async with session_factory() as sess:
         inputs = await topic_inputs(sess)
+        active = [t.topic for t in inputs]
         vague = [t.topic for t in inputs if not specific_enough(t)]
         waiting = await pending_by_topic(sess)
         backlogged = [t.topic for t in inputs if waiting.get(t.topic, 0) >= MAX_PENDING]
@@ -134,14 +154,18 @@ async def run_once(
         already = list(
             await sess.scalars(select(QueueTask.url_or_query).where(QueueTask.task_type == "query"))
         )
-        queries = plan(
-            inputs,
-            already=already,
-            per_topic=per_topic,
-            seed=seed if seed is not None else int(time.time()),
+        seed = seed if seed is not None else int(time.time())
+        queries = plan(inputs, already=already, per_topic=per_topic, seed=seed)
+        # A node is filed under an active topic, then dropped if that topic is
+        # backlogged — never refiled under another, which would mislabel it.
+        nodes = await diversity.graph_inputs(sess, active=active)
+        graph = diversity.plan(
+            [n for n in nodes if n.topic not in backlogged],
+            already=[*already, *(q.text for q in queries)],
+            seed=seed,
         )
         if write:
-            for query in queries:
+            for query in [*queries, *graph]:
                 await enqueue(
                     sess,
                     query.text,
@@ -149,13 +173,23 @@ async def run_once(
                     seed_source="diversity",
                     task_type="query",
                     priority=QUERY_PRIORITY,
+                    seed_mechanism=query.mechanism,
                 )
             await sess.commit()
+    summary = diversity.summarise(nodes)
     log.info(
         "search seeds planned",
-        extra={"queries": len(queries), "written": write, "vague": vague, "backlogged": backlogged},
+        extra={
+            "queries": len(queries),
+            "graph_queries": len(graph),
+            "by_mechanism": dict(Counter(q.mechanism for q in [*queries, *graph] if q.mechanism)),
+            "written": write,
+            "vague": vague,
+            "backlogged": backlogged,
+            "graph": dataclasses.asdict(summary),
+        },
     )
-    return SeedRun(queries, vague, backlogged)
+    return SeedRun(queries, vague, backlogged, graph, summary)
 
 
 def main() -> None:
@@ -175,9 +209,24 @@ def main() -> None:
 
     with bind_run_id(f"seedsearch-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         run = asyncio.run(go())
+    verb = "queued" if args.once else "planned (report only)"
     for query in run.queries:
         print(f"  {query.topic:22} {query.kind:11} {query.text}")
-    print(f"{len(run.queries)} queries {'queued' if args.once else 'planned (report only)'}")
+    print(f"{len(run.queries)} topic queries {verb}")
+    for g in run.graph:
+        print(f"  {g.topic:22} {g.mechanism:15} {g.text}")
+        print(f"  {'':22} {'':15} <- {g.node}: {g.reason}")
+    if run.summary is not None:
+        s = run.summary
+        print(
+            f"{len(run.graph)} graph queries {verb}. Graph: {s.nodes} nodes, "
+            f"{s.eligible} usable ({s.no_topic} with no active topic), "
+            f"{s.enough_evidence} with >= {diversity.MIN_SOURCES} sources, "
+            f"{s.imbalanced} tier-imbalanced, {s.far} far from focus"
+        )
+    mechanisms = Counter(q.mechanism for q in [*run.queries, *run.graph] if q.mechanism)
+    if mechanisms:
+        print("by mechanism: " + ", ".join(f"{m} {n}" for m, n in sorted(mechanisms.items())))
     if run.vague:
         print(f"searched by name only (no description or vocabulary): {', '.join(run.vague)}")
     if run.backlogged:

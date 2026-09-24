@@ -35,6 +35,7 @@ from meridian_core.models.graph import (
 from meridian_core.models.mixins import TRUST_STATE
 from meridian_core.models.queue import (
     FETCH_OUTCOME,
+    SEED_MECHANISM,
     SEED_SOURCE,
     TASK_STATUS,
     TASK_TYPE,
@@ -53,6 +54,7 @@ from meridian_core.models.source import DOC_KIND, OCR_TIER, RETENTION_TIER, SOUR
 TaskStatus = Literal[*TASK_STATUS.enums]
 TaskType = Literal[*TASK_TYPE.enums]
 SeedSource = Literal[*SEED_SOURCE.enums]
+SeedMechanism = Literal[*SEED_MECHANISM.enums]
 FetchOutcome = Literal[*FETCH_OUTCOME.enums]
 
 # source.py

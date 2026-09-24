@@ -26,6 +26,7 @@ ENUM_PAIRS = [
     ("TaskStatus", models.queue.TASK_STATUS),
     ("TaskType", models.queue.TASK_TYPE),
     ("SeedSource", models.queue.SEED_SOURCE),
+    ("SeedMechanism", models.queue.SEED_MECHANISM),
     ("FetchOutcome", models.queue.FETCH_OUTCOME),
     ("SourceTier", models.source.SOURCE_TIER),
     ("RetentionTier", models.source.RETENTION_TIER),

@@ -340,8 +340,12 @@ async def enqueue(
     seed_source: str = "frontier",
     task_type: str = "url",
     priority: int = 0,
+    seed_mechanism: str | None = None,
 ) -> QueueTask:
     """Add one task to the queue. Flushes; does not commit.
+
+    ``seed_mechanism`` names which of §7.4's diversity mechanisms asked for a
+    ``diversity`` query (`P5-05`); the column's CHECK refuses anything else.
 
     Deliberately does no filtering. Whether a URL is worth fetching is a
     question about blocklists, what has already been seen and what the domain's
@@ -365,6 +369,7 @@ async def enqueue(
         seed_source=seed_source,
         task_type=task_type,
         priority=priority,
+        seed_mechanism=seed_mechanism,
     )
     sess.add(task)
     await sess.flush()

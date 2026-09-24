@@ -68,6 +68,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.139.0] — 2026-09-25
+
+### Added
+
+- `P5-05`: the rest of §7.4's diversity seeding, from the graph and without a
+  model. **Tier imbalance** (mechanism 2): a node backed by at least three
+  sources, 80% or more from one tier, gets queries phrased to reach the tiers
+  it has none of. **Distant walks** (mechanism 4): nodes with no edges or far
+  from the recent crawl's centroid seed queries, reproducibly by run seed.
+  Both run inside `worker.seedsearch`, sharing its no-repeat rule, backlog
+  rule and a per-run cap. Every generated query records its
+  `queue.seed_mechanism` (including B-51's counter-seeds, naive phrasing and
+  non-English shapes), so yield per mechanism is one query. Node-level stance
+  imbalance (mechanism 1) waits for per-source stance and is a clean hook
+  until then. Migration `d6faafb2e712`
+
 ## [0.138.1] — 2026-09-25
 
 ### Added

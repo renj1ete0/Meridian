@@ -42,6 +42,23 @@ EVIDENCE = ("evaluation", "study", "evidence", "outcomes")
 #: §7.4 mechanism 1: phrasings that find the other side.
 COUNTER = ("criticism of {}", "{} problems", "why {} failed")
 
+#: Which §7.4 mechanism each shape is an instance of (`P5-05`), written to
+#: `queue.seed_mechanism` so a query's yield can be read per mechanism. The
+#: counter-phrasings are mechanism 1 at *topic* level: they fire for every
+#: topic, not because a node's sources were seen to agree (that needs stance,
+#: which is a model's output and does not exist yet — see `diversity`).
+MECHANISM_BY_KIND = {
+    "counter": "counter_seed",
+    "description": "naive_phrasing",
+    "language": "non_english",
+    "language_news": "non_english",
+}
+
+#: Shapes that widen a topic without answering one of the five failure modes.
+#: Listed rather than implied, so a new shape has to be put in one set or the
+#: other (a test fails otherwise).
+WIDENING_KINDS = frozenset({"concept", "evidence", "news", "with_topic", "pair"})
+
 _SPACE = re.compile(r"\s+")
 
 
@@ -60,6 +77,11 @@ class Query:
     text: str
     #: Which shape produced it, for the report and for measuring what works.
     kind: str
+
+    @property
+    def mechanism(self) -> str | None:
+        """The §7.4 mechanism this query answers, or None for plain widening."""
+        return MECHANISM_BY_KIND.get(self.kind)
 
 
 def topic_words(topic: str) -> str:
