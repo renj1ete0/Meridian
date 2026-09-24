@@ -116,30 +116,36 @@ Wikipedia and Unpaywall lookups is still open (see TASKS, needs the operator).
 
 ## 1. Where the build actually is
 
-**`v0.110.0`. 2940 backend tests against a real Postgres, 335 frontend.**
+**`v0.129.0` at the end of 2026-09-24.** Test counts move by the hour; run
+`make test` rather than trusting a number here.
 
-Phase 0 is closed. Phase 1's fetch path is complete and running. Phase 2 is
-complete except its human checkpoint: the corpus is searchable over HTTP, through
-a UI, and through MCP. Phase 3's read surface is built and waits only on a
-Cloudflare account. **Phase 4 now reasons, against a fake model only.** The
-graph store, entity resolution, the write tools, the run state machine, the
-cycle, the model client and — since `P4-16` — the prompts, the parse and the
-mention-to-node step all exist. A cycle over a scripted answer writes entities,
-edges, tags and the mark, and since `P4-17` the orchestrator has its own image
-and runs §6.3's schedule as a service.
+**What the corpus pipeline now does, end to end, with no model.** Fetch →
+extract (a garbled PDF text layer goes to OCR, a soft-404 is junk) → clean
+(menus, banners, running heads, debris cut around, `B-43`) → chunk → embed the
+reader's view of the text (`B-49`) → novelty gate → topic labels from content
+(`P2-21`) → duplicates at document level (`B-44`). The crawl decides where to
+go next from that: per-host relevance learned from the labels (`B-48`), tiers
+that need document evidence before calling anything scholarly (`B-50`), fresh
+per-topic search queries every six hours including news and counter-evidence
+(`B-51`), non-English queries in each language's own words (`B-52`), and an
+English version fetched first where a page declares one (`B-57`).
 
-**No run has called a real model, and what is left is a key.** `B-32` found the
-last piece of code in the way: no deployment had ever had a budget row, and
-`P4-13` refuses to start a run without one, so every install's first act was to
-refuse. With that seeded, a run on the live stack pulls its batch and defers at
-`extract` saying which variable is unset — which is the whole chain working.
+**What reads it.** Find (hybrid search, with a neighbourhood panel beside the
+results, `P6-33`), the node workspace (`P6-01`–`P6-03`), routes between
+concepts with every hop labelled cited or similar (`P6-32`, API only until the
+Map's route mode), Gaps (`P6-36`), the held-out question-set runner (`P2-22`),
+and Admin. The Map (`P6-30`–`P6-35`) is being built.
 
-The single thing standing between here and phase 2's go/no-go is `P1-16`: the
-48-hour unattended run. It has not happened, and everything it would exercise
-now exists — a crawl that reads the attention vector, an embedder that keeps
-pace and reports when it does not, frontier gates that skip identifiers and
-site furniture, and a snapshot that captures what the run produced rather than
-a catalogue of it.
+**What is still thin.** The graph: a few hundred entities from the relay
+agent, one batch at a time. Synthesis at corpus scale needs an API key or a
+local model. The operator asked for the relay to be paced when it restarts,
+to stay inside the account's token limits. Phase 2's go/no-go (`P2-09`) needs
+the question set run against the live corpus. The operator's own questions
+are in, and 30 drafted items still await review.
+
+**The unattended run.** A 12-hour checkpoint of `P1-16` ran overnight
+2026-09-24/25 (see §0), and the re-steer and re-run loop builds on it. The
+full 48-hour sign-off is still open.
 
 ### The four processes
 
