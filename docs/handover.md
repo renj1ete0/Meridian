@@ -1712,6 +1712,22 @@ The raw store under `.localdata/raw` is written by the container user and is
 not readable from the host account, so calibrating against the live corpus
 means reading chunk text through `psql`, not re-extracting raw files.
 
+### One weight change logs a row for every active topic
+
+`steering.renormalise` records each weight it moves, and setting one topic's
+weight moves all the others. So anything keyed on "was this topic touched
+recently" in `steering_log` sees *every* active topic as touched after any
+weight change. `P6-38`'s proposal pass relies on exactly that — no proposal
+for a topic with a log row in the last 24 hours, whoever wrote it — and it is
+deliberately conservative: after one weight change anywhere, nothing is
+proposed for a day. If that proves too quiet, filter on `field` and the
+reason's prefix, not on actor alone, because an auto-applied proposal's
+renormalisation rows carry actor `proposal` on topics it never proposed for.
+
+Also from `P6-38`: the window a proposal waits (`steering_proposal_window_hours`
+in the global policy row) is not in Admin's fetch-policy `EDITABLE` set, so it
+is changed with SQL for now. Scheduled as `steerproposals`, hourly, enabled.
+
 ## 4. What is verified live, and what is only tested
 
 Tests are hermetic by design, so "the tests pass" and "it works against the real web"
