@@ -27,9 +27,12 @@ session to a list of :class:`Gap`, registered under a name. What exists today:
   run file. An operator grade counts; a heuristic proposal is shown as one and
   ranked below any real score.
 
-``routes`` (`P6-32`, "no cited route within N hops") and ``areas`` (`P6-30`)
-are listed as *pending* rather than silently absent, so an empty list is never
-mistaken for "no gaps of that kind".
+- ``routes`` — pairs of topics whose most-cited nodes no chain of stated
+  links joins within a few hops, using `P6-32`'s claims-only answer: joined
+  only by resemblance, or not at all. Bounded to a few pairs per read.
+
+``areas`` (`P6-30`) is listed as *pending* rather than silently absent, so an
+empty list is never mistaken for "no gaps of that kind".
 
 **The held-out rule shapes the question-set actions.** `eval/README.md` forbids
 using a question as a seed or a steering reason, so a low-scoring item offers
@@ -45,11 +48,13 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import false, func, select, true, union
+from sqlalchemy import false, func, select, text, true, union
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Chunk, ChunkTopics, QueueTask, Source, TopicConfig
+from .route import DEFAULT_ROUTE_DEPTH, Endpoint
+from .route import route as find_route
 from .searchseeds import topic_words
 
 #: Fewer on-topic sources than this is thin. A number to argue with, not a law:
@@ -112,7 +117,6 @@ SOURCES: dict[str, GapSource] = {}
 #: Sources the design names that are not built yet, and the task that builds them.
 PENDING: dict[str, str] = {
     "areas": "thin or weak areas arrive with P6-30",
-    "routes": "routes with no cited link arrive with P6-32",
 }
 
 
@@ -800,6 +804,207 @@ async def search_results(sess: AsyncSession) -> list[Gap]:
         if gap is not None:
             out.append(gap)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Routes — topics the graph does not connect by stated links (`P6-32`)
+# ---------------------------------------------------------------------------
+#
+# Which pairs are worth checking: each topic's most-cited node against every
+# other topic's. Most-cited means the most passages behind the edges touching
+# it — the node a reader of that topic is likeliest to start from — so a
+# missing link between two of those is a missing link between the topics,
+# not between two obscure names. One node per topic keeps the pair count at
+# topics², and `ROUTE_PAIRS` caps it, because each pair is a graph search and
+# this runs on every read of the list.
+
+#: Pairs searched per read, most-cited first.
+ROUTE_PAIRS = 10
+
+#: How far to look: the route search's own default.
+ROUTE_DEPTH = DEFAULT_ROUTE_DEPTH
+
+#: A route through resemblance only is a weaker finding than no route at all;
+#: both stay under a thin topic and an operator-graded question. A search cut
+#: short by its work bound says less, and is ranked down by this much.
+ROUTE_KINDS: dict[str, float] = {"route_none": 0.5, "route_similar_only": 0.4}
+ROUTE_TRUNCATED_PENALTY = 0.15
+
+#: Seed words are capped by `GapSeed.query` (200 characters).
+SEED_MAX = 200
+
+
+@dataclasses.dataclass(frozen=True)
+class Anchor:
+    topic: str
+    entity_id: int
+    name: str
+    support: int
+
+
+@dataclasses.dataclass(frozen=True)
+class RouteCheck:
+    """What the route search said about one pair: the claims-only answer and,
+    when that found nothing, the mixed one."""
+
+    cited: bool
+    found: bool
+    hops: int | None
+    similar_hops: int
+    truncated: bool
+    max_depth: int
+
+
+def route_pairs(anchors: list[Anchor], limit: int = ROUTE_PAIRS) -> list[tuple[Anchor, Anchor]]:
+    """Pairs of different topics' anchors, most-cited first, at most ``limit``.
+
+    One node heading two topics is not a pair: it connects them trivially.
+    Ordered by combined support, then by topic, so the capped set is the same
+    on every read.
+    """
+    ordered = sorted(anchors, key=lambda a: a.topic)
+    pairs = [
+        (a, b)
+        for i, a in enumerate(ordered)
+        for b in ordered[i + 1 :]
+        if a.entity_id != b.entity_id
+    ]
+    pairs.sort(key=lambda p: (-(p[0].support + p[1].support), p[0].topic, p[1].topic))
+    return pairs[:limit]
+
+
+def _seed_words(a: str, b: str) -> str:
+    words = " ".join(f"{a} {b}".split())
+    return words[:SEED_MAX].rsplit(" ", 1)[0] if len(words) > SEED_MAX else words
+
+
+def route_gap(a: Anchor, b: Anchor, check: RouteCheck) -> Gap | None:
+    """The finding for one pair, or None when a chain of claims joins them."""
+    if check.cited:
+        return None
+    kind = "route_similar_only" if check.found else "route_none"
+    within = f"within {_plural(check.max_depth, 'hop')}"
+    ends = f"“{a.name}” (most cited under {a.topic}) and “{b.name}” (most cited under {b.topic})"
+    if check.found:
+        title = f"“{a.name}” and “{b.name}” connect only by resemblance"
+        reason = (
+            f"No chain of stated links {within} joins {ends}. The shortest route takes "
+            f"{_plural(check.hops or 0, 'hop')}, {check.similar_hops} of them only because "
+            "two names read alike."
+        )
+    else:
+        title = f"No route between “{a.name}” and “{b.name}”"
+        reason = f"Neither stated links nor resemblance join {ends} {within}."
+    if check.truncated:
+        reason += " The search stopped at its work bound, so this is weaker than it looks."
+    severity = ROUTE_KINDS[kind] - (ROUTE_TRUNCATED_PENALTY if check.truncated else 0.0)
+    return Gap(
+        id=f"route:{a.topic}:{b.topic}",
+        source="routes",
+        kind=kind,
+        subject=f"{a.topic} · {b.topic}",
+        title=title,
+        reason=reason + " A search naming both ends may find the passage that links them.",
+        severity=round(severity, 3),
+        evidence={
+            "from_node": a.entity_id,
+            "to_node": b.entity_id,
+            "max_depth": check.max_depth,
+            "hops": check.hops,
+            "similar_hops": check.similar_hops if check.found else None,
+        },
+        actions=(
+            Action(
+                "seed_query",
+                "Seed a search naming both",
+                topic=a.topic,
+                query=_seed_words(a.name, b.name),
+            ),
+        ),
+    )
+
+
+async def topic_anchors(sess: AsyncSession, topics: list[str]) -> list[Anchor]:
+    """Each topic's most-cited live node (not merged away, not a reader's note).
+
+    A reader's note linking to a node is not the corpus citing it, so edges
+    to or from a note do not count toward support either.
+    """
+    if not topics:
+        return []
+    rows = await sess.execute(
+        text(
+            """
+            WITH claims AS (
+                SELECT ed.from_node, ed.to_node, cardinality(ed.supporting_chunk_ids) AS n
+                FROM edges ed
+                JOIN entities f ON f.entity_id = ed.from_node
+                JOIN entities t ON t.entity_id = ed.to_node
+                WHERE ed.from_node <> ed.to_node
+                  AND NOT f.is_annotation AND NOT t.is_annotation
+            ), ends AS (
+                SELECT from_node AS node, n FROM claims
+                UNION ALL
+                SELECT to_node, n FROM claims
+            ), support AS (
+                SELECT node, sum(n) AS support FROM ends GROUP BY node HAVING sum(n) > 0
+            )
+            SELECT DISTINCT ON (t.topic) t.topic, e.entity_id, e.canonical_name, s.support
+            FROM entities e
+            JOIN support s ON s.node = e.entity_id
+            CROSS JOIN LATERAL unnest(e.topic_labels) AS t(topic)
+            WHERE e.redirects_to IS NULL
+              AND NOT e.is_annotation
+              AND t.topic = ANY(CAST(:topics AS text[]))
+            ORDER BY t.topic, s.support DESC, e.entity_id
+            """
+        ),
+        {"topics": sorted(topics)},
+    )
+    return [
+        Anchor(topic, entity_id, name, int(support)) for topic, entity_id, name, support in rows
+    ]
+
+
+async def check_route(sess: AsyncSession, a: int, b: int, *, max_depth: int) -> RouteCheck:
+    """Claims first; the mixed search only when claims found nothing.
+
+    Most pairs of well-cited nodes are joined by claims, and the claims-only
+    search is the cheap one: resemblance asks the vector index at every level.
+    """
+    ends = (Endpoint(entity_id=a), Endpoint(entity_id=b))
+    cited = await find_route(sess, *ends, max_depth=max_depth, allow="cited")
+    if cited.found:
+        return RouteCheck(True, True, cited.hops, 0, cited.truncated, cited.max_depth)
+    mixed = await find_route(sess, *ends, max_depth=max_depth, allow="cited_and_similar")
+    return RouteCheck(
+        False, mixed.found, mixed.hops, mixed.similar_hops, mixed.truncated, mixed.max_depth
+    )
+
+
+async def route_gaps(
+    sess: AsyncSession,
+    *,
+    topics: list[str] | None = None,
+    max_pairs: int = ROUTE_PAIRS,
+    max_depth: int = ROUTE_DEPTH,
+) -> list[Gap]:
+    """Pairs of topics whose most-cited nodes no chain of claims joins."""
+    if topics is None:
+        topics = list(await _live_descriptions(sess))
+    out: list[Gap] = []
+    for a, b in route_pairs(await topic_anchors(sess, topics), max_pairs):
+        gap = route_gap(
+            a, b, await check_route(sess, a.entity_id, b.entity_id, max_depth=max_depth)
+        )
+        if gap is not None:
+            out.append(gap)
+    return out
+
+
+@register("routes")
+async def routes(sess: AsyncSession) -> list[Gap]:
+    return await route_gaps(sess)
 
 
 # ---------------------------------------------------------------------------

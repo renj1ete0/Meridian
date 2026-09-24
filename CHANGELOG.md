@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.138.1] — 2026-09-25
+
+### Added
+
+- `P6-36`: Gaps lists pairs of topics the graph joins only by resemblance,
+  or not at all — the `routes` source is real (no longer "pending"): each
+  live topic's most-cited node is paired with the others' (at most 10 pairs
+  per read), a claims-only route is tried first and the mixed search only
+  when claims find nothing, and the action seeds a search naming both ends
+
 ## [0.138.0] — 2026-09-25
 
 ### Added

@@ -10,6 +10,8 @@ only by the UI.
 from __future__ import annotations
 
 import datetime as dt
+import math
+import random
 import uuid
 from collections.abc import AsyncIterator
 
@@ -21,7 +23,17 @@ from sqlalchemy import delete, select
 from api.main import create_app
 from meridian_core import gaps
 from meridian_core.db import dispose_engines
-from meridian_core.models import Chunk, ChunkTopics, QueueTask, Source, SteeringLog, TopicConfig
+from meridian_core.models import (
+    Chunk,
+    ChunkTopics,
+    Edge,
+    Entity,
+    QueueTask,
+    Source,
+    SteeringLog,
+    TopicConfig,
+)
+from meridian_core.models.source import EMBEDDING_DIM
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -342,6 +354,164 @@ async def test_results_reached_another_way_are_not_counted_as_search_results(ses
     assert f"search-off-topic:{topic}" not in by_id(await gaps.search_results(sess))
 
 
+# -- routes ------------------------------------------------------------------------
+
+
+def unit_at(degrees: float, axes: tuple[int, int]) -> list[float]:
+    v = [0.0] * EMBEDDING_DIM
+    v[axes[0]] = math.cos(math.radians(degrees))
+    v[axes[1]] = math.sin(math.radians(degrees))
+    return v
+
+
+class Graph:
+    """Two or three topics, each with a most-cited node, joined as a test asks."""
+
+    def __init__(self, sess, chunks: list[int]) -> None:
+        self.sess = sess
+        self.chunks = chunks
+        self.axes = tuple(random.sample(range(EMBEDDING_DIM), 4))
+        self.node: dict[str, Entity] = {}
+
+    async def entity(self, key: str, topics: list[str], angle: float | None = None, **kw):
+        axes = (self.axes[0], self.axes[1]) if kw.pop("plane", "p") == "p" else self.axes[2:]
+        e = Entity(
+            canonical_name=f"{marker()} {key}",
+            node_type="concept",
+            topic_labels=topics,
+            embedding=unit_at(angle, axes) if angle is not None else None,
+            **kw,
+        )
+        self.sess.add(e)
+        await self.sess.flush()
+        self.node[key] = e
+        return e
+
+    async def edge(self, a: str, b: str, n: int = 1) -> None:
+        self.sess.add(
+            Edge(
+                from_node=self.node[a].entity_id,
+                to_node=self.node[b].entity_id,
+                relation_type="increases",
+                supporting_chunk_ids=self.chunks[:n],
+            )
+        )
+        await self.sess.flush()
+
+
+@pytest.fixture
+async def graph(session_for):
+    sess = await session_for("rw")
+    source = Source(
+        url=f"https://{marker()}.test/route",
+        source_tier="government",
+        retention_tier="primary",
+        checksum=f"sha256:{uuid.uuid4().hex}",
+        text_available=True,
+    )
+    sess.add(source)
+    await sess.flush()
+    for i in range(3):
+        sess.add(Chunk(source_id=source.source_id, text=f"route passage {i}", chunk_index=i))
+    await sess.flush()
+    chunks = list(
+        await sess.scalars(select(Chunk.chunk_id).where(Chunk.source_id == source.source_id))
+    )
+    return Graph(sess, chunks)
+
+
+async def test_topics_joined_by_a_claim_are_not_a_route_gap(graph):
+    a, b = marker(), marker()
+    await graph.entity("A", [a])
+    await graph.entity("B", [b])
+    await graph.entity("mid", [])
+    await graph.edge("A", "mid", 3)
+    await graph.edge("mid", "B", 3)
+    assert await gaps.route_gaps(graph.sess, topics=[a, b]) == []
+
+
+async def test_topics_joined_only_by_resemblance_are_a_route_gap(graph):
+    a, b = marker(), marker()
+    await graph.entity("A", [a], 0)
+    await graph.entity("B", [b], 10)  # cos 10° clears the similar floor
+    await graph.entity("x", [], None)
+    await graph.entity("y", [], None)
+    await graph.edge("A", "x", 3)
+    await graph.edge("B", "y", 2)
+
+    (gap,) = await gaps.route_gaps(graph.sess, topics=[a, b])
+    assert gap.kind == "route_similar_only"
+    first, second = sorted([(a, "A"), (b, "B")])  # pairs are ordered by topic
+    assert gap.id == f"route:{first[0]}:{second[0]}"
+    assert gap.evidence["similar_hops"] >= 1
+    assert gap.evidence["from_node"] == graph.node[first[1]].entity_id
+    assert gap.actions[0].topic == first[0]
+    (seed,) = gap.actions
+    assert graph.node["A"].canonical_name in seed.query
+    assert graph.node["B"].canonical_name in seed.query
+
+
+async def test_topics_joined_by_nothing_are_the_worse_route_gap(graph):
+    a, b = marker(), marker()
+    await graph.entity("A", [a], 0)
+    await graph.entity("B", [b], 90, plane="q")  # orthogonal: no resemblance
+    await graph.entity("x", [])
+    await graph.entity("y", [])
+    await graph.edge("A", "x")
+    await graph.edge("B", "y")
+    (gap,) = await gaps.route_gaps(graph.sess, topics=[a, b])
+    assert gap.kind == "route_none" and gap.evidence["hops"] is None
+
+
+async def test_the_anchor_is_the_most_cited_live_node(graph):
+    """A merged node or a reader's note is never an anchor, however cited."""
+    a = marker()
+    await graph.entity("few", [a])
+    await graph.entity("many", [a])
+    await graph.entity("note", [a], is_annotation=True)
+    await graph.entity("x", [])
+    await graph.edge("few", "x", 1)
+    await graph.edge("many", "x", 2)
+    await graph.edge("note", "x", 3)
+    await graph.edge("note", "few", 3)
+    (anchor,) = await gaps.topic_anchors(graph.sess, [a])
+    assert anchor.entity_id == graph.node["many"].entity_id and anchor.support == 2
+
+    graph.node["many"].redirects_to = graph.node["few"].entity_id
+    await graph.sess.flush()
+    (anchor,) = await gaps.topic_anchors(graph.sess, [a])
+    assert anchor.entity_id == graph.node["few"].entity_id
+
+
+async def test_a_topic_with_no_cited_node_is_not_paired(graph):
+    """Nothing to start from is a coverage gap, not a routing one."""
+    a, b = marker(), marker()
+    await graph.entity("A", [a])
+    await graph.entity("B", [b])  # no edges at all
+    await graph.entity("x", [])
+    await graph.edge("A", "x")
+    assert [x.topic for x in await gaps.topic_anchors(graph.sess, [a, b])] == [a]
+    assert await gaps.route_gaps(graph.sess, topics=[a, b]) == []
+
+
+async def test_route_gaps_search_no_more_pairs_than_the_cap(graph, monkeypatch):
+    topics = [marker() for _ in range(4)]
+    for i, t in enumerate(topics):
+        await graph.entity(t, [t], 90 * (i % 2), plane="p" if i < 2 else "q")
+        await graph.entity(f"{t}x", [])
+        await graph.edge(t, f"{t}x")
+    searched = []
+    real = gaps.check_route
+
+    async def counting(sess, a, b, *, max_depth):
+        searched.append((a, b))
+        return await real(sess, a, b, max_depth=max_depth)
+
+    monkeypatch.setattr(gaps, "check_route", counting)
+    await gaps.route_gaps(graph.sess, topics=topics, max_pairs=2)
+    assert len(searched) == 2
+
+
 # -- the API ---------------------------------------------------------------------
 
 
@@ -382,7 +552,8 @@ async def test_the_list_reads_and_names_pending_sources(client, monkeypatch, tmp
     states = {s["name"]: s["status"] for s in body["sources"]}
     assert states["topic-coverage"] == "ok"
     assert states["question-set"] == "unavailable"  # no run file in tmp_path
-    assert states["areas"] == "pending" and states["routes"] == "pending"
+    assert states["areas"] == "pending"
+    assert states["routes"] == "ok"  # built on P6-32; no longer pending
     severities = [g["severity"] for g in body["gaps"]]
     assert severities == sorted(severities, reverse=True)
 

@@ -145,8 +145,9 @@ describe('helpers', () => {
     }
     expect(keys.size).toBeGreaterThan(5)
     // A question's kind is already the first word of its title, and a failed
-    // search group's queries are quoted in its reason (P6-37).
-    const shownElsewhere = new Set(['kind', 'queries'])
+    // search group's queries are quoted in its reason (P6-37), and a route
+    // gap's two ends are named in its title (P6-36 routes).
+    const shownElsewhere = new Set(['kind', 'queries', 'from_node', 'to_node'])
     const missing = [...keys].filter(
       (k) =>
         !shownElsewhere.has(k) &&
@@ -198,6 +199,14 @@ describe('helpers', () => {
     expect(line).toEqual(['failed 3', 'searches 8', 'results 0', 'tasks 9, 7, 4'])
     const off = evidenceLine({ examined: 10, on_topic: 2, on_topic_share: 0.2 })
     expect(off).toEqual(['read 10', 'on topic 2', 'on-topic share 20%'])
+  })
+
+  it('prints a route gap: hops, how many by resemblance, and the depth searched', () => {
+    const similar = evidenceLine({ from_node: 1, to_node: 2, max_depth: 4, hops: 3, similar_hops: 2 })
+    expect(similar).toEqual(['hops 3', 'by resemblance 2', 'within 4'])
+    const none = evidenceLine({ from_node: 1, to_node: 2, max_depth: 4, hops: null, similar_hops: null })
+    expect(none).toEqual(['hops none', 'within 4'])
+    expect(groupOf(gap({ source: 'routes' }))).toBe('coverage')
   })
 })
 

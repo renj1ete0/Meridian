@@ -411,3 +411,67 @@ def test_runs_dir_prefers_the_environment_and_ignores_a_blank_one(monkeypatch, t
     assert runs_dir(tmp_path / "default") == tmp_path / "default"
     monkeypatch.delenv(RUNS_DIR_ENV)
     assert runs_dir(tmp_path / "default") == tmp_path / "default"
+
+
+# -- routes ---------------------------------------------------------------------------
+
+
+def anchor(topic, entity_id, support, name=None):
+    return gaps.Anchor(topic, entity_id, name or f"node {entity_id}", support)
+
+
+def check(*, cited=False, found=False, hops=None, similar=0, truncated=False):
+    return gaps.RouteCheck(cited, found, hops, similar, truncated, 4)
+
+
+def test_route_pairs_are_different_topics_most_cited_first_and_capped():
+    anchors = [anchor("c", 3, 1), anchor("a", 1, 10), anchor("b", 2, 5), anchor("d", 1, 10)]
+    pairs = gaps.route_pairs(anchors, limit=3)
+    assert len(pairs) == 3
+    # a and d share a node: one node heading two topics joins them trivially.
+    assert all(p.entity_id != q.entity_id for p, q in pairs)
+    assert [(p.topic, q.topic) for p, q in pairs] == [("a", "b"), ("b", "d"), ("a", "c")]
+    assert gaps.route_pairs(anchors, limit=0) == []
+    assert gaps.route_pairs([anchor("a", 1, 1)]) == []
+
+
+def test_a_pair_joined_by_claims_is_not_a_gap():
+    assert (
+        gaps.route_gap(anchor("a", 1, 3), anchor("b", 2, 3), check(cited=True, found=True)) is None
+    )
+
+
+def test_no_route_outranks_a_route_through_resemblance():
+    a, b = anchor("a", 1, 3, "first"), anchor("b", 2, 3, "second")
+    none = gaps.route_gap(a, b, check())
+    similar = gaps.route_gap(a, b, check(found=True, hops=3, similar=2))
+    assert (none.kind, similar.kind) == ("route_none", "route_similar_only")
+    assert none.severity > similar.severity
+    assert "2 of them only because" in similar.reason
+    assert none.id == similar.id == "route:a:b"
+    # A route gap is a symptom; an empty topic is the gap.
+    assert none.severity < cover(sources=0)["thin"].severity
+
+
+def test_a_truncated_search_is_said_and_ranked_down():
+    a, b = anchor("a", 1, 3), anchor("b", 2, 3)
+    cut = gaps.route_gap(a, b, check(truncated=True))
+    assert "work bound" in cut.reason
+    assert cut.severity < gaps.route_gap(a, b, check()).severity
+
+
+def test_the_route_seed_names_both_ends_and_fits_the_seed_payload():
+    long_a, long_b = "alpha " * 30, "beta " * 30
+    g = gaps.route_gap(anchor("a", 1, 3, long_a), anchor("b", 2, 3, long_b), check())
+    (seed,) = g.actions
+    assert seed.kind == "seed_query" and seed.topic == "a"
+    assert len(seed.query) <= gaps.SEED_MAX
+    GapSeed(topic=seed.topic, query=seed.query, gap_id=g.id)  # accepted as sent
+    short = gaps.route_gap(anchor("a", 1, 3, "one"), anchor("b", 2, 3, "two"), check())
+    assert short.actions[0].query == "one two"
+
+
+def test_the_route_depth_is_one_the_route_search_accepts():
+    from meridian_core.route import MAX_ROUTE_DEPTH
+
+    assert 1 <= gaps.ROUTE_DEPTH <= MAX_ROUTE_DEPTH
