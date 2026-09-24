@@ -37,12 +37,13 @@ live), `B-51` (search seeding every 6h, Bing web off),
 
 **First thing next session:**
 
-0. **The P1-16 checkpoint run (8h, operator's choice) ran 2026-09-25 08:00–16:00**,
-   driven by systemd user timers (`meridian-p116-start`, `meridian-p116-end`;
-   `systemctl --user list-timers`). The script and output are outside the repo
+0. **The P1-16 checkpoint run (12h, operator's choice) started overnight
+   2026-09-24**, once the evening's deploy finished (`meridian-p116-begin`, then a
+   `meridian-p116-end` timer 12h later; `systemctl --user list-timers`,
+   `begin.log`). The script and output are outside the repo
    in `~/Documents/gh/meridian-calibration/p1-16/` (`start.txt`, `end.txt`,
    `report.md` with the pass criteria). It is a first checkpoint, not P1-16's
-   48h sign-off: daily jobs run about once in 8h. The timers fire only while
+   48h sign-off: daily jobs run about once in 12h. The timers fire only while
    the operator is logged in, since lingering is off.
 
 1. **Three agent branches to merge** — Map (`P6-30`, `P6-31`, `P6-34`,

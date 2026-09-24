@@ -75,11 +75,11 @@ told to; check).
   and `SELECT duplicate_reason, count(*) FROM sources GROUP BY 1`. Then enable
   the `docdupes` timetable row in Admin (it shipped disabled).
 
-**P1-16 checkpoint:** an 8-hour unattended window, 2026-09-25 08:00–16:00,
-snapshotted at both ends by user timers into
+**P1-16 checkpoint:** a 12-hour unattended window from late 2026-09-24,
+starting when the evening's deploy finished and snapshotted at both ends into
 `~/Documents/gh/meridian-calibration/p1-16/`. Read `report.md` first next
-session. If `end.txt` is missing, the machine was asleep or logged out at
-16:00; run `snapshot.sh end` by hand.
+session. If `end.txt` is missing, the machine was asleep or logged out when
+the end timer fired; run `snapshot.sh end` by hand.
 
 **Operator decisions, 2026-09-24:** topics stay **broad** at the start and the
 crawl finds its way in. Descriptions are optional, a way to steer into more
