@@ -46,7 +46,7 @@ live), `B-51` (search seeding every 6h, Bing web off),
    48h sign-off: daily jobs run about once in 12h. The timers fire only while
    the operator is logged in, since lingering is off.
 
-1. **Merged overnight (2026-09-24/25), all on `main` at `v0.139.0`**, full suite
+1. **Merged overnight (2026-09-24/25), all on `main` at `v0.140.0`**, full suite
    passing: the Map (`P6-30`, `P6-31`, `P6-34`, `P6-35`), Find's neighbourhood
    (`P6-33`), routes (`P6-32`), Gaps and its sources (`P6-36`, `P6-37`), the
    question-set runner (`P2-22`), steering proposals (`P6-38`), places (`P2-23`),
@@ -55,8 +55,8 @@ live), `B-51` (search seeding every 6h, Bing web off),
    the live stack yet**, because the measurement window was running. Deploy it,
    then run each backfill's report before `--apply`. The document-kind one
    retires about a third of live passages, those of listing pages. `B-58` (DOI
-   ranking) was still with its agent at the time of writing. Wiring the Map's
-   route mode to `P6-32` is a small open follow-up.
+   ranking) is merged too (`v0.140.0`); run `worker.requeue_dois` (report, then
+   `--apply`), then enable its timetable row. The Map's route mode is `P6-39`.
 2. **Check the live stack finished what was started** (handover §0): the
    embedding backlog and `worker.reembed`, the first `seedsearch` batch, the
    `translate` table (it was empty at handover), the crawler running under the
