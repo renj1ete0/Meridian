@@ -15,7 +15,11 @@ class MapPointRead(BaseModel):
     x: float
     y: float
     z: float
+    #: The primary topic — ``topics[0]`` — or None. What the point is coloured by.
     topic: str | None
+    #: Every topic, primary first; None when the source is not yet examined,
+    #: ``[]`` when it was and is about none (`P2-21`).
+    topics: list[str] | None
     title: str | None
     url: str
     snippet: str

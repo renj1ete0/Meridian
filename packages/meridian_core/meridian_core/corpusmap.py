@@ -61,10 +61,14 @@ class MapPoint:
     x: float
     y: float
     z: float
-    #: The source's first topic label, or None for a source nothing labelled.
-    #: One colour per point, so one topic; a source carrying several is drawn in
-    #: its first, which is the one the frontier queued it under.
+    #: The source's primary topic — the one its content scored highest on — or
+    #: None for a source about none of them or not yet examined. One colour per
+    #: point, so one topic; ``topics`` carries the rest.
     topic: str | None
+    #: Every topic the source's content is about, primary first (`P2-21`).
+    #: None when nothing has examined it yet; ``[]`` when it was examined and is
+    #: about none — the two look alike on a canvas and are opposite answers.
+    topics: list[str] | None
     title: str | None
     url: str
     snippet: str
@@ -223,6 +227,8 @@ async def corpus_map(
             y=round(float(y), 4),
             z=round(float(z), 4),
             topic=labels[0] if labels else None,
+            # Stored best first by the labeller, so order is meaning here.
+            topics=list(labels) if labels is not None else None,
             title=title,
             url=url,
             snippet=snippet,

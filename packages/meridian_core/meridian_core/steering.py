@@ -471,6 +471,42 @@ async def set_pinned(
     await sess.flush()
 
 
+async def set_description(
+    sess: AsyncSession,
+    topic: str,
+    description: str | None,
+    *,
+    actor: str,
+    reason: str,
+    now: dt.datetime,
+) -> None:
+    """Say what a topic is about (task P2-21). Blank clears it.
+
+    No renormalisation — it moves no share. Logged anyway: a description is
+    most of what the content labeller compares a page against, so changing one
+    re-labels every source, and "why did these labels move" deserves the same
+    answer as "why did this weight move".
+    """
+    row = await sess.get(TopicConfig, topic)
+    if row is None:
+        raise LookupError(f"no topic {topic!r}")
+    cleaned = " ".join((description or "").split()) or None
+    if row.description == cleaned:
+        return
+    await record(
+        sess,
+        actor=actor,
+        topic=topic,
+        field="description",
+        old=row.description,
+        new=cleaned,
+        reason=reason,
+        now=now,
+    )
+    row.description = cleaned
+    await sess.flush()
+
+
 async def set_boost(
     sess: AsyncSession,
     topic: str,
@@ -527,6 +563,7 @@ async def add_topic(
     actor: str,
     reason: str,
     now: dt.datetime,
+    description: str | None = None,
 ) -> dict[str, float]:
     """Insert a topic and redistribute (§10.2's `add_topic`).
 
@@ -547,7 +584,16 @@ async def add_topic(
     ]
     check_feasible([*existing, TopicShare(topic, 0.0, floor, ceiling)])
 
-    sess.add(TopicConfig(topic=topic, weight=0.0, floor=floor, ceiling=ceiling, status=DRAWING))
+    sess.add(
+        TopicConfig(
+            topic=topic,
+            weight=0.0,
+            floor=floor,
+            ceiling=ceiling,
+            status=DRAWING,
+            description=" ".join((description or "").split()) or None,
+        )
+    )
     await sess.flush()
     await record(
         sess,

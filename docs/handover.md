@@ -106,7 +106,7 @@ Three more passes are on demand rather than on the loop:
 ```
 worker.sweep      retention report; deletes only with --apply
 worker.harvest    §5.6 acronym definitions → gazetteer, unapproved
-worker.retopic    topic labels onto sources crawled before P2-14
+worker.retopic    topic labels from content (P2-21); hourly with --apply, report by default
 ```
 
 ### What exists that the older version of this document said did not

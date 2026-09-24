@@ -82,7 +82,7 @@ async def upsert_source(
     doi: str | None = None,
     extractor: str | None = None,
     text_available: bool | None = None,
-    topic_labels: Sequence[str] | None = None,
+    crawled_for: Sequence[str] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> tuple[Source, bool]:
     """Create or update the source row for ``url``. Flushes; does not commit.
@@ -150,18 +150,14 @@ async def upsert_source(
         # changed, and keeping the older name would misattribute the text now
         # in the corpus.
         row.extractor = extractor
-    if topic_labels is not None:
-        # Accumulates; never replaces (`P2-14`). A source reached under two
-        # topics belongs to both, and overwriting would make the label depend on
-        # which crawl ran last — so a URL enqueued under `walkability` and later
-        # found again through an `on-demand-bus` seed ends up carrying both,
-        # which is the truth about how it entered the corpus.
-        #
-        # An empty list therefore still writes: it turns NULL ("never examined")
-        # into `{}` ("examined, matched nothing"), which is the distinction the
-        # backfill pass reads.
-        merged = dict.fromkeys([*(row.topic_labels or ()), *topic_labels])
-        row.topic_labels = sorted(merged)
+    if crawled_for is not None:
+        # Accumulates; never replaces (`P2-14`, `P2-21`). A source reached
+        # under two topics was crawled for both, and overwriting would make the
+        # record depend on which crawl ran last. Provenance only — what the
+        # source is *about* is `topic_labels`, which the fetch path never
+        # writes: it has the queue row in hand and not a single vector.
+        merged = dict.fromkeys([*(row.crawled_for or ()), *crawled_for])
+        row.crawled_for = sorted(merged)
     if text_available is not None:
         # This one *does* overwrite in both directions. A page that used to
         # extract and now does not is a real change — a paywall going up, a

@@ -129,19 +129,46 @@ class Source(Base, TimestampMixin):
     )
     ocr_confidence: Mapped[float | None] = mapped_column()
 
-    #: Which topics this source belongs to (task P2-14, §12.5, §12.3).
+    #: Which topics this source's *content* is about (tasks P2-14, P2-21,
+    #: §12.5, §12.3).
     #:
     #: An array, and named to match `entities.topic_labels` and
-    #: `gazetteer.topic_labels`, which already carry exactly this. A source
-    #: genuinely belongs to more than one: a URL can be enqueued under several
-    #: topics and its path can match several more, and picking one would make
-    #: the label depend on whichever crawl ran last.
+    #: `gazetteer.topic_labels`. Zero, one or several, best first: written by
+    #: `python -m worker.retopic` from the source's chunk vectors, never by the
+    #: fetch path — why a page was crawled is `crawled_for`, and conflating the
+    #: two is the defect `P2-21` fixed.
     #:
     #: **NULL and `{}` are different.** NULL means nothing has examined this
-    #: source — every row written before the column existed — and `{}` means it
-    #: was examined and matched nothing. Only the first is worth a backfill,
-    #: which is what `python -m worker.retopic` reads.
+    #: source's content; `{}` means it was examined and is about none of the
+    #: topics. Only the first is the labeller's queue.
     topic_labels: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+
+    #: Which queue topics caused this source to be fetched (task P2-21).
+    #:
+    #: Provenance, and nothing more: the reason the crawler went there. It used
+    #: to *be* `topic_labels`, and that is how a crawl pursuing one topic
+    #: stamped it onto every page a site's navigation led to, whatever those
+    #: pages were about. Accumulates across fetches — a URL reached under two
+    #: topics was crawled for both — and is written at fetch time, where the
+    #: queue row is still in hand.
+    crawled_for: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+
+    #: When the content labeller last examined this source (`P2-21`). NULL is
+    #: the queue; a live chunk newer than this means a re-crawl rewrote the
+    #: text and the labels describe a page that no longer exists.
+    topics_examined_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: The basis the labels were computed under — a fingerprint of the model,
+    #: the thresholds and every topic's prototype text (`P2-21`). A topic added,
+    #: archived or re-described changes the fingerprint, and every source whose
+    #: basis differs is re-examined. Opaque on purpose: compare, never parse.
+    topic_basis: Mapped[str | None] = mapped_column(Text)
+
+    #: Every labelling topic's similarity to this source, under `topic_basis`
+    #: (`P2-21`). What the labels were decided from, kept so a label can be
+    #: explained — and so an off-topic demotion reads the same numbers the
+    #: labelling did rather than recomputing them.
+    topic_scores: Mapped[dict | None] = mapped_column(JSONB)
 
     #: When §5.6's acronym harvest last read this document (task P5-02).
     #:

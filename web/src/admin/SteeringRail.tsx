@@ -40,6 +40,9 @@ export function auditLine(entry: SteeringEntry): string {
       return old === null ? `${topic} added` : `${topic} ${old} → ${next}`
     case 'pinned':
       return next === 'True' ? `${topic} pinned` : `${topic} unpinned`
+    case 'description':
+      // `P2-21`: moves no share, but re-labels every source's topics.
+      return next === null || next === '' ? `${topic} description cleared` : `${topic} re-described`
     case 'boost_factor':
       return next === null ? `${topic} boost ended` : `${topic} boost ${next}×`
     case 'boost_expires_at':

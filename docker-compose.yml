@@ -374,6 +374,11 @@ services:
       postgres: { condition: service_healthy }
     environment:
       MERIDIAN_EMBED_CACHE: /models
+      # `worker.retopic` labels sources from their vectors and embeds each
+      # topic's prototype through the sidecar (`P2-21`). Declared here rather
+      # than left to `.env`: a scheduled labeller with no embedder exits 2
+      # every hour, and every new source stays unlabelled.
+      MERIDIAN_EMBEDDER_URL: http://embedder:8100
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures

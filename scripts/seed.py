@@ -69,6 +69,7 @@ async def seed_topics(sess) -> tuple[int, int]:
                 ceiling=row.get("ceiling", 1.0),
                 pinned=row.get("pinned", False),
                 status=row.get("status", "active"),
+                description=row.get("description"),
             )
         )
         added += 1

@@ -38,6 +38,7 @@ function topicRow(topic: string, weight: number): TopicRow {
       boost_expires_at: null,
       pinned: false,
       status: 'active',
+      description: null,
     },
     effective_weight: weight,
     share: weight,

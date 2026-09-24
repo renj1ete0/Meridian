@@ -68,6 +68,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.118.0] — 2026-09-24
+
+### Added
+
+- `P2-21`: a source's topics now come from what its text says, not from the
+  queue topic that caused the fetch. Provenance moves to `sources.crawled_for`;
+  `topic_labels` is written only by `python -m worker.retopic`, which scores
+  each source's mean chunk vector against each topic's prototype (name,
+  description, approved vocabulary) measured from a fixed reference point, and
+  labels every topic above a floor and within a margin of the best — zero, one
+  or several. Hourly on the timetable with `--apply`; labels re-queue when the
+  basis changes or a source is re-crawled. `--demote-offtopic` is gated and
+  never scheduled. Topics gain a `description`, editable inline in Admin →
+  Topics and logged to the steering audit. The map carries every label.
+  Migration `71de4a6d0c50`; the production scheduler now declares
+  `MERIDIAN_EMBEDDER_URL`
+
 ## [0.76.3] — 2026-09-20
 
 ### Fixed

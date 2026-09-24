@@ -239,7 +239,7 @@ docker compose run --rm worker python -m worker.embed      # vectors
 docker compose run --rm worker python -m worker.novelty    # near-duplicate verdicts
 docker compose run --rm worker python -m worker.sweep      # retention report (add --apply to delete)
 docker compose run --rm worker python -m worker.harvest    # acronym definitions into the gazetteer
-docker compose run --rm worker python -m worker.retopic    # topics onto pre-P2-14 sources (--apply to write)
+docker compose run --rm scheduler python -m worker.retopic # label sources by content; report only (--apply writes; hourly on the timetable)
 make snapshot-corpus                                       # the run's deliverable
 ```
 

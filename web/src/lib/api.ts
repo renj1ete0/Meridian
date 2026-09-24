@@ -255,8 +255,18 @@ export interface Source {
   ocr_applied: boolean
   ocr_tier: OcrTier
   ocr_confidence: number | null
-  /** Which topics this source belongs to (`P2-14`). Null means nothing examined it. */
+  /**
+   * Which topics this source's content is about, best first (`P2-14`, `P2-21`).
+   * Null means nothing has examined the content; `[]` means it is about none.
+   */
   topic_labels: string[] | null
+  /** Which queue topics caused the fetch (`P2-21`) — why it was crawled, not what it says. */
+  crawled_for: string[] | null
+  /** When the content labeller last examined it, and under which basis (`P2-21`). */
+  topics_examined_at: string | null
+  topic_basis: string | null
+  /** Each topic's similarity to the content: what the labels were decided from. */
+  topic_scores: Record<string, number> | null
   /**
    * What screening concluded about this page (`P4-14`). Shown to the operator
    * on purpose: a passage from something quarantined should be visible here,
@@ -293,6 +303,10 @@ export const SOURCE_FIELDS = [
   'ocr_tier',
   'ocr_confidence',
   'topic_labels',
+  'crawled_for',
+  'topics_examined_at',
+  'topic_basis',
+  'topic_scores',
   'trust_state',
   'acronyms_harvested_at',
   'extra',
@@ -478,8 +492,13 @@ export interface MapPoint {
   y: number
   /** The third principal component (`P6-29`); the flat view ignores it. */
   z: number
-  /** The source's first topic label; null when nothing examined it. */
+  /** The primary topic — `topics[0]` — or null. What the point is coloured by. */
   topic: string | null
+  /**
+   * Every topic the source's content is about, primary first (`P2-21`). Null
+   * when nothing has examined it; `[]` when it was examined and is about none.
+   */
+  topics: string[] | null
   title: string | null
   url: string
   snippet: string
@@ -492,6 +511,7 @@ export const MAP_POINT_FIELDS = [
   'y',
   'z',
   'topic',
+  'topics',
   'title',
   'url',
   'snippet',
@@ -790,6 +810,8 @@ export interface TopicConfig {
   boost_expires_at: string | null
   pinned: boolean
   status: TopicStatus
+  /** What the topic is about (`P2-21`) — most of what content labelling compares a page to. */
+  description: string | null
 }
 
 export const TOPIC_CONFIG_FIELDS = [
@@ -801,6 +823,7 @@ export const TOPIC_CONFIG_FIELDS = [
   'boost_expires_at',
   'pinned',
   'status',
+  'description',
 ] as const
 
 /** Mirrors `TopicRowRead`. */
@@ -862,6 +885,8 @@ export interface TopicEdit {
   status?: TopicStatus
   boost_factor?: number | null
   boost_expires_at?: string | null
+  /** Re-labels every source's topics when it changes (`P2-21`). Empty clears it. */
+  description?: string | null
   reason?: string
 }
 
@@ -879,7 +904,7 @@ export function editTopic(topic: string, edit: TopicEdit, init?: RequestInit): P
 }
 
 export function addTopic(
-  body: { topic: string; floor?: number; ceiling?: number; reason?: string },
+  body: TopicAddBody,
   init?: RequestInit,
 ): Promise<Topics> {
   return request<Topics>('/api/admin/topics', {
@@ -1658,6 +1683,7 @@ export interface TopicAddBody {
   topic: string
   floor?: number
   ceiling?: number
+  description?: string | null
   reason?: string
 }
 

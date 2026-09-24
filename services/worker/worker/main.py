@@ -397,34 +397,22 @@ class Worker:
     def stats(self) -> WorkerStats:
         return self._stats
 
-    def _labels_for(self, claim: object, final_url: str | None) -> list[str]:
-        """Which topics this source belongs to (task P2-14, §12.5).
+    def _crawled_for(self, claim: object) -> list[str]:
+        """Why this URL was fetched: the claim's topic (tasks P2-14, P2-21).
 
-        Two sources of evidence, unioned, and they are different kinds of thing.
+        Provenance, recorded here because this is the only moment the queue row
+        is in hand — after the fact a URL can have been enqueued under several
+        topics, and a redirect means the fetched URL is often not the queued
+        one. It says nothing about what the page turned out to be about: that
+        is `topic_labels`, written by the content labeller once the chunks have
+        vectors. The two used to be one column, and a crawl pursuing one topic
+        stamped it on every page a site's navigation led to.
 
-        The claim's topic is **provenance**: it is why this URL was fetched at
-        all, recorded on the queue row that produced the fetch. That is the
-        stronger of the two and is the reason this happens here rather than in a
-        later pass — after the fact, the only way back to it is a join on the
-        URL, and a URL can be enqueued repeatedly under different topics while a
-        redirect means the fetched URL is frequently not the queued one.
-
-        The path match is **evidence from the URL itself**, and it is why the
-        final URL is used rather than the requested one: a redirect to
-        `/transport/walking/...` says something about the document, and the
-        address that was asked for says only what was guessed.
-
-        A list, never None. An empty list means "examined, matched nothing",
-        which is a fact worth recording and is what stops the backfill pass from
-        re-reading it forever.
+        A list, never None. An empty list means the claim carried no topic,
+        which is a fact about the fetch worth keeping.
         """
-        labels: dict[str, None] = {}
         topic = getattr(claim, "topic", None)
-        if topic:
-            labels[topic] = None
-        for match in self._topics.topics_for(final_url or getattr(claim, "url", "")):
-            labels[match] = None
-        return sorted(labels)
+        return [topic] if topic else []
 
     def stop(self) -> None:
         """Ask the loop to finish what it is holding and come back."""
@@ -1169,7 +1157,7 @@ class Worker:
                     retention_tier=stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,
-                    topic_labels=self._labels_for(claim, result.final_url),
+                    crawled_for=self._crawled_for(claim),
                     **_bibliography(document, screening),
                     **validators(result.headers),
                 )

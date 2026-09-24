@@ -50,6 +50,18 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: topics
+    module: worker.retopic
+    args: ["--apply"]
+    # `P2-21`: which topics each source's *content* is about, from its chunk
+    # vectors. Trails `embed` like `novelty` does — a source is only labelled
+    # once every live chunk has a vector — and re-examines what a topic change
+    # or a re-crawl made stale. Writes labels only. NEVER `--demote-offtopic`:
+    # that hands sources to the retention sweep, and is a person's decision
+    # after reading the report, not a timer's.
+    interval_seconds: 3600
+    enabled: true
+
   - name: sweep
     module: worker.sweep
     # NO `--apply`. Reports what could be reclaimed and deletes nothing: this is

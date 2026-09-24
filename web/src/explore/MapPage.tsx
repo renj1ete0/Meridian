@@ -5,9 +5,11 @@ import {
   assignSwatches,
   caption,
   legendOrder,
+  multiTopicCount,
   percent,
   topicCounts,
   type Swatch,
+  type TopicCount,
 } from '../lib/corpusmap'
 import { hrefForSource, navigate } from '../lib/route'
 import { coloursOf, positionsOf, visibilityOf } from './map/geometry'
@@ -144,6 +146,7 @@ export function MapView({
 }) {
   const swatches = useMemo(() => assignSwatches(map.points), [map.points])
   const counts = useMemo(() => topicCounts(map.points), [map.points])
+  const multi = useMemo(() => multiTopicCount(map.points), [map.points])
   const [hidden, setHidden] = useState<ReadonlySet<string | null>>(new Set())
   const [view, setView] = useState<View>('3d')
   const [webgl, setWebgl] = useState<boolean | undefined>(knownWebGL)
@@ -307,6 +310,7 @@ export function MapView({
           {table ? (
             <TablePanel
               counts={counts}
+              multi={multi}
               total={map.points.length}
               swatches={swatches}
               shares={map.explained_variance}
@@ -383,24 +387,32 @@ function Legend({
   onToggle,
 }: {
   swatches: Map<string | null, Swatch>
-  counts: { topic: string | null; count: number }[]
+  counts: TopicCount[]
   hidden: ReadonlySet<string | null>
   onToggle: (topic: string | null) => void
 }) {
   // In name order rather than by size, the order colours were given in, so
   // the legend does not reshuffle as topics grow.
-  const count = new Map(counts.map((row) => [row.topic, row.count]))
+  const rows = new Map(counts.map((row) => [row.topic, row]))
 
   return (
     <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5" aria-label="Topics">
       {legendOrder(swatches.keys()).map((topic) => {
         const off = hidden.has(topic)
+        const row = rows.get(topic)
+        const drawn = row?.count ?? 0
+        // Passages that carry the topic as a second or third subject, drawn in
+        // another topic's colour (`P2-21`). Shown beside the colour count rather
+        // than folded into it, so the colour counts still add up to the canvas.
+        const also = (row?.carrying ?? drawn) - drawn
         return (
           <li key={topic ?? '∅'}>
             <button
               type="button"
               aria-pressed={!off}
-              title={off ? `Show ${topicLabel(topic)}` : `Hide ${topicLabel(topic)}`}
+              title={`${off ? 'Show' : 'Hide'} ${topicLabel(topic)} — ${drawn.toLocaleString('en')} drawn in this colour${
+                also > 0 ? `, ${also.toLocaleString('en')} more carry it as another topic` : ''
+              }`}
               onClick={() => onToggle(topic)}
               className={`flex h-7 items-center gap-2 rounded-[var(--radius-chip)] border px-2.5 text-[12px] ${
                 off
@@ -413,7 +425,8 @@ function Legend({
               </span>
               {topicLabel(topic)}
               <span className="font-mono text-[10.5px] text-text-faint">
-                {(count.get(topic) ?? 0).toLocaleString('en')}
+                {drawn.toLocaleString('en')}
+                {also > 0 ? <span data-testid="legend-also"> +{also.toLocaleString('en')}</span> : null}
               </span>
             </button>
           </li>
@@ -430,6 +443,7 @@ function Legend({
  */
 function TablePanel({
   counts,
+  multi,
   total,
   swatches,
   shares,
@@ -437,7 +451,8 @@ function TablePanel({
   sample,
   onSample,
 }: {
-  counts: { topic: string | null; count: number }[]
+  counts: TopicCount[]
+  multi: number
   total: number
   swatches: Map<string | null, Swatch>
   shares: readonly number[]
@@ -461,12 +476,13 @@ function TablePanel({
           <thead className="sr-only">
             <tr>
               <th>Topic</th>
-              <th>Passages</th>
+              <th>Passages drawn in its colour</th>
+              <th>Passages carrying it, where more</th>
               <th>Share</th>
             </tr>
           </thead>
           <tbody>
-            {counts.map(({ topic, count }) => (
+            {counts.map(({ topic, count, carrying }) => (
               <tr key={topic ?? '∅'} className="border-b border-line last:border-b-0">
                 <td className="py-1.5 pr-2 text-text">
                   <span className="flex items-center gap-2">
@@ -477,11 +493,23 @@ function TablePanel({
                   </span>
                 </td>
                 <td className="py-1.5 text-right font-mono text-[10.5px] text-text-muted">{count.toLocaleString('en')}</td>
+                <td
+                  className="w-14 py-1.5 text-right font-mono text-[10.5px] text-text-faint"
+                  title="Passages carrying this topic in any position"
+                >
+                  {carrying > count ? `+${(carrying - count).toLocaleString('en')}` : ''}
+                </td>
                 <td className="w-14 py-1.5 text-right font-mono text-[10.5px] text-text-faint">{percent(count / total)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        {multi > 0 ? (
+          <p className="font-mono text-[10.5px] leading-[1.5] text-text-faint" data-testid="multi-topic-note">
+            {multi.toLocaleString('en')} {multi === 1 ? 'passage is' : 'passages are'} about more than one
+            topic, each drawn in its first; +n counts them under the others.
+          </p>
+        ) : null}
       </section>
 
       <section className="flex flex-col gap-3 border-b border-line px-5 py-4">

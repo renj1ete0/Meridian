@@ -80,8 +80,9 @@ async def world(session_for, marker: str):
             source_tier=tier,
             title=f"{key} document",
             publication_date=published,
-            topic_labels=topics,
         )
+        # Content labels are the labeller's to write (`P2-21`); set directly.
+        source.topic_labels = topics
         await replace_chunks(
             sess, source.source_id, [ChunkWrite(text=f"{marker} {key} passage.", chunk_index=0)]
         )

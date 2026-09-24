@@ -87,6 +87,13 @@ class TopicConfig(Base):
         TOPIC_STATUS, nullable=False, default="active", server_default="active"
     )
 
+    #: What the topic is about, in a sentence (task P2-21). A slug is a poor
+    #: description of a subject — two words, and an embedder reads them without
+    #: context — so this is most of what the content labeller compares a page
+    #: against. Optional: a topic without one is labelled from its name and its
+    #: vocabulary, which works and is less discriminating.
+    description: Mapped[str | None] = mapped_column(Text)
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<TopicConfig {self.topic} w={self.weight} {self.status}>"
 

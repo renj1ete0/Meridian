@@ -43,7 +43,9 @@ import {
   percent,
   swatchVar,
   toScreen,
+  multiTopicCount,
   topicCounts,
+  topicLine,
 } from '../src/lib/corpusmap'
 import { parseRoute } from '../src/lib/route'
 
@@ -58,6 +60,8 @@ function point(over: Partial<MapPoint> = {}): MapPoint {
     y: 0,
     z: 0,
     topic: 'transit',
+    // Derived from `topic` unless given, so a fixture never disagrees with itself.
+    topics: over.topic === undefined ? ['transit'] : over.topic === null ? null : [over.topic],
     title: 'A title',
     url: 'https://example.test/a',
     snippet: 'A passage.',
@@ -483,9 +487,9 @@ describe('the table view', () => {
       point({ topic: 'c' }),
     ])
     expect(rows).toEqual([
-      { topic: 'c', count: 2 },
-      { topic: 'a', count: 1 },
-      { topic: 'b', count: 1 },
+      { topic: 'c', count: 2, carrying: 2 },
+      { topic: 'a', count: 1, carrying: 1 },
+      { topic: 'b', count: 1, carrying: 1 },
     ])
   })
 
@@ -503,5 +507,48 @@ describe('the route', () => {
   it('does not swallow a longer path that merely starts with it', () => {
     expect(parseRoute('/maps')).toEqual({ name: 'explore' })
     expect(parseRoute('/map/5')).toEqual({ name: 'explore' })
+  })
+})
+
+describe('a passage about several topics is counted honestly (P2-21)', () => {
+  const points = [
+    point({ chunk_id: 1, topic: 'transit', topics: ['transit', 'housing'] }),
+    point({ chunk_id: 2, topic: 'housing', topics: ['housing'] }),
+    point({ chunk_id: 3, topic: 'transit', topics: ['transit'] }),
+    point({ chunk_id: 4, topic: null, topics: [] }),
+    point({ chunk_id: 5, topic: null, topics: null }),
+    // Only ever a second label: drawn in nobody's colour, still in the table.
+    point({ chunk_id: 6, topic: 'transit', topics: ['transit', 'parking'] }),
+  ]
+
+  it('colour counts sum to the passages drawn, and carrying counts every label', () => {
+    const rows = topicCounts(points)
+    const byTopic = new Map(rows.map((r) => [r.topic, r]))
+    expect(rows.reduce((n, r) => n + r.count, 0)).toBe(points.length)
+    expect(byTopic.get('transit')).toEqual({ topic: 'transit', count: 3, carrying: 3 })
+    expect(byTopic.get('housing')).toEqual({ topic: 'housing', count: 1, carrying: 2 })
+    expect(byTopic.get('parking')).toEqual({ topic: 'parking', count: 0, carrying: 1 })
+    expect(byTopic.get(null)).toEqual({ topic: null, count: 2, carrying: 2 })
+  })
+
+  it('counts the passages about more than one topic', () => {
+    expect(multiTopicCount(points)).toBe(2)
+  })
+
+  it('gives a second-only topic a colour of its own', () => {
+    expect(assignSwatches(points).get('parking')?.kind).toBe('series')
+  })
+
+  it('says every topic on hover, primary first, and tells unexamined from off-topic', () => {
+    expect(topicLine(points[0]!)).toBe('transit · housing')
+    expect(topicLine(points[3]!)).toBe('No topic')
+    expect(topicLine(points[4]!)).toBe('Not yet examined')
+  })
+
+  it('shows the second-label count in the legend and explains it in the table', () => {
+    const markup = renderToStaticMarkup(<MapView map={map({ points, eligible: points.length })} webgl={false} />)
+    expect(markup).toContain('data-testid="legend-also"')
+    expect(markup).toContain('data-testid="multi-topic-note"')
+    expect(text(markup)).toContain('2 passages are about more than one topic')
   })
 })

@@ -423,6 +423,8 @@ export function AdminPage() {
     steerTopic(topic, () => editTopic(topic, { status }))
   const onPinned = (topic: string, pinned: boolean) =>
     steerTopic(topic, () => editTopic(topic, { pinned }))
+  const onDescribe = (topic: string, description: string | null) =>
+    steerTopic(topic, () => editTopic(topic, { description }))
   const onBoost = (topic: string, change: BoostChange) =>
     steerTopic(topic, () => editTopic(topic, change))
 
@@ -518,6 +520,7 @@ export function AdminPage() {
               }}
               onStatus={onStatus}
               onPinned={onPinned}
+              onDescribe={onDescribe}
               onArchive={(topic) => setArchiving(topic)}
               onAddTopic={() => setAdding(true)}
               onBoost={onBoost}

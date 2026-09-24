@@ -43,6 +43,7 @@ function config(over: Partial<TopicConfig> = {}): TopicConfig {
     boost_expires_at: null,
     pinned: false,
     status: 'active',
+    description: null,
     ...over,
   }
 }

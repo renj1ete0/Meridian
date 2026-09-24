@@ -1158,31 +1158,16 @@ deploy runbook whose first two commands could not work (`B-17`).
 
 ### The connections work (agreed 2026-09-23 — see "Resume here")
 
-- [~] `P2-21` **Topics come from what a page says, not why it was crawled** —
-      **partial, on branch `worktree-agent-ae5c754b3e8137972` commit `9c574d8`, not
-      yet on `main`**. Built: migration `71de4a6d0c50` (after `525b10621a92`;
-      `sources.crawled_for`, `topics_examined_at`, `topic_basis`, `topic_scores`,
-      `topic_config.description`; old labels copied to `crawled_for`, then
-      `topic_labels` reset to NULL; an hourly `topics` timetable row);
-      `meridian_core/topiclabels.py` (source vector = mean of live chunks;
-      prototype = embedding of name, description and gazetteer phrases; both
-      measured from a fixed generic-phrase reference; label every topic ≥ 0.45 and
-      within 0.04 of the best; `{}` = examined, off-topic); `worker.retopic`
-      rewritten (report, `--apply`, gated `--demote-offtopic`); fetch path writes
-      `crawled_for` only; topic descriptions in the admin API; the map carries all
-      labels. **Calibrated read-only on the live corpus**: silver-set AUC 0.985;
-      ~85% precision on 20 random labelled sources; all 347 medical-condition
-      pages, 49 privacy/terms/contact pages and 94 search-result pages get `{}`;
-      227 sources labelled without descriptions, ~256 with. Reports and scripts:
-      `~/Documents/gh/meridian-calibration/p2-21/` (outside the repo — they name
-      real pages). **Remaining**: Postgres integration tests for the labeller,
-      the backfill and demotion; `make test` after migrating; an Admin field for
-      descriptions; `setup.md`/handover still describe `retopic` as a URL
-      backfill; the production scheduler gets `MERIDIAN_EMBEDDER_URL` only via
-      `.env`. **⚑ human**: set topic descriptions first (they raise recall from
-      0.70 to 0.82), and decide on `--demote-offtopic` — 2,231 sources at the
-      default floor 0.30, 1,023 at 0.25; junk lets the retention sweep delete
-      the raw file
+- [x] `P2-21` **Topics come from what a page says, not why it was crawled** —
+      `v0.118.0`. `sources.crawled_for` holds provenance; `topic_labels` is written
+      only by `worker.retopic` (hourly, `--apply`) from the source's mean chunk
+      vector against each topic's prototype (name, description, approved
+      vocabulary), centred on a fixed reference; multi-label, `{}` = examined and
+      off-topic. Descriptions editable in Admin → Topics. Calibration (silver-set
+      AUC 0.985, ~85% precision on a random sample) is in the commit body of
+      `9c574d8` and `~/Documents/gh/meridian-calibration/p2-21/`. **⚑ human, still
+      open**: write topic descriptions (they raise recall from 0.70 to 0.82), and
+      decide whether to run `--demote-offtopic` (floor 0.30 or 0.25)
 - [~] `B-43` **Headers, footers, banners and menus inside extracted pages** —
       **partial, on branch `worktree-agent-a017d2a680b2111d0` commit `60b025d`, not
       yet on `main`**: `worker/extract/clean.py` (navigation affordances, menu

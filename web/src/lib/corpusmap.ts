@@ -41,7 +41,10 @@ export function nameHash(name: string): number {
  * their colours.
  */
 export function assignSwatches(points: readonly MapPoint[]): Map<string | null, Swatch> {
-  const topics = [...new Set(points.map((p) => p.topic).filter((t): t is string => t !== null))]
+  // Every topic any point carries, not only the primaries: a topic that is only
+  // ever a second label still gets a legend entry, and giving it a colour now
+  // means it keeps the same one on the day it becomes somebody's first.
+  const topics = [...new Set(points.flatMap((p) => topicsOf(p)))]
   topics.sort((a, b) => a.localeCompare(b))
 
   const taken = new Set<number>()
@@ -66,13 +69,66 @@ export function swatchVar(swatch: Swatch): string {
   return '--text-faint'
 }
 
+/**
+ * One row of the legend and the table: a topic, how many points are drawn in
+ * its colour, and how many carry it at all.
+ *
+ * Two numbers because a passage can be about several topics (`P2-21`) and is
+ * drawn in one — its primary. Counting only the colour would say a topic that
+ * is every other passage's second subject is barely present; counting every
+ * label would make the rows sum past the number of passages drawn. `count`
+ * sums to the total, `carrying` is the honest answer to "how much of this
+ * picture is about X".
+ */
+export interface TopicCount {
+  topic: string | null
+  /** Points whose primary topic this is — the ones drawn in its colour. */
+  count: number
+  /** Points carrying the topic in any position. Equal to `count` for unlabelled. */
+  carrying: number
+}
+
+/** Every topic a point carries: `topics` when present, else its primary, else none. */
+export function topicsOf(point: Pick<MapPoint, 'topic' | 'topics'>): string[] {
+  if (point.topics && point.topics.length > 0) return point.topics
+  return point.topic === null ? [] : [point.topic]
+}
+
 /** How many points each topic contributes, largest first — the table view's rows. */
-export function topicCounts(points: readonly MapPoint[]): { topic: string | null; count: number }[] {
+export function topicCounts(points: readonly MapPoint[]): TopicCount[] {
   const counts = new Map<string | null, number>()
-  for (const point of points) counts.set(point.topic, (counts.get(point.topic) ?? 0) + 1)
+  const carrying = new Map<string | null, number>()
+  for (const point of points) {
+    counts.set(point.topic, (counts.get(point.topic) ?? 0) + 1)
+    const all = topicsOf(point)
+    if (all.length === 0) carrying.set(null, (carrying.get(null) ?? 0) + 1)
+    for (const topic of new Set(all)) carrying.set(topic, (carrying.get(topic) ?? 0) + 1)
+  }
+  // A topic that is only ever a second label is drawn in nobody's colour and
+  // still belongs in the table, with a zero beside its colour count.
+  for (const topic of carrying.keys()) if (!counts.has(topic)) counts.set(topic, 0)
   return [...counts]
-    .map(([topic, count]) => ({ topic, count }))
-    .sort((a, b) => b.count - a.count || String(a.topic).localeCompare(String(b.topic)))
+    .map(([topic, count]) => ({ topic, count, carrying: carrying.get(topic) ?? count }))
+    .sort(
+      (a, b) =>
+        b.count - a.count || b.carrying - a.carrying || String(a.topic).localeCompare(String(b.topic)),
+    )
+}
+
+/** Points about more than one topic — each drawn in its first, so the table says so. */
+export function multiTopicCount(points: readonly MapPoint[]): number {
+  return points.reduce((n, point) => n + (topicsOf(point).length > 1 ? 1 : 0), 0)
+}
+
+/**
+ * What the hover card says about a point's topics. Null topics and an empty
+ * list look the same on the canvas and are opposite answers: nothing has read
+ * the passage yet, or it was read and is about none of the topics.
+ */
+export function topicLine(point: Pick<MapPoint, 'topic' | 'topics'>): string {
+  const all = topicsOf(point)
+  if (all.length > 0) return all.join(' · ')
+  return point.topics === null ? 'Not yet examined' : 'No topic'
 }
 
 /** The legend's order: by name, unlabelled last — the order colours were given in. */

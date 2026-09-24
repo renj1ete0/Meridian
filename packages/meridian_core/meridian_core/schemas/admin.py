@@ -149,6 +149,10 @@ class TopicEdit(BaseModel):
     status: TopicStatus | None = None
     boost_factor: float | None = Field(default=None, gt=0.0)
     boost_expires_at: dt.datetime | None = None
+    #: What the topic is about (`P2-21`). Not a steering change — it moves no
+    #: share — but it moves every source's labels, so it is logged like one.
+    #: An empty string clears it.
+    description: str | None = Field(default=None, max_length=1000)
     reason: str | None = None
 
 
@@ -160,6 +164,7 @@ class TopicAdd(BaseModel):
     topic: str = Field(min_length=1, max_length=120)
     floor: float = Field(default=0.05, ge=0.0, le=1.0)
     ceiling: float = Field(default=0.60, ge=0.0, le=1.0)
+    description: str | None = Field(default=None, max_length=1000)
     reason: str | None = None
 
 

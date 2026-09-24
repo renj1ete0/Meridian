@@ -1,5 +1,5 @@
 import type { MapPoint } from '../../lib/api'
-import { swatchVar, type Swatch } from '../../lib/corpusmap'
+import { swatchVar, topicLine, type Swatch } from '../../lib/corpusmap'
 
 export const CARD_WIDTH = 280
 
@@ -66,7 +66,11 @@ export function HoverCard({
       </span>
       <span className="flex items-center gap-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-faint">
         <SwatchChip swatch={swatch} size={7} />
-        <span className="truncate">{topicLabel(point.topic)}</span>
+        {/* Every topic, primary first: the dot is drawn in one colour and the
+            passage may be about several (`P2-21`). */}
+        <span className="truncate" data-testid="hover-topics">
+          {topicLine(point)}
+        </span>
       </span>
       <span className="line-clamp-3 text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
         {point.snippet}

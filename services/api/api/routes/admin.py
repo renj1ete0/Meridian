@@ -400,6 +400,8 @@ async def _steer(sess, topic: str, edit: TopicEdit) -> list[str]:
             )
         if "pinned" in changes:
             await steering.set_pinned(sess, topic, changes["pinned"], **kwargs)
+        if "description" in changes:
+            await steering.set_description(sess, topic, changes["description"], **kwargs)
         if "boost_factor" in changes or "boost_expires_at" in changes:
             await steering.set_boost(
                 sess,
@@ -446,6 +448,7 @@ async def _add(sess, body: TopicAdd) -> None:
             actor=ACTOR,
             reason=body.reason or "added through admin",
             now=_now(),
+            description=body.description,
         )
     except (ValueError, steering.InfeasibleWeights) as exc:
         await sess.rollback()

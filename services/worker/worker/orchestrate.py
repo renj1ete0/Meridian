@@ -282,7 +282,10 @@ async def _pull(
     filter drops chunks the gate already judged duplicates and chunks a
     re-crawl has superseded (`P1-32`): both are text the corpus holds
     elsewhere, and reasoning over them again costs tokens to reach the same
-    conclusion.
+    conclusion. It also drops junk-tier sources (`P2-21`), as search and the
+    map already do: a source demoted as off-topic or duplicate is one the
+    corpus has decided is not evidence, and spending a model on it would be
+    reasoning over what the reader was told is not there.
 
     Takes `now` and does not use it: every runner has one signature, so a stage
     added later cannot be called with arguments the dispatcher does not send.

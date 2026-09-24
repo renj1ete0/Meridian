@@ -67,10 +67,20 @@ class SourceRead(BaseModel):
     ocr_confidence: float | None
     #: When §5.6's acronym harvest last read this document (`P5-02`). NULL is the
     #: queue, and the default keeps rows written before the column readable.
-    #: Which topics this source belongs to (`P2-14`). NULL means nothing has
-    #: examined it — distinct from `[]`, which means it was examined and matched
-    #: nothing, and only the first is worth a backfill.
+    #: Which topics this source's content is about, best first (`P2-14`,
+    #: `P2-21`). NULL means nothing has examined the content — distinct from
+    #: `[]`, which means it was examined and is about none of the topics.
     topic_labels: list[str] | None = None
+    #: Which queue topics caused it to be fetched (`P2-21`). Provenance: why the
+    #: crawler went there, which is not what the page turned out to be about.
+    crawled_for: list[str] | None = None
+    #: When the content labeller last examined it, and under which basis — a
+    #: fingerprint that changes when the topics or the method do (`P2-21`).
+    topics_examined_at: dt.datetime | None = None
+    topic_basis: str | None = None
+    #: Each topic's similarity to the content under that basis: what the labels
+    #: were decided from (`P2-21`).
+    topic_scores: dict[str, float] | None = None
     #: What screening concluded about this page (`P4-14`). Published rather than
     #: hidden: a reader looking at their own corpus should be able to see that a
     #: passage came from something quarantined, which is how a false positive

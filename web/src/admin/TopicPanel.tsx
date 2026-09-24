@@ -54,6 +54,8 @@ export interface TopicPanelProps {
   onArchive?: (topic: string) => void
   onAddTopic?: () => void
   onBoost?: (topic: string, change: BoostChange) => void
+  /** Sets what the topic is about; `null` clears it (`P2-21`). */
+  onDescribe?: (topic: string, description: string | null) => void
 }
 
 /** §10.2's four states, in the order a person moves through them. */
@@ -309,6 +311,96 @@ function RowMenu({
 }
 
 // --------------------------------------------------------------------------
+// The description — what content labelling compares a page to (`P2-21`)
+// --------------------------------------------------------------------------
+
+/**
+ * One line under a topic: its description, or a note that it has none, and an
+ * inline editor. The description matters more than it looks — pages are
+ * labelled by how close they sit to the topic's name, description and
+ * vocabulary, so a topic described in a sentence is found more reliably than
+ * one known only by its slug. Changing it re-labels the corpus, and the line
+ * says so before the change is made.
+ */
+export function DescriptionLine({
+  topic,
+  description,
+  disabled = false,
+  onDescribe,
+}: {
+  topic: string
+  description: string | null
+  disabled?: boolean
+  onDescribe?: (topic: string, description: string | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(description ?? '')
+  useEffect(() => {
+    if (!editing) setText(description ?? '')
+  }, [description, editing])
+
+  if (!editing) {
+    return (
+      <div className="flex items-baseline justify-between gap-3 text-[12px] leading-[1.5]">
+        {description ? (
+          <span className="min-w-0 text-text-muted">{description}</span>
+        ) : (
+          <span className="min-w-0 text-text-faint">
+            No description — pages are matched on the name and vocabulary alone.
+          </span>
+        )}
+        {onDescribe ? (
+          <button
+            type="button"
+            className={`${LINK_ACTION} shrink-0`}
+            disabled={disabled}
+            aria-label={`Describe ${topic}`}
+            onClick={() => setEditing(true)}
+          >
+            {description ? 'Edit' : 'Describe'}
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
+  const next = text.trim()
+  const unchanged = next === (description ?? '').trim()
+  return (
+    <div className="flex flex-col gap-2">
+      <textarea
+        aria-label={`Description for ${topic}`}
+        className="min-h-[58px] w-full resize-y border border-line-strong bg-surface px-2.5 py-2 text-[12.5px] leading-[1.5] text-text"
+        value={text}
+        maxLength={1000}
+        onChange={(event) => setText(event.target.value)}
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] text-text-faint">
+          Saving re-labels every page against the new wording, within the hour.
+        </span>
+        <span className="flex shrink-0 gap-3">
+          <button type="button" className={LINK_ACTION} onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={LINK_ACTION}
+            disabled={disabled || unchanged}
+            onClick={() => {
+              setEditing(false)
+              onDescribe?.(topic, next || null)
+            }}
+          >
+            Save
+          </button>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
 // The panel
 // --------------------------------------------------------------------------
 
@@ -328,6 +420,7 @@ export function TopicPanel({
   onArchive,
   onAddTopic,
   onBoost,
+  onDescribe,
 }: TopicPanelProps) {
   const [archivedOpen, setArchivedOpen] = useState(false)
   const current = rows.filter((row) => row.topic.status !== 'archived')
@@ -436,6 +529,12 @@ export function TopicPanel({
                 <span className="min-w-0 truncate text-center">{caption(row, entries)}</span>
                 <span className="shrink-0">ceiling {weight(ceiling)}</span>
               </div>
+              <DescriptionLine
+                topic={topic}
+                description={stored.topic.description}
+                disabled={busy !== null}
+                onDescribe={onDescribe}
+              />
             </div>
           )
         })}

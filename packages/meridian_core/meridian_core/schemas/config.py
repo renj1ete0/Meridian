@@ -37,6 +37,7 @@ class TopicConfigCreate(CreateBase):
     boost_expires_at: dt.datetime | None = None
     pinned: bool = False
     status: TopicStatus = "active"
+    description: str | None = None
 
 
 class TopicConfigRead(BaseModel):
@@ -50,6 +51,10 @@ class TopicConfigRead(BaseModel):
     boost_expires_at: dt.datetime | None
     pinned: bool
     status: TopicStatus
+    #: What the topic is about, in a sentence (`P2-21`) — most of what the
+    #: content labeller compares a page against. None for a topic nobody has
+    #: described, which is labelled from its name and vocabulary alone.
+    description: str | None = None
 
 
 class SteeringLogCreate(CreateBase):

@@ -531,6 +531,43 @@ async def test_a_known_duplicate_is_not_reasoned_over(corpus, monkeypatch) -> No
     assert [passage.chunk_id for passage in batch.passages] == [ids[0], ids[1]]
 
 
+async def test_a_junk_source_is_not_reasoned_over(corpus, monkeypatch) -> None:
+    """`P2-21`: search and the map already leave junk out, and `--demote-offtopic`
+    relies on that being true everywhere a reader or a model meets the corpus.
+    A passage from a source the corpus has decided is not evidence must not
+    become an edge — the next id after the good ones is the one that would."""
+    sess, ids, marker = corpus
+    junk, _ = await upsert_source(
+        sess,
+        f"https://{marker}.test/junk",
+        checksum=f"sha256:{uuid.uuid4().hex}",
+        retention_tier="junk",
+    )
+    await replace_chunks(
+        sess, junk.source_id, [ChunkWrite(text=f"{marker} junk passage.", chunk_index=0)]
+    )
+    await sess.flush()
+    junk_ids = list(
+        await sess.scalars(select(Chunk.chunk_id).where(Chunk.source_id == junk.source_id))
+    )
+    assert junk_ids and junk_ids[0] > ids[-1]
+    # Committed, so nothing a stage rolls back can make the junk passage
+    # vanish before `pull` looks — which would pass this test for free.
+    await sess.commit()
+
+    try:
+        _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
+    finally:
+        # The fixture removes its own source's chunks and nothing else.
+        await sess.rollback()
+        await sess.execute(delete(Source).where(Source.url == f"https://{marker}.test/junk"))
+        await sess.commit()
+
+    pulled = [passage.chunk_id for passage in batch.passages]
+    assert pulled[: len(ids)] == ids
+    assert not set(junk_ids) & set(pulled)
+
+
 # --------------------------------------------------------------------------
 # The relay agent: a real `complete`, with a directory for a model (`P4-18`)
 # --------------------------------------------------------------------------
