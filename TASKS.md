@@ -53,7 +53,8 @@ live), `B-51` (search seeding every 6h, Bing web off),
    gate judges a non-English host.
 
 **Needs the operator (⚑):**
-- **Set `MERIDIAN_CONTACT_EMAIL`** for the local stack's services (it is unset).
+- **Reminder: `MERIDIAN_CONTACT_EMAIL` (optional; the operator chose to leave it
+  unset for now).** Unset is a working state.
   Without it Wikimedia refuses the translation lookups, so no non-English
   seeds are written (`B-52`), and the DOI resolver skips Unpaywall. Restart the
   scheduler and worker after setting it.
@@ -1274,6 +1275,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       rule (2026-09-24): an English version if the site offers one, the original
       language otherwise. Declared `hreflang="en"` alternates are fetched first and
       the original becomes a `translation` copy via `worker.docdupes`
+- [ ] `B-58` **DOI resolution has never run** — every queued `doi` task sits at the
+      lowest priority below all links and search results, so none has ever been
+      claimed (found 2026-09-24). Raising them wholesale would re-import the drift:
+      many were cited by off-topic pages before the host gate, and the queue does not
+      record which page cited each DOI. Record the citing source on new `doi` rows,
+      rank each by its citing page's topic labels and host score, and requeue the
+      backlog by the same rule. Unpaywall is not the bottleneck: without a contact
+      email the resolver still uses OpenAlex (which carries most of Unpaywall's
+      open-access data), Europe PMC, Semantic Scholar and the preprint rule
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
