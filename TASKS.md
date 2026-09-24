@@ -19,7 +19,50 @@ something went wrong.
 **`v0.117.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
 against a real Postgres, 616 frontend.
 
-## Resume here (written 2026-09-23, end of session)
+## Resume here (written 2026-09-24, end of session)
+
+**What changed on 2026-09-24, and why.** An audit of what the corpus actually
+holds found the crawl had drifted: nearly everything fetched came from following
+links, only the cold-start search queries had ever run, and by content
+(`P2-21`) the large majority of sources were about none of the topics. Link-following into large academic
+sites, ranked first because an academic domain counted as peer review, was the
+mechanism. Fixed today, each its own commit on `main` (`v0.118.0`–`v0.124.0`):
+`P2-21` (content labels, merged from its branch), `B-46`, `B-43` (boilerplate,
+merged and applied live), `B-47` (garbled PDF text
+layers), `B-49` (embed text without URLs), `B-48` (host gate + requeue, applied
+live to the queued backlog), `B-50` (academic domain ≠ peer review, applied
+live), `B-51` (search seeding every 6h, Bing web off),
+`B-52` (non-English seeds via Wikipedia interlanguage titles), `B-45`
+(soft-404s), `B-44` (document duplicates).
+
+**First thing next session:**
+
+1. **Three agent branches to merge** — Map (`P6-30`, `P6-31`, `P6-34`,
+   `P6-35`), Find panel (`P6-33`, `P6-32`), Gaps (`P2-22`, `P6-36`). They were
+   told not to bump versions or edit CHANGELOG/TASKS; see handover §0 for
+   branches and how to merge (re-parent their Alembic revisions onto
+   `7fbdd2242063`, then bump, changelog, TASKS per task).
+2. **Check the live stack finished what was started** (handover §0): the
+   embedding backlog and `worker.reembed`, the first `seedsearch` batch, the
+   `translate` table (it was empty at handover), the crawler running under the
+   new gate. Then run `worker.docdupes` (report, then `--apply`) and
+   `worker.retopic` + `worker.hostscore` once the embeddings catch up, and
+   measure the difference in what the crawl fetches (share from search vs
+   links, share on-topic).
+3. `B-53` below — calibrate labelling for non-English pages before the host
+   gate judges a non-English host.
+
+**Needs the operator (⚑):**
+- **Describe the topics** (Admin → Topics, now editable). It raises labelling
+  recall from 0.70 to 0.82, and `seedsearch` skips a topic with no
+  description and under three vocabulary terms. Several topics are skipped for
+  that reason today, and their scope is also the open question in `P0-15`.
+- `P2-21` off-topic demotion (`retopic --demote-offtopic`, floor 0.30 or 0.25).
+- `P0-15` question-set review, as before.
+- Whether the default `search_languages` (in the global policy row)
+  is the right set.
+
+### Before 2026-09-24
 
 **The direction changed today, and it is the operator's.** The goal is a system that
 shows *how topics, terms and documents connect* — "walkability → transport → health →
@@ -1223,6 +1266,15 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-45` **Soft-404 pages crawled as content** — `v0.123.1`; title-segment and opening-text rules, junk at fetch, `worker.furniture` for stored ones — pages titled "Page not found"
       served with 200 and chunked. Detect at fetch (title/body shape) and demote
       what is stored
+- [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
+      hundredths lower in translation than in English against the topic prototypes
+      (another paragraph showed no gap). Near the 0.45 floor that turns
+      a relevant non-English page into "off-topic", which then feeds the host gate.
+      Measure on real non-English sources once `B-52` seeds have fetched some;
+      options are per-language prototypes from `translation_lookups` or a
+      language-aware floor
+- [ ] `B-54` **Schedule `worker.docdupes`** — built and tested but not on the timetable
+      and not yet applied live
 - [ ] `P6-30` **Areas: the corpus as nested clusters** — hierarchical clustering
       of passage embeddings (2–3 levels), each area named by its most
       distinctive terms, with per-area stats (passages, sources, tier mix,

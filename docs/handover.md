@@ -11,44 +11,65 @@ add it here.
 
 ---
 
-## 0. In flight at the end of 2026-09-23 — read before starting
+## 0. In flight at the end of 2026-09-24 — read before starting
 
-Two delegated agents were asked to wrap up before shutdown and both committed a
-**tested partial** on their own branch (not on `main`). Their full reports are
-summarised in `TASKS.md`; the branches:
+**Three delegated agents** worked concurrently on the connection screens, each
+in its own worktree under `.claude/worktrees/` with its own Postgres (compose
+projects `meridian-map`, `meridian-find`, `meridian-gaps` on ports 21121,
+21131, 21141 — they were told to tear these down; check `docker ps`). They were
+told not to bump versions or touch CHANGELOG/TASKS, and to commit tested
+partials when stopped.
 
-| Task | Branch / worktree | What it was told |
-|---|---|---|
-| `P2-21` topics from content | `worktree-agent-ae5c754b3e8137972` · `.claude/worktrees/agent-ae5c754b3e8137972` | **Handed over partial: commit `9c574d8`** — labeller, migration `71de4a6d0c50`, `retopic` rewrite, map changes; calibrated, integration tests not written, `make test` not run. Calibration reports: `~/Documents/gh/meridian-calibration/p2-21/report_*.txt`. See `TASKS.md` `P2-21` for the remaining list and the operator's two decisions |
-| `B-43` boilerplate in pages | `worktree-agent-a017d2a680b2111d0` · `.claude/worktrees/agent-a017d2a680b2111d0` | **Handed over partial: commit `60b025d`** — the cleaners and the drop-aware chunker, tested, not wired in. The remaining list is in `TASKS.md` `B-43` and the commit body; fix `B-46` before its re-chunk pass runs. Its measurement scripts are in `~/Documents/gh/meridian-calibration/b-43/`; the commit body has the numbers |
+| Scope | Tasks |
+|---|---|
+| Map | `P6-30` areas, `P6-31` bridges, `P6-34` Map screen, `P6-35` steering from the map |
+| Find | `P6-33` neighbourhood + Find panel, `P6-32` route |
+| Gaps | `P2-22` question-set runner, `P6-36` Gaps screen |
 
-To pick them up: `git log --oneline main..<branch>`. A commit there → read its body
-(the calibration report), cherry-pick onto `main` with `--no-commit`, resolve (both
-may add Alembic revisions from the same head — re-parent the second onto the first),
-run `make test` and the web checks, then bump, changelog, `TASKS.md`, commit.
-**Apply to the live stack only after reading the numbers**: `P2-21`'s labels, then
-decide on off-topic demotion; `B-43`'s report, then `--apply`. No commit →
-`git -C <worktree> status` shows whether work was left uncommitted; if so, finish it
-in that worktree rather than starting over.
+To merge each: `git worktree list`, `git log --oneline main..<branch>`, read
+every commit body, cherry-pick with `--no-commit` one task at a time,
+re-parent any Alembic revision onto `main`'s head (`7fbdd2242063` at
+handover, or whatever the previous merge left), run `make test` and the web
+checks, then bump + changelog + `TASKS.md` in that task's commit. Screens must
+be screenshotted against the mocks before they count as done (the agents were
+told to; check).
 
-Other state worth knowing before touching anything:
+**The live stack at handover** (`v0.124.0` deployed or deploying):
 
-- **Crawler stopped**, relay agent (`claude-code-session`) **disabled**, everything
-  else up at `v0.117.1`. The relay's next batch is chunk 3,360; the prompt file for it
-  may still be in `.localdata/relay` and is harmless.
-- **Deploying without restarting Postgres**: `docker compose -f docker-compose.local.yml
-  build <svc>` then `up -d --no-deps <svc>`; migrations via `run --rm --no-deps tools
-  alembic upgrade head` after `build tools`. Plain `up -d --build <svc>` restarted
-  Postgres twice under a running crawl (see §3).
-- **Looking at the UI**: the operator judges screens against `docs/design/*.dc.html`
-  and the design canvas <https://claude.ai/artifact/PJtF8cqTSnUvW7qGd5ozay>. A headless
-  screenshot needs Playwright (`npm i playwright && npx playwright install chromium`
-  in a scratch folder); the script used on 2026-09-23 lived in that session's scratch
-  directory and is gone. Screenshot dark and light, compare with the mock, before
-  calling UI work done.
-- **Operator decisions to honour**: fewer screens, each useful; a reworded attribute
-  value may replace the old one (`B-39`); matrix and coverage grid cut; right-click
-  steering on the map; circle size = passages collected, with a key.
+- **Crawler started** under the new rules (host gate, search seeding,
+  evidence tiers). What to measure next time: share of fetches from search
+  vs followed links, and the on-topic share of new sources (`retopic`
+  report). This comparison is the point of the day's work and has not been
+  made yet.
+- **Embeddings are catching up.** The re-chunk superseded a large set of
+  chunks, and `worker.embed` is embedding the new ones through the sidecar
+  while a one-off container `meridian-reembed` (`docker logs
+  meridian-reembed`) re-embeds old vectors under the `B-49` view. Both share
+  one CPU sidecar, so this takes hours. Until it finishes, those chunks are
+  missing from vector search (lexical still finds them) and their sources are
+  not relabelled. Remove the container when it exits (`docker rm
+  meridian-reembed`).
+- **`translation_lookups` was empty at handover.** The first manual
+  `worker.translate` ran on an image built before `B-52`. The timetable row
+  runs it daily; to run it now, `docker compose -f docker-compose.local.yml
+  run --rm --no-deps scheduler python -m worker.translate --once`.
+- **Not yet applied live:** `worker.docdupes --apply` (report first).
+- Deploying without restarting Postgres: as before, `build <svc>`, then
+  `run --rm --no-deps tools alembic upgrade head`, then `up -d --no-deps
+  <svc>`.
+
+**New traps from this session:**
+
+- `pkill -f "alembic upgrade head"` also matches a `docker compose run …
+  alembic upgrade head` for the *live* stack. Kill by PID.
+- An `ALTER TABLE` on the dev database queues behind a running test suite,
+  and while it waits Postgres blocks every new query on that table, so the
+  suite then hangs as well. Don't migrate the dev database while a suite runs.
+- Builds and test runs are several times slower while the embedding sidecar
+  is busy. That is CPU contention, not a hang.
+- SearXNG's Bing *web* engine returned results unrelated to the query (now
+  disabled). If search quality drops, measure each engine's relevance before
+  trusting its results. `B-51`'s commit shows the method.
 
 ## 1. Where the build actually is
 
