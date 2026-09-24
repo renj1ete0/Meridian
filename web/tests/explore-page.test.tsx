@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { CLAMP_OVER, ResultList } from '../src/explore/ResultList'
+import { CLAMP_OVER, ResultList, passageOnlyTopics } from '../src/explore/ResultList'
 import { RetrievalNotice, SearchOutcome, entryState, summaryLine } from '../src/explore/ExplorePage'
 import type { CorpusStats } from '../src/lib/api'
 import type { SearchHit, SearchResponse } from '../src/lib/api'
@@ -53,6 +53,7 @@ function hit(over: Partial<SearchHit> = {}): SearchHit {
     publication_date: '2025-12-03',
     language: 'en',
     topic_labels: ['walkability'],
+    passage_topics: null,
     duplicate_of: null,
     score: 0.016,
     lexical_rank: 1,
@@ -141,6 +142,36 @@ describe('every result carries its citation', () => {
       const markup = renderToStaticMarkup(<ResultList hits={[hit({ topic_labels: labels })]} />)
       expect(text(markup)).not.toContain('walkability')
     }
+  })
+
+  it('shows a passage topic its document does not carry, and only that one', () => {
+    // `P2-24`: a topic filter matches a passage on its own labels, so a hit
+    // from a document filed under something else needs a visible reason to be
+    // in the filtered list. A topic the source already shows is not repeated.
+    const rendered = text(
+      renderToStaticMarkup(
+        <ResultList
+          hits={[hit({ topic_labels: ['walkability'], passage_topics: ['transit', 'walkability'] })]}
+        />,
+      ),
+    )
+    expect(rendered).toContain('passage · transit')
+    expect(rendered).not.toContain('passage · walkability')
+  })
+
+  it('shows no passage chip for an unexamined or off-topic passage', () => {
+    for (const passage of [null, []]) {
+      const markup = renderToStaticMarkup(<ResultList hits={[hit({ passage_topics: passage })]} />)
+      expect(text(markup)).not.toContain('passage ·')
+    }
+  })
+
+  it('keeps the passage order and drops the source topics', () => {
+    expect(
+      passageOnlyTopics({ topic_labels: null, passage_topics: ['b', 'a'] }),
+    ).toEqual(['b', 'a'])
+    expect(passageOnlyTopics({ topic_labels: ['a'], passage_topics: ['b', 'a'] })).toEqual(['b'])
+    expect(passageOnlyTopics({ topic_labels: ['a'], passage_topics: null })).toEqual([])
   })
 
   it('marks a near-duplicate as one', () => {

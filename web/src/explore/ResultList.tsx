@@ -47,6 +47,18 @@ function domainOf(url: string): string {
 
 const META = 'font-mono text-[10px] text-text-faint'
 
+/**
+ * The passage's own topics that its source does not carry (`P2-24`), in the
+ * passage's order. Empty when the passage is unexamined (null) or about
+ * nothing beyond its document.
+ */
+export function passageOnlyTopics(
+  hit: Pick<SearchHit, 'topic_labels' | 'passage_topics'>,
+): string[] {
+  const onSource = new Set(hit.topic_labels ?? [])
+  return (hit.passage_topics ?? []).filter((topic) => !onSource.has(topic))
+}
+
 function Provenance({ hit }: { hit: SearchHit }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -79,6 +91,14 @@ function Provenance({ hit }: { hit: SearchHit }) {
           document that has none. */}
       {(hit.topic_labels ?? []).map((topic) => (
         <DataChip key={topic}>{topic}</DataChip>
+      ))}
+      {/* `P2-24`: topics this passage is about that its document is not. A
+          topic filter matches on these too, so without the chip a hit from a
+          document labelled with something else would sit in a filtered list
+          with no visible reason. Topics the source already carries are not
+          repeated. */}
+      {passageOnlyTopics(hit).map((topic) => (
+        <DataChip key={`passage-${topic}`}>passage · {topic}</DataChip>
       ))}
       {hit.duplicate_of !== null ? <DataChip>duplicate of {hit.duplicate_of}</DataChip> : null}
     </div>

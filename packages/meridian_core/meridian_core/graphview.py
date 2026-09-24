@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import annotations
 from .models import AttributeDefinition, AttributeValue, Chunk, Edge, Entity, Source
+from .passagetopics import passage_topics_for
 from .schemas.graph import EntityRead
 from .schemas.graphview import (
     ContestedPairRead,
@@ -610,6 +611,7 @@ async def hydrate_chunks(sess: AsyncSession, chunk_ids: Iterable[int]) -> dict[i
         .join(Source, Source.source_id == Chunk.source_id)
         .where(Chunk.chunk_id.in_(ids))
     )
+    passages = await passage_topics_for(sess, ids)
     return {
         chunk.chunk_id: SearchHitRead(
             chunk_id=chunk.chunk_id,
@@ -623,6 +625,7 @@ async def hydrate_chunks(sess: AsyncSession, chunk_ids: Iterable[int]) -> dict[i
             publication_date=source.publication_date,
             language=source.language,
             topic_labels=source.topic_labels,
+            passage_topics=passages.get(chunk.chunk_id),
             page_unit=page_unit_for((source.extra or {}).get("media_type")),
             media_type=(source.extra or {}).get("media_type"),
             duplicate_of=chunk.duplicate_of,

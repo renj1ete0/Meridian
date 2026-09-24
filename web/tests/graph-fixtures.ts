@@ -143,6 +143,7 @@ export function hit(over: Partial<SearchHit> = {}): SearchHit {
     publication_date: '2023-08-14',
     language: 'en',
     topic_labels: ['walkability'],
+    passage_topics: null,
     page_unit: 'page',
     media_type: 'application/pdf',
     duplicate_of: null,

@@ -469,6 +469,52 @@ class Figure(Base, TimestampMixin):
         return f"<Figure {self.figure_id} src={self.source_id} p{self.page}>"
 
 
+class ChunkTopics(Base):
+    """Which topics one passage is about (task `P2-24`).
+
+    `P2-21` labels a *source* from its mean chunk vector, which is right for a
+    page and coarse for a long report: a book mostly about one topic with a
+    chapter on another carries only the first, and the chapter is invisible to
+    a topic filter. This is the same method applied to each chunk's own vector
+    (:mod:`meridian_core.passagetopics`).
+
+    **A side table, not columns on ``chunks``.** ``chunks`` carries an HNSW and
+    a GIN index, and an UPDATE that cannot be HOT writes a new entry into every
+    one of them — so re-labelling the corpus after a topic change would re-index
+    every vector for the sake of a few bytes of labels, and bloat the table the
+    embedder and search both live on. Here a re-label rewrites only these
+    narrow rows. The cost is one join, by primary key, where labels are read.
+
+    **No row is NULL; an empty array is ``{}``.** The same distinction
+    ``sources.topic_labels`` keeps: a chunk with no row has not been examined
+    (usually because it has no vector yet), and one whose row carries ``{}``
+    was examined and is about none of the topics.
+    """
+
+    __tablename__ = "chunk_topics"
+
+    chunk_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("chunks.chunk_id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Best first, like ``sources.topic_labels``. Never NULL: absence is the row.
+    topic_labels: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    #: Every topic's score, so thresholds can be re-measured without vectors.
+    topic_scores: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    #: The passage basis fingerprint the labels were decided under.
+    topic_basis: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Which embedding view the scored vector came from (``chunks.embedding_view``
+    #: at the time). A re-embed under a new view makes the row stale.
+    embedding_view: Mapped[int | None] = mapped_column(SmallInteger)
+    topics_examined_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        # Gaps counts passages per topic; overlap (`&&`) is what search asks.
+        Index("ix_chunk_topics_labels", "topic_labels", postgresql_using="gin"),
+    )
+
+
 class PageLine(Base):
     """Which candidate lines one page's *uncleaned* text holds (task `B-43`).
 

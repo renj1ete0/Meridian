@@ -79,6 +79,13 @@ export interface SearchHit {
   language: string | null
   /** Which topics the source belongs to (`P2-14`). Null means nothing examined it. */
   topic_labels: string[] | null
+  /**
+   * Which topics this passage itself is about (`P2-24`), best first. Null means
+   * no pass has examined the passage; `[]` means one has and found none. A
+   * topic filter matches on either list, so this is how a hit from a document
+   * labelled with something else shows why it is in a filtered set.
+   */
+  passage_topics: string[] | null
 
   /**
    * What `page_or_offset` counts (`P2-18`). §5.3 makes it a page for paginated
@@ -120,6 +127,7 @@ export const SEARCH_HIT_FIELDS = [
   'publication_date',
   'language',
   'topic_labels',
+  'passage_topics',
   'page_unit',
   'media_type',
   'duplicate_of',

@@ -21,7 +21,7 @@ from sqlalchemy import delete, select
 from api.main import create_app
 from meridian_core import gaps
 from meridian_core.db import dispose_engines
-from meridian_core.models import Chunk, QueueTask, Source, SteeringLog, TopicConfig
+from meridian_core.models import Chunk, ChunkTopics, QueueTask, Source, SteeringLog, TopicConfig
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -74,6 +74,57 @@ async def test_a_topic_with_few_labelled_sources_is_thin_with_the_database_count
     assert gap.evidence["passages"] == 2
     assert gap.evidence["strong_sources"] == 2
     assert {a.kind for a in gap.actions} == {"seed_query", "boost_topic"}
+
+
+async def test_passages_about_a_topic_in_other_documents_are_counted(session_for):
+    """`P2-24`: a passage labelled with the topic inside a document labelled
+    with something else counts as a passage and names its document; one inside
+    a document already labelled with the topic is not counted twice; a
+    superseded chunk and an off-topic passage do not count at all."""
+    sess = await session_for("rw")
+    topic, other = marker(), marker()
+    await add_topic(sess, topic)
+    await add_topic(sess, other)
+    await add_sources(sess, topic, 1)
+    await add_sources(sess, other, 2)
+
+    own = await sess.scalar(
+        select(Chunk.chunk_id).join(Source).where(Source.topic_labels == [topic])
+    )
+    elsewhere = list(
+        await sess.scalars(
+            select(Chunk.chunk_id).join(Source).where(Source.topic_labels == [other])
+        )
+    )
+    sess.add(ChunkTopics(chunk_id=own, topic_labels=[topic], topic_scores={}, topic_basis="t"))
+    sess.add(
+        ChunkTopics(chunk_id=elsewhere[0], topic_labels=[topic], topic_scores={}, topic_basis="t")
+    )
+    sess.add(ChunkTopics(chunk_id=elsewhere[1], topic_labels=[], topic_scores={}, topic_basis="t"))
+    # A superseded chunk in the second document, labelled with the topic.
+    old_source = await sess.scalar(select(Chunk.source_id).where(Chunk.chunk_id == elsewhere[1]))
+    gone = Chunk(
+        source_id=old_source,
+        text="old",
+        chunk_index=7,
+        superseded_at=dt.datetime.now(dt.UTC),
+    )
+    sess.add(gone)
+    await sess.flush()
+    sess.add(
+        ChunkTopics(chunk_id=gone.chunk_id, topic_labels=[topic], topic_scores={}, topic_basis="t")
+    )
+    await sess.flush()
+
+    found = by_id(await gaps.topic_coverage(sess))
+    gap = found[f"topic-thin:{topic}"]
+    assert gap.evidence["sources"] == 1
+    assert gap.evidence["passages"] == 2
+    assert gap.evidence["passage_sources"] == 1
+    assert "1 other document" in gap.reason
+    # The other topic's documents gained nothing from a passage about this one.
+    assert found[f"topic-thin:{other}"].evidence["passage_sources"] == 0
+    assert found[f"topic-thin:{other}"].evidence["passages"] == 2
 
 
 async def test_a_topic_with_no_sources_at_all_is_the_most_severe(session_for):

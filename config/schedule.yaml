@@ -68,7 +68,9 @@ jobs:
     # `P2-21`: which topics each source's *content* is about, from its chunk
     # vectors. Trails `embed` like `novelty` does — a source is only labelled
     # once every live chunk has a vector — and re-examines what a topic change
-    # or a re-crawl made stale. Writes labels only. NEVER `--demote-offtopic`:
+    # or a re-crawl made stale. Then, under the same basis, each passage's own
+    # labels (`P2-24`), so a chapter inside a document about something else is
+    # findable by its topic. Writes labels only. NEVER `--demote-offtopic`:
     # that hands sources to the retention sweep, and is a person's decision
     # after reading the report, not a timer's.
     interval_seconds: 3600

@@ -52,6 +52,11 @@ class SearchHitRead(BaseModel):
     #: can show why a document is in a filtered set — a hit whose topic a reader
     #: cannot see is a filter they have to trust rather than check.
     topic_labels: list[str] | None = None
+    #: Which topics this passage itself is about (`P2-24`), best first. None
+    #: when no pass has examined the passage; `[]` when one has and found none.
+    #: A topic filter matches on either list, so a hit whose document is about
+    #: something else shows here why it matched.
+    passage_topics: list[str] | None = None
 
     #: What `page_or_offset` counts, and what it was derived from. §5.3's rule
     #: is "page for paginated documents, offset otherwise", and before `P2-18`

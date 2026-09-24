@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from meridian_core.embedtext import embedding_view, view_differs
+from meridian_core.embedtext import embedding_view, link_text_share, view_differs
 
 
 @pytest.mark.parametrize(
@@ -47,3 +47,48 @@ def test_link_text_is_kept_word_for_word() -> None:
     text = "Read [the 2019 household travel survey](https://x.test/survey.pdf) first."
     assert "the 2019 household travel survey" in embedding_view(text)
     assert "x.test" not in embedding_view(text)
+
+
+# --------------------------------------------------------------------------
+# How much of a chunk is link text (`P2-24` reads it to spot listings)
+# --------------------------------------------------------------------------
+
+
+def test_prose_without_links_has_no_link_text() -> None:
+    assert link_text_share("A paragraph that argues something at length.") == 0.0
+
+
+def test_a_listing_is_almost_all_link_text() -> None:
+    listing = " - ".join(
+        f"[Chapter {i} - Some Heading](https://example.test/c/{i})" for i in range(20)
+    )
+    assert link_text_share(listing) > 0.85
+
+
+def test_link_targets_never_count() -> None:
+    """A sentence with one long URL is still a sentence, not a listing."""
+    text = (
+        "The study found a clear effect across all sites, as reported in "
+        "[the appendix](https://example.test/" + "x" * 400 + ")."
+    )
+    assert link_text_share(text) < 0.2
+
+
+def test_a_bare_url_is_not_link_text() -> None:
+    assert link_text_share("See https://example.test/a/very/long/path for details.") == 0.0
+
+
+def test_image_alt_text_counts_as_link_text() -> None:
+    assert link_text_share("![Figure](f.png)") == 1.0
+
+
+def test_a_reference_list_of_url_labelled_links_is_a_listing() -> None:
+    refs = " - ".join(
+        f"Author {i} (2019) A title. [https://doi.org/10.1/{i}](https://doi.org/10.1/{i})"
+        for i in range(6)
+    )
+    assert link_text_share(refs) > 0.5
+
+
+def test_the_share_never_exceeds_one() -> None:
+    assert 0.0 < link_text_share("[a  b   c](https://x/1)") <= 1.0

@@ -65,3 +65,31 @@ def embedding_view(text: str) -> str:
 def view_differs(text: str) -> bool:
     """Whether a chunk's embedding would change under the current view."""
     return embedding_view(text) != text
+
+
+def link_text_share(text: str) -> float:
+    """How much of what a reader sees in ``text`` is the visible text of links.
+
+    Measured on the view, not the raw text, so link *targets* never count
+    either way: a sentence with one long URL in it is still a sentence. A chunk
+    that is mostly link labels is a listing — a table of contents, a directory
+    of regulations, a publication list — and its vector is the average of the
+    things it links to, not a statement about any of them (`P2-24` reads this
+    to keep listings from being labelled as passages about a topic).
+
+    A link whose label is itself a URL — how extractors render most reference
+    lists — counts its label as link text although the view drops it, which
+    pushes such a list towards 1.0. That is deliberate: a bibliography is a
+    listing too, and it was measured that way.
+
+    0.0 for text with no links; 1.0 when nothing but link text remains.
+    """
+    labels = sum(len(m.group(1)) for m in _IMAGE.finditer(text))
+    without_images = _IMAGE.sub(lambda m: m.group(1), text)
+    labels += sum(len(m.group(1)) for m in _LINK.finditer(without_images))
+    if not labels:
+        return 0.0
+    visible = embedding_view(text)
+    if not visible.strip():
+        return 1.0
+    return min(1.0, labels / len(visible))

@@ -39,13 +39,14 @@ import dataclasses
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import ColumnElement, Select, and_, cast, func, select
+from sqlalchemy import ColumnElement, Select, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .ageing import age_in_days, decay_factor
 from .logging import get_logger
-from .models import Chunk, Source
+from .models import Chunk, ChunkTopics, Source
+from .passagetopics import on_topic_passage
 from .trust import READABLE_STATES
 
 log = get_logger(__name__)
@@ -128,6 +129,14 @@ class SearchFilters:
     and *is* excluded by a topic filter: NULL means nothing has examined it, so
     it cannot be claimed for a topic, and claiming it would silently assert
     something no pass has established.
+
+    **A passage matches on its own labels too** (`P2-24`). A topic filter keeps
+    a chunk when its source carries the topic *or* the chunk itself does, so a
+    chapter about one topic inside a document about another is found — the
+    source label alone would hide it. The hit says which matched
+    (:attr:`SearchHit.passage_topics`). Every chunk of a source labelled with
+    the topic still matches, as before: a passage is not required to be about
+    the topic when its document is.
     """
 
     source_tiers: Sequence[str] | None = None
@@ -191,6 +200,12 @@ class SearchHit:
     #: topic a reader cannot see is a filter they have to trust rather than
     #: check, which is the opposite of what this corpus is for.
     topic_labels: list[str] | None
+
+    #: Which topics this passage itself is about (`P2-24`), best first. None
+    #: when no pass has examined the passage, ``[]`` when one has and found
+    #: none. Beside the source's labels so a hit matched by its passage label
+    #: — in a document labelled with something else — shows why it is there.
+    passage_topics: list[str] | None
 
     #: What ``page_or_offset`` counts: ``page``, ``offset``, or None when the
     #: source's media type was never recorded (`P2-18`). Derived here so no
@@ -266,7 +281,14 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         # `&&` is array overlap. `= ANY` would be the other way round and
         # `IN` does not apply to an array column at all — both are easy to reach
         # for and both would filter on something other than what was asked.
-        where.append(Source.topic_labels.op("&&")(list(filters.topics)))
+        # The passage arm is an EXISTS by primary key, so it costs one index
+        # probe per candidate row and needs no join that could multiply rows.
+        where.append(
+            or_(
+                Source.topic_labels.op("&&")(list(filters.topics)),
+                on_topic_passage(filters.topics),
+            )
+        )
     if filters.published_after is not None:
         where.append(Source.publication_date >= filters.published_after)
     if filters.published_before is not None:
@@ -468,19 +490,20 @@ async def search(
 
     rows = (
         await sess.execute(
-            select(Chunk, Source)
+            select(Chunk, Source, ChunkTopics.topic_labels)
             .join(Source, Source.source_id == Chunk.source_id)
+            .outerjoin(ChunkTopics, ChunkTopics.chunk_id == Chunk.chunk_id)
             .where(Chunk.chunk_id.in_(ordered))
         )
     ).all()
-    by_id = {chunk.chunk_id: (chunk, source) for chunk, source in rows}
+    by_id = {chunk.chunk_id: (chunk, source, passage) for chunk, source, passage in rows}
 
     hits = []
     for chunk_id in ordered:
         found = by_id.get(chunk_id)
         if found is None:  # pragma: no cover - deleted between the two queries
             continue
-        chunk, source = found
+        chunk, source, passage = found
         hits.append(
             SearchHit(
                 chunk_id=chunk.chunk_id,
@@ -494,6 +517,7 @@ async def search(
                 publication_date=source.publication_date,
                 language=source.language,
                 topic_labels=source.topic_labels,
+                passage_topics=list(passage) if passage is not None else None,
                 duplicate_of=chunk.duplicate_of,
                 media_type=(source.extra or {}).get("media_type"),
                 page_unit=page_unit_for((source.extra or {}).get("media_type")),

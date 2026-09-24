@@ -213,3 +213,32 @@ def test_seed_payload_rejections(payload):
 def test_boost_payload_rejections(factor, days):
     with pytest.raises(ValidationError):
         GapBoost(topic="t", factor=factor, days=days, gap_id="g")
+
+
+# -- passages (P2-24) ----------------------------------------------------------
+
+
+def test_passages_in_other_documents_are_counted_and_shown():
+    thin = cover(sources=2, passages=9, passage_sources=3)["thin"]
+    assert thin.evidence["passage_sources"] == 3
+    assert "3 other documents" in thin.reason and "9 passages" in thin.reason
+
+
+def test_passages_elsewhere_do_not_lift_a_topic_out_of_thin():
+    """A topic that lives only as asides has no document to cite as about it."""
+    found = cover(sources=0, passages=40, passage_sources=gaps.THIN_SOURCES * 3)
+    assert "thin" in found
+    assert found["thin"].title.startswith("No sources; passages in")
+    assert found["thin"].severity == cover(sources=0)["thin"].severity
+
+
+def test_no_passages_elsewhere_says_nothing_about_them():
+    thin = cover(sources=1, passages=1)["thin"]
+    assert thin.evidence["passage_sources"] == 0
+    assert "other document" not in thin.reason
+    assert cover(sources=0)["thin"].title == "No sources"
+
+
+def test_a_weak_topic_mentions_passages_elsewhere():
+    weak = cover(sources=gaps.THIN_SOURCES, strong=0, passages=50, passage_sources=2)["weak"]
+    assert "2 other documents" in weak.reason

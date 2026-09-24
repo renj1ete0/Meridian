@@ -68,6 +68,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.130.0] — 2026-09-24
+
+### Added
+
+- `P2-24`: passages carry their own topic labels. A side table
+  `chunk_topics` holds each embedded passage's labels and scores under the
+  same basis as the source labeller (`P2-21`), re-scored when that basis or
+  the passage's embedding view changes; a passage that is mostly link labels
+  is a listing and labelled `{}`. Computed as a second stage of
+  `worker.retopic` (same hourly row; `--no-passages` skips it). Search's
+  topic filter matches a passage labelled with the topic even when its
+  source is not; hits carry `passage_topics`, shown as a chip only when the
+  source lacks the topic. Gaps counts on-topic passages beside sources but
+  still judges "thin" on sources. Migration `baa1aa041c08`
+
 ## [0.129.1] — 2026-09-24
 
 ### Fixed

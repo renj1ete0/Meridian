@@ -1317,6 +1317,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       that found nothing can be its own gap. Also `eval/runs` is not mounted into the
       API container, so on a deployment the question-set source reports
       "unavailable" until `MERIDIAN_EVAL_RUNS_DIR` points at a mounted directory
+- [x] `P2-24` **Topics per passage** — `v0.130.0` (delegated agent). Calibrated read-only:
+      precision on labels a passage adds beyond its source's is about half, so they
+      widen search but do not lift a topic out of "thin" in Gaps. Topic descriptions
+      would help more than thresholds. Open: should graph filters and the question
+      set's topic match read passage labels too (it would move the eval baseline)
 - [ ] `P6-38` **Steering proposals that apply by default** — the operator's request
       (2026-09-24): the system proposes what to steer, and if the operator does not
       object within a window (default 12h, in the global policy row) it is applied,

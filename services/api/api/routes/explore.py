@@ -41,6 +41,7 @@ from meridian_core.models import (
     SavedView,
     Source,
 )
+from meridian_core.passagetopics import passage_topics_for
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
 from meridian_core.schemas.corpusmap import CorpusMapRead
@@ -567,6 +568,7 @@ async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
             .order_by(Chunk.source_id, Chunk.chunk_index)
         )
     ).all()
+    passages = await passage_topics_for(sess, chunk_ids)
 
     return [
         SearchHitRead(
@@ -581,6 +583,7 @@ async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
             publication_date=source.publication_date,
             language=source.language,
             topic_labels=source.topic_labels,
+            passage_topics=passages.get(chunk.chunk_id),
             page_unit=page_unit_for((source.extra or {}).get("media_type")),
             media_type=(source.extra or {}).get("media_type"),
             duplicate_of=chunk.duplicate_of,

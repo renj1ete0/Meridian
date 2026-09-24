@@ -10,8 +10,10 @@ actions are applied by the admin routes.
 session to a list of :class:`Gap`, registered under a name. What exists today:
 
 - ``topic-coverage`` — per topic: thin (few sources), weak (few of them
-  government or peer-reviewed), stale (the newest dated one is old). Per
-  *area* joins when `P6-30`'s areas land: register another source.
+  government or peer-reviewed), stale (the newest dated one is old). Each
+  finding also counts on-topic *passages* (`P2-24`), including those inside
+  documents labelled with something else. Per *area* joins when `P6-30`'s
+  areas land: register another source.
 - ``search-yield`` — a topic whose search seeds keep producing nothing that
   survives the prefilter.
 - ``question-set`` — items of the held-out set that score low in the newest
@@ -37,10 +39,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import func, select, true
+from sqlalchemy import false, func, select, true, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Chunk, QueueTask, Source, TopicConfig
+from .models import Chunk, ChunkTopics, QueueTask, Source, TopicConfig
 from .searchseeds import topic_words
 
 #: Fewer on-topic sources than this is thin. A number to argue with, not a law:
@@ -170,6 +172,15 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
+def _elsewhere(passage_sources: int) -> str:
+    if not passage_sources:
+        return ""
+    return (
+        f" On-topic passages also sit in {_plural(passage_sources, 'other document')}"
+        " labelled with something else."
+    )
+
+
 def coverage_gaps(
     topic: str,
     *,
@@ -181,12 +192,26 @@ def coverage_gaps(
     share: float | None,
     corpus_share: float | None,
     today: dt.date,
+    passage_sources: int = 0,
 ) -> list[Gap]:
-    """The coverage findings for one topic. Pure, so the thresholds are testable."""
+    """The coverage findings for one topic. Pure, so the thresholds are testable.
+
+    ``passages`` counts on-topic passages (`P2-24`): chunks labelled with the
+    topic themselves, or belonging to a source that is. ``passage_sources``
+    counts the documents *not* labelled with the topic that hold at least one
+    passage about it — a chapter inside a book about something else.
+
+    **Thin is still judged on sources.** A passage label is one chunk's vector,
+    noisier than a document's mean, and a topic that exists in the corpus only
+    as asides in other documents is thin in the sense that matters: there is
+    no document to cite as being about it. So those documents are counted and
+    shown, and do not lift a topic out of "thin".
+    """
     evidence = {
         "sources": sources,
         "strong_sources": strong,
         "passages": passages,
+        "passage_sources": passage_sources,
         "newest": newest.isoformat() if newest else None,
         "crawl_share": None if share is None else round(share, 3),
         "corpus_share": None if corpus_share is None else round(corpus_share, 3),
@@ -199,21 +224,23 @@ def coverage_gaps(
         )
     out: list[Gap] = []
     if sources < THIN_SOURCES:
+        if sources:
+            title = f"{_plural(sources, 'source')}, {strong} government or peer-reviewed"
+        elif passage_sources:
+            title = f"No sources; passages in {_plural(passage_sources, 'other document')}"
+        else:
+            title = "No sources"
         out.append(
             Gap(
                 id=f"topic-thin:{topic}",
                 source="topic-coverage",
                 kind="thin",
                 subject=topic,
-                title=(
-                    f"{_plural(sources, 'source')}, {strong} government or peer-reviewed"
-                    if sources
-                    else "No sources"
-                ),
+                title=title,
                 reason=(
                     f"{_plural(sources, 'source')} labelled {topic} by content, "
-                    f"{_plural(passages, 'passage')}; fewer than {THIN_SOURCES} is thin."
-                    + share_note
+                    f"{_plural(passages, 'passage')} about it; fewer than {THIN_SOURCES} "
+                    "sources is thin." + _elsewhere(passage_sources) + share_note
                 ),
                 severity=round(0.6 + 0.4 * (1 - sources / THIN_SOURCES), 3),
                 evidence=evidence,
@@ -231,7 +258,9 @@ def coverage_gaps(
                 reason=(
                     f"{_plural(sources, 'source')}, {strong} of them government or "
                     f"peer-reviewed; fewer than {WEAK_STRONG} leaves an evidence question "
-                    "resting on institutional and informal material." + share_note
+                    "resting on institutional and informal material."
+                    + _elsewhere(passage_sources)
+                    + share_note
                 ),
                 severity=round(0.35 + 0.2 * (1 - strong / WEAK_STRONG), 3),
                 evidence=evidence,
@@ -290,18 +319,7 @@ async def topic_coverage(sess: AsyncSession, *, today: dt.date | None = None) ->
             .group_by(label.c.value)
         )
     }
-    passages = dict(
-        (
-            await sess.execute(
-                select(label.c.value, func.count(Chunk.chunk_id))
-                .select_from(Source)
-                .join(label, true())
-                .join(Chunk, Chunk.source_id == Source.source_id)
-                .where(Chunk.superseded_at.is_(None))
-                .group_by(label.c.value)
-            )
-        ).all()
-    )
+    passages, passage_sources = await _passage_counts(sess)
     on_topic_total = sum(n for n, _, _ in per_topic.values()) or 0
 
     out: list[Gap] = []
@@ -314,6 +332,7 @@ async def topic_coverage(sess: AsyncSession, *, today: dt.date | None = None) ->
                 sources=n,
                 strong=strong,
                 passages=int(passages.get(row.topic, 0)),
+                passage_sources=int(passage_sources.get(row.topic, 0)),
                 newest=newest,
                 share=shares.get(row.topic),
                 corpus_share=(n / on_topic_total) if on_topic_total else None,
@@ -321,6 +340,55 @@ async def topic_coverage(sess: AsyncSession, *, today: dt.date | None = None) ->
             )
         )
     return out
+
+
+async def _passage_counts(sess: AsyncSession) -> tuple[dict[str, int], dict[str, int]]:
+    """Per topic: on-topic live passages, and the other documents holding some.
+
+    A passage is on-topic when its own labels carry the topic (`P2-24`) or its
+    source's do — counted once either way. The second count is the documents
+    whose *own* labels do not carry the topic but which hold at least one
+    passage that does: where the topic lives only as an aside.
+    """
+    source_label = func.unnest(Source.topic_labels).table_valued("value").render_derived("sl")
+    by_source = (
+        select(source_label.c.value.label("topic"), Chunk.chunk_id)
+        .select_from(Source)
+        .join(source_label, true())
+        .join(Chunk, Chunk.source_id == Source.source_id)
+        .where(Chunk.superseded_at.is_(None))
+    )
+    passage_label = func.unnest(ChunkTopics.topic_labels).table_valued("value").render_derived("pl")
+    by_passage = (
+        select(passage_label.c.value.label("topic"), ChunkTopics.chunk_id)
+        .select_from(ChunkTopics)
+        .join(passage_label, true())
+        .join(Chunk, Chunk.chunk_id == ChunkTopics.chunk_id)
+        .where(Chunk.superseded_at.is_(None))
+    )
+    on_topic = union(by_source, by_passage).subquery()
+    passages = dict(
+        (
+            await sess.execute(select(on_topic.c.topic, func.count()).group_by(on_topic.c.topic))
+        ).all()
+    )
+    elsewhere = dict(
+        (
+            await sess.execute(
+                select(passage_label.c.value, func.count(func.distinct(Chunk.source_id)))
+                .select_from(ChunkTopics)
+                .join(passage_label, true())
+                .join(Chunk, Chunk.chunk_id == ChunkTopics.chunk_id)
+                .join(Source, Source.source_id == Chunk.source_id)
+                .where(
+                    Chunk.superseded_at.is_(None),
+                    ~func.coalesce(Source.topic_labels.any(passage_label.c.value), false()),
+                )
+                .group_by(passage_label.c.value)
+            )
+        ).all()
+    )
+    return passages, elsewhere
 
 
 # ---------------------------------------------------------------------------

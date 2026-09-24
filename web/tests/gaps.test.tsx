@@ -124,6 +124,37 @@ describe('helpers', () => {
     expect(line).toContain('corpus share 0%')
   })
 
+  it('names documents holding on-topic passages only when there are some', () => {
+    // `P2-24`: passages about a topic inside documents filed under another.
+    expect(evidenceLine({ ...gap().evidence, passage_sources: 4 })).toContain(
+      'in other documents 4',
+    )
+    expect(evidenceLine({ ...gap().evidence, passage_sources: 0 }).join(' ')).not.toContain(
+      'other documents',
+    )
+  })
+
+  it('prints every evidence key the server emits', () => {
+    // Drift across the language boundary: a key added to a gap's evidence in
+    // gaps.py and never printed here is a number the operator cannot see.
+    const server = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/gaps.py'), 'utf8')
+    const client = readFileSync(join(REPO, 'web/src/lib/gaps.ts'), 'utf8')
+    const keys = new Set<string>()
+    for (const block of server.matchAll(/evidence\s*=\s*\{([^}]*)\}/g)) {
+      for (const key of block[1]!.matchAll(/"([a-z_]+)"\s*:/g)) keys.add(key[1]!)
+    }
+    expect(keys.size).toBeGreaterThan(5)
+    // A question's kind is already the first word of its title.
+    const shownElsewhere = new Set(['kind'])
+    const missing = [...keys].filter(
+      (k) =>
+        !shownElsewhere.has(k) &&
+        !client.includes(`has('${k}')`) &&
+        !client.includes(`evidence.${k}`),
+    )
+    expect(missing).toEqual([])
+  })
+
   it('links a question to Find with the search already asked', () => {
     expect(findHref('a b&c')).toBe('/?q=a%20b%26c')
   })

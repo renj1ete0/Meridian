@@ -78,6 +78,7 @@ def test_a_hit_validates_from_the_dataclass() -> None:
         publication_date=None,
         language="en",
         topic_labels=["walkability"],
+        passage_topics=["walkability", "economics"],
         page_unit="page",
         media_type="application/pdf",
         duplicate_of=None,
@@ -94,6 +95,8 @@ def test_a_hit_validates_from_the_dataclass() -> None:
     # rather than guessed at.
     assert dto.page_unit == "page"
     assert dto.vector_rank is None
+    # `P2-24`: the passage's own labels survive the boundary, order kept.
+    assert dto.passage_topics == ["walkability", "economics"]
 
 
 def test_the_hit_dto_rejects_a_tier_the_database_would_reject() -> None:

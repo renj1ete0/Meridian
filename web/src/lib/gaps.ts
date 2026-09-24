@@ -126,6 +126,8 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
   if (has('sources')) out.push(`sources ${evidence.sources}`)
   if (has('strong_sources')) out.push(`gov/peer-reviewed ${evidence.strong_sources}`)
   if (has('passages')) out.push(`passages ${evidence.passages}`)
+  if (has('passage_sources') && evidence.passage_sources)
+    out.push(`in other documents ${evidence.passage_sources}`)
   if (has('newest')) out.push(`newest ${evidence.newest ?? '—'}`)
   if (has('crawl_share')) out.push(`crawl share ${pct(evidence.crawl_share)}`)
   if (has('corpus_share')) out.push(`corpus share ${pct(evidence.corpus_share)}`)

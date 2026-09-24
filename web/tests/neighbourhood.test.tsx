@@ -73,6 +73,7 @@ function hit(over: Partial<SearchHit> = {}): SearchHit {
   return {
     chunk_id: 11,
     source_id: 7,
+    passage_topics: null,
     text: 'Covered linkways near stations were associated with more walking trips.',
     page_or_offset: 3,
     chunk_index: 0,
