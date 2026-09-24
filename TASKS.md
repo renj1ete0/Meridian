@@ -1233,9 +1233,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       Custom font encodings extract to control characters, which pass the
       scanned-page check. Garbled pages are blanked, and mostly garbled documents
       go to OCR, both at fetch and via `worker.rechunk`. Found by B-43's debris
-      rule: six sources, 693 chunks. Follow-up, not done: a *re-fetch* that turns
-      a document into a scan leaves its previous chunks live (`main._chunk`
-      returns early when there is no text)
+      rule: six sources, 693 chunks. Follow-up done in `v0.125.2`: a re-fetch
+      that turns a document into a scan retires its previous chunks
 - [x] `B-49` **URLs were embedded as if they were meaning** — `v0.120.0`. One
       character in eight of chunk text sat inside a markdown link target, and one
       chunk in ten was over 30% URL, so pages clustered by link shape. The embedder

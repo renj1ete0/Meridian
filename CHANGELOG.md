@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.125.2] — 2026-09-24
+
+### Fixed
+
+- `B-47`: a document re-fetched as a scan (or a garbled text layer) retires
+  its previous chunks, instead of leaving them live beside
+  `text_available=False`
+
 ## [0.125.1] — 2026-09-24
 
 ### Fixed

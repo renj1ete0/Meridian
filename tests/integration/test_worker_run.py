@@ -2614,3 +2614,43 @@ async def test_a_non_english_pages_english_version_is_queued_first(
     assert rows[english] == rows[other] + ENGLISH_ALTERNATE_BONUS
     source = await get_source(sess, f"https://{run_domain}/a")
     assert source.extra["english_alternate"] == english
+
+
+async def test_a_page_refetched_as_a_scan_retires_its_old_chunks(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    """`B-47` follow-up: a document with no text has no live chunks."""
+    from worker.extract.base import ExtractedDocument
+
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[long_page("v1")])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+    source = await get_source(sess, f"https://{run_domain}/a")
+    assert await sess.scalar(
+        select(func.count()).select_from(Chunk).where(Chunk.source_id == source.source_id)
+    )
+
+    await enqueue(sess, run_domain, run_topic, path="/a")
+
+    def changed(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[long_page("v2")])
+
+    worker, _ = build_worker(sess, changed, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    async def scanned(claim, result):
+        return ExtractedDocument(extractor="pdftotext", needs_ocr=True)
+
+    monkeypatch.setattr(worker, "_extract", scanned)
+    await worker.run()
+
+    live = await sess.scalar(
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.source_id == source.source_id, Chunk.superseded_at.is_(None))
+    )
+    assert live == 0

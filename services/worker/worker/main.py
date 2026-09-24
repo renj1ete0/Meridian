@@ -1223,6 +1223,10 @@ class Worker:
                     # which is a different thing needing a different follow-up.
                     await mark_scanned(sess, source)
                     await enqueue_ocr(sess, source.source_id)
+                    # `B-47` follow-up: a document that had text and is now a
+                    # scan (or a garbled layer) has none. What it said before
+                    # is superseded, not left live beside `text_available=False`.
+                    await replace_chunks(sess, source.source_id, [])
                     self._stats.scanned += 1
                 if missing:
                     log.info(
