@@ -46,11 +46,17 @@ live), `B-51` (search seeding every 6h, Bing web off),
    48h sign-off: daily jobs run about once in 12h. The timers fire only while
    the operator is logged in, since lingering is off.
 
-1. **Three agent branches to merge** — Map (`P6-30`, `P6-31`, `P6-34`,
-   `P6-35`), Find panel (`P6-33`, `P6-32`), Gaps (`P2-22`, `P6-36`). They were
-   told not to bump versions or edit CHANGELOG/TASKS; see handover §0 for
-   branches and how to merge (re-parent their Alembic revisions onto
-   `7fbdd2242063`, then bump, changelog, TASKS per task).
+1. **Merged overnight (2026-09-24/25), all on `main` at `v0.139.0`**, full suite
+   passing: the Map (`P6-30`, `P6-31`, `P6-34`, `P6-35`), Find's neighbourhood
+   (`P6-33`), routes (`P6-32`), Gaps and its sources (`P6-36`, `P6-37`), the
+   question-set runner (`P2-22`), steering proposals (`P6-38`), places (`P2-23`),
+   passage topics (`P2-24`), document kind and listings (`B-59`), diversity
+   seeding (`P5-05`), merge folding (`B-41`) and smaller fixes. **None of it is on
+   the live stack yet**, because the measurement window was running. Deploy it,
+   then run each backfill's report before `--apply`. The document-kind one
+   retires about a third of live passages, those of listing pages. `B-58` (DOI
+   ranking) was still with its agent at the time of writing. Wiring the Map's
+   route mode to `P6-32` is a small open follow-up.
 2. **Check the live stack finished what was started** (handover §0): the
    embedding backlog and `worker.reembed`, the first `seedsearch` batch, the
    `translate` table (it was empty at handover), the crawler running under the
