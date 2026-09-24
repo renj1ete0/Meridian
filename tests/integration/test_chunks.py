@@ -483,3 +483,100 @@ async def test_the_chunkers_output_round_trips_through_the_database(
         assert text[row.page_or_offset : row.page_or_offset + len(row.text)] == row.text, (
             f"chunk {row.chunk_index}'s stored offset does not locate its text"
         )
+
+
+# --------------------------------------------------------------------------
+# Every citing table counts (`B-46`)
+# --------------------------------------------------------------------------
+
+
+async def test_the_citing_tables_are_every_table_the_database_has_with_provenance(
+    session_for,
+) -> None:
+    """Drift: the models' list against the migrated database's.
+
+    The hand-written list left `entities` out while the column existed on it;
+    the list is now derived from the models, and this compares that with what
+    the migrations actually built, so neither can gain a citing table the
+    sweep does not know about.
+    """
+    from sqlalchemy import text
+
+    from meridian_core.chunks import CITATION_COLUMN, citing_tables
+
+    sess = await session_for("rw")
+    in_database = set(
+        await sess.scalars(
+            text(
+                "SELECT table_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND column_name = :column"
+            ),
+            {"column": CITATION_COLUMN},
+        )
+    )
+
+    assert set(citing_tables()) == in_database
+    assert "entities" in in_database
+
+
+async def _retire_one(sess, url: str) -> tuple[Source, int]:
+    source = await a_source(sess, url)
+    await replace_chunks(sess, source.source_id, writes("evidence"))
+    cited = (await chunks_for(sess, source.source_id))[0].chunk_id
+    await replace_chunks(sess, source.source_id, writes("rewritten"))
+    return source, cited
+
+
+async def test_a_superseded_chunk_only_an_entity_cites_is_not_reclaimable(
+    session_for, url, cleanup
+) -> None:
+    sess = await session_for("rw")
+    _, cited = await _retire_one(sess, url)
+    sess.add(
+        Entity(
+            canonical_name=f"subject-{uuid.uuid4().hex[:8]}",
+            node_type="finding",
+            supporting_chunk_ids=[cited],
+        )
+    )
+    await sess.flush()
+
+    reclaimable = set(await sess.scalars(select(_reclaimable().subquery().c.chunk_id)))  # noqa: SLF001
+
+    assert cited not in reclaimable
+    await sess.rollback()
+
+
+async def test_a_source_only_an_entity_cites_is_cited_for_every_sweep(
+    session_for, url, cleanup
+) -> None:
+    """Retention (raw files) and furniture both ask the one helper now."""
+    from meridian_core import retention
+    from meridian_core.chunks import cited_source_ids
+    from worker import furniture
+
+    sess = await session_for("rw")
+    source, cited = await _retire_one(sess, url)
+    sess.add(
+        Entity(
+            canonical_name=f"subject-{uuid.uuid4().hex[:8]}",
+            node_type="finding",
+            supporting_chunk_ids=[cited],
+        )
+    )
+    await sess.flush()
+
+    assert source.source_id in await cited_source_ids(sess)
+    assert source.source_id in await retention.cited_source_ids(sess)
+    assert source.source_id in await furniture.cited_source_ids(sess)
+    await sess.rollback()
+
+
+async def test_an_uncited_source_is_not_reported_cited(session_for, url, cleanup) -> None:
+    from meridian_core.chunks import cited_source_ids
+
+    sess = await session_for("rw")
+    source, _ = await _retire_one(sess, url)
+
+    assert source.source_id not in await cited_source_ids(sess)
+    await sess.rollback()

@@ -173,26 +173,58 @@ async def purge_superseded(sess: AsyncSession, *, before=None) -> int:
     return result.rowcount or 0
 
 
-#: Every table whose provenance is an array of chunk ids. All three carry
-#: `supporting_chunk_ids` (§2.3), and all three are reasons a retired chunk must
-#: stay: an edge's evidence is not reclaimable space, it is the thing that makes
-#: the edge checkable.
+#: The column every provenance-carrying table names its evidence in (§2.3).
+CITATION_COLUMN = "supporting_chunk_ids"
+
+
+def citing_tables() -> tuple[str, ...]:
+    """Every table with a ``supporting_chunk_ids`` column, read from the models.
+
+    Derived rather than listed (`B-46`). The list was written out by hand with
+    edges, observations and attribute values, and entities — which carry the
+    same column — were left out, so a sweep could delete a retired chunk that
+    only an entity cited. A table that gains provenance later is covered the
+    moment its model declares the column.
+    """
+    return tuple(
+        sorted(t.name for t in Chunk.metadata.tables.values() if CITATION_COLUMN in t.columns)
+    )
+
+
+#: Every reason a retired chunk must stay: an edge's (or entity's, or
+#: observation's) evidence is not reclaimable space, it is the thing that makes
+#: the claim checkable.
 #:
 #: Written as SQL rather than built with `~exists()` because the clause is
 #: negated, and SQLAlchemy cannot negate a text fragment — which is how the
 #: first version of this failed, loudly and immediately, rather than by quietly
-#: matching everything.
-_UNCITED = (
-    "NOT EXISTS (SELECT 1 FROM edges e WHERE chunks.chunk_id = ANY(e.supporting_chunk_ids))"
-    " AND NOT EXISTS (SELECT 1 FROM observations o"
-    " WHERE chunks.chunk_id = ANY(o.supporting_chunk_ids))"
-    " AND NOT EXISTS (SELECT 1 FROM attribute_values a"
-    " WHERE chunks.chunk_id = ANY(a.supporting_chunk_ids))"
-)
+#: matching everything. Table names come from the models, never from input.
+def _cited(chunk_ref: str) -> str:
+    """SQL true when the chunk ``chunk_ref`` names is evidence for anything."""
+    return " OR ".join(
+        f"EXISTS (SELECT 1 FROM {table} c WHERE {chunk_ref} = ANY(c.{CITATION_COLUMN}))"
+        for table in citing_tables()
+    )
+
+
+_UNCITED = f"NOT ({_cited('chunks.chunk_id')})"
+
+
+async def cited_source_ids(sess: AsyncSession) -> set[int]:
+    """Sources with at least one chunk that anything with provenance cites.
+
+    The one definition every pass that retires or rewrites material asks —
+    the raw-file sweep, the furniture pass, the re-chunk pass. There had been
+    three, each naming a different subset of the citing tables.
+    """
+    rows = await sess.execute(
+        sql_text(f"SELECT DISTINCT k.source_id FROM chunks k WHERE {_cited('k.chunk_id')}")
+    )
+    return {row[0] for row in rows}
 
 
 def _reclaimable(before=None):
-    """Superseded chunks that no edge, observation or attribute value cites."""
+    """Superseded chunks that nothing with provenance cites."""
     query = select(Chunk.chunk_id).where(Chunk.superseded_at.is_not(None), sql_text(_UNCITED))
     if before is not None:
         query = query.where(Chunk.superseded_at < before)

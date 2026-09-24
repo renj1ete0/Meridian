@@ -1186,7 +1186,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       false-positive sample. Edge cases already seen: a legal site's "recent
       decisions" sidebar taken as a menu, ISBN lines repeated across one book's
       chapters taken as repeated
-- [ ] `B-46` **The superseded-chunk sweep ignores entity citations** —
+- [x] `B-46` **The superseded-chunk sweep ignores entity citations** — `v0.118.1`;
+      the citing tables are derived from the models, one `cited_source_ids` for all sweeps —
       `chunks._UNCITED` checks edges, observations and attribute values but not
       `entities.supporting_chunk_ids`, so `sweep --apply` could delete a
       superseded chunk that only an entity cites. Must be fixed before `B-43`'s

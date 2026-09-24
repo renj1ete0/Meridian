@@ -33,11 +33,12 @@ import contextlib
 import dataclasses
 import time
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
+from meridian_core import chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
-from meridian_core.models import Chunk, Edge, Entity, Source
+from meridian_core.models import Source
 
 from .prefilter import is_site_furniture
 
@@ -60,16 +61,8 @@ def is_furniture_source(source: Source) -> bool:
 
 
 async def cited_source_ids(sess) -> set[int]:
-    """Sources with at least one chunk that an edge or an entity cites."""
-    cited = (
-        select(func.unnest(Edge.supporting_chunk_ids))
-        .union(select(func.unnest(Entity.supporting_chunk_ids)))
-        .subquery()
-    )
-    rows = await sess.scalars(
-        select(Chunk.source_id).distinct().where(Chunk.chunk_id.in_(select(cited)))
-    )
-    return set(rows)
+    """Sources with at least one cited chunk — one definition, in `meridian_core.chunks`."""
+    return await chunks.cited_source_ids(sess)
 
 
 async def run_pass(*, apply: bool, domain: str | None = None, examples: int = 20) -> FurnitureStats:

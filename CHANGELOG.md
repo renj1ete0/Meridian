@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.118.1] — 2026-09-24
+
+### Fixed
+
+- `B-46`: a retired chunk cited only by an entity could be deleted by
+  `sweep --apply`, and its raw file dropped by the retention sweep. The set of
+  citing tables is now derived from the models (every table with
+  `supporting_chunk_ids`), and the chunk sweep, the raw-file sweep and the
+  furniture pass share one `cited_source_ids`
+
 ## [0.118.0] — 2026-09-24
 
 ### Added

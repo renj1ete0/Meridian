@@ -51,9 +51,10 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import chunks
 from .logging import get_logger
 from .models import Source
 
@@ -113,21 +114,13 @@ class RetentionPlan:
 
 
 async def cited_source_ids(sess: AsyncSession) -> set[int]:
-    """Sources with at least one chunk cited by an edge (§5.4's "snapshot if cited").
+    """Sources with at least one cited chunk (§5.4's "snapshot if cited").
 
-    Empty until the graph exists, which makes every background file droppable in
-    the meantime — correct per §5.4, and harmless only because none are written.
-    The query is here rather than deferred because the day edges appear is the
-    day a sweep without it starts deleting evidence, and that is not a day
-    anyone will connect to this function.
+    Delegates to `chunks.cited_source_ids`, which covers every table with
+    provenance (`B-46`). This one asked only about edges, so a raw file whose
+    only citation was an entity's could be swept.
     """
-    rows = await sess.execute(
-        text(
-            "SELECT DISTINCT c.source_id FROM chunks c "
-            "WHERE EXISTS (SELECT 1 FROM edges e WHERE c.chunk_id = ANY(e.supporting_chunk_ids))"
-        )
-    )
-    return {row[0] for row in rows}
+    return await chunks.cited_source_ids(sess)
 
 
 def _walk(root: Path) -> Iterable[tuple[str, int]]:
