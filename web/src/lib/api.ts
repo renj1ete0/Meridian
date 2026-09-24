@@ -1425,6 +1425,8 @@ export interface SeedCreate {
   task_type?: 'url' | 'query'
   topic?: string | null
   priority?: number
+  /** Why, for the steering audit (`B-55`). */
+  reason?: string | null
 }
 
 export function getFirstRun(init?: RequestInit): Promise<FirstRun> {

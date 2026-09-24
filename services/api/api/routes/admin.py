@@ -1074,6 +1074,18 @@ async def add_seed(seed: SeedCreate, _: AdminAllowed, sess: WriteSession) -> Que
         task_type=seed.task_type,
         priority=seed.priority,
     )
+    # `B-55`: a seed changes what the crawl acquires, which is steering, and
+    # steering nobody can find in the log is steering nobody can undo.
+    await steering.record(
+        sess,
+        actor="user",
+        topic=seed.topic,
+        field="seed",
+        old=None,
+        new=seed.url_or_query,
+        reason=seed.reason or f"{seed.task_type} seed added",
+        now=dt.datetime.now(dt.UTC),
+    )
     await sess.commit()
     await sess.refresh(task)
     log.info("seed added", extra={"url": seed.url_or_query, "topic": seed.topic})
@@ -1115,6 +1127,16 @@ async def drop_seed(task_id: int, _: AdminAllowed, sess: WriteSession) -> None:
             ),
         )
 
+    await steering.record(
+        sess,
+        actor="user",
+        topic=task.topic,
+        field="seed",
+        old=task.url_or_query,
+        new=None,
+        reason=f"{task.task_type} seed withdrawn before it ran",
+        now=dt.datetime.now(dt.UTC),
+    )
     await sess.delete(task)
     await sess.commit()
     log.info("seed removed", extra={"task_id": task_id, "url": task.url_or_query})

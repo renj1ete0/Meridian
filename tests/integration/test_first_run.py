@@ -20,7 +20,7 @@ from sqlalchemy import delete, select
 
 from api.routes.admin import add_seed, drop_seed, read_first_run
 from fastapi import HTTPException
-from meridian_core.models import QueueTask, Source
+from meridian_core.models import QueueTask, Source, SteeringLog
 from meridian_core.schemas.admin import SeedCreate
 
 pytestmark = pytest.mark.usefixtures("require_db")
@@ -33,6 +33,14 @@ async def clean(session_for):
     sess = await session_for("rw")
     await sess.execute(delete(QueueTask).where(QueueTask.url_or_query.like("%first-run.test%")))
     await sess.execute(delete(Source).where(Source.url.like("%first-run.test%")))
+    await sess.execute(
+        delete(SteeringLog)
+        .where(SteeringLog.field == "seed")
+        .where(
+            SteeringLog.new_value.like("%first-run.test%")
+            | SteeringLog.old_value.like("%first-run.test%")
+        )
+    )
     await sess.flush()
     return sess
 
@@ -273,3 +281,55 @@ async def test_progress_names_domains_once_each(clean) -> None:
     view = await explore_progress(clean)
 
     assert view.recent_domains.count("first-run.test") == 1
+
+
+# --------------------------------------------------------------------------
+# A seed is steering, and steering is logged (`B-55`)
+
+
+async def seed_log(sess) -> list[SteeringLog]:
+    return list(
+        await sess.scalars(
+            select(SteeringLog)
+            .where(SteeringLog.field == "seed")
+            .where(
+                SteeringLog.new_value.like("%first-run.test%")
+                | SteeringLog.old_value.like("%first-run.test%")
+            )
+            .order_by(SteeringLog.log_id)
+        )
+    )
+
+
+async def test_adding_a_seed_is_in_the_steering_log_with_its_reason(clean) -> None:
+    await add_seed(
+        SeedCreate(url_or_query=URL, topic="walkability", reason="a gap the map showed"),
+        None,
+        clean,
+    )
+
+    [row] = await seed_log(clean)
+    assert (row.actor, row.topic, row.old_value, row.new_value) == (
+        "user",
+        "walkability",
+        None,
+        URL,
+    )
+    assert row.reason == "a gap the map showed"
+
+
+async def test_a_refused_seed_leaves_no_log_row(clean) -> None:
+    await add_seed(SeedCreate(url_or_query=URL), None, clean)
+    with pytest.raises(HTTPException):
+        await add_seed(SeedCreate(url_or_query=URL), None, clean)
+
+    assert len(await seed_log(clean)) == 1
+
+
+async def test_withdrawing_a_seed_is_in_the_steering_log(clean) -> None:
+    task = await a_seed(clean)
+
+    await drop_seed(task.task_id, None, clean)
+
+    [row] = await seed_log(clean)
+    assert (row.old_value, row.new_value) == (URL, None)

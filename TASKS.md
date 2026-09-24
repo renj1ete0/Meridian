@@ -1293,7 +1293,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       language-aware floor
 - [x] `B-54` **Schedule `worker.docdupes`** — `v0.124.1`, timetable row shipped
       *disabled*: read the first live report, then enable it in Admin
-- [ ] `B-55` **Seeds and watches are not in the steering audit** — `POST /api/admin/seeds`
+- [x] `B-55` **Seeds and watches are not in the steering audit** — `v0.125.1` for seeds (a "watch" does not exist yet; it arrives with `P6-35`) — `POST /api/admin/seeds`
       writes no `steering_log` row, so the map's "suggest a term" and Gaps' actions
       would be steering nobody can see or undo from the log (found by the Map and Gaps
       agents)

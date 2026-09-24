@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.125.1] — 2026-09-24
+
+### Fixed
+
+- `B-55`: adding or withdrawing a seed writes a `steering_log` row (field
+  `seed`, with an optional `reason` on `POST /api/admin/seeds`), and the Admin
+  audit rail reads it as "seed: …" / "seed withdrawn: …" — a seed changes what
+  the crawl acquires, so it is steering, and the map's and Gaps' actions build
+  on it
+
 ## [0.125.0] — 2026-09-24
 
 ### Added

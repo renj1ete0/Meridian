@@ -377,3 +377,16 @@ describe('boosts', () => {
     expect(factorOf('1.5')).toBe(1.5)
   })
 })
+
+describe('auditLine for seeds (B-55)', () => {
+  it('says a seed was added and withdrawn', async () => {
+    const { auditLine } = await import('../src/admin/SteeringRail')
+    const base = { log_id: 1, changed_at: '2026-09-24T00:00:00Z', actor: 'user', topic: 'walkability', reason: null }
+    expect(auditLine({ ...base, field: 'seed', old_value: null, new_value: 'a query' } as never)).toBe(
+      'walkability seed: a query',
+    )
+    expect(auditLine({ ...base, field: 'seed', old_value: 'a query', new_value: null } as never)).toBe(
+      'walkability seed withdrawn: a query',
+    )
+  })
+})

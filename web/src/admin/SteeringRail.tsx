@@ -49,6 +49,9 @@ export function auditLine(entry: SteeringEntry): string {
       return next === null
         ? `${topic} boost expiry cleared`
         : `${topic} boost until ${next.slice(0, 10)}`
+    case 'seed':
+      // `B-55`: a seed is steering too — what the crawl is sent to look at.
+      return next === null ? `${topic} seed withdrawn: ${old ?? '—'}` : `${topic} seed: ${next}`
     default:
       return `${topic} ${field ?? 'change'} ${old ?? '—'} → ${next ?? '—'}`
   }

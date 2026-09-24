@@ -340,6 +340,9 @@ class SeedCreate(BaseModel):
     topic: str | None = None
     #: Cold-start seeds run first, the same default `scripts/seed.py` uses.
     priority: int = 100
+    #: Why, for the steering audit (`B-55`). A seed is steering — it changes
+    #: what the crawl acquires — so it is logged beside weights and boosts.
+    reason: str | None = Field(default=None, max_length=500)
 
 
 # ---------------------------------------------------------------------------
