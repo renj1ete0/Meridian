@@ -1321,6 +1321,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       (2026-09-24): the system proposes what to steer, and if the operator does not
       object within a window (default 12h, in the global policy row) it is applied,
       bounded, expiring and logged. Being built by a delegated agent
+- [ ] `B-60` **No database guard against a duplicate edge** — `add_edge` combines a
+      repeated claim, but two concurrent calls could still insert two rows: there is
+      no unique index on (from, relation, to). Add it after `worker.edgedupes --apply`
+      has folded the live graph's existing duplicate (found by the `B-41` agent)
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
