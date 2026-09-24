@@ -369,7 +369,9 @@ async def test_a_reversal_puts_back_exactly_this_merges_rows(clean) -> None:
     await reverse(clean, second_merge.merge_id, reversed_by="user")
 
     await clean.refresh(first_edge)
-    await clean.refresh(second_edge)
+    # Both edges landed on one claim, so the second merge folded its edge into
+    # the first's (`B-41`) and the reversal re-created it under its own id.
+    second_edge = await clean.get(Edge, second_edge.edge_id, populate_existing=True)
     assert second_edge.from_node == second.entity_id, "its own edge came back"
     assert first_edge.from_node == target.entity_id, "the other merge's edge stayed put"
 

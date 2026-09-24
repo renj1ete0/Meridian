@@ -1850,7 +1850,7 @@ Things worth doing that don't belong to a phase yet.
       the graph cites**: the rule reads an address, and evidence outranks it.
       Synthesis no longer pulls junk. Chunk-level boilerplate inside content
       pages (footers, banners) is a separate problem, not addressed here
-- [ ] `B-41` **A merge leaves identical edges side by side** — merging #27 into
+- [x] `B-41` **A merge leaves identical edges side by side** — `v0.129.1` (delegated agent); the live graph's one duplicate is left for `worker.edgedupes --apply` after the measurement window — merging #27 into
       #9 moved edge 21 onto the same subject, relation and object as edge 6,
       and nothing combined them. `add_edge` treats that triple as one claim
       with two citations; `merge` should too, keeping every citation and the

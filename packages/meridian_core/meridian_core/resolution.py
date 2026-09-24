@@ -31,12 +31,22 @@ import difflib
 import re
 import unicodedata
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
-from .models import AttributeValue, Edge, Entity, GazetteerTerm, MergeLog, Observation
+from .models import (
+    AttributeDefinition,
+    AttributeValue,
+    Edge,
+    Entity,
+    GazetteerTerm,
+    MergeLog,
+    Observation,
+)
 
 log = get_logger(__name__)
 
@@ -72,10 +82,14 @@ __all__ = [
     "decide",
     "expansions_from_gazetteer",
     "MergeError",
+    "RepeatedEdges",
+    "fold_repeated_edges",
     "merge",
     "reverse",
+    "revive",
     "normalise",
     "score",
+    "snapshot",
 ]
 
 _PUNCT = re.compile(r"[^\w\s]")
@@ -409,6 +423,55 @@ class MergeError(RuntimeError):
         self.reason = reason
 
 
+#: The tables a merge re-points, and the columns in each that name an entity.
+#: One place, so `merge` and `reverse` cannot disagree about what moved.
+_REFERENCES: dict[str, tuple[type, tuple[str, ...]]] = {
+    "edges": (Edge, ("from_node", "to_node")),
+    "attribute_values": (AttributeValue, ("entity_id",)),
+    "observations": (Observation, ("subject_entity_id", "geography_entity_id")),
+}
+
+#: What a fold may change on the surviving edge. The citation-like lists
+#: accumulate; the judgement moves only to a strictly higher tier, which is
+#: `add_edge`'s rule for the same claim arriving twice (§11.12).
+_EDGE_JUDGEMENT = (
+    "confidence",
+    "stance",
+    "certainty",
+    "produced_by",
+    "model",
+    "quality_tier",
+    "produced_at",
+)
+_EDGE_FOLD_FIELDS = (
+    "supporting_chunk_ids",
+    "topic_labels",
+    "contested_with",
+    "valid_from",
+    "valid_to",
+    "similarity_dimension",
+    "disanalogy",
+    "created_by",
+    *_EDGE_JUDGEMENT,
+)
+
+#: The same for an attribute value. The value itself travels with the
+#: judgement: which of two readings of one attribute an entity carries is the
+#: judgement.
+_VALUE_JUDGEMENT = (
+    "value",
+    "value_numeric",
+    "value_json",
+    "confidence",
+    "produced_by",
+    "model",
+    "quality_tier",
+    "produced_at",
+    "tagged_at",
+)
+_VALUE_FOLD_FIELDS = ("supporting_chunk_ids", *_VALUE_JUDGEMENT)
+
+
 async def merge(
     sess: AsyncSession,
     source_id: int,
@@ -435,6 +498,14 @@ async def merge(
     Everything that pointed at the source is moved and the moved ids are
     recorded, so `reverse` can put back exactly this merge's rows rather than
     whatever currently points at the target.
+
+    **A claim the target already holds is folded, not duplicated** (`B-41`).
+    `add_edge` treats subject, relation and object as one claim with several
+    citations; a merge that re-pointed an edge onto a triple the target
+    already had would leave two rows for that one claim, and every count built
+    on edges would count it twice. The same holds for an attribute the target
+    already carries, where the table allows one value per entity and the move
+    would simply be refused. Observations are not folded — see `_fold_edges`.
     """
     source = await sess.get(Entity, source_id, with_for_update=True)
     target = await sess.get(Entity, target_id, with_for_update=True)
@@ -453,12 +524,21 @@ async def merge(
     if target.redirects_to is not None:
         raise MergeError("chain", f"Entity {target_id} is itself a redirect; it is not a home.")
 
-    moved_edges = await _reassign(sess, Edge, ("from_node", "to_node"), source_id, target_id)
-    moved_values = await _reassign(sess, AttributeValue, ("entity_id",), source_id, target_id)
-    moved_observations = await _reassign(
-        sess, Observation, ("subject_entity_id", "geography_entity_id"), source_id, target_id
-    )
+    # Before the move, not after: the table's one-value-per-attribute
+    # constraint would refuse the move itself.
+    combined = await _fold_attribute_values(sess, source_id, target_id, folded_by=decided_by)
 
+    moved: dict[str, list[int]] = {}
+    moved_columns: dict[str, dict[str, list[str]]] = {}
+    for table, (model, columns) in _REFERENCES.items():
+        moved[table], moved_columns[table] = await _reassign(
+            sess, model, columns, source_id, target_id
+        )
+
+    combined += await _fold_edges(sess, moved["edges"], folded_by=decided_by)
+
+    target_fields = ("aliases", "merged_from", "supporting_chunk_ids")
+    target_before = snapshot(target, target_fields)
     # The aliases come too. A merge that dropped them would lose the very
     # spellings that caused the merge, so the next mention fragments again.
     target.aliases = sorted(
@@ -478,9 +558,12 @@ async def merge(
         score=verdict.score if verdict else None,
         signals=dict(verdict.signals) if verdict else None,
         decided_by=decided_by,
-        moved_edge_ids=moved_edges,
-        moved_attribute_value_ids=moved_values,
-        moved_observation_ids=moved_observations,
+        moved_edge_ids=moved["edges"],
+        moved_attribute_value_ids=moved["attribute_values"],
+        moved_observation_ids=moved["observations"],
+        moved_columns=moved_columns,
+        combined=combined or None,
+        target_fields={"before": target_before, "after": snapshot(target, target_fields)},
     )
     sess.add(entry)
     await sess.flush()
@@ -491,7 +574,8 @@ async def merge(
             "source_entity_id": source_id,
             "target_entity_id": target_id,
             "decided_by": decided_by,
-            "edges": len(moved_edges),
+            "edges": len(moved["edges"]),
+            "folded": len(combined),
         },
     )
     return entry
@@ -503,6 +587,12 @@ async def reverse(sess: AsyncSession, merge_id: int, *, reversed_by: str) -> Mer
     Moves back the rows *this* merge moved, not everything now pointing at the
     target — two merges into the same entity are otherwise indistinguishable
     afterwards, and reversing the second would take the first's edges with it.
+
+    Folds are split first, newest first: the folded row comes back whole under
+    its own id, and the survivor loses what the fold gave it — but only that.
+    A citation the survivor gained *after* the merge stays, and a field that
+    something else has since rewritten is left as that write left it, because
+    the reversal undoes this merge and not the writes that followed it.
 
     The log row is kept and stamped rather than deleted. "Merged and then
     reversed" is a more interesting fact than "never merged": it is the signal
@@ -519,58 +609,498 @@ async def reverse(sess: AsyncSession, merge_id: int, *, reversed_by: str) -> Mer
     if source is None or target is None:
         raise MergeError("missing", "One side of this merge no longer exists.")
 
-    await _restore(sess, Edge, ("from_node", "to_node"), entry.moved_edge_ids, entry)
-    await _restore(sess, AttributeValue, ("entity_id",), entry.moved_attribute_value_ids, entry)
-    await _restore(
-        sess,
-        Observation,
-        ("subject_entity_id", "geography_entity_id"),
-        entry.moved_observation_ids,
-        entry,
-    )
+    records = list(entry.combined or ())
+    # Every survivor is checked before anything is touched, so a reversal that
+    # cannot finish leaves nothing half-split.
+    for record in records:
+        model, _ = _REFERENCES[record["table"]]
+        if await sess.get(model, record["survivor_id"]) is None:
+            raise MergeError(
+                "order",
+                f"{record['table']} row {record['survivor_id']} that merge {merge_id} folded "
+                "into is gone; reverse the later merge that took it first.",
+            )
+
+    for record in reversed(records):
+        await _unfold(sess, record)
+
+    moved_ids = {
+        "edges": entry.moved_edge_ids,
+        "attribute_values": entry.moved_attribute_value_ids,
+        "observations": entry.moved_observation_ids,
+    }
+    for table, (model, columns) in _REFERENCES.items():
+        per_row = None if entry.moved_columns is None else entry.moved_columns.get(table, {})
+        await _restore(sess, model, columns, moved_ids[table], entry, per_row)
 
     source.redirects_to = None
-    target.merged_from = [i for i in (target.merged_from or ()) if i != entry.source_entity_id]
+    if entry.target_fields:
+        _restore_fields(target, entry.target_fields["before"], entry.target_fields["after"])
+    else:
+        # Logged before `B-41`: only the provenance was known to be this merge's.
+        target.merged_from = [i for i in (target.merged_from or ()) if i != entry.source_entity_id]
     entry.reversed_at = dt.datetime.now(dt.UTC)
     entry.reversed_by = reversed_by
     await sess.flush()
 
     log.info(
         "merge reversed",
-        extra={"merge_id": merge_id, "reversed_by": reversed_by},
+        extra={"merge_id": merge_id, "reversed_by": reversed_by, "unfolded": len(records)},
     )
     return entry
 
 
 async def _reassign(
     sess: AsyncSession, model, columns, source_id: int, target_id: int
-) -> list[int]:
+) -> tuple[list[int], dict[str, list[str]]]:
     """Point every ``columns`` reference at the target, and report which rows.
 
     Reads the ids first and updates by primary key. The obvious alternative —
     one `UPDATE ... WHERE from_node = source` — cannot tell you afterwards
     which rows it touched, and that list is the whole reversibility story.
+
+    Which *columns* moved is reported per row as well: an edge from the target
+    to the source moves only its object, and a reversal that moved both ends
+    back would hand the source an edge it never had.
     """
     pk_column = list(model.__table__.primary_key.columns)[0]
-    moved: list[int] = []
+    per_row: dict[str, list[str]] = {}
     for column in columns:
         attribute = getattr(model, column)
         rows = (await sess.execute(select(model).where(attribute == source_id))).scalars().all()
         for row in rows:
             setattr(row, column, target_id)
-            moved.append(getattr(row, pk_column.name))
+            per_row.setdefault(str(getattr(row, pk_column.name)), []).append(column)
     await sess.flush()
-    return sorted(set(moved))
+    return sorted(int(key) for key in per_row), per_row
 
 
-async def _restore(sess: AsyncSession, model, columns, ids, entry: MergeLog) -> None:
-    """Point the recorded rows back at the source."""
+async def _restore(
+    sess: AsyncSession,
+    model,
+    columns,
+    ids,
+    entry: MergeLog,
+    per_row: dict[str, list[str]] | None = None,
+) -> None:
+    """Point the recorded rows back at the source.
+
+    ``per_row`` names the columns that moved; without it (a merge logged
+    before `B-41`) every column naming the target is moved back, which is
+    what the reversal always did and is wrong only for a row that joined the
+    two entities.
+    """
     if not ids:
         return
     pk_column = list(model.__table__.primary_key.columns)[0]
     rows = (await sess.execute(select(model).where(pk_column.in_(list(ids))))).scalars().all()
     for row in rows:
-        for column in columns:
+        moved = columns if per_row is None else per_row.get(str(getattr(row, pk_column.name)), ())
+        for column in moved:
             if getattr(row, column) == entry.target_entity_id:
                 setattr(row, column, entry.source_entity_id)
     await sess.flush()
+
+
+# ---------------------------------------------------------------------------
+# Folding a repeated claim into the one already held (task `B-41`)
+# ---------------------------------------------------------------------------
+
+
+def _stronger(incoming: int | None, existing: int | None) -> bool:
+    """`add_edge`'s rule: only a strictly higher tier replaces a judgement.
+
+    An equal tier disagreeing with itself is a contradiction to record, not a
+    value to overwrite; and a lower tier never replaces a higher one (§11.12).
+    """
+    return incoming is not None and (existing or 0) < incoming
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dt.datetime | dt.date):
+        return value.isoformat()
+    if isinstance(value, list | tuple):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+def snapshot(row, fields: Sequence[str] | None = None) -> dict[str, Any]:
+    """A row as JSON: every column, unless ``fields`` narrows it.
+
+    Every column is read from the table rather than listed here, so a column
+    added to `edges` later is kept by a fold without anybody remembering to
+    add it. A snapshot that silently dropped one would make a reversal that
+    looks exact and is not.
+    """
+    names = fields or [column.key for column in row.__table__.columns]
+    return {name: _jsonable(getattr(row, name)) for name in names}
+
+
+def revive(model, snap: dict[str, Any]) -> dict[str, Any]:
+    """The inverse of `snapshot`: column values ready for the model."""
+    out: dict[str, Any] = {}
+    for name, value in snap.items():
+        column = model.__table__.columns[name]
+        try:
+            kind = column.type.python_type
+        except NotImplementedError:  # pragma: no cover - types without one
+            kind = None
+        if value is not None and kind is dt.datetime:
+            value = dt.datetime.fromisoformat(value)
+        elif value is not None and kind is dt.date:
+            value = dt.date.fromisoformat(value)
+        out[name] = value
+    return out
+
+
+def _is_list(model, name: str) -> bool:
+    return isinstance(model.__table__.columns[name].type, ARRAY)
+
+
+def _restore_fields(row, before: dict[str, Any], after: dict[str, Any]) -> None:
+    """Take back what a fold gave ``row``, and nothing it gained since.
+
+    Lists lose exactly the items the fold added and regain the ones it
+    removed; any other item — a citation `add_edge` attached after the merge —
+    stays. A scalar goes back only if it still holds what the fold set: if a
+    later, better-tiered write has replaced it, that write stands.
+    """
+    model = type(row)
+    for name, was in before.items():
+        now = after.get(name)
+        current = _jsonable(getattr(row, name))
+        if _is_list(model, name):
+            added = set(now or ()) - set(was or ())
+            removed = set(was or ()) - set(now or ())
+            kept = (set(current or ()) - added) | removed
+            setattr(row, name, sorted(kept) if kept or was is not None else None)
+        elif current == now:
+            setattr(row, name, revive(model, {name: was})[name])
+
+
+async def _fold_edge(
+    sess: AsyncSession, survivor: Edge, folded: Edge, *, folded_by: str
+) -> dict[str, Any]:
+    """Fold ``folded`` into ``survivor``: one claim, every citation.
+
+    The citations, topic labels and contradictions unite. The judgement —
+    confidence, stance, certainty and the provenance that produced them —
+    moves only if the folded edge's tier is strictly higher, exactly as
+    `add_edge` treats the same claim arriving twice. Fields the survivor left
+    empty (a validity period, a comparison's dimension and disanalogy) are
+    filled in pairs, so a half-borrowed period cannot end before it begins.
+
+    Edges that named the folded edge as their contradiction name the survivor
+    instead: a contradiction pointing at a row that has left the table would
+    be a dangling claim of disagreement.
+
+    The folded row leaves `edges` and is kept whole in the returned record,
+    which the caller puts in `merge_log.combined`.
+    """
+    absorbed = snapshot(folded)
+    before = snapshot(survivor, _EDGE_FOLD_FIELDS)
+
+    survivor.supporting_chunk_ids = sorted(
+        {*(survivor.supporting_chunk_ids or ()), *(folded.supporting_chunk_ids or ())}
+    )
+    labels = {*(survivor.topic_labels or ()), *(folded.topic_labels or ())}
+    if labels:
+        survivor.topic_labels = sorted(labels)
+    contested = {*(survivor.contested_with or ()), *(folded.contested_with or ())} - {
+        survivor.edge_id,
+        folded.edge_id,
+    }
+    if contested or survivor.contested_with is not None:
+        survivor.contested_with = sorted(contested)
+
+    if _stronger(folded.quality_tier, survivor.quality_tier):
+        for name in _EDGE_JUDGEMENT:
+            setattr(survivor, name, getattr(folded, name))
+    for pair in (("valid_from", "valid_to"), ("similarity_dimension", "disanalogy")):
+        if all(getattr(survivor, name) is None for name in pair):
+            for name in pair:
+                setattr(survivor, name, getattr(folded, name))
+    if survivor.created_by is None:
+        survivor.created_by = folded.created_by
+
+    references = []
+    others = (
+        (
+            await sess.execute(
+                select(Edge)
+                .where(
+                    Edge.contested_with.any(folded.edge_id),
+                    Edge.edge_id.not_in([survivor.edge_id, folded.edge_id]),
+                )
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for other in others:
+        was = list(other.contested_with or ())
+        other.contested_with = sorted((set(was) - {folded.edge_id}) | {survivor.edge_id})
+        references.append(
+            {"edge_id": other.edge_id, "before": was, "after": list(other.contested_with)}
+        )
+
+    await sess.delete(folded)
+    await sess.flush()
+    return {
+        "table": "edges",
+        "survivor_id": survivor.edge_id,
+        "absorbed": absorbed,
+        "survivor_before": before,
+        "survivor_after": snapshot(survivor, _EDGE_FOLD_FIELDS),
+        "contested_refs": references,
+        "folded_by": folded_by,
+        "at": dt.datetime.now(dt.UTC).isoformat(),
+    }
+
+
+async def _fold_edges(
+    sess: AsyncSession, moved_ids: Sequence[int], *, folded_by: str
+) -> list[dict[str, Any]]:
+    """Fold every moved edge that landed on a claim already held.
+
+    The survivor is the edge the target already had (the lowest id, if it had
+    several); when two *moved* edges collide with each other — an edge from the
+    source to the target and one back, say — the lower id survives. Only moved
+    edges are folded: a duplicate the target held before this merge is not this
+    merge's doing, and folding it here would put it in a log that does not
+    explain it.
+
+    **Observations are not folded, deliberately.** An observation is a reading
+    — a metric, value, period and qualifiers — and two identical readings from
+    two sources are two pieces of evidence for one figure, which is how a time
+    series and §9's contested figures are built. Nothing in the codebase says
+    when two observations are the same claim, and inventing that rule inside a
+    merge would be inventing schema.
+    """
+    if not moved_ids:
+        return []
+    moved = set(moved_ids)
+    rows = (await sess.execute(select(Edge).where(Edge.edge_id.in_(moved)))).scalars().all()
+    triples = sorted({(row.from_node, row.relation_type, row.to_node) for row in rows})
+
+    records: list[dict[str, Any]] = []
+    for from_node, relation_type, to_node in triples:
+        group = (
+            (
+                await sess.execute(
+                    select(Edge)
+                    .where(
+                        Edge.from_node == from_node,
+                        Edge.relation_type == relation_type,
+                        Edge.to_node == to_node,
+                    )
+                    .order_by(Edge.edge_id)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(group) < 2:
+            continue
+        held = [edge for edge in group if edge.edge_id not in moved]
+        survivor = held[0] if held else group[0]
+        for edge in group:
+            if edge is not survivor and edge.edge_id in moved:
+                records.append(await _fold_edge(sess, survivor, edge, folded_by=folded_by))
+    return records
+
+
+async def _fold_attribute_values(
+    sess: AsyncSession, source_id: int, target_id: int, *, folded_by: str
+) -> list[dict[str, Any]]:
+    """Fold the source's attribute values into the target's where both have one.
+
+    One value per entity, attribute and schema version is the table's rule, so
+    this is not optional: the move would be refused. The target's row
+    survives; citations unite, as `tag_entity` unites them on a re-tag; the
+    value and its provenance move only to a strictly higher tier. The
+    attribute's usage count drops by the row that left, and `reverse` gives
+    it back.
+    """
+    rows = (
+        (
+            await sess.execute(
+                select(AttributeValue)
+                .where(AttributeValue.entity_id == source_id)
+                .order_by(AttributeValue.value_id)
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    records: list[dict[str, Any]] = []
+    for folded in rows:
+        held = await sess.scalar(
+            select(AttributeValue)
+            .where(
+                AttributeValue.entity_id == target_id,
+                AttributeValue.attribute_id == folded.attribute_id,
+                AttributeValue.schema_version == folded.schema_version,
+            )
+            .with_for_update()
+        )
+        if held is None:
+            continue
+        absorbed = snapshot(folded)
+        before = snapshot(held, _VALUE_FOLD_FIELDS)
+        held.supporting_chunk_ids = sorted(
+            {*(held.supporting_chunk_ids or ()), *(folded.supporting_chunk_ids or ())}
+        )
+        if _stronger(folded.quality_tier, held.quality_tier):
+            for name in _VALUE_JUDGEMENT:
+                setattr(held, name, getattr(folded, name))
+        definition = await sess.get(AttributeDefinition, folded.attribute_id)
+        if definition is not None:
+            definition.usage_count = max(0, definition.usage_count - 1)
+        await sess.delete(folded)
+        await sess.flush()
+        records.append(
+            {
+                "table": "attribute_values",
+                "survivor_id": held.value_id,
+                "absorbed": absorbed,
+                "survivor_before": before,
+                "survivor_after": snapshot(held, _VALUE_FOLD_FIELDS),
+                "contested_refs": [],
+                "folded_by": folded_by,
+                "at": dt.datetime.now(dt.UTC).isoformat(),
+            }
+        )
+    return records
+
+
+async def _unfold(sess: AsyncSession, record: dict[str, Any]) -> None:
+    """Split one fold: the survivor as it was, the folded row back whole."""
+    model, _ = _REFERENCES[record["table"]]
+    survivor = await sess.get(model, record["survivor_id"], with_for_update=True)
+    _restore_fields(survivor, record["survivor_before"], record["survivor_after"])
+
+    for reference in record.get("contested_refs") or ():
+        other = await sess.get(Edge, reference["edge_id"], with_for_update=True)
+        if other is not None:
+            _restore_fields(
+                other,
+                {"contested_with": reference["before"]},
+                {"contested_with": reference["after"]},
+            )
+
+    sess.add(model(**revive(model, record["absorbed"])))
+    if model is AttributeValue:
+        definition = await sess.get(AttributeDefinition, record["absorbed"]["attribute_id"])
+        if definition is not None:
+            definition.usage_count += 1
+    await sess.flush()
+
+
+# ---------------------------------------------------------------------------
+# Repairing the folds that merges before `B-41` did not make
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class RepeatedEdges:
+    """What a repair pass found, and what it did or would do."""
+
+    #: Triples held by more than one edge.
+    groups: int = 0
+    #: Edges folded (or, reporting, that would be) — one per row removed.
+    folded: int = 0
+    #: (merge_id, survivor edge id, folded edge ids) for each attributed group.
+    attributed: list[tuple[int, int, list[int]]] = dataclasses.field(default_factory=list)
+    #: Edge ids of groups no unreversed merge explains. Reported, not touched.
+    unattributed: list[list[int]] = dataclasses.field(default_factory=list)
+
+
+async def fold_repeated_edges(
+    sess: AsyncSession, *, apply: bool, folded_by: str = "repair"
+) -> RepeatedEdges:
+    """Fold the duplicate edges earlier merges left behind (`B-41`).
+
+    Report by default; ``apply`` writes. **Each fold is logged on the merge
+    that caused it**, in that merge's `combined`, so reversing the merge
+    splits the fold exactly as if the merge had made it — the repair adds no
+    second log to reconcile.
+
+    A group is attributed to the newest unreversed merge that moved one of its
+    edges and whose target the triple names. A group no merge explains is
+    reported and left alone: without a merge there is no log a reversal would
+    read, and a fold that cannot be undone is the one thing this module does
+    not do.
+
+    Idempotent: a folded edge leaves the table, so a second pass finds nothing
+    to attribute.
+    """
+    groups = (
+        await sess.execute(
+            select(
+                Edge.from_node,
+                Edge.to_node,
+                func.array_agg(aggregate_order_by(Edge.edge_id, Edge.edge_id)),
+            )
+            .group_by(Edge.from_node, Edge.relation_type, Edge.to_node)
+            .having(func.count() > 1)
+            .order_by(func.min(Edge.edge_id))
+        )
+    ).all()
+    merges = (
+        (
+            await sess.execute(
+                select(MergeLog)
+                .where(MergeLog.reversed_at.is_(None))
+                .order_by(MergeLog.merge_id.desc())
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    report = RepeatedEdges(groups=len(groups))
+    for from_node, to_node, ids in groups:
+        entry = next(
+            (
+                m
+                for m in merges
+                if m.target_entity_id in (from_node, to_node)
+                and set(m.moved_edge_ids or ()) & set(ids)
+            ),
+            None,
+        )
+        moved = set(entry.moved_edge_ids or ()) if entry is not None else set()
+        held = [i for i in ids if i not in moved]
+        survivor_id = held[0] if held else ids[0]
+        folded_ids = [i for i in ids if i in moved and i != survivor_id]
+        if entry is None or not folded_ids:
+            report.unattributed.append(list(ids))
+            continue
+        report.attributed.append((entry.merge_id, survivor_id, folded_ids))
+        report.folded += len(folded_ids)
+        if not apply:
+            continue
+        survivor = await sess.get(Edge, survivor_id, with_for_update=True)
+        records = []
+        for folded_id in folded_ids:
+            folded = await sess.get(Edge, folded_id, with_for_update=True)
+            records.append(await _fold_edge(sess, survivor, folded, folded_by=folded_by))
+        # Reassigned, not appended in place: JSONB is not mutation-tracked.
+        entry.combined = [*(entry.combined or ()), *records]
+        await sess.flush()
+
+    log.info(
+        "repeated edges",
+        extra={
+            "groups": report.groups,
+            "folded": report.folded,
+            "unattributed": len(report.unattributed),
+            "applied": apply,
+        },
+    )
+    return report

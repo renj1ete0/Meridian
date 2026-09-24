@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.129.1] — 2026-09-24
+
+### Fixed
+
+- `B-41`: a merge that lands a moved edge on a claim the target already holds
+  folds the two — citations, topic labels and `contested_with` unioned,
+  confidence and stance moving only to a higher tier, as `add_edge` does —
+  and `reverse` splits them back exactly (the folded row is kept whole in
+  `merge_log.combined` and restored under its own id). Attribute values that
+  used to make such a merge fail now fold the same way. `reverse` also puts
+  back an edge between the two merged entities and the alias the merge added.
+  `python -m worker.edgedupes` repairs duplicates an earlier merge left
+  (report by default, `--apply`). Migration `b41c0b1ed0a4`
+
 ## [0.129.0] — 2026-09-24
 
 ### Added

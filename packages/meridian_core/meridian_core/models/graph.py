@@ -268,6 +268,28 @@ class MergeLog(Base):
     moved_attribute_value_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
     moved_observation_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
 
+    #: Which *columns* of each moved row pointed at the source, by table and
+    #: row id (`B-41`). The id lists above cannot say, and an edge between the
+    #: source and the target — or an observation measured *at* the source but
+    #: *about* the target — has one column that moved and one that did not.
+    #: Null on merges logged before this existed; `reverse` then falls back to
+    #: moving back every column that names the target.
+    moved_columns: Mapped[dict | None] = mapped_column(JSONB)
+
+    #: Rows this merge folded into another rather than moved (`B-41`): a moved
+    #: edge that landed on a claim the target already held, or an attribute
+    #: the target already carried. Each record keeps the folded row whole and
+    #: the surviving row's fields before and after, so `reverse` can split
+    #: them apart again. The folded row leaves its table; it does not leave
+    #: the database.
+    combined: Mapped[list | None] = mapped_column(JSONB)
+
+    #: The target's aliases, `merged_from` and supporting chunks before and
+    #: after the merge (`B-41`). A reversal that left the source's name among
+    #: the target's aliases would send the next mention of the source straight
+    #: back into the target, undoing the reversal by resolution.
+    target_fields: Mapped[dict | None] = mapped_column(JSONB)
+
     #: Set when the merge is undone. The row stays: "this was merged and then
     #: reversed" is a different and more interesting fact than "this was never
     #: merged", and it is what tells you a threshold is wrong.
