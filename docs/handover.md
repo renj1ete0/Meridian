@@ -53,7 +53,13 @@ told to; check).
   `worker.translate` ran on an image built before `B-52`. The timetable row
   runs it daily; to run it now, `docker compose -f docker-compose.local.yml
   run --rm --no-deps scheduler python -m worker.translate --once`.
-- **Not yet applied live:** `worker.docdupes --apply` (report first).
+- **Translations need a contact.** `MERIDIAN_CONTACT_EMAIL` is unset on the
+  local stack, Wikimedia answers anonymous clients 403, and `worker.translate`
+  now refuses to run without it. So there are no non-English seeds until it is
+  set. The same variable is what lets the DOI resolver use Unpaywall.
+- **Not yet applied live:** `worker.docdupes --apply`. The first report found
+  a few hundred exact copies and a handful of near ones; read it, apply it,
+  then enable the `docdupes` timetable row (shipped disabled).
 - Deploying without restarting Postgres: as before, `build <svc>`, then
   `run --rm --no-deps tools alembic upgrade head`, then `up -d --no-deps
   <svc>`.

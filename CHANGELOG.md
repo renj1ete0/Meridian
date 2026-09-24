@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.124.3] — 2026-09-24
+
+### Fixed
+
+- `B-52`: `worker.translate` refuses to run without `MERIDIAN_CONTACT_EMAIL`,
+  saying why, instead of failing every lookup — Wikimedia's robot policy
+  answers an anonymous client 403 on every request (measured on the live
+  stack, where the variable was unset)
+
 ## [0.124.2] — 2026-09-24
 
 ### Added

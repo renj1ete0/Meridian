@@ -53,6 +53,10 @@ live), `B-51` (search seeding every 6h, Bing web off),
    gate judges a non-English host.
 
 **Needs the operator (⚑):**
+- **Set `MERIDIAN_CONTACT_EMAIL`** for the local stack's services (it is unset).
+  Without it Wikimedia refuses the translation lookups, so no non-English
+  seeds are written (`B-52`), and the DOI resolver skips Unpaywall. Restart the
+  scheduler and worker after setting it.
 - **Describe the topics** (Admin → Topics, now editable). It raises labelling
   recall from 0.70 to 0.82, and `seedsearch` skips a topic with no
   description and under three vocabulary terms. Several topics are skipped for

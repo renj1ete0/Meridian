@@ -37,9 +37,12 @@ DELAY_S = 1.0
 DEFAULT_LIMIT = 200
 
 
+def contact() -> str | None:
+    return os.environ.get("MERIDIAN_CONTACT_EMAIL", "").strip() or None
+
+
 def user_agent() -> str:
-    contact = os.environ.get("MERIDIAN_CONTACT_EMAIL", "").strip() or "no contact configured"
-    return f"Meridian research crawler (vocabulary lookups; {contact})"
+    return f"Meridian/1 (research crawler; vocabulary lookups; {contact() or 'no contact'})"
 
 
 def title_forms(phrase: str) -> list[str]:
@@ -95,6 +98,13 @@ async def run_once(
         )
         todo = (await stale(sess, phrases))[:limit]
     summary = {"languages": list(languages), "phrases": len(phrases), "looked_up": 0, "found": 0}
+    if client is None and contact() is None:
+        # Measured: Wikimedia answers every request 403 under its robot policy
+        # when the User-Agent carries no way to reach the operator. Refusing
+        # once, loudly, beats a run of failures that reads as a network fault.
+        log.error("MERIDIAN_CONTACT_EMAIL is not set; Wikimedia refuses anonymous clients")
+        summary["refused"] = "no contact configured (MERIDIAN_CONTACT_EMAIL)"
+        return summary
     if not languages:
         log.warning("no search_languages configured; nothing to translate")
         return summary

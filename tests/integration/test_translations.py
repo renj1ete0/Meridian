@@ -147,3 +147,12 @@ async def test_seeds_use_the_translations_in_that_languages_words(sess, topic) -
 async def test_search_languages_is_not_a_fetch_setting(sess, topic) -> None:
     policy = await resolve_policy(sess, "example.org")
     assert "search_languages" not in policy.model_dump()
+
+
+async def test_the_pass_refuses_to_ask_wikipedia_anonymously(sess, topic, monkeypatch) -> None:
+    """Measured: an anonymous client gets 403 on every request."""
+    monkeypatch.delenv("MERIDIAN_CONTACT_EMAIL", raising=False)
+
+    summary = await translate.run_once(session_factory=factory(sess), delay_s=0)
+
+    assert summary["looked_up"] == 0 and "refused" in summary
