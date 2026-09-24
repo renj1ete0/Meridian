@@ -28,3 +28,46 @@ topic_local:
       description: Availability of covered walkways / tree canopy on pedestrian routes
     - name: sidewalk_width
       description: Physical sidewalk/footpath width relative to pedestrian volume
+  # Drafted 2026-09-24 at the operator's request, for the topics that had none.
+  # Framed the way the question set frames these topics (in relation to walking
+  # and transport); retire or rename any of them in Admin, where the monthly
+  # audit (P7-02) will also judge them on use.
+  on-demand-bus:
+    - name: booking_mode
+      description: How a trip is requested — app, phone, stop-based, or fixed schedule on demand
+    - name: service_area
+      description: Size and type of the area served (zone, corridor, many-to-one to a hub)
+    - name: fare_level
+      description: Fare relative to the fixed-route service it complements or replaces
+    - name: productivity
+      description: Passengers carried per vehicle-hour, the service's efficiency measure
+    - name: subsidy_per_trip
+      description: Public cost per passenger trip after fares
+  biology:
+    - name: activity_measure
+      description: How physical activity is measured — steps, minutes of moderate activity, energy use
+    - name: health_outcome
+      description: The health effect studied — cardiometabolic, mental health, mortality, injury
+    - name: heat_exposure
+      description: Thermal load on people walking — temperature, humidity, heat index
+    - name: population_group
+      description: Who was studied — age group, health condition, or other group
+  economics:
+    - name: cost_measure
+      description: The cost reported — capital, operating, per trip, per user, or external
+    - name: pricing_mechanism
+      description: How use is priced — fares, road or congestion pricing, parking, subsidies
+    - name: funding_source
+      description: Who pays — public budget, operator, private partner, land value capture
+    - name: value_of_time
+      description: Monetary value placed on travel time or time savings
+  robotics:
+    - name: robot_class
+      description: Kind of machine — delivery, service, security, inspection, mobility aid
+    - name: operating_environment
+      description: Where it operates — footpath, road, mixed space, indoors
+    - name: autonomy_level
+      description: Degree of independent operation, from teleoperated to fully autonomous
+    - name: pedestrian_interaction
+      description: How it shares space with people walking — yielding, speed limits, conflicts
+

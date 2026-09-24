@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.127.1] — 2026-09-24
+
+### Added
+
+- Topic-local attributes for the four topics that had none (17 definitions in
+  `config/attributes.yaml`), drafted at the operator's request and framed as
+  the question set frames those topics. `scripts/seed.py` adds missing
+  definitions without touching existing ones, so a running install picks them
+  up by re-running it
+
 ## [0.127.0] — 2026-09-24
 
 ### Added
