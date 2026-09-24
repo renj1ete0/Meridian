@@ -273,6 +273,10 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         where.append(Source.publication_date <= filters.published_before)
     if not filters.include_duplicates:
         where.append(Chunk.duplicate_of.is_(None))
+        # And the document-level verdict (`B-44`): a source that is a copy of
+        # an earlier one — the same page under another URL — answers nothing
+        # its canonical source does not.
+        where.append(Source.duplicate_of.is_(None))
     if not filters.include_junk:
         where.append(Source.retention_tier != "junk")
     if filters.cleared_only:

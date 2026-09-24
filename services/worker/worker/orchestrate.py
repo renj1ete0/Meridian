@@ -297,6 +297,9 @@ async def _pull(
         .where(
             Chunk.superseded_at.is_(None),
             Chunk.duplicate_of.is_(None),
+            # A copy of an earlier source (`B-44`) would be the same reasoning
+            # twice, and two edges citing one document as if it were two.
+            Source.duplicate_of.is_(None),
             # Junk is material a sweep will drop — site furniture, for one
             # (`B-42`). Reasoning over it spends a batch to extract nothing.
             Source.retention_tier != "junk",

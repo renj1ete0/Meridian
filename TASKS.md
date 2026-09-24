@@ -1215,7 +1215,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       suffixes (listed in the tier map's `needs_scholarly_evidence`) make a page
       `peer_reviewed` only with its own DOI, else `institutional`; links rank
       accordingly; `worker.retier` fixes stored sources
-- [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
+- [x] `B-44` **Duplicate documents** — `v0.124.0`; `worker.docdupes` (exact passage overlap, or same title + cosine ≥ 0.985 + comparable length; mean-vector cosine alone was measured to merge distinct same-template documents). Not yet scheduled or applied live — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string
       variants, `www.`/bare-host twins. Mark the later source as a duplicate of the

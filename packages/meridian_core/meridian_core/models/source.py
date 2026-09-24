@@ -16,6 +16,7 @@ import datetime as dt
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     Computed,
     Date,
     DateTime,
@@ -198,6 +199,20 @@ class Source(Base, TimestampMixin):
 
     extra: Mapped[dict | None] = mapped_column(JSONB)
 
+    #: The earlier source this one is a copy of (`B-44`) — the same document
+    #: under another URL, or its PDF and its HTML page. Document-level, where
+    #: `chunks.duplicate_of` is passage-level: the novelty gate judges passages
+    #: one at a time and never hides a primary source, so a document fetched
+    #: twice was searched twice and would be synthesised twice. Set by
+    #: `worker.docdupes`; the earliest source is the canonical one and a copy
+    #: always points at it directly, never at another copy. Nothing is deleted.
+    duplicate_of: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sources.source_id", ondelete="SET NULL"), index=True
+    )
+    #: Which rule found it: ``exact`` (its passages are the other's) or
+    #: ``near`` (same title, near-identical meaning, comparable length).
+    duplicate_reason: Mapped[str | None] = mapped_column(Text)
+
     chunks: Mapped[list[Chunk]] = relationship(
         back_populates="source", cascade="all, delete-orphan"
     )
@@ -207,6 +222,14 @@ class Source(Base, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("url", name="uq_sources_url"),
+        CheckConstraint(
+            "duplicate_of IS NULL OR duplicate_of <> source_id",
+            name="duplicate_is_another_source",
+        ),
+        CheckConstraint(
+            "(duplicate_of IS NULL) = (duplicate_reason IS NULL)",
+            name="duplicate_has_a_reason",
+        ),
         Index("ix_sources_tier_date", "source_tier", "publication_date"),
         # The acronym harvest's queue (`P5-02`). Partial: everything with text
         # and not yet read. A metadata-only source has nothing to harvest, and

@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.124.0] — 2026-09-24
+
+### Added
+
+- `B-44`: document-level duplicates. `sources.duplicate_of` / `duplicate_reason`
+  point a copy at its canonical (earliest) source — `exact` when ≥90% of its
+  passages are the earlier source's (URL variants), `near` when title, meaning
+  (mean-vector cosine ≥ 0.985) and length all match (a PDF and its HTML page).
+  Search, the map and synthesis leave copies out; cited sources are never
+  marked; nothing is deleted. `python -m worker.docdupes` reports, `--apply`
+  marks and clears stale marks. Migration `7fbdd2242063`
+
 ## [0.123.1] — 2026-09-24
 
 ### Fixed

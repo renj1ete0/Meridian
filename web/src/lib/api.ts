@@ -265,6 +265,9 @@ export interface Source {
   topic_labels: string[] | null
   /** Which queue topics caused the fetch (`P2-21`) — why it was crawled, not what it says. */
   crawled_for: string[] | null
+  /** The earlier source this one copies (`B-44`); hidden from search and the map. */
+  duplicate_of: number | null
+  duplicate_reason: string | null
   /** When the content labeller last examined it, and under which basis (`P2-21`). */
   topics_examined_at: string | null
   topic_basis: string | null
@@ -307,6 +310,8 @@ export const SOURCE_FIELDS = [
   'ocr_confidence',
   'topic_labels',
   'crawled_for',
+  'duplicate_of',
+  'duplicate_reason',
   'topics_examined_at',
   'topic_basis',
   'topic_scores',

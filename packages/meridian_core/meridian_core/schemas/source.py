@@ -74,6 +74,9 @@ class SourceRead(BaseModel):
     #: Which queue topics caused it to be fetched (`P2-21`). Provenance: why the
     #: crawler went there, which is not what the page turned out to be about.
     crawled_for: list[str] | None = None
+    #: The earlier source this one copies, and the rule that said so (`B-44`).
+    duplicate_of: int | None = None
+    duplicate_reason: str | None = None
     #: When the content labeller last examined it, and under which basis — a
     #: fingerprint that changes when the topics or the method do (`P2-21`).
     topics_examined_at: dt.datetime | None = None
