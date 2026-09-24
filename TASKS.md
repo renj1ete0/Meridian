@@ -62,6 +62,13 @@ live), `B-51` (search seeding every 6h, Bing web off),
    gate judges a non-English host.
 
 **Needs the operator (⚑):**
+- **The first question-set run on the live corpus** (`P2-22`): it needs the live
+  database's read-only role and the embedder. The delegated agent was refused
+  that access, rightly, since it is a production read; run
+  `scripts/run_question_set.py` yourself or grant it.
+- Gaps thresholds, as built: thin is under 10 labelled sources, weak is under
+  3 government or peer-reviewed sources, stale is over 3 years old, and the
+  one-click boost is ×2 for 7 days. Keep them, or change them?
 - **Reminder: `MERIDIAN_CONTACT_EMAIL` (optional; the operator chose to leave it
   unset for now).** Unset is a working state.
   Without it Wikimedia refuses the translation lookups, so no non-English
@@ -1292,6 +1299,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       backlog by the same rule. Unpaywall is not the bottleneck: without a contact
       email the resolver still uses OpenAlex (which carries most of Unpaywall's
       open-access data), Europe PMC, Semantic Scholar and the preprint rule
+- [ ] `P6-37` **Gaps per query, and runs on a deployment** — Gaps' search-yield
+      source counts per topic; `B-56` now records each query's yield, so a query
+      that found nothing can be its own gap. Also `eval/runs` is not mounted into the
+      API container, so on a deployment the question-set source reports
+      "unavailable" until `MERIDIAN_EVAL_RUNS_DIR` points at a mounted directory
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
