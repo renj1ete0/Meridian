@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.122.2] — 2026-09-24
+
+### Changed
+
+- `B-51`: search seeds leave agencies out of query vocabulary (they paired a
+  concept with a government's name), and skip a topic with no description and
+  fewer than three approved terms — its only queries were its bare name — and
+  the report names the topics left out so they can be described
+
 ## [0.122.1] — 2026-09-24
 
 ### Fixed

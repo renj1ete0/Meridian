@@ -37,7 +37,16 @@ async def topic(sess) -> str:
     name = f"seedtopic-{uuid.uuid4().hex[:6]}"
     for row in await sess.scalars(select(TopicConfig)):
         row.status = "paused"
-    sess.add(TopicConfig(topic=name, weight=0.1, floor=0.0, ceiling=1.0, status="active"))
+    sess.add(
+        TopicConfig(
+            topic=name,
+            weight=0.1,
+            floor=0.0,
+            ceiling=1.0,
+            status="active",
+            description="how easy and pleasant a place is to walk around in",
+        )
+    )
     await sess.flush()
     return name
 
@@ -57,7 +66,7 @@ async def test_queries_are_queued_as_diversity_seeds_above_every_link(sess, topi
 
 
 async def test_a_report_queues_nothing(sess, topic) -> None:
-    planned = await run_once(write=False, seed=1, session_factory=factory(sess))
+    planned = (await run_once(write=False, seed=1, session_factory=factory(sess))).queries
 
     assert any(q.topic == topic for q in planned)
     assert await mine(sess, topic) == []
@@ -83,7 +92,7 @@ async def test_a_topic_with_a_backlog_of_queries_gets_none(sess, topic) -> None:
         )
     await sess.flush()
 
-    planned = await run_once(write=True, seed=1, session_factory=factory(sess))
+    planned = (await run_once(write=True, seed=1, session_factory=factory(sess))).queries
 
     assert not any(q.topic == topic for q in planned)
 
@@ -103,7 +112,9 @@ async def test_only_approved_vocabulary_of_the_topic_is_used(sess, topic) -> Non
     )
     await sess.flush()
 
-    planned = await run_once(write=False, per_topic=200, seed=1, session_factory=factory(sess))
+    planned = (
+        await run_once(write=False, per_topic=200, seed=1, session_factory=factory(sess))
+    ).queries
 
     texts = " ".join(q.text for q in planned if q.topic == topic)
     assert approved in texts
@@ -115,6 +126,31 @@ async def test_a_paused_topic_gets_no_queries(sess, topic) -> None:
     row.status = "paused"
     await sess.flush()
 
-    planned = await run_once(write=False, seed=1, session_factory=factory(sess))
+    planned = (await run_once(write=False, seed=1, session_factory=factory(sess))).queries
 
     assert not any(q.topic == topic for q in planned)
+
+
+async def test_a_topic_with_no_description_and_little_vocabulary_is_left_out(sess, topic) -> None:
+    row = await sess.get(TopicConfig, topic)
+    row.description = None
+    await sess.flush()
+
+    run = await run_once(write=True, seed=1, session_factory=factory(sess))
+
+    assert topic in run.vague
+    assert await mine(sess, topic) == []
+
+
+async def test_an_agency_is_not_query_vocabulary(sess, topic) -> None:
+    agency = f"Someplace Transit Authority {uuid.uuid4().hex[:4]}"
+    sess.add(
+        GazetteerTerm(canonical=agency, entity_type="agency", topic_labels=[topic], approved=True)
+    )
+    await sess.flush()
+
+    planned = (
+        await run_once(write=False, per_topic=200, seed=1, session_factory=factory(sess))
+    ).queries
+
+    assert not any(agency in q.text for q in planned)

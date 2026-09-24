@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import dataclasses
 import time
 
 from sqlalchemy import func, select
@@ -44,6 +45,18 @@ QUERY_PRIORITY = 70
 #: something else entirely.
 MIN_ALIAS = 5
 
+#: Vocabulary a query is built from. An agency is *who*, not *what*: paired
+#: with a concept it asks for that agency's pages, and the first live run
+#: produced exactly that — a concept beside a city government's name.
+QUERY_ENTITY_TYPES = frozenset({"concept", "scheme", "metric", "infrastructure"})
+
+#: A topic with no description and fewer approved terms than this is not
+#: specific enough to search for: its only queries are its bare name, and a
+#: bare field name ("biology", "economics") answers with encyclopaedia pages
+#: and generic news. It is left out and the report says so, which is the
+#: prompt to describe it.
+MIN_TERMS_WITHOUT_DESCRIPTION = 3
+
 
 async def topic_inputs(sess: AsyncSession) -> list[TopicSeedInput]:
     rows = (
@@ -56,7 +69,9 @@ async def topic_inputs(sess: AsyncSession) -> list[TopicSeedInput]:
     terms: dict[str, list[str]] = {topic: [] for topic, _ in rows}
     for term in await sess.scalars(
         select(GazetteerTerm).where(
-            GazetteerTerm.approved.is_(True), GazetteerTerm.rejected_at.is_(None)
+            GazetteerTerm.approved.is_(True),
+            GazetteerTerm.rejected_at.is_(None),
+            GazetteerTerm.entity_type.in_(sorted(QUERY_ENTITY_TYPES)),
         )
     ):
         for topic in term.topic_labels or ():
@@ -68,6 +83,13 @@ async def topic_inputs(sess: AsyncSession) -> list[TopicSeedInput]:
     return [TopicSeedInput(topic, description, tuple(terms[topic])) for topic, description in rows]
 
 
+def specific_enough(topic: TopicSeedInput) -> bool:
+    """Whether a topic says enough about itself to be searched for."""
+    return bool(topic.description and topic.description.strip()) or (
+        len(set(topic.terms)) >= MIN_TERMS_WITHOUT_DESCRIPTION
+    )
+
+
 async def pending_by_topic(sess: AsyncSession) -> dict[str, int]:
     rows = await sess.execute(
         select(QueueTask.topic, func.count())
@@ -77,13 +99,24 @@ async def pending_by_topic(sess: AsyncSession) -> dict[str, int]:
     return {topic: int(n) for topic, n in rows if topic}
 
 
+@dataclasses.dataclass
+class SeedRun:
+    queries: list[Query]
+    #: Active topics left out for saying too little about themselves.
+    vague: list[str]
+    #: Active topics left out because their queries are not being answered.
+    backlogged: list[str]
+
+
 async def run_once(
     *, write: bool, per_topic: int = PER_TOPIC, seed: int | None = None, session_factory=session
-) -> list[Query]:
+) -> SeedRun:
     async with session_factory() as sess:
         inputs = await topic_inputs(sess)
+        vague = [t.topic for t in inputs if not specific_enough(t)]
         waiting = await pending_by_topic(sess)
-        inputs = [t for t in inputs if waiting.get(t.topic, 0) < MAX_PENDING]
+        backlogged = [t.topic for t in inputs if waiting.get(t.topic, 0) >= MAX_PENDING]
+        inputs = [t for t in inputs if t.topic not in vague and t.topic not in backlogged]
         already = list(
             await sess.scalars(select(QueueTask.url_or_query).where(QueueTask.task_type == "query"))
         )
@@ -104,8 +137,11 @@ async def run_once(
                     priority=QUERY_PRIORITY,
                 )
             await sess.commit()
-    log.info("search seeds planned", extra={"queries": len(queries), "written": write})
-    return queries
+    log.info(
+        "search seeds planned",
+        extra={"queries": len(queries), "written": write, "vague": vague, "backlogged": backlogged},
+    )
+    return SeedRun(queries, vague, backlogged)
 
 
 def main() -> None:
@@ -117,17 +153,21 @@ def main() -> None:
     args = parser.parse_args()
     configure_logging("seedsearch")
 
-    async def go() -> list[Query]:
+    async def go() -> SeedRun:
         try:
             return await run_once(write=args.once, per_topic=args.per_topic)
         finally:
             await dispose_engines()
 
     with bind_run_id(f"seedsearch-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
-        queries = asyncio.run(go())
-    for query in queries:
+        run = asyncio.run(go())
+    for query in run.queries:
         print(f"  {query.topic:22} {query.kind:11} {query.text}")
-    print(f"{len(queries)} queries {'queued' if args.once else 'planned (report only)'}")
+    print(f"{len(run.queries)} queries {'queued' if args.once else 'planned (report only)'}")
+    if run.vague:
+        print(f"left out, too vague to search (describe them in Admin): {', '.join(run.vague)}")
+    if run.backlogged:
+        print(f"left out, queries not being answered: {', '.join(run.backlogged)}")
 
 
 if __name__ == "__main__":
