@@ -115,6 +115,9 @@ export const KIND_OF_TYPE: Record<string, NotificationKind> = {
   seed_proposal: 'approvals',
   gazetteer_proposal: 'approvals',
   merge_adjudication: 'approvals',
+  // `P6-38`: an approval that grants itself if nobody answers — still the
+  // group a reader opens to find what wants a decision.
+  steering_proposal: 'approvals',
 }
 
 /** Unknown types are shown as jobs rather than dropped: a row is never hidden. */

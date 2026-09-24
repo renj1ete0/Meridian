@@ -62,6 +62,7 @@ const TYPE_LABEL: Record<string, string> = {
   seed_proposal: 'seed sources',
   gazetteer_proposal: 'gazetteer',
   merge_adjudication: 'possible duplicate',
+  steering_proposal: 'steering proposal',
 }
 
 /**
@@ -71,6 +72,9 @@ const TYPE_LABEL: Record<string, string> = {
  */
 function actionFor(item: Notification): { label: string; href: string } | null {
   const kind = kindOf(item.notification_type)
+  // `P6-38`: straight to the list where it can be accepted or rejected.
+  if (item.notification_type === 'steering_proposal')
+    return { label: 'Review', href: '/admin/proposals' }
   if (kind === 'approvals') return { label: 'Review', href: '/admin' }
   if (kind === 'alerts') return { label: 'Admin', href: '/admin' }
   if (item.notification_type === 'run_summary') return { label: 'Run log', href: '/admin' }

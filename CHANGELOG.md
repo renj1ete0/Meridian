@@ -68,6 +68,24 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.133.0] — 2026-09-24
+
+### Added
+
+- `P6-38`: **steering proposals that apply unless the operator objects**. An
+  hourly `worker.steerproposals` pass compares each active topic's share of
+  new on-topic sources with its draw share and its share of fetches over the
+  last day, and proposes a time-limited boost for a starved topic (×1.5 for
+  24h) or a bounded weight cut for an over-served one (at most 0.05 and 25%,
+  never below the floor). A proposal waits a window (12h by default,
+  `steering_proposal_window_hours` in the global policy row) and then applies
+  through the steering machinery, logged as auto-applied with its reason;
+  the operator can accept or reject it first in Admin → Proposals, and each
+  new one raises a notification. Topics steered by hand in the last day,
+  pinned or inactive topics, and thin evidence get no proposal; a proposal
+  whose basis changed is superseded, never applied. Non-fetch policy keys
+  now share one list. Migration `63509269e4e1`
+
 ## [0.132.0] — 2026-09-24
 
 ### Added

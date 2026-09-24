@@ -13,10 +13,11 @@ from .config import (
     GrantAudit,
     ScheduledJob,
     SteeringLog,
+    SteeringProposal,
     TopicConfig,
 )
 from .gazetteer import GazetteerTerm
-from .graph import MergeLog, AttributeDefinition, AttributeValue, Edge, Entity, Observation
+from .graph import AttributeDefinition, AttributeValue, Edge, Entity, MergeLog, Observation
 from .mixins import (
     CURRENT_SCHEMA_VERSION,
     QUALITY_TIER_MAX,
@@ -76,6 +77,7 @@ __all__ = [
     "GrantAudit",
     "ScheduledJob",
     "SteeringLog",
+    "SteeringProposal",
     "TimestampMixin",
     "TopicConfig",
     "TranslationLookup",

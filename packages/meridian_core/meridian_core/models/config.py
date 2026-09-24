@@ -32,8 +32,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from meridian_core.db import Base
 
 from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
-from .source import SOURCE_TIER
 from .queue import SEED_SOURCE
+from .source import SOURCE_TIER
 
 TOPIC_STATUS = constrained("active", "maintenance", "paused", "archived", name="topic_status")
 DOMAIN_STATUS = constrained("active", "blocked", "paused", name="domain_status")
@@ -49,7 +49,6 @@ SUBJECT_KIND = constrained("person", "service", name="subject_kind")
 # is how somebody ends up holding a write tool nobody remembers granting.
 GRANT_PROFILE = constrained("reader", "analyst", "operator", name="grant_profile")
 AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_availability")
-
 
 
 class TopicConfig(Base):
@@ -121,6 +120,95 @@ class SteeringLog(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<SteeringLog {self.actor} {self.topic}.{self.field} -> {self.new_value!r}>"
+
+
+#: What a steering proposal changes (`P6-38`). Two kinds, because §10 has two
+#: levers a heuristic may reasonably pull on its own: a boost, which removes
+#: itself, and a baseline weight, which stays inside the topic's bounds.
+PROPOSAL_KIND = constrained("boost", "weight", name="proposal_kind")
+
+#: A proposal's lifecycle. There is no `accepted`: accepting applies in the
+#: same transaction, so a proposal the operator accepted is `applied` with
+#: `decided_by` set, and one that could not be applied is `failed`.
+PROPOSAL_STATUS = constrained(
+    "pending", "rejected", "applied", "superseded", "failed", name="proposal_status"
+)
+
+
+class SteeringProposal(Base, TimestampMixin):
+    """A steering change the system proposes and applies unless refused (`P6-38`).
+
+    §10.2's default is that the system steers itself; §10.1 that every change is
+    logged with a reason. A proposal sits between the two: the change is stated
+    in plain words with the numbers it rests on, it waits `apply_after` for an
+    objection, and it is applied through :mod:`meridian_core.steering` — so the
+    change itself still lands in `steering_log` like any other.
+
+    **At most one pending proposal per topic and kind**, held by a partial
+    unique index rather than by the writer remembering: two pending boosts for
+    one topic would apply one after the other, and the second would be a
+    decision nobody saw.
+    """
+
+    __tablename__ = "steering_proposals"
+
+    proposal_id: Mapped[int] = pk()
+
+    #: Who proposed it — the pass that measured the signal.
+    actor: Mapped[str] = mapped_column(Text, nullable=False)
+    topic: Mapped[str] = mapped_column(
+        Text, ForeignKey("topic_config.topic", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(PROPOSAL_KIND, nullable=False)
+
+    #: For `weight`, the stored weight before and after. For `boost`, the
+    #: factor in force (1.0 for none) and the factor proposed.
+    current_value: Mapped[float] = mapped_column(Float, nullable=False)
+    proposed_value: Mapped[float] = mapped_column(Float, nullable=False)
+
+    #: When a boost would end. Projected from `apply_after` while pending, and
+    #: rewritten with the real expiry when it is applied. Always set for a
+    #: boost: §10's boosts end by themselves, and a proposal is no exception.
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: Why, in a sentence a person reads — and the numbers behind it.
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
+    #: When silence becomes consent.
+    apply_after: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    status: Mapped[str] = mapped_column(
+        PROPOSAL_STATUS, nullable=False, default="pending", server_default="pending"
+    )
+    decided_by: Mapped[str | None] = mapped_column(Text)
+    decided_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Why it ended the way it did: the operator's reason for rejecting it, what
+    #: superseded it, or what refused it.
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index(
+            "uq_steering_proposals_one_pending",
+            "topic",
+            "kind",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+        CheckConstraint("kind <> 'boost' OR expires_at IS NOT NULL", name="boost_expires"),
+        CheckConstraint("kind <> 'boost' OR proposed_value > 0", name="boost_factor_positive"),
+        CheckConstraint(
+            "kind <> 'weight' OR (proposed_value >= 0 AND proposed_value <= 1)",
+            name="weight_is_a_share",
+        ),
+        CheckConstraint("status <> 'applied' OR applied_at IS NOT NULL", name="applied_has_a_time"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<SteeringProposal {self.proposal_id} {self.topic}.{self.kind} {self.status}>"
 
 
 class FetchPolicy(Base):

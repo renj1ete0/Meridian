@@ -1334,7 +1334,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       (the web sends `topic`, the server expects `topics`) — read from code, not
       reproduced; comparison *cities* are not listed explicitly, so Gaps reports per
       country; the MCP search tool does not take `places` yet
-- [ ] `P6-38` **Steering proposals that apply by default** — the operator's request
+- [x] `P6-38` **Steering proposals that apply by default** — `v0.133.0` (delegated agent). Open: the "hand-steered in the last day" rule counts any steering-log row, so one manual change quiets proposals for a day (conservative on purpose); the window is set in SQL, not Admin; no Telegram push — the operator's request
       (2026-09-24): the system proposes what to steer, and if the operator does not
       object within a window (default 12h, in the global policy row) it is applied,
       bounded, expiring and logged. Being built by a delegated agent

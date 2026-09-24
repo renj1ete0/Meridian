@@ -104,6 +104,11 @@ from .search import (
     SourceChunksRead,
 )
 from .source import ChunkCreate, ChunkRead, FigureCreate, FigureRead, SourceCreate, SourceRead
+from .steering_proposals import (
+    SteeringProposalRead,
+    SteeringProposalReject,
+    SteeringProposalsRead,
+)
 from .views import SavedViewCreate, SavedViewEdit, SavedViewRead, SavedViewsRead
 
 __all__ = [
@@ -198,4 +203,8 @@ __all__ = [
     "NotificationRead",
     "ObservationCreate",
     "ObservationRead",
+    # steering proposals (P6-38)
+    "SteeringProposalRead",
+    "SteeringProposalReject",
+    "SteeringProposalsRead",
 ]

@@ -7,6 +7,7 @@ import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
 import { GazetteerQueue, PAGE_SIZE } from './GazetteerQueue'
 import { PinsPanel } from './PinsPanel'
+import { ProposalsPanel } from './ProposalsPanel'
 import { RunsPanel } from './RunsPanel'
 import {
   DEFAULT_SECTION,
@@ -55,6 +56,12 @@ import {
   type TopicStatus,
   type Topics,
 } from '../lib/api'
+import {
+  acceptProposal,
+  getProposals,
+  rejectProposal,
+  type Proposals,
+} from '../lib/proposals'
 import { onInternalClick } from '../lib/route'
 
 /**
@@ -93,7 +100,7 @@ export const HEALTH_REFRESH_MS = 30_000
 /** Sections that carry the steering rail. The rail answers "what moved, and
  * what did it steer", which is a question about these pages only; on a table
  * of thousands of terms it would be width taken from the table. */
-const WITH_RAIL: readonly Section[] = ['topics', 'boosts']
+const WITH_RAIL: readonly Section[] = ['topics', 'boosts', 'proposals']
 
 /** Fetch-policy rows per page — the API's ceiling. */
 const DOMAIN_PAGE = 200
@@ -137,6 +144,8 @@ export function AdminPage() {
   const [agents, setAgents] = useState<Agents | null>(null)
   const [runs, setRuns] = useState<Runs | null>(null)
   const [health, setHealth] = useState<CrawlHealth | null>(null)
+  const [proposals, setProposals] = useState<Proposals | null>(null)
+  const [proposalBusy, setProposalBusy] = useState<number | null>(null)
 
   const [run, setRun] = useState<FirstRun | null>(null)
   const [seedBusy, setSeedBusy] = useState<number | null>(null)
@@ -232,6 +241,21 @@ export function AdminPage() {
       })
   }, [])
 
+  const loadProposals = useCallback((signal?: AbortSignal) => {
+    // With the steering log, because the rail beside the proposals is where a
+    // decision made here shows up.
+    return Promise.all([getProposals({ signal }), getSteeringLog({ limit: 60 }, { signal })])
+      .then(([body, log]) => {
+        setProposals(body)
+        setEntries(log.entries)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        const text = message(cause, 'Proposals could not be loaded.')
+        if (text) setError(text)
+      })
+  }, [])
+
   const loadRun = useCallback(async (signal?: AbortSignal) => {
     try {
       setRun(await getFirstRun({ signal }))
@@ -284,6 +308,9 @@ export function AdminPage() {
     else if (section === 'topics' || section === 'boosts') {
       void loadTopics(signal)
       void loadRecent(signal)
+    } else if (section === 'proposals') {
+      void loadProposals(signal)
+      void loadRecent(signal)
     } else if (section === 'seeds') void loadRun(signal)
     else if (section === 'agents') void loadAgents(signal)
     else if (section === 'runs') void loadRuns(signal)
@@ -299,6 +326,7 @@ export function AdminPage() {
     loadAgents,
     loadHealth,
     loadPolicy,
+    loadProposals,
     loadRecent,
     loadRun,
     loadRuns,
@@ -408,6 +436,27 @@ export function AdminPage() {
     } finally {
       setSteering(null)
     }
+  }
+
+  // A decision on a proposal. The list is refetched after, not patched: a
+  // proposal that was accepted can supersede nothing else, but a refusal from
+  // the server (someone else decided it first) must show the list as it is.
+  async function decide(proposalId: number, done: string, work: () => Promise<unknown>) {
+    setProposalBusy(proposalId)
+    setNotice(null)
+    setError(null)
+    let refusal: string | null = null
+    try {
+      await work()
+    } catch (cause: unknown) {
+      refusal = cause instanceof ApiError ? cause.message : 'That decision was not saved.'
+    }
+    // Refetched first, then the sentence: a successful reload clears the
+    // error line, and the refusal is the one thing that must survive it.
+    await loadProposals()
+    setProposalBusy(null)
+    if (refusal) setError(refusal)
+    else setNotice(done)
   }
 
   const steerTopic = (topic: string, work: () => Promise<unknown>) => {
@@ -535,6 +584,25 @@ export function AdminPage() {
             <PinsPanel rows={topics.rows} busy={steering} onPinned={onPinned} onBoost={onBoost} />
           ) : (
             <Loading what="the topics" />
+          )
+        ) : null}
+
+        {section === 'proposals' ? (
+          proposals ? (
+            <ProposalsPanel
+              proposals={proposals}
+              busy={proposalBusy}
+              onAccept={(proposalId) =>
+                void decide(proposalId, 'Applied now.', () => acceptProposal(proposalId))
+              }
+              onReject={(proposalId, reason) =>
+                void decide(proposalId, 'Rejected; it will not apply.', () =>
+                  rejectProposal(proposalId, reason),
+                )
+              }
+            />
+          ) : error ? null : (
+            <Loading what="the proposals" />
           )
         ) : null}
 

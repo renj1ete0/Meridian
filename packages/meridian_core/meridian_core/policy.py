@@ -48,6 +48,22 @@ RENDER_JS_THRESHOLD = 3
 RENDER_JS_TTL = dt.timedelta(days=7)
 
 
+#: Keys that ride in the global row's settings and are not fetch settings, so
+#: :func:`resolve_policy` strips them. One list, shared with Admin's resolved
+#: view, because two copies had already drifted: a key missing from one of
+#: them shows up as a "setting" on every domain in Admin.
+#:
+#: - ``source_tiers`` — the domain → tier map.
+#: - ``frontier`` — what enters the queue, not how a request is made; a policy
+#:   carrying it would invite treating "should this be crawled" as per-request.
+#: - ``search_languages`` — what search seeds are written in (`B-52`).
+#: - ``steering_proposal_window_hours`` — how long a steering proposal waits
+#:   for an objection before it applies itself (`P6-38`).
+NOT_FETCH_SETTINGS = frozenset(
+    {"source_tiers", "frontier", "search_languages", "steering_proposal_window_hours"}
+)
+
+
 class ResolvedPolicy(BaseModel):
     """The effective policy for one domain, after all layers are merged."""
 
@@ -146,15 +162,8 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
         glob.settings if glob else None,
         file_defaults(),
     )
-    # The tier map rides in the global row but is not a fetch setting.
-    settings.pop("source_tiers", None)
-    # Likewise the frontier block: it decides what enters the queue, not how a
-    # request is made, and a ResolvedPolicy carrying it would invite callers to
-    # treat "should this be crawled" as a per-request setting.
-    settings.pop("frontier", None)
-    # And the languages search seeds are written in (`B-52`): what to ask, not
-    # how to fetch.
-    settings.pop("search_languages", None)
+    for key in NOT_FETCH_SETTINGS:
+        settings.pop(key, None)
 
     # A per-domain row carries status; the global row's status is not inherited,
     # because blocking '*' would silently stop the entire crawl.

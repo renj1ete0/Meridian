@@ -111,3 +111,8 @@ frontier:
 # words come from `worker.translate`; a concept with no article in a language
 # simply has no seed in it. An empty list switches the mechanism off.
 search_languages: [ja, ko, zh, de, fr, nl, id, ms, th]
+
+# How long a steering proposal waits for an objection before it applies itself
+# (`P6-38`, §10.2: the system steers itself by default). Hours. Accepting one in
+# Admin applies it at once; rejecting it means it never applies.
+steering_proposal_window_hours: 12

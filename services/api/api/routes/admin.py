@@ -48,6 +48,7 @@ from meridian_core.models import (
 )
 from meridian_core.policy import (
     GLOBAL_DOMAIN,
+    NOT_FETCH_SETTINGS,
     ResolvedPolicy,
     file_defaults,
     learned_render_js,
@@ -542,12 +543,6 @@ def _resolved(row: FetchPolicy, glob: FetchPolicy | None) -> dict:
         # it are what say why.
         resolved = resolved.model_copy(update={"render_js": "always"})
     return resolved.model_dump()
-
-
-#: In the settings blob and not fetch settings. `source_tiers` is the domain →
-#: tier map and `frontier` decides what enters the queue; both ride in the
-#: global row (§13.1) and neither is something a fetch reads.
-NOT_FETCH_SETTINGS = frozenset({"source_tiers", "frontier"})
 
 
 def _row_read(row: FetchPolicy, glob: FetchPolicy | None) -> FetchPolicyRowRead:

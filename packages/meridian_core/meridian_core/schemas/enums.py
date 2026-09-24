@@ -18,6 +18,8 @@ from meridian_core.models.config import (
     AVAILABILITY,
     DOMAIN_STATUS,
     GRANT_PROFILE,
+    PROPOSAL_KIND,
+    PROPOSAL_STATUS,
     SUBJECT_KIND,
     TOKEN_SCOPE,
     TOPIC_STATUS,
@@ -86,6 +88,10 @@ SubjectKind = Literal[*SUBJECT_KIND.enums]
 #: somebody ends up holding a write tool nobody remembers granting (§3).
 GrantProfile = Literal[*GRANT_PROFILE.enums]
 AgentAvailability = Literal[*AVAILABILITY.enums]
+
+#: What a steering proposal changes, and where it is in its life (`P6-38`).
+ProposalKind = Literal[*PROPOSAL_KIND.enums]
+ProposalStatus = Literal[*PROPOSAL_STATUS.enums]
 
 # mixins.py — shared by `sources` and `fetch_policy` (`P4-14`)
 TrustState = Literal[*TRUST_STATE.enums]

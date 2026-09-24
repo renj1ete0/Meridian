@@ -52,6 +52,8 @@ ENUM_PAIRS = [
     ("TrustState", models.mixins.TRUST_STATE),
     ("SubjectKind", models.config.SUBJECT_KIND),
     ("GrantProfile", models.config.GRANT_PROFILE),
+    ("ProposalKind", models.config.PROPOSAL_KIND),
+    ("ProposalStatus", models.config.PROPOSAL_STATUS),
 ]
 
 
@@ -110,6 +112,7 @@ READ_PAIRS = [
     (models.EnrichmentItem, schemas.EnrichmentItemRead, set()),
     (models.Report, schemas.ReportRead, set()),
     (models.Notification, schemas.NotificationRead, set()),
+    (models.SteeringProposal, schemas.SteeringProposalRead, set()),
 ]
 
 

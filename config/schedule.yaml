@@ -144,3 +144,14 @@ jobs:
     # read the first `python -m worker.docdupes` report, then enable it.
     interval_seconds: 86400
     enabled: false
+
+  - name: steerproposals
+    module: worker.steerproposals
+    args: ["--once"]
+    # `P6-38`, §10.2: proposes a bounded steering change for a topic that is
+    # starved or over-served against its weight (a day's new on-topic sources
+    # and fetches), and applies each proposal nobody rejected once its window
+    # (`steering_proposal_window_hours`, 12 by default) has passed. Hourly, so a
+    # proposal applies within the hour its window ends.
+    interval_seconds: 3600
+    enabled: true

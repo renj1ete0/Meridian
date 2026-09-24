@@ -35,6 +35,7 @@ NOTIFICATION_TYPE = constrained(
     "seed_proposal",
     "gazetteer_proposal",
     "merge_adjudication",
+    "steering_proposal",
     name="notification_type",
 )
 

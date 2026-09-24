@@ -52,6 +52,10 @@ export function auditLine(entry: SteeringEntry): string {
     case 'seed':
       // `B-55`: a seed is steering too — what the crawl is sent to look at.
       return next === null ? `${topic} seed withdrawn: ${old ?? '—'}` : `${topic} seed: ${next}`
+    case 'proposal':
+      // `P6-38`: a decision on a proposal. Rejecting changes nothing, and the
+      // line says so rather than printing an arrow to nowhere.
+      return next?.startsWith('rejected') ? `${topic} proposal rejected` : `${topic} proposal ${next ?? 'decided'}`
     default:
       return `${topic} ${field ?? 'change'} ${old ?? '—'} → ${next ?? '—'}`
   }

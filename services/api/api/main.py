@@ -35,7 +35,7 @@ from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
-from .routes import admin, connect, explore, gaps, graph, neighbourhood
+from .routes import admin, connect, explore, gaps, graph, neighbourhood, steering_proposals
 
 log = get_logger(__name__)
 
@@ -219,6 +219,8 @@ def create_app() -> FastAPI:
     # `/api/admin` — one module, two routers, the prefix still the role boundary.
     app.include_router(gaps.explore_router)
     app.include_router(gaps.admin_router)
+    # Steering proposals (`P6-38`): list, accept, reject — all under `/api/admin`.
+    app.include_router(steering_proposals.router)
 
     # §11.1's agent-initiated direction (`P3-01`). Mounted on the same app on
     # purpose: it is the same corpus, the same read-only role and the same

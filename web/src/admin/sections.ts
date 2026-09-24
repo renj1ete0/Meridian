@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react'
 export type Section =
   | 'topics'
   | 'boosts'
+  | 'proposals'
   | 'seeds'
   | 'agents'
   | 'gazetteer'
@@ -40,6 +41,9 @@ export interface SectionDef {
 export const SECTIONS: readonly SectionDef[] = [
   { key: 'topics', label: 'Topic weights', path: 'topics', group: 'steering' },
   { key: 'boosts', label: 'Pins & boosts', path: 'boosts', group: 'steering' },
+  // `P6-38`. Beside the controls it proposes changes to: a proposal is a boost
+  // or a weight that will be set unless somebody says no.
+  { key: 'proposals', label: 'Proposals', path: 'proposals', group: 'steering' },
   // Last in its group, because it is the one section that stops mattering. It
   // is also the first thing anybody needs on a fresh install, which is why
   // Admin opens on it when nothing has been crawled yet.
