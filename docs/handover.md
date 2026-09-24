@@ -67,9 +67,20 @@ told to; check).
   local stack, Wikimedia answers anonymous clients 403, and `worker.translate`
   now refuses to run without it. So there are no non-English seeds until it is
   set. The same variable is what lets the DOI resolver use Unpaywall.
-- **Not yet applied live:** `worker.docdupes --apply`. The first report found
-  a few hundred exact copies and a handful of near ones; read it, apply it,
-  then enable the `docdupes` timetable row (shipped disabled).
+- **An unattended deploy chain was left running** at handover: after the
+  `v0.124.4` build and requeue, it rebuilds at `v0.125.0`, migrates, runs
+  `worker.docdupes --apply` (the operator left the call to the lead; it is
+  reversible and deletes nothing), and restarts worker, scheduler, api and web.
+  Check `SELECT version_num FROM alembic_version` (should be `f5b9328b0df8`)
+  and `SELECT duplicate_reason, count(*) FROM sources GROUP BY 1`. Then enable
+  the `docdupes` timetable row in Admin (it shipped disabled).
+
+**Operator decisions, 2026-09-24:** topics stay **broad** at the start and the
+crawl finds its way in. Descriptions are optional, a way to steer into more
+defined spaces later, and never required. Undescribed topics are searched by
+name. For other languages, **English where a site offers it, otherwise
+whatever language the page is in** (`B-57`). The contact address for the
+Wikipedia and Unpaywall lookups is still open (see TASKS, needs the operator).
 - Deploying without restarting Postgres: as before, `build <svc>`, then
   `run --rm --no-deps tools alembic upgrade head`, then `up -d --no-deps
   <svc>`.
