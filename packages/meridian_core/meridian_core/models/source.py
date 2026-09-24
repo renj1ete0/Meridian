@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     Text,
     UniqueConstraint,
     text,
@@ -235,6 +236,11 @@ class Chunk(Base, TimestampMixin):
 
     text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
+    #: Which `embedtext.VIEW_VERSION` the vector was computed from (`B-49`).
+    #: NULL for vectors computed from the raw text, before the view existed.
+    #: What lets `worker.reembed` find the vectors a view change made stale
+    #: without taking any of them out of search while it works.
+    embedding_view: Mapped[int | None] = mapped_column(SmallInteger)
 
     # Page number for paginated documents, character offset otherwise. Citations
     # need this to be accurate, so it is written when the text is extracted.

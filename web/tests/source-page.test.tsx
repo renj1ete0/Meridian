@@ -72,6 +72,7 @@ beforeEach(() => {
         nearest_similarity: null,
         duplicate_of: null,
         superseded_at: null,
+        embedding_view: 1,
         created_at: '2026-09-01T00:00:00Z',
       },
     ],

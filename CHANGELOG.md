@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.120.0] — 2026-09-24
+
+### Changed
+
+- `B-49`: chunks are embedded as what a reader reads. Link and image syntax
+  becomes its visible text and bare URLs are dropped before embedding
+  (`meridian_core.embedtext`); stored text, the lexical index and citations
+  are unchanged. `chunks.embedding_view` records which view a vector came
+  from, and `python -m worker.reembed --apply` replaces stale vectors in place
+  (a chunk stays searchable until its new vector lands), only for chunks the
+  view changes. Migration `11c2589fddbf`
+
 ## [0.119.1] — 2026-09-24
 
 ### Fixed

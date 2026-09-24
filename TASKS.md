@@ -1188,6 +1188,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       rule: six sources, 693 chunks. Follow-up, not done: a *re-fetch* that turns
       a document into a scan leaves its previous chunks live (`main._chunk`
       returns early when there is no text)
+- [x] `B-49` **URLs were embedded as if they were meaning** — `v0.120.0`. One
+      character in eight of chunk text sat inside a markdown link target, and one
+      chunk in ten was over 30% URL, so pages clustered by link shape. The embedder
+      now gets a view with link syntax reduced to its visible text; stored text is
+      untouched. `worker.reembed` brings existing vectors up to the view in place
 - [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string

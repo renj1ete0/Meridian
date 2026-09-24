@@ -278,8 +278,13 @@ async def chunks_without_embeddings(
     return list(rows.scalars())
 
 
-async def store_embeddings(sess: AsyncSession, vectors: Mapping[int, Sequence[float]]) -> int:
+async def store_embeddings(
+    sess: AsyncSession, vectors: Mapping[int, Sequence[float]], *, view: int | None = None
+) -> int:
     """Attach vectors to chunks by id. Returns how many landed. Flushes.
+
+    ``view`` records which `embedtext.VIEW_VERSION` the vectors were computed
+    from (`B-49`); a caller embedding raw text leaves it None.
 
     Skips a chunk that has vanished rather than failing the batch: a source
     re-crawled between the read and the write has had its chunks replaced
@@ -294,6 +299,7 @@ async def store_embeddings(sess: AsyncSession, vectors: Mapping[int, Sequence[fl
     written = 0
     for chunk in rows.scalars():
         chunk.embedding = list(vectors[chunk.chunk_id])
+        chunk.embedding_view = view
         written += 1
 
     await sess.flush()

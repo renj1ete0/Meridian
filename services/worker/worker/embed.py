@@ -49,6 +49,7 @@ from meridian_core.chunks import (
     store_embeddings,
 )
 from meridian_core.db import dispose_engines, session
+from meridian_core.embedtext import VIEW_VERSION, embedding_view
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .embeddings import EmbeddingError
@@ -149,7 +150,9 @@ class Backfill:
                 # Read out of the ORM before the model runs: encoding is slow,
                 # and holding a database connection across it would pin one for
                 # the whole batch.
-                batch = [(chunk.chunk_id, chunk.text) for chunk in chunks]
+                # The view, not the stored text (`B-49`): link targets and bare
+                # URLs carry no meaning and were one character in eight.
+                batch = [(chunk.chunk_id, embedding_view(chunk.text)) for chunk in chunks]
 
             after_id = batch[-1][0]
             stats.batches += 1
@@ -179,6 +182,7 @@ class Backfill:
                         chunk_id: vector
                         for (chunk_id, _), vector in zip(batch, vectors, strict=True)
                     },
+                    view=VIEW_VERSION,
                 )
                 await sess.commit()
 

@@ -213,6 +213,8 @@ export interface Chunk {
   duplicate_of: number | null
   /** When a re-crawl retired this chunk (`P1-32`). Null is the live set. */
   superseded_at: string | null
+  /** Which embedding view the vector was computed from (`B-49`); null before views. */
+  embedding_view: number | null
   created_at: string
 }
 
@@ -226,6 +228,7 @@ export const CHUNK_FIELDS = [
   'nearest_similarity',
   'duplicate_of',
   'superseded_at',
+  'embedding_view',
   'created_at',
 ] as const
 

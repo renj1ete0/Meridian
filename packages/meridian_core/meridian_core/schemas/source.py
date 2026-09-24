@@ -129,6 +129,10 @@ class ChunkRead(BaseModel):
     # the edge was derived from, and the page has since changed" from "this is
     # what the page says now".
     superseded_at: dt.datetime | None = None
+    # Which embedding view the chunk's vector was computed from (`B-49`), so a
+    # caller comparing similarities across chunks can tell whether they were
+    # embedded from the same kind of text. The vector itself stays out.
+    embedding_view: int | None = None
     created_at: dt.datetime
 
 
