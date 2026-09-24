@@ -81,6 +81,16 @@ starting when the evening's deploy finished and snapshotted at both ends into
 session. If `end.txt` is missing, the machine was asleep or logged out when
 the end timer fired; run `snapshot.sh end` by hand.
 
+**The optimisation loop (operator's request, 2026-09-24):** run, then
+re-check tagging and quality, re-steer, and run again. Keep going while each
+iteration still improves on-topic yield, tagging coverage or question-set
+scores materially, and stop after two runs without material improvement.
+Work files go in `~/Documents/gh/meridian-calibration/loop/`. A session-only
+scheduled prompt drives iteration 1 at about 11:47 on 2026-09-25. If the
+session has ended, do it by hand: close run 1 (P1-16 `end.txt`), merge the
+agent branches, deploy and run the backfills, write the findings, re-steer,
+and start a 5h run 2. Never deploy or restart during a measurement window.
+
 **Operator decisions, 2026-09-24:** topics stay **broad** at the start and the
 crawl finds its way in. Descriptions are optional, a way to steer into more
 defined spaces later, and never required. Undescribed topics are searched by
