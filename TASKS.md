@@ -1156,7 +1156,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       Writing it now means a pass whose output nothing reads, which is the
       exact shape `B-15` found five instances of: code that runs correctly when
       invoked and is never invoked. Build it with `P5-03`, or with a consumer
-      named first
+      named first. **2026-09-24:** still no consumer. The Map's areas (`P6-30`) and
+      neighbourhood (`P6-33`) connect terms by embedding and by cited claims,
+      which covers what co-occurrence was for. Consider closing it once those land
 - [x] `P5-02` Gazetteer into `EntityRuler` at worker startup; acronym auto-harvest
       — `v0.63.0`. §5.6's "do not hand-write it — bootstrap it", built as two
       pure halves plus a pass. `compile_patterns` turns approved rows into
@@ -1171,8 +1173,19 @@ deploy runbook whose first two commands could not work (`B-17`).
       optional `ner` extra rather than a dependency: `P5-01` is the task that
       introduces NER, and the patterns are built in `meridian_core`, which needs
       none of it
-- [ ] `P5-03` Coverage scoring, schema-aware, topic × dimension
-- [ ] `P5-04` Gap analysis and seed emission, capped and validated
+- [ ] `P5-03` Coverage scoring, schema-aware, topic × dimension — **re-scoped
+      2026-09-24**: per-topic coverage (thin, weak, stale) now exists as a Gaps
+      source (`P6-36`), and per-place coverage is coming with `P2-23`. What remains is
+      the *dimension* half, coverage per attribute (which attributes have evidence
+      for which places), and it needs attribute values, which need synthesis at
+      scale. Build it as another Gaps source when there are values to count
+- [ ] `P5-04` Gap analysis and seed emission, capped and validated — **re-scoped
+      2026-09-24**: largely covered. Gaps (`P6-36`, `P6-37`) is the analysis, seeds
+      are emitted capped and never repeated by `seedsearch` (`B-51`, `B-52`, `P5-05`),
+      and `P6-38` turns gaps into steering that applies by default. What remains is
+      validation: measure whether an emitted seed closed its gap on the next run,
+      and down-rank query shapes that never do. That is the re-run loop's job
+      (see Resume here)
 - [ ] `P5-05` Diversity seeding — stance-imbalance counter-seeds first (spec §7.4)
 - [x] `P5-06` Scheduler reads its timetable from the DB — no cron files,
       `v0.59.0`. `scheduled_jobs` plus `python -m worker.scheduler`, reusing the
