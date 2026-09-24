@@ -1304,6 +1304,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       that found nothing can be its own gap. Also `eval/runs` is not mounted into the
       API container, so on a deployment the question-set source reports
       "unavailable" until `MERIDIAN_EVAL_RUNS_DIR` points at a mounted directory
+- [ ] `P6-38` **Steering proposals that apply by default** — the operator's request
+      (2026-09-24): the system proposes what to steer, and if the operator does not
+      object within a window (default 12h, in the global policy row) it is applied,
+      bounded, expiring and logged. Being built by a delegated agent
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
