@@ -1503,6 +1503,35 @@ writes to AGE yet and nothing should until the projection pass exists. A stage
 that wrote Cypher directly would be creating exactly the divergence this
 decision exists to prevent.
 
+### A merge folds a repeated claim, and the folded row lives in `merge_log`
+
+`B-41`. When a merge re-points an edge onto a subject, relation and object the
+target already holds, `merge` folds it into the held edge — citations, topic
+labels and contradictions unite; the judgement moves only to a strictly higher
+tier, as in `add_edge` — and **deletes the moved row from `edges`**, keeping it
+whole in `merge_log.combined`. The same happens to an attribute value both
+entities carry (the table allows one per entity, so the move used to fail
+outright). Observations are moved, never folded: two equal readings are two
+pieces of evidence, and nothing defines when they are one.
+
+Three things worth knowing before touching it:
+
+- **An edge id can disappear and come back.** `reverse` re-inserts a folded
+  row under its original id. Anything that caches edge ids across a merge
+  (a saved view, a contested pair) should expect a miss, not an error.
+- **Reverse merges newest first when they share a survivor.** If a later merge
+  folded away the edge an earlier one folded into, reversing the earlier one
+  is refused (`reason="order"`) before it touches anything.
+- **`merge_log.moved_columns` says which end of a row moved.** Before it, a
+  reversal moved back every column naming the target, so an edge between the
+  two entities came back as a self-loop on the source. Merges logged before
+  `B-41` have it null and still reverse the old way.
+
+Duplicates left by earlier merges are folded by `python -m worker.edgedupes`
+(report by default, `--apply` writes). Each fold is appended to the `combined`
+of the merge that caused it, so reversing that merge splits it; a duplicate no
+merge explains is listed and left alone.
+
 ### One unfinished run is an invariant, so a stuck run blocks every later one
 
 `P4-08` puts two unique partial indexes on `runs`: at most one row may be
