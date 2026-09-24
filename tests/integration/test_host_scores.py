@@ -98,7 +98,9 @@ async def test_requeue_holds_an_offtopic_hosts_links_and_keeps_an_on_topic_hosts
         )
     ).all()
     assert {p for u, p in rows if off in u} == {HELD_PRIORITY}
-    assert {p for u, p in rows if on in u} == {60}
+    # Kept, at the priority its tier is worth now — not held.
+    kept = {p for u, p in rows if on in u}
+    assert len(kept) == 1 and HELD_PRIORITY not in kept
     assert stats.held >= 3
 
 
@@ -151,3 +153,26 @@ async def test_requeue_deletes_nothing(sess) -> None:
         )
     )
     assert count == 5
+
+
+async def test_requeue_brings_a_kept_link_to_its_current_tier_priority(sess) -> None:
+    """`B-50` changed what a tier is worth; a link queued before must follow."""
+    from meridian_core.ageing import HALF_LIFE_DAYS
+    from meridian_core.policy import source_tier_map
+    from meridian_core.tiering import priority_with_urgency
+
+    on = host()
+    await labelled(sess, on, 20, on=20)
+    await queued(sess, on, 1, priority=97)
+    await recompute(sess)
+
+    await run_pass(apply=True, session_factory=factory(sess))
+
+    url, priority = (
+        await sess.execute(
+            select(QueueTask.url_or_query, QueueTask.priority).where(
+                QueueTask.url_or_query.like(f"https://{on}/%")
+            )
+        )
+    ).one()
+    assert priority == priority_with_urgency(url, await source_tier_map(sess), HALF_LIFE_DAYS)

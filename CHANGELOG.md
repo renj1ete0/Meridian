@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.124.4] — 2026-09-24
+
+### Fixed
+
+- `B-48`/`B-50`: `worker.requeue` recomputes each followed link's priority
+  from its tier as it stands now, before applying the host verdict. Links
+  queued before `B-50` were still ranked as scholarship and, on the live
+  stack, were being fetched ahead of search results
+
 ## [0.124.3] — 2026-09-24
 
 ### Fixed

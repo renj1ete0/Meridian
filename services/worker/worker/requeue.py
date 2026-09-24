@@ -24,13 +24,14 @@ from urllib.parse import urlsplit
 
 from sqlalchemy import select, update
 
+from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.boilerplate import host_key
 from meridian_core.db import dispose_engines, session
 from meridian_core.hostscores import HostPolicy, Score, load
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask
 from meridian_core.policy import source_tier_map
-from meridian_core.tiering import resolve_tier
+from meridian_core.tiering import priority_with_urgency, resolve_tier
 
 log = get_logger(__name__)
 
@@ -74,16 +75,20 @@ async def run_pass(*, apply: bool, session_factory=session) -> RequeueStats:
             stats.examined += 1
             government = resolve_tier(urlsplit(url).hostname or "", tiers) == "government"
             decision = policy.admit(url, government=government)
+            # From the link's tier *now*, not the priority it was queued at:
+            # a tier rule that changed since (`B-50`) reaches the backlog only
+            # if the priority is recomputed.
+            wanted = decision.applied_to(priority_with_urgency(url, tiers, HALF_LIFE_DAYS))
             if not decision.queue:
                 stats.held += 1
                 stats.reasons[decision.reason] += 1
                 stats.held_hosts[host_key(url) or "?"] += 1
                 if priority != HELD_PRIORITY:
                     changes[HELD_PRIORITY].append(task_id)
-            elif decision.applied_to(priority) != priority:
-                stats.downranked += 1
-                stats.reasons[decision.reason] += 1
-                changes[decision.applied_to(priority)].append(task_id)
+            elif wanted != priority:
+                stats.downranked += wanted < priority
+                stats.reasons[decision.reason if wanted < priority else "raised"] += 1
+                changes[wanted].append(task_id)
             else:
                 stats.kept += 1
         if apply:
