@@ -1348,7 +1348,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `P6-32` **Route across claims and areas** — extends `P6-03`'s path search
       to areas and terms; every hop labelled cited or similar; "no cited route
       within N hops" is a result and feeds Gaps
-- [ ] `P6-33` **Neighbourhood** — term → nearest entities by claim and nearest
+- [x] `P6-33` **Neighbourhood** — `v0.128.0` (delegated agent; screenshotted dark and light against the Term neighbourhood board with live responses). Open: the board's caption says CLAIMED where the build says CITED — term → nearest entities by claim and nearest
       passages/terms by embedding; shown as a panel beside Find's results
 - [ ] `P6-34` **The Map screen** — areas zoomable by level, size key, weak/stale
       outline, bridge panel, route mode, 3D toggle (`P6-29` moves inside it),

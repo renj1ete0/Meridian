@@ -68,6 +68,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.128.0] — 2026-09-24
+
+### Added
+
+- `P6-33`: a term's **neighbourhood** beside Find's results. `GET
+  /api/explore/neighbourhood?q=|entity_id=` (read-only role) returns an inner
+  ring of *cited* links (edges and observation-to-place links, with support,
+  relation, direction and contested state) and an outer ring of *similar*
+  names (name-vector cosine ≥ 0.70) and nearby passages (≥ 0.55, one per
+  source, through search's own filters) — separate types everywhere, never
+  one list. A term becomes a node only by name or alias, never by meaning;
+  each empty case says which it is. The panel draws the rings on the canvas
+  ground in both themes (solid for cited, dashed for similar) and does not
+  repeat passages already in the results
+
 ## [0.127.1] — 2026-09-24
 
 ### Added

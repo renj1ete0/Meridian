@@ -11,6 +11,8 @@ import { ResultList } from './ResultList'
 import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
+import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
+import { getTermNeighbourhood } from './neighbourhood/api'
 import { TopicFilter } from './TopicFilter'
 import { WhereYouWere } from './WhereYouWere'
 import {
@@ -129,6 +131,36 @@ export function ExplorePage() {
 
   const inFlight = useRef<AbortController | null>(null)
 
+  // The neighbourhood beside the results (`P6-33`): the term as asked, or a
+  // node the reader picked from the candidates when the term named none.
+  const [hood, setHood] = useState<NeighbourhoodPanelProps['state'] | null>(null)
+  const [picked, setPicked] = useState<number | null>(null)
+  useEffect(() => {
+    if (!asked) {
+      setHood(null)
+      return
+    }
+    const controller = new AbortController()
+    setHood({ phase: 'loading' })
+    getTermNeighbourhood(picked !== null ? { entityId: picked } : { q: asked }, {
+      signal: controller.signal,
+    })
+      .then((data) => setHood({ phase: 'done', data }))
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        // The panel is beside the results, not in front of them: its failure
+        // is named in the panel and the results stand.
+        setHood({
+          phase: 'failed',
+          message:
+            cause instanceof ApiError
+              ? `The neighbourhood could not be read: ${cause.message}`
+              : 'The neighbourhood could not be read.',
+        })
+      })
+    return () => controller.abort()
+  }, [asked, picked])
+
   // Read once, and the stamp advances immediately. Writing it later — on
   // unmount, or after the fetch — is how the delta ends up always zero: the
   // second render reads a stamp the first one just wrote. `P6-11`.
@@ -202,6 +234,7 @@ export function ExplorePage() {
 
     setPhase('searching')
     setAsked(trimmed)
+    setPicked(null)
     setError(null)
 
     searchCorpus({ q: trimmed, topic: within }, { signal: controller.signal })
@@ -229,6 +262,7 @@ export function ExplorePage() {
     inFlight.current?.abort()
     setQuery('')
     setAsked('')
+    setPicked(null)
     setResults(null)
     setError(null)
     setPhase('idle')
@@ -267,50 +301,62 @@ export function ExplorePage() {
   ) : null
 
   if (!idle) {
+    const shown = new Set(results?.hits.map((hit) => hit.chunk_id) ?? [])
     return (
-      <div className="mx-auto w-full max-w-[912px] px-4 pb-24 pt-8">
-        <div className="flex flex-col gap-3">
+      <div className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-8">
+        <div className="flex max-w-[912px] flex-col gap-3">
           {field}
           {topicFilter}
         </div>
 
-        <section className="mt-8" aria-live="polite">
-          {phase === 'searching' ? (
-            <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>
-          ) : null}
+        {/* Results and the neighbourhood side by side (`P6-33`); stacked,
+            results first, below the width where both fit. */}
+        <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <section aria-live="polite">
+            {phase === 'searching' ? (
+              <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>
+            ) : null}
 
-          {phase === 'failed' && error ? (
-            // §4: an error names the cause and the scope. The API's own message
-            // is the most specific thing available, so it is shown rather than
-            // replaced with a generic line.
-            <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{error}</p>
-          ) : null}
+            {phase === 'failed' && error ? (
+              // §4: an error names the cause and the scope. The API's own message
+              // is the most specific thing available, so it is shown rather than
+              // replaced with a generic line.
+              <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{error}</p>
+            ) : null}
 
-          {phase === 'done' && results ? (
-            <SearchOutcome
-              asked={asked}
-              results={results}
-              aside={
-                <SaveView
-                  query={asked}
-                  filters={topics.length > 0 ? { topic: topics } : {}}
-                  busy={saving}
-                  error={saveError}
-                  onSave={(name, text, filters) => {
-                    setSaving(true)
-                    setSaveError(null)
-                    saveView({ name, query: text, filters })
-                      .then((view) => setViews((current) => [view, ...current]))
-                      .catch((cause: unknown) => {
-                        setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
-                      })
-                      .finally(() => setSaving(false))
-                  }}
-                />
-              }
+            {phase === 'done' && results ? (
+              <SearchOutcome
+                asked={asked}
+                results={results}
+                aside={
+                  <SaveView
+                    query={asked}
+                    filters={topics.length > 0 ? { topic: topics } : {}}
+                    busy={saving}
+                    error={saveError}
+                    onSave={(name, text, filters) => {
+                      setSaving(true)
+                      setSaveError(null)
+                      saveView({ name, query: text, filters })
+                        .then((view) => setViews((current) => [view, ...current]))
+                        .catch((cause: unknown) => {
+                          setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
+                        })
+                        .finally(() => setSaving(false))
+                    }}
+                  />
+                }
+              />
+            ) : null}
+          </section>
+          {hood ? (
+            <NeighbourhoodPanel
+              state={hood}
+              shownChunkIds={shown}
+              onPick={(term) => setPicked(term.entity_id)}
             />
           ) : null}
-        </section>
+        </div>
 
         <p className="mt-8">
           <button
