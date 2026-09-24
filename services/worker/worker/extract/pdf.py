@@ -39,6 +39,7 @@ import dataclasses
 import datetime as dt
 import re
 import shutil
+import unicodedata
 
 from meridian_core.logging import get_logger
 
@@ -56,6 +57,20 @@ PDFINFO = "pdfinfo"
 #: The gap between the two is wide enough that the exact threshold does not
 #: matter much, which is why a cheap check can carry this decision.
 SCAN_CHARS_PER_PAGE = 100
+
+#: A page whose text layer is more than this share control characters,
+#: private-use code points and replacement characters has no readable text. A
+#: PDF drawn with a custom font encoding and no Unicode map comes out of
+#: `pdftotext` as exactly that: a page-length run of `\x10\x13\x17…`, which is
+#: not blank, so the scanned-page check passes it, and it embeds as noise.
+#: Measured over a real crawl, garbled documents sat at 60–66% and the next
+#: highest ordinary document at 5%, so the exact value matters little.
+GARBLED_SHARE = 0.2
+
+#: Above this share of garbled pages the document is treated as a scan: its
+#: readable pages are too few to stand for it, and OCR is the only way to its
+#: text. At or below it the readable pages are kept and the garbled ones blanked.
+GARBLED_PAGES_FOR_OCR = 0.5
 
 #: How long one document may take. A malformed PDF can send an extractor into a
 #: very long walk, and one document is never worth a stalled lane.
@@ -102,6 +117,29 @@ class PdfText:
         return self.page_count > 0 and self.chars_per_page < SCAN_CHARS_PER_PAGE
 
 
+def garbled_share(text: str) -> float:
+    """Share of a text's visible characters that no reader could read.
+
+    Controls other than layout whitespace, private-use code points, and U+FFFD.
+    Visible means not whitespace — a page of blank lines is the scan check's
+    business, not this one's.
+    """
+    visible = 0
+    bad = 0
+    for char in text:
+        if char.isspace():
+            continue
+        visible += 1
+        category = unicodedata.category(char)
+        if category in ("Cc", "Co", "Cs") or char == "\ufffd":
+            bad += 1
+    return bad / visible if visible else 0.0
+
+
+def is_garbled(text: str) -> bool:
+    return garbled_share(text) > GARBLED_SHARE
+
+
 def available() -> bool:
     """Whether `pdftotext` is on the path."""
     return shutil.which(PDFTOTEXT) is not None
@@ -129,6 +167,38 @@ async def extract_pdf(
     extracted = await _run_pdftotext(content, timeout_s=timeout_s)
     if extracted is None:
         return ExtractedDocument(extractor="pdftotext-failed")
+
+    garbled = [page.number for page in extracted.pages if is_garbled(page.text)]
+    if garbled:
+        share = len(garbled) / max(extracted.page_count, 1)
+        log.info(
+            "pdf text layer is garbled on some pages",
+            extra={
+                "pages": extracted.page_count,
+                "garbled": len(garbled),
+                "share": round(share, 2),
+            },
+        )
+        if share > GARBLED_PAGES_FOR_OCR:
+            # The same resting state as a scan: no text, OCR queued. The garbled
+            # layer is dropped for the scan path's reason — kept, it would be
+            # the document's "content" in search and in the novelty gate.
+            return ExtractedDocument(
+                pages=(),
+                extractor="pdftotext",
+                needs_ocr=True,
+                **(await _metadata(content, timeout_s) if with_metadata else {}),
+            )
+        # Blanked, not removed: page numbers are citations, so the readable
+        # pages keep theirs.
+        dropped = set(garbled)
+        extracted = dataclasses.replace(
+            extracted,
+            pages=tuple(
+                Page(number=page.number, text="") if page.number in dropped else page
+                for page in extracted.pages
+            ),
+        )
 
     if extracted.looks_scanned:
         log.info(

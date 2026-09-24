@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.119.1] — 2026-09-24
+
+### Fixed
+
+- `B-47`: a PDF whose text layer is garbled (a custom font encoding with no
+  Unicode map, which extracts to control characters) was chunked and embedded
+  as noise, because it is not blank and so passed the scanned-page check. A
+  page more than 20% control, private-use or replacement characters is now
+  blanked, keeping its page number; a document with more than half its pages
+  garbled takes the scan path (no text, OCR queued). `worker.rechunk` does the
+  same for stored sources, and leaves any cited source alone
+
 ## [0.119.0] — 2026-09-24
 
 ### Added

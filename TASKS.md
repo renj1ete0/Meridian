@@ -1181,6 +1181,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       `entities.supporting_chunk_ids`, so `sweep --apply` could delete a
       superseded chunk that only an entity cites. Must be fixed before `B-43`'s
       re-chunk pass runs, since that pass supersedes chunks
+- [x] `B-47` **PDFs with a garbled text layer were chunked as noise** — `v0.119.1`.
+      Custom font encodings extract to control characters, which pass the
+      scanned-page check. Garbled pages are blanked, and mostly garbled documents
+      go to OCR, both at fetch and via `worker.rechunk`. Found by B-43's debris
+      rule: six sources, 693 chunks. Follow-up, not done: a *re-fetch* that turns
+      a document into a scan leaves its previous chunks live (`main._chunk`
+      returns early when there is no text)
 - [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string

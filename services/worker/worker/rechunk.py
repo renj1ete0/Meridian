@@ -51,6 +51,8 @@ from meridian_core.search import PAGINATED_MEDIA_TYPES
 from .cleancut import Cut, clean_cut
 from .extract.base import Page
 from .extract.clean import page_line_hashes
+from .extract.pdf import GARBLED_PAGES_FOR_OCR, is_garbled
+from .ocr_queue import enqueue_ocr, mark_scanned
 
 log = get_logger(__name__)
 
@@ -65,6 +67,10 @@ class RechunkStats:
     unchanged: int = 0
     kept_whole: int = 0
     cited: int = 0
+    #: Stored PDFs whose text layer is garbled (`B-47`): sent to OCR, and
+    #: those whose garbled pages are blanked while the rest are kept.
+    garbled_to_ocr: int = 0
+    garbled_pages_blanked: int = 0
     lines_removed: int = 0
     removed_chars: int = 0
     total_chars: int = 0
@@ -174,9 +180,33 @@ async def run_pass(
                 continue
             stats.examined += 1
             host = host_key((source.extra or {}).get("final_url") or source.url)
-            cut: Cut = await clean_cut(
-                sess, source.source_id, host, **_document(source, live), record_lines=False
-            )
+            document = _document(source, live)
+            if "pages" in document:
+                # `B-47`: a stored PDF whose text layer is garbled gets what a
+                # fresh fetch of it now gets.
+                pages = document["pages"]
+                garbled = {p.number for p in pages if is_garbled(p.text)}
+                if garbled and len(garbled) / len(pages) > GARBLED_PAGES_FOR_OCR:
+                    if source.source_id in cited:
+                        stats.cited += 1
+                        continue
+                    stats.garbled_to_ocr += 1
+                    if len(stats.examples) < EXAMPLES:
+                        stats.examples.append((source.url, ["(garbled text layer: sent to OCR)"]))
+                    if apply:
+                        await replace_chunks(sess, source.source_id, [])
+                        await mark_scanned(sess, source)
+                        await enqueue_ocr(sess, source.source_id, requested_by="rechunk")
+                    continue
+                if garbled:
+                    stats.garbled_pages_blanked += len(garbled)
+                    document = {
+                        "pages": [
+                            Page(number=p.number, text="") if p.number in garbled else p
+                            for p in pages
+                        ]
+                    }
+            cut: Cut = await clean_cut(sess, source.source_id, host, **document, record_lines=False)
             if cut.kept_original:
                 stats.kept_whole += 1
             before = [c.text for c in live]
@@ -227,6 +257,8 @@ def render(stats: RechunkStats, apply: bool) -> None:
     print(f"  unchanged             {stats.unchanged}")
     print(f"  cited, left alone     {stats.cited}")
     print(f"  kept whole (guard)    {stats.kept_whole}")
+    print(f"  garbled, sent to OCR  {stats.garbled_to_ocr}")
+    print(f"  garbled pages blanked {stats.garbled_pages_blanked}")
     print(f"  lines removed         {stats.lines_removed}")
     if stats.total_chars:
         share = stats.removed_chars / stats.total_chars
