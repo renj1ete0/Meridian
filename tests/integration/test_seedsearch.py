@@ -131,7 +131,8 @@ async def test_a_paused_topic_gets_no_queries(sess, topic) -> None:
     assert not any(q.topic == topic for q in planned)
 
 
-async def test_a_topic_with_no_description_and_little_vocabulary_is_left_out(sess, topic) -> None:
+async def test_a_broad_topic_is_searched_by_its_name(sess, topic) -> None:
+    """The operator runs topics broad: no description is needed to be searched."""
     row = await sess.get(TopicConfig, topic)
     row.description = None
     await sess.flush()
@@ -139,7 +140,8 @@ async def test_a_topic_with_no_description_and_little_vocabulary_is_left_out(ses
     run = await run_once(write=True, seed=1, session_factory=factory(sess))
 
     assert topic in run.vague
-    assert await mine(sess, topic) == []
+    texts = {r.url_or_query for r in await mine(sess, topic)}
+    assert topic.replace("-", " ") in texts
 
 
 async def test_an_agency_is_not_query_vocabulary(sess, topic) -> None:

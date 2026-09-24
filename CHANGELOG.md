@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.124.5] — 2026-09-24
+
+### Changed
+
+- `B-51`: a topic with no description or vocabulary is searched by its name
+  again rather than skipped — topics are meant to be broad, and the crawl to
+  find its way in. The report still names them, since a description widens
+  their queries
+
 ## [0.124.4] — 2026-09-24
 
 ### Fixed

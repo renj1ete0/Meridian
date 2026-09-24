@@ -51,11 +51,11 @@ MIN_ALIAS = 5
 #: produced exactly that — a concept beside a city government's name.
 QUERY_ENTITY_TYPES = frozenset({"concept", "scheme", "metric", "infrastructure"})
 
-#: A topic with no description and fewer approved terms than this is not
-#: specific enough to search for: its only queries are its bare name, and a
-#: bare field name ("biology", "economics") answers with encyclopaedia pages
-#: and generic news. It is left out and the report says so, which is the
-#: prompt to describe it.
+#: Below this many approved terms, with no description, a topic is searched by
+#: its name alone. That is deliberate: the operator runs topics broad and lets
+#: the crawl find its way in, and a bare field name is a broad query. The report
+#: names such topics, because a description or vocabulary would widen their
+#: queries — but it is an option, never a requirement.
 MIN_TERMS_WITHOUT_DESCRIPTION = 3
 
 
@@ -116,7 +116,7 @@ async def pending_by_topic(sess: AsyncSession) -> dict[str, int]:
 @dataclasses.dataclass
 class SeedRun:
     queries: list[Query]
-    #: Active topics left out for saying too little about themselves.
+    #: Active topics searched by name only, having no description or vocabulary.
     vague: list[str]
     #: Active topics left out because their queries are not being answered.
     backlogged: list[str]
@@ -130,7 +130,7 @@ async def run_once(
         vague = [t.topic for t in inputs if not specific_enough(t)]
         waiting = await pending_by_topic(sess)
         backlogged = [t.topic for t in inputs if waiting.get(t.topic, 0) >= MAX_PENDING]
-        inputs = [t for t in inputs if t.topic not in vague and t.topic not in backlogged]
+        inputs = [t for t in inputs if t.topic not in backlogged]
         already = list(
             await sess.scalars(select(QueueTask.url_or_query).where(QueueTask.task_type == "query"))
         )
@@ -179,7 +179,7 @@ def main() -> None:
         print(f"  {query.topic:22} {query.kind:11} {query.text}")
     print(f"{len(run.queries)} queries {'queued' if args.once else 'planned (report only)'}")
     if run.vague:
-        print(f"left out, too vague to search (describe them in Admin): {', '.join(run.vague)}")
+        print(f"searched by name only (no description or vocabulary): {', '.join(run.vague)}")
     if run.backlogged:
         print(f"left out, queries not being answered: {', '.join(run.backlogged)}")
 

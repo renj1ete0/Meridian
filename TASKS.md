@@ -57,10 +57,10 @@ live), `B-51` (search seeding every 6h, Bing web off),
   Without it Wikimedia refuses the translation lookups, so no non-English
   seeds are written (`B-52`), and the DOI resolver skips Unpaywall. Restart the
   scheduler and worker after setting it.
-- **Describe the topics** (Admin → Topics, now editable). It raises labelling
-  recall from 0.70 to 0.82, and `seedsearch` skips a topic with no
-  description and under three vocabulary terms. Several topics are skipped for
-  that reason today, and their scope is also the open question in `P0-15`.
+- *Optional:* topic descriptions (Admin → Topics). **The operator's decision
+  (2026-09-24): topics stay broad and the crawl finds its way in**, so a
+  description is never required. Undescribed topics are searched by name. A
+  description only raises labelling recall (0.70 → 0.82 in calibration).
 - `P2-21` off-topic demotion (`retopic --demote-offtopic`, floor 0.30 or 0.25).
 - `P0-15` question-set review, as before.
 - Whether the default `search_languages` (in the global policy row)
