@@ -33,7 +33,7 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from .base import Page
 
@@ -94,8 +94,18 @@ def chunk_text(
     target_chars: int = TARGET_CHARS,
     max_chars: int = MAX_CHARS,
     min_chars: int = MIN_CHARS,
+    drop: Sequence[tuple[int, int]] = (),
 ) -> list[TextChunk]:
     """Split ``text`` into chunks, each carrying its offset in the original.
+
+    ``drop`` is a list of ``(start, end)`` spans no chunk may contain — the
+    lines `clean.py` judged to be boilerplate (`B-43`). They are not cut out
+    and the rest re-joined: that would make a chunk that spans one something
+    other than a slice of ``text``, and the slice is what makes the offset a
+    citation. Instead the text is chunked in the stretches *between* dropped
+    spans, and a chunk never reaches across one. The cost is that a short
+    stretch between two dropped lines stands as a short chunk rather than
+    merging with its neighbour.
 
     Returns an empty list for text with nothing in it. A document that yields no
     chunks is a metadata-only source (§6.5), not a failure.
@@ -109,12 +119,34 @@ def chunk_text(
     if not text or not text.strip():
         return []
 
-    spans = _pack(_paragraph_spans(text), text, target_chars, max_chars)
-    spans = _absorb_runts(spans, min_chars, max_chars)
+    spans: list[tuple[int, int]] = []
+    for start, end in _kept_stretches(text, drop):
+        paragraphs = [(a + start, b + start) for a, b in _paragraph_spans(text[start:end])]
+        packed = _pack(paragraphs, text, target_chars, max_chars)
+        spans.extend(_absorb_runts(packed, min_chars, max_chars))
     return [
         TextChunk(text=text[start:end], offset=start, index=index)
         for index, (start, end) in enumerate(spans)
     ]
+
+
+def _kept_stretches(text: str, drop: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
+    """The spans of ``text`` left once ``drop`` is taken out, in order.
+
+    Refuses spans that overlap or run outside the text rather than guessing
+    what was meant: a wrong span here silently removes somebody's paragraph.
+    """
+    out: list[tuple[int, int]] = []
+    cursor = 0
+    for start, end in sorted(drop):
+        if not 0 <= start <= end <= len(text) or start < cursor:
+            raise ValueError(f"drop span {(start, end)} overlaps another or leaves the text")
+        if start > cursor:
+            out.append((cursor, start))
+        cursor = end
+    if cursor < len(text):
+        out.append((cursor, len(text)))
+    return [span for span in out if text[span[0] : span[1]].strip()]
 
 
 # Everything below works in half-open ``(start, end)`` spans into the original
@@ -249,8 +281,12 @@ def chunk_pages(
     target_chars: int = TARGET_CHARS,
     max_chars: int = MAX_CHARS,
     min_chars: int = MIN_CHARS,
+    drop: Mapping[int, Sequence[tuple[int, int]]] | None = None,
 ) -> list[TextChunk]:
     """Chunk a paginated document, carrying page numbers instead of offsets.
+
+    ``drop`` maps a page number to the spans on that page no chunk may contain
+    (see :func:`chunk_text`).
 
     §5.3 makes `page_or_offset` mean one or the other, and for a PDF a citation
     that cannot be opened at the right page is barely a citation. So
@@ -274,6 +310,7 @@ def chunk_pages(
             target_chars=target_chars,
             max_chars=max_chars,
             min_chars=min_chars,
+            drop=(drop or {}).get(page.number, ()),
         ):
             out.append(TextChunk(text=chunk.text, offset=page.number, index=len(out)))
     return out

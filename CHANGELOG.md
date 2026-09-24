@@ -68,6 +68,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.119.0] — 2026-09-24
+
+### Added
+
+- `B-43`: menus, skip links, site-wide banners, PDF running heads and
+  extraction debris are left out of chunks. The chunker cuts around removed
+  lines, so every chunk is still a verbatim slice of the extracted text and its
+  offset is still a citation. Repetition across a site is counted per host from
+  uncleaned text (`page_lines`) and rebuilt daily into `boilerplate_lines` by
+  `python -m worker.boilerplate --once`; a line qualifies on at least 5 pages
+  and 30% of the host's pages. `python -m worker.rechunk` applies the same
+  cleaning to stored sources: report by default, `--apply` supersedes (nothing
+  is deleted), `--domain`, `--limit`, and never a source the graph cites.
+  Migration `1654b2103e5a`
+
 ## [0.118.1] — 2026-09-24
 
 ### Fixed

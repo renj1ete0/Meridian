@@ -27,7 +27,7 @@ from .mixins import (
 from .queue import FetchAttempt, QueueTask
 from .robots import RobotsCacheEntry
 from .runs import EnrichmentItem, Notification, Report, Run
-from .source import EMBEDDING_DIM, Chunk, Figure, Source
+from .source import EMBEDDING_DIM, BoilerplateLine, Chunk, Figure, PageLine, Source
 from .views import SavedView
 
 __all__ = [
@@ -39,6 +39,7 @@ __all__ = [
     "AgentToken",
     "AttributeDefinition",
     "AttributeValue",
+    "BoilerplateLine",
     "Chunk",
     "Edge",
     "EnrichmentItem",
@@ -48,6 +49,7 @@ __all__ = [
     "Figure",
     "GazetteerTerm",
     "Notification",
+    "PageLine",
     "Observation",
     "ProvenanceMixin",
     "QueueTask",

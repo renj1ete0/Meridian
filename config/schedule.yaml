@@ -50,6 +50,18 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: boilerplate
+    module: worker.boilerplate
+    args: ["--once"]
+    # `B-43`: which lines each host repeats on enough of its pages to be
+    # template, from `page_lines` (written at fetch, from uncleaned text).
+    # Derived and rebuilt wholesale, so a missed run only means the fetch path
+    # cleans against yesterday's set. Daily is enough: a site's template does
+    # not change hourly, and the first pages of a new host are chunked before
+    # it has five pages to count anyway.
+    interval_seconds: 86400
+    enabled: true
+
   - name: topics
     module: worker.retopic
     args: ["--apply"]

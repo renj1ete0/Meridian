@@ -59,6 +59,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
+from meridian_core.boilerplate import host_key
 from meridian_core.chunks import as_writes, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.figures import FigureWrite, replace_figures
@@ -89,9 +90,9 @@ from meridian_core.tiering import is_tier_mapped, priority_with_urgency
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
 from . import rawstore
+from .cleancut import clean_cut
 from .crawl import Crawler, validators
 from .extract import ExtractedDocument, extract_html
-from .extract.chunk import chunk_pages, chunk_text
 from .extract.document import extract_document
 from .extract.document import supports as supports_document
 from .extract.injection import Screening, screen
@@ -1377,8 +1378,16 @@ class Worker:
         # §5.3: page number for a paginated document, character offset otherwise.
         # The two are the same column, and `is_paginated` is what says which
         # reading applies — not which extractor happened to run.
-        cut = chunk_pages(document.pages) if document.is_paginated else chunk_text(document.text)
-        written, deleted = await replace_chunks(sess, source.source_id, as_writes(cut))
+        #
+        # `B-43`: menus, banners, running heads and extraction debris are left
+        # out of the chunks — never cut out of the text, so every chunk is
+        # still a slice of it. The host is the one the page was served from.
+        host = host_key((source.extra or {}).get("final_url") or source.url)
+        if document.is_paginated:
+            cut = await clean_cut(sess, source.source_id, host, pages=document.pages)
+        else:
+            cut = await clean_cut(sess, source.source_id, host, text=document.text)
+        written, deleted = await replace_chunks(sess, source.source_id, as_writes(cut.chunks))
 
         # In the same transaction as the chunks and the source row (`P1-10`). A
         # source whose text came from this fetch and whose figures came from the
@@ -1407,6 +1416,8 @@ class Worker:
                 "replaced": deleted,
                 "chars": document.char_count,
                 "paginated": document.is_paginated,
+                "lines_removed": cut.lines_removed,
+                "kept_whole": cut.kept_original,
             },
         )
         return written

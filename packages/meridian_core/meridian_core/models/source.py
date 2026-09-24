@@ -438,3 +438,46 @@ class Figure(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Figure {self.figure_id} src={self.source_id} p{self.page}>"
+
+
+class PageLine(Base):
+    """Which candidate lines one page's *uncleaned* text holds (task `B-43`).
+
+    One row per distinct line hash per source, with the page's host beside it
+    so the per-host counts are a single GROUP BY. Written at fetch from the text
+    as extracted — never from cleaned text: counted after cleaning, a banner
+    would vanish from the pages it was removed from, fall below the threshold,
+    stop being removed and come back, a rule that switches itself off by
+    working. Replaced whenever the page is re-chunked from a fresh fetch.
+    """
+
+    __tablename__ = "page_lines"
+
+    source_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("sources.source_id", ondelete="CASCADE"), primary_key=True
+    )
+    line_hash: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    #: Lower-cased, ``www.`` folded — the unit "every page of this site" means.
+    host: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (Index("ix_page_lines_host_hash", "host", "line_hash"),)
+
+
+class BoilerplateLine(Base):
+    """A line a host repeats on enough of its pages to be furniture (task `B-43`).
+
+    Derived, wholesale, from `page_lines` by `worker.boilerplate`; nothing else
+    writes it and nothing is lost by truncating it. The counts are kept so a
+    person can see why a line was judged repeated.
+    """
+
+    __tablename__ = "boilerplate_lines"
+
+    host: Mapped[str] = mapped_column(Text, primary_key=True)
+    line_hash: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    #: Pages of this host carrying the line, and the host's pages in all.
+    pages: Mapped[int] = mapped_column(Integer, nullable=False)
+    host_pages: Mapped[int] = mapped_column(Integer, nullable=False)
+    computed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

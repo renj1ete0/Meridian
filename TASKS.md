@@ -1168,24 +1168,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       `9c574d8` and `~/Documents/gh/meridian-calibration/p2-21/`. **⚑ human, still
       open**: write topic descriptions (they raise recall from 0.70 to 0.82), and
       decide whether to run `--demote-offtopic` (floor 0.30 or 0.25)
-- [~] `B-43` **Headers, footers, banners and menus inside extracted pages** —
-      **partial, on branch `worktree-agent-a017d2a680b2111d0` commit `60b025d`, not
-      yet on `main`**: `worker/extract/clean.py` (navigation affordances, menu
-      blocks, PDF running heads, site-repetition matching and hashing, an 80%
-      guard) and `chunk_text(drop=…)` / `chunk_pages(drop=…)`, which cut around
-      removed lines so every chunk is still an exact slice of the text. Nothing
-      calls it yet. Simulated read-only over all live chunks: 24,133 lines
-      (2.41M of 43.0M characters) would go; 1,348 sources would change, 33 of
-      them cited (to be skipped); the guard keeps 124 whole. **Remaining**, per
-      the commit body: the `page_lines` / `boilerplate_lines` tables and a
-      `worker.boilerplate --once` pass (count hashes from *uncleaned* text, or the
-      rule switches itself off; timetable row in the migration too); wire
-      `clean_text`/`clean_pages` into `main._chunk`; `worker.rechunk` (report,
-      `--apply`, `--domain`, `--limit`, skipping any source with a cited chunk);
-      integration tests; the 15 before/after samples and a judged 20-line
-      false-positive sample. Edge cases already seen: a legal site's "recent
-      decisions" sidebar taken as a menu, ISBN lines repeated across one book's
-      chapters taken as repeated
+- [x] `B-43` **Headers, footers, banners and menus inside extracted pages** —
+      `v0.119.0`. Cleaners (navigation affordances, menu runs, PDF running heads,
+      per-host repeated lines, extraction debris) wired into the fetch path through
+      `worker.cleancut`; `page_lines`/`boilerplate_lines` with a daily
+      `worker.boilerplate` pass; `worker.rechunk` for stored sources. Report on the
+      live corpus: 1,305 of 3,873 sources change, 34 cited ones left alone, 31 kept
+      whole by the guard, 4.8% of readable characters removed. It also found `B-47`
 - [x] `B-46` **The superseded-chunk sweep ignores entity citations** — `v0.118.1`;
       the citing tables are derived from the models, one `cited_source_ids` for all sweeps —
       `chunks._UNCITED` checks edges, observations and attribute values but not
