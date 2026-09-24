@@ -20,8 +20,13 @@ server:
 engines:
   - name: google scholar
     disabled: false
+  # Web results off (`B-51`): measured on the live instance, 2 of 44 results
+  # mentioned any word of the query — pages about unrelated software, whatever
+  # was asked — while the other engines were at 98–100%. Every one of those
+  # became a queued "search" result. `bing news` is a separate engine and
+  # returned relevant reporting, so news keeps it.
   - name: bing
-    disabled: false
+    disabled: true
   - name: duckduckgo
     disabled: false
   - name: arxiv

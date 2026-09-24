@@ -172,6 +172,11 @@ UNMATCHED_SITEMAP_PRIORITY = -10
 
 #: How many of one page's citations become `doi` rows (`P1-14`, §6.1).
 #:
+#: Added to a search result's tier priority (`B-51`). A result is an answer to a
+#: question somebody — or §7.4's seeding — asked about a topic; a frontier link
+#: is whatever a page carried. At the same tier the answer goes first.
+SEARCH_RESULT_BONUS = 5
+
 #: A reference list is the densest frontier signal there is — §6.4 notes the
 #: citation graph alone sustains a full queue for weeks — but a review article
 #: cites three hundred works, and letting one page put three hundred rows in
@@ -1037,7 +1042,11 @@ class Worker:
                     # question and carries it.
                     topic=claim.topic,
                     seed_source="search",
-                    priority=priority_with_urgency(url, tiers, HALF_LIFE_DAYS),
+                    # `B-51`: an answer to a question outranks a link a page
+                    # happened to carry, at the same tier. Small on purpose —
+                    # tier still decides order across tiers.
+                    priority=priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
+                    + SEARCH_RESULT_BONUS,
                 )
             await sess.commit()
 

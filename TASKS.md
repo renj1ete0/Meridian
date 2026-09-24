@@ -1200,6 +1200,19 @@ deploy runbook whose first two commands could not work (`B-17`).
       (`worker.hostscore`, hourly); off-topic hosts are not followed into or out of,
       unjudged ones are explored up to a cap, every host is capped. `worker.requeue`
       applies it to the existing queue
+- [x] `B-51` **The crawl ran five queries and then only followed links** — `v0.122.0`.
+      Nothing generated search queries after cold start, so 98% of fetches came from
+      link-following. `worker.seedsearch` (6-hourly) queues fresh per-topic queries,
+      including news and §7.4 counter-seeds; results outrank same-tier links; Bing web
+      search disabled (returned unrelated pages)
+- [ ] `B-52` **Non-English seeds (§7.4 mechanism 5)** — `:lang` prefixes with English
+      words return English pages (measured); a German query in German returned German
+      sources. Needs the words, not only the prefix: Wikipedia interlanguage titles for
+      each topic's concepts are a model-free, human-written source
+- [ ] `B-50` **An academic domain is not peer review** — `*.edu`/`*.edu.sg`/`*.ac.*` map
+      to `peer_reviewed`, so a law school's statute pages, a hospital's condition pages
+      and a university's HR pages rank and read as scholarship. Peer review needs
+      document evidence (a DOI, citation metadata, a known publisher)
 - [ ] `B-44` **Duplicate documents** — 129 near-identical source pairs (mean-
       embedding cosine ≥ 0.96), 81 of them only partly caught by the chunk-level
       novelty gate: a PDF and its HTML page, listing pages under query-string

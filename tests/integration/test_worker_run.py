@@ -2414,3 +2414,26 @@ async def test_an_off_topic_government_link_is_queued_downranked_not_dropped(
     )
     assert rows[f"https://{official}/policy"] == DOWNRANKED_PRIORITY
     assert rows[f"https://{run_domain}/local"] > DOWNRANKED_PRIORITY
+
+
+async def test_a_search_result_outranks_a_frontier_link_of_the_same_tier(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-51`: an answer to a question goes before a link a page carried."""
+    from meridian_core.policy import source_tier_map
+    from meridian_core.tiering import priority_with_urgency
+
+    from worker.main import HALF_LIFE_DAYS, SEARCH_RESULT_BONUS
+
+    sess = await session_for("rw")
+    await enqueue_query(sess, "a question", run_topic)
+    url = f"https://{run_domain}/answer"
+    backend = FakeSearx(SearchResults(query="a question", urls=(url,)))
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    row = (await sess.execute(select(QueueTask).where(QueueTask.url_or_query == url))).scalar_one()
+    tier_priority = priority_with_urgency(url, await source_tier_map(sess), HALF_LIFE_DAYS)
+    assert SEARCH_RESULT_BONUS > 0
+    assert row.priority == tier_priority + SEARCH_RESULT_BONUS

@@ -68,6 +68,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.122.0] — 2026-09-24
+
+### Added
+
+- `B-51`: the crawl keeps asking new questions. `python -m worker.seedsearch
+  --once` (every six hours) queues up to 6 fresh search queries per active
+  topic from its name, description and approved vocabulary — the concept,
+  evidence phrasings, §7.4 counter-seeds ("criticism of …"), pairs of
+  concepts, and news through SearXNG's `!news` category — never repeating a
+  query already queued, and none for a topic with 24 unanswered. They are
+  `diversity` seeds at priority 70, above every link. Search results now get
+  +5 over a followed link of the same tier. Bing web search is disabled in
+  the SearXNG config (2 of 44 results were related to the query); Bing News
+  stays
+
 ## [0.121.1] — 2026-09-24
 
 ### Changed

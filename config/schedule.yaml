@@ -99,3 +99,15 @@ jobs:
     # almost never about a topic. Hourly, like `topics`, which it trails.
     interval_seconds: 3600
     enabled: true
+
+  - name: seedsearch
+    module: worker.seedsearch
+    args: ["--once"]
+    # `B-51`, §7.4: fresh queries per active topic from its name, description
+    # and approved vocabulary — concepts, evidence and counter-evidence
+    # phrasings, pairs of concepts, and news. Without it the crawl ran five
+    # seed queries and then only followed links, which converges on the same
+    # few sites. At most 6 per topic per run, and none for a topic with 24
+    # unanswered already.
+    interval_seconds: 21600
+    enabled: true

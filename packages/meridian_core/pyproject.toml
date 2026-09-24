@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.121.1"
+version = "0.122.0"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 license = "MIT"
