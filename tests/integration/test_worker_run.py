@@ -12,9 +12,9 @@ subject, not this one's.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import importlib.util
-import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
@@ -41,7 +41,12 @@ from worker.main import MAX_CITATIONS_PER_PAGE, Worker, WorkerSettings
 from worker.prefilter import Prefilter
 from worker.ratelimit import DomainLimiter
 from worker.rawstore import checksum_for
-from worker.resolve_doi import DoiError, OpenAccessCopy, ResolutionUnavailable
+from worker.resolve_doi import (
+    DoiError,
+    OpenAccessCopy,
+    ResolutionThrottled,
+    ResolutionUnavailable,
+)
 from worker.robots import ALLOW_ALL, RobotsRules, parse
 from worker.search import SearchError, SearchResults
 
@@ -2263,6 +2268,50 @@ async def test_an_unreachable_resolver_retries(
     assert task.status == "pending"
     assert task.attempts == 1
     assert "resolution_unavailable" in (task.error or "")
+
+
+async def test_a_throttled_doi_waits_out_the_cooldown(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-67`: the queue's backoff is seconds, and three quick refusals from a
+    shared quota used to fail the paper for good. It comes back after the
+    provider's cooldown instead."""
+    import worker.main as main_mod
+
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+    chain = FakeResolver(error=ResolutionThrottled("rate-limited", retry_after_s=600))
+
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    before = dt.datetime.now(dt.UTC)
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "pending"
+    assert "resolution_throttled" in (task.error or "")
+    assert task.next_attempt_at >= before + dt.timedelta(seconds=600)
+    assert worker._settings.max_retries < main_mod.THROTTLED_MAX_RETRIES
+
+
+async def test_a_throttled_doi_outlasts_the_ordinary_retry_budget(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Where the ordinary budget would have failed it, throttling still retries."""
+    sess = await session_for("rw")
+    task = await enqueue_doi(sess, "10.1016/j.trd.2021.103013", run_topic)
+    chain = FakeResolver(error=ResolutionThrottled("rate-limited", retry_after_s=1))
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, chain, resolver=resolve, max_tasks=1
+    )
+    task.attempts = worker._settings.max_retries + 1
+    await sess.flush()
+
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "pending"
 
 
 async def test_a_malformed_doi_is_abandoned_not_retried(

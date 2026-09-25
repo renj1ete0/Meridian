@@ -21,6 +21,7 @@ import threading
 import pytest
 
 from meridian_core.models.source import EMBEDDING_DIM
+from worker import embeddings
 from worker.embeddings import (
     DEFAULT_MODEL,
     BGEEmbedder,
@@ -341,3 +342,77 @@ def test_the_real_model_produces_the_width_the_schema_expects() -> None:
     # Japanese must land nearer than an unrelated English sentence.
     unrelated = embedder.embed(["The cat sat on the mat."])[0]
     assert cosine(vectors[0], vectors[1]) > cosine(vectors[0], unrelated)
+
+
+# -- the batch, sized at startup ----------------------------------------------------
+
+GIB = 2**30
+
+
+def test_an_explicit_batch_size_wins_over_the_memory(monkeypatch) -> None:
+    monkeypatch.setenv("MERIDIAN_EMBED_BATCH_SIZE", "3")
+    monkeypatch.setattr(embeddings, "visible_memory", lambda: 512 * GIB)
+    assert EmbedderSettings.from_env().batch_size == 3
+
+
+def test_without_a_setting_the_batch_is_sized_from_memory(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
+    monkeypatch.setattr(embeddings, "visible_memory", lambda: 16 * GIB)
+    assert EmbedderSettings.from_env().batch_size == embeddings.auto_batch_size(16 * GIB)
+
+
+def test_unreadable_memory_gets_the_pi_default() -> None:
+    assert embeddings.auto_batch_size(None) == embeddings.DEFAULT_BATCH_SIZE
+
+
+@pytest.mark.parametrize(
+    ("gib", "batch"),
+    # The §3 board keeps what it was hand-sized to; a small box still embeds.
+    [(1, 1), (2, 1), (8, 8), (16, 16), (93, embeddings.MAX_AUTO_BATCH)],
+)
+def test_known_machines_get_known_batches(gib: int, batch: int) -> None:
+    assert embeddings.auto_batch_size(gib * GIB) == batch
+
+
+def test_the_batch_grows_with_memory_and_stops_at_the_cap() -> None:
+    sizes = [embeddings.auto_batch_size(g * GIB) for g in range(1, 257)]
+    assert sizes == sorted(sizes)
+    assert all(s >= 1 and s & (s - 1) == 0 for s in sizes)  # powers of two
+    assert max(sizes) == embeddings.MAX_AUTO_BATCH
+
+
+def test_a_lower_token_cap_fits_more_passages() -> None:
+    at_full = embeddings.auto_batch_size(8 * GIB)
+    at_half = embeddings.auto_batch_size(8 * GIB, max_tokens=embeddings.DEFAULT_MAX_TOKENS // 2)
+    assert at_half > at_full
+
+
+def _files(tmp_path, monkeypatch, *, v2=None, v1=None, total_kib=None) -> None:
+    paths = []
+    for name, value in (("memory.max", v2), ("limit_in_bytes", v1)):
+        path = tmp_path / name
+        if value is not None:
+            path.write_text(f"{value}\n")
+        paths.append(str(path))
+    monkeypatch.setattr(embeddings, "CGROUP_LIMITS", tuple(paths))
+    meminfo = tmp_path / "meminfo"
+    if total_kib is not None:
+        meminfo.write_text(f"MemTotal:       {total_kib} kB\nMemFree:  1 kB\n")
+    monkeypatch.setattr(embeddings, "MEMINFO", str(meminfo))
+
+
+def test_a_container_limit_below_the_machine_wins(tmp_path, monkeypatch) -> None:
+    """A container sees the host's meminfo; sizing to it would get the process killed."""
+    _files(tmp_path, monkeypatch, v2=4 * GIB, total_kib=64 * GIB // 1024)
+    assert embeddings.visible_memory() == 4 * GIB
+
+
+@pytest.mark.parametrize("unlimited", [{"v2": "max"}, {"v1": 2**63 - 4096}])
+def test_no_container_limit_means_the_machine(tmp_path, monkeypatch, unlimited) -> None:
+    _files(tmp_path, monkeypatch, total_kib=16 * GIB // 1024, **unlimited)
+    assert embeddings.visible_memory() == 16 * GIB
+
+
+def test_nothing_readable_is_unknown(tmp_path, monkeypatch) -> None:
+    _files(tmp_path, monkeypatch)
+    assert embeddings.visible_memory() is None

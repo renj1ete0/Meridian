@@ -68,6 +68,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.5] — 2026-09-25
+
+### Fixed
+
+- `B-67`: a paper is no longer written off because a provider was busy. A DOI
+  held back only by a rate-limited provider used to retry within seconds and
+  fail for good after three refusals — on a shared anonymous quota, within a
+  minute. Now the resolver leaves a provider that refused alone for its
+  Retry-After, or a cooldown that doubles from a minute to half an hour, and
+  asks nobody into the wall meanwhile; the DOI comes back after that cooldown,
+  with a budget of eight such retries. `worker.requeue_dois --revive-throttled`
+  (report, then `--apply`; by hand only) returns DOIs that throttling alone
+  failed to the queue, spread over an hour
+
+### Changed
+
+- The embedding batch is sized at startup from the memory the process can see
+  (a container's limit where it has one): the largest power of two that fits in
+  a quarter of what the model leaves, capped where a larger batch stopped being
+  faster. `MERIDIAN_EMBED_BATCH_SIZE` still wins, and unreadable memory keeps
+  the old default of 8
+
 ## [0.140.4] — 2026-09-25
 
 ### Fixed

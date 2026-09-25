@@ -19,9 +19,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from worker import resolve_doi
 from worker.resolve_doi import (
     DoiError,
     DoiResolver,
+    ResolutionThrottled,
     ResolutionUnavailable,
     ResolverSettings,
     normalise_doi,
@@ -672,3 +674,127 @@ def test_every_paced_provider_is_one_the_chain_actually_calls() -> None:
     chain = inspect.getsource(DoiResolver.resolve)
     unused = [name for name in PROVIDER_MIN_INTERVAL_S if f'"{name}"' not in chain]
     assert not unused, f"paced but never called: {unused}"
+
+
+# --------------------------------------------------------------------------
+# Cooling a provider that throttled us (`B-67`)
+# --------------------------------------------------------------------------
+
+
+def counting(routes):
+    """`resolver_for`, plus a count of requests per host."""
+    calls: dict[str, int] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls[request.url.host] = calls.get(request.url.host, 0) + 1
+        answer = routes.get(request.url.host)
+        if isinstance(answer, httpx.Response):
+            return answer
+        if isinstance(answer, int):
+            return httpx.Response(answer, json={})
+        if answer is None:
+            return httpx.Response(404, json={})
+        return httpx.Response(200, json=answer)
+
+    resolver = DoiResolver(
+        ResolverSettings(contact_email="ops@example.test"),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    return resolver, calls
+
+
+S2 = "api.semanticscholar.org"
+
+
+async def test_a_throttled_resolution_says_how_long_to_wait() -> None:
+    resolver, _ = counting({**exhausted(), S2: 429})
+    with pytest.raises(ResolutionThrottled) as caught:
+        await resolver.resolve(DOI)
+    assert caught.value.retry_after_s == resolve_doi.COOLDOWN_BASE_S
+
+
+async def test_a_cooling_provider_is_not_asked_again() -> None:
+    """Every DOI in the cooldown would otherwise cost a request into the wall."""
+    resolver, calls = counting({**exhausted(), S2: 429})
+    for _ in range(3):
+        with pytest.raises(ResolutionThrottled) as caught:
+            await resolver.resolve(DOI)
+    assert calls[S2] == 1
+    # Still not a final answer: its opinion is unknown, so the DOI retries.
+    assert 0 < caught.value.retry_after_s <= resolve_doi.COOLDOWN_BASE_S
+
+
+async def test_retry_after_is_honoured_and_capped() -> None:
+    resolver, _ = counting({**exhausted(), S2: httpx.Response(429, headers={"Retry-After": "90"})})
+    with pytest.raises(ResolutionThrottled) as caught:
+        await resolver.resolve(DOI)
+    assert caught.value.retry_after_s == 90
+
+    resolver, _ = counting(
+        {**exhausted(), S2: httpx.Response(429, headers={"Retry-After": "999999"})}
+    )
+    with pytest.raises(ResolutionThrottled) as caught:
+        await resolver.resolve(DOI)
+    assert caught.value.retry_after_s == resolve_doi.COOLDOWN_MAX_S
+
+
+@pytest.mark.parametrize("header", ["Wed, 21 Oct 2026 07:28:00 GMT", "soon", ""])
+async def test_an_unreadable_retry_after_falls_back_to_the_doubling(header: str) -> None:
+    resolver, _ = counting(
+        {**exhausted(), S2: httpx.Response(429, headers={"Retry-After": header})}
+    )
+    with pytest.raises(ResolutionThrottled) as caught:
+        await resolver.resolve(DOI)
+    assert caught.value.retry_after_s == resolve_doi.COOLDOWN_BASE_S
+
+
+async def test_refusals_in_a_row_double_the_cooldown_up_to_the_cap() -> None:
+    resolver, _ = counting({**exhausted(), S2: 429})
+    waits = []
+    for _ in range(8):
+        resolver._cool_until.clear()  # the cooldown has passed; it refuses again
+        resolver._last_call.clear()
+        with pytest.raises(ResolutionThrottled) as caught:
+            await resolver.resolve(DOI)
+        waits.append(caught.value.retry_after_s)
+    assert waits[:3] == [60.0, 120.0, 240.0]
+    assert waits == sorted(waits) and waits[-1] == resolve_doi.COOLDOWN_MAX_S
+
+
+async def test_an_answer_resets_the_doubling() -> None:
+    routes = {**exhausted(), S2: 429}
+    resolver, _ = counting(routes)
+    for _ in range(3):
+        resolver._cool_until.clear()
+        resolver._last_call.clear()
+        with pytest.raises(ResolutionThrottled):
+            await resolver.resolve(DOI)
+    routes[S2] = {}  # answers: nothing here
+    resolver._cool_until.clear()
+    resolver._last_call.clear()
+    assert await resolver.resolve(DOI) is None
+    routes[S2] = 429
+    with pytest.raises(ResolutionThrottled) as caught:
+        await resolver.resolve(DOI)
+    assert caught.value.retry_after_s == resolve_doi.COOLDOWN_BASE_S
+
+
+async def test_a_copy_elsewhere_still_wins_while_a_provider_cools() -> None:
+    resolver, calls = counting({**exhausted(), S2: 429})
+    with pytest.raises(ResolutionThrottled):
+        await resolver.resolve(DOI)
+    resolver._client._transport = httpx.MockTransport(
+        lambda r: (
+            httpx.Response(200, json=unpaywall(OA_PDF))
+            if r.url.host == "api.unpaywall.org"
+            else httpx.Response(404, json={})
+        )
+    )
+    copy = await resolver.resolve(DOI)
+    assert copy is not None and copy.provider == "unpaywall"
+
+
+async def test_a_throttled_resolution_is_still_unavailable_to_old_callers() -> None:
+    """Anything catching `ResolutionUnavailable` keeps retrying rather than
+    settling a throttled paper as having no copy."""
+    assert issubclass(ResolutionThrottled, ResolutionUnavailable)

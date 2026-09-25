@@ -1395,6 +1395,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-67` **Throttling wrote papers off** — `v0.140.5`. A DOI held back only by a
+      rate-limited provider retried within seconds and failed after three refusals;
+      hundreds were lost in a single run to an anonymous shared quota. Provider cooldown
+      (Retry-After, else doubling 1 min → 30 min), throttled DOIs retry after it with a
+      larger budget, and `requeue_dois --revive-throttled` recovers the ones already
+      failed. A Semantic Scholar key (⚑ operator, free) would remove most of the
+      throttling at source
 - [x] `B-66` **Embed by value, not by age** — `v0.140.3`. Three tiers, re-checked every
       batch: directed sources and on-topic hosts first, the rest next, off-topic hosts
       last, junk never; backpressure counts the first two only. Measured on the live

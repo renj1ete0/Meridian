@@ -7,6 +7,7 @@ pages in `sources.extra` for rows queued before the parent was recorded.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from contextlib import asynccontextmanager
 
@@ -22,7 +23,7 @@ from meridian_core.models import HostScore, QueueTask, Source
 from meridian_core.policy import source_tier_map
 from meridian_core.queueing import enqueue_dois
 from meridian_core.sources import upsert_source
-from worker.requeue_dois import run_pass
+from worker.requeue_dois import REVIVE_SPREAD_S, revive_throttled, run_pass
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -388,3 +389,68 @@ async def test_the_pass_deletes_nothing_and_touches_only_pending_dois(sess) -> N
     assert pending.priority == FLOOR_PRIORITY
     assert done.priority == FLOOR_PRIORITY
     assert link.priority == 11
+
+
+# --------------------------------------------------------------------------
+# Reviving DOIs that only throttling failed (`B-67`)
+# --------------------------------------------------------------------------
+
+
+async def failed_doi(sess, error: str, *, task_type: str = "doi") -> QueueTask:
+    task = QueueTask(
+        url_or_query=doi(),
+        task_type=task_type,
+        priority=3,
+        seed_source="citation",
+        status="failed",
+        attempts=3,
+        error=error,
+    )
+    sess.add(task)
+    await sess.flush()
+    return task
+
+
+THROTTLED_OLD = (
+    "resolution_unavailable: no copy found for 10.1/x, but a provider was rate-limited "
+    "— not a final answer"
+)
+
+
+async def test_only_throttling_failures_are_revived(sess) -> None:
+    old = await failed_doi(sess, THROTTLED_OLD)
+    new = await failed_doi(sess, "resolution_throttled: no copy found, rate-limited")
+    outage = await failed_doi(sess, "resolution_unavailable: no resolution provider answered")
+    bad = await failed_doi(sess, "invalid_doi: not a DOI")
+    link = await failed_doi(sess, THROTTLED_OLD, task_type="url")
+
+    await revive_throttled(sess, apply=True)
+
+    for task in (old, new, outage, bad, link):
+        await sess.refresh(task)
+    assert (old.status, new.status) == ("pending", "pending")
+    assert (outage.status, bad.status, link.status) == ("failed", "failed", "failed")
+    assert old.attempts == 0
+    # The old error is kept behind the note; nothing is lost.
+    assert old.error.startswith("revived after throttling") and "rate-limited" in old.error
+
+
+async def test_revived_dois_come_back_spread_out(sess) -> None:
+    tasks = [await failed_doi(sess, THROTTLED_OLD) for _ in range(20)]
+    before = dt.datetime.now(dt.UTC)
+
+    await revive_throttled(sess, apply=True)
+
+    times = []
+    for task in tasks:
+        await sess.refresh(task)
+        times.append(task.next_attempt_at)
+    assert all(before <= t <= before + dt.timedelta(seconds=REVIVE_SPREAD_S + 5) for t in times)
+    assert len(set(times)) > 10, "they would walk into the provider together"
+
+
+async def test_a_report_counts_and_changes_nothing(sess) -> None:
+    task = await failed_doi(sess, THROTTLED_OLD)
+    assert await revive_throttled(sess, apply=False) >= 1
+    await sess.refresh(task)
+    assert task.status == "failed" and task.attempts == 3

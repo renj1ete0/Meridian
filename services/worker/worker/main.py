@@ -122,6 +122,7 @@ from .resolve_doi import (
     DoiError,
     DoiResolver,
     OpenAccessCopy,
+    ResolutionThrottled,
     ResolutionUnavailable,
     ResolverSettings,
     normalise_doi,
@@ -192,6 +193,11 @@ ENGLISH_ALTERNATE_BONUS = 10
 #: question somebody — or §7.4's seeding — asked about a topic; a frontier link
 #: is whatever a page carried. At the same tier the answer goes first.
 SEARCH_RESULT_BONUS = 5
+
+#: Retries for a DOI held back only by a throttled provider (`B-67`). Each waits
+#: out the provider's cooldown, which doubles to half an hour, so this spans
+#: hours rather than the seconds the ordinary budget spans.
+THROTTLED_MAX_RETRIES = 8
 
 #: A reference list is the densest frontier signal there is — §6.4 notes the
 #: citation graph alone sustains a full queue for weeks — but a review article
@@ -794,6 +800,7 @@ class Worker:
         *,
         fetched_status: str = "fetched",
         floor_s: float = 0.0,
+        max_retries: int | None = None,
     ) -> None:
         """Apply one disposition to the queue row and drop the lease.
 
@@ -826,7 +833,7 @@ class Worker:
                     sess,
                     task,
                     detail,
-                    max_retries=self._settings.max_retries,
+                    max_retries=self._settings.max_retries if max_retries is None else max_retries,
                     backoff_base_s=self._settings.backoff_base_s,
                     floor_s=floor_s,
                 )
@@ -1064,12 +1071,19 @@ class Worker:
 
         copy = None
         queued = 0
+        floor_s, max_retries = 0.0, None
         try:
             copy = await self._resolver.resolve(claim.url)
         except DoiError as exc:
             # The row is bad, not the network. Retrying re-parses the same
             # string to the same error, so it is abandoned rather than retried.
             disposition, detail = "abandon", f"invalid_doi: {exc}"
+        except ResolutionThrottled as exc:
+            # Back after the provider's cooldown, not the queue's seconds, and
+            # with room for several: a shared anonymous quota is busy for hours
+            # at a time, and the paper is not at fault (`B-67`).
+            disposition, detail = "retry", f"resolution_throttled: {exc}"
+            floor_s, max_retries = exc.retry_after_s, THROTTLED_MAX_RETRIES
         except ResolutionUnavailable as exc:
             disposition, detail = "retry", f"resolution_unavailable: {exc}"
         else:
@@ -1083,7 +1097,7 @@ class Worker:
                 queued = await self._queue_resolved_copy(claim, copy)
                 self._stats.queued += queued
 
-        await self._settle(claim, disposition, detail)
+        await self._settle(claim, disposition, detail, floor_s=floor_s, max_retries=max_retries)
 
         log.info(
             "doi settled",

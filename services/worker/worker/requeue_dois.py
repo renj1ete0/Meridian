@@ -33,11 +33,13 @@ import asyncio
 import collections
 import contextlib
 import dataclasses
+import datetime as dt
+import random
 import time
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
-from sqlalchemy import select, text, update
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.boilerplate import host_key
@@ -243,13 +245,78 @@ async def run_pass(*, apply: bool, session_factory: SessionFactory = session) ->
     return stats
 
 
+#: A revived DOI comes back at a random point within this long, so a burst of
+#: them does not walk into the provider that throttled them all at once.
+REVIVE_SPREAD_S = 3600
+
+#: How a DOI failed only because a provider throttled us reads in `queue.error`:
+#: before `B-67` as a rate-limited unavailability, since as its own kind.
+THROTTLED_ERRORS = ("resolution_unavailable:%rate-limited%", "resolution_throttled:%")
+
+
+async def revive_throttled(
+    sess: AsyncSession, *, apply: bool, rng: random.Random | None = None
+) -> int:
+    """Give failed DOIs back to the queue when throttling was all that failed them (`B-67`).
+
+    Before `B-67` a throttled DOI retried within seconds and was failed after
+    three refusals, so a busy spell at a shared quota wrote papers off for
+    good. Only DOIs whose error says exactly that; any other failure stands.
+    Attempts start again, the old error is kept behind a note, and nothing is
+    deleted. By hand only — on the timetable it would revive the same papers
+    forever. Flushes; the caller commits.
+    """
+    rows = list(
+        await sess.scalars(
+            select(QueueTask).where(
+                QueueTask.task_type == "doi",
+                QueueTask.status == "failed",
+                or_(*(QueueTask.error.like(pattern) for pattern in THROTTLED_ERRORS)),
+            )
+        )
+    )
+    if apply:
+        rng = rng or random.Random()
+        now = dt.datetime.now(dt.UTC)
+        for task in rows:
+            task.status = "pending"
+            task.attempts = 0
+            task.next_attempt_at = now + dt.timedelta(seconds=rng.uniform(0, REVIVE_SPREAD_S))
+            task.error = f"revived after throttling (B-67); was: {task.error}"[:2000]
+        await sess.flush()
+    return len(rows)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Rank queued DOIs by the pages that cite them (B-58)."
     )
     parser.add_argument("--apply", action="store_true", help="write; without it, report only")
+    parser.add_argument(
+        "--revive-throttled",
+        action="store_true",
+        help="instead: return DOIs failed only by provider throttling to the queue (B-67)",
+    )
     args = parser.parse_args()
     configure_logging("requeue_dois")
+
+    if args.revive_throttled:
+
+        async def revive() -> int:
+            try:
+                async with session() as sess:
+                    n = await revive_throttled(sess, apply=args.apply)
+                    await sess.commit()
+                    return n
+            finally:
+                await dispose_engines()
+
+        n = asyncio.run(revive())
+        if args.apply:
+            print(f"revived {n} DOIs failed only by throttling; back within {REVIVE_SPREAD_S}s")
+        else:
+            print(f"{n} DOIs failed only by throttling. Report only; --apply revives them.")
+        return
 
     async def go() -> DoiRequeueStats:
         try:

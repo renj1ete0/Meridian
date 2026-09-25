@@ -109,6 +109,29 @@ class ResolutionUnavailable(RuntimeError):
     """No provider could be reached. Transient — the DOI may resolve later."""
 
 
+class ResolutionThrottled(ResolutionUnavailable):
+    """Not a final answer because a provider told us to slow down (`B-67`).
+
+    ``retry_after_s`` is how long until the soonest throttled provider may be
+    asked again. Retrying sooner asks into the same wall: the queue's ordinary
+    backoff is seconds, and three quick refusals from a shared anonymous quota
+    used to fail the task for good — a paper written off by somebody else's
+    traffic.
+    """
+
+    def __init__(self, message: str, *, retry_after_s: float) -> None:
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
+
+
+#: A provider that rate-limited us is left alone this long when it names no
+#: Retry-After, doubling with each refusal in a row up to the cap (`B-67`).
+#: Asking it for every DOI in between costs a request each and teaches the
+#: provider's limiter that we are not listening.
+COOLDOWN_BASE_S = 60.0
+COOLDOWN_MAX_S = 1800.0
+
+
 @dataclasses.dataclass(frozen=True)
 class OpenAccessCopy:
     """Where a legally available copy of one paper lives."""
@@ -189,6 +212,10 @@ class DoiResolver:
         # Unpaywall, which has no such limit and is first in the chain.
         self._last_call: dict[str, float] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        # Cooling providers (`B-67`): until when, and how many refusals in a
+        # row, on the monotonic clock. Per process, like the pacing.
+        self._cool_until: dict[str, float] = {}
+        self._refusals: dict[str, int] = {}
 
     @property
     def settings(self) -> ResolverSettings:
@@ -237,7 +264,7 @@ class DoiResolver:
             return preprint
 
         answered = False
-        throttled = False
+        waits: list[float] = []
         for name, provider in (
             ("unpaywall", self._unpaywall),
             ("openalex", self._openalex),
@@ -245,6 +272,11 @@ class DoiResolver:
             ("europepmc", self._europepmc),
             ("semanticscholar", self._semantic_scholar),
         ):
+            cooling = self._cool_until.get(name, 0.0) - time.monotonic()
+            if cooling > 0:
+                # Still told to slow down: its opinion is unknown without asking.
+                waits.append(cooling)
+                continue
             try:
                 async with self._paced(name):
                     copy = await provider(doi)
@@ -254,10 +286,11 @@ class DoiResolver:
             except _ProviderRateLimited as exc:
                 # Not an answer, and not a routine outage either: we were told
                 # to slow down, so this provider's opinion is simply unknown.
-                throttled = True
+                wait = self._cool(name, exc.retry_after_s)
+                waits.append(wait)
                 log.info(
                     "a resolution provider rate-limited us",
-                    extra={"provider": name, "doi": doi, "error": str(exc)},
+                    extra={"provider": name, "doi": doi, "error": str(exc), "cooling_s": wait},
                 )
                 continue
             except _ProviderUnreachable as exc:
@@ -270,20 +303,35 @@ class DoiResolver:
                 continue
 
             answered = True
+            self._refusals.pop(name, None)
             if copy is not None:
                 return copy
 
-        if not answered:
-            raise ResolutionUnavailable(f"no resolution provider answered for {doi}")
-        if throttled:
+        if waits:
             # The distinction this whole chain turns on. "Nobody has a copy"
             # settles the task `done` and never looks again; "we did not finish
             # asking" has to retry, or a burst of throttling quietly writes off
-            # every paper it touched.
-            raise ResolutionUnavailable(
-                f"no copy found for {doi}, but a provider was rate-limited — not a final answer"
+            # every paper it touched. And retry *after the cooldown*, not on the
+            # queue's usual seconds.
+            said = "no copy found" if answered else "no provider answered"
+            raise ResolutionThrottled(
+                f"{said} for {doi}, but a provider was rate-limited — not a final answer",
+                retry_after_s=min(waits),
             )
+        if not answered:
+            raise ResolutionUnavailable(f"no resolution provider answered for {doi}")
         return None
+
+    def _cool(self, name: str, retry_after_s: float | None) -> float:
+        """Leave a provider alone after a refusal. Returns for how long."""
+        refusals = self._refusals.get(name, 0) + 1
+        self._refusals[name] = refusals
+        if retry_after_s is not None and retry_after_s > 0:
+            wait = min(retry_after_s, COOLDOWN_MAX_S)
+        else:
+            wait = min(COOLDOWN_BASE_S * 2 ** (refusals - 1), COOLDOWN_MAX_S)
+        self._cool_until[name] = time.monotonic() + wait
+        return wait
 
     # -- the chain ---------------------------------------------------------
 
@@ -509,7 +557,10 @@ class DoiResolver:
             # over the anonymous quota" rather than 429, and treating that as a
             # flat refusal would silently drop every paper for the rest of the
             # window.
-            raise _ProviderRateLimited(f"HTTP {response.status_code}")
+            raise _ProviderRateLimited(
+                f"HTTP {response.status_code}",
+                retry_after_s=_retry_after(response.headers.get("Retry-After")),
+            )
         if response.status_code >= 400:
             raise _ProviderUnreachable(f"HTTP {response.status_code}")
         try:
@@ -526,6 +577,15 @@ class _ProviderUnreachable(RuntimeError):
     """This provider could not be asked. The next one still can be."""
 
 
+def _retry_after(raw: str | None) -> float | None:
+    """Seconds from a Retry-After header, when it gives seconds. The HTTP-date
+    form is rare from these APIs and falls back to the doubling cooldown."""
+    try:
+        return float(raw) if raw is not None else None
+    except ValueError:
+        return None
+
+
 class _ProviderRateLimited(_ProviderUnreachable):
     """This provider refused *because we asked too fast*, which is not the same
     as it having no copy — and the difference decides whether the paper is lost.
@@ -537,6 +597,10 @@ class _ProviderRateLimited(_ProviderUnreachable):
     silently — so the chain reports "no open-access copy", the task settles
     `done`, and the paper is never looked for again.
     """
+
+    def __init__(self, message: str, *, retry_after_s: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
 
 
 def _usable(url: object) -> bool:

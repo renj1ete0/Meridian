@@ -46,9 +46,9 @@ log = get_logger(__name__)
 #: fetched from a cache the operator controls; see `MERIDIAN_EMBED_MODEL`.
 DEFAULT_MODEL = "BAAI/bge-m3"
 
-#: How many chunks go through the model at once. Sized for the Pi rather than
-#: for a GPU: bge-m3 at 8192 tokens is memory-hungry, and a batch that swaps is
-#: far slower than two batches that do not.
+#: How many chunks go through the model at once when the memory cannot be read.
+#: Sized for the Pi rather than for a GPU: bge-m3 is memory-hungry, and a batch
+#: that swaps is far slower than two batches that do not.
 DEFAULT_BATCH_SIZE = 8
 
 #: bge-m3 accepts 8192 tokens, which is far more than `chunk_text` produces
@@ -57,6 +57,66 @@ DEFAULT_BATCH_SIZE = 8
 #: description — should be truncated deterministically rather than by whatever
 #: the tokeniser happens to do.
 DEFAULT_MAX_TOKENS = 1024
+
+# -- sizing the batch at startup (`MERIDIAN_EMBED_BATCH_SIZE` still wins) --------
+
+#: Resident size of the loaded model, which a batch must leave room for.
+MODEL_BYTES = int(2.5 * 2**30)
+#: Peak memory one passage of ``DEFAULT_MAX_TOKENS`` adds to a batch.
+BYTES_PER_ITEM = 150 * 2**20
+#: The share of what is left after the model that batches may use. The rest is
+#: for the crawl, Postgres and the page cache on a machine that runs them all.
+MEMORY_SHARE = 0.25
+#: Above this a larger batch stopped being faster on CPU; memory keeps growing.
+MAX_AUTO_BATCH = 32
+
+
+#: Where a container's memory limit is, cgroup v2 then v1, and the machine's total.
+CGROUP_LIMITS = ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes")
+MEMINFO = "/proc/meminfo"
+
+
+def visible_memory() -> int | None:
+    """Bytes this process may use: a container's limit if it has one, else the machine's.
+
+    The lower of cgroup v2's ``memory.max``, cgroup v1's limit and ``MemTotal``,
+    because a container sees the host's ``/proc/meminfo`` and would otherwise
+    size itself for memory it will be killed for touching. None when nothing
+    could be read.
+    """
+    found: list[int] = []
+    for path in CGROUP_LIMITS:
+        try:
+            raw = open(path).read().strip()  # noqa: SIM115
+        except OSError:
+            continue
+        # "max", or v1's "no limit" spelled as a number near 2**63.
+        if raw.isdigit() and int(raw) < 2**60:
+            found.append(int(raw))
+    try:
+        with open(MEMINFO) as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    found.append(int(line.split()[1]) * 1024)
+                    break
+    except (OSError, ValueError, IndexError):
+        pass
+    return min(found) if found else None
+
+
+def auto_batch_size(memory: int | None, *, max_tokens: int = DEFAULT_MAX_TOKENS) -> int:
+    """The largest power-of-two batch that fits, capped where speed stops improving.
+
+    Attention memory grows with the square of the sequence, so a lower token cap
+    fits more passages. Unknown memory gets the Pi's default rather than a guess.
+    """
+    if memory is None:
+        return DEFAULT_BATCH_SIZE
+    per_item = BYTES_PER_ITEM * max(max_tokens / DEFAULT_MAX_TOKENS, 1 / 16) ** 2
+    fits = int(max(memory - MODEL_BYTES, 0) * MEMORY_SHARE // per_item)
+    if fits < 1:
+        return 1
+    return min(1 << (fits.bit_length() - 1), MAX_AUTO_BATCH)
 
 
 class EmbeddingError(RuntimeError):
@@ -97,10 +157,24 @@ class EmbedderSettings:
 
     @classmethod
     def from_env(cls) -> EmbedderSettings:
+        max_tokens = _int_env("MERIDIAN_EMBED_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+        explicit = _int_env("MERIDIAN_EMBED_BATCH_SIZE", 0)
+        if explicit:
+            batch_size = explicit
+        else:
+            memory = visible_memory()
+            batch_size = auto_batch_size(memory, max_tokens=max_tokens)
+            log.info(
+                "embedding batch sized from memory",
+                extra={
+                    "batch_size": batch_size,
+                    "memory_gib": None if memory is None else round(memory / 2**30, 1),
+                },
+            )
         return cls(
             model_name=os.environ.get("MERIDIAN_EMBED_MODEL") or DEFAULT_MODEL,
-            batch_size=_int_env("MERIDIAN_EMBED_BATCH_SIZE", DEFAULT_BATCH_SIZE),
-            max_tokens=_int_env("MERIDIAN_EMBED_MAX_TOKENS", DEFAULT_MAX_TOKENS),
+            batch_size=batch_size,
+            max_tokens=max_tokens,
             cache_dir=os.environ.get("MERIDIAN_EMBED_CACHE") or None,
             device=os.environ.get("MERIDIAN_EMBED_DEVICE") or None,
         )
@@ -192,6 +266,7 @@ class BGEEmbedder:
                 extra={
                     "model": self._settings.model_name,
                     "device": self._settings.device or "auto",
+                    "batch_size": self._settings.batch_size,
                     "cache_dir": self._settings.cache_dir,
                 },
             )
