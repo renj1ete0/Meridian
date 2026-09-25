@@ -3,7 +3,7 @@
 The claims, each as a rejection where one is possible:
 
 - The pass measures what the database holds, and proposes for the starved and
-  the over-served topic and nobody else.
+  the inefficient topic and nobody else — never the productive one (`B-64`).
 - Nothing applies before its window; everything that applies lands in
   `steering_log` through `steering`, with the reason the operator was shown.
 - A rejected proposal never applies. A superseded one never applies. A topic
@@ -99,15 +99,18 @@ async def activity(sess, topic: str, *, fetches: int, sources: int, at: dt.datet
 
 
 async def scenario(sess):
-    """Three topics at a third each: one starved, one over-served, one on par."""
+    """Three topics at a third each: one starved because the draw is not reaching
+    it, one taking most of the fetches and yielding little (``over``), and one
+    productive — the case the old over-served rule cut (`B-64`)."""
     await isolate(sess)
     starved, over, par = marker(), marker(), marker()
     for topic in (starved, over, par):
         await add_topic(sess, topic, 1 / 3)
     at = NOW - dt.timedelta(hours=2)
-    await activity(sess, starved, fetches=60, sources=2, at=at)
-    await activity(sess, over, fetches=160, sources=40, at=at)
-    await activity(sess, par, fetches=80, sources=18, at=at)
+    await activity(sess, starved, fetches=40, sources=4, at=at)
+    # Above Gaps' thin line, or the guard that never cuts a thin topic holds it.
+    await activity(sess, over, fetches=180, sources=12, at=at)
+    await activity(sess, par, fetches=80, sources=100, at=at)
     return starved, over, par
 
 
@@ -157,8 +160,8 @@ async def test_the_pass_counts_what_the_database_holds(session_for):
 
     measured = {m.topic: m for m in await sp.measure(sess, now=NOW)}
     assert set(measured) == {starved, over, par}
-    assert (measured[starved].fetches, measured[starved].new_sources) == (60, 2)
-    assert (measured[over].fetches, measured[over].new_sources) == (160, 40)
+    assert (measured[starved].fetches, measured[starved].new_sources) == (40, 4)
+    assert (measured[over].fetches, measured[over].new_sources) == (180, 12)
     assert abs(sum(m.share for m in measured.values()) - 1.0) < 1e-6
     # Gaps' thin finding rides along: two labelled sources in the window,
     # fifty-two in all, so the starved topic is not thin.
@@ -184,7 +187,7 @@ async def test_end_to_end_proposes_waits_then_applies_through_steering(session_f
     )
     assert set(report.created) == {boost.proposal_id, lower.proposal_id}
     assert boost.apply_after == NOW + dt.timedelta(hours=sp.DEFAULT_WINDOW_HOURS)
-    assert boost.evidence["new_sources"] == 2 and boost.evidence["fetches"] == 60
+    assert boost.evidence["new_sources"] == 4 and boost.evidence["fetches"] == 40
     assert lower.proposed_value < lower.current_value
 
     notes = list(

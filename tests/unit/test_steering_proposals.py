@@ -57,8 +57,8 @@ def test_a_balanced_crawl_proposes_nothing() -> None:
     assert sp.draft_proposals(balanced()) == []
 
 
-def test_a_starved_topic_gets_a_boost_that_expires() -> None:
-    drafts = by_topic(sp.draft_proposals(balanced(a={"new_sources": 2})))
+def test_a_starved_topic_the_draw_is_not_reaching_gets_a_boost_that_expires() -> None:
+    drafts = by_topic(sp.draft_proposals(balanced(a={"new_sources": 2, "fetches": 20})))
     boost = drafts["a"]
     assert (boost.kind, boost.current, boost.proposed) == ("boost", 1.0, sp.BOOST_FACTOR)
     assert boost.evidence["boost_hours"] == sp.BOOST_HOURS > 0
@@ -66,15 +66,71 @@ def test_a_starved_topic_gets_a_boost_that_expires() -> None:
     assert "2 of 42" in boost.reason and "33%" in boost.reason
 
 
-def test_an_over_served_topic_is_lowered_by_a_capped_step() -> None:
-    drafts = by_topic(
-        sp.draft_proposals(balanced(a={"new_sources": 60, "fetches": 200}, b={}, c={}))
+def test_a_starved_topic_whose_fetches_find_nothing_is_not_boosted() -> None:
+    """It already gets its share of the crawl; more of the same finds more nothing.
+    Its weight is lowered instead, so the crawl goes where it pays."""
+    drafts = by_topic(sp.draft_proposals(balanced(a={"new_sources": 2})))
+    assert drafts["a"].kind == "weight"
+
+
+def test_a_starved_topic_whose_fetches_yield_is_boosted() -> None:
+    """Few sources but a good yield per fetch: the crawl it gets pays, so more helps."""
+    drafts = by_topic(sp.draft_proposals(balanced(a={"new_sources": 6, "fetches": 25}, b={}, c={})))
+    assert drafts["a"].kind == "boost"
+    assert drafts["a"].evidence["yield_per_fetch"] >= (
+        sp.LOW_YIELD_RATIO * drafts["a"].evidence["mean_yield_per_fetch"]
     )
+
+
+def test_an_inefficient_topic_is_lowered_by_a_capped_step() -> None:
+    drafts = by_topic(sp.draft_proposals(balanced(a={"new_sources": 4, "fetches": 200})))
     lowered = drafts["a"]
     assert lowered.kind == "weight"
     step = lowered.current - lowered.proposed
     assert 0 < step <= sp.MAX_WEIGHT_STEP + 1e-9
     assert step <= lowered.current * sp.MAX_RELATIVE_STEP + 1e-9
+    # The reason names the yield it rests on, in words.
+    assert "0.02 per fetch" in lowered.reason
+    assert lowered.evidence["yield_per_fetch"] == 0.02
+
+
+def test_a_productive_topic_taking_many_fetches_is_not_lowered() -> None:
+    """`B-64`, the live case: most of the new sources, from most of the fetches.
+    The old rule called it over-served and cut it; it is the crawl working."""
+    drafts = sp.draft_proposals(balanced(a={"new_sources": 60, "fetches": 200}))
+    assert "a" not in by_topic(drafts)
+
+
+def test_topics_beside_a_very_productive_one_are_boosted_not_cut() -> None:
+    """Beside one topic taking most of the crawl, the others yield under the mean
+    — but they get under their share of the fetches, so that is the draw not
+    reaching them, and the answer is more crawl, never less."""
+    drafts = by_topic(sp.draft_proposals(balanced(a={"new_sources": 300, "fetches": 300})))
+    assert drafts["b"].kind == "boost" and drafts["c"].kind == "boost"
+    assert "a" not in drafts
+
+
+def test_the_yield_line_is_exclusive() -> None:
+    """Exactly at LOW_YIELD_RATIO of the mean is not inefficient."""
+    # a: 10/100 = 0.1; mean = (10 + 2 * 30) / 300 = 0.2333; 0.5 * mean = 0.1167 > 0.1.
+    below = by_topic(
+        sp.draft_proposals(
+            balanced(a={"new_sources": 10}, b={"new_sources": 30}, c={"new_sources": 30})
+        )
+    )
+    # a: 20/100 = 0.2; mean = (20 + 2 * 20) / 300 = 0.2: exactly average.
+    at = by_topic(sp.draft_proposals(balanced(a={"new_sources": 20})))
+    assert below["a"].kind == "weight"
+    assert "a" not in at
+
+
+def test_a_thin_topic_is_never_lowered_however_poor_its_yield() -> None:
+    drafts = by_topic(
+        sp.draft_proposals(
+            balanced(a={"new_sources": 1, "fetches": 400, "thin_sources": 3}, b={}, c={})
+        )
+    )
+    assert drafts.get("a") is None or drafts["a"].kind != "weight"
 
 
 def test_a_topic_that_yields_well_but_takes_few_fetches_is_not_lowered() -> None:
@@ -107,8 +163,8 @@ def test_no_proposal_for_a_topic_that_is_held(held: dict) -> None:
     """§10.1: pinned topics are the ones autonomous adjustment may not touch;
     a recently steered topic's manual choice wins; a boost is not stacked."""
     starved = sp.draft_proposals(balanced(a={"new_sources": 1, **held}))
-    over = sp.draft_proposals(balanced(a={"new_sources": 60, "fetches": 200, **held}))
-    assert "a" not in by_topic(starved) and "a" not in by_topic(over)
+    poor = sp.draft_proposals(balanced(a={"new_sources": 1, "fetches": 200, **held}))
+    assert "a" not in by_topic(starved) and "a" not in by_topic(poor)
 
 
 @pytest.mark.parametrize(
@@ -129,15 +185,15 @@ def test_a_single_active_topic_is_never_steered() -> None:
 
 def test_a_weight_at_its_floor_is_not_lowered() -> None:
     drafts = sp.draft_proposals(
-        balanced(a={"weight": 0.05, "share": 0.05, "new_sources": 60, "fetches": 200})
+        balanced(a={"weight": 0.05, "share": 0.05, "new_sources": 1, "fetches": 200})
     )
     assert "a" not in by_topic(drafts)
 
 
 @pytest.mark.parametrize(
     ("weight", "floor"),
-    # Up to 0.6: above that, 1.5x its share is more than the whole of the new
-    # sources, and "over-served" is unreachable by construction.
+    # Up to 0.6: the case below gives the topic about four fifths of the
+    # fetches, so it takes at least its share at every weight tested.
     list(itertools.product([0.06, 0.1, 0.2, 0.4, 0.6], [0.0, 0.05, 0.1, 0.3])),
 )
 def test_a_lowered_weight_never_crosses_its_floor_or_moves_past_the_caps(
@@ -152,7 +208,7 @@ def test_a_lowered_weight_never_crosses_its_floor_or_moves_past_the_caps(
                     "weight": weight,
                     "share": weight,
                     "floor": floor,
-                    "new_sources": 400,
+                    "new_sources": 5,
                     "fetches": 900,
                 }
             )

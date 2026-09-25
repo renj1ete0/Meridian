@@ -12,18 +12,33 @@ change, and is undone the way any other change is.
 **The signal is measured, and heuristic.** The worker never calls a model
 (§2.1), so a proposal comes from counting: each active topic's share of the
 *new on-topic sources* of the last ``LOOKBACK_HOURS``, against the share of the
-crawl its weight gives it, and against its share of the fetches. Two findings
-are acted on:
+crawl its weight gives it, and each topic's *yield* — new on-topic sources per
+fetch — against the crawl's as a whole. Two findings are acted on:
 
 - **Starved** — the topic produced well under the share its weight promises
-  (or it is thin by :mod:`meridian_core.gaps`' measure and behind). Proposed:
-  a boost, ×``BOOST_FACTOR`` for ``BOOST_HOURS``. A boost is the gentlest lever
-  there is, because it removes itself (§10).
-- **Over-served** — it produced well over its share *and* took more fetches
-  than its weight gives it. Proposed: its baseline weight lowered by a small,
-  capped step, never below its floor. Lowering a weight is the one lever that
-  frees crawl for the others; raising a weight would be a permanent change made
-  on a day's evidence, and a boost already does that job temporarily.
+  (or it is thin by :mod:`meridian_core.gaps`' measure and behind), *and* more
+  crawl would help: either the draw is not reaching it (fewer fetches than its
+  share) or the fetches it does get yield. Proposed: a boost,
+  ×``BOOST_FACTOR`` for ``BOOST_HOURS``. A boost is the gentlest lever there
+  is, because it removes itself (§10). Boosting a topic whose fetches already
+  find nothing only spends more crawl finding nothing.
+- **Inefficient** — it takes at least its share of the fetches and yields
+  under ``LOW_YIELD_RATIO`` of the crawl's average per fetch. Proposed: its
+  baseline weight lowered by a small, capped step, never below its floor, and
+  never for a thin topic. Lowering a weight frees crawl for the topics that
+  turn it into sources; raising one would be a permanent change made on a
+  day's evidence, and a boost already does that job temporarily.
+
+  This replaced an "over-served" rule (`B-64`) that cut a topic for producing
+  *more* than its share — which on a live crawl meant cutting exactly the
+  topics the crawl was doing well on. Producing a lot is the goal; producing
+  little per fetch is the waste.
+
+Fetches are attributed to the topic that drew them and sources to the topics
+their content carries, so yield is a heuristic across the two: a fetch drawn
+for one topic that lands a page about another counts for the other. Over a
+day's crawl that is the signal wanted — which topics' crawl turns into
+on-topic pages at all.
 
 **Bounds, each of them a failure this is built against:**
 
@@ -138,8 +153,10 @@ MIN_NEW_SOURCES = 20
 
 #: Starved: new on-topic sources below this fraction of the draw share.
 STARVED_RATIO = 0.5
-#: Over-served: above this multiple of the draw share, in sources and fetches.
-OVER_RATIO = 1.5
+#: Inefficient: new on-topic sources per fetch below this fraction of the
+#: crawl's average (`B-64`). Half, so ordinary variation between topics — some
+#: subjects simply publish less — is not read as waste.
+LOW_YIELD_RATIO = 0.5
 
 BOOST_FACTOR = 1.5
 BOOST_HOURS = 24
@@ -216,12 +233,18 @@ def draft_proposals(
     if len(measures) < 2:
         return []
 
+    mean_yield = total_new / total_fetches
+
     out: list[Draft] = []
     for m in sorted(measures, key=lambda m: m.topic):
         if m.pinned or m.quiet or m.boosted or m.share <= 0:
             continue
         new_share = _share(m.new_sources, total_new)
         fetch_share = _share(m.fetches, total_fetches)
+        # None when the topic drew no fetches: no yield to judge, which is
+        # itself the finding a boost answers.
+        topic_yield = m.new_sources / m.fetches if m.fetches else None
+        yields = topic_yield is None or topic_yield >= LOW_YIELD_RATIO * mean_yield
         evidence: dict[str, Any] = {
             "lookback_hours": lookback_hours,
             "draw_share": round(m.share, 4),
@@ -234,13 +257,16 @@ def draft_proposals(
             "fetches": m.fetches,
             "fetches_total": total_fetches,
             "fetch_share": round(fetch_share, 4),
+            "yield_per_fetch": None if topic_yield is None else round(topic_yield, 4),
+            "mean_yield_per_fetch": round(mean_yield, 4),
         }
         if m.thin_sources is not None:
             evidence["labelled_sources"] = m.thin_sources
 
         starved = new_share < STARVED_RATIO * m.share
         thin_and_behind = m.thin_sources is not None and new_share < m.share
-        if starved or thin_and_behind:
+        under_drawn = fetch_share < m.share
+        if (starved or thin_and_behind) and (under_drawn or yields):
             reason = (
                 f"{m.topic} is weighted for {m.share:.0%} of the crawl and produced "
                 f"{new_share:.0%} of new on-topic sources in the last {lookback_hours} hours "
@@ -267,7 +293,14 @@ def draft_proposals(
             )
             continue
 
-        if new_share > OVER_RATIO * m.share and fetch_share > m.share:
+        inefficient = (
+            topic_yield is not None
+            and topic_yield < LOW_YIELD_RATIO * mean_yield
+            and fetch_share >= m.share
+        )
+        # Never a thin topic: a topic short of sources is not one to take crawl
+        # from, however poorly its crawl is doing — that wants better seeds.
+        if inefficient and m.thin_sources is None:
             step = min(MAX_WEIGHT_STEP, m.weight * MAX_RELATIVE_STEP, m.weight - m.floor)
             if step < MIN_WEIGHT_STEP:
                 continue
@@ -275,10 +308,11 @@ def draft_proposals(
             if not (m.floor - steering.EPS <= proposed <= m.ceiling + steering.EPS):
                 continue
             reason = (
-                f"{m.topic} produced {new_share:.0%} of new on-topic sources in the last "
-                f"{lookback_hours} hours against a {m.share:.0%} share of the crawl, and took "
-                f"{fetch_share:.0%} of fetches. Lowering its weight from {m.weight:.2f} to "
-                f"{proposed:.2f} leaves more of the crawl to the other topics."
+                f"{m.topic} took {fetch_share:.0%} of fetches in the last {lookback_hours} "
+                f"hours and produced {m.new_sources} new on-topic sources — "
+                f"{topic_yield:.2f} per fetch against {mean_yield:.2f} across the crawl. "
+                f"Lowering its weight from {m.weight:.2f} to {proposed:.2f} moves crawl to "
+                "topics that turn it into sources."
             )
             out.append(Draft(m.topic, "weight", round(m.weight, 4), proposed, reason, evidence))
     return out

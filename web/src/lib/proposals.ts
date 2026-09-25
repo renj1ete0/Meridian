@@ -134,6 +134,15 @@ export function evidenceFacts(evidence: Proposal['evidence']): string[] {
     )
   if (has('fetches'))
     out.push(`fetches ${evidence.fetches} of ${evidence.fetches_total ?? '—'} (${pct(evidence.fetch_share)})`)
+  // Yield decides a weight cut (`B-64`); null when the topic drew no fetches.
+  if (has('yield_per_fetch')) {
+    const y = evidence.yield_per_fetch
+    const mean = evidence.mean_yield_per_fetch
+    out.push(
+      `yield ${typeof y === 'number' ? y.toFixed(2) : '—'} per fetch` +
+        (typeof mean === 'number' ? ` (crawl ${mean.toFixed(2)})` : ''),
+    )
+  }
   if (has('labelled_sources')) out.push(`labelled sources ${evidence.labelled_sources}`)
   if (has('lookback_hours')) out.push(`last ${evidence.lookback_hours} h`)
   return out

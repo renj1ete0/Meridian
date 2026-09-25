@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.4] — 2026-09-25
+
+### Fixed
+
+- `B-64`: steering proposals judge a topic by its *yield* — new on-topic
+  sources per fetch — not by its output against its weight. The old
+  "over-served" rule cut a topic for producing more than its share, which on a
+  live crawl meant cutting exactly the topics the crawl was doing best on. Now
+  a weight is lowered only for a topic that takes at least its share of the
+  fetches and yields under half the crawl's average per fetch, and never for a
+  thin one. A starved topic is boosted only where more crawl would help: the
+  draw is not reaching it, or the fetches it gets do yield. Admin's proposal
+  panel prints the yield beside the other evidence
+
 ## [0.140.3] — 2026-09-25
 
 ### Fixed

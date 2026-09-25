@@ -1380,15 +1380,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       budget, and embedding backpressure
 - [x] `B-63` **Synthesis reasoned over whatever came next, on-topic or not** — `v0.140.2`,
       a deployment setting, on locally
-- [ ] `B-64` **Steering proposals cut the productive topics** — `P6-38`'s "over-served"
-      rule compares a topic's share of new on-topic sources with its weight, so it
-      proposes cutting exactly the topics the crawl is doing well on (first live
-      pass: both of its cuts were productive topics; the lead rejected them). Judge
-      efficiency, on-topic yield per fetch, not yield against weight
+- [x] `B-64` **Steering proposals cut the productive topics** — `v0.140.4`. Cuts now go
+      to topics taking at least their share of fetches at under half the crawl's
+      average yield per fetch, never to thin ones; boosts only where more crawl would
+      help (under-drawn, or yielding)
 - [ ] `B-65` **The lexical arm is the slow half of search** — measured at corpus size
-      it is roughly ten times slower than the vector arm and sets hybrid latency;
-      look at the GIN index usage and `ts_rank_cd` over large candidate sets before
-      the corpus grows further
+      it is roughly ten times slower than the vector arm and sets hybrid latency.
+      **Diagnosed 2026-09-25:** the GIN index is used; cost is linear in the number
+      of *matching* passages (about 4 µs each), almost all of it reading each match's
+      `search_vector` out of the heap and TOAST to rank it. Multi-word questions are
+      ANDed and match few passages (2–5 ms); a single common word matching tens of
+      thousands costs 150–200 ms, and that is what the benchmark's probes are. It will
+      grow with the corpus. Options, not yet chosen: a RUM index (ranks inside the
+      index; an extension to add to the Postgres image), or ranking only the first N
+      matches of a very broad query and letting the vector arm carry it. Low urgency
+      while real questions are multi-word
 - [x] `B-66` **Embed by value, not by age** — `v0.140.3`. Three tiers, re-checked every
       batch: directed sources and on-topic hosts first, the rest next, off-topic hosts
       last, junk never; backpressure counts the first two only. Measured on the live

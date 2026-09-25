@@ -75,6 +75,8 @@ function proposal(over: Partial<Proposal> = {}): Proposal {
       fetches: 60,
       fetches_total: 300,
       fetch_share: 0.2,
+      yield_per_fetch: 0.0333,
+      mean_yield_per_fetch: 0.14,
       boost_hours: 24,
     },
     apply_after: '2026-09-24T21:00:00Z',
@@ -149,9 +151,16 @@ describe('what a proposal says', () => {
       'crawl share 33%',
       'new sources 2 of 42 (5%)',
       'fetches 60 of 300 (20%)',
+      'yield 0.03 per fetch (crawl 0.14)',
       'last 24 h',
     ])
     expect(facts.join(' ')).not.toContain('surprise')
+  })
+
+  it('says a topic that drew no fetches has no yield, rather than a yield of nothing', () => {
+    const facts = evidenceFacts({ ...proposal().evidence, fetches: 0, yield_per_fetch: null })
+    expect(facts).toContain('yield — per fetch (crawl 0.14)')
+    expect(facts.join(' ')).not.toContain('0.00 per fetch')
   })
 
   it('counts down to when it applies, and never into the past', () => {

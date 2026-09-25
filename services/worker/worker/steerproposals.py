@@ -2,7 +2,7 @@
 
 ``python -m worker.steerproposals --once`` measures each active topic's share of
 the last day's new on-topic sources and fetches against its weight, writes a
-proposal for a topic that is starved or over-served, and applies every pending
+proposal for a topic that is starved or inefficient, and applies every pending
 proposal whose window has passed with its basis intact. ``--report`` does the
 same inside a transaction it rolls back, and prints what it would have done.
 
