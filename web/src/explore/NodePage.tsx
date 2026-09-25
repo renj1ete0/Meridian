@@ -27,6 +27,7 @@ import { NodeSearchBox } from './graph/NodeSearchBox'
 import { readPalette } from './graph/palette'
 import { recordRecentNode } from './graph/recent'
 import { neighbourhoodScene, pathScene } from './graph/scene'
+import { MatrixView, adjacency, matrixLine } from './graph/MatrixView'
 import { TableView } from './graph/TableView'
 import { nextTrail, readTrail, writeTrail, type Crumb } from './graph/trail'
 import {
@@ -345,14 +346,16 @@ export function NodePage({ entityId }: { entityId: number }) {
           <Centre>
             <p className="text-[13px] text-text-muted">{VIEW_LABEL[view]} is not built yet.</p>
             <p className="mt-1 text-[12.5px] text-text-faint">
-              Node-link and Table show this neighbourhood.
+              Node-link, Table and Matrix show this neighbourhood.
             </p>
           </Centre>
-        ) : view === 'table' ? (
+        ) : view === 'table' || view === 'matrix' ? (
           hood.shown === 0 ? (
             <EmptyHood hood={hood} onClear={() => updateUrl({ ...url, filters: NO_FILTERS })} />
-          ) : (
+          ) : view === 'table' ? (
             <TableView hood={hood} />
+          ) : (
+            <MatrixView hood={hood} onPick={refocus} hrefFor={(id) => `${hrefForNode(id)}${toSearch(url)}`} />
           )
         ) : (
           <>
@@ -415,7 +418,9 @@ export function NodePage({ entityId }: { entityId: number }) {
             </span>
           ) : path.phase === 'failed' ? (
             <span className="text-accent-attention">{path.message}</span>
-          ) : hood && view !== 'matrix' && view !== 'timeline' && view !== 'coverage' ? (
+          ) : hood && view === 'matrix' && hood.shown > 0 ? (
+            <span>{matrixLine(adjacency(hood), hood)}</span>
+          ) : hood && view !== 'timeline' && view !== 'coverage' ? (
             <span>{statusLine(hood)}</span>
           ) : null}
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { AboutPage } from './about/AboutPage'
 import { AdminPage } from './admin/AdminPage'
 import { ExplorePage } from './explore/ExplorePage'
 import { GapsPage } from './explore/GapsPage'
@@ -14,9 +15,12 @@ import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
 /**
  * The section a route belongs to. A source page and a node page belong to
  * Explore: marking no destination while a reader is two clicks into the corpus
- * would say the bar does not know where they are.
+ * would say the bar does not know where they are. About belongs to none — it
+ * is reached from Settings, not the nav, and marking a tab for it would claim
+ * a section it is not in.
  */
-export function sectionOf(route: Route): Section {
+export function sectionOf(route: Route): Section | null {
+  if (route.name === 'about') return null
   return route.name === 'admin' || route.name === 'map' || route.name === 'gaps'
     ? route.name
     : 'explore'
@@ -89,6 +93,7 @@ export function App() {
           {route.name === 'admin' ? <AdminPage /> : null}
           {route.name === 'map' ? <MapPage /> : null}
           {route.name === 'gaps' ? <GapsPage /> : null}
+          {route.name === 'about' ? <AboutPage /> : null}
           {route.name === 'explore' ? <ExplorePage /> : null}
         </main>
       </div>
