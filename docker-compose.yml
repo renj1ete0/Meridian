@@ -321,6 +321,8 @@ services:
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
+      # `B-76`: the sidecar, loaded, before the backfill decides whether to use it.
+      embedder: { condition: service_healthy }
     environment:
       MERIDIAN_EMBEDDER_URL: http://embedder:8100
       MERIDIAN_EMBED_CACHE: /models

@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.144.1] — 2026-09-25
+
+### Fixed
+
+- `B-76`: on a joint restart the embedding backfill asked the sidecar once, found
+  it still loading its weights, and loaded a second copy of the model that then
+  competed with the sidecar for the CPU. It now keeps asking for up to three
+  minutes (`MERIDIAN_EMBEDDER_WAIT_S`), and both compose files start it after
+  the sidecar is healthy
+
 ## [0.144.0] — 2026-09-25
 
 ### Changed

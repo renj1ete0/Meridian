@@ -239,6 +239,8 @@ services:
     networks: [internal]
     depends_on:
       postgres: { condition: service_healthy }
+      # `B-76`: the sidecar, loaded, before the backfill decides whether to use it.
+      embedder: { condition: service_healthy }
     environment:
       <<: [*pg-credentials, *db-urls]
       MERIDIAN_EMBEDDER_URL: http://embedder:8100

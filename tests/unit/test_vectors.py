@@ -210,9 +210,46 @@ async def test_a_mismatch_is_reported_as_a_mismatch_not_an_outage() -> None:
 
 
 async def test_an_unreachable_sidecar_is_not_chosen() -> None:
-    embedder = await build_embedder(FakeRemote(described=None))
+    embedder = await build_embedder(FakeRemote(described=None), wait_s=0)
 
     assert embedder.using_remote is False
+
+
+class SlowToStart(FakeRemote):
+    """Answers on the nth probe, as a sidecar still loading its weights does."""
+
+    def __init__(self, answers_on: int) -> None:
+        super().__init__(described={"model": "bge-m3", "loaded": True})
+        self.answers_on = answers_on
+        self.probes = 0
+
+    async def describe(self):
+        self.probes += 1
+        return self.described if self.probes >= self.answers_on else None
+
+
+async def test_a_sidecar_still_starting_is_waited_for() -> None:
+    """`B-76`: a joint restart must not load a second copy of the model."""
+    remote = SlowToStart(answers_on=3)
+    embedder = await build_embedder(remote, wait_s=5, poll_s=0.01)
+
+    assert embedder.using_remote is True and remote.probes == 3
+
+
+async def test_the_wait_ends(monkeypatch) -> None:
+    remote = SlowToStart(answers_on=10_000)
+    embedder = await build_embedder(remote, wait_s=0.05, poll_s=0.01)
+
+    assert embedder.using_remote is False
+    assert 2 <= remote.probes < 50
+
+
+async def test_the_wait_is_read_from_the_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_WAIT_S", "0")
+    remote = SlowToStart(answers_on=2)
+    embedder = await build_embedder(remote, poll_s=0.01)
+
+    assert embedder.using_remote is False and remote.probes == 1
 
 
 async def test_a_reachable_sidecar_is_chosen() -> None:

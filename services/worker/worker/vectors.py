@@ -22,6 +22,8 @@ mismatch falls back rather than failing — but it is reported as what it is.
 from __future__ import annotations
 
 import asyncio
+import os
+import time
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -116,20 +118,42 @@ class PreferRemote:
         return await self._fallback().embed(texts)
 
 
-async def build_embedder(remote: RemoteEmbedder | None = None) -> PreferRemote:
-    """The backfill's embedder, with one probe to say which path it took.
+#: How long to keep asking a configured sidecar before loading the model here
+#: (`B-76`). A joint restart brings both up at once, and the sidecar takes most
+#: of a minute to load its weights: asking once, the backfill gave up in seconds
+#: and loaded a second copy that then competed with the sidecar for the CPU.
+SIDECAR_WAIT_S = 180.0
+SIDECAR_POLL_S = 5.0
+
+
+async def build_embedder(
+    remote: RemoteEmbedder | None = None,
+    *,
+    wait_s: float | None = None,
+    poll_s: float = SIDECAR_POLL_S,
+) -> PreferRemote:
+    """The backfill's embedder, with a probe to say which path it took.
 
     The probe is for the log, not for correctness — `embed` falls back on its
     own. It is here because "which model is this pass using" is the first
     question asked of an unexpectedly slow or unexpectedly hungry backfill, and
     without the line the answer is a guess.
+
+    A configured sidecar is asked until it answers or ``wait_s`` passes
+    (``MERIDIAN_EMBEDDER_WAIT_S``, default :data:`SIDECAR_WAIT_S`).
     """
     candidate = remote if remote is not None else RemoteEmbedder.from_env()
     if candidate is None:
         log.info("no embedding sidecar configured; the model loads in this process")
         return PreferRemote(None)
 
+    if wait_s is None:
+        wait_s = float(os.environ.get("MERIDIAN_EMBEDDER_WAIT_S") or SIDECAR_WAIT_S)
+    deadline = time.monotonic() + max(wait_s, 0.0)
     described = await candidate.describe()
+    while described is None and time.monotonic() < deadline:
+        await asyncio.sleep(poll_s)
+        described = await candidate.describe()
     if described is None:
         log.warning(
             "embedding sidecar did not answer; the model loads in this process",

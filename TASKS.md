@@ -1412,6 +1412,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-76` **A joint restart loaded the model twice** — `v0.144.1`. The backfill asked the
+      sidecar once at startup; it now waits for it, and compose orders them
 - [x] `B-75` **The first embedding tier newest first** — found closing loop run 4: new sources
       are labelled only once embedded, and the window's passages queued behind older
       first-tier ones, so no run could measure its own on-topic yield. The other tiers stay
