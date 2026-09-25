@@ -35,6 +35,15 @@ live), `B-51` (search seeding every 6h, Bing web off),
 `B-52` (non-English seeds via Wikipedia interlanguage titles), `B-45`
 (soft-404s), `B-44` (document duplicates).
 
+**Loop status (2026-09-25 12:30):** iteration 1 done. Run 1 (12h) was stable
+but showed the crawl outrunning search, labelling and embedding. Fixed as
+`B-61`, with `B-63` for synthesis. `v0.140.2` is deployed with every backfill
+applied (tagging coverage is in `~/Documents/gh/meridian-calibration/loop/run1/`).
+The first question-set run exists (`.localdata/eval-runs/2026-09-25.yaml`,
+waiting for the operator's grades). **Run 2, a 2h test window, started at
+12:30.** Close it, compare with run 1, decide the next optimisation, and
+continue.
+
 **First thing next session:**
 
 0. **The P1-16 checkpoint run (12h, operator's choice) started overnight
