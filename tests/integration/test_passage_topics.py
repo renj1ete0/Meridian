@@ -437,6 +437,10 @@ async def test_overlaps_count_sources_by_exact_combination(world) -> None:
     assert counts[tuple(sorted([a, b]))] == pair + 1
     assert after.labelled_sources == before.labelled_sources + 1
     assert all(o.topics == sorted(o.topics) for o in after.overlaps)
+    # Each combination is one source's own set: no repeats, never more topics
+    # than exist. (The first version pooled every source's labels into one.)
+    assert all(len(o.topics) == len(set(o.topics)) <= len(topics) for o in after.overlaps)
+    assert len({tuple(o.topics) for o in after.overlaps}) == len(after.overlaps)
 
 
 async def test_overlaps_leave_out_junk_and_unlabelled_sources(world) -> None:

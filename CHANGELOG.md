@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.141.1] — 2026-09-25
+
+### Fixed
+
+- `B-72`: `/api/explore/topic-overlaps` pooled every source's topics into one
+  combination; it now counts each source's own set
+
 ## [0.141.0] — 2026-09-25
 
 ### Added

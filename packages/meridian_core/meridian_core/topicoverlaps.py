@@ -13,6 +13,8 @@ person weighing "is there anything here" reads.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,20 +23,25 @@ from .schemas.search import TopicOverlapRead, TopicOverlapsRead
 
 
 async def topic_overlaps(sess: AsyncSession) -> TopicOverlapsRead:
-    ordered = func.array(
-        select(func.unnest(Source.topic_labels).label("t")).order_by("t").scalar_subquery()
-    )
+    # Grouped as stored, then merged in Python: the same set may be stored in
+    # different orders, and there are only as many distinct sets as there are
+    # combinations anybody's content falls into — a few dozen, not a scan.
     rows = (
         await sess.execute(
-            select(ordered.label("topics"), func.count())
+            select(Source.topic_labels, func.count())
             .where(
                 func.cardinality(Source.topic_labels) > 0,
                 Source.retention_tier != "junk",
                 Source.duplicate_of.is_(None),
             )
-            .group_by("topics")
-            .order_by(func.count().desc())
+            .group_by(Source.topic_labels)
         )
     ).all()
-    overlaps = [TopicOverlapRead(topics=list(t), sources=n) for t, n in rows]
-    return TopicOverlapsRead(overlaps=overlaps, labelled_sources=sum(o.sources for o in overlaps))
+    merged: Counter[tuple[str, ...]] = Counter()
+    for labels, n in rows:
+        merged[tuple(sorted(set(labels)))] += n
+    overlaps = [
+        TopicOverlapRead(topics=list(topics), sources=n)
+        for topics, n in sorted(merged.items(), key=lambda kv: (-kv[1], kv[0]))
+    ]
+    return TopicOverlapsRead(overlaps=overlaps, labelled_sources=sum(merged.values()))
