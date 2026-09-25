@@ -21,14 +21,16 @@ against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-24, end of session)
 
-> **Overnight 2026-09-25 → 26 (operator asleep, PC on):** run 5 closes at ~22:53 by a
-> scheduled prompt; two agents are building the Map's semantic zoom and the `P6-41` answer
-> page on worktree branches — merge, bump, rebuild and deploy each after run 5 closes (not
-> during a window). `main` is at `v0.144.3` (unique map names), committed; not yet built or deployed (the live map already carries its names).
->
-> **Run 5 is live (20:51 → ~22:53, v0.144.2) with the worker's backpressure ceiling lifted to
-> 200000 for the window. If this session is gone, recreate the worker from a shell without
-> `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` set so it returns to 20000.**
+> **Stopped 2026-09-25 21:16 (+08) for a shutdown.** Run 5 was stopped after 25 minutes —
+> too short to judge; **rerun it in full** (2h, same procedure: `seedsearch --once`,
+> `hostscore --once`, lift `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` for the window only,
+> `snapshot.sh start`/`end`, restore). Worker ceiling is back at 20000. `main` is at
+> `v0.144.3`: committed; the live map carries its names but the images are not rebuilt —
+> rebuild and deploy first. Two agent branches hold work in progress, committed at
+> shutdown (check `git branch --list 'worktree-agent-*'`): the Map's **semantic zoom**
+> (level control, bubbles splitting between levels) and the **`P6-41` answer page**
+> (`/api/explore/answer`, Find's Answer view, "Find more"). Review, finish, merge, bump,
+> deploy — neither is merged.
 >
 > **Live state, 2026-09-25 evening (+08).** Optimisation loop, runs 3 and 4 (2h each,
 > backpressure ceiling lifted to 200k for each window only, restored to 20000 after;

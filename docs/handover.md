@@ -13,6 +13,15 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-25 close of day.** Also shipped from the operator's UI review: source titles
+> cleaned at write and in bulk (`B-69`, `worker.retitle`), gazetteer terms typed by head
+> word (`B-70`, `harvest --retype`), Map clusters named from a fixed list of fields of work
+> and unique per level (`B-71`, `B-74`, `config/fields.yaml`, `worker.areas --name-only`;
+> match *after centring* both sides, or a few generic labels name everything), the topic
+> web (`B-72`), saved views with topics (`B-73`), About and Matrix views. The reader-journey
+> plan is `P6-41`..`P6-44` and `P0-18` in TASKS. In flight at shutdown: two agent branches
+> (semantic zoom; answer page) and run 5, which must be rerun.
+
 > **2026-09-25 evening — the optimisation loop and what it found.** Runs 3 and 4 (2h each)
 > tested the directed claim share (`B-61`) and embedding by value (`B-66`). Run 3 found
 > that a cited-paper DOI outranking every page let one topic spend its whole crawl share on
