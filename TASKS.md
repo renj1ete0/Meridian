@@ -21,6 +21,10 @@ against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-24, end of session)
 
+> **Run 5 is live (20:51 → ~22:53, v0.144.2) with the worker's backpressure ceiling lifted to
+> 200000 for the window. If this session is gone, recreate the worker from a shell without
+> `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` set so it returns to 20000.**
+>
 > **Live state, 2026-09-25 evening (+08).** Optimisation loop, runs 3 and 4 (2h each,
 > backpressure ceiling lifted to 200k for each window only, restored to 20000 after;
 > notes in `meridian-calibration/loop/run3`, `run4`):
