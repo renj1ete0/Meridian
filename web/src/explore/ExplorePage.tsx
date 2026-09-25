@@ -29,7 +29,9 @@ import {
   type CrawlProgress,
   type SavedViewRecord,
   type SearchResponse,
+  type TopicMatch,
 } from '../lib/api'
+import { findParams } from '../lib/topicweb'
 
 /**
  * Explore — the landing and the search results (tasks P2-08, P6-27; spec
@@ -111,6 +113,9 @@ export function ExplorePage() {
   // would show the top 20 of an unfiltered ranking with most of them removed,
   // which looks like a topic with almost nothing in it (`P6-24`).
   const [topics, setTopics] = useState<string[]>([])
+  // Whether a source must carry any chosen topic or all of them (`B-72`):
+  // the Map's topic web hands its intersections over as `all`.
+  const [topicMatch, setTopicMatch] = useState<TopicMatch>('any')
   // Places narrow the same way topics do (`P2-23`), as codes.
   const [places, setPlaces] = useState<string[]>([])
 
@@ -226,7 +231,8 @@ export function ExplorePage() {
     return () => controller.abort()
   }, [])
 
-  const run = useCallback((text: string, within: readonly string[] = [], where: readonly string[] = []) => {
+  const run = useCallback(
+    (text: string, within: readonly string[] = [], where: readonly string[] = [], match: TopicMatch = 'any') => {
     const trimmed = text.trim()
     if (!trimmed) return
 
@@ -239,7 +245,10 @@ export function ExplorePage() {
     setPicked(null)
     setError(null)
 
-    searchCorpus({ q: trimmed, topic: within, place: where }, { signal: controller.signal })
+    searchCorpus(
+      { q: trimmed, topic: within, place: where, topic_match: within.length > 0 ? match : undefined },
+      { signal: controller.signal },
+    )
       .then((response) => {
         setResults(response)
         setPhase('done')
@@ -249,16 +258,28 @@ export function ExplorePage() {
         setError(cause instanceof ApiError ? cause.message : 'The search could not be completed.')
         setPhase('failed')
       })
-  }, [])
+    },
+    [],
+  )
 
   // `/?q=…` opens with that search run: Gaps' "Search it in Find" (`P6-36`)
   // and the Map's "Open in Find" (`P6-34`) both link here, and a search that
-  // can be linked is one that can be shared.
+  // can be linked is one that can be shared. `topic=` (repeated) and
+  // `topic_match=` preselect the topic filter — the Map's topic web (`B-72`)
+  // sends its intersections here with `topic_match=all`. Topics without a
+  // query set the filter up and wait for the words.
   useEffect(() => {
-    const linked = new URLSearchParams(window.location.search).get('q')?.trim()
-    if (!linked) return
-    setQuery(linked)
-    run(linked)
+    const linked = findParams(window.location.search)
+    if (linked.topics.length > 0) {
+      setTopics(linked.topics)
+      setTopicMatch(linked.match)
+    }
+    if (!linked.q) {
+      if (linked.topics.length > 0) focusSearch()
+      return
+    }
+    setQuery(linked.q)
+    run(linked.q, linked.topics, [], linked.match)
   }, [run])
 
   function clear() {
@@ -278,7 +299,7 @@ export function ExplorePage() {
     <SearchField
       value={query}
       onChange={setQuery}
-      onSubmit={(text) => run(text, topics, places)}
+      onSubmit={(text) => run(text, topics, places, topicMatch)}
       size={idle ? 'large' : 'regular'}
     />
   )
@@ -294,11 +315,16 @@ export function ExplorePage() {
         // Re-run immediately, but only when there is a query to re-run.
         // Changing the filter with an empty box is setting up a search, not
         // performing one.
-        if (asked) run(asked, next, places)
+        if (asked) run(asked, next, places, topicMatch)
       }}
       onClear={() => {
         setTopics([])
-        if (asked) run(asked, [], places)
+        if (asked) run(asked, [], places, topicMatch)
+      }}
+      match={topicMatch}
+      onMatch={(next) => {
+        setTopicMatch(next)
+        if (asked && topics.length > 1) run(asked, topics, places, next)
       }}
     />
   ) : null
@@ -317,11 +343,11 @@ export function ExplorePage() {
         onToggle={(code) => {
           const next = places.includes(code) ? places.filter((p) => p !== code) : [...places, code]
           setPlaces(next)
-          if (asked) run(asked, topics, next)
+          if (asked) run(asked, topics, next, topicMatch)
         }}
         onClear={() => {
           setPlaces([])
-          if (asked) run(asked, topics, [])
+          if (asked) run(asked, topics, [], topicMatch)
         }}
       />
     ) : null
@@ -455,6 +481,7 @@ export function ExplorePage() {
             void markViewOpened(view.view_id).catch(() => {})
             const saved = Array.isArray(view.filters.topic) ? (view.filters.topic as string[]) : []
             setTopics(saved)
+            setTopicMatch('any')
             setQuery(view.query ?? '')
             if (view.query) run(view.query, saved)
           }}

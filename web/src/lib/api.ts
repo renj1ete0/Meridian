@@ -483,6 +483,12 @@ export interface SearchParams {
   language?: readonly string[]
   /** Keep sources carrying any of these topics (`P2-14`). */
   topic?: readonly string[]
+  /**
+   * `all` keeps only passages whose source and own labels together carry
+   * every `topic` — where topics meet (`B-72`). Omitted means the server's
+   * default, `any`.
+   */
+  topic_match?: TopicMatch
   /** Keep sources about any of these places — stored codes (`P2-23`). */
   place?: readonly string[]
   published_after?: string
@@ -516,6 +522,9 @@ export function searchQuery(params: SearchParams): string {
     ['include_duplicates', params.include_duplicates],
     ['include_junk', params.include_junk],
     ['candidates', params.candidates],
+    // Only sent when it narrows: `any` is the server's default, and a URL that
+    // always carries it would read as a choice the reader made.
+    ['topic_match', params.topic_match === 'all' ? 'all' : undefined],
   ]
   for (const [key, value] of scalars) {
     if (value !== undefined) query.set(key, String(value))
@@ -601,6 +610,36 @@ export function getCorpusMap(
   for (const topic of params.topic ?? []) query.append('topic', topic)
   const suffix = query.size ? `?${query}` : ''
   return request<CorpusMap>(`/api/explore/map${suffix}`, init)
+}
+
+/** How several `topic` filters combine on `/api/explore/search` (`B-72`). */
+export type TopicMatch = 'any' | 'all'
+
+/** Mirrors `TopicOverlapRead` (`B-72`): sources carrying exactly this set of topics. */
+export interface TopicOverlap {
+  /** Sorted and de-duplicated. */
+  topics: string[]
+  sources: number
+}
+
+export const TOPIC_OVERLAP_FIELDS = ['topics', 'sources'] as const
+
+/**
+ * Mirrors `TopicOverlapsRead` (`B-72`). Exact sets, so they add up: sources
+ * carrying *at least* a selection are the sum over every set containing it.
+ */
+export interface TopicOverlaps {
+  overlaps: TopicOverlap[]
+  labelled_sources: number
+}
+
+export const TOPIC_OVERLAPS_FIELDS = ['overlaps', 'labelled_sources'] as const
+
+export type AssertTopicOverlap = Expect<Equal<keyof TopicOverlap, (typeof TOPIC_OVERLAP_FIELDS)[number]>>
+export type AssertTopicOverlaps = Expect<Equal<keyof TopicOverlaps, (typeof TOPIC_OVERLAPS_FIELDS)[number]>>
+
+export function getTopicOverlaps(init?: RequestInit): Promise<TopicOverlaps> {
+  return request<TopicOverlaps>('/api/explore/topic-overlaps', init)
 }
 
 export function getSource(sourceId: number, init?: RequestInit): Promise<Source> {

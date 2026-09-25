@@ -32,6 +32,13 @@ export interface TopicFilterProps {
   every?: string
   names?: Readonly<Record<string, string>>
   caveat?: string
+  /**
+   * How several chosen values combine (`B-72`). Offered only when two or more
+   * are chosen — with one, any and all are the same search — and only when
+   * the caller passes `onMatch`, since places have no such switch.
+   */
+  match?: 'any' | 'all'
+  onMatch?: (match: 'any' | 'all') => void
 }
 
 export function TopicFilter({
@@ -44,6 +51,8 @@ export function TopicFilter({
   every = 'every topic',
   names,
   caveat = 'Documents collected before topics were recorded are not included — narrowing here can hide material that is relevant.',
+  match = 'any',
+  onMatch,
 }: TopicFilterProps) {
   if (topics.length === 0) return null
 
@@ -77,6 +86,34 @@ export function TopicFilter({
             {names?.[topic] ?? topic}
           </button>
         ))}
+        {onMatch && active.length > 1 ? (
+          <span
+            role="radiogroup"
+            aria-label={`Match ${label.toLowerCase()}s`}
+            className="ml-2 inline-flex items-center gap-1.5"
+          >
+            <span className="font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
+              match
+            </span>
+            {(
+              [
+                ['any', 'any of these'],
+                ['all', 'all at once'],
+              ] as const
+            ).map(([value, text]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={match === value}
+                onClick={() => onMatch(value)}
+                className={chip(match === value)}
+              >
+                {text}
+              </button>
+            ))}
+          </span>
+        ) : null}
       </div>
 
       {active.length > 0 && unexamined ? (

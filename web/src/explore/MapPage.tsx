@@ -18,6 +18,7 @@ import { coloursOf, positionsOf, visibilityOf } from './map/geometry'
 import { SwatchChip, topicLabel } from './map/HoverCard'
 import { readPalette, type CanvasPalette } from './map/palette'
 import { Plot2D } from './map/Plot2D'
+import { TopicsScreen } from './map/TopicsScreen'
 import type { SceneHandle } from './map/Scene3D'
 
 /*
@@ -37,15 +38,26 @@ type Load =
   | { status: 'error'; message: string }
   | { status: 'ready'; map: CorpusMap }
 
-type Mode = 'areas' | 'points'
+type Mode = 'areas' | 'points' | 'topics'
 
 /** Right-click steering (P6-35); a test may pass none. */
 const STEERING = mapActions()
 
-/** `?view=points` opens the passage cloud; anything else is the areas. */
+/**
+ * `?view=points` opens the passage cloud, `?view=topics` the web of topics
+ * (`B-72`); anything else is the areas.
+ */
 export function modeFromSearch(search: string): Mode {
-  return new URLSearchParams(search).get('view') === 'points' ? 'points' : 'areas'
+  const view = new URLSearchParams(search).get('view')
+  return view === 'points' || view === 'topics' ? view : 'areas'
 }
+
+/** The Map sub-bar's views, in order, with the URL each one lives at. */
+export const MAP_VIEWS = [
+  ['areas', 'Areas', '/map'],
+  ['topics', 'Topics', '/map?view=topics'],
+  ['points', 'Passages in 3D', '/map?view=points'],
+] as const satisfies readonly (readonly [Mode, string, string])[]
 
 /**
  * The Map screen (task P6-34): the corpus as nested, named areas, with the
@@ -63,8 +75,8 @@ export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
 
   function choose(next: Mode) {
     const search = new URLSearchParams(window.location.search)
-    if (next === 'points') search.set('view', 'points')
-    else search.delete('view')
+    if (next === 'areas') search.delete('view')
+    else search.set('view', next)
     const query = search.toString()
     navigate(`/map${query ? `?${query}` : ''}`)
     setMode(next)
@@ -74,18 +86,13 @@ export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
     <Workspace>
       <nav
         aria-label="Map views"
-        className="flex h-11 shrink-0 items-center gap-[22px] border-b border-line bg-surface px-5"
+        className="flex h-11 shrink-0 items-center gap-4 overflow-x-auto whitespace-nowrap border-b border-line bg-surface px-4 sm:gap-[22px] sm:px-5"
       >
         <span className="font-mono text-[9.5px] uppercase tracking-[var(--tracking-label)] text-text-faint">Map</span>
-        {(
-          [
-            ['areas', 'Areas'],
-            ['points', 'Passages in 3D'],
-          ] as const
-        ).map(([value, label]) => (
+        {MAP_VIEWS.map(([value, label, href]) => (
           <a
             key={value}
-            href={value === 'points' ? '/map?view=points' : '/map'}
+            href={href}
             aria-current={mode === value ? 'page' : undefined}
             onClick={(event) => {
               if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
@@ -100,7 +107,9 @@ export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
           </a>
         ))}
       </nav>
-      {mode === 'areas' ? <AreasScreen actions={actions} /> : <PointsPage />}
+      {mode === 'areas' ? <AreasScreen actions={actions} /> : null}
+      {mode === 'topics' ? <TopicsScreen /> : null}
+      {mode === 'points' ? <PointsPage /> : null}
     </Workspace>
   )
 }
