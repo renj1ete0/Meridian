@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.143.1] — 2026-09-25
+
+### Changed
+
+- The Map calls its clusters **fields, subfields and themes** instead of regions,
+  areas and sub-areas: "area" read as geography, and the clusters are now named
+  by field of work (`B-74`). Wording only; `/map?view=areas`, `?area=` and the
+  API are unchanged, so old links keep working
+
 ## [0.143.0] — 2026-09-25
 
 ### Changed
