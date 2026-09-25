@@ -395,6 +395,20 @@ export function Settings({ theme, onTheme }: { theme: Theme; onTheme: (theme: Th
               ? 'Follows this machine. Dark is the flagship.'
               : `${THEME_LABEL[theme]}, whatever this machine is set to.`}
           </p>
+          {/* About is not a section, so it is not a tab: the nav is where the
+              work is, and this is where the system describes itself. */}
+          <div className="mt-4 border-t border-line pt-3">
+            <a
+              href="/about"
+              onClick={(event) => {
+                onInternalClick('/about')(event)
+                close()
+              }}
+              className="font-sans text-[12.5px] text-text-muted hover:text-text"
+            >
+              About {WORDMARK}
+            </a>
+          </div>
         </div>
       ) : null}
     </div>
