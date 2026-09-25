@@ -48,3 +48,19 @@ def test_furniture_never_becomes_a_term_at_build_time() -> None:
 
 def test_furniture_is_a_subset_of_the_stopwords() -> None:
     assert FURNITURE <= STOPWORDS
+
+
+def test_names_still_shared_carry_their_own_phrase() -> None:
+    from worker.areas import distinct_per_level
+
+    names = distinct_per_level(
+        [2, 2, 2, 1],
+        ["Transportation", "Transportation", "Law", "Transportation"],
+        [["fares", "transit"], ["arxiv", "vehicle safety"], ["court"], ["x"]],
+    )
+    assert names == [
+        "Transportation (fares)",
+        "Transportation (vehicle safety)",  # furniture skipped
+        "Law",
+        "Transportation",  # a different level: not a clash
+    ]

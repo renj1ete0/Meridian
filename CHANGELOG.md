@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.144.3] — 2026-09-25
+
+### Fixed
+
+- Map names are unique within each level, not only among siblings: clusters that
+  still land on one subfield carry their own best cleaned phrase —
+  "Transportation \& Urban Studies (transit)" beside "(fare)" — reported by the
+  operator as several fields with one name
+
 ## [0.144.2] — 2026-09-25
 
 ### Changed

@@ -151,3 +151,16 @@ def test_a_unique_name_gets_no_second_part() -> None:
         parents=[7, 7],
     )
     assert names == ["Transportation", "Oncology"]
+
+
+def test_names_are_told_apart_across_a_level_not_only_among_siblings() -> None:
+    names = assign(
+        [2, 2],
+        np.stack([unit(1, 0.1, 0.1), unit(1, 0.1, 0.4)]),
+        FIELDS,
+        FIELD_VECS,
+        [*SUBS, FieldLabel("Social Sciences", "Urban Studies")],
+        np.stack([unit(1, 0.2, 0), unit(0, 1, 0.2), unit(1, 0, 0.6)]),
+        parents=[1, 2],  # different parents
+    )
+    assert len(set(names)) == 2

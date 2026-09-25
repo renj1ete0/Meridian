@@ -164,7 +164,10 @@ def _told_apart(
     for i, name in enumerate(names):
         if name is None:
             continue
-        key = (levels[i], parents[i] if parents is not None and levels[i] != 1 else None)
+        # Across the whole level, not only among siblings: the operator reads
+        # one level of the map at a time, so two "Transportation" anywhere on
+        # it are one name too many.
+        key = (levels[i], None)
         groups.setdefault(key, {}).setdefault(name, []).append(i)
     out = list(names)
     for by_name in groups.values():

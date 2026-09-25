@@ -24,7 +24,7 @@ import numpy as np
 from sqlalchemy import select
 
 from meridian_core.areabuild import BuildReport, build_areas
-from meridian_core.areaview import area_name
+from meridian_core.areaview import area_name, usable_terms
 from meridian_core.db import dispose_engines, session
 from meridian_core.fields import FieldLabel, assign, load_fields
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
@@ -61,10 +61,46 @@ async def name_build(sess, build_id: int, embedder) -> int:
         parents=[index.get(a.parent_id) for a in areas],
         weights=[a.passages for a in areas],
     )
+    names = distinct_per_level([a.level for a in areas], names, [list(a.terms) for a in areas])
     for area, name in zip(areas, names, strict=True):
         area.field = name
     await sess.flush()
     return sum(1 for name in names if name)
+
+
+def distinct_per_level(
+    levels: list[int], names: list[str | None], terms: list[list[str]]
+) -> list[str | None]:
+    """Names unique within each level (`B-74`).
+
+    Several clusters can land on one subfield — a subject the corpus holds a
+    lot of splits into several — and even their second choices can agree. Those
+    that still share a name carry their own best phrase: "Transportation (fares
+    and transit)". The phrase is from the area's cleaned terms, so furniture
+    cannot reach it.
+    """
+    seen: dict[tuple[int, str], list[int]] = {}
+    for i, name in enumerate(names):
+        if name:
+            seen.setdefault((levels[i], name), []).append(i)
+    out = list(names)
+    for (_, name), members in seen.items():
+        if len(members) < 2:
+            continue
+        used: set[str] = set()
+        for i in members:
+            phrase = next(
+                (
+                    t
+                    for t in usable_terms(terms[i])[:5]
+                    if t.lower() not in name.lower() and t not in used
+                ),
+                None,
+            )
+            if phrase:
+                used.add(phrase)
+                out[i] = f"{name} ({phrase})"
+    return out
 
 
 async def _embedder():
