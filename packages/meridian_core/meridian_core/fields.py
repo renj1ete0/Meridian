@@ -85,6 +85,11 @@ def nearest(
     return best, sims[np.arange(len(best)), best]
 
 
+def _top2(sims_row: np.ndarray) -> tuple[int, int]:
+    order = np.argsort(-sims_row)
+    return int(order[0]), int(order[1]) if len(order) > 1 else int(order[0])
+
+
 def assign(
     levels: list[int],
     centroids: np.ndarray,
@@ -97,39 +102,76 @@ def assign(
     weights: list[int] | None = None,
     min_similarity: float = MIN_SIMILARITY,
 ) -> list[str | None]:
-    """The field name for each area, or None where nothing fits.
+    """The name for each area from the list, or None where nothing fits.
 
-    Deeper areas take the nearest subfield. A region takes the field most of
-    its subfields belong to, weighted by passages (``parents`` gives each
-    area's parent's index in these lists): there are too few regions to centre
-    on, and a region named apart from its own contents reads as a contradiction
-    one click down. A region with no named children falls back to the nearest
-    field.
+    Deeper areas take the nearest subfield. A region takes the subfield that
+    most of its passages' areas were given (``parents`` gives each area's
+    parent's index in these lists): there are too few regions to centre on,
+    and a region named apart from its own contents reads as a contradiction one
+    click down. A field ("Social Sciences") was tried first and named five of
+    twelve live regions alike. A region with no named children falls back to
+    the nearest field.
+
+    Siblings that would share a name are told apart by their second choice:
+    "Transportation & Urban Studies" (an ampersand, because many subfield names
+    already contain "and"). Every word still comes from the list.
     """
     out: list[str | None] = [None] * len(levels)
-    field_of = {label.subfield: label.field for label in subfield_labels}
+    second: list[str | None] = [None] * len(levels)
     deep = [i for i, level in enumerate(levels) if level != 1]
     if deep:
-        best, sims = nearest(centroids[deep], subfield_vecs)
-        for row, index, sim in zip(deep, best, sims, strict=True):
-            if sim >= min_similarity:
-                out[row] = subfield_labels[int(index)].name
+        if len(deep) > 1:
+            a, b = _centred(centroids[deep]), _centred(subfield_vecs)
+        else:
+            a = centroids[deep] / np.linalg.norm(centroids[deep], axis=1, keepdims=True)
+            b = subfield_vecs / np.linalg.norm(subfield_vecs, axis=1, keepdims=True)
+        sims = a @ b.T
+        for row, sims_row in zip(deep, sims, strict=True):
+            first, runner = _top2(sims_row)
+            if sims_row[first] >= min_similarity:
+                out[row] = subfield_labels[first].name
+                if runner != first:
+                    second[row] = subfield_labels[runner].name
 
     regions = [i for i, level in enumerate(levels) if level == 1]
     votes: dict[int, dict[str, int]] = {i: {} for i in regions}
     if parents is not None:
         for i, parent in enumerate(parents):
             if parent in votes and out[i] and levels[i] == 2:
-                field = field_of.get(out[i])
-                if field:
-                    weight = weights[i] if weights is not None else 1
-                    votes[parent][field] = votes[parent].get(field, 0) + weight
-    unvoted = [i for i in regions if not votes[i]]
+                weight = weights[i] if weights is not None else 1
+                votes[parent][out[i]] = votes[parent].get(out[i], 0) + weight
     for i in regions:
         if votes[i]:
-            out[i] = max(votes[i].items(), key=lambda kv: (kv[1], kv[0]))[0]
+            ranked = sorted(votes[i].items(), key=lambda kv: (-kv[1], kv[0]))
+            out[i] = ranked[0][0]
+            second[i] = ranked[1][0] if len(ranked) > 1 else None
+    unvoted = [i for i in regions if not votes[i]]
     if unvoted:
-        best, sims = nearest(centroids[unvoted], field_vecs, centre=len(unvoted) > 2)
-        for row, index, sim in zip(unvoted, best, sims, strict=True):
+        best, _ = nearest(centroids[unvoted], field_vecs, centre=len(unvoted) > 2)
+        for row, index in zip(unvoted, best, strict=True):
             out[row] = field_labels[int(index)].name
+
+    return _told_apart(out, second, levels, parents)
+
+
+def _told_apart(
+    names: list[str | None],
+    second: list[str | None],
+    levels: list[int],
+    parents: list[int | None] | None,
+) -> list[str | None]:
+    groups: dict[tuple[int, int | None], dict[str, list[int]]] = {}
+    for i, name in enumerate(names):
+        if name is None:
+            continue
+        key = (levels[i], parents[i] if parents is not None and levels[i] != 1 else None)
+        groups.setdefault(key, {}).setdefault(name, []).append(i)
+    out = list(names)
+    for by_name in groups.values():
+        for name, members in by_name.items():
+            if len(members) < 2:
+                continue
+            for i in members:
+                if second[i] and second[i] != name:
+                    out[i] = f"{name} & {second[i]}"
     return out

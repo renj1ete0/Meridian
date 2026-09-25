@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.144.2] — 2026-09-25
+
+### Changed
+
+- `B-74` follow-up: a region is named by the subfield most of its passages' areas
+  were given — the field ("Social Sciences") named five of twelve live regions
+  alike — and siblings that would share a name are told apart by their second
+  choice ("Transportation & Urban Studies"). Every word still comes from the list
+
 ## [0.144.1] — 2026-09-25
 
 ### Fixed
