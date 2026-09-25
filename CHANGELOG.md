@@ -68,6 +68,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.144.0] — 2026-09-25
+
+### Changed
+
+- `B-75`: the first embedding tier (directed sources and on-topic hosts) is
+  served newest first. Labels, host judgments and steering all wait on a
+  vector, and oldest-first left a window's own passages hours behind, so no
+  run could measure its own on-topic yield. The other tiers stay oldest first;
+  a failed batch is stepped past by id rather than retried in the same pass
+- `B-74` follow-up: field names are matched after centring both the area
+  centroids and the label vectors — raw matching let one generic clinical
+  subfield name five of twelve live regions — and a region takes the field most
+  of its subfields belong to, weighted by passages, so a region and its
+  contents agree. Hyphenated licence strings (`by-nc-nd`, `cc-by`) join the
+  furniture list
+
 ## [0.143.1] — 2026-09-25
 
 ### Changed

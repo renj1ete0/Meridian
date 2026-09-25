@@ -293,3 +293,62 @@ async def test_the_tier_query_still_pages_by_id(sess) -> None:
     chunks = await page(sess, url, chunks=3)
     got = await chunks_without_embeddings(sess, limit=10, after_id=chunks[0].chunk_id, tier="first")
     assert [c.chunk_id for c in got] == [c.chunk_id for c in chunks[1:]]
+
+
+# --------------------------------------------------------------------------
+# Newest first, in the first tier only (`B-75`)
+# --------------------------------------------------------------------------
+
+
+async def test_the_first_tier_is_served_newest_first(sess) -> None:
+    """What a crawl just fetched is what its labels and host judgments wait on."""
+    older_url, newer_url = f"https://{host()}/old", f"https://{host()}/new"
+    await queued(sess, older_url, "search")
+    await queued(sess, newer_url, "search")
+    (older,) = await page(sess, older_url)
+    (newer,) = await page(sess, newer_url)
+
+    await backfill(sess, older, batch_size=1, max_batches=1).run_once()
+    await sess.refresh(older)
+    await sess.refresh(newer)
+
+    assert newer.embedding is not None and older.embedding is None
+
+
+async def test_the_other_tiers_stay_oldest_first(sess) -> None:
+    (older,) = await page(sess, f"https://{host()}/a")
+    (newer,) = await page(sess, f"https://{host()}/b")
+
+    await backfill(sess, older, batch_size=1, max_batches=1).run_once()
+    await sess.refresh(older)
+    await sess.refresh(newer)
+
+    assert older.embedding is not None and newer.embedding is None
+
+
+async def test_a_failing_first_tier_batch_is_stepped_past_not_retried_forever(sess) -> None:
+    from worker.embeddings import EmbeddingError
+
+    bad_url, good_url = f"https://{host()}/bad", f"https://{host()}/good"
+    await queued(sess, good_url, "search")
+    await queued(sess, bad_url, "search")
+    (good,) = await page(sess, good_url)
+    (bad,) = await page(sess, bad_url)  # newest: tried first
+    seen: list[str] = []
+
+    class FailsOnce:
+        async def embed(self, texts):
+            seen.extend(texts)
+            if len(seen) == 1:
+                raise EmbeddingError("model fell over")
+            return await LocalEmbedder(FakeEmbedder()).embed(texts)
+
+    fill = backfill(sess, good, batch_size=1, max_batches=4)
+    fill._embedder = FailsOnce()
+    stats = await fill.run_once()
+    await sess.refresh(good)
+    await sess.refresh(bad)
+
+    assert stats.failed_batches == 1
+    assert good.embedding is not None and bad.embedding is None
+    assert seen.count(seen[0]) == 1, "the failed batch came round again in the same pass"

@@ -25,16 +25,54 @@ SUBS = [FieldLabel("Social Sciences", "Transportation"), FieldLabel("Medicine", 
 SUB_VECS = np.stack([unit(1, 0.2, 0), unit(0, 1, 0.2)])
 
 
-def test_regions_take_fields_and_deeper_areas_subfields() -> None:
-    centroids = np.stack([unit(1, 0.1, 0), unit(1, 0.1, 0), unit(0.1, 1, 0)])
-    names = assign([1, 2, 3], centroids, FIELDS, FIELD_VECS, SUBS, SUB_VECS)
+def test_deeper_areas_take_subfields_and_regions_the_field_of_their_children() -> None:
+    centroids = np.stack([unit(0.2, 0.2, 1), unit(1, 0.1, 0), unit(0.1, 1, 0)])
+    names = assign(
+        [1, 2, 2],
+        centroids,
+        FIELDS,
+        FIELD_VECS,
+        SUBS,
+        SUB_VECS,
+        parents=[None, 0, 0],
+        weights=[0, 30, 10],
+    )
+    # The region follows its larger child, not its own centroid.
     assert names == ["Social Sciences", "Transportation", "Oncology"]
 
 
+def test_a_region_without_named_children_falls_back_to_the_nearest_field() -> None:
+    names = assign([1], np.stack([unit(0.1, 1, 0)]), FIELDS, FIELD_VECS, SUBS, SUB_VECS)
+    assert names == ["Medicine"]
+
+
 def test_a_poor_fit_is_not_forced() -> None:
-    """Orthogonal to every label: better named by its terms than by a guess."""
-    names = assign([2], np.stack([unit(0, 0, 1)]), FIELDS, FIELD_VECS, SUBS, SUB_VECS)
-    assert names == [None]
+    names = assign(
+        [2, 2],
+        np.stack([unit(1, 0.1, 0), unit(0, 0.1, 1)]),
+        FIELDS,
+        FIELD_VECS,
+        SUBS,
+        SUB_VECS,
+        min_similarity=0.9,
+    )
+    assert names[1] is None
+
+
+def test_a_label_near_everything_does_not_name_everything() -> None:
+    """The live failure: one generic subfield sat near the middle of the space
+    and named most regions. Centring removes the shared direction first."""
+    hub = FieldLabel("Medicine", "Nursing")
+    subs = [*SUBS, hub]
+    # Every centroid shares one strong direction (the third axis), and the hub
+    # label lies along it, so in raw cosine terms it is nearest to all of them.
+    vecs = np.stack([unit(1, 0.2, 0), unit(0, 1, 0.2), unit(0, 0, 1)])
+    centroids = np.stack([unit(1, 0, 3), unit(0, 1, 3), unit(1, 1, 3)])
+    raw_best, _ = nearest(centroids, vecs, centre=False)
+    names = assign([2, 2, 2], centroids, FIELDS, FIELD_VECS, subs, vecs, min_similarity=-1)
+    assert [subs[i].name for i in raw_best] == ["Nursing"] * 3
+    assert "Nursing" not in names
+    assert names[:2] == ["Transportation", "Oncology"]
 
 
 def test_every_name_comes_from_the_list() -> None:
@@ -46,7 +84,7 @@ def test_every_name_comes_from_the_list() -> None:
 
 
 def test_nearest_is_by_direction_not_length() -> None:
-    best, sims = nearest(np.stack([np.array([10.0, 0.5, 0])]), FIELD_VECS)
+    best, sims = nearest(np.stack([np.array([10.0, 0.5, 0])]), FIELD_VECS, centre=False)
     assert best.tolist() == [0] and sims[0] == pytest.approx(0.9988, abs=1e-3)
 
 

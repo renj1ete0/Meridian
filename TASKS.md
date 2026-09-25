@@ -21,14 +21,24 @@ against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-24, end of session)
 
-> **Live state, 2026-09-25 15:05 (+08):** optimisation loop run 3 (the real `B-61`
-> test, 2h) is running on `v0.140.3` (`B-66` embed by value). For this window only
-> the worker was recreated with `MERIDIAN_WORKER_MAX_EMBED_BACKLOG=200000`; at the
-> default the crawl would sit paused behind the backlog for most of a day. **When the
-> window closes, recreate the worker from a shell without that variable** so it
-> returns to 20000. Topic descriptions and the off-topic demotion (both decided
-> 2026-09-25) were applied before the window; see
-> `meridian-calibration/loop/run2/steering.md`.
+> **Live state, 2026-09-25 evening (+08).** Optimisation loop, runs 3 and 4 (2h each,
+> backpressure ceiling lifted to 200k for each window only, restored to 20000 after;
+> notes in `meridian-calibration/loop/run3`, `run4`):
+> - **Run 3** (`v0.140.3`) was not a material improvement: one topic got no page fetches
+>   because its top-ranked rows were cited-paper DOIs (fixed, `B-68`), and throttled
+>   lookups were written off (fixed, `B-67`; 858 revived).
+> - **Run 4** (`v0.140.6`) was: that topic took its share of page fetches, search and
+>   directed work rose, the throttle cooldown held. The loop continues; run 3 is the only
+>   run without improvement so far.
+> - **Embedder finding:** on this CPU a smaller batch is faster (1 → 119/min, 8 → 99,
+>   32 → 67); the embedder now uses 1 on a CPU and sizes by memory only on an accelerator.
+> - **Next:** `B-75` (first embedding tier newest first, so a run can measure its own
+>   on-topic yield — built, deploying), then a per-host pace for hosts judged on-topic at a
+>   low share. A Semantic Scholar key (operator) would clear most deferred DOI lookups.
+> - Also on 2026-09-25, from the operator's review of the UI: titles cleaned (`B-69`),
+>   gazetteer types (`B-70`), Map clusters named by field of work and called fields
+>   (`B-71`, `B-74`), a topic web on the Map (`B-72`), saved views with topics (`B-73`),
+>   About and Matrix views. Unbuilt screens and their blockers: `P6-40`'s audit note.
 
 **What changed on 2026-09-24, and why.** An audit of what the corpus actually
 holds found the crawl had drifted: nearly everything fetched came from following
@@ -1402,6 +1412,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-75` **The first embedding tier newest first** — found closing loop run 4: new sources
+      are labelled only once embedded, and the window's passages queued behind older
+      first-tier ones, so no run could measure its own on-topic yield. The other tiers stay
+      oldest first; a failed batch is stepped past by id
 - [x] `B-74` **Area names aligned to fields of work** — `v0.143.0`. The operator: "align to
       fields of work", after licence strings ("bync", "free article") still named areas.
       Named by the nearest OpenAlex field/subfield (`config/fields.yaml`) by centroid;

@@ -50,6 +50,7 @@ async def name_build(sess, build_id: int, embedder) -> int:
     areas = list(await sess.scalars(select(Area).where(Area.build_id == build_id)))
     if not areas:
         return 0
+    index = {a.area_id: i for i, a in enumerate(areas)}
     names = assign(
         [a.level for a in areas],
         np.asarray([a.centroid for a in areas], dtype=np.float64),
@@ -57,6 +58,8 @@ async def name_build(sess, build_id: int, embedder) -> int:
         field_vecs,
         subfields,
         subfield_vecs,
+        parents=[index.get(a.parent_id) for a in areas],
+        weights=[a.passages for a in areas],
     )
     for area, name in zip(areas, names, strict=True):
         area.field = name

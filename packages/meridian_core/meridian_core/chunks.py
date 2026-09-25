@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy import text as sql_text
@@ -255,6 +255,10 @@ def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
 #: not junk; ``last`` — hosts judged off-topic. Junk is in no tier.
 EMBED_TIERS = ("first", "then", "last")
 
+#: The tier served newest first (`B-75`); the others go oldest first.
+NEWEST_FIRST_TIER = "first"
+
+
 def _host_of(url_column):
     """`boilerplate.host_key` in SQL: lower-case host, port and a leading www. dropped."""
     host = func.split_part(func.split_part(url_column, "://", 2), "/", 1)
@@ -296,7 +300,13 @@ def embed_tier(tier: str):
 
 
 async def chunks_without_embeddings(
-    sess: AsyncSession, *, limit: int = 256, after_id: int = 0, tier: str | None = None
+    sess: AsyncSession,
+    *,
+    limit: int = 256,
+    after_id: int = 0,
+    tier: str | None = None,
+    newest_first: bool = False,
+    exclude: Collection[int] = (),
 ) -> list[Chunk]:
     """The next batch of chunks that have no vector yet (task `P2-01`).
 
@@ -313,6 +323,11 @@ async def chunks_without_embeddings(
     embedder is the slowest stage on modest hardware, so under a free crawl its
     backlog is permanent, and oldest-first spends it on whatever the crawl
     happened to fetch first. Junk is in no tier and is never embedded.
+
+    ``newest_first`` (`B-75`) takes the highest ids, still above ``after_id``:
+    labels, host judgments and steering all wait on a vector, so the passages
+    a crawl just fetched are the ones whose embedding tells it something. With
+    no advancing cursor, ``exclude`` is how a failed batch is stepped past.
     """
     stmt = (
         select(Chunk)
@@ -323,9 +338,11 @@ async def chunks_without_embeddings(
             Chunk.superseded_at.is_(None),
             Chunk.chunk_id > after_id,
         )
-        .order_by(Chunk.chunk_id)
+        .order_by(Chunk.chunk_id.desc() if newest_first else Chunk.chunk_id)
         .limit(limit)
     )
+    if exclude:
+        stmt = stmt.where(Chunk.chunk_id.not_in(list(exclude)))
     if tier is not None:
         stmt = stmt.join(Source, Source.source_id == Chunk.source_id).where(embed_tier(tier))
     rows = await sess.execute(stmt)

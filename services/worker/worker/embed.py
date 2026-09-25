@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.chunks import (
     EMBED_TIERS,
+    NEWEST_FIRST_TIER,
     chunks_without_embeddings,
     embedding_backlog,
     store_embeddings,
@@ -136,6 +137,10 @@ class Backfill:
         # brings in mid-pass go ahead of the off-topic tail already queued.
         cursors = dict.fromkeys(EMBED_TIERS, self._start_after)
         after_id = self._start_after
+        # `B-75`: the first tier newest first, so what a crawl just fetched is
+        # labelled while it can still steer the crawl. No cursor — embedded
+        # rows leave the queue — so a failed batch is stepped past by id.
+        failed: set[int] = set()
 
         while not self._stopping.is_set():
             # Before the batch, not after it (`B-28`). A batch is minutes of
@@ -149,8 +154,14 @@ class Backfill:
             async with self._session_factory() as sess:
                 chunks, tier = [], None
                 for tier in EMBED_TIERS:
+                    newest = tier == NEWEST_FIRST_TIER
                     chunks = await chunks_without_embeddings(
-                        sess, limit=self._batch_size, after_id=cursors[tier], tier=tier
+                        sess,
+                        limit=self._batch_size,
+                        after_id=self._start_after if newest else cursors[tier],
+                        tier=tier,
+                        newest_first=newest,
+                        exclude=failed if newest else (),
                     )
                     if chunks:
                         break
@@ -163,7 +174,10 @@ class Backfill:
                 # URLs carry no meaning and were one character in eight.
                 batch = [(chunk.chunk_id, embedding_view(chunk.text)) for chunk in chunks]
 
-            after_id = cursors[tier] = batch[-1][0]
+            if tier == NEWEST_FIRST_TIER:
+                after_id = batch[0][0]
+            else:
+                after_id = cursors[tier] = batch[-1][0]
             stats.batches += 1
 
             try:
@@ -174,6 +188,7 @@ class Backfill:
                 vectors = await self._embedder.embed([text for _, text in batch])
             except (EmbeddingError, ValueError):
                 stats.failed_batches += 1
+                failed.update(chunk_id for chunk_id, _ in batch)
                 log.exception(
                     "could not embed a batch; leaving it for a later pass",
                     extra={"chunks": len(batch), "after_id": after_id},

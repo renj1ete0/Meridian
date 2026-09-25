@@ -13,6 +13,18 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-25 evening — the optimisation loop and what it found.** Runs 3 and 4 (2h each)
+> tested the directed claim share (`B-61`) and embedding by value (`B-66`). Run 3 found
+> that a cited-paper DOI outranking every page let one topic spend its whole crawl share on
+> lookups (`B-68`: the ordinary draw now claims pages only; lookups alternate with search
+> results in the directed slot), and that three quick throttled retries wrote papers off
+> (`B-67`: providers cool; throttled DOIs retry after the cooldown). Run 4 confirmed both.
+> Traps: *labels wait on embedding*, so in-window on-topic yield is unmeasurable unless the
+> first tier is served newest first (`B-75`); *on a CPU a bigger embedding batch is
+> slower*, so do not raise `MERIDIAN_EMBED_BATCH_SIZE` there; a window's throughput is not
+> comparable when image builds or test suites share the CPU.
+
+
 **Three delegated agents** worked concurrently on the connection screens, each
 in its own worktree under `.claude/worktrees/` with its own Postgres (compose
 projects `meridian-map`, `meridian-find`, `meridian-gaps` on ports 21121,

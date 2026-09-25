@@ -48,7 +48,8 @@ _FURNITURE_TEXT = """nan null none arxiv doi isbn issn title abstract volume vol
     et al ibid journal proceedings conference university press author authors editor
     submitted revised accepted published version download view full text cite citation
     references bync byncnd byncsa ccby cc nc nd sa creative commons free article articles
-    open access pubmed medline epub print ahead reprint permissions"""
+    open access pubmed medline epub print ahead reprint permissions by-nc by-nc-nd by-nc-sa
+    by-sa by-nd cc-by cc-by-nc"""
 FURNITURE = frozenset(_FURNITURE_TEXT.split())
 
 STOPWORDS = frozenset(_STOP_TEXT.split()) | FURNITURE
