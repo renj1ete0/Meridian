@@ -28,7 +28,8 @@ against a real Postgres, 616 frontend.
 > `v0.144.3`: committed; the live map carries its names but the images are not rebuilt —
 > rebuild and deploy first. Two agent branches hold work in progress, committed at
 > shutdown (check `git branch --list 'worktree-agent-*'`): the Map's **semantic zoom**
-> (level control, bubbles splitting between levels) and the **`P6-41` answer page**
+> (level control, bubbles splitting between levels — working and screenshot-checked, its own
+> tests not yet written) and the **`P6-41` answer page** (complete, tests pass, needs screenshots)
 > (`/api/explore/answer`, Find's Answer view, "Find more"). Review, finish, merge, bump,
 > deploy — neither is merged.
 >
