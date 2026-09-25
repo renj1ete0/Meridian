@@ -529,7 +529,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       **never** `primary`. Verified against a real crawled corpus: it found the
       boilerplate a site repeats under every URL, at similarity 1.0, and
       demoted nothing
-- [~] `P2-04` pgvector HNSW index; measure recall and latency at corpus size —
+- [x] `P2-04` pgvector HNSW index; measure recall and latency at corpus size — — **measured on the live corpus 2026-09-25 (under crawl load): HNSW recall@10 ≈ 0.97 at every ef_search tried; vector p50 ≈ 25 ms; the lexical arm is the slow one (p50 ≈ 0.26 s, p95 ≈ 0.44 s) and dominates hybrid latency — watch it as the corpus grows (`B-65`)**
       **index built in v0.30.0, measurement outstanding.** `vector_cosine_ops`,
       matching the operator everything here already uses; an index built for
       another operator class is not slower, it is unused, and the planner
@@ -1365,6 +1365,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       proposes cutting exactly the topics the crawl is doing well on (first live
       pass: both of its cuts were productive topics; the lead rejected them). Judge
       efficiency, on-topic yield per fetch, not yield against weight
+- [ ] `B-65` **The lexical arm is the slow half of search** — measured at corpus size
+      it is roughly ten times slower than the vector arm and sets hybrid latency;
+      look at the GIN index usage and `ts_rank_cd` over large candidate sets before
+      the corpus grows further
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
