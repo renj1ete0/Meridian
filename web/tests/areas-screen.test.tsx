@@ -67,7 +67,7 @@ function respond(body: unknown) {
 describe('an empty map', () => {
   it('says what it is waiting for rather than drawing nothing', () => {
     render(<AreasView level={level({ build: null, areas: [] })} onLevel={() => {}} />)
-    expect(screen.getByText('No areas yet')).toBeTruthy()
+    expect(screen.getByText('No fields yet')).toBeTruthy()
     expect(screen.getByText(/at least 20 of them/)).toBeTruthy()
   })
 })
@@ -106,7 +106,7 @@ describe('areas on the canvas', () => {
     )
     fireEvent.click(container.querySelector('[data-area="9"]')!)
     expect(onLevel).not.toHaveBeenCalled()
-    const panel = await screen.findByRole('complementary', { name: 'Area' })
+    const panel = await screen.findByRole('complementary', { name: 'Field' })
     await waitFor(() => expect(within(panel).getByText(/a passage/)).toBeTruthy())
   })
 
@@ -163,7 +163,7 @@ describe('the bridge panel', () => {
     const panel = await screen.findByRole('complementary', { name: 'Bridge' })
     await waitFor(() => expect(within(panel).getByText('shelters')).toBeTruthy())
     expect(within(panel).getByText('claim · cited')).toBeTruthy()
-    expect(within(panel).getByText('Terms both areas share')).toBeTruthy()
+    expect(within(panel).getByText('Terms both fields share')).toBeTruthy()
     expect(within(panel).getByText('Similar passages across the two')).toBeTruthy()
     expect(within(panel).getByText('cosine 0.81')).toBeTruthy()
   })
@@ -230,8 +230,10 @@ describe('inside a region', () => {
       />,
     )
     expect(screen.getByRole('navigation', { name: 'Where you are' }).textContent).toContain('rule · court · party')
-    expect(screen.getByText(/Areas are clusters of passages/)).toBeTruthy()
-    expect(screen.getByText('Areas in this region')).toBeTruthy()
+    expect(screen.getByText(/Fields are clusters of passages/)).toBeTruthy()
+    expect(screen.getByText('Subfields in this field')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'All fields' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Fields of the corpus' })).toBeTruthy()
   })
 })
 
@@ -263,7 +265,7 @@ describe('jumping to an area or a term', () => {
     vi.stubGlobal('fetch', fetchMock)
     const onLevel = vi.fn()
     const { rerender } = render(<AreasView level={level()} onLevel={onLevel} />)
-    fireEvent.change(screen.getByLabelText('Jump to an area or a term'), { target: { value: 'enzyme' } })
+    fireEvent.change(screen.getByLabelText('Jump to a field or a term'), { target: { value: 'enzyme' } })
     fireEvent.submit(screen.getByRole('search'))
     const hit = await screen.findByRole('button', { name: /enzyme · protein · folding/ })
     expect(hit.textContent).toContain('in r › a')
@@ -274,7 +276,7 @@ describe('jumping to an area or a term', () => {
     rerender(
       <AreasView level={level({ level: 3, parent: area({ area_id: 7, level: 2 }), areas: [leaf] })} onLevel={onLevel} />,
     )
-    expect(await screen.findByRole('complementary', { name: 'Area' })).toBeTruthy()
+    expect(await screen.findByRole('complementary', { name: 'Field' })).toBeTruthy()
   })
 })
 

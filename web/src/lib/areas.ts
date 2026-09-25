@@ -449,16 +449,27 @@ export function labelLines(name: string, maxChars = 26): string[] {
   return [lines[0]!, `${lines[1]!}…`]
 }
 
-/** "Level 2 of 3 · 7 areas in this region" and the like. */
+/**
+ * What a person calls a cluster at a level: a field, then the subfields
+ * inside it, then the themes inside those. The API and the URL still say
+ * "area"; only the words on screen changed, so old links keep working.
+ */
+export function levelNoun(level: number, count = 1): string {
+  const noun = level <= 1 ? 'field' : level === 2 ? 'subfield' : 'theme'
+  return count === 1 ? noun : `${noun}s`
+}
+
+/** "Engineering · level 2 of 3 · 7 subfields" and the like. */
 export function levelCaption(level: AreasLevel): string {
-  const noun = level.level === 1 ? 'regions' : level.level === level.levels ? 'sub-areas' : 'areas'
   const count = level.areas.length
   if (level.parent === null) {
     const build = level.build
-    const inside = build ? ` · ${build.areas.toLocaleString('en')} areas in ${build.regions} regions` : ''
-    return `All areas · level 1 of ${level.levels}${inside}`
+    const inside = build
+      ? ` · ${build.areas.toLocaleString('en')} ${levelNoun(2, build.areas)} in ${build.regions} ${levelNoun(1, build.regions)}`
+      : ''
+    return `All fields · level 1 of ${level.levels}${inside}`
   }
-  return `${level.parent.name} · level ${level.level} of ${level.levels} · ${count} ${count === 1 ? noun.replace(/s$/, '') : noun}`
+  return `${level.parent.name} · level ${level.level} of ${level.levels} · ${count} ${levelNoun(level.level, count)}`
 }
 
 // --------------------------------------------------------------------------

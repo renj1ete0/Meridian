@@ -130,7 +130,7 @@ export const SOURCE_NAMES: Record<string, string> = {
   'search-queries': 'search queries',
   'search-results': 'search results',
   'question-set': 'question set',
-  areas: 'areas',
+  areas: 'fields',
   routes: 'routes',
 }
 

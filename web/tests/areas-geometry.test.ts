@@ -11,6 +11,7 @@ import {
   fitRadius,
   labelLines,
   levelCaption,
+  levelNoun,
   linkWidth,
   niceBelow,
   placeAreas,
@@ -140,11 +141,22 @@ describe('links and labels', () => {
       stale_after_days: 180,
       weak_below_sources: 3,
     }
-    expect(levelCaption(base)).toBe('All areas · level 1 of 3 · 30 areas in 8 regions')
+    expect(levelCaption(base)).toBe('All fields · level 1 of 3 · 30 subfields in 8 fields')
     expect(levelCaption({ ...base, level: 2, parent: area({ name: 'x · y' }) })).toBe(
-      'x · y · level 2 of 3 · 2 areas',
+      'x · y · level 2 of 3 · 2 subfields',
     )
-    expect(levelCaption({ ...base, level: 3, parent: area(), areas: [area()] })).toContain('1 sub-area')
+    expect(levelCaption({ ...base, level: 3, parent: area(), areas: [area()] })).toMatch(/ · 1 theme$/)
+    expect(levelCaption({ ...base, level: 3, parent: area() })).toMatch(/ · 2 themes$/)
+    // One of each counts in the singular, the old geography words are gone.
+    const single = levelCaption({ ...base, build: { ...base.build!, regions: 1, areas: 1 } })
+    expect(single).toBe('All fields · level 1 of 3 · 1 subfield in 1 field')
+    expect(single).not.toMatch(/area|region/)
+  })
+
+  it('names each level as a person would: field, subfield, theme', () => {
+    expect([1, 2, 3].map((n) => levelNoun(n))).toEqual(['field', 'subfield', 'theme'])
+    expect([1, 2, 3].map((n) => levelNoun(n, 0))).toEqual(['fields', 'subfields', 'themes'])
+    expect(levelNoun(4, 5)).toBe('themes')
   })
 })
 
