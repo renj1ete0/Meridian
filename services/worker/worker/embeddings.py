@@ -60,14 +60,21 @@ DEFAULT_MAX_TOKENS = 1024
 
 # -- sizing the batch at startup (`MERIDIAN_EMBED_BATCH_SIZE` still wins) --------
 
-#: Resident size of the loaded model, which a batch must leave room for.
+#: On a CPU, one passage at a time. Measured on a 24-thread x86 machine, bge-m3
+#: at 1 → 119 passages/min, 2 → 113, 4 → 106, 8 → 99, 16 → 78, 32 → 67, 64 → 51:
+#: a batch pads every passage to its longest, and a CPU gains nothing from the
+#: grouping that would pay for the padding. Memory is not the constraint there.
+CPU_BATCH_SIZE = 1
+
+#: On an accelerator the batch *is* the speed, so it is sized to memory. Resident
+#: size of the loaded model, which a batch must leave room for ...
 MODEL_BYTES = int(2.5 * 2**30)
-#: Peak memory one passage of ``DEFAULT_MAX_TOKENS`` adds to a batch.
-BYTES_PER_ITEM = 150 * 2**20
-#: The share of what is left after the model that batches may use. The rest is
-#: for the crawl, Postgres and the page cache on a machine that runs them all.
+#: ... peak memory one passage of ``DEFAULT_MAX_TOKENS`` adds (measured on CPU at
+#: about 50 MB; doubled, since an accelerator's allocator is less forgiving) ...
+BYTES_PER_ITEM = 100 * 2**20
+#: ... the share of what is left after the model that batches may use ...
 MEMORY_SHARE = 0.25
-#: Above this a larger batch stopped being faster on CPU; memory keeps growing.
+#: ... and a cap, not yet measured on an accelerator this project has run.
 MAX_AUTO_BATCH = 32
 
 
@@ -104,8 +111,25 @@ def visible_memory() -> int | None:
     return min(found) if found else None
 
 
+def on_accelerator(device: str | None) -> bool:
+    """Whether the model will run on something other than the CPU.
+
+    An explicit device says so; left to the library, it is whatever
+    sentence-transformers would pick, which is CUDA or MPS when present. Without
+    torch installed nothing embeds here at all, and a CPU answer is harmless.
+    """
+    if device is not None:
+        return device.split(":", 1)[0].lower() != "cpu"
+    try:
+        import torch
+    except ImportError:
+        return False
+    mps = getattr(torch.backends, "mps", None)
+    return bool(torch.cuda.is_available() or (mps is not None and mps.is_available()))
+
+
 def auto_batch_size(memory: int | None, *, max_tokens: int = DEFAULT_MAX_TOKENS) -> int:
-    """The largest power-of-two batch that fits, capped where speed stops improving.
+    """On an accelerator, the largest power-of-two batch that fits, capped.
 
     Attention memory grows with the square of the sequence, so a lower token cap
     fits more passages. Unknown memory gets the Pi's default rather than a guess.
@@ -158,9 +182,13 @@ class EmbedderSettings:
     @classmethod
     def from_env(cls) -> EmbedderSettings:
         max_tokens = _int_env("MERIDIAN_EMBED_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+        device = os.environ.get("MERIDIAN_EMBED_DEVICE") or None
         explicit = _int_env("MERIDIAN_EMBED_BATCH_SIZE", 0)
         if explicit:
             batch_size = explicit
+        elif not on_accelerator(device):
+            batch_size = CPU_BATCH_SIZE
+            log.info("embedding batch sized for a CPU", extra={"batch_size": batch_size})
         else:
             memory = visible_memory()
             batch_size = auto_batch_size(memory, max_tokens=max_tokens)
@@ -176,7 +204,7 @@ class EmbedderSettings:
             batch_size=batch_size,
             max_tokens=max_tokens,
             cache_dir=os.environ.get("MERIDIAN_EMBED_CACHE") or None,
-            device=os.environ.get("MERIDIAN_EMBED_DEVICE") or None,
+            device=device,
         )
 
 

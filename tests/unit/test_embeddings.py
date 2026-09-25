@@ -355,10 +355,34 @@ def test_an_explicit_batch_size_wins_over_the_memory(monkeypatch) -> None:
     assert EmbedderSettings.from_env().batch_size == 3
 
 
-def test_without_a_setting_the_batch_is_sized_from_memory(monkeypatch) -> None:
+def test_on_an_accelerator_the_batch_is_sized_from_memory(monkeypatch) -> None:
     monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
+    monkeypatch.setenv("MERIDIAN_EMBED_DEVICE", "cuda")
     monkeypatch.setattr(embeddings, "visible_memory", lambda: 16 * GIB)
     assert EmbedderSettings.from_env().batch_size == embeddings.auto_batch_size(16 * GIB)
+
+
+@pytest.mark.parametrize("device", ["cpu", "CPU", "cpu:0"])
+def test_on_a_cpu_the_batch_is_one_however_much_memory(monkeypatch, device) -> None:
+    """Measured: on a CPU every step up from one passage was slower."""
+    monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
+    monkeypatch.setenv("MERIDIAN_EMBED_DEVICE", device)
+    monkeypatch.setattr(embeddings, "visible_memory", lambda: 512 * GIB)
+    assert EmbedderSettings.from_env().batch_size == embeddings.CPU_BATCH_SIZE == 1
+
+
+def test_an_unset_device_without_an_accelerator_is_a_cpu(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
+    monkeypatch.delenv("MERIDIAN_EMBED_DEVICE", raising=False)
+    monkeypatch.setattr(embeddings, "on_accelerator", lambda device: False)
+    assert EmbedderSettings.from_env().batch_size == embeddings.CPU_BATCH_SIZE
+
+
+@pytest.mark.parametrize(
+    ("device", "expected"), [("cuda", True), ("cuda:1", True), ("mps", True), ("cpu", False)]
+)
+def test_an_explicit_device_decides_without_asking_torch(device, expected) -> None:
+    assert embeddings.on_accelerator(device) is expected
 
 
 def test_unreadable_memory_gets_the_pi_default() -> None:
@@ -367,8 +391,8 @@ def test_unreadable_memory_gets_the_pi_default() -> None:
 
 @pytest.mark.parametrize(
     ("gib", "batch"),
-    # The §3 board keeps what it was hand-sized to; a small box still embeds.
-    [(1, 1), (2, 1), (8, 8), (16, 16), (93, embeddings.MAX_AUTO_BATCH)],
+    # A small accelerator box still embeds; the cap holds on a large one.
+    [(1, 1), (2, 1), (8, 8), (16, 32), (93, embeddings.MAX_AUTO_BATCH)],
 )
 def test_known_machines_get_known_batches(gib: int, batch: int) -> None:
     assert embeddings.auto_batch_size(gib * GIB) == batch

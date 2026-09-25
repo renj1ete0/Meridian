@@ -194,6 +194,11 @@ ENGLISH_ALTERNATE_BONUS = 10
 #: is whatever a page carried. At the same tier the answer goes first.
 SEARCH_RESULT_BONUS = 5
 
+#: Task types that look something up rather than fetch a page (`B-68`). They are
+#: claimed in their own turn of the directed slot and never in a topic's
+#: ordinary draw, which is for pages.
+LOOKUP_TASK_TYPES = frozenset({"doi"})
+
 #: Retries for a DOI held back only by a throttled provider (`B-67`). Each waits
 #: out the provider's cooldown, which doubles to half an hour, so this spans
 #: hours rather than the seconds the ordinary budget spans.
@@ -449,6 +454,7 @@ class Worker:
         self._hosts = hosts
         self._stopping = asyncio.Event()
         self._claims = 0
+        self._directed_claims = 0
         self._backlog_checked = -1e9
         self._paused = False
         self._stats = WorkerStats()
@@ -676,25 +682,38 @@ class Worker:
                 # vector as any claim so it never spends a topic's share outside
                 # the pool. Falls through to the ordinary draw when nothing
                 # directed is waiting, so the slot is never idle.
-                pool = dict(shares)
-                while pool:
-                    topic = draw_topic(pool)
-                    if topic is None:
-                        break
-                    claim = await self._claim_within(sess, [topic], directed=True)
-                    if claim is not None:
-                        return claim
-                    pool.pop(topic, None)
-                if not shares:
-                    claim = await self._claim_within(sess, None, directed=True)
-                    if claim is not None:
-                        return claim
+                #
+                # `B-68`: alternating between cited-paper lookups and the rest
+                # (search results, queries, seeds). Ranked together, a topic
+                # with thousands of well-cited DOIs spent every directed slot
+                # on lookups and never reached its search results.
+                self._directed_claims += 1
+                first = self._directed_claims % 2 == 0
+                for lookups in (first, not first):
+                    pool = dict(shares)
+                    while pool:
+                        topic = draw_topic(pool)
+                        if topic is None:
+                            break
+                        claim = await self._claim_within(
+                            sess, [topic], directed=True, lookups=lookups
+                        )
+                        if claim is not None:
+                            return claim
+                        pool.pop(topic, None)
+                    if not shares:
+                        claim = await self._claim_within(sess, None, directed=True, lookups=lookups)
+                        if claim is not None:
+                            return claim
 
+            # The topic's share is spent on pages, never on lookups (`B-68`):
+            # measured on a live run, a topic whose best rows were cited-paper
+            # DOIs got no page fetches at all for two hours.
             while shares:
                 topic = draw_topic(shares)
                 if topic is None:
                     break
-                claim = await self._claim_within(sess, [topic])
+                claim = await self._claim_within(sess, [topic], lookups=False)
                 if claim is not None:
                     return claim
                 # Nothing claimable under it *right now* — in backoff, held by
@@ -705,14 +724,27 @@ class Worker:
             return await self._claim_within(sess, None)
 
     async def _claim_within(
-        self, sess, topics: list[str] | None, *, directed: bool = False
+        self,
+        sess,
+        topics: list[str] | None,
+        *,
+        directed: bool = False,
+        lookups: bool | None = None,
     ) -> Claim | None:
+        """One claim. ``lookups`` True claims only lookup tasks, False only page
+        work, None either (`B-68`)."""
+        task_types = self._claimable_task_types()
+        if lookups is not None:
+            task_types = [t for t in task_types if (t in LOOKUP_TASK_TYPES) == lookups]
+        if not task_types:
+            # Nothing of that kind this worker can do — never an unfiltered claim.
+            return None
         task = await claim_next(
             sess,
             worker_id=self._settings.worker_id,
             lease_seconds=self._settings.lease_seconds,
             topics=topics,
-            task_types=self._claimable_task_types(),
+            task_types=task_types,
             directed=directed,
         )
         if task is None:

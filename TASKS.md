@@ -1395,6 +1395,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-68` **A topic's crawl share went to cited-paper lookups** — `v0.140.6`. Found in
+      loop run 3: one topic got no page fetches in two hours because its top-ranked rows
+      were DOIs at priority 60. The ordinary draw claims page work only; the directed slot
+      alternates lookups and search results
 - [x] `B-67` **Throttling wrote papers off** — `v0.140.5`. A DOI held back only by a
       rate-limited provider retried within seconds and failed after three refusals;
       hundreds were lost in a single run to an anonymous shared quota. Provider cooldown

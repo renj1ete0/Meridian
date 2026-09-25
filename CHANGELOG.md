@@ -68,6 +68,30 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.6] — 2026-09-25
+
+### Fixed
+
+- `B-68`: a topic's share of the crawl goes to its pages, not to its cited
+  papers. A cited-paper DOI ranks above every link and search result (`B-58`),
+  so a topic with many of them spent every claim, ordinary and directed, on DOI
+  lookups — on a live run, two hours without a single page fetched for it, and
+  its search results never reached. The ordinary topic draw now claims page
+  work only; the directed slot alternates between lookups and the rest (search
+  results, queries, seeds); anything is still claimed when nothing else is
+  waiting
+
+### Changed
+
+- On a CPU the embedder now works one passage at a time. Measured on a
+  24-thread machine: batch 1 → 119 passages/min, 2 → 113, 4 → 106, 8 → 99,
+  32 → 67, 64 → 51 — a batch pads every passage to its longest and a CPU gains
+  nothing from the grouping. Batch sizing from memory (`v0.140.5`) now applies
+  only on an accelerator, where the batch is what makes it fast.
+  `MERIDIAN_EMBED_BATCH_SIZE` still wins. An 8-bit quantised model was 1.6x
+  faster but moved vectors too far (cosine down to 0.89) to mix with the stored
+  ones, and is not used
+
 ## [0.140.5] — 2026-09-25
 
 ### Fixed

@@ -3066,10 +3066,10 @@ async def test_every_third_claim_asks_for_directed_work_first(
     sess = await session_for("rw")
     worker, _ = build_worker(sess, ok_html, run_domain, run_topic, resolver=resolve)
     worker._settings = dc.replace(worker._settings, topics=None, directed_every=3)
-    asked: list[bool] = []
+    asked: list[tuple[bool, bool | None]] = []
 
-    async def record(_sess, topics, *, directed=False):
-        asked.append(directed)
+    async def record(_sess, topics, *, directed=False, lookups=None):
+        asked.append((directed, lookups))
         return None
 
     async def no_shares(_sess):
@@ -3080,5 +3080,110 @@ async def test_every_third_claim_asks_for_directed_work_first(
     for _ in range(6):
         await worker._claim()
 
-    # Claims 3 and 6 try a directed claim, then fall through to the ordinary one.
-    assert asked == [False, False, True, False, False, False, True, False]
+    # Claims 3 and 6 try directed work — pages then lookups, then the other way
+    # round (`B-68`) — and fall through to the ordinary claim.
+    ordinary = (False, None)
+    assert asked == [
+        ordinary,
+        ordinary,
+        (True, False),
+        (True, True),
+        ordinary,
+        ordinary,
+        ordinary,
+        (True, True),
+        (True, False),
+        ordinary,
+    ]
+
+
+async def _only_topic(worker, topic, monkeypatch, *, directed_every: int) -> None:
+    import dataclasses as dc
+
+    worker._settings = dc.replace(worker._settings, topics=None, directed_every=directed_every)
+
+    async def shares(_sess):
+        return {topic: 1.0}
+
+    monkeypatch.setattr(worker, "_shares", shares)
+
+
+async def test_a_topics_share_goes_to_its_pages_not_its_cited_papers(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    """`B-68`, the live case: a topic whose best-ranked rows were cited-paper
+    DOIs spent two hours resolving them and fetched none of its pages."""
+    sess = await session_for("rw")
+    for i in range(5):
+        doi_task = await enqueue_doi(sess, f"10.1016/j.trd.2021.{103013 + i}", run_topic)
+        doi_task.priority = 60
+    page = await enqueue(sess, run_domain, run_topic)
+    page.priority = 10
+    await sess.flush()
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, FakeResolver(), resolver=resolve
+    )
+    await _only_topic(worker, run_topic, monkeypatch, directed_every=0)
+
+    claim = await worker._claim()
+
+    assert claim is not None and claim.task_id == page.task_id
+
+
+async def test_the_directed_slot_alternates_lookups_and_pages(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    """Search results are not starved by a pile of higher-ranked DOIs, and the
+    DOIs still get their turn."""
+    sess = await session_for("rw")
+    for i in range(4):
+        doi_task = await enqueue_doi(sess, f"10.1016/j.trd.2021.{104013 + i}", run_topic)
+        doi_task.priority = 60
+    searched = [
+        await enqueue(sess, run_domain, run_topic, path=f"/s{i}", seed_source="search")
+        for i in range(4)
+    ]
+    for task in searched:
+        task.priority = 50
+    await sess.flush()
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, FakeResolver(), resolver=resolve
+    )
+    await _only_topic(worker, run_topic, monkeypatch, directed_every=1)
+
+    kinds = [(await worker._claim()).task_type for _ in range(4)]
+
+    assert sorted(kinds) == ["doi", "doi", "url", "url"]
+    assert kinds[0] != kinds[1] and kinds[2] != kinds[3]
+
+
+async def test_lookups_are_still_claimed_when_nothing_else_is_queued(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    """Out of the ordinary draw is not out of the queue: with no pages waiting
+    the lane still resolves a DOI rather than idling."""
+    sess = await session_for("rw")
+    doi_task = await enqueue_doi(sess, "10.1016/j.trd.2021.105013", run_topic)
+    worker, _ = with_resolver(
+        sess, ok_html, run_domain, run_topic, FakeResolver(), resolver=resolve
+    )
+    await _only_topic(worker, run_topic, monkeypatch, directed_every=0)
+    got = []
+
+    async def only_mine(_sess, topics, *, directed=False, lookups=None):
+        # The unfiltered fallback would reach other tests' rows in the dev
+        # database; narrow it to this topic without changing what it asks for.
+        return await original(_sess, topics or [run_topic], directed=directed, lookups=lookups)
+
+    original = worker._claim_within
+    monkeypatch.setattr(worker, "_claim_within", only_mine)
+    got.append(await worker._claim())
+
+    assert got[0] is not None and got[0].task_id == doi_task.task_id
+
+
+def test_lookups_are_a_kind_the_worker_handles() -> None:
+    from worker.main import HANDLED_TASK_TYPES, LOOKUP_TASK_TYPES
+
+    assert LOOKUP_TASK_TYPES and set(HANDLED_TASK_TYPES) >= LOOKUP_TASK_TYPES
+    assert set(HANDLED_TASK_TYPES) - LOOKUP_TASK_TYPES, "no page work left to claim"

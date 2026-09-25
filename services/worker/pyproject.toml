@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.140.5"
+version = "0.140.6"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 license = "MIT"
@@ -32,6 +32,9 @@ agent = ["meridian-core[agent]"]
 
 embed = [
     "sentence-transformers>=3.0",
+    # Already there through sentence-transformers; named because
+    # `embeddings.on_accelerator` imports it to size the batch (`B-68`).
+    "torch>=2.0",
     # `P2-17`'s sidecar serves the same model over HTTP, from this image rather
     # than a second one — a separate service would mean a second 2.3GB download
     # and a second resident copy on a machine that has one of each.
