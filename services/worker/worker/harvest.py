@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import collections
 import contextlib
 import dataclasses
 import datetime as dt
@@ -41,7 +42,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.db import dispose_engines, session
-from meridian_core.gazetteer import find_acronyms
+from meridian_core.gazetteer import find_acronyms, infer_entity_type, join_tokens
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import Chunk, GazetteerTerm, Source
 
@@ -58,10 +59,13 @@ BATCH = 50
 #: stronger claim than thirty mentions in one.
 APPROVAL_THRESHOLD = 3
 
-#: What a harvested term is, in §5.6's five types. A regex cannot tell an agency
-#: from a scheme from a metric, and `concept` is the one that claims least — a
-#: term filed here and later corrected costs a curator one dropdown, where a
-#: term wrongly filed as `agency` reads as a fact somebody established.
+#: What a harvested term is when its name does not say, in §5.6's five types.
+#: `concept` is the one that claims least — a term filed here and later
+#: corrected costs a curator one dropdown, where a term wrongly filed as
+#: `agency` reads as a fact somebody established. A head word that says one
+#: thing ("…Authority", "…Scheme") does say (`B-70`): with every harvested term
+#: filed as a concept, the type told the ruler, the approval queue and search
+#: seeding nothing at all.
 HARVEST_ENTITY_TYPE = "concept"
 
 HARVEST_SOURCE = "auto_acronym"
@@ -160,7 +164,7 @@ async def record(
         row = GazetteerTerm(
             canonical=expansion,
             aliases=[acronym],
-            entity_type=HARVEST_ENTITY_TYPE,
+            entity_type=infer_entity_type(expansion, default=HARVEST_ENTITY_TYPE),
             jurisdiction=None,
             source=HARVEST_SOURCE,
             approved=False,
@@ -279,6 +283,81 @@ def render(stats: HarvestStats) -> None:
         print("\n  New terms wait for approval. Approved ones override statistical NER.")
 
 
+@dataclasses.dataclass
+class RetypeStats:
+    examined: int = 0
+    retyped: collections.Counter = dataclasses.field(default_factory=collections.Counter)
+    respaced: int = 0
+    rejected: int = 0
+    collisions: int = 0
+
+
+#: A character that makes a harvested "name" a clause (`B-70`). Not the comma:
+#: "Agency for Science, Technology and Research" is one name. An author list
+#: that slips through is never corroborated by three documents, so it never
+#: reaches the ruler.
+_NOT_A_NAME = (";",)
+
+
+async def retype_harvested(sess: AsyncSession, *, apply: bool) -> RetypeStats:
+    """Bring terms harvested before `B-70` up to what the harvest writes now.
+
+    Only ``auto_acronym`` rows that nobody rejected: a curated row is a person's
+    decision and a regex does not revise it. Three repairs — the type from the
+    head word; "multi - agent" and "Science , Technology" back to what the
+    document wrote; and a "name" holding a semicolon marked rejected, which
+    keeps it as a tombstone the next harvest respects rather than deleting it. A repair that
+    would collide with an existing row (the table is unique on name,
+    jurisdiction and type) is skipped and counted. Flushes; the caller commits.
+    """
+    stats = RetypeStats()
+    rows = list(
+        await sess.scalars(
+            select(GazetteerTerm).where(
+                GazetteerTerm.source == HARVEST_SOURCE, GazetteerTerm.rejected_at.is_(None)
+            )
+        )
+    )
+    taken = {
+        (canonical.lower(), jurisdiction, entity_type)
+        for canonical, jurisdiction, entity_type in (
+            await sess.execute(
+                select(
+                    GazetteerTerm.canonical,
+                    GazetteerTerm.jurisdiction,
+                    GazetteerTerm.entity_type,
+                )
+            )
+        ).all()
+    }
+    now = dt.datetime.now(dt.UTC)
+    for row in rows:
+        stats.examined += 1
+        if any(mark in row.canonical for mark in _NOT_A_NAME):
+            stats.rejected += 1
+            if apply:
+                row.rejected_at = now
+            continue
+        canonical = join_tokens(row.canonical.split())
+        entity_type = infer_entity_type(canonical, default=HARVEST_ENTITY_TYPE)
+        if (canonical, entity_type) == (row.canonical, row.entity_type):
+            continue
+        key = (canonical.lower(), row.jurisdiction, entity_type)
+        if key in taken:
+            stats.collisions += 1
+            continue
+        taken.discard((row.canonical.lower(), row.jurisdiction, row.entity_type))
+        taken.add(key)
+        if canonical != row.canonical:
+            stats.respaced += 1
+        if entity_type != row.entity_type:
+            stats.retyped[entity_type] += 1
+        if apply:
+            row.canonical, row.entity_type = canonical, entity_type
+    await sess.flush()
+    return stats
+
+
 def main() -> None:
     """Entry point: ``python -m worker.harvest``."""
     parser = argparse.ArgumentParser(
@@ -290,9 +369,36 @@ def main() -> None:
         default=None,
         help="stop after this many documents. Without it the pass drains the queue.",
     )
+    parser.add_argument(
+        "--retype",
+        action="store_true",
+        help="instead: re-type and repair terms harvested before B-70 (report; --apply writes)",
+    )
+    parser.add_argument("--apply", action="store_true", help="with --retype: write")
     args = parser.parse_args()
 
     configure_logging("harvest")
+    if args.retype:
+
+        async def retype() -> RetypeStats:
+            try:
+                async with session() as sess:
+                    stats = await retype_harvested(sess, apply=args.apply)
+                    await sess.commit()
+                    return stats
+            finally:
+                await dispose_engines()
+
+        stats = asyncio.run(retype())
+        print(
+            f"examined {stats.examined}  respaced {stats.respaced}  "
+            f"rejected as clauses {stats.rejected}  skipped on collision {stats.collisions}"
+        )
+        for entity_type, n in stats.retyped.most_common():
+            print(f"  now {entity_type:15} {n}")
+        if not args.apply:
+            print("\nReport only. --apply writes; rejected terms are kept, not deleted.")
+        return
     with bind_run_id(f"harvest-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         stats = asyncio.run(_run(max_documents=args.max_documents))
     render(stats)

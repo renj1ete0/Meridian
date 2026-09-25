@@ -68,6 +68,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.7] — 2026-09-25
+
+### Fixed
+
+- `B-69`: source titles that are not titles. What a document declares is
+  often a placeholder ("untitled", "nan", "Microsoft Word - x.docx", a file
+  name), the site rather than the page ("Home", "Results", "Main navigation",
+  the site's own name on every page) or a numbered heading ("1Introduction").
+  `meridian_core.titles` cleans a declared title, strips a site name off
+  "Page | Site", and falls back to a heading-like first line of the text, which
+  is marked `extra.title_from = "text"`. The fetch loop applies it as it writes;
+  `worker.retitle` (report, then `--apply`) cleans what is stored. A replaced
+  title is kept in `extra.declared_title`; nothing is deleted
+- `B-70`: harvested gazetteer terms are typed by their head word instead of all
+  being filed as `concept` — "…Authority", "Ministry of…" are agencies,
+  "…Scheme", "…Act" schemes, "…Index" metrics, "…Expressway" infrastructure —
+  where the head says one thing only; anything else stays `concept`. Expansions
+  keep the document's spelling ("multi-agent", "Science, Technology"), and a
+  clause (a semicolon, colon or bracket inside) is no longer read as a name.
+  `worker.harvest --retype` (report, then `--apply`) repairs terms harvested
+  before; curated rows are never touched and nothing is deleted
+
 ## [0.140.6] — 2026-09-25
 
 ### Fixed

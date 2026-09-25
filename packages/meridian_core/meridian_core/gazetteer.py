@@ -344,6 +344,23 @@ def _expansion_start(words: list[str], letters: str) -> int | None:
     return word + 1 if letter < 0 else None
 
 
+#: Tokens that end a name rather than sit inside one.
+_BREAKS = frozenset({";", ":", '"', "“", "”", "(", ")", "[", "]"})
+
+#: Joining tokens back with spaces writes "multi - agent" and "A / B"; the
+#: document said "multi-agent". Patterns are built from `tokenise`, which
+#: splits either spelling the same way, so this changes what a person reads
+#: and not what matches.
+_GLUED = re.compile(r"\s*([-/‐–’'])\s*")
+_BEFORE_COMMA = re.compile(r"\s+,")
+
+
+def join_tokens(tokens: list[str]) -> str:
+    """Tokens back into the text a document wrote: hyphens and slashes glued,
+    no space before a comma."""
+    return _BEFORE_COMMA.sub(",", _GLUED.sub(r"\1", " ".join(tokens)))
+
+
 def find_acronyms(text: str) -> list[AcronymDefinition]:
     """Every ``Full Name Here (ACRONYM)`` this text defines.
 
@@ -374,7 +391,12 @@ def find_acronyms(text: str) -> list[AcronymDefinition]:
         if start is None:
             continue
 
-        expansion = _POSSESSIVE.sub("", " ".join(words[start:]))
+        span = words[start:]
+        # A colon, a semicolon or a bracket inside is a clause, not a name.
+        # Commas are not: "Agency for Science, Technology and Research" is one.
+        if any(token in _BREAKS for token in span):
+            continue
+        expansion = _POSSESSIVE.sub("", join_tokens(span))
         # An acronym whose expansion is one word is the word itself abbreviated,
         # which the table has no use for, and a runaway span is a parse failure.
         if len(words) - start < 2 or len(expansion) > 90:
@@ -385,3 +407,78 @@ def find_acronyms(text: str) -> list[AcronymDefinition]:
         found.setdefault(key, AcronymDefinition(acronym, expansion))
 
     return list(found.values())
+
+
+# ---------------------------------------------------------------------------
+# What kind of thing a harvested name is
+# ---------------------------------------------------------------------------
+
+#: A name's head word, by the type it signals. English puts the head last
+#: ("National Science Foundation") or before the first preposition ("Ministry
+#: of Transport"). Only heads that say one thing: "Service", "Group", "System"
+#: and "Framework" name agencies, schemes and concepts alike, and stay concept;
+#: so do "Network" (usually a neural one in this corpus) and "Law" (of physics as
+#: often as of a legislature).
+_AGENCY_HEADS = """
+    academy agency alliance administration assembly association authority board bureau
+    centre center coalition college commission committee company conference consortium
+    corporation council court department directorate federation forum foundation
+    inspectorate institute institution laboratory laboratories league ministry office
+    organisation organization parliament partnership secretariat society tribunal union
+    university
+"""
+_SCHEME_HEADS = """
+    act allowance bill code directive fund grant guideline guidelines initiative
+    licence license ordinance pass permit pilot plan policy programme program project
+    rebate regulation regulations scheme standard strategy subsidy trial
+"""
+_INFRASTRUCTURE_HEADS = """
+    airport bridge corridor depot expressway highway hospital interchange lane line
+    motorway port railway road station terminal tunnel
+"""
+_METRIC_HEADS = "coefficient index indicator percentage ratio rate score"
+
+HEAD_TYPES: dict[str, str] = {
+    **dict.fromkeys(_AGENCY_HEADS.split(), "agency"),
+    **dict.fromkeys(_SCHEME_HEADS.split(), "scheme"),
+    **dict.fromkeys(_INFRASTRUCTURE_HEADS.split(), "infrastructure"),
+    **dict.fromkeys(_METRIC_HEADS.split(), "metric"),
+}
+
+_PREPOSITIONS = frozenset({"of", "on", "for", "in", "to", "at", "de", "der", "du"})
+
+
+#: Types that name one particular thing, so need a capitalised head: "base
+#: station" is a kind of thing, "Changi Station" is one. A metric is named in
+#: lowercase as often as not ("true positive rate").
+_PROPER_TYPES = frozenset({"agency", "scheme", "infrastructure"})
+
+
+def _head(name: str) -> str | None:
+    words = [w for w in re.split(r"[\s\-/]+", name.strip()) if w]
+    for index, word in enumerate(words):
+        if word.lower() in _PREPOSITIONS and index > 0:
+            words = words[:index]
+            break
+    return words[-1] if words else None
+
+
+def head_word(name: str) -> str | None:
+    """The word a name is about: last before the first preposition, else last."""
+    head = _head(name)
+    return head.lower() if head else None
+
+
+def infer_entity_type(name: str, *, default: str = "concept") -> str:
+    """The type a harvested name's head word signals, or ``default``.
+
+    Deliberately narrow. A term wrongly filed as an agency reads as a fact
+    somebody established, so a head that could mean two things files nothing.
+    """
+    head = _head(name)
+    if not head:
+        return default
+    kind = HEAD_TYPES.get(head.lower())
+    if kind is None or (kind in _PROPER_TYPES and not head[:1].isupper()):
+        return default
+    return kind

@@ -100,6 +100,7 @@ from meridian_core.tiering import (
     priority_with_urgency,
     resolve_tier,
 )
+from meridian_core.titles import clean_title, title_from_text
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
 
 from . import rawstore
@@ -1353,7 +1354,7 @@ class Worker:
                     media_type=result.media_type,
                     final_url=result.final_url,
                     crawled_for=self._crawled_for(claim),
-                    **_bibliography(document, screening),
+                    **_bibliography(document, screening, url=claim.url),
                     **validators(result.headers),
                 )
                 if document is not None and document.needs_ocr:
@@ -2145,7 +2146,10 @@ def main() -> None:
 
 
 def _bibliography(
-    document: ExtractedDocument | None, screening: Screening | None = None
+    document: ExtractedDocument | None,
+    screening: Screening | None = None,
+    *,
+    url: str | None = None,
 ) -> dict[str, object]:
     """The `sources` columns an extracted document can fill (§5.2).
 
@@ -2163,8 +2167,18 @@ def _bibliography(
 
     if document is None:
         return {"extra": extra} if extra else {}
+    # `B-69`: what the document declared is often a placeholder or the site's
+    # name. Cleaned; else a heading-like first line, marked as such; else None,
+    # which leaves whatever a previous fetch found. The declared one is kept.
+    title = clean_title(
+        document.title, publisher=document.publisher, host=urlsplit(url).hostname if url else None
+    )
+    if title is None and (title := title_from_text(document.text)) is not None:
+        extra["title_from"] = "text"
+    if document.title and title != document.title:
+        extra["declared_title"] = document.title
     fields: dict[str, object] = {
-        "title": document.title,
+        "title": title,
         "author": document.author,
         "publisher": document.publisher,
         "publication_date": document.publication_date,

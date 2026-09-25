@@ -1373,6 +1373,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       area-hop source for `route()` (its `HopSource` protocol takes one), the
       two-click pick on the canvas, the route drawn with cited and similar hops
       distinguished, and screenshots against the Route board on the design canvas
+- [ ] `P6-40` **The About page** — the design canvas has an About board (tagline, what the
+      build holds: topics, sources, version) and there is no route or task for it. Found by
+      the 2026-09-25 audit of the build against the mocks, which also lists as unbuilt: the
+      synthesis panel (`P6-06`/`P6-07`), reports (`P7-09`), Explore's Matrix, Timeline and
+      Coverage views (only node-link and table render), the landing Coverage card (`P6-10`,
+      needs `P5-03`), Admin's enrichment queue (`P7-07`), notifications' "Mark all read" and
+      digest settings, and the Map's route mode (`P6-39`)
 - [x] `B-61` **The crawl outran search, labelling and embedding** — `v0.140.1`. Found by
       the first 12h run: followed links outnumbered search results by orders of
       magnitude, unjudged institutional hosts were explored 50 links each, and the
@@ -1395,6 +1402,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-69` **Titles that are not titles** — `v0.140.7`. Reported by the operator: placeholder
+      PDF titles, site names as page titles, thousands missing. `meridian_core.titles`
+      at write time; `worker.retitle` for what is stored
+- [x] `B-70` **Every harvested gazetteer term was a `concept`** — `v0.140.7`. Reported by the
+      operator. Typed by head word where unambiguous; spelling repaired; `harvest --retype`
+      for the existing rows
 - [x] `B-68` **A topic's crawl share went to cited-paper lookups** — `v0.140.6`. Found in
       loop run 3: one topic got no page fetches in two hours because its top-ranked rows
       were DOIs at priority 60. The ordinary draw claims page work only; the directed slot

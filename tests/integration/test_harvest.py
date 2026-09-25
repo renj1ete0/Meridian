@@ -23,7 +23,7 @@ import pytest
 from sqlalchemy import delete, select, update
 
 from meridian_core.chunks import ChunkWrite, replace_chunks
-from meridian_core.gazetteer import compile_patterns
+from meridian_core.gazetteer import compile_patterns, infer_entity_type
 from meridian_core.models import GazetteerTerm, Source
 from meridian_core.sources import upsert_source
 from worker.harvest import (
@@ -176,8 +176,21 @@ async def test_a_new_term_lands_unapproved_with_the_acronym_as_an_alias(clean, p
     assert term.approved is False
     assert term.aliases == [ACRONYM]
     assert term.source == "auto_acronym"
-    assert term.entity_type == HARVEST_ENTITY_TYPE
+    # Typed by its head word (`B-70`), not filed as a concept by default.
+    assert term.entity_type == infer_entity_type(EXPANSION) == "agency"
     assert term.jurisdiction is None
+
+
+async def test_a_name_that_does_not_say_what_it_is_stays_a_concept(clean, prefix) -> None:
+    """The narrow default: a head that could mean several things files nothing."""
+    source = await a_document(
+        clean, f"{prefix}/g2", ["Our Peripheral Signal Coordination (PSC) approach."]
+    )
+
+    await harvest(clean, [source.source_id])
+    term = (await terms_for(clean, "Peripheral Signal Coordination"))[0]
+
+    assert term.entity_type == HARVEST_ENTITY_TYPE == "concept"
 
 
 async def test_an_unapproved_term_loads_no_patterns(clean, prefix) -> None:
@@ -360,3 +373,65 @@ async def test_a_curated_row_is_never_auto_approved_by_the_harvest(clean, prefix
     await harvest(clean, ids)
 
     assert (await terms_for(clean, EXPANSION))[0].approved is False
+
+
+# --------------------------------------------------------------------------
+# Repairing terms harvested before B-70
+# --------------------------------------------------------------------------
+
+
+async def old_term(sess, canonical: str, **fields) -> GazetteerTerm:
+    fields.setdefault("source", "auto_acronym")
+    fields.setdefault("entity_type", "concept")
+    term = GazetteerTerm(canonical=canonical, aliases=["X"], **fields)
+    sess.add(term)
+    await sess.flush()
+    return term
+
+
+async def test_retype_types_respaces_and_rejects_clauses(clean) -> None:
+    from worker.harvest import retype_harvested
+
+    agency = await old_term(clean, "Provisional Oversight Authority")
+    spaced = await old_term(clean, "Provisional multi - agent planning")
+    listed = await old_term(clean, "Provisional ; Nicolai ; Busquet")
+    commas = await old_term(clean, "Provisional Science , Technology and Research")
+    curated = await old_term(clean, "Provisional Curated Authority", source="manual")
+
+    await retype_harvested(clean, apply=True)
+    for term in (agency, spaced, listed, commas, curated):
+        await clean.refresh(term)
+
+    assert agency.entity_type == "agency"
+    assert spaced.canonical == "Provisional multi-agent planning"
+    assert spaced.entity_type == "concept"
+    # Kept as a tombstone the next harvest respects, not deleted.
+    assert listed.rejected_at is not None
+    # A comma is part of a real name: respaced, not rejected.
+    assert commas.canonical == "Provisional Science, Technology and Research"
+    assert commas.rejected_at is None
+    # A person's row is theirs: typed concept by hand, it stays concept.
+    assert curated.entity_type == "concept"
+
+
+async def test_retype_skips_a_repair_that_would_collide(clean) -> None:
+    from worker.harvest import retype_harvested
+
+    await old_term(clean, "Provisional Oversight Authority", entity_type="agency", source="manual")
+    duplicate = await old_term(clean, "Provisional Oversight Authority")
+
+    stats = await retype_harvested(clean, apply=True)
+    await clean.refresh(duplicate)
+
+    assert duplicate.entity_type == "concept"
+    assert stats.collisions >= 1
+
+
+async def test_a_retype_report_writes_nothing(clean) -> None:
+    from worker.harvest import retype_harvested
+
+    term = await old_term(clean, "Provisional Oversight Authority")
+    stats = await retype_harvested(clean, apply=False)
+    await clean.refresh(term)
+
+    assert term.entity_type == "concept" and stats.retyped["agency"] >= 1

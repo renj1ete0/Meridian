@@ -423,3 +423,66 @@ def test_the_report_covers_every_row_it_was_given() -> None:
     ]
 
     assert set(loading_report(rows)) == {1, 2, 3, 4, 5}
+
+
+# -- B-70: what a harvested name is, and what counts as one --------------------------
+
+from meridian_core.gazetteer import HEAD_TYPES, head_word, infer_entity_type  # noqa: E402
+from meridian_core.models.gazetteer import GAZETTEER_ENTITY_TYPE  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("National Science Foundation", "agency"),
+        ("Ministry of Transport", "agency"),
+        ("Land Transport Authority's", "concept"),  # the possessive is stripped before this
+        ("Conference on Robot Learning", "agency"),
+        ("Temporary Occupation License", "scheme"),
+        ("Road Traffic Act", "scheme"),
+        ("Consumer Price Index", "metric"),
+        ("Mass Rapid Transit Line", "infrastructure"),
+        ("North-South Expressway", "infrastructure"),
+        # Heads that name several kinds of thing stay the default.
+        ("Special Transport Service", "concept"),
+        ("Intelligent Transport System", "concept"),
+        ("multi-agent reinforcement learning", "concept"),
+        # Found in the live table: a neural network is not infrastructure, and
+        # a lowercase name is a kind of thing, not a particular one.
+        ("Recurrent Convolutional Neural Network", "concept"),
+        ("law of maximum entropy production", "concept"),
+        ("base station", "concept"),
+        ("Changi Station", "infrastructure"),
+        ("true positive rate", "metric"),
+        ("", "concept"),
+    ],
+)
+def test_a_names_head_word_types_it(name: str, expected: str) -> None:
+    assert infer_entity_type(name) == expected
+
+
+def test_the_head_is_before_the_first_preposition() -> None:
+    assert head_word("Department of Transport for London") == "department"
+    assert head_word("Of Mice") == "mice"  # a leading preposition is not a split
+
+
+def test_every_inferred_type_is_one_the_table_allows() -> None:
+    """A type outside the CHECK constraint would fail the harvest's insert."""
+    allowed = set(GAZETTEER_ENTITY_TYPE.enums)
+    assert set(HEAD_TYPES.values()) <= allowed
+    assert "concept" in allowed
+
+
+def test_a_name_with_commas_is_kept_as_the_document_wrote_it() -> None:
+    """Commas are part of many real names; only the spacing around them was wrong."""
+    (found,) = find_acronyms("the Agency for Science, Technology and Research (ASTAR) said.")
+    assert found.expansion == "Agency for Science, Technology and Research"
+
+
+def test_a_clause_is_not_an_expansion() -> None:
+    assert find_acronyms("results: Peripheral Signal Coordination; Timing (PSCT) held.") == []
+
+
+def test_an_expansion_keeps_the_documents_hyphens() -> None:
+    (found,) = find_acronyms("we use multi-agent reinforcement learning (MARL) here.")
+    assert found.expansion == "multi-agent reinforcement learning"
