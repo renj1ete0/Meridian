@@ -68,6 +68,32 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.141.0] — 2026-09-25
+
+### Added
+
+- `P6-40`: an About screen, reached from Settings — the mark and tagline as the
+  design board has them, the build's version, its topics and what the corpus
+  holds
+- Explore's **Matrix** view: the visible neighbourhood as an adjacency matrix,
+  relations counted both ways, contested cells marked as everywhere else.
+  Follows the filter rail. (Timeline stays unbuilt: the graph endpoints carry
+  one newest date per node and none per edge, so a timeline would be invented)
+- `B-72`: where topics meet. A source carries every topic its content is about,
+  so topics form a web, not a partition. Search takes `topic_match=all` —
+  passages whose source and own labels together carry every topic named — and
+  `GET /api/explore/topic-overlaps` counts labelled sources by exact topic
+  combination, so a client can show how many sources lie in any selection
+
+### Fixed
+
+- `B-71`: Map areas are named by one phrase, not three terms joined by dots,
+  and document furniture ("nan", "arxiv", "doi", "title", "volume number",
+  "cross-list") is no longer a term — dropped when areas are built and when they
+  are read, so an existing map reads properly before its next rebuild
+- `B-69` follow-up: a title guessed from the text refuses sentences,
+  exclamations, submission notes and author lines
+
 ## [0.140.7] — 2026-09-25
 
 ### Fixed

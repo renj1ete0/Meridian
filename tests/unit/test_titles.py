@@ -102,12 +102,25 @@ def test_the_first_heading_like_line_is_used() -> None:
         "This paper studies demand. It finds that fares matter.",
         "https://example.org/paper.pdf",
         "© 2024 Elsevier Ltd. All rights reserved",
+        # Found in the live report as bad guesses.
+        "Read the LTA Annual Report 2024/25 here!",
+        "TRID is an integrated database that combines the records from",
+        "Submitted to Transportation Science",
+        "Mohd. Hafiz Hasan · Pascal Van Hentenryck",
+        "Ann Smith, Bo Jones, Cy Lee",
         "",
         None,
     ],
 )
 def test_no_heading_means_no_title(text) -> None:
     assert title_from_text(text) is None
+
+
+def test_a_title_case_title_with_commas_is_still_a_title() -> None:
+    assert (
+        title_from_text("Planes, Trains and Automobiles in the City")
+        == "Planes, Trains and Automobiles in the City"
+    )
 
 
 def test_only_the_start_of_the_text_is_read() -> None:

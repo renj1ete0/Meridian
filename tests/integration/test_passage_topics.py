@@ -386,6 +386,74 @@ async def test_the_source_topic_still_matches_every_passage_of_its_document(worl
     assert {hit.chunk_id for hit in result.hits} == set(ids)
 
 
+async def test_all_topics_finds_where_they_meet(world) -> None:
+    """`B-72`: the chapter on B inside a document on A is where A and B meet —
+    the rest of the document is about A only."""
+    sess, *_ = world
+    token, a, b, _, ids, _ = await mixed(world)
+
+    both = await search(sess, token, filters=SearchFilters(topics=[a, b], topics_all=True))
+    either = await search(sess, token, filters=SearchFilters(topics=[a, b]))
+
+    assert {hit.chunk_id for hit in both.hits} == {ids[2]}
+    assert set(ids) <= {hit.chunk_id for hit in either.hits}
+
+
+async def test_all_topics_with_one_topic_is_the_ordinary_filter(world) -> None:
+    sess, *_ = world
+    token, a, _, _, ids, _ = await mixed(world)
+
+    one = await search(sess, token, filters=SearchFilters(topics=[a], topics_all=True))
+
+    assert {hit.chunk_id for hit in one.hits} == set(ids)
+
+
+async def test_all_topics_never_matches_an_unexamined_source_by_accident(world) -> None:
+    """NULL labels coalesce to empty, never to "everything"."""
+    sess, topics, *_ = world
+    token, a, b, _, _, off = await mixed(world)
+    third = topics[2]
+
+    result = await search(sess, token, filters=SearchFilters(topics=[a, b, third], topics_all=True))
+
+    assert result.hits == []
+
+
+async def test_overlaps_count_sources_by_exact_combination(world) -> None:
+    from meridian_core.topicoverlaps import topic_overlaps
+
+    sess, topics, *_ = world
+    a, b = topics[0], topics[1]
+    before = await topic_overlaps(sess)
+    pair = next((o.sources for o in before.overlaps if o.topics == sorted([a, b])), 0)
+
+    source_id, _ = await a_document(sess, [("overlap probe", None)])
+    source = await sess.get(Source, source_id)
+    source.topic_labels = [b, a]  # stored in any order; counted sorted
+    await sess.flush()
+
+    after = await topic_overlaps(sess)
+    counts = {tuple(o.topics): o.sources for o in after.overlaps}
+    assert counts[tuple(sorted([a, b]))] == pair + 1
+    assert after.labelled_sources == before.labelled_sources + 1
+    assert all(o.topics == sorted(o.topics) for o in after.overlaps)
+
+
+async def test_overlaps_leave_out_junk_and_unlabelled_sources(world) -> None:
+    from meridian_core.topicoverlaps import topic_overlaps
+
+    sess, topics, *_ = world
+    before = (await topic_overlaps(sess)).labelled_sources
+    junk_id, _ = await a_document(sess, [("junk probe", None)])
+    empty_id, _ = await a_document(sess, [("empty probe", None)])
+    junk = await sess.get(Source, junk_id)
+    junk.topic_labels, junk.retention_tier = [topics[0]], "junk"
+    (await sess.get(Source, empty_id)).topic_labels = []
+    await sess.flush()
+
+    assert (await topic_overlaps(sess)).labelled_sources == before
+
+
 async def test_a_topic_filter_rejects_passages_about_nothing_it_named(world) -> None:
     sess, topics, *_ = world
     token, _, _, _, ids, off = await mixed(world)

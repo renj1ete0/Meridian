@@ -46,13 +46,14 @@ import json
 from collections.abc import Mapping, Sequence
 
 import numpy as np
-from sqlalchemy import and_, exists, func, select
+from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from .embedtext import link_text_share
-from .models import Chunk, ChunkTopics
+from .models import Chunk, ChunkTopics, Source
 from .topiclabels import LABEL_FLOOR, LABEL_MARGIN, decide
 
 #: The absolute floor for a passage label. See the module docstring for why it
@@ -236,6 +237,25 @@ def on_topic_passage(topics: Sequence[str]):
     return exists().where(
         row.chunk_id == Chunk.chunk_id,
         row.topic_labels.op("&&")(list(topics)),
+    )
+
+
+def carries_all_topics(topics: Sequence[str]):
+    """A predicate over ``Chunk`` joined to ``Source``: between them, the passage's
+    own labels and its source's carry every one of ``topics`` (`B-72`).
+
+    Together rather than each alone: a chapter on one topic inside a document
+    labelled with the other is where two topics genuinely meet.
+    """
+    wanted = list(topics)
+    row = aliased(ChunkTopics)
+    combined = func.array_cat(
+        func.coalesce(Source.topic_labels, sql_text("'{}'::text[]")),
+        func.coalesce(row.topic_labels, sql_text("'{}'::text[]")),
+    )
+    return or_(
+        Source.topic_labels.op("@>")(wanted),
+        exists().where(row.chunk_id == Chunk.chunk_id, combined.op("@>")(wanted)),
     )
 
 

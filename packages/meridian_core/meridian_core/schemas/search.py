@@ -428,3 +428,22 @@ class CrawlHealthRead(BaseModel):
     #: The busiest domains in the last hour.
     top_domains: list[DomainCountRead]
     liveness: LivenessRead
+
+
+class TopicOverlapRead(BaseModel):
+    """Sources carrying exactly this set of topics (`B-72`)."""
+
+    topics: list[str]
+    sources: int
+
+
+class TopicOverlapsRead(BaseModel):
+    """How labelled sources fall across topic combinations.
+
+    Exact sets, so they add up: the sources carrying *at least* a selection are
+    the sum over every set that contains it, which a client computes for any
+    selection without another request.
+    """
+
+    overlaps: list[TopicOverlapRead]
+    labelled_sources: int

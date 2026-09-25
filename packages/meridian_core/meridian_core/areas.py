@@ -37,7 +37,20 @@ _STOP_TEXT = """a about above after again against all also am an and any are as 
     when where which while who whom why will with within without would you your yours one two
     new use used using well however therefore thus page pages click here http https www com
     org html pdf"""
-STOPWORDS = frozenset(_STOP_TEXT.split())
+#: What documents are made of rather than about (`B-71`): repository and
+#: citation furniture, table placeholders, section labels. Found naming live
+#: areas — "model · arxiv · title", "nan · arxiv · cross-list", "university ·
+#: doi · research", "volume number · virus · measles".
+_FURNITURE_TEXT = """nan null none arxiv doi isbn issn title abstract volume vol issue
+    number pp preprint cross-list crossref pubmed pmc scholar google html pdf retrieved
+    accessed available online copyright rights reserved license licence cookie cookies
+    menu navigation login sign skip content figure fig table section chapter appendix
+    et al ibid journal proceedings conference university press author authors editor
+    submitted revised accepted published version download view full text cite citation
+    references"""
+FURNITURE = frozenset(_FURNITURE_TEXT.split())
+
+STOPWORDS = frozenset(_STOP_TEXT.split()) | FURNITURE
 
 _WORD = re.compile(r"[^\W\d_][\w\-]*[^\W_]|[^\W\d_]{3,}", re.UNICODE)
 

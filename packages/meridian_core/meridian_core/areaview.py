@@ -20,6 +20,7 @@ from sqlalchemy import Select, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .areabuild import MIN_PASSAGES
+from .areas import FURNITURE
 from .bridges import exact_distance
 from .corpusmap import SNIPPET_CHARS
 from .models import Area, AreaBridge, AreaBuild, AreaMember, Chunk, Source
@@ -48,8 +49,25 @@ class AreaNotFound(LookupError):
     pass
 
 
+def usable_terms(terms: list[str]) -> list[str]:
+    """Stored terms without document furniture (`B-71`).
+
+    Applied on read as well as at build time, so a map built before the
+    furniture list existed is named properly without waiting for a rebuild.
+    """
+    return [t for t in terms if not any(word in FURNITURE for word in t.split())]
+
+
 def area_name(terms: list[str]) -> str:
-    return " · ".join(terms[:NAME_TERMS]) if terms else "(no distinctive terms)"
+    """One short phrase, not a list: the operator reads a name, not three
+    keywords joined by dots (`B-71`). The best two-word phrase among the top
+    few terms when there is one — "road safety" says more than "road" — and
+    otherwise the top term."""
+    terms = usable_terms(terms)
+    if not terms:
+        return "(no distinctive terms)"
+    phrase = next((t for t in terms[:NAME_TERMS] if " " in t), terms[0])
+    return phrase[:1].upper() + phrase[1:]
 
 
 def flags(area: Area, *, now: dt.datetime) -> tuple[bool, bool, list[str]]:
@@ -74,7 +92,7 @@ def to_read(area: Area, children: int, *, now: dt.datetime) -> AreaRead:
         level=area.level,
         parent_id=area.parent_id,
         name=area_name(area.terms),
-        terms=list(area.terms[:TERMS_SHOWN]),
+        terms=usable_terms(list(area.terms))[:TERMS_SHOWN],
         passages=area.passages,
         sources=area.sources,
         tier_mix=dict(area.tier_mix),

@@ -18,7 +18,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -70,11 +70,13 @@ from meridian_core.schemas.search import (
     SearchResponse,
     SourceChunksRead,
     SourceFiguresRead,
+    TopicOverlapsRead,
 )
 from meridian_core.schemas.source import ChunkRead, SourceRead
 from meridian_core.schemas.views import SavedViewRead, SavedViewsRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for
 from meridian_core.stats import corpus_stats
+from meridian_core.topicoverlaps import topic_overlaps
 
 from ..deps import ReadSession
 from ..search_service import WindowTooDeep, paged_search
@@ -134,6 +136,13 @@ async def explore_search(
             "Sources crawled before topics were recorded carry none and are excluded."
         ),
     ] = None,
+    topic_match: Annotated[
+        Literal["any", "all"],
+        Query(
+            description="`all` keeps only passages whose source and own labels, together, "
+            "carry every `topic` named: where topics meet."
+        ),
+    ] = "any",
     place: Annotated[
         list[str] | None,
         Query(
@@ -180,6 +189,7 @@ async def explore_search(
         source_tiers=source_tier,
         languages=language,
         topics=topic,
+        topics_all=topic_match == "all",
         places=place,
         published_after=published_after,
         published_before=published_before,
@@ -194,6 +204,16 @@ async def explore_search(
         # 422, not 500: the request is the thing that is wrong, and the message
         # names both remedies.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/topic-overlaps", response_model=TopicOverlapsRead)
+async def explore_topic_overlaps(sess: ReadSession) -> TopicOverlapsRead:
+    """Labelled sources by exact topic combination (`B-72`): the web of topics.
+
+    A client sums the sets containing a selection to show how many sources lie
+    in all of it, then searches with ``topic_match=all``.
+    """
+    return await topic_overlaps(sess)
 
 
 @router.get("/stats", response_model=CorpusStatsRead)

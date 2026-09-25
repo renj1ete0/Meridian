@@ -120,9 +120,24 @@ def clean_title(
 #: A first line containing any of these is page furniture, not a heading.
 _NOT_A_HEADING = re.compile(
     r"https?://|www\.|©|\bdoi\b|\bissn\b|\bvol(?:ume)?\.?\s*\d|\breceived\b|\baccepted\b|"
-    r"\bcookies?\b|skip to|javascript|\bpage \d+ of\b|\bdownloaded\b",
+    r"\bcookies?\b|skip to|javascript|\bpage \d+ of\b|\bdownloaded\b|\bsubmitted\b|"
+    r"\bpreprint\b|\bunder review\b|\bworking paper\b|\bdraft\b|\bclick\b|\bhere\b",
     re.IGNORECASE,
 )
+
+#: A sentence, not a heading: a heading names; it does not assert.
+_SENTENCE = re.compile(r"\s(?:is|are|was|were|has|have|will|can)\s", re.IGNORECASE)
+
+#: How author lines separate names.
+_NAME_SEPARATORS = re.compile(r"[·•;]|\s&\s")
+
+
+def _author_line(line: str) -> bool:
+    """ "A. Smith · B. Jones", "Ann Smith, Bo Jones": names, not a title."""
+    if _NAME_SEPARATORS.search(line):
+        return True
+    words = [w for w in re.split(r"[\s,]+", line) if w]
+    return "," in line and all(w[:1].isupper() for w in words)
 
 
 def title_from_text(text: str | None, *, lines: int = 5) -> str | None:
@@ -145,8 +160,10 @@ def title_from_text(text: str | None, *, lines: int = 5) -> str | None:
             3 <= len(words) <= 25
             and 15 <= len(line) <= 180
             and (line[0].isupper() or line[0].isdigit())
-            and not line.endswith((":", ".", ","))
+            and not line.endswith((":", ".", ",", "!", "?", ";"))
             and not _NOT_A_HEADING.search(line)
+            and not _SENTENCE.search(line)
+            and not _author_line(line)
         ):
             cleaned = clean_title(line)
             if cleaned:

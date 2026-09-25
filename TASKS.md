@@ -1373,7 +1373,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       area-hop source for `route()` (its `HopSource` protocol takes one), the
       two-click pick on the canvas, the route drawn with cited and similar hops
       distinguished, and screenshots against the Route board on the design canvas
-- [ ] `P6-40` **The About page** — the design canvas has an About board (tagline, what the
+- [x] `P6-40` **The About page** — `v0.141.0`, reached from Settings. The design canvas has an About board (tagline, what the
       build holds: topics, sources, version) and there is no route or task for it. Found by
       the 2026-09-25 audit of the build against the mocks, which also lists as unbuilt: the
       synthesis panel (`P6-06`/`P6-07`), reports (`P7-09`), Explore's Matrix, Timeline and
@@ -1402,6 +1402,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-71` **Map area names were keyword lists with furniture in them** — `v0.141.0`.
+      Reported by the operator ("arxiv title arxiv model", "nan"). One phrase per name;
+      furniture dropped at build and at read
+- [~] `B-72` **A web of topics** — the operator's idea: topics overlap, so let a person pick
+      several and see the sources where they all meet. Server side `v0.141.0`
+      (`topic_match=all`, `/api/explore/topic-overlaps`); the picker UI is next
 - [x] `B-69` **Titles that are not titles** — `v0.140.7`. Reported by the operator: placeholder
       PDF titles, site names as page titles, thousands missing. `meridian_core.titles`
       at write time; `worker.retitle` for what is stored

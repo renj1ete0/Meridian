@@ -46,7 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .ageing import age_in_days, decay_factor
 from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
-from .passagetopics import on_topic_passage
+from .passagetopics import carries_all_topics, on_topic_passage
 from .trust import READABLE_STATES
 
 log = get_logger(__name__)
@@ -143,6 +143,9 @@ class SearchFilters:
     languages: Sequence[str] | None = None
     #: Match a source carrying any of these topics (§12.5, §12.3).
     topics: Sequence[str] | None = None
+    #: Every one of ``topics`` rather than any (`B-72`): where topics meet.
+    #: Counted on a live corpus, several hundred sources carry two or more.
+    topics_all: bool = False
     #: Match a source about any of these places (`P2-23`) — codes as
     #: `sources.places` stores them. Overlap, like topics, and for the same
     #: reason; and a source never examined for places (NULL) is excluded by a
@@ -295,12 +298,15 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         # for and both would filter on something other than what was asked.
         # The passage arm is an EXISTS by primary key, so it costs one index
         # probe per candidate row and needs no join that could multiply rows.
-        where.append(
-            or_(
-                Source.topic_labels.op("&&")(list(filters.topics)),
-                on_topic_passage(filters.topics),
+        if filters.topics_all:
+            where.append(carries_all_topics(filters.topics))
+        else:
+            where.append(
+                or_(
+                    Source.topic_labels.op("&&")(list(filters.topics)),
+                    on_topic_passage(filters.topics),
+                )
             )
-        )
     if filters.places:
         where.append(Source.places.op("&&")([p.strip().upper() for p in filters.places]))
     if filters.published_after is not None:
