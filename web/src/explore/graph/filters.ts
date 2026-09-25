@@ -18,7 +18,7 @@ import { NO_FILTERS, filtersToRecord, type GraphFilterState } from './api'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
-/** The views §12.3 lists. Only the first two are built. */
+/** The views §12.3 lists. Node-link, Table and Matrix are built. */
 export const VIEWS = ['node-link', 'table', 'matrix', 'timeline', 'coverage'] as const
 export type GraphView = (typeof VIEWS)[number]
 
@@ -30,7 +30,7 @@ export const VIEW_LABEL: Record<GraphView, string> = {
   coverage: 'Coverage',
 }
 
-export const BUILT_VIEWS: ReadonlySet<GraphView> = new Set(['node-link', 'table'])
+export const BUILT_VIEWS: ReadonlySet<GraphView> = new Set(['node-link', 'table', 'matrix'])
 
 function isTier(value: unknown): value is SourceTier {
   return typeof value === 'string' && (SOURCE_TIERS as readonly string[]).includes(value)

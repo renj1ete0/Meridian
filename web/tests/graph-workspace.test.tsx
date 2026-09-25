@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { GraphCanvasProps } from '../src/explore/graph/GraphCanvas'
 import { CEILING, NodePage, PAGE, cardPosition, expandBlocked, statusLine } from '../src/explore/NodePage'
+import { BUILT_VIEWS, VIEWS, VIEW_LABEL } from '../src/explore/graph/filters'
 import { detail, gnode, hood, path } from './graph-fixtures'
 
 vi.mock('../src/explore/graph/GraphCanvas', () => ({
@@ -119,7 +120,11 @@ describe('the workspace', () => {
     expect(screen.getAllByRole('row')).toHaveLength(4)
   })
 
-  it.each(['Matrix', 'Timeline', 'Coverage'])('%s says it is not built rather than faking it', async (view) => {
+  // Derived from the switcher's own lists, so a view that is built but still
+  // listed as unbuilt (or the reverse) fails here instead of being skipped.
+  const UNBUILT = VIEWS.filter((v) => !BUILT_VIEWS.has(v)).map((v) => VIEW_LABEL[v])
+
+  it.each(UNBUILT)('%s says it is not built rather than faking it', async (view) => {
     serve(() => undefined)
     render(<NodePage entityId={1} />)
     await screen.findByText(/3 of 3 neighbours/)
