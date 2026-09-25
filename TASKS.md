@@ -1360,6 +1360,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       budget, and embedding backpressure
 - [x] `B-63` **Synthesis reasoned over whatever came next, on-topic or not** — `v0.140.2`,
       a deployment setting, on locally
+- [ ] `B-64` **Steering proposals cut the productive topics** — `P6-38`'s "over-served"
+      rule compares a topic's share of new on-topic sources with its weight, so it
+      proposes cutting exactly the topics the crawl is doing well on (first live
+      pass: both of its cuts were productive topics; the lead rejected them). Judge
+      efficiency, on-topic yield per fetch, not yield against weight
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
