@@ -21,6 +21,15 @@ against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-24, end of session)
 
+> **Live state, 2026-09-25 15:05 (+08):** optimisation loop run 3 (the real `B-61`
+> test, 2h) is running on `v0.140.3` (`B-66` embed by value). For this window only
+> the worker was recreated with `MERIDIAN_WORKER_MAX_EMBED_BACKLOG=200000`; at the
+> default the crawl would sit paused behind the backlog for most of a day. **When the
+> window closes, recreate the worker from a shell without that variable** so it
+> returns to 20000. Topic descriptions and the off-topic demotion (both decided
+> 2026-09-25) were applied before the window; see
+> `meridian-calibration/loop/run2/steering.md`.
+
 **What changed on 2026-09-24, and why.** An audit of what the corpus actually
 holds found the crawl had drifted: nearly everything fetched came from following
 links, only the cold-start search queries had ever run, and by content
