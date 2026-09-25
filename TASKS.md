@@ -89,11 +89,13 @@ continue.
   Without it Wikimedia refuses the translation lookups, so no non-English
   seeds are written (`B-52`), and the DOI resolver skips Unpaywall. Restart the
   scheduler and worker after setting it.
-- *Optional:* topic descriptions (Admin → Topics). **The operator's decision
-  (2026-09-24): topics stay broad and the crawl finds its way in**, so a
-  description is never required. Undescribed topics are searched by name. A
-  description only raises labelling recall (0.70 → 0.82 in calibration).
-- `P2-21` off-topic demotion (`retopic --demote-offtopic`, floor 0.30 or 0.25).
+- ~~Topic descriptions~~ **decided 2026-09-25**: every topic now has a short
+  broad description (set through Admin with a reason; the operator left the
+  choice between seeding and describing to the lead, and seeding was ruled out
+  because the question set is held out). Forced re-label run the same day.
+- ~~`P2-21` off-topic demotion~~ **decided 2026-09-25** ("ok"): applied at the
+  default floor 0.30 after the re-label; 5,522 sources marked junk, none of them
+  directed. Nothing deleted; the retention sweep was not run.
 - `P0-15` question-set review, as before.
 - Whether the default `search_languages` (in the global policy row)
   is the right set.

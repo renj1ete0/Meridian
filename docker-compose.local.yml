@@ -187,6 +187,10 @@ services:
       # with the container — silently, and again on the next run.
       MERIDIAN_EMBED_CACHE: /models
       MERIDIAN_RAW_ROOT: /data/raw
+      # Crawl backpressure (`B-61`, `B-66`): the valuable unembedded backlog
+      # above which the crawl pauses. Passed through so a test window can lift
+      # it from the shell without an edit; 0 turns backpressure off.
+      MERIDIAN_WORKER_MAX_EMBED_BACKLOG: ${MERIDIAN_WORKER_MAX_EMBED_BACKLOG:-20000}
     volumes:
       - ${DATA_ROOT:-./.localdata}/raw:/data/raw
       - ${DATA_ROOT:-./.localdata}/figures:/data/figures
