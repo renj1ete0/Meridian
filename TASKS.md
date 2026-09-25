@@ -1405,9 +1405,11 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-71` **Map area names were keyword lists with furniture in them** — `v0.141.0`.
       Reported by the operator ("arxiv title arxiv model", "nan"). One phrase per name;
       furniture dropped at build and at read
-- [~] `B-72` **A web of topics** — the operator's idea: topics overlap, so let a person pick
+- [x] `B-72` **A web of topics** — `v0.142.0`, a tab on the Map. The operator's idea: topics overlap, so let a person pick
       several and see the sources where they all meet. Server side `v0.141.0`
-      (`topic_match=all`, `/api/explore/topic-overlaps`); the picker UI is next
+      (`topic_match=all`, `/api/explore/topic-overlaps`); picker UI `v0.142.0`
+- [x] `B-73` **Saving a view with a topic filter always failed** — `v0.142.0`. Client key
+      `topic`, server field `topics`; found by the B-72 agent
 - [x] `B-69` **Titles that are not titles** — `v0.140.7`. Reported by the operator: placeholder
       PDF titles, site names as page titles, thousands missing. `meridian_core.titles`
       at write time; `worker.retitle` for what is stored

@@ -384,7 +384,7 @@ export function ExplorePage() {
                 aside={
                   <SaveView
                     query={asked}
-                    filters={topics.length > 0 ? { topic: topics } : {}}
+                    filters={viewFilters(topics, topicMatch)}
                     busy={saving}
                     error={saveError}
                     onSave={(name, text, filters) => {
@@ -479,11 +479,12 @@ export function ExplorePage() {
             // view from opening — the ordering of a list is not worth refusing
             // somebody the thing they clicked.
             void markViewOpened(view.view_id).catch(() => {})
-            const saved = Array.isArray(view.filters.topic) ? (view.filters.topic as string[]) : []
+            const saved = savedTopics(view.filters)
+            const match: TopicMatch = view.filters.topics_all === true ? 'all' : 'any'
             setTopics(saved)
-            setTopicMatch('any')
+            setTopicMatch(match)
             setQuery(view.query ?? '')
-            if (view.query) run(view.query, saved)
+            if (view.query) run(view.query, saved, places, match)
           }}
         />
 
@@ -607,4 +608,20 @@ export function RetrievalNotice({ reason, empty }: { reason: string; empty: bool
       ) : null}
     </div>
   )
+}
+
+/**
+ * A view's filters, named as the server's `SearchFilters` names them — it
+ * validates against that model, and `topic` (the query-string spelling) was
+ * refused, so no view with a topic filter could be saved (`B-73`).
+ */
+export function viewFilters(topics: string[], match: TopicMatch): Record<string, unknown> {
+  if (topics.length === 0) return {}
+  return match === 'all' && topics.length > 1 ? { topics, topics_all: true } : { topics }
+}
+
+/** The topics a saved view carries: `topics`, or `topic` from before `B-73`. */
+export function savedTopics(filters: Record<string, unknown>): string[] {
+  const value = filters.topics ?? filters.topic
+  return Array.isArray(value) ? (value as string[]) : []
 }

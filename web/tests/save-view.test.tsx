@@ -110,3 +110,49 @@ describe('saving', () => {
     expect(screen.getByRole('button', { name: /save this view/i })).toBeTruthy()
   })
 })
+
+// -- B-73: what a view stores has to be what the server accepts ---------------------
+
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { savedTopics, viewFilters } from '../src/explore/ExplorePage'
+
+/** `SearchFilters`' fields, read from the dataclass the server validates against. */
+function searchFilterFields(): string[] {
+  const source = readFileSync(
+    join(__dirname, '..', '..', 'packages', 'meridian_core', 'meridian_core', 'search.py'),
+    'utf8',
+  )
+  const start = source.indexOf('class SearchFilters:')
+  const rest = source.slice(start)
+  const end = rest.slice(1).search(/^(class |def |async def )/m)
+  const body = (end === -1 ? rest : rest.slice(0, end + 1)).replace(/"""[\s\S]*?"""/g, '')
+  return [...body.matchAll(/^ {4}([a-z_][a-z0-9_]*)\s*:/gm)].map((m) => m[1]!)
+}
+
+describe('a saved view carries filters the server can apply', () => {
+  it('names every key as SearchFilters does', () => {
+    const fields = searchFilterFields()
+    expect(fields).toContain('topics')
+    for (const filters of [
+      viewFilters(['a'], 'any'),
+      viewFilters(['a', 'b'], 'all'),
+      viewFilters(['a', 'b'], 'any'),
+    ]) {
+      for (const key of Object.keys(filters)) expect(fields).toContain(key)
+    }
+  })
+
+  it('stores all-of only when there is more than one topic to meet', () => {
+    expect(viewFilters([], 'all')).toEqual({})
+    expect(viewFilters(['a'], 'all')).toEqual({ topics: ['a'] })
+    expect(viewFilters(['a', 'b'], 'all')).toEqual({ topics: ['a', 'b'], topics_all: true })
+  })
+
+  it('reopens views saved either way', () => {
+    expect(savedTopics({ topics: ['a'] })).toEqual(['a'])
+    expect(savedTopics({ topic: ['b'] })).toEqual(['b'])
+    expect(savedTopics({})).toEqual([])
+  })
+})

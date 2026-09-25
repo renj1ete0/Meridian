@@ -68,6 +68,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.142.0] — 2026-09-25
+
+### Added
+
+- `B-72`: **a web of topics**, as a third tab on the Map (`/map?view=topics`).
+  One circle per topic, sized by its sources, joined by lines as thick as the
+  sources they share. Pick circles, or a line for its pair, and it says how many
+  sources carry all of them, with the combinations containing the selection
+  listed largest first; "Search where these meet" opens Find with those topics
+  and `topic_match=all`. Find reads `topic` and `topic_match` from its address,
+  and its topic filter has an any/all switch once two topics are chosen
+
+### Fixed
+
+- `B-73`: saving a view with a topic filter always failed. Find stored the
+  query-string spelling (`topic`) and the server validates against
+  `SearchFilters` (`topics`), so it answered 422. Views now store `topics`
+  (and `topics_all`), reopen either spelling, and a drift test holds the keys to
+  the server's fields
+
 ## [0.141.1] — 2026-09-25
 
 ### Fixed

@@ -32,7 +32,8 @@ export function suggestedName(query: string, filters: Record<string, unknown>): 
   // The query, plus the topics if any narrowed it. A default that is merely the
   // query makes two views of the same words indistinguishable in the list, which
   // is the one thing the name has to prevent.
-  const topics = Array.isArray(filters.topic) ? (filters.topic as string[]) : []
+  const value = filters.topics ?? filters.topic
+  const topics = Array.isArray(value) ? (value as string[]) : []
   return topics.length > 0 ? `${query} · ${topics.join(', ')}` : query
 }
 
