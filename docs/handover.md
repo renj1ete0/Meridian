@@ -103,6 +103,15 @@ Wikipedia and Unpaywall lookups is still open (see TASKS, needs the operator).
 
 **New traps from this session:**
 
+- **`docker compose start <svc>` restarts the old container, on its old
+  image.** A service stopped for maintenance and left out of the `up -d
+  --no-deps …` list comes back as the code from before the deploy. On
+  2026-09-25 a whole test window ran the previous worker because of this.
+  Bring a service back with `up -d --no-deps <svc>`, and check what a
+  container actually runs (`python -c "import importlib.metadata as m;
+  print(m.version('meridian-worker'))"` inside it), not the repository's
+  `VERSION`.
+
 - `pkill -f "alembic upgrade head"` also matches a `docker compose run …
   alembic upgrade head` for the *live* stack. Kill by PID.
 - An `ALTER TABLE` on the dev database queues behind a running test suite,
