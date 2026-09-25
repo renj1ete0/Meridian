@@ -1387,6 +1387,23 @@ deploy runbook whose first two commands could not work (`B-17`).
       area-hop source for `route()` (its `HopSource` protocol takes one), the
       two-click pick on the canvas, the route drawn with cited and similar hops
       distinguished, and screenshots against the Route board on the design canvas
+- [~] `P6-41` **An answer page for a question** — UX priority 1 (agreed 2026-09-25). People come
+      with a question, not to browse clusters: evidence grouped by country (places are
+      already tagged), coverage shown honestly (strong / thin / none), trust markers on every
+      item (government, peer-reviewed, date, contested), and "Find more" on a thin country
+      queuing a search. No model; the synthesis panel is a separate decision
+- [ ] `P6-42` **The Map as a tool, not a picture** — UX priority 2. Shade fields by on-topic
+      share, source quality and freshness; clicking a field shows what it holds; actions on
+      every field: search within, want more of this, this is noise (feeds the off-topic
+      demotion). Junk clusters visibly low-value. Semantic zoom across levels (in progress)
+- [ ] `P6-43` **Watched questions** — UX priority 3. A saved view becomes a question to watch:
+      "new evidence since you asked", replacing generic notifications on the landing page
+- [ ] `P6-44` **Plain language in reader views** — UX priority 4. Reader screens say sources,
+      government, peer-reviewed, fields; nodes, edges, passages, tiers and basis stay in Admin.
+      Reader and operator navigation separated
+- [ ] `P0-18` ⚑ **Task-based check with the operator's own questions** — for five of Q31–Q41,
+      time to an answer the operator would stand behind, and dead ends met. Before and after
+      each of P6-41..44
 - [x] `P6-40` **The About page** — `v0.141.0`, reached from Settings. The design canvas has an About board (tagline, what the
       build holds: topics, sources, version) and there is no route or task for it. Found by
       the 2026-09-25 audit of the build against the mocks, which also lists as unbuilt: the
