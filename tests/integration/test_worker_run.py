@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
@@ -2934,3 +2935,95 @@ async def test_a_page_that_becomes_a_listing_retires_its_old_chunks(
     assert source.doc_kind == "listing"
     assert live == []
     assert {c.chunk_id for c in before} <= {c.chunk_id for c in every}, "old chunks were deleted"
+
+
+# --------------------------------------------------------------------------
+# Backpressure (`B-61`)
+# --------------------------------------------------------------------------
+
+
+async def test_the_crawl_pauses_above_the_backlog_ceiling_and_resumes_below_80_percent(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    import worker.main as main_mod
+
+    sess = await session_for("rw")
+    worker, _ = build_worker(
+        sess, ok_html, run_domain, run_topic, resolver=resolve, max_embed_backlog=100
+    )
+    backlog = {"n": 101}
+
+    async def fake_backlog(_sess):
+        return backlog["n"]
+
+    monkeypatch.setattr(main_mod, "embedding_backlog", fake_backlog)
+    monkeypatch.setattr(main_mod, "BACKLOG_CHECK_S", 0.0)
+
+    assert await worker.backpressured() is True
+    backlog["n"] = 90  # below the ceiling, above 80%: still paused
+    assert await worker.backpressured() is True
+    backlog["n"] = 79
+    assert await worker.backpressured() is False
+
+
+async def test_backpressure_off_never_pauses(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    worker, _ = build_worker(
+        sess, ok_html, run_domain, run_topic, resolver=resolve, max_embed_backlog=0
+    )
+    assert await worker.backpressured() is False
+
+
+async def test_a_paused_worker_claims_nothing(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    import worker.main as main_mod
+
+    sess = await session_for("rw")
+    task = await enqueue(sess, run_domain, run_topic)
+    worker, rec = build_worker(
+        sess, ok_html, run_domain, run_topic, resolver=resolve, max_embed_backlog=1
+    )
+
+    async def huge(_sess):
+        return 10**6
+
+    monkeypatch.setattr(main_mod, "embedding_backlog", huge)
+
+    async def stop_soon():
+        await asyncio.sleep(0.2)
+        worker.stop()
+
+    await asyncio.gather(worker.run(), stop_soon())
+
+    await sess.refresh(task)
+    assert task.status == "pending" and rec.requests == []
+
+
+async def test_every_third_claim_asks_for_directed_work_first(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup, monkeypatch
+) -> None:
+    """`B-61`: the reservation is a rhythm, and an empty slot falls through."""
+    import dataclasses as dc
+
+    sess = await session_for("rw")
+    worker, _ = build_worker(sess, ok_html, run_domain, run_topic, resolver=resolve)
+    worker._settings = dc.replace(worker._settings, topics=None, directed_every=3)
+    asked: list[bool] = []
+
+    async def record(_sess, topics, *, directed=False):
+        asked.append(directed)
+        return None
+
+    async def no_shares(_sess):
+        return {}
+
+    monkeypatch.setattr(worker, "_claim_within", record)
+    monkeypatch.setattr(worker, "_shares", no_shares)
+    for _ in range(6):
+        await worker._claim()
+
+    # Claims 3 and 6 try a directed claim, then fall through to the ordinary one.
+    assert asked == [False, False, True, False, False, False, True, False]

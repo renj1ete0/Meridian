@@ -55,8 +55,12 @@ MIN_EXAMINED = 20
 #: at 18–46%.
 OFFTOPIC_SHARE = 0.05
 
-#: Queued links allowed to a host nobody has judged yet.
-EXPLORE_PENDING = 50
+#: Queued links allowed to a host nobody has judged yet. Was 50: a 12-hour run
+#: showed that thousands of unjudged hosts at 50 links each is a breadth-first
+#: crawl of every large institutional website the crawl brushes against, long
+#: before labelling can judge any of them (`B-61`). Ten is enough to learn what a
+#: host is about.
+EXPLORE_PENDING = 10
 
 #: Queued links allowed to any one host.
 MAX_PENDING = 500

@@ -49,6 +49,7 @@ import datetime as dt
 import os
 import signal
 import socket
+import time
 import uuid
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -61,7 +62,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
 from meridian_core.boilerplate import host_key
-from meridian_core.chunks import as_writes, chunk_count, replace_chunks
+from meridian_core.chunks import as_writes, chunk_count, embedding_backlog, replace_chunks
 from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
 from meridian_core.db import dispose_engines, session
 from meridian_core.figures import FigureWrite, replace_figures
@@ -213,6 +214,20 @@ DEFAULT_CONCURRENCY = 4
 DEFAULT_IDLE_SLEEP_S = 5.0
 DEFAULT_HOUSEKEEPING_S = 3600.0
 
+#: `B-61`: one claim in three goes to directed work when any is pending. A
+#: 12-hour run without it fetched a few hundred times more followed links than
+#: search results, because a large frontier out-ranked them all by tier.
+DEFAULT_DIRECTED_EVERY = 3
+
+#: `B-61`: the crawl pauses while this many live chunks wait for a vector. A
+#: CPU embedder falls behind a free-running crawl by an order of magnitude, and
+#: an unembedded page is unsearchable by meaning, unlabelled, and invisible to
+#: the host gate that is supposed to steer the crawl away from it.
+DEFAULT_MAX_EMBED_BACKLOG = 20_000
+
+#: How often the backlog is re-counted while claiming.
+BACKLOG_CHECK_S = 60.0
+
 #: How long a lane waits after an error it did not expect. Capped low: the
 #: failure this exists for is Postgres restarting, and coming back a minute
 #: later is the difference between a blip and an outage that needed a human.
@@ -268,6 +283,12 @@ class WorkerSettings:
     housekeeping_interval_s: float = DEFAULT_HOUSEKEEPING_S
     attempt_retention_days: int = DEFAULT_RETENTION_DAYS
     topics: tuple[str, ...] | None = None
+    #: One claim in this many is *directed* (`B-61`): a search result, query,
+    #: seed or cited paper, when any is waiting. 0 turns the reservation off.
+    directed_every: int = DEFAULT_DIRECTED_EVERY
+    #: Stop claiming while more live chunks than this wait for a vector
+    #: (`B-61`); resume below 80% of it. 0 turns backpressure off.
+    max_embed_backlog: int = DEFAULT_MAX_EMBED_BACKLOG
     #: Stop after this many claims. None runs until signalled; a number gives a
     #: bounded run for tests and for `--once`-style smoke checks.
     max_tasks: int | None = None
@@ -292,6 +313,12 @@ class WorkerSettings:
             ),
             topics=tuple(topics) or None,
             max_tasks=max_tasks or None,
+            directed_every=_env_int(
+                "MERIDIAN_WORKER_DIRECTED_EVERY", DEFAULT_DIRECTED_EVERY, minimum=0
+            ),
+            max_embed_backlog=_env_int(
+                "MERIDIAN_WORKER_MAX_EMBED_BACKLOG", DEFAULT_MAX_EMBED_BACKLOG, minimum=0
+            ),
         )
 
 
@@ -415,6 +442,9 @@ class Worker:
         # every link, which is what a one-shot fetch or a test wants.
         self._hosts = hosts
         self._stopping = asyncio.Event()
+        self._claims = 0
+        self._backlog_checked = -1e9
+        self._paused = False
         self._stats = WorkerStats()
         self._reserved = 0
 
@@ -509,6 +539,14 @@ class Worker:
             # lane that wedges *inside* a fetch should stop beating, and a beat
             # at the end of the loop would only stop once the wedge cleared.
             beat()
+            try:
+                paused = await self.backpressured()
+            except Exception:
+                log.exception("could not read the embedding backlog; claiming anyway")
+                paused = False
+            if paused:
+                await self._sleep(self._settings.idle_sleep_s)
+                continue
             if not self._reserve():
                 return
             try:
@@ -577,6 +615,30 @@ class Worker:
             log.exception("could not read the steering vector; claiming unfiltered")
             return {}
 
+    async def backpressured(self) -> bool:
+        """Whether the embedding backlog says to stop claiming for now (`B-61`).
+
+        Re-counted at most every :data:`BACKLOG_CHECK_S`. Hysteresis: pause above
+        the ceiling, resume only below 80% of it, so the crawl does not flap on
+        the line.
+        """
+        ceiling = self._settings.max_embed_backlog
+        if ceiling <= 0:
+            return False
+        now = time.monotonic()
+        if now - self._backlog_checked >= BACKLOG_CHECK_S:
+            self._backlog_checked = now
+            async with self._session_factory() as sess:
+                backlog = await embedding_backlog(sess)
+            was = self._paused
+            self._paused = backlog > ceiling if not was else backlog > int(ceiling * 0.8)
+            if self._paused != was:
+                log.info(
+                    "crawl paused for embedding" if self._paused else "crawl resumed",
+                    extra={"backlog": backlog, "ceiling": ceiling},
+                )
+        return self._paused
+
     async def _claim(self) -> Claim | None:
         """One task, preferring the topics the attention vector prefers (§10).
 
@@ -600,6 +662,28 @@ class Worker:
                 return await self._claim_within(sess, list(self._settings.topics))
 
             shares = await self._shares(sess)
+
+            self._claims += 1
+            every = self._settings.directed_every
+            if every and self._claims % every == 0:
+                # `B-61`: the reserved slot, drawn through the same attention
+                # vector as any claim so it never spends a topic's share outside
+                # the pool. Falls through to the ordinary draw when nothing
+                # directed is waiting, so the slot is never idle.
+                pool = dict(shares)
+                while pool:
+                    topic = draw_topic(pool)
+                    if topic is None:
+                        break
+                    claim = await self._claim_within(sess, [topic], directed=True)
+                    if claim is not None:
+                        return claim
+                    pool.pop(topic, None)
+                if not shares:
+                    claim = await self._claim_within(sess, None, directed=True)
+                    if claim is not None:
+                        return claim
+
             while shares:
                 topic = draw_topic(shares)
                 if topic is None:
@@ -614,13 +698,16 @@ class Worker:
 
             return await self._claim_within(sess, None)
 
-    async def _claim_within(self, sess, topics: list[str] | None) -> Claim | None:
+    async def _claim_within(
+        self, sess, topics: list[str] | None, *, directed: bool = False
+    ) -> Claim | None:
         task = await claim_next(
             sess,
             worker_id=self._settings.worker_id,
             lease_seconds=self._settings.lease_seconds,
             topics=topics,
             task_types=self._claimable_task_types(),
+            directed=directed,
         )
         if task is None:
             return None

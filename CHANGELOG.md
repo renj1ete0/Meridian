@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.1] — 2026-09-25
+
+### Fixed
+
+- `B-61`: the crawl no longer outruns search, labelling and embedding. One
+  claim in three (`MERIDIAN_WORKER_DIRECTED_EVERY`) goes to *directed* work —
+  search results, queries, seeds and cited papers above the floor — drawn
+  through the same attention vector, falling through when none waits; a host
+  nobody has judged yet may hold 10 queued links, not 50; and the worker
+  pauses claiming while more than 20,000 live chunks wait for a vector
+  (`MERIDIAN_WORKER_MAX_EMBED_BACKLOG`), resuming below 80% of it
+
 ## [0.140.0] — 2026-09-25
 
 ### Fixed

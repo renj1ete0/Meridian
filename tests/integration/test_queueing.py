@@ -23,6 +23,7 @@ from sqlalchemy import delete, func, select
 
 from meridian_core.models import QueueTask
 from meridian_core.queueing import (
+    DIRECTED_FLOOR,
     DEFAULT_LEASE_SECONDS,
     abandon,
     advance,
@@ -563,3 +564,84 @@ async def test_queue_depth_counts_by_status(session_for) -> None:
 
     assert after["pending"] == before.get("pending", 0) + 2
     assert after["failed"] == before.get("failed", 0) + 1
+
+
+# --------------------------------------------------------------------------
+# Directed claims (`B-61`)
+# --------------------------------------------------------------------------
+
+
+async def _directed_fixture(sess, topic: str):
+    rows = {
+        "frontier": QueueTask(
+            url_or_query=f"https://d.example/{topic}/f",
+            topic=topic,
+            seed_source="frontier",
+            priority=90,
+        ),
+        "sitemap": QueueTask(
+            url_or_query=f"https://d.example/{topic}/s",
+            topic=topic,
+            seed_source="sitemap",
+            priority=85,
+        ),
+        "search": QueueTask(
+            url_or_query=f"https://d.example/{topic}/r",
+            topic=topic,
+            seed_source="search",
+            priority=10,
+        ),
+        "doi_floor": QueueTask(
+            url_or_query=f"10.1/{topic}.floor",
+            topic=topic,
+            seed_source="citation",
+            task_type="doi",
+            priority=DIRECTED_FLOOR,
+        ),
+    }
+    sess.add_all(rows.values())
+    await sess.flush()
+    return rows
+
+
+async def test_a_directed_claim_takes_chosen_work_over_higher_priority_links(session_for) -> None:
+    sess = await session_for("rw")
+    topic = f"directed-{uuid.uuid4().hex[:6]}"
+    rows = await _directed_fixture(sess, topic)
+
+    claimed = await claim_next(sess, worker_id="w", topics=[topic], directed=True)
+
+    assert claimed.task_id == rows["search"].task_id
+    # And the ordinary claim still follows priority.
+    assert (await claim_next(sess, worker_id="w", topics=[topic])).task_id == rows[
+        "frontier"
+    ].task_id
+
+
+async def test_a_directed_claim_skips_followed_links_and_the_floor(session_for) -> None:
+    sess = await session_for("rw")
+    topic = f"directed-{uuid.uuid4().hex[:6]}"
+    rows = await _directed_fixture(sess, topic)
+    await claim_next(sess, worker_id="w", topics=[topic], directed=True)  # the search row
+
+    assert await claim_next(sess, worker_id="w", topics=[topic], directed=True) is None
+    assert rows["doi_floor"].claimed_by is None
+
+
+async def test_a_followed_query_or_doi_still_counts_as_directed(session_for) -> None:
+    """A frontier-found DOI above the floor is a cited paper, not a link."""
+    sess = await session_for("rw")
+    topic = f"directed-{uuid.uuid4().hex[:6]}"
+    doi = QueueTask(
+        url_or_query=f"10.1/{topic}.x",
+        topic=topic,
+        seed_source="frontier",
+        task_type="doi",
+        priority=60,
+    )
+    sess.add(doi)
+    await sess.flush()
+
+    assert (
+        await claim_next(sess, worker_id="w", topics=[topic], directed=True)
+    ).task_id == doi.task_id

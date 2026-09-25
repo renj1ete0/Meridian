@@ -72,6 +72,15 @@ def backoff_delay_s(
     return (rng or random).uniform(0, ceiling)
 
 
+#: Seed sources a crawl *followed* rather than chose (`B-61`).
+FOLLOWED_SOURCES = ("frontier", "sitemap")
+
+#: A directed claim skips work at or below this priority: a cited paper whose
+#: citing page was off-topic sits here on purpose, and a reserved slot is not
+#: the place to spend on it.
+DIRECTED_FLOOR = 3
+
+
 async def claim_next(
     sess: AsyncSession,
     *,
@@ -79,8 +88,15 @@ async def claim_next(
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
     topics: list[str] | None = None,
     task_types: list[str] | None = None,
+    directed: bool = False,
 ) -> QueueTask | None:
     """Claim the highest-priority eligible task, or return None if there is none.
+
+    ``directed`` narrows the claim to work somebody or something *chose* rather
+    than followed (`B-61`): search results, queries, seeds and cited papers above
+    the priority floor. Frontier and sitemap links are excluded. A worker spends
+    a fixed share of its claims this way, because priority alone could not stop a
+    large frontier from out-ranking every search result the crawl produced.
 
     Eligible means: pending, past its backoff time, and either unclaimed or
     holding a lease that has expired. Ordered by priority then age, so
@@ -114,6 +130,14 @@ async def claim_next(
         stmt = stmt.where(QueueTask.topic.in_(topics))
     if task_types:
         stmt = stmt.where(QueueTask.task_type.in_(task_types))
+    if directed:
+        stmt = stmt.where(
+            or_(
+                QueueTask.seed_source.not_in(FOLLOWED_SOURCES),
+                QueueTask.task_type.in_(("query", "doi")),
+            ),
+            QueueTask.priority > DIRECTED_FLOOR,
+        )
 
     task = (await sess.execute(stmt)).scalar_one_or_none()
     if task is None:

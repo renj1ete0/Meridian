@@ -1353,6 +1353,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       area-hop source for `route()` (its `HopSource` protocol takes one), the
       two-click pick on the canvas, the route drawn with cited and similar hops
       distinguished, and screenshots against the Route board on the design canvas
+- [x] `B-61` **The crawl outran search, labelling and embedding** — `v0.140.1`. Found by
+      the first 12h run: followed links outnumbered search results by orders of
+      magnitude, unjudged institutional hosts were explored 50 links each, and the
+      embedding backlog grew several-fold. Directed claim share, smaller exploration
+      budget, and embedding backpressure
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
