@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.2] — 2026-09-25
+
+### Added
+
+- `B-63`: `MERIDIAN_SYNTHESIS_ON_TOPIC_ONLY` points synthesis at passages
+  content labelling put on a topic (by source or by passage), never moving its
+  mark past a passage not yet examined — so a corpus that is mostly off-topic
+  does not spend model tokens reasoning over drift. Off by default (a fresh
+  install has no labels); on in the local compose file
+
 ## [0.140.1] — 2026-09-25
 
 ### Fixed

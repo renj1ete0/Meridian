@@ -645,3 +645,52 @@ async def test_pull_leaves_junk_out_of_the_batch(corpus, monkeypatch) -> None:
     _, journal, batch = await drive(sess, ids, FakeModel(), monkeypatch)
 
     assert not {passage.chunk_id for passage in batch.passages} & set(ids)
+
+
+# --------------------------------------------------------------------------
+# On-topic synthesis, when the deployment asks for it (`B-63`)
+# --------------------------------------------------------------------------
+
+
+async def _examine(sess, chunk_ids, labels) -> None:
+    from meridian_core.models import ChunkTopics
+
+    for cid in chunk_ids:
+        sess.add(
+            ChunkTopics(
+                chunk_id=cid, topic_labels=list(labels), topic_scores={}, topic_basis="test"
+            )
+        )
+    await sess.flush()
+
+
+async def test_off_by_default_every_live_passage_is_pulled(corpus, monkeypatch) -> None:
+    sess, ids, _ = corpus
+    monkeypatch.delenv(orchestrate.ON_TOPIC_ENV, raising=False)
+    _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
+    assert [p.chunk_id for p in batch.passages][: len(ids)] == ids
+
+
+async def test_on_topic_only_skips_a_passage_examined_and_about_nothing(
+    corpus, monkeypatch
+) -> None:
+    sess, ids, _ = corpus
+    monkeypatch.setenv(orchestrate.ON_TOPIC_ENV, "true")
+    await _examine(sess, ids[:1], ["walkability"])
+    await _examine(sess, ids[1:], [])
+
+    _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
+
+    pulled = [p.chunk_id for p in batch.passages]
+    assert ids[0] in pulled and not set(ids[1:]) & set(pulled)
+
+
+async def test_on_topic_only_never_passes_a_passage_not_yet_examined(corpus, monkeypatch) -> None:
+    """The mark only moves forward: skipping an unlabelled passage would be for good."""
+    sess, ids, _ = corpus
+    monkeypatch.setenv(orchestrate.ON_TOPIC_ENV, "true")
+    await _examine(sess, [ids[0], ids[2]], ["walkability"])  # ids[1] not examined
+
+    _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
+
+    assert [p.chunk_id for p in batch.passages] == [ids[0]]

@@ -65,12 +65,13 @@ import asyncio
 import contextlib
 import dataclasses
 import datetime as dt
+import os
 import signal
 import time
 from collections.abc import AsyncIterator
 from typing import Final
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.budget import BudgetError, load_budget
@@ -78,7 +79,16 @@ from meridian_core.db import dispose_engines, get_sessionmaker
 from meridian_core.embedder import RemoteEmbedder
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.mentions import embed_missing_entities, embed_names, resolve_mention
-from meridian_core.models import Agent, AttributeDefinition, Chunk, Entity, Run, Source, TopicConfig
+from meridian_core.models import (
+    Agent,
+    AttributeDefinition,
+    Chunk,
+    ChunkTopics,
+    Entity,
+    Run,
+    Source,
+    TopicConfig,
+)
 from meridian_core.proposals import (
     CitationOutOfRange,
     Passage,
@@ -273,6 +283,38 @@ async def _quality_tier(sess: AsyncSession, agent_id: str) -> int | None:
     return agent.quality_tier if agent is not None else None
 
 
+#: `B-63`: a deployment whose corpus is mostly off-topic can point synthesis at
+#: labelled on-topic passages only. Off by default: it depends on content
+#: labelling having run, and a fresh install has no labels yet.
+ON_TOPIC_ENV = "MERIDIAN_SYNTHESIS_ON_TOPIC_ONLY"
+
+
+def on_topic_only() -> bool:
+    return os.environ.get(ON_TOPIC_ENV, "").strip().lower() in {"1", "true", "yes"}
+
+
+def on_topic_chunk():
+    """The source, or the passage itself, is labelled with a topic by content."""
+    return or_(
+        func.cardinality(Source.topic_labels) > 0,
+        exists().where(
+            ChunkTopics.chunk_id == Chunk.chunk_id,
+            func.cardinality(ChunkTopics.topic_labels) > 0,
+        ),
+    )
+
+
+async def _before_unexamined(sess: AsyncSession, stmt, run: Run):
+    unexamined = await sess.scalar(
+        select(func.min(Chunk.chunk_id)).where(
+            Chunk.superseded_at.is_(None),
+            ~exists().where(ChunkTopics.chunk_id == Chunk.chunk_id),
+            *([Chunk.chunk_id > run.last_chunk_id] if run.last_chunk_id is not None else []),
+        )
+    )
+    return stmt.where(Chunk.chunk_id < unexamined) if unexamined is not None else stmt
+
+
 async def _pull(
     sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now: dt.datetime
 ) -> None:
@@ -285,7 +327,9 @@ async def _pull(
     conclusion. It also drops junk-tier sources (`P2-21`), as search and the
     map already do: a source demoted as off-topic or duplicate is one the
     corpus has decided is not evidence, and spending a model on it would be
-    reasoning over what the reader was told is not there.
+    reasoning over what the reader was told is not there. And it takes only
+    passages that content labelling put on a topic, stopping short of any
+    passage not yet examined, when the deployment asks for it (`B-63`).
 
     Takes `now` and does not use it: every runner has one signature, so a stage
     added later cannot be called with arguments the dispatcher does not send.
@@ -309,6 +353,12 @@ async def _pull(
     )
     if run.last_chunk_id is not None:
         stmt = stmt.where(Chunk.chunk_id > run.last_chunk_id)
+    if on_topic_only():
+        stmt = stmt.where(on_topic_chunk())
+        # ...and never past a passage nobody has examined yet. The mark only
+        # moves forward, so a passage skipped because it was not yet labelled
+        # would be skipped for good once labelling caught up.
+        stmt = await _before_unexamined(sess, stmt, run)
 
     rows = (await sess.execute(stmt)).all()
     batch.passages = [

@@ -361,6 +361,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     environment:
+      # `B-63`: this corpus is mostly off-topic drift, so reason only over
+      # passages content labelling put on a topic.
+      MERIDIAN_SYNTHESIS_ON_TOPIC_ONLY: "true"
       <<: [*pg-credentials, *db-urls]
       # The key the registry row names (§11.11). Absent is a supported state:
       # the run defers at `extract` saying which agent could not be reached,
