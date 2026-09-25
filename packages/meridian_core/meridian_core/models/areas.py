@@ -58,8 +58,11 @@ class Area(Base):
     parent_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("areas.area_id", ondelete="CASCADE")
     )
-    #: Most distinctive terms first. The name is the first three.
+    #: Most distinctive terms first. Detail beside the name, not the name.
     terms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    #: The field of work nearest the centroid, from ``config/fields.yaml``
+    #: (`B-74`). NULL when nothing fitted, or before the build was named.
+    field: Mapped[str | None] = mapped_column(Text)
     passages: Mapped[int] = mapped_column(Integer, nullable=False)
     sources: Mapped[int] = mapped_column(Integer, nullable=False)
     #: ``{source_tier: passages}``.

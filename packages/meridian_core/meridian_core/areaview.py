@@ -58,15 +58,21 @@ def usable_terms(terms: list[str]) -> list[str]:
     return [t for t in terms if not any(word in FURNITURE for word in t.split())]
 
 
-def area_name(terms: list[str]) -> str:
-    """One short phrase, not a list: the operator reads a name, not three
-    keywords joined by dots (`B-71`). The best two-word phrase among the top
-    few terms when there is one — "road safety" says more than "road" — and
-    otherwise the top term."""
+def area_name(terms: list[str], field: str | None = None) -> str:
+    """One short name, not a list of keywords (`B-71`, `B-74`).
+
+    The area's field of work when the build found one: a name from a fixed
+    list, so nothing a document happened to contain — a licence string, a
+    publisher's badge — can become it. The terms stay beside the name as
+    detail. Without a field, the best two-word phrase among the top few terms,
+    else the top term.
+    """
+    if field:
+        return field
     terms = usable_terms(terms)
-    if not terms:
+    phrase = next((t for t in terms[:NAME_TERMS] if " " in t), terms[0] if terms else None)
+    if not phrase:
         return "(no distinctive terms)"
-    phrase = next((t for t in terms[:NAME_TERMS] if " " in t), terms[0])
     return phrase[:1].upper() + phrase[1:]
 
 
@@ -91,7 +97,7 @@ def to_read(area: Area, children: int, *, now: dt.datetime) -> AreaRead:
         area_id=area.area_id,
         level=area.level,
         parent_id=area.parent_id,
-        name=area_name(area.terms),
+        name=area_name(area.terms, area.field),
         terms=usable_terms(list(area.terms))[:TERMS_SHOWN],
         passages=area.passages,
         sources=area.sources,
@@ -141,7 +147,7 @@ async def path_to(sess: AsyncSession, area: Area) -> list[AreaCrumb]:
             break
         chain.append(parent)
     return [
-        AreaCrumb(area_id=a.area_id, level=a.level, name=area_name(a.terms))
+        AreaCrumb(area_id=a.area_id, level=a.level, name=area_name(a.terms, a.field))
         for a in reversed(chain)
     ]
 

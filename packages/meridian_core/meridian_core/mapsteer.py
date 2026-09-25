@@ -137,7 +137,7 @@ async def steer_area(
     """More, less or watch one area of the newest build. Flushes; does not commit."""
     build = await latest_build(sess)
     area, _ = await _area_in(sess, build, area_id)
-    name = area_name(area.terms)
+    name = area_name(area.terms, area.field)
     reason = f"from the map: {action} of area “{name}” (build {area.build_id})"
     topic = dominant(await area_topics(sess, area), await configured_topics(sess))
 

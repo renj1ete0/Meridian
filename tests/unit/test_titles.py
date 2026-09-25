@@ -116,6 +116,24 @@ def test_no_heading_means_no_title(text) -> None:
     assert title_from_text(text) is None
 
 
+def test_a_wrapped_sentence_is_not_a_heading() -> None:
+    """Found in the live report: the rejected sentence's second line was taken."""
+    text = (
+        "TRID is an integrated database that combines the records from\n"
+        "Database and the OECD's Joint Transport Research Centre's International Transport\n"
+    )
+    assert title_from_text(text) is None
+
+
+def test_a_heading_after_a_blank_line_still_counts() -> None:
+    text = (
+        "TRID is an integrated database that combines the records from\n"
+        "\n"
+        "Planning for Autonomous Cars"
+    )
+    assert title_from_text(text) == "Planning for Autonomous Cars"
+
+
 def test_a_title_case_title_with_commas_is_still_a_title() -> None:
     assert (
         title_from_text("Planes, Trains and Automobiles in the City")

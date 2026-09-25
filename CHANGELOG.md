@@ -68,6 +68,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.143.0] — 2026-09-25
+
+### Changed
+
+- `B-74`: Map areas are named by **field of work**. Words drawn from passages
+  let licence strings and publisher badges through ("bync", "free article");
+  a list of words to refuse never ends. Each area is now named by the field
+  (regions) or subfield (deeper areas) nearest its centroid, from
+  `config/fields.yaml` — the OpenAlex fields and subfields, 26 and 241 — so a
+  name outside that list cannot appear. An area nothing fits is named by its
+  cleaned terms, as before. New column `areas.field`; `worker.areas` names every
+  build, and `worker.areas --name-only` names the newest without rebuilding
+
+### Fixed
+
+- `B-69` follow-up: a title guessed from the text skips the second line of a
+  wrapped sentence
+- Licence and badge words (`bync`, `cc`, `nd`, "free article", "open access",
+  `pubmed`, `epub`) join the terms an area can never be described by
+
 ## [0.142.0] — 2026-09-25
 
 ### Added

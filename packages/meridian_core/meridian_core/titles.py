@@ -150,6 +150,34 @@ def title_from_text(text: str | None, *, lines: int = 5) -> str | None:
     """
     if not text:
         return None
+    previous_open = False
+    for raw in text.splitlines()[: lines * 3]:
+        line = _norm(raw.strip("#*_ "))
+        if not line:
+            previous_open = False
+            continue
+        lines -= 1
+        # A line after an unfinished long one is that sentence wrapping, not a
+        # heading: "…combines the records from / Database and the OECD's…".
+        continuation = previous_open
+        previous_open = len(line) > 60 and not line.endswith((".", "!", "?", ":"))
+        words = line.split()
+        if (
+            not continuation
+            and 3 <= len(words) <= 25
+            and 15 <= len(line) <= 180
+            and (line[0].isupper() or line[0].isdigit())
+            and not line.endswith((":", ".", ",", "!", "?", ";"))
+            and not _NOT_A_HEADING.search(line)
+            and not _SENTENCE.search(line)
+            and not _author_line(line)
+        ):
+            cleaned = clean_title(line)
+            if cleaned:
+                return cleaned
+        if lines <= 0:
+            break
+    return None
     for raw in text.splitlines()[: lines * 3]:
         line = _norm(raw.strip("#*_ "))
         if not line:

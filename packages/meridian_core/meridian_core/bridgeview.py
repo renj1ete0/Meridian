@@ -52,7 +52,9 @@ async def bridge(sess: AsyncSession, a: int, b: int) -> BridgeRead:
     )
 
     def crumb(area: Area) -> AreaCrumb:
-        return AreaCrumb(area_id=area.area_id, level=area.level, name=area_name(area.terms))
+        return AreaCrumb(
+            area_id=area.area_id, level=area.level, name=area_name(area.terms, area.field)
+        )
 
     first, second = areas[a], areas[b]
     if row is None:

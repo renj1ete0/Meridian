@@ -1402,6 +1402,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [x] `B-74` **Area names aligned to fields of work** — `v0.143.0`. The operator: "align to
+      fields of work", after licence strings ("bync", "free article") still named areas.
+      Named by the nearest OpenAlex field/subfield (`config/fields.yaml`) by centroid;
+      terms stay as detail
 - [x] `B-71` **Map area names were keyword lists with furniture in them** — `v0.141.0`.
       Reported by the operator ("arxiv title arxiv model", "nan"). One phrase per name;
       furniture dropped at build and at read
