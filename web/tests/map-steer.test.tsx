@@ -69,7 +69,7 @@ describe('the area menu', () => {
     render(<AreaSteerItems area={area()} close={() => {}} />)
     const less = (await screen.findByRole('menuitem', { name: /Crawl less of this/ })) as HTMLButtonElement
     expect(less.disabled).toBe(true)
-    expect(less.textContent).toContain('no configured topic holds this area')
+    expect(less.textContent).toContain('no configured topic holds this field')
     expect((screen.getByRole('menuitem', { name: /Crawl more of this/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 

@@ -9,6 +9,7 @@ import {
   keyValuesAtScale,
   labelLines,
   levelCaption,
+  levelNoun,
   linkWidth,
   placeAreas,
   edgeToEdge,
@@ -27,17 +28,20 @@ import { hrefForSource, navigate, onInternalClick } from '../../lib/route'
 /**
  * The Map screen's default view (task P6-34): the corpus as nested areas.
  *
- * One level at a time — regions, then the areas inside one region, then its
- * sub-areas — so the picture stays readable whatever the corpus holds. Circle
+ * On screen these are fields, subfields and themes (level 1, 2, 3); the code,
+ * the API and the URL keep the older word "area", so old links still open.
+ *
+ * One level at a time — fields, then the subfields inside one field, then its
+ * themes — so the picture stays readable whatever the corpus holds. Circle
  * *area* is passages collected, with a key drawn at the same scale; an amber
  * outline marks an area that is weak (few independent sources) or stale
  * (nothing new stored for months), and its reasons are in words on hover and
  * in the panel. Lines are bridges: solid where a claim in the graph is cited
  * across the two, dashed where the nearest passages are merely similar.
  *
- * **An area is a cluster, not a topic**, and the screen says so where it
- * lists them: names are the terms that set a cluster's passages apart, not a
- * label anybody chose.
+ * **A field is a cluster, not a topic**, and the screen says so where it
+ * lists them: the server names each cluster for the field of work its
+ * passages read as; topics are a filter over the clusters, not their bounds.
  */
 
 /** What the context menu can do beyond reading; wired by P6-35. */
@@ -91,7 +95,7 @@ export function AreasScreen({ actions }: { actions?: MapActions }) {
       .then((level) => setLoad({ status: 'ready', level }))
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        setLoad({ status: 'error', message: messageOf(cause, 'The areas did not load.') })
+        setLoad({ status: 'error', message: messageOf(cause, 'The fields did not load.') })
       })
     return () => controller.abort()
   }, [parent])
@@ -109,7 +113,7 @@ export function AreasScreen({ actions }: { actions?: MapActions }) {
     return <p className="p-6 text-text">{load.message}</p>
   }
   if (!load.level) {
-    return <p className="p-6 font-mono text-[length:var(--text-data)] text-text-muted">Reading the areas.</p>
+    return <p className="p-6 font-mono text-[length:var(--text-data)] text-text-muted">Reading the fields.</p>
   }
   return <AreasView level={load.level} onLevel={goTo} actions={actions} loading={load.status === 'loading'} />
 }
@@ -152,7 +156,7 @@ export function AreasView({
         .then((detail) => setPanel((p) => (p.kind === 'area' && p.areaId === panel.areaId ? { ...p, detail } : p)))
         .catch((cause: unknown) => {
           if (controller.signal.aborted) return
-          setPanel((p) => (p.kind === 'area' ? { ...p, error: messageOf(cause, 'This area did not load.') } : p))
+          setPanel((p) => (p.kind === 'area' ? { ...p, error: messageOf(cause, 'This field did not load.') } : p))
         })
       return () => controller.abort()
     }
@@ -184,9 +188,9 @@ export function AreasView({
     return (
       <div className="flex-1 p-6">
         <div className="max-w-xl border border-line bg-surface p-5">
-          <h2 className="text-[length:var(--text-subhead)] font-semibold text-text">No areas yet</h2>
+          <h2 className="text-[length:var(--text-subhead)] font-semibold text-text">No fields yet</h2>
           <p className="mt-2 text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
-            Areas are built once a day by <span className="font-mono">worker.areas</span> from every searchable,
+            Fields are built once a day by <span className="font-mono">worker.areas</span> from every searchable,
             embedded passage — at least {level.passages_needed.toLocaleString('en')} of them. Nothing has been
             built on this corpus yet. The passages themselves can be seen now, under Passages in 3D.
           </p>
@@ -262,7 +266,7 @@ export function AreasView({
 
       {panel.kind !== 'none' ? (
         <aside
-          aria-label={panel.kind === 'bridge' ? 'Bridge' : 'Area'}
+          aria-label={panel.kind === 'bridge' ? 'Bridge' : 'Field'}
           className="flex w-[380px] shrink-0 flex-col gap-3.5 overflow-y-auto border-l border-line bg-surface p-5"
         >
           {panel.kind === 'bridge' ? (
@@ -348,7 +352,7 @@ function Canvas({
     [level.areas, width, drawHeight, maxRadius],
   )
   useEffect(() => onScale(scale), [scale, onScale])
-  const childNoun = level.level + 1 >= level.levels ? 'sub-area' : 'area'
+  const childNoun = levelNoun(level.level + 1)
   const at = new Map(placed.map((p) => [p.area.area_id, p]))
 
   function contextMenu(event: React.MouseEvent, area: Area | null) {
@@ -366,7 +370,7 @@ function Canvas({
 
   return (
     <div ref={box} className="absolute inset-0" onContextMenu={(event) => contextMenu(event, null)}>
-      <svg width={width} height={height} role="img" aria-label="Areas of the corpus" className="block">
+      <svg width={width} height={height} role="img" aria-label="Fields of the corpus" className="block">
         <g fill="none" stroke="var(--dark-canvas-graticule)">
           <circle cx={cx} cy={cy} r={globe} />
           <ellipse cx={cx} cy={cy} rx={globe * 0.42} ry={globe} />
@@ -643,7 +647,9 @@ function LevelAside({
   onLevel: (areaId: number | null) => void
   onPick: (area: Area) => void
 }) {
-  const noun = level.level === level.levels ? 'Sub-areas' : 'Areas'
+  const plural = levelNoun(level.level, 2)
+  const noun = capitalised(plural)
+  const parentNoun = levelNoun(level.level - 1)
   return (
     <aside className="flex w-[280px] shrink-0 flex-col gap-3.5 overflow-y-auto border-r border-line bg-surface p-[18px]">
       <nav aria-label="Where you are" className="flex flex-col gap-1 font-mono text-[11px]">
@@ -655,7 +661,7 @@ function LevelAside({
             onLevel(null)
           }}
         >
-          All areas
+          All fields
         </a>
         {level.path.map((crumb, i) => {
           const last = i === level.path.length - 1
@@ -680,7 +686,7 @@ function LevelAside({
       </nav>
 
       <h2 className="font-mono text-[9.5px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
-        {noun} in this {level.level === 2 ? 'region' : 'area'}
+        {noun} in this {parentNoun}
       </h2>
       <ul className="flex flex-col">
         {level.areas.map((area) => (
@@ -727,7 +733,7 @@ function LevelAside({
       </ul>
 
       <p className="mt-auto text-[12px] leading-[1.55] text-text-faint">
-        Areas are clusters of passages, named by their most distinctive terms. Topics are a filter over them,
+        Fields are clusters of passages, each named for the field of work it reads as. Topics are a filter over them,
         not their boundaries.
       </p>
     </aside>
@@ -764,19 +770,19 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
           setText(event.target.value)
           if (!event.target.value) setHits(null)
         }}
-        placeholder="Jump to an area or a term"
-        aria-label="Jump to an area or a term"
+        placeholder="Jump to a field or a term"
+        aria-label="Jump to a field or a term"
         className="h-9 w-[340px] border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-faint"
       />
       {error ? <p className="absolute left-0 top-10 w-[340px] border border-line bg-surface p-2 text-[12px] text-text">{error}</p> : null}
       {hits ? (
         <ul
-          aria-label="Areas found"
+          aria-label="Fields found"
           className="absolute left-0 top-10 z-20 max-h-[360px] w-[420px] overflow-y-auto border border-line-strong bg-surface py-1"
         >
           {hits.length === 0 ? (
             <li className="px-3 py-2 text-[12.5px] text-text-muted">
-              No area is named by it, and no passage in the map contains it.
+              No field is named by it, and no passage in the map contains it.
             </li>
           ) : null}
           {hits.map((hit) => (
@@ -799,7 +805,7 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
                   {hit.path
                     .slice(0, -1)
                     .map((c) => c.name)
-                    .join(' › ') || 'a region'}
+                    .join(' › ') || 'a field'}
                 </span>
               </button>
             </li>
@@ -906,7 +912,7 @@ function ContextMenu({
         Open in Find
       </MenuItem>
       <div className="my-1.5 border-t border-line" />
-      <MenuItem disabled note="Route search across areas (P6-32) is not built yet.">
+      <MenuItem disabled note="Route search across fields (P6-32) is not built yet.">
         Route from here…
       </MenuItem>
     </div>
@@ -1027,7 +1033,7 @@ function BridgePanel({
             </p>
           )}
 
-          <SectionLabel>Terms both areas share</SectionLabel>
+          <SectionLabel>Terms both fields share</SectionLabel>
           {bridge.shared_terms.length ? (
             <div className="flex flex-wrap gap-1.5">
               {bridge.shared_terms.map((term) => (
@@ -1035,7 +1041,7 @@ function BridgePanel({
               ))}
             </div>
           ) : (
-            <p className="text-[12.5px] text-text-muted">None among either area's distinctive terms.</p>
+            <p className="text-[12.5px] text-text-muted">None among either field's distinctive terms.</p>
           )}
 
           <SectionLabel>Similar passages across the two</SectionLabel>
@@ -1073,7 +1079,7 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
   const detail = panel.detail
   return (
     <>
-      <PanelHead label="Area" title={detail?.area.name ?? '…'} onClose={onClose} />
+      <PanelHead label={detail ? capitalised(levelNoun(detail.area.level)) : 'Field'} title={detail?.area.name ?? '…'} onClose={onClose} />
       {panel.error ? <p className="text-[13px] text-text">{panel.error}</p> : null}
       {detail ? (
         <>
@@ -1110,8 +1116,12 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
           </ul>
         </>
       ) : !panel.error ? (
-        <p className="font-mono text-[11px] text-text-faint">Reading the area.</p>
+        <p className="font-mono text-[11px] text-text-faint">Reading the field.</p>
       ) : null}
     </>
   )
+}
+
+function capitalised(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1)
 }

@@ -54,7 +54,7 @@ export function modeFromSearch(search: string): Mode {
 
 /** The Map sub-bar's views, in order, with the URL each one lives at. */
 export const MAP_VIEWS = [
-  ['areas', 'Areas', '/map'],
+  ['areas', 'Fields', '/map'],
   ['topics', 'Topics', '/map?view=topics'],
   ['points', 'Passages in 3D', '/map?view=points'],
 ] as const satisfies readonly (readonly [Mode, string, string])[]

@@ -49,7 +49,7 @@ export function AreaSteerItems({ area, close }: { area: Area; close: () => void 
     getAreaSteering(area.area_id, { signal: controller.signal })
       .then(setSteering)
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setReadError(messageOf(cause, 'Could not read what this area would steer.'))
+        if (!controller.signal.aborted) setReadError(messageOf(cause, 'Could not read what this field would steer.'))
       })
     return () => controller.abort()
   }, [area.area_id])
@@ -76,7 +76,7 @@ export function AreaSteerItems({ area, close }: { area: Area; close: () => void 
         note={
           topic
             ? `boosts “${topic}” ×${steering.more_factor} for ${steering.boost_days} days · searches “${steering.search}”`
-            : `no configured topic holds this area · searches “${steering.search}”`
+            : `no configured topic holds this field · searches “${steering.search}”`
         }
       >
         Crawl more of this
@@ -87,7 +87,7 @@ export function AreaSteerItems({ area, close }: { area: Area; close: () => void 
         note={
           topic
             ? `turns “${topic}” down ×${steering.less_factor} for ${steering.boost_days} days`
-            : 'no configured topic holds this area, so no weight draws it on purpose'
+            : 'no configured topic holds this field, so no weight draws it on purpose'
         }
       >
         Crawl less of this
@@ -138,7 +138,7 @@ function MakeTopic({
   function submit(event: React.FormEvent) {
     event.preventDefault()
     setBusy(true)
-    addTopic({ topic: name.trim(), description: description.trim() || null, reason: `from the map: area “${area.name}”` })
+    addTopic({ topic: name.trim(), description: description.trim() || null, reason: `from the map: field “${area.name}”` })
       .then(() =>
         onDone({
           kind: 'done',
@@ -253,7 +253,7 @@ export function SuggestBox({ near, close }: { near: readonly Area[]; close: () =
           </label>
           {thin.length ? (
             <>
-              <span className="text-[12px] text-text-faint">Smallest areas here, if you want one of these:</span>
+              <span className="text-[12px] text-text-faint">Smallest fields here, if you want one of these:</span>
               <div className="flex flex-wrap gap-1.5">
                 {thin.map((term) => (
                   <button
