@@ -2953,7 +2953,10 @@ async def test_the_crawl_pauses_above_the_backlog_ceiling_and_resumes_below_80_p
     )
     backlog = {"n": 101}
 
-    async def fake_backlog(_sess):
+    asked: list[bool] = []
+
+    async def fake_backlog(_sess, *, valuable_only=False):
+        asked.append(valuable_only)
         return backlog["n"]
 
     monkeypatch.setattr(main_mod, "embedding_backlog", fake_backlog)
@@ -2964,6 +2967,9 @@ async def test_the_crawl_pauses_above_the_backlog_ceiling_and_resumes_below_80_p
     assert await worker.backpressured() is True
     backlog["n"] = 79
     assert await worker.backpressured() is False
+    # The valuable backlog only (`B-66`): an off-topic tail embedded last would
+    # otherwise hold the crawl paused for good.
+    assert asked and all(asked)
 
 
 async def test_backpressure_off_never_pauses(
@@ -2987,7 +2993,7 @@ async def test_a_paused_worker_claims_nothing(
         sess, ok_html, run_domain, run_topic, resolver=resolve, max_embed_backlog=1
     )
 
-    async def huge(_sess):
+    async def huge(_sess, **_):
         return 10**6
 
     monkeypatch.setattr(main_mod, "embedding_backlog", huge)

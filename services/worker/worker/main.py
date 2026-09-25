@@ -629,7 +629,7 @@ class Worker:
         if now - self._backlog_checked >= BACKLOG_CHECK_S:
             self._backlog_checked = now
             async with self._session_factory() as sess:
-                backlog = await embedding_backlog(sess)
+                backlog = await embedding_backlog(sess, valuable_only=True)
             was = self._paused
             self._paused = backlog > ceiling if not was else backlog > int(ceiling * 0.8)
             if self._paused != was:

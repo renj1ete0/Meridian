@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.140.3] — 2026-09-25
+
+### Fixed
+
+- `B-66`: the embedder works by value, not by age. The backlog is served in
+  three tiers, re-checked every batch: passages of directed sources (anything
+  not reached by following a link — the directed claim's own definition) and of
+  hosts judged on-topic first; everything else next; hosts judged off-topic
+  last. Junk is never embedded. Crawl backpressure (`B-61`) now waits only on
+  the first two tiers, so an off-topic tail embedded last can no longer hold the
+  crawl paused. Host standing is the host policy's (`MIN_EXAMINED`,
+  `OFFTOPIC_SHARE`), with the host worked out from the URL in SQL the way
+  `host_key` does it
+
 ## [0.140.2] — 2026-09-25
 
 ### Added

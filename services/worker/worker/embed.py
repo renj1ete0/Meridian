@@ -44,6 +44,7 @@ from contextlib import AbstractAsyncContextManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.chunks import (
+    EMBED_TIERS,
     chunks_without_embeddings,
     embedding_backlog,
     store_embeddings,
@@ -130,6 +131,10 @@ class Backfill:
         """
         stats = EmbedStats()
         started = time.monotonic()
+        # One cursor per tier (`B-66`). Each batch is drawn from the highest
+        # tier with anything left, re-checked every batch, so passages a search
+        # brings in mid-pass go ahead of the off-topic tail already queued.
+        cursors = dict.fromkeys(EMBED_TIERS, self._start_after)
         after_id = self._start_after
 
         while not self._stopping.is_set():
@@ -142,9 +147,13 @@ class Backfill:
                 break
 
             async with self._session_factory() as sess:
-                chunks = await chunks_without_embeddings(
-                    sess, limit=self._batch_size, after_id=after_id
-                )
+                chunks, tier = [], None
+                for tier in EMBED_TIERS:
+                    chunks = await chunks_without_embeddings(
+                        sess, limit=self._batch_size, after_id=cursors[tier], tier=tier
+                    )
+                    if chunks:
+                        break
                 if not chunks:
                     break
                 # Read out of the ORM before the model runs: encoding is slow,
@@ -154,7 +163,7 @@ class Backfill:
                 # URLs carry no meaning and were one character in eight.
                 batch = [(chunk.chunk_id, embedding_view(chunk.text)) for chunk in chunks]
 
-            after_id = batch[-1][0]
+            after_id = cursors[tier] = batch[-1][0]
             stats.batches += 1
 
             try:

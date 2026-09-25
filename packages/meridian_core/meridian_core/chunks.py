@@ -40,12 +40,12 @@ import dataclasses
 import datetime as dt
 from collections.abc import Iterable, Mapping, Sequence
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
-from .models import Chunk
+from .models import Chunk, Source
 
 log = get_logger(__name__)
 
@@ -249,8 +249,54 @@ def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
     ]
 
 
+#: Embedding tiers, in the order the backfill serves them (`B-66`).
+#: ``first`` — passages of directed sources (a search result, a person's seed, a
+#: cited paper) or of hosts judged on-topic; ``then`` — everything else that is
+#: not junk; ``last`` — hosts judged off-topic. Junk is in no tier.
+EMBED_TIERS = ("first", "then", "last")
+
+def _host_of(url_column):
+    """`boilerplate.host_key` in SQL: lower-case host, port and a leading www. dropped."""
+    host = func.split_part(func.split_part(url_column, "://", 2), "/", 1)
+    return func.regexp_replace(func.lower(host), r"^www\.|:\d+$", "", "g")
+
+
+def _host_standing(*, off_topic: bool):
+    from .hostscores import MIN_EXAMINED, OFFTOPIC_SHARE
+    from .models import HostScore
+
+    share = HostScore.on_topic * 1.0 / func.nullif(HostScore.examined, 0)
+    cond = share < OFFTOPIC_SHARE if off_topic else share >= OFFTOPIC_SHARE
+    return exists().where(
+        HostScore.host == _host_of(Source.url), HostScore.examined >= MIN_EXAMINED, cond
+    )
+
+
+def _directed():
+    """Somebody or something *chose* the page — the directed claim's definition, not a copy."""
+    from .models import QueueTask
+    from .queueing import FOLLOWED_SOURCES
+
+    return exists().where(
+        QueueTask.url_or_query == Source.url, QueueTask.seed_source.not_in(FOLLOWED_SOURCES)
+    )
+
+
+def embed_tier(tier: str):
+    """The predicate for one embedding tier, over ``Chunk`` joined to ``Source``."""
+    not_junk = Source.retention_tier != "junk"
+    first = or_(_directed(), _host_standing(off_topic=False))
+    if tier == "first":
+        return and_(not_junk, first)
+    if tier == "then":
+        return and_(not_junk, ~first, ~_host_standing(off_topic=True))
+    if tier == "last":
+        return and_(not_junk, ~_directed(), _host_standing(off_topic=True))
+    raise ValueError(f"no embedding tier {tier!r}; expected one of {EMBED_TIERS}")
+
+
 async def chunks_without_embeddings(
-    sess: AsyncSession, *, limit: int = 256, after_id: int = 0
+    sess: AsyncSession, *, limit: int = 256, after_id: int = 0, tier: str | None = None
 ) -> list[Chunk]:
     """The next batch of chunks that have no vector yet (task `P2-01`).
 
@@ -262,8 +308,13 @@ async def chunks_without_embeddings(
     `embedding IS NULL` is the whole queue. `P2-02` writes chunks with no vector
     by design — embedding is a separate pass so the fetch loop never waits on a
     model — so a NULL here means "not embedded yet" and nothing else.
+
+    ``tier`` (`B-66`) narrows the queue to one of :data:`EMBED_TIERS`. The
+    embedder is the slowest stage on modest hardware, so under a free crawl its
+    backlog is permanent, and oldest-first spends it on whatever the crawl
+    happened to fetch first. Junk is in no tier and is never embedded.
     """
-    rows = await sess.execute(
+    stmt = (
         select(Chunk)
         # Superseded chunks are excluded: embedding text that is no longer on
         # the page spends the model's time producing a vector nothing may search.
@@ -275,6 +326,9 @@ async def chunks_without_embeddings(
         .order_by(Chunk.chunk_id)
         .limit(limit)
     )
+    if tier is not None:
+        stmt = stmt.join(Source, Source.source_id == Chunk.source_id).where(embed_tier(tier))
+    rows = await sess.execute(stmt)
     return list(rows.scalars())
 
 
@@ -311,18 +365,24 @@ async def store_embeddings(
     return written
 
 
-async def embedding_backlog(sess: AsyncSession) -> int:
+async def embedding_backlog(sess: AsyncSession, *, valuable_only: bool = False) -> int:
     """How many chunks are still waiting for a vector.
 
     The number §12.5's health line wants: a backlog that only grows means the
     embedder has stopped, which is otherwise invisible — the crawl keeps
     working and the corpus keeps growing and none of it becomes searchable.
+
+    ``valuable_only`` (`B-66`) counts the ``first`` and ``then`` tiers only —
+    what backpressure should wait for. Passages of hosts judged off-topic are
+    embedded last, if ever; counting them would pause the crawl for good.
     """
-    return (
-        await sess.scalar(
-            select(func.count())
-            .select_from(Chunk)
-            .where(Chunk.embedding.is_(None), Chunk.superseded_at.is_(None))
-        )
-        or 0
+    stmt = (
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.embedding.is_(None), Chunk.superseded_at.is_(None))
     )
+    if valuable_only:
+        stmt = stmt.join(Source, Source.source_id == Chunk.source_id).where(
+            or_(embed_tier("first"), embed_tier("then"))
+        )
+    return (await sess.scalar(stmt)) or 0
