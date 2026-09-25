@@ -1378,6 +1378,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       it is roughly ten times slower than the vector arm and sets hybrid latency;
       look at the GIN index usage and `ts_rank_cd` over large candidate sets before
       the corpus grows further
+- [ ] `B-66` **Embed by value, not by age** — measured: the embedder clears several thousand
+      passages an hour and a free crawl produces more than twice that, so a backlog is
+      permanent and backpressure (`B-61`) pauses the crawl behind it. The backlog is
+      embedded oldest-first and is mostly off-topic drift. Embed directed sources and
+      on-topic hosts first, off-topic hosts last, junk never
 - [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
