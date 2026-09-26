@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.9] — 2026-09-26
+
+### Changed
+
+- `B-86`: the crawl gives search results a larger share. Half of claims go to
+  directed work (was a third), and within it cited-paper lookups lead one slot in
+  three (was one in two), so search results and seeds lead about a third of all
+  claims instead of a sixth. Measured over everything labelled since the crawl
+  fixes, search results were on a topic about three times as often as followed
+  links. An empty directed slot still falls through to the ordinary claim
+
 ## [0.148.8] — 2026-09-26
 
 ### Fixed

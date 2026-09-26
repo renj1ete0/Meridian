@@ -3080,21 +3080,30 @@ async def test_every_third_claim_asks_for_directed_work_first(
     for _ in range(6):
         await worker._claim()
 
-    # Claims 3 and 6 try directed work — pages then lookups, then the other way
-    # round (`B-68`) — and fall through to the ordinary claim.
+    # Claims 3 and 6 try directed work — pages first, then lookups — and fall
+    # through to the ordinary claim. Lookups lead only one directed slot in
+    # LOOKUP_EVERY (`B-86`), so both of these lead with pages.
     ordinary = (False, None)
+    pages_first = [(True, False), (True, True)]
     assert asked == [
         ordinary,
         ordinary,
-        (True, False),
-        (True, True),
+        *pages_first,
         ordinary,
         ordinary,
         ordinary,
-        (True, True),
-        (True, False),
+        *pages_first,
         ordinary,
     ]
+
+
+def test_the_directed_share_matches_what_was_measured() -> None:
+    """`B-86`: half of claims directed, and lookups lead one directed slot in
+    three. A change here changes the crawl's on-topic yield; re-measure first."""
+    from worker.main import DEFAULT_DIRECTED_EVERY, LOOKUP_EVERY
+
+    assert DEFAULT_DIRECTED_EVERY == 2
+    assert LOOKUP_EVERY == 3
 
 
 async def _only_topic(worker, topic, monkeypatch, *, directed_every: int) -> None:
@@ -3151,10 +3160,10 @@ async def test_the_directed_slot_alternates_lookups_and_pages(
     )
     await _only_topic(worker, run_topic, monkeypatch, directed_every=1)
 
-    kinds = [(await worker._claim()).task_type for _ in range(4)]
+    kinds = [(await worker._claim()).task_type for _ in range(6)]
 
-    assert sorted(kinds) == ["doi", "doi", "url", "url"]
-    assert kinds[0] != kinds[1] and kinds[2] != kinds[3]
+    # `B-86`: search results lead two directed slots in three, lookups one.
+    assert kinds == ["url", "url", "doi", "url", "url", "doi"]
 
 
 async def test_lookups_are_still_claimed_when_nothing_else_is_queued(

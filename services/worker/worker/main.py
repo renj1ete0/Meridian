@@ -226,10 +226,19 @@ DEFAULT_CONCURRENCY = 4
 DEFAULT_IDLE_SLEEP_S = 5.0
 DEFAULT_HOUSEKEEPING_S = 3600.0
 
-#: `B-61`: one claim in three goes to directed work when any is pending. A
+#: `B-61`: a share of claims goes to directed work when any is pending. A
 #: 12-hour run without it fetched a few hundred times more followed links than
 #: search results, because a large frontier out-ranked them all by tier.
-DEFAULT_DIRECTED_EVERY = 3
+#: `B-86`: one in two, from one in three. Measured over everything labelled
+#: since the crawl fixes, search results were on a topic about three times as
+#: often as followed links, and at one in three they were a sixth of fetches.
+DEFAULT_DIRECTED_EVERY = 2
+
+#: `B-86`: within the directed slots, cited-paper lookups go first in one of
+#: this many and search results, seeds and queries in the rest. Alternating
+#: evenly (`B-68`) gave lookups — about as often on a topic as a coin toss, and
+#: often deferred for want of an API key — as many slots as search results.
+LOOKUP_EVERY = 3
 
 #: `B-61`: the crawl pauses while this many live chunks wait for a vector. A
 #: CPU embedder falls behind a free-running crawl by an order of magnitude, and
@@ -689,7 +698,7 @@ class Worker:
                 # with thousands of well-cited DOIs spent every directed slot
                 # on lookups and never reached its search results.
                 self._directed_claims += 1
-                first = self._directed_claims % 2 == 0
+                first = self._directed_claims % LOOKUP_EVERY == 0
                 for lookups in (first, not first):
                     pool = dict(shares)
                     while pool:
