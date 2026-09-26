@@ -13,6 +13,25 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **Start here — end of 2026-09-26 (+08, ~22:50).** `main` = `v0.148.12`, built and deployed;
+> every container up, every timetable job `ok`, worker ceiling back at 20000. Overnight the
+> crawl sits mostly paused behind the embedding backlog (~176k chunks, falling at roughly
+> 120–290/min depending on chunk length); that is expected, not a fault. `seedsearch` now
+> runs every 3h (live row set by hand, `B-87`).
+>
+> First things tomorrow:
+> 1. Re-measure on-topic yield **by seed source** for runs 6 and 7 once their chunks are
+>    embedded (query in `meridian-calibration/loop/run7/comparison.md`'s notes: join `sources`
+>    to `queue` on `url_or_query = url`). Run 7's 64% is mostly search-found sources so far.
+> 2. Ask the operator about `B-83` (label floor 0.45 lets generic government pages in; three
+>    options in TASKS). Do not move it without them.
+> 3. If the backlog is under ~20k, run another 1h loop run (export
+>    `MERIDIAN_WORKER_MAX_EMBED_BACKLOG=200000` in the shell *before* `snapshot.sh start`).
+> 4. Remaining `P6-42` (field "this is noise" action; shading by quality/freshness) and
+>    `P6-44` (concept page labels, reader vs operator navigation).
+> 5. The operator may want to reword the `B-79` commit message (it quotes a real link); it is
+>    unpushed, so that is a history rewrite — their call.
+
 > **2026-09-26 — UX and information audit, bf16 embedding, loop run 6.** An audit of what
 > the Map shows found one of twelve top-level fields mostly on the topics (at
 > 70%); the rest are 0–16%, legacy drift from before the 2026-09-24 fixes. Sources collected
