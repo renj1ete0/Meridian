@@ -13,6 +13,29 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-26 — UX and information audit, bf16 embedding, loop run 6.** An audit of what
+> the Map shows found one of twelve top-level fields mostly on the topics (at
+> 70%); the rest are 0–16%, legacy drift from before the 2026-09-24 fixes. Sources collected
+> since then are 43–72% on-topic. The Map now shades fields by on-topic share (`areas.examined`,
+> `on_topic`, `topic_mix`, counted at build time; a passage never examined is neither on nor
+> off). Embedding was the bottleneck (190k chunks waiting, crawl paused): the CPU is
+> memory-bound, so more processes do not help, but bfloat16 doubles throughput on a CPU with
+> `avx512_bf16` (`B-77`). Traps:
+> - **`snapshot.sh start` recreates the worker**, dropping a backlog ceiling that was lifted
+>   only on the compose command line. Export `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` in the shell
+>   before `start`, or lift it after, and check with `printenv` in the container.
+> - **Bare `uv run pytest` fails every integration test** with "PG_RO_URL is not set". `make
+>   test` loads `.env.dev`; by hand, `set -a; . ./.env.dev; set +a` first.
+> - **SQLAlchemy writes Python `None` into a JSONB column as JSON `null`**, not SQL NULL. Use
+>   `sqlalchemy.null()` when NULL is meant; SQL reading such a column must check
+>   `jsonb_typeof`.
+> - **A statement binding one parameter per source** breaks at 32,767 (`B-84`: docdupes).
+>   Join or batch instead.
+> - **The label floor's band 0.45–0.48 holds over half of all labels** and is noisy on
+>   generic government pages (`B-83`, the operator's call).
+> - The embedding sidecar keeps computing a batch after its client is gone (`B-82`), so after
+>   a deploy it runs at full CPU for a few minutes on nothing.
+
 > **2026-09-25 close of day.** Also shipped from the operator's UI review: source titles
 > cleaned at write and in bulk (`B-69`, `worker.retitle`), gazetteer terms typed by head
 > word (`B-70`, `harvest --retype`), Map clusters named from a fixed list of fields of work

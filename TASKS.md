@@ -16,10 +16,29 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.117.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
+**`v0.148.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
 against a real Postgres, 616 frontend.
 
-## Resume here (written 2026-09-24, end of session)
+## Resume here (written 2026-09-26, end of session)
+
+> **2026-09-26.** Both in-flight branches merged (`P6-41` answer page, ticked after screenshots;
+> Map semantic zoom). The operator asked for a UX and information audit, then improvement and a
+> 1h run. Shipped `v0.145.0`–`v0.148.7`, each its own commit: on-topic shading of Map fields and
+> field gaps in Gaps (`P6-42`), plain reader wording on the landing, Find and concept pages
+> (`P6-44`), bf16 embedding (`B-77`, 2× throughput), empty neighbourhood panel hidden (`B-78`),
+> Markdown link syntax cleaned for display (`B-79`), the Answer view's heading-as-passage
+> (`B-80`), the daily duplicate pass failing on >32,767 bound ids (`B-84`).
+>
+> **Loop run 6** (1h, `meridian-calibration/loop/run6/comparison.md`): 1,480 sources, directed
+> share 18%, embedding ~292/min so the backlog nearly holds against the crawl, on-topic yield
+> 72% of the 274 examined so far (early; re-measure once the window's chunks are embedded).
+>
+> **Next:** re-measure run 6's yield; `B-85` (harvest times out at 30 min); `B-82`; seed
+> searches more often while the directed queue is empty (the directed share fell after the
+> first minutes). **Needs the operator:** `B-83` — the label floor (0.45) lets in generic
+> government pages; raise it, add negatives, or describe topics.
+
+## Earlier resume notes (written 2026-09-24)
 
 > **Stopped 2026-09-25 21:16 (+08) for a shutdown.** Run 5 was stopped after 25 minutes —
 > too short to judge; **rerun it in full** (2h, same procedure: `seedsearch --once`,
@@ -1395,18 +1414,25 @@ deploy runbook whose first two commands could not work (`B-17`).
       area-hop source for `route()` (its `HopSource` protocol takes one), the
       two-click pick on the canvas, the route drawn with cited and similar hops
       distinguished, and screenshots against the Route board on the design canvas
-- [~] `P6-41` **An answer page for a question** — UX priority 1 (agreed 2026-09-25). People come
+- [x] `P6-41` **An answer page for a question** — `v0.145.0`, screenshot-checked on the live
+      corpus 2026-09-26 (and `B-80`). UX priority 1 (agreed 2026-09-25). People come
       with a question, not to browse clusters: evidence grouped by country (places are
       already tagged), coverage shown honestly (strong / thin / none), trust markers on every
       item (government, peer-reviewed, date, contested), and "Find more" on a thin country
       queuing a search. No model; the synthesis panel is a separate decision
-- [ ] `P6-42` **The Map as a tool, not a picture** — UX priority 2. Shade fields by on-topic
-      share, source quality and freshness; clicking a field shows what it holds; actions on
-      every field: search within, want more of this, this is noise (feeds the off-topic
-      demotion). Junk clusters visibly low-value. Semantic zoom across levels (in progress)
+- [~] `P6-42` **The Map as a tool, not a picture** — UX priority 2. Done: semantic zoom
+      (`v0.146.0`), fields shaded and labelled by on-topic share with a per-topic breakdown
+      (`v0.147.0`), on-topic fields with thin evidence listed in Gaps with a link back to the
+      Map (`v0.148.0`, `v0.148.1`), the dead "Route from here…" item removed. Left: "this is
+      noise" on a field feeding the off-topic demotion; shading by source quality and
+      freshness as well as topic share
 - [ ] `P6-43` **Watched questions** — UX priority 3. A saved view becomes a question to watch:
       "new evidence since you asked", replacing generic notifications on the landing page
-- [ ] `P6-44` **Plain language in reader views** — UX priority 4. Reader screens say sources,
+- [~] `P6-44` **Plain language in reader views** — UX priority 4. Done 2026-09-26: the
+      landing's counts and cards, Coverage opening Gaps, Find's summary line, concept pages
+      offering only built views (`v0.148.2`–`v0.148.5`). Left: the concept page's own labels
+      (node type, "supporting chunks", "asserted"), the topic filter's slugs, and separating
+      reader from operator navigation. Reader screens say sources,
       government, peer-reviewed, fields; nodes, edges, passages, tiers and basis stay in Admin.
       Reader and operator navigation separated
 - [ ] `P0-18` ⚑ **Task-based check with the operator's own questions** — for five of Q31–Q41,
@@ -1441,6 +1467,34 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+- [ ] `B-83` ⚑ **Re-calibrate the topic label floor on today's corpus** — found by the
+      2026-09-26 information audit. Over half of all labelled sources (about 1,300 of 2,500)
+      sit in the 0.45–0.48 band just above `LABEL_FLOOR`, and judged by title only about a
+      third to two fifths of a sample of 25 there were on their topic: generic government
+      landing and event pages, speeches)
+      and off-subject pages that share vocabulary. At 0.55 and above 15 of 15 were right.
+      The floor was calibrated on a silver set with no generic government pages. Tried and
+      rejected: a flatness rule (best score minus the median of the others) does not
+      separate right from wrong in that band. Options, the operator's trade-off (recall for
+      precision, and every filter, Gaps count and Map shade moves with it): raise the floor
+      to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
+      noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [ ] `B-85` **The nightly harvest times out** — killed at its 1800s limit twice by
+      2026-09-26 as the corpus grew. Find what it scans in full and make it incremental
+- [x] `B-84` **The duplicate pass failed daily past 32,767 sources** — `v0.148.7`. It bound
+      every source id in one IN list; now a join, and the update is batched
+- [ ] `B-82` **The embedding sidecar finishes a request its client abandoned** — a batch is
+      encoded in one thread call, so a backfill restarted mid-batch (every deploy) leaves
+      the sidecar at full CPU for up to a few minutes on work nobody will store. Encode in
+      slices and stop when the request is disconnected
+- [x] `B-80` **The Answer view showed a source by its heading** — `v0.147.4`. A passage of
+      120 characters or more now outranks a shorter one for its source
+- [x] `B-79` **Passages showed raw Markdown link syntax** — `v0.147.3`, `v0.148.3`. About a
+      quarter of live passages carry `[text](url)`; cleaned for display only
+- [x] `B-78` **An empty neighbourhood panel beside every question** — `v0.147.2`
+- [x] `B-77` **Embedding in bfloat16 on a CPU that has it** — `v0.147.1`. 145 → 297
+      passages/min measured on the live machine; vectors within 0.998 cosine of float32's.
+      int8 measured and rejected (cosine 0.905)
 - [x] `B-76` **A joint restart loaded the model twice** — `v0.144.1`. The backfill asked the
       sidecar once at startup; it now waits for it, and compose orders them
 - [x] `B-75` **The first embedding tier newest first** — found closing loop run 4: new sources
