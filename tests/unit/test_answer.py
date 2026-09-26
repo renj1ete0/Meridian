@@ -41,12 +41,13 @@ def hit(
     host: str | None = None,
     date: dt.date | None = None,
     www: bool = True,
+    text: str | None = None,
 ) -> SearchHit:
     host = host or f"pub{source_id}.example"
     return SearchHit(
         chunk_id=next(_chunk),
         source_id=source_id,
-        text=f"passage from {source_id} at {score}",
+        text=text if text is not None else f"passage from {source_id} at {score}",
         page_or_offset=None,
         chunk_index=0,
         url=f"https://{'www.' if www else ''}{host}/doc/{source_id}",
@@ -139,6 +140,45 @@ def test_one_item_per_source_carrying_its_best_passage() -> None:
     assert items[0].chunk_id == strong.chunk_id
     assert items[0].passages == 2
     assert groups[0].sources == 2
+
+
+BODY = (
+    "Fares were integrated across operators in 2019, and ridership on the "
+    "demand-responsive routes rose by a fifth in the first year."
+)
+
+
+def test_a_heading_does_not_stand_for_a_source_that_has_a_passage() -> None:
+    """A heading scores well because it is little more than the question's words."""
+    heading = hit(
+        1, score=0.95, places=["FR"], text="Mobility-on-demand versus fixed-route transit"
+    )
+    body = hit(1, score=0.40, places=["FR"], text=BODY)
+    groups, _ = group_hits([heading, body])
+    item = groups[0].items[0]
+    assert item.chunk_id == body.chunk_id
+    assert item.passages == 2, "the heading still counts as a matching passage"
+
+
+def test_a_source_with_only_a_heading_is_still_shown_by_it() -> None:
+    heading = hit(1, score=0.95, places=["FR"], text="Mobility-on-demand")
+    tiny = hit(1, score=0.10, places=["FR"], text="Contents")
+    groups, _ = group_hits([tiny, heading])
+    assert groups[0].items[0].chunk_id == heading.chunk_id
+
+
+def test_among_passages_long_enough_the_better_score_wins() -> None:
+    low = hit(1, score=0.3, places=["FR"], text=BODY)
+    high = hit(1, score=0.6, places=["FR"], text=BODY + " Again.")
+    groups, _ = group_hits([low, high])
+    assert groups[0].items[0].chunk_id == high.chunk_id
+
+
+def test_whitespace_does_not_make_a_heading_long_enough() -> None:
+    padded = hit(1, score=0.9, places=["FR"], text="Heading" + " " * 200 + "\n" * 20)
+    body = hit(1, score=0.2, places=["FR"], text=BODY)
+    groups, _ = group_hits([padded, body])
+    assert groups[0].items[0].chunk_id == body.chunk_id
 
 
 def test_top_caps_items_but_not_the_counts() -> None:

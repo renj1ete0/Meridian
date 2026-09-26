@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.147.4] — 2026-09-26
+
+### Fixed
+
+- `B-80`: in the Answer view a source is represented by a passage with content
+  (120 characters or more) ahead of a higher-scoring heading; a heading matches
+  a question because it is little more than its words, and shows nothing. A source
+  whose only matches are short is still shown by the best of them
+
 ## [0.147.3] — 2026-09-26
 
 ### Fixed

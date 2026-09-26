@@ -133,13 +133,23 @@ def countries_of(places: Sequence[str] | None) -> list[str]:
     return list(seen)
 
 
+#: A passage shorter than this is a heading or a caption: it matches a question
+#: well, because it is little more than the question's words, and shows a
+#: reader nothing. It stands for its source only when nothing longer matched.
+MIN_SHOWN_CHARS = 120
+
+
+def _shown_key(hit: SearchHit) -> tuple[bool, float, int]:
+    return (len(hit.text.strip()) >= MIN_SHOWN_CHARS, hit.score, -hit.chunk_id)
+
+
 def _best_per_source(hits: Iterable[SearchHit]) -> tuple[dict[int, SearchHit], dict[int, int]]:
     best: dict[int, SearchHit] = {}
     counts: dict[int, int] = {}
     for hit in hits:
         counts[hit.source_id] = counts.get(hit.source_id, 0) + 1
         held = best.get(hit.source_id)
-        if held is None or (hit.score, -hit.chunk_id) > (held.score, -held.chunk_id):
+        if held is None or _shown_key(hit) > _shown_key(held):
             best[hit.source_id] = hit
     return best, counts
 
