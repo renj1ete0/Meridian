@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.3] — 2026-09-26
+
+### Fixed
+
+- `B-79` follow-up: a concept page's supporting passages and contested quotes are
+  cleaned of Markdown link syntax too; they are excerpted by their own helper
+
 ## [0.148.2] — 2026-09-26
 
 ### Changed

@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import type { GraphNodeDetail, ContestedPair, Evidence } from './graph/api'
 import type { NodeAttribute, NoteDraft, SearchHit } from '../lib/api'
+import { readable } from '../lib/readable'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
 import { DAGGER } from '../ui/Contested'
 import { TIER_LABEL, type SourceTier } from '../ui/Tier'
@@ -57,7 +58,7 @@ export function monthOf(date: string | null): string | null {
 }
 
 export function excerpt(text: string, max = 240): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
+  const flat = readable(text).replace(/\s+/g, ' ').trim()
   if (flat.length <= max) return flat
   const cut = flat.slice(0, max)
   return `${cut.slice(0, cut.lastIndexOf(' ') > max * 0.6 ? cut.lastIndexOf(' ') : max)}…`
