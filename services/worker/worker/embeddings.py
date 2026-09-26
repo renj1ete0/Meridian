@@ -66,6 +66,33 @@ DEFAULT_MAX_TOKENS = 1024
 #: grouping that would pay for the padding. Memory is not the constraint there.
 CPU_BATCH_SIZE = 1
 
+#: The precision the model computes in. On a CPU with bf16 instructions
+#: (x86 ``avx512_bf16``/``amx_bf16``, arm64 ``bf16``) bfloat16 doubled bge-m3's
+#: throughput — 145 → 297 passages/min on a 24-thread x86 machine — and its
+#: vectors kept a cosine of at least 0.998 with float32's and 98% of the same
+#: five nearest neighbours, close enough to sit beside vectors already stored
+#: in float32. int8 dynamic quantisation was faster still (397/min) and was
+#: rejected: cosine fell to 0.905 and a fifth of the neighbours changed, which
+#: would quietly reorder search. Without the instructions bfloat16 is emulated
+#: and slower, so the default follows the hardware.
+DTYPES = ("float32", "bfloat16")
+CPUINFO = "/proc/cpuinfo"
+BF16_FLAGS = frozenset({"avx512_bf16", "amx_bf16", "bf16"})
+
+
+def cpu_has_bf16(path: str | None = None) -> bool:
+    """Whether this CPU computes bfloat16 in hardware, from its flags; False when unreadable."""
+    try:
+        with open(path or CPUINFO) as fh:
+            for line in fh:
+                key, _, value = line.partition(":")
+                if key.strip() in {"flags", "Features"}:
+                    return not BF16_FLAGS.isdisjoint(value.split())
+    except OSError:
+        pass
+    return False
+
+
 #: On an accelerator the batch *is* the speed, so it is sized to memory. Resident
 #: size of the loaded model, which a batch must leave room for ...
 MODEL_BYTES = int(2.5 * 2**30)
@@ -178,6 +205,8 @@ class EmbedderSettings:
     #: the Pi means CPU and on a workstation means the GPU is used for the
     #: backfill without anyone configuring it.
     device: str | None = None
+    #: One of :data:`DTYPES`. float32 unless the environment or the hardware says otherwise.
+    dtype: str = "float32"
 
     @classmethod
     def from_env(cls) -> EmbedderSettings:
@@ -199,12 +228,21 @@ class EmbedderSettings:
                     "memory_gib": None if memory is None else round(memory / 2**30, 1),
                 },
             )
+        dtype = os.environ.get("MERIDIAN_EMBED_DTYPE", "").strip().lower()
+        if dtype and dtype not in DTYPES:
+            raise RuntimeError(
+                f"MERIDIAN_EMBED_DTYPE must be one of {', '.join(DTYPES)}, got {dtype!r}"
+            )
+        if not dtype:
+            # Only a CPU was measured; an accelerator keeps float32 until one is.
+            dtype = "bfloat16" if not on_accelerator(device) and cpu_has_bf16() else "float32"
         return cls(
             model_name=os.environ.get("MERIDIAN_EMBED_MODEL") or DEFAULT_MODEL,
             batch_size=batch_size,
             max_tokens=max_tokens,
             cache_dir=os.environ.get("MERIDIAN_EMBED_CACHE") or None,
             device=device,
+            dtype=dtype,
         )
 
 
@@ -263,7 +301,7 @@ class BGEEmbedder:
         except Exception as exc:  # pragma: no cover - depends on the runtime
             raise EmbeddingError(f"{type(exc).__name__}: {exc}") from exc
 
-        out = [[float(value) for value in vector] for vector in vectors]
+        out = [_unit([float(value) for value in vector]) for vector in vectors]
         for vector in out:
             if len(vector) != self._settings.dimensions:
                 raise EmbeddingError(
@@ -295,14 +333,21 @@ class BGEEmbedder:
                     "model": self._settings.model_name,
                     "device": self._settings.device or "auto",
                     "batch_size": self._settings.batch_size,
+                    "dtype": self._settings.dtype,
                     "cache_dir": self._settings.cache_dir,
                 },
             )
+            extra: dict[str, object] = {}
+            if self._settings.dtype != "float32":
+                import torch
+
+                extra["model_kwargs"] = {"torch_dtype": getattr(torch, self._settings.dtype)}
             try:
                 model = SentenceTransformer(
                     self._settings.model_name,
                     device=self._settings.device,
                     cache_folder=self._settings.cache_dir,
+                    **extra,
                 )
             except Exception as exc:
                 raise EmbeddingError(
@@ -370,6 +415,18 @@ class FakeEmbedder:
             norm = math.sqrt(sum(value * value for value in vector)) or 1.0
             out.append([value / norm for value in vector])
         return out
+
+
+def _unit(vector: list[float]) -> list[float]:
+    """``vector`` rescaled to unit length in float64.
+
+    The model normalises in its own precision, and in bfloat16 that leaves a
+    norm off by up to a few parts in a thousand — enough that a dot product
+    stops being a cosine. Rescaling here holds every stored vector to the same
+    length whatever precision computed it.
+    """
+    norm = sum(value * value for value in vector) ** 0.5
+    return [value / norm for value in vector] if norm > 0 else vector
 
 
 def _int_env(name: str, default: int) -> int:

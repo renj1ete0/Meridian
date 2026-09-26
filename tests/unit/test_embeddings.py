@@ -175,12 +175,14 @@ def fake_sentence_transformers(monkeypatch, *, dimensions=EMBEDDING_DIM, on_load
     import types
 
     loads: list[str] = []
+    LOAD_KWARGS.clear()
 
     class StubModel:
         max_seq_length = 512
 
-        def __init__(self, name, device=None, cache_folder=None):
+        def __init__(self, name, device=None, cache_folder=None, model_kwargs=None):
             loads.append(name)
+            LOAD_KWARGS.append(model_kwargs)
             if on_load is not None:
                 on_load()
 
@@ -348,6 +350,9 @@ def test_the_real_model_produces_the_width_the_schema_expects() -> None:
 
 GIB = 2**30
 
+#: What each stub model load was asked for beyond name, device and cache.
+LOAD_KWARGS: list[dict | None] = []
+
 
 def test_an_explicit_batch_size_wins_over_the_memory(monkeypatch) -> None:
     monkeypatch.setenv("MERIDIAN_EMBED_BATCH_SIZE", "3")
@@ -440,3 +445,86 @@ def test_no_container_limit_means_the_machine(tmp_path, monkeypatch, unlimited) 
 def test_nothing_readable_is_unknown(tmp_path, monkeypatch) -> None:
     _files(tmp_path, monkeypatch)
     assert embeddings.visible_memory() is None
+
+
+# --------------------------------------------------------------------------
+# Precision
+# --------------------------------------------------------------------------
+
+
+def _cpuinfo(tmp_path, text: str) -> str:
+    path = tmp_path / "cpuinfo"
+    path.write_text(text)
+    return str(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("processor\t: 0\nflags\t\t: fpu avx2 avx512f avx512_bf16 avx512_vnni\n", True),
+        ("processor\t: 0\nflags\t\t: fpu sse avx2 amx_bf16 amx_tile\n", True),
+        ("processor\t: 0\nFeatures\t: fp asimd bf16 i8mm\n", True),
+        # avx512f alone is not bf16, and a flag that merely contains the letters is not either.
+        ("processor\t: 0\nflags\t\t: fpu avx2 avx512f avx512_vnni\n", False),
+        ("processor\t: 0\nflags\t\t: fpu nobf16x\n", False),
+        ("model name\t: something with bf16 in its name\n", False),
+        ("", False),
+    ],
+)
+def test_bf16_hardware_is_read_from_the_cpu_flags(tmp_path, text, expected) -> None:
+    assert embeddings.cpu_has_bf16(_cpuinfo(tmp_path, text)) is expected
+
+
+def test_an_unreadable_cpuinfo_means_no_bf16(tmp_path) -> None:
+    assert embeddings.cpu_has_bf16(str(tmp_path / "missing")) is False
+
+
+def test_a_cpu_with_bf16_embeds_in_bf16_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBED_DTYPE", raising=False)
+    monkeypatch.setattr(embeddings, "on_accelerator", lambda device: False)
+    monkeypatch.setattr(embeddings, "cpu_has_bf16", lambda path=None: True)
+    assert EmbedderSettings.from_env().dtype == "bfloat16"
+    monkeypatch.setattr(embeddings, "cpu_has_bf16", lambda path=None: False)
+    assert EmbedderSettings.from_env().dtype == "float32"
+
+
+def test_an_accelerator_keeps_float32_until_one_is_measured(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBED_DTYPE", raising=False)
+    monkeypatch.setattr(embeddings, "on_accelerator", lambda device: True)
+    monkeypatch.setattr(embeddings, "cpu_has_bf16", lambda path=None: True)
+    monkeypatch.setattr(embeddings, "visible_memory", lambda: 16 * GIB)
+    assert EmbedderSettings.from_env().dtype == "float32"
+
+
+@pytest.mark.parametrize("value", ["float32", "FLOAT32", " float32 "])
+def test_the_environment_can_force_float32(monkeypatch, value) -> None:
+    monkeypatch.setenv("MERIDIAN_EMBED_DTYPE", value)
+    monkeypatch.setattr(embeddings, "on_accelerator", lambda device: False)
+    monkeypatch.setattr(embeddings, "cpu_has_bf16", lambda path=None: True)
+    assert EmbedderSettings.from_env().dtype == "float32"
+
+
+@pytest.mark.parametrize("value", ["int8", "fp16", "float16", "bf16", "qint8"])
+def test_an_unknown_precision_is_refused(monkeypatch, value) -> None:
+    """int8 was measured and rejected; a typo must not silently mean float32."""
+    monkeypatch.setenv("MERIDIAN_EMBED_DTYPE", value)
+    with pytest.raises(RuntimeError, match="MERIDIAN_EMBED_DTYPE"):
+        EmbedderSettings.from_env()
+
+
+def test_the_model_is_loaded_in_the_precision_asked_for(monkeypatch) -> None:
+    torch = pytest.importorskip("torch")
+    fake_sentence_transformers(monkeypatch)
+    BGEEmbedder(EmbedderSettings(dtype="bfloat16")).embed(["text"])
+    BGEEmbedder(EmbedderSettings(dtype="float32")).embed(["text"])
+    assert [{"torch_dtype": torch.bfloat16}, None] == LOAD_KWARGS
+
+
+def test_vectors_are_unit_length_whatever_the_model_returned(monkeypatch) -> None:
+    """bfloat16 normalises in its own precision and leaves norms slightly off."""
+    fake_sentence_transformers(monkeypatch)
+    embedder = BGEEmbedder()
+    model = embedder._model()
+    model.encode = lambda texts, **kwargs: [[0.5] * EMBEDDING_DIM for _ in texts]  # norm 16
+    for vector in embedder.embed(["a", "b"]):
+        assert abs(sum(v * v for v in vector) - 1.0) < 1e-9

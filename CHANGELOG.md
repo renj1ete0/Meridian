@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.147.1] — 2026-09-26
+
+### Changed
+
+- `B-77`: the embedder computes in bfloat16 on a CPU with bf16 instructions, and
+  float32 elsewhere (`MERIDIAN_EMBED_DTYPE` overrides). Measured on a 24-thread x86
+  machine: 145 → 297 passages/min, vectors within 0.998 cosine of float32's and 98%
+  of the same five nearest neighbours. int8 quantisation was measured and rejected
+  (cosine 0.905). Vectors are rescaled to unit length after the model, whatever
+  precision computed them
+
 ## [0.147.0] — 2026-09-26
 
 ### Added
