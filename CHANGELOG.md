@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.7] — 2026-09-26
+
+### Fixed
+
+- `B-84`: the daily document-duplicate pass (`worker.docdupes`) failed every run once
+  the corpus held more than 32,767 non-junk sources: it bound every source id as a
+  parameter. Passages are now read by a join, and the stale-mark update is batched
+
 ## [0.148.6] — 2026-09-26
 
 ### Changed

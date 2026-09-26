@@ -42,6 +42,32 @@ class DupeStats:
     examples: list[tuple[str, str, str, float]] = dataclasses.field(default_factory=list)
 
 
+#: Ids bound in one statement at most. Postgres takes 32,767 parameters per
+#: statement; binding every non-junk source id failed the daily pass once the
+#: corpus passed that many (`B-84`).
+MAX_BOUND_IDS = 5000
+
+
+def live_passages():
+    """Every live passage of a non-junk source, by join rather than an id list.
+
+    The earlier form bound each source id as a parameter, which grows with the
+    corpus and stops working at Postgres's per-statement limit.
+    """
+    return (
+        select(Chunk.source_id, Chunk.text)
+        .join(Source, Source.source_id == Chunk.source_id)
+        .where(Chunk.superseded_at.is_(None), Source.retention_tier != "junk")
+    )
+
+
+def batches(ids: list[int], size: int = MAX_BOUND_IDS) -> list[list[int]]:
+    """``ids`` in consecutive slices of at most ``size``, none empty."""
+    if size < 1:
+        raise ValueError("a batch holds at least one id")
+    return [ids[i : i + size] for i in range(0, len(ids), size)]
+
+
 async def run_pass(*, apply: bool, session_factory=session) -> DupeStats:
     stats = DupeStats()
     async with session_factory() as sess:
@@ -59,11 +85,7 @@ async def run_pass(*, apply: bool, session_factory=session) -> DupeStats:
         ids = [s.source_id for s in sources]
         passages: dict[int, list[str]] = collections.defaultdict(list)
         lengths: collections.Counter[int] = collections.Counter()
-        rows = await sess.execute(
-            select(Chunk.source_id, Chunk.text).where(
-                Chunk.superseded_at.is_(None), Chunk.source_id.in_(ids)
-            )
-        )
+        rows = await sess.execute(live_passages())
         for sid, text in rows:
             passages[sid].append(text)
             lengths[sid] += len(text)
@@ -101,10 +123,10 @@ async def run_pass(*, apply: bool, session_factory=session) -> DupeStats:
         ]
         stats.cleared = len(stale)
         if apply:
-            if stale:
+            for batch in batches(stale):
                 await sess.execute(
                     update(Source)
-                    .where(Source.source_id.in_(stale))
+                    .where(Source.source_id.in_(batch))
                     .values(duplicate_of=None, duplicate_reason=None)
                 )
             for pair in verdicts.values():
