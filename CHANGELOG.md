@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.5] — 2026-09-26
+
+### Changed
+
+- `P6-44` (part): Find's result summary reads "20 passages shown · 100 matched the
+  words · 100 near in meaning" instead of "20 shown · lexical 100 · vector 100",
+  and a result's link to its source page says "the source" rather than "in this
+  corpus"
+
 ## [0.148.4] — 2026-09-26
 
 ### Changed

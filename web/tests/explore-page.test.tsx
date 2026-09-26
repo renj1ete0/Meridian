@@ -338,11 +338,16 @@ describe('the results summary', () => {
     const line = summaryLine(
       response({ arms: ['lexical', 'vector'], lexical_candidates: 0, vector_candidates: 100 }),
     )
-    expect(line).toBe('1 shown · lexical 0 · vector 100')
+    expect(line).toBe('1 passage shown · 0 matched the words · 100 near in meaning')
   })
 
   it('names only the arms that ran', () => {
-    expect(summaryLine(response())).toBe('1 shown · lexical 9')
+    expect(summaryLine(response())).toBe('1 passage shown · 9 matched the words')
+  })
+
+  it('says how it was found in words, not in the machinery', () => {
+    const line = summaryLine(response({ arms: ['lexical', 'vector'], lexical_candidates: 5, vector_candidates: 7 }))
+    expect(line).not.toMatch(/lexical|vector/)
   })
 })
 

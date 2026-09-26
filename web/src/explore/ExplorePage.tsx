@@ -597,10 +597,18 @@ export function ModeSwitch({ mode, onChange }: { mode: ResultMode; onChange: (mo
  * alone and read "20 of 0" whenever meaning-based matching found everything —
  * a sentence that contradicts itself on a correct result.
  */
+/**
+ * What the search found, per arm, in a reader's words (`P6-44`): "lexical" and
+ * "vector" are how it was done, not what it means. Counted per arm, so a
+ * search that only one arm answered does not read as "20 of 0".
+ */
 export function summaryLine(results: SearchResponse): string {
-  const parts = [`${results.hits.length} shown`]
-  if (results.arms.includes('lexical')) parts.push(`lexical ${results.lexical_candidates.toLocaleString('en')}`)
-  if (results.arms.includes('vector')) parts.push(`vector ${results.vector_candidates.toLocaleString('en')}`)
+  const shown = results.hits.length
+  const parts = [`${shown} ${shown === 1 ? 'passage' : 'passages'} shown`]
+  if (results.arms.includes('lexical'))
+    parts.push(`${results.lexical_candidates.toLocaleString('en')} matched the words`)
+  if (results.arms.includes('vector'))
+    parts.push(`${results.vector_candidates.toLocaleString('en')} near in meaning`)
   return parts.join(' · ')
 }
 

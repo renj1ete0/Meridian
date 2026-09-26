@@ -162,7 +162,7 @@ export function ResultList({ hits }: ResultListProps) {
               onClick={onInternalClick(hrefForSource(hit.source_id))}
               className="shrink-0 font-mono text-[10.5px] text-accent-graph hover:underline"
             >
-              in this corpus →
+              the source →
             </a>
           </div>
 
