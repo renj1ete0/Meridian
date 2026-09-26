@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.147.3] — 2026-09-26
+
+### Fixed
+
+- `B-79`: passage text is shown as a reader would have seen it: Markdown link
+  syntax becomes its words, footnote links become `[n]`, images and bold and
+  heading marks are dropped. About a quarter of stored passages carried raw
+  `[text](https://…)`. Display only; the stored text is unchanged
+
 ## [0.147.2] — 2026-09-26
 
 ### Fixed

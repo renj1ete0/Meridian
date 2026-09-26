@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { BUTTON_SECONDARY, FIELD } from '../admin/ui'
 import { ApiError, type TopicMatch } from '../lib/api'
 import { getAnswer, queueFindMore, type Answer, type AnswerGroup, type AnswerItem } from '../lib/answer'
+import { readable } from '../lib/readable'
 import { hrefForSource, onInternalClick } from '../lib/route'
 import { TierChip, type SourceTier } from '../ui/Tier'
 
@@ -306,7 +307,7 @@ function ItemRow({ item }: { item: AnswerItem }) {
         ) : null}
       </div>
       {/* The source's own words, clamped; the whole passage is on its page. */}
-      <p className="line-clamp-4 whitespace-pre-line text-[13px] leading-[1.55] text-text/85">{item.text}</p>
+      <p className="line-clamp-4 whitespace-pre-line text-[13px] leading-[1.55] text-text/85">{readable(item.text)}</p>
     </li>
   )
 }

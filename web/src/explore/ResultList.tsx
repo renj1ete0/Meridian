@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { readable } from '../lib/readable'
 import { hrefForSource, onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
 import type { SearchHit } from '../lib/api'
@@ -116,8 +117,9 @@ export const CLAMP_OVER = 600
  * a single extraction-damaged chunk fills three screens is a list nobody reads
  * past the first hit.
  */
-function Passage({ text }: { text: string }) {
+function Passage({ text: raw }: { text: string }) {
   const [open, setOpen] = useState(false)
+  const text = readable(raw)
   const long = text.length > CLAMP_OVER
   return (
     <div className="flex flex-col items-start gap-1.5">

@@ -40,6 +40,7 @@ import {
   type Placed,
   type Rect,
 } from '../../lib/areas'
+import { readable } from '../../lib/readable'
 import { hrefForSource, navigate, onInternalClick } from '../../lib/route'
 import { LevelControl, MorphLayer, useZoomGestures } from './Zoom'
 
@@ -1447,7 +1448,7 @@ function BridgePanel({
                       onClick={onInternalClick(hrefForSource(p.source_id))}
                       className="text-[12.5px] italic leading-[1.55] text-text-muted no-underline hover:text-text"
                     >
-                      “{p.snippet.trim()}…”
+                      “{readable(p.snippet)}…”
                       <span className="mt-0.5 block font-mono text-[10px] not-italic text-text-faint">
                         {p.title ?? `source ${p.source_id}`} · {p.source_tier.replace('_', ' ')}
                       </span>
