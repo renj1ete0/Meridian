@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .areas import _normalise_rows, distinctive_terms, nest
 from .bridges import build_bridges
 from .corpusmap import project
-from .models import Area, AreaBuild, AreaMember, Chunk, Source
+from .models import Area, AreaBuild, AreaMember, Chunk, ChunkTopics, Source
 from .search import SearchFilters, _conditions
 
 #: A leaf holds roughly this many passages. Small enough that a sub-area is
@@ -169,6 +169,11 @@ class _Leaf:
     sources: set[int] = dataclasses.field(default_factory=set)
     tiers: Counter[str] = dataclasses.field(default_factory=Counter)
     newest: dt.datetime | None = None
+    #: Passages whose topics have been decided (`P2-24`), and of those, how
+    #: many are about at least one topic; per-topic counts beside them.
+    examined: int = 0
+    on_topic: int = 0
+    topics: Counter[str] = dataclasses.field(default_factory=Counter)
 
 
 async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) -> BuildReport:
@@ -213,9 +218,15 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
     members: list[tuple[int, int]] = []
     stream = await sess.stream(
         select(
-            Chunk.chunk_id, Chunk.source_id, Chunk.embedding, Source.source_tier, Chunk.created_at
+            Chunk.chunk_id,
+            Chunk.source_id,
+            Chunk.embedding,
+            Source.source_tier,
+            Chunk.created_at,
+            ChunkTopics.topic_labels,
         )
         .join(Source, Source.source_id == Chunk.source_id)
+        .outerjoin(ChunkTopics, ChunkTopics.chunk_id == Chunk.chunk_id)
         .where(and_(*conditions))
         .order_by(Chunk.chunk_id)
         .execution_options(yield_per=ASSIGN_BATCH)
@@ -232,6 +243,11 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
             leaf.tiers[row[3]] += 1
             if leaf.newest is None or row[4] > leaf.newest:
                 leaf.newest = row[4]
+            if row[5] is not None:
+                leaf.examined += 1
+                if row[5]:
+                    leaf.on_topic += 1
+                    leaf.topics.update(row[5])
             members.append((row[0], int(index)))
 
     # A leaf the whole corpus left empty (the fit was a sample) is dropped,
@@ -307,8 +323,10 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
         for index in range(len(vecs[level])):
             inside = [leaves[i] for i in np.flatnonzero(holder[level] == index)]
             tiers: Counter[str] = Counter()
+            topics: Counter[str] = Counter()
             for leaf in inside:
                 tiers.update(leaf.tiers)
+                topics.update(leaf.topics)
             dates = [leaf.newest for leaf in inside if leaf.newest is not None]
             rows.append(
                 Area(
@@ -319,6 +337,9 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
                     passages=sum(leaf.count for leaf in inside),
                     sources=len(set().union(*(leaf.sources for leaf in inside))),
                     tier_mix=dict(sorted(tiers.items())),
+                    examined=sum(leaf.examined for leaf in inside),
+                    on_topic=sum(leaf.on_topic for leaf in inside),
+                    topic_mix=dict(sorted(topics.items())),
                     newest_at=max(dates) if dates else None,
                     centroid=vecs[level][index].astype(np.float32).tolist(),
                     x=round(float(positions[level][index][0]), 4),

@@ -68,6 +68,24 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.147.0] — 2026-09-26
+
+### Added
+
+- `P6-42` (part): the Map says how much of each field is about the topics. A build
+  counts, per cluster, the passages whose topics were decided and how many of them
+  are on at least one topic, with a per-topic breakdown (`areas.examined`,
+  `on_topic`, `topic_mix`; migration `b3e1c4d2a9f0` measures the builds already
+  held). A field's circle is filled fainter the less of it is on a topic and its
+  name is muted below 10%; the tip and the field panel state the share in words
+  and list the topics it holds. A passage never examined counts as neither on nor
+  off topic
+
+### Removed
+
+- The disabled "Route from here…" item in the Map's right-click menu: a reader's
+  menu should not offer what cannot be used. It returns with `P6-39`
+
 ## [0.146.0] — 2026-09-26
 
 ### Added

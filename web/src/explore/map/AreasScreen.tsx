@@ -2,6 +2,11 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 
 import { ApiError } from '../../lib/api'
 import {
+  OFF_TOPIC_BELOW,
+  onTopicShare,
+  shareFill,
+  shareText,
+  topicShares,
   AreaCache,
   ancestorAt,
   enclosing,
@@ -817,6 +822,8 @@ const AreaCircle = memo(function AreaCircle({
 }) {
   const { area, x, y, r } = placed
   const flagged = area.weak || area.stale
+  const share = onTopicShare(area)
+  const background = share !== null && share < OFF_TOPIC_BELOW
   const caption =
     area.children > 0
       ? `${area.children} ${childNoun}${area.children === 1 ? '' : 's'} inside`
@@ -826,6 +833,8 @@ const AreaCircle = memo(function AreaCircle({
       role="button"
       tabIndex={0}
       aria-label={`${area.name}: ${area.passages.toLocaleString('en')} passages from ${area.sources.toLocaleString('en')} sources${
+        shareText(area) ? `, ${shareText(area)}` : ''
+      }${
         flagged ? ` — ${area.reasons.join('; ')}` : ''
       }${area.children > 0 ? '. Open to zoom in.' : ''}`}
       className="cursor-pointer focus:outline-none"
@@ -843,14 +852,16 @@ const AreaCircle = memo(function AreaCircle({
       onContextMenu={(event) => onMenu(event, area)}
       data-area={area.area_id}
       data-flagged={flagged ? 'true' : undefined}
+      data-share={share === null ? undefined : share.toFixed(3)}
     >
       <circle
         cx={x}
         cy={y}
         r={r}
         fill="var(--accent-graph-deep)"
-        fillOpacity={hovered || highlighted ? 0.5 : 0.3}
+        fillOpacity={hovered || highlighted ? Math.max(0.5, shareFill(share)) : shareFill(share)}
         stroke={flagged ? 'var(--accent-attention)' : 'var(--accent-graph)'}
+        strokeOpacity={background && !hovered && !highlighted ? 0.45 : 1}
         strokeWidth={highlighted ? 2.4 : r < 12 ? 1 : 1.2}
         strokeDasharray={flagged ? (r < 12 ? '3 2' : '5 4') : undefined}
       />
@@ -863,7 +874,7 @@ const AreaCircle = memo(function AreaCircle({
           fontFamily="var(--font-sans)"
           fontSize={label.fontSize}
           fontWeight={600}
-          fill="var(--text)"
+          fill={background ? 'var(--text-muted)' : 'var(--text)'}
           paintOrder="stroke"
           stroke="var(--ground-deep)"
           strokeWidth={3.5}
@@ -957,11 +968,40 @@ function AreaTip({ area }: { area: Area }) {
         {area.passages.toLocaleString('en')} passages · {area.sources.toLocaleString('en')} sources
         {area.newest_at ? ` · newest ${area.newest_at.slice(0, 10)}` : ''}
       </span>
+      <TopicShare area={area} />
       <TierMix mix={area.tier_mix} total={area.passages} />
       {area.reasons.length ? (
         <span className="text-[length:var(--text-small)] text-accent-attention">{area.reasons.join('; ')}</span>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * How much of a field is about the topics, and which (`P6-42`). Said in words
+ * and numbers, since the fill that shows it is a shade and a shade is not read
+ * exactly. Nothing is drawn when the build did not measure it.
+ */
+function TopicShare({ area }: { area: Area }) {
+  const text = shareText(area)
+  if (!text) return null
+  const topics = topicShares(area)
+  return (
+    <span className="flex flex-col gap-0.5" data-testid="topic-share">
+      <span className={`text-[12px] ${(onTopicShare(area) ?? 0) < OFF_TOPIC_BELOW ? 'text-accent-attention' : 'text-text'}`}>
+        {text}
+        {(onTopicShare(area) ?? 0) < OFF_TOPIC_BELOW ? ' — mostly material outside your topics' : ''}
+      </span>
+      {topics.length ? (
+        <span className="flex flex-wrap gap-x-2 font-mono text-[10px] text-text-muted">
+          {topics.map(({ topic, share }) => (
+            <span key={topic}>
+              {topic} {share > 0 && share < 0.01 ? '<1' : Math.round(share * 100)}%
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -1071,6 +1111,13 @@ function LevelAside({
         <li className="flex items-center gap-2">
           <span className="h-3.5 w-3.5 rounded-full border border-accent-graph" aria-hidden />
           circle size — passages collected, not importance
+        </li>
+        <li className="flex items-center gap-2">
+          <span className="flex gap-0.5" aria-hidden>
+            <span className="h-3.5 w-3.5 rounded-full border border-accent-graph/45 bg-accent-graph-deep/10" />
+            <span className="h-3.5 w-3.5 rounded-full border border-accent-graph bg-accent-graph-deep/60" />
+          </span>
+          fainter — less of it on your topics
         </li>
         <li className="flex items-center gap-2">
           <span className="h-3.5 w-3.5 rounded-full border border-accent-attention" style={{ borderStyle: 'dashed' }} aria-hidden />
@@ -1258,10 +1305,6 @@ function ContextMenu({
       >
         Open in Find
       </MenuItem>
-      <div className="my-1.5 border-t border-line" />
-      <MenuItem disabled note="Route search across fields (P6-32) is not built yet.">
-        Route from here…
-      </MenuItem>
     </div>
   )
 }
@@ -1434,6 +1477,7 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
             {detail.area.passages.toLocaleString('en')} passages · {detail.area.sources.toLocaleString('en')} sources
             {detail.area.newest_at ? ` · newest ${detail.area.newest_at.slice(0, 10)}` : ''}
           </span>
+          <TopicShare area={detail.area} />
           <TierMix mix={detail.area.tier_mix} total={detail.area.passages} />
           {detail.area.reasons.length ? (
             <p className="text-[12.5px] text-accent-attention">{detail.area.reasons.join('; ')}</p>

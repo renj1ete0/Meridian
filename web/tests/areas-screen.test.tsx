@@ -83,6 +83,30 @@ describe('areas on the canvas', () => {
     expect(container.querySelector('[data-area="1"]')!.getAttribute('data-flagged')).toBeNull()
   })
 
+  it('shades a field by how much of it is on a topic, and says so', () => {
+    const shaded = level({
+      areas: [
+        area({ area_id: 1, name: 'Law', passages: 600, examined: 600, on_topic: 3, topic_mix: { walk: 3 } }),
+        area({ area_id: 2, name: 'Transport', passages: 300, examined: 300, on_topic: 210, topic_mix: { walk: 210 } }),
+      ],
+    })
+    const { container } = render(<AreasView level={shaded} onLevel={() => {}} />)
+    const law = container.querySelector('[data-area="1"]')!
+    const transport = container.querySelector('[data-area="2"]')!
+    expect(law.getAttribute('data-share')).toBe('0.005')
+    expect(law.getAttribute('aria-label')).toContain('under 1% on a topic')
+    expect(transport.getAttribute('aria-label')).toContain('70% on a topic')
+    const fill = (g: Element) => Number(g.querySelector('circle')!.getAttribute('fill-opacity'))
+    expect(fill(law)).toBeLessThan(fill(transport))
+  })
+
+  it('leaves a field the build did not measure at the plain fill', () => {
+    const { container } = render(<AreasView level={level()} onLevel={() => {}} />)
+    const g = container.querySelector('[data-area="1"]')!
+    expect(g.getAttribute('data-share')).toBeNull()
+    expect(g.querySelector('circle')!.getAttribute('fill-opacity')).toBe('0.3')
+  })
+
   it('zooms into an area that has areas inside', () => {
     const onLevel = vi.fn()
     const { container } = render(<AreasView level={level()} onLevel={onLevel} />)
@@ -190,14 +214,17 @@ describe('the bridge panel', () => {
 })
 
 describe('the context menu', () => {
-  it('offers Find and a disabled route that says why', () => {
+  it('offers Find, and no item a reader cannot use', () => {
     const { container } = render(<AreasView level={level()} onLevel={() => {}} />)
     fireEvent.contextMenu(container.querySelector('[data-area="1"]')!)
     const menu = screen.getByRole('menu')
     expect(within(menu).getByRole('menuitem', { name: /Open in Find/ })).toBeTruthy()
-    const route = within(menu).getByRole('menuitem', { name: /Route from here/ }) as HTMLButtonElement
-    expect(route.disabled).toBe(true)
-    expect(route.textContent).toContain('not built yet')
+    // A disabled "not built yet" entry is a dead end in a reader's menu; route
+    // mode returns with P6-39.
+    for (const item of within(menu).queryAllByRole('menuitem')) {
+      expect((item as HTMLButtonElement).disabled).toBe(false)
+      expect(item.textContent).not.toMatch(/not built/i)
+    }
   })
 
   it('renders steering items when given them', () => {

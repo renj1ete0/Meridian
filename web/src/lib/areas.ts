@@ -28,6 +28,11 @@ export interface Area {
   passages: number
   sources: number
   tier_mix: Record<string, number>
+  /** Passages whose topics were decided, and of those how many are about a topic (`P6-42`); null when not measured. */
+  examined: number | null
+  on_topic: number | null
+  /** `{topic: passages}`, most first; a passage on two topics counts under both. */
+  topic_mix: Record<string, number>
   newest_at: string | null
   x: number
   y: number
@@ -140,6 +145,9 @@ export const AREA_FIELDS = [
   'passages',
   'sources',
   'tier_mix',
+  'examined',
+  'on_topic',
+  'topic_mix',
   'newest_at',
   'x',
   'y',
@@ -1061,4 +1069,50 @@ export function topicNameFrom(terms: readonly string[]): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
+}
+
+// --------------------------------------------------------------------------
+// How much of a field is about the topics (task P6-42).
+
+/**
+ * The share of a field's examined passages that are about at least one topic,
+ * in [0, 1]; null when the build did not measure it or nothing was examined.
+ * A passage never examined is neither on nor off topic, so it is left out of
+ * both sides rather than counted as off.
+ */
+export function onTopicShare(area: Pick<Area, 'examined' | 'on_topic'>): number | null {
+  const { examined, on_topic } = area
+  if (examined == null || on_topic == null || examined <= 0) return null
+  return Math.min(1, Math.max(0, on_topic / examined))
+}
+
+/** Fill opacity of a field's circle: faint when little of it is on a topic, full when most is. */
+export const FILL_FAINT = 0.06
+export const FILL_FULL = 0.42
+
+export function shareFill(share: number | null): number {
+  if (share === null) return 0.3
+  return FILL_FAINT + (FILL_FULL - FILL_FAINT) * Math.sqrt(share)
+}
+
+/** Below this share a field's name is drawn muted: it reads as background, not a subject. */
+export const OFF_TOPIC_BELOW = 0.1
+
+/** "6% on a topic", or null when not measured. Under 1% but not none reads "under 1%". */
+export function shareText(area: Pick<Area, 'examined' | 'on_topic'>): string | null {
+  const share = onTopicShare(area)
+  if (share === null) return null
+  if (share > 0 && share < 0.01) return 'under 1% on a topic'
+  return `${Math.round(share * 100)}% on a topic`
+}
+
+/** The topics a field holds, most first, each with its share of the examined passages. */
+export function topicShares(area: Pick<Area, 'examined' | 'topic_mix'>, limit = 4): { topic: string; share: number }[] {
+  const examined = area.examined ?? 0
+  if (examined <= 0 || !area.topic_mix) return []
+  return Object.entries(area.topic_mix)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([topic, n]) => ({ topic, share: Math.min(1, n / examined) }))
 }

@@ -9,6 +9,12 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   AreaCache,
   CHILD_SPREAD,
+  FILL_FAINT,
+  FILL_FULL,
+  onTopicShare,
+  shareFill,
+  shareText,
+  topicShares,
   ancestorAt,
   composeChild,
   easeInOut,
@@ -352,5 +358,48 @@ describe('labels', () => {
         expect(overlap).toBe(false)
       }
     }
+  })
+})
+
+describe('on-topic share (P6-42)', () => {
+  it('is measured against examined passages, never against all of them', () => {
+    expect(onTopicShare({ examined: 200, on_topic: 50 })).toBe(0.25)
+    // 1000 passages, only 100 examined: the unexamined are not counted as off.
+    expect(onTopicShare({ examined: 100, on_topic: 100 })).toBe(1)
+  })
+
+  it('refuses to guess when nothing was measured', () => {
+    expect(onTopicShare({ examined: null, on_topic: null })).toBeNull()
+    expect(onTopicShare({ examined: 0, on_topic: 0 })).toBeNull()
+    expect(shareText({ examined: null, on_topic: null })).toBeNull()
+    // Unmeasured keeps the old fill, so an old build does not read as all off-topic.
+    expect(shareFill(null)).toBe(0.3)
+  })
+
+  it('clamps a count that exceeds what was examined', () => {
+    expect(onTopicShare({ examined: 10, on_topic: 12 })).toBe(1)
+  })
+
+  it('fills fainter the less of a field is on a topic', () => {
+    const fills = [0, 0.01, 0.1, 0.5, 1].map((s) => shareFill(s))
+    for (let i = 1; i < fills.length; i++) expect(fills[i]!).toBeGreaterThan(fills[i - 1]!)
+    expect(fills[0]).toBe(FILL_FAINT)
+    expect(fills[fills.length - 1]).toBe(FILL_FULL)
+  })
+
+  it('says a tiny share as under 1%, not 0%', () => {
+    expect(shareText({ examined: 1000, on_topic: 2 })).toBe('under 1% on a topic')
+    expect(shareText({ examined: 1000, on_topic: 0 })).toBe('0% on a topic')
+    expect(shareText({ examined: 100, on_topic: 70 })).toBe('70% on a topic')
+  })
+
+  it('lists topics most first, of examined passages', () => {
+    const shares = topicShares({ examined: 100, topic_mix: { b: 10, a: 30, c: 10, d: 0 } })
+    expect(shares).toEqual([
+      { topic: 'a', share: 0.3 },
+      { topic: 'b', share: 0.1 },
+      { topic: 'c', share: 0.1 },
+    ])
+    expect(topicShares({ examined: null, topic_mix: { a: 3 } })).toEqual([])
   })
 })

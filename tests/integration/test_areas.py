@@ -23,7 +23,7 @@ from meridian_core import areabuild
 from meridian_core.areabuild import KEEP_BUILDS, build_areas
 from meridian_core.areaview import area_detail, areas_level, jump
 from meridian_core.db import dispose_engines
-from meridian_core.models import Area, AreaBuild, AreaMember, ScheduledJob, Source
+from meridian_core.models import Area, AreaBuild, AreaMember, ChunkTopics, ScheduledJob, Source
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -265,3 +265,120 @@ async def test_the_read_only_role_cannot_write_areas(session_for):
     sess = await session_for("ro")
     with pytest.raises(DBAPIError):
         await sess.execute(delete(AreaBuild))
+
+
+async def _label_passages(sess, chunks: dict[int, int], topic: str) -> dict[int, list[str] | None]:
+    """Decide topics for most passages: subject 0 on ``topic`` and on a second
+    topic, subject 1 examined and about none, the rest never examined."""
+    other = f"{topic}-b"
+    labels: dict[int, list[str] | None] = {}
+    for chunk_id, subject in chunks.items():
+        if subject == 0:
+            labels[chunk_id] = [topic, other]
+        elif subject == 1:
+            labels[chunk_id] = []
+        else:
+            labels[chunk_id] = None
+            continue
+        sess.add(
+            ChunkTopics(
+                chunk_id=chunk_id,
+                topic_labels=labels[chunk_id],
+                topic_scores={},
+                topic_basis="test",
+            )
+        )
+    await sess.flush()
+    return labels
+
+
+async def test_a_build_counts_passages_on_a_topic_and_levels_sum(session_for, topic):
+    """`P6-42`: a field's on-topic share is measured, never guessed. A passage
+    never examined is counted as neither on nor off topic."""
+    sess = await session_for("rw")
+    chunks = await seed(sess, topic)
+    labels = await _label_passages(sess, chunks, topic)
+
+    report = await build_areas(sess, topics=[topic])
+    areas = list(await sess.scalars(select(Area).where(Area.build_id == report.build_id)))
+    members = dict(
+        (
+            await sess.execute(
+                select(AreaMember.chunk_id, AreaMember.area_id).where(
+                    AreaMember.build_id == report.build_id
+                )
+            )
+        ).all()
+    )
+
+    for leaf in (a for a in areas if a.level == 3):
+        inside = [labels[c] for c, a in members.items() if a == leaf.area_id]
+        assert leaf.examined == sum(1 for x in inside if x is not None)
+        assert leaf.on_topic == sum(1 for x in inside if x)
+        assert leaf.examined <= leaf.passages
+    for area in (a for a in areas if a.level < 3):
+        children = [c for c in areas if c.parent_id == area.area_id]
+        assert area.examined == sum(c.examined for c in children)
+        assert area.on_topic == sum(c.on_topic for c in children)
+        for key, n in area.topic_mix.items():
+            assert n == sum(c.topic_mix.get(key, 0) for c in children)
+
+    top = [a for a in areas if a.level == 1]
+    on = sum(1 for x in labels.values() if x)
+    assert sum(a.on_topic for a in top) == on
+    assert sum(a.examined for a in top) == sum(1 for x in labels.values() if x is not None)
+    # A passage on two topics counts under both, and on_topic counts it once.
+    assert sum(a.topic_mix.get(topic, 0) for a in top) == on
+    assert sum(a.topic_mix.get(f"{topic}-b", 0) for a in top) == on
+
+
+async def test_the_migration_backfill_counts_as_the_build_does(session_for, topic):
+    """Drift: the migration measures builds made before the build counted, with
+    SQL of its own. It must reach the same numbers the build writes."""
+    import importlib.util
+    from pathlib import Path
+
+    from sqlalchemy import null, text, update
+
+    path = next(
+        Path(__file__)
+        .resolve()
+        .parents[2]
+        .glob("migrations/versions/*_areas_count_passages_on_a_topic.py")
+    )
+    spec = importlib.util.spec_from_file_location("backfill", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    sess = await session_for("rw")
+    chunks = await seed(sess, topic)
+    await _label_passages(sess, chunks, topic)
+    report = await build_areas(sess, topics=[topic])
+    mine = Area.build_id == report.build_id
+    built = {
+        a.area_id: (a.examined, a.on_topic, a.topic_mix)
+        for a in await sess.scalars(select(Area).where(mine))
+    }
+
+    await sess.execute(
+        update(Area).where(mine).values(examined=None, on_topic=None, topic_mix=null())
+    )
+    await sess.execute(text(migration.LEAF_SQL))
+    for _ in range(migration.ROLLUP_PASSES):
+        await sess.execute(text(migration.ROLLUP_SQL))
+    sess.expire_all()
+    backfilled = {
+        a.area_id: (a.examined, a.on_topic, a.topic_mix)
+        for a in await sess.scalars(select(Area).where(mine))
+    }
+    assert backfilled == built
+
+
+async def test_the_api_serves_on_topic_counts(client, committed):
+    body = (await client.get("/api/explore/areas")).json()
+    for area in body["areas"]:
+        assert set(area) >= {"examined", "on_topic", "topic_mix"}
+        if area["examined"] is not None:
+            assert 0 <= area["on_topic"] <= area["examined"] <= area["passages"]
+            counts = list(area["topic_mix"].values())
+            assert counts == sorted(counts, reverse=True), "most first"

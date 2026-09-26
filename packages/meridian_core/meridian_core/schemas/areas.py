@@ -38,6 +38,12 @@ class AreaRead(BaseModel):
     passages: int
     sources: int
     tier_mix: dict[str, int]
+    #: Passages whose topics were decided, and of those how many are about a
+    #: topic (`P6-42`); None on a build that was not measured.
+    examined: int | None = None
+    on_topic: int | None = None
+    #: ``{topic: passages}``, most first; a passage on two topics counts twice.
+    topic_mix: dict[str, int] = {}
     newest_at: dt.datetime | None
     x: float
     y: float

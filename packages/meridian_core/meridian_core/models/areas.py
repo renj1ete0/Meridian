@@ -67,6 +67,14 @@ class Area(Base):
     sources: Mapped[int] = mapped_column(Integer, nullable=False)
     #: ``{source_tier: passages}``.
     tier_mix: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    #: Passages whose topics had been decided when the build ran (`P6-42`).
+    #: NULL on a build made before this was counted: not measured, not zero.
+    examined: Mapped[int | None] = mapped_column(Integer)
+    #: Of those, passages about at least one topic. A passage never examined
+    #: is neither on nor off topic, so the share is ``on_topic / examined``.
+    on_topic: Mapped[int | None] = mapped_column(Integer)
+    #: ``{topic: passages}``; a passage about two topics counts under both.
+    topic_mix: Mapped[dict | None] = mapped_column(JSONB)
     #: When the newest passage in the area was stored.
     newest_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     #: Unit-length mean of the passages' vectors: what "similar area" and a
