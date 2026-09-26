@@ -132,7 +132,10 @@ jobs:
     # few sites. At most 6 per topic per run, and none for a topic with 24
     # unanswered already. Since `P5-05` the same run also reads the graph:
     # up to 6 tier counter-seeds and 2 distant walks (§7.4 mechanisms 2, 4).
-    interval_seconds: 21600
+    # `B-87`: every 3 hours, from 6. A run's results were spent in about two
+    # hours once search got a third of claims (`B-86`), leaving the directed
+    # slot to fall through to followed links for the rest of the interval.
+    interval_seconds: 10800
     enabled: true
 
   - name: translate

@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.10] — 2026-09-26
+
+### Changed
+
+- `B-87`: search seeding runs every 3 hours by default (was 6). With search results
+  given a third of claims (`B-86`) a run's results lasted about two hours. The
+  timetable seeds the database at first boot only; the live row was set by hand
+
 ## [0.148.9] — 2026-09-26
 
 ### Changed
