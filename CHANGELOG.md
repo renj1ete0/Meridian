@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.12] — 2026-09-26
+
+### Fixed
+
+- `B-88`: the duplicate pass marked a page a copy of itself, and the database's
+  check refused the write, when a translation (pointing at its English version) and
+  a near copy (pointing at the older page) disagreed about direction. A loop now
+  gets one root, the smallest id, and that page stays unmarked
+
 ## [0.148.11] — 2026-09-26
 
 ### Fixed

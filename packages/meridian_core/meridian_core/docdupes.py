@@ -183,9 +183,18 @@ def canonical(pairs: Iterable[Pair], *, protected: set[int] = frozenset()) -> di
             best[pair.later] = pair
     resolved: dict[int, Pair] = {}
     for later, pair in best.items():
-        root, seen = pair.earlier, {later}
-        while root in best and root not in seen:
-            seen.add(root)
+        path, root = [later], pair.earlier
+        while root in best and root not in path:
+            path.append(root)
             root = best[root].earlier
+        if root in path:
+            # A loop (`B-88`): reasons disagree about which way round two pages
+            # go — a translation points at its English version, a near copy at
+            # the older one — and walking it came back to where it began, which
+            # marked a page a copy of itself. The loop gets one root for all of
+            # its members, the smallest id, and that page stays unmarked.
+            root = min(path[path.index(root) :])
+            if root == later:
+                continue
         resolved[later] = dataclasses.replace(pair, earlier=root)
     return resolved

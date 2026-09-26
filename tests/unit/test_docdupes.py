@@ -93,3 +93,45 @@ def test_a_cited_source_is_never_marked_and_its_copies_stop_at_it() -> None:
     verdicts = canonical([Pair(3, 2, "exact", 1.0), Pair(2, 1, "exact", 1.0)], protected={2})
     assert 2 not in verdicts
     assert verdicts[3].earlier == 2
+
+
+# -- B-88: reasons that disagree about direction make loops ---------------------------
+
+
+def test_a_translation_and_a_near_copy_pointing_opposite_ways_mark_no_page_its_own_copy():
+    """The live case: a page declares its English version, and the English one
+    reads as a near copy of the older page. The walk looped back to its start."""
+    verdicts = canonical([Pair(10, 20, "translation", 1.0), Pair(20, 10, "near", 0.99)])
+    assert all(pair.later != pair.earlier for pair in verdicts.values())
+    assert verdicts == {20: Pair(20, 10, "near", 0.99)}
+
+
+def test_a_longer_loop_has_one_root_for_all_its_members():
+    pairs = [Pair(1, 2, "exact", 1.0), Pair(2, 3, "exact", 1.0), Pair(3, 1, "exact", 1.0)]
+    verdicts = canonical(pairs)
+    assert {later: p.earlier for later, p in verdicts.items()} == {2: 1, 3: 1}
+
+
+def test_a_chain_into_a_loop_reaches_the_loops_root():
+    pairs = [Pair(7, 5, "near", 0.99), Pair(5, 6, "translation", 1.0), Pair(6, 5, "near", 0.99)]
+    verdicts = canonical(pairs)
+    assert verdicts[7].earlier == 5 and 5 not in verdicts and verdicts[6].earlier == 5
+
+
+def test_verdicts_never_mark_a_root_and_never_point_at_themselves():
+    """Whatever the pairs, a verdict's target is itself unmarked: search hides
+    copies and keeps canonicals, so a target that is also a copy hides both."""
+    import random
+
+    rng = random.Random(0)
+    reasons = ["exact", "near", "translation"]
+    for _ in range(300):
+        pairs = [
+            Pair(rng.randrange(12), rng.randrange(12), rng.choice(reasons), 1.0)
+            for _ in range(rng.randrange(1, 15))
+        ]
+        pairs = [p for p in pairs if p.later != p.earlier]
+        verdicts = canonical(pairs)
+        for later, pair in verdicts.items():
+            assert pair.later == later != pair.earlier
+            assert pair.earlier not in verdicts, (pairs, verdicts)
