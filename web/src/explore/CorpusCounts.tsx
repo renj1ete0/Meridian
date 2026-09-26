@@ -39,9 +39,10 @@ function figure(value: number | undefined): string {
 }
 
 const CELLS: ReadonlyArray<{ key: keyof CorpusFigures; label: string }> = [
-  { key: 'documents', label: 'Documents' },
-  { key: 'nodes', label: 'Nodes' },
-  { key: 'edges', label: 'Edges' },
+  // Reader words (`P6-44`): nodes and edges stay in Admin.
+  { key: 'documents', label: 'Sources' },
+  { key: 'nodes', label: 'Concepts' },
+  { key: 'edges', label: 'Stated links' },
   { key: 'contested', label: 'Contested' },
 ]
 

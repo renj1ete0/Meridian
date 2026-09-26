@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.2] — 2026-09-26
+
+### Changed
+
+- `P6-44` (part): the landing speaks to a reader. The counts read Sources, Concepts,
+  Stated links and Contested rather than documents, nodes and edges; the first card
+  is "Ask a question" and says what the Answer view does; Coverage opens Gaps instead
+  of standing as a dead "not built yet" card; contested copy says claims, not edges
+
 ## [0.148.1] — 2026-09-26
 
 ### Added

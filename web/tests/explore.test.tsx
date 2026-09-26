@@ -105,9 +105,11 @@ describe('the corpus counts', () => {
   it('names all four figures §8 asks for', () => {
     const markup = text(renderToStaticMarkup(<CorpusCounts counts={null} />))
 
-    expect(markup).toContain('Documents')
-    expect(markup).toContain('Nodes')
-    expect(markup).toContain('Edges')
+    // Reader words on the landing (P6-44); graph terms stay in Admin.
+    expect(markup).toContain('Sources')
+    expect(markup).toContain('Concepts')
+    expect(markup).toContain('Stated links')
+    expect(markup).not.toMatch(/>(Nodes|Edges|Documents)</)
     expect(markup).toContain('Contested')
   })
 
@@ -127,6 +129,11 @@ describe('the corpus counts', () => {
 // --------------------------------------------------------------------------
 
 describe('the entry points', () => {
+  it('speaks to a reader, not about the machinery (P6-44)', () => {
+    const copy = ENTRY_POINTS.map((e) => `${e.title} ${e.description}`).join(' ')
+    expect(copy).not.toMatch(/reciprocal rank|retrieval|hybrid|\bedges?\b|\bnodes?\b|cells?\b/i)
+  })
+
   it('offers exactly the three §12.5 names', () => {
     expect(ENTRY_POINTS.map((entry) => entry.name)).toEqual(['search', 'coverage', 'contested'])
   })
@@ -151,11 +158,11 @@ describe('the entry points', () => {
     const markup = renderToStaticMarkup(
       <EntryPoints
         actions={{ search: noop, coverage: noop }}
-        unavailable={{ coverage: 'Coverage scoring is not built yet.' }}
+        unavailable={{ coverage: 'Gaps could not be read.' }}
       />,
     )
 
-    expect(text(markup)).toContain('Coverage scoring is not built yet.')
+    expect(text(markup)).toContain('Gaps could not be read.')
     // Still says what the view is — the reason is added, not substituted.
     expect(text(markup)).toContain(ENTRY_POINTS.find((e) => e.name === 'coverage')!.description)
     // Only search is a button: the unavailable card is not, even with an action.

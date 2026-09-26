@@ -383,25 +383,25 @@ describe('what the entry cards claim', () => {
     }
   }
 
-  it('always says coverage is not built, and invents no cell count', () => {
-    const { unavailable } = entryState(stats())
-    expect(unavailable.coverage).toMatch(/not built/i)
-    expect(unavailable.coverage).not.toMatch(/\d/)
+  it('opens coverage through Gaps rather than calling it unbuilt, and invents no count', () => {
+    const { unavailable, descriptions } = entryState(stats())
+    expect(unavailable.coverage).toBeUndefined()
+    expect(descriptions.coverage).toBeUndefined()
   })
 
   it('says there is nothing to disagree about when there are no edges', () => {
-    expect(entryState(stats({ edges: 0 })).unavailable.contested).toMatch(/No edges yet/)
+    expect(entryState(stats({ edges: 0 })).unavailable.contested).toMatch(/No stated links yet/)
   })
 
   it('states a real zero when edges exist and none is contested', () => {
     const { unavailable, descriptions } = entryState(stats({ edges: 4, contested_edges: 0 }))
     expect(unavailable.contested).toBeUndefined()
-    expect(descriptions.contested).toMatch(/^No pair of sources disagrees across 4 edges/)
+    expect(descriptions.contested).toMatch(/^No two sources disagree across 4 stated links/)
   })
 
   it('carries the real count when there is one, in the right number', () => {
-    expect(entryState(stats({ contested_edges: 1 })).descriptions.contested).toMatch(/^1 pair where/)
-    expect(entryState(stats({ contested_edges: 214 })).descriptions.contested).toMatch(/^214 pairs where/)
+    expect(entryState(stats({ contested_edges: 1 })).descriptions.contested).toMatch(/^1 claim sources/)
+    expect(entryState(stats({ contested_edges: 214 })).descriptions.contested).toMatch(/^214 claims sources/)
   })
 
   it('makes no claim about contested pairs before the counts arrive', () => {

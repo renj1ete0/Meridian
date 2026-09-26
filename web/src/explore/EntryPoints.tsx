@@ -16,6 +16,10 @@ import { Icon } from '../ui/Icon'
  * mono line beneath — a measured fact about that view, where one exists. Where
  * none exists the line is absent rather than invented: the artboard's
  * "9 thin cells · 3 stale" needs coverage scoring, which is not built.
+ *
+ * Coverage opens Gaps (`P6-36`, `P6-42`): the one ranked list of what the
+ * corpus cannot answer is where absence became visible, and a card that said
+ * "not built" beside it was a dead end on the first screen (`P6-44`).
  */
 
 export type EntryPointName = 'search' | 'coverage' | 'contested'
@@ -30,20 +34,20 @@ export interface EntryPoint {
 export const ENTRY_POINTS: readonly EntryPoint[] = [
   {
     name: 'search',
-    title: 'Search',
+    title: 'Ask a question',
     description:
-      'Hybrid retrieval over the corpus, fused by reciprocal rank. Start here when you know what you are looking for.',
+      'The evidence grouped by country, each place marked strong or thin, in the sources’ own words. Nothing is generated.',
   },
   {
     name: 'coverage',
     title: 'Coverage',
     description:
-      'Topic against dimension, thin cells first. This is the view that makes absence visible.',
+      'What the corpus cannot answer yet, most severe first — thin topics, places and fields — each with a search to fill it.',
   },
   {
     name: 'contested',
     title: 'Contested',
-    description: 'Pairs where sources disagree. Both edges are kept; neither is resolved.',
+    description: 'Claims sources disagree about. Both sides are kept; neither is resolved.',
   },
 ] as const
 

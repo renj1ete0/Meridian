@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { focusSearch } from '../lib/hotkeys'
 import { openSession } from '../lib/lastVisit'
+import { navigate } from '../lib/route'
 import { initialMode, rememberMode, type ResultMode } from '../lib/answer'
 import { Lockup } from '../ui/Mark'
 import { AnswerView } from './AnswerView'
@@ -88,20 +89,18 @@ export function entryState(stats: CorpusStats | null): {
   unavailable: Partial<Record<EntryPointName, string>>
   descriptions: Partial<Record<EntryPointName, string>>
 } {
-  const unavailable: Partial<Record<EntryPointName, string>> = {
-    coverage: 'Not built yet — no cell is scored.',
-  }
+  const unavailable: Partial<Record<EntryPointName, string>> = {}
   const descriptions: Partial<Record<EntryPointName, string>> = {}
   if (stats) {
     if (stats.edges === 0) {
       // Derived rather than hardcoded: once edges exist this stops claiming
       // they do not, without anyone remembering to change it.
-      unavailable.contested = 'No edges yet, so no source disagrees with another.'
+      unavailable.contested = 'No stated links yet, so no source disagrees with another.'
     } else if (stats.contested_edges === 0) {
-      descriptions.contested = `No pair of sources disagrees across ${stats.edges.toLocaleString('en')} edges yet. When one does, both edges are kept; neither is resolved.`
+      descriptions.contested = `No two sources disagree across ${stats.edges.toLocaleString('en')} stated links yet. When they do, both sides are kept; neither is resolved.`
     } else {
       const n = stats.contested_edges
-      descriptions.contested = `${n.toLocaleString('en')} ${n === 1 ? 'pair' : 'pairs'} where sources disagree. Both edges are kept; neither is resolved.`
+      descriptions.contested = `${n.toLocaleString('en')} ${n === 1 ? 'claim' : 'claims'} sources disagree about. Both sides are kept; neither is resolved.`
     }
   }
   return { unavailable, descriptions }
@@ -481,7 +480,7 @@ export function ExplorePage() {
           )
         ) : (
           <EntryPoints
-            actions={{ search: () => focusSearch() }}
+            actions={{ search: () => focusSearch(), coverage: () => navigate('/gaps') }}
             unavailable={unavailable}
             descriptions={descriptions}
           />
