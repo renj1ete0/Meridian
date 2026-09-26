@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.146.0] — 2026-09-26
+
+### Added
+
+- `P6-42` (part): semantic zoom on the Map. A level control (and `?level=` in the
+  URL) shows every cluster of a finer level at once, each laid out inside the circle
+  of the parent it came from; a parent with nothing under it is carried down, so no
+  part of the corpus drops out of view. Changing level animates the split (or merge)
+  from the parent's circle, and skips the animation when the reader asks for reduced
+  motion. Each level is fetched once and shared
+
 ## [0.145.0] — 2026-09-26
 
 ### Added

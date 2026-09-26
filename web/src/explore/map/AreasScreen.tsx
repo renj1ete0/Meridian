@@ -1,29 +1,42 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { ApiError } from '../../lib/api'
 import {
+  AreaCache,
+  ancestorAt,
+  enclosing,
+  fitLabels,
   getArea,
-  getAreas,
   getBridge,
   jumpToArea,
   keyValuesAtScale,
-  labelLines,
-  levelCaption,
+  levelFromSearch,
   levelNoun,
   linkWidth,
+  loadedTo,
   placeAreas,
+  placeNested,
+  prefersReducedMotion,
+  rowsAt,
   edgeToEdge,
   fitRadius,
   radiusOf,
+  splitMorph,
+  zoomCaption,
   type Area,
   type AreaDetail,
   type AreaJumpHit,
   type AreaLink,
   type AreasLevel,
   type Bridge,
+  type Label,
+  type Layout,
+  type MorphItem,
   type Placed,
+  type Rect,
 } from '../../lib/areas'
 import { hrefForSource, navigate, onInternalClick } from '../../lib/route'
+import { LevelControl, MorphLayer, useZoomGestures } from './Zoom'
 
 /**
  * The Map screen's default view (task P6-34): the corpus as nested areas.
@@ -78,36 +91,105 @@ export function areaFromSearch(search: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
-export function AreasScreen({ actions }: { actions?: MapActions }) {
+/** The URL for a root (`?area=`) and a level of detail (`?level=`), other parameters kept. */
+export function mapHref(search: string, areaId: number | null, depth: number | null): string {
+  const params = new URLSearchParams(search)
+  if (areaId === null) params.delete('area')
+  else params.set('area', String(areaId))
+  if (depth === null) params.delete('level')
+  else params.set('level', String(depth))
+  const query = params.toString()
+  return `/map${query ? `?${query}` : ''}`
+}
+
+const NO_CHILDREN: ReadonlyMap<number, AreasLevel> = new Map()
+
+export function AreasScreen({ actions, cache: given }: { actions?: MapActions; cache?: AreaCache }) {
   const [parent, setParent] = useState<number | null>(() => areaFromSearch(window.location.search))
+  // The level of detail asked for; null is the root's own level.
+  const [depth, setDepth] = useState<number | null>(() => levelFromSearch(window.location.search))
   const [load, setLoad] = useState<Load>({ status: 'loading' })
+  const cache = useMemo(() => given ?? new AreaCache(), [given])
+  const [tree, setTree] = useState<{ root: AreasLevel; byParent: Map<number, AreasLevel> } | null>(null)
+  const [zoomError, setZoomError] = useState<string | null>(null)
 
   useEffect(() => {
-    const onPop = () => setParent(areaFromSearch(window.location.search))
+    const onPop = () => {
+      setParent(areaFromSearch(window.location.search))
+      setDepth(levelFromSearch(window.location.search))
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
+    let alive = true
     setLoad((current) => ({ status: 'loading', level: current.status === 'ready' ? current.level : undefined }))
-    getAreas(parent, { signal: controller.signal })
-      .then((level) => setLoad({ status: 'ready', level }))
+    cache
+      .get(parent)
+      .then((level) => alive && setLoad({ status: 'ready', level }))
       .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        setLoad({ status: 'error', message: messageOf(cause, 'The fields did not load.') })
+        if (alive) setLoad({ status: 'error', message: messageOf(cause, 'The fields did not load.') })
       })
-    return () => controller.abort()
-  }, [parent])
+    return () => {
+      alive = false
+    }
+  }, [parent, cache])
+
+  // The finer levels under the root, each parent's children fetched once.
+  const root = load.status === 'ready' ? load.level : null
+  useEffect(() => {
+    if (!root || root.build === null) return
+    const want = Math.min(depth ?? root.level, root.levels)
+    if (want <= root.level) return
+    let alive = true
+    setZoomError(null)
+    cache
+      .descend(root, want)
+      .then((byParent) => {
+        if (!alive) return
+        setTree((current) => {
+          if (!current || current.root !== root) return { root, byParent }
+          // Nothing new (a level already loaded, asked for again): keep the
+          // same map, or every level's layout would be computed afresh.
+          if ([...byParent.keys()].every((id) => current.byParent.has(id))) return current
+          return { root, byParent: new Map([...current.byParent, ...byParent]) }
+        })
+      })
+      .catch((cause: unknown) => {
+        if (alive) setZoomError(messageOf(cause, 'The finer level did not load.'))
+      })
+    return () => {
+      alive = false
+    }
+  }, [root, depth, cache])
 
   const goTo = useCallback((areaId: number | null) => {
-    const search = new URLSearchParams(window.location.search)
-    if (areaId === null) search.delete('area')
-    else search.set('area', String(areaId))
-    const query = search.toString()
-    navigate(`/map${query ? `?${query}` : ''}`)
+    navigate(mapHref(window.location.search, areaId, null))
     setParent(areaId)
+    setDepth(null)
   }, [])
+
+  // A level coarser than the root's moves the root up to the ancestor at
+  // that level, so zooming out of one field ends at all of them.
+  const zoomTo = useCallback(
+    (next: number) => {
+      if (!root) return
+      const target = Math.min(Math.max(1, next), root.levels)
+      let areaId = parent
+      let rootLevel = root.level
+      if (target < root.level) {
+        areaId = target === 1 ? null : (root.path.find((c) => c.level === target - 1)?.area_id ?? null)
+        rootLevel = target
+      }
+      const wanted = target === rootLevel ? null : target
+      if (areaId === parent && wanted === depth) return
+      navigate(mapHref(window.location.search, areaId, wanted))
+      setParent(areaId)
+      setDepth(wanted)
+    },
+    [root, parent, depth],
+  )
 
   if (load.status === 'error') {
     return <p className="p-6 text-text">{load.message}</p>
@@ -115,7 +197,19 @@ export function AreasScreen({ actions }: { actions?: MapActions }) {
   if (!load.level) {
     return <p className="p-6 font-mono text-[length:var(--text-data)] text-text-muted">Reading the fields.</p>
   }
-  return <AreasView level={load.level} onLevel={goTo} actions={actions} loading={load.status === 'loading'} />
+  const byParent = tree && tree.root === load.level ? tree.byParent : NO_CHILDREN
+  return (
+    <AreasView
+      level={load.level}
+      onLevel={goTo}
+      actions={actions}
+      loading={load.status === 'loading'}
+      byParent={byParent}
+      depth={Math.max(load.level.level, Math.min(depth ?? load.level.level, load.level.levels))}
+      onDepth={zoomTo}
+      zoomError={zoomError}
+    />
+  )
 }
 
 /** Everything but the fetch of the level, so tests render it directly. */
@@ -124,12 +218,40 @@ export function AreasView({
   onLevel,
   actions,
   loading = false,
+  byParent = NO_CHILDREN,
+  depth,
+  onDepth,
+  zoomError = null,
 }: {
   level: AreasLevel
   onLevel: (areaId: number | null) => void
   actions?: MapActions
   loading?: boolean
+  /** Children already loaded under the root's areas, by parent id. */
+  byParent?: ReadonlyMap<number, AreasLevel>
+  /** The level of detail asked for; the root's own level when left out. */
+  depth?: number
+  /** Change the level of detail without opening any one circle. */
+  onDepth?: (depth: number) => void
+  zoomError?: string | null
 }) {
+  const wanted = Math.max(level.level, Math.min(depth ?? level.level, level.levels))
+  // The deepest level asked for whose every parent has arrived; until the
+  // rest arrive, the level above stays on screen.
+  const shown = useMemo(() => {
+    let deepest = level.level
+    for (let l = level.level + 1; l <= wanted; l++) {
+      if (!loadedTo(level, byParent, l)) break
+      deepest = l
+    }
+    return deepest
+  }, [level, byParent, wanted])
+  const rows = useMemo(() => rowsAt(level, byParent, shown), [level, byParent, shown])
+  const canvasFrame = useRef<HTMLDivElement>(null)
+  const overlay = useRef<HTMLDivElement>(null)
+  const overlayHeight = useHeight(overlay, 36)
+  useZoomGestures(canvasFrame, (direction) => onDepth?.(wanted + direction), level.build !== null && !!onDepth)
+
   const [panel, setPanel] = useState<Panel>({ kind: 'none' })
   const [menu, setMenu] = useState<Menu>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -199,11 +321,11 @@ export function AreasView({
     )
   }
 
-  const siblings = level.areas
-  const byId = new Map(siblings.map((a) => [a.area_id, a]))
+  const byId = new Map(rows.map((a) => [a.area_id, a]))
+  const zooming = shown < wanted && !zoomError
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="relative flex min-h-0 flex-1">
       {!top ? (
         <LevelAside
           level={level}
@@ -215,9 +337,16 @@ export function AreasView({
         />
       ) : null}
 
-      <div data-theme="dark" className="relative min-w-0 flex-1 bg-ground-deep text-text">
+      <div
+        ref={canvasFrame}
+        data-theme="dark"
+        className="relative min-w-0 flex-1 bg-ground-deep text-text"
+        style={{ touchAction: 'pan-x pan-y' }}
+      >
         <Canvas
           level={level}
+          byParent={byParent}
+          shown={shown}
           hover={hover}
           highlight={highlight}
           selectedLink={panel.kind === 'bridge' ? [panel.a, panel.b] : null}
@@ -226,9 +355,10 @@ export function AreasView({
           onLink={(link) => setPanel({ kind: 'bridge', a: link.area_a, b: link.area_b })}
           onMenu={setMenu}
           onScale={setScale}
+          top={Math.max(64, overlayHeight + 28)}
         />
 
-        <div className="absolute left-5 top-4 z-[1] flex items-center gap-2.5">
+        <div ref={overlay} className="absolute inset-x-5 top-4 z-[1] flex flex-wrap items-center gap-2.5">
           <JumpBox
             onPick={(hit) => {
               setHighlight(hit.area.area_id)
@@ -239,16 +369,25 @@ export function AreasView({
               } else if (leaf) setPanel({ kind: 'area', areaId: hit.area.area_id })
             }}
           />
-          <span className="font-mono text-[11px] text-text-faint" aria-live="polite">
-            {levelCaption(level)}
-            {loading ? ' · loading' : ''}
+          <span className="min-w-0 font-mono text-[11px] text-text-faint" aria-live="polite">
+            {zoomCaption(level, shown, rows.length)}
+            {loading || zooming ? ' · loading' : ''}
+            {zoomError ? ` · ${zoomError}` : ''}
           </span>
+          {onDepth ? (
+            <div className="ml-auto">
+              <LevelControl levels={level.levels} value={wanted} onChange={onDepth} />
+            </div>
+          ) : null}
         </div>
 
-        <SizeKey areas={siblings} scale={scale} />
-        <p className="pointer-events-none absolute bottom-4 left-5 font-mono text-[11px] text-text-faint">
-          size = passages · solid = a cited claim spans both, thicker = more sources · dashed = similar
-          passages · click to zoom in · right-click for more
+        <SizeKey areas={rows} scale={scale} />
+        <p className="pointer-events-none absolute bottom-4 left-5 right-5 hidden font-mono text-[11px] text-text-faint sm:block">
+          size = passages ·{' '}
+          {shown === level.level
+            ? 'solid = a cited claim spans both, thicker = more sources · dashed = similar passages · '
+            : `outline = the ${levelNoun(level.level)} each came from · `}
+          click to zoom in · scroll, pinch or +/− for more or less detail · right-click for more
         </p>
 
         {hover !== null && byId.get(hover) ? <AreaTip area={byId.get(hover)!} /> : null}
@@ -256,7 +395,7 @@ export function AreasView({
         {menu ? (
           <ContextMenu
             menu={menu}
-            level={level}
+            level={{ ...level, areas: rows }}
             actions={actions}
             onClose={() => setMenu(null)}
             onOpen={openArea}
@@ -267,7 +406,7 @@ export function AreasView({
       {panel.kind !== 'none' ? (
         <aside
           aria-label={panel.kind === 'bridge' ? 'Bridge' : 'Field'}
-          className="flex w-[380px] shrink-0 flex-col gap-3.5 overflow-y-auto border-l border-line bg-surface p-5"
+          className="absolute inset-y-0 right-0 z-30 flex w-full max-w-[380px] shrink-0 flex-col gap-3.5 overflow-y-auto border-l border-line bg-surface p-5 md:static md:w-[380px]"
         >
           {panel.kind === 'bridge' ? (
             <BridgePanel
@@ -287,6 +426,25 @@ export function AreasView({
 // --------------------------------------------------------------------------
 // The canvas
 
+/** An element's height as laid out, or `fallback` until it has one. */
+function useHeight(ref: React.RefObject<HTMLElement | null>, fallback: number): number {
+  const [height, setHeight] = useState(fallback)
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const measure = () => {
+      const h = element.getBoundingClientRect().height
+      if (h > 0) setHeight(h)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return height
+}
+
 function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; height: number } {
   const [size, setSize] = useState({ width: 900, height: 640 })
   useLayoutEffect(() => {
@@ -305,8 +463,28 @@ function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; hei
   return size
 }
 
+/**
+ * By how many levels below the root: each level's circle scale as a share of
+ * the level above's, how far children spread across their parent's circle,
+ * and the space kept between circles. A level's circles together hold the
+ * same passages as the level above, so at a share of 1 they cover the same
+ * area; the spacing lets them spread into the room the coarser level left.
+ */
+const SHRINK = [1, 0.98, 0.9]
+const SPREAD = [0, 0.95, 0.85]
+const GAPS = [14, 5, 2.5]
+
+type Morph = {
+  items: MorphItem[]
+  coarse: Placed[]
+  coarseLabels: Map<number, Label>
+  split: boolean
+}
+
 function Canvas({
   level,
+  byParent,
+  shown,
   hover,
   highlight,
   selectedLink,
@@ -315,8 +493,11 @@ function Canvas({
   onLink,
   onMenu,
   onScale,
+  top = 64,
 }: {
   level: AreasLevel
+  byParent: ReadonlyMap<number, AreasLevel>
+  shown: number
   hover: number | null
   highlight: number | null
   selectedLink: [number, number] | null
@@ -325,14 +506,15 @@ function Canvas({
   onLink: (link: AreaLink) => void
   onMenu: (menu: Menu) => void
   onScale: (scale: number) => void
+  /** Room kept clear at the top for what floats over the canvas there. */
+  top?: number
 }) {
   const box = useRef<HTMLDivElement>(null)
   const { width, height } = useSize(box)
   // Keyboard focus on a line draws it as selected: the hit line is invisible,
   // so an outline would be a box round nothing.
   const [focused, onFocusLink] = useState<[number, number] | null>(null)
-  // Room at the top for the jump box and at the bottom for the key.
-  const top = 64
+  // Room at the bottom for the key.
   const bottom = 40
   const drawHeight = Math.max(200, height - top - bottom)
   const maxRadius = fitRadius(
@@ -340,29 +522,132 @@ function Canvas({
     width,
     drawHeight,
   )
-  const { placed, scale } = useMemo(
-    () =>
-      placeAreas(level.areas, width, drawHeight, {
-        maxRadius,
-        gap: 14,
-        pad: 28,
-        // Where the size key sits, bottom left.
-        avoid: [{ x: 0, y: drawHeight - KEY_BOX.h, w: KEY_BOX.w, h: KEY_BOX.h }],
-      }),
-    [level.areas, width, drawHeight, maxRadius],
-  )
-  useEffect(() => onScale(scale), [scale, onScale])
-  const childNoun = levelNoun(level.level + 1)
-  const at = new Map(placed.map((p) => [p.area.area_id, p]))
 
-  function contextMenu(event: React.MouseEvent, area: Area | null) {
-    event.preventDefault()
-    event.stopPropagation()
-    const frame = box.current?.getBoundingClientRect()
-    const x = event.clientX - (frame?.left ?? 0)
-    const y = event.clientY - (frame?.top ?? 0)
-    onMenu(area ? { kind: 'area', area, x, y } : { kind: 'empty', x, y })
-  }
+  // Where the size key sits, bottom left: circles and labels keep out of it.
+  const keyBox = useMemo<Rect>(() => ({ x: 0, y: drawHeight - KEY_BOX.h, w: KEY_BOX.w, h: KEY_BOX.h }), [drawHeight])
+
+  // Every loaded level laid out once per size: the root's by its stored
+  // positions, each finer one composed into the level above it.
+  const layouts = useMemo(() => {
+    const avoid: Rect[] = [keyBox]
+    const first = placeAreas(level.areas, width, drawHeight, { maxRadius, gap: GAPS[0], pad: 28, avoid })
+    let current: Layout = { level: level.level, ...first }
+    const out = new Map<number, Layout>([[level.level, current]])
+    const childrenOf = new Map([...byParent].map(([id, children]) => [id, children.areas]))
+    for (let l = level.level + 1; l <= level.levels; l++) {
+      if (!loadedTo(level, byParent, l)) break
+      current = placeNested(current, childrenOf, {
+        width,
+        height: drawHeight,
+        shrink: SHRINK[Math.min(l - level.level, SHRINK.length - 1)]!,
+        spread: SPREAD[Math.min(l - level.level, SPREAD.length - 1)]!,
+        gap: GAPS[Math.min(l - level.level, GAPS.length - 1)]!,
+        pad: 20,
+        avoid,
+      })
+      out.set(l, current)
+    }
+    return out
+  }, [level, byParent, width, drawHeight, maxRadius, keyBox])
+
+  const layout = layouts.get(shown) ?? layouts.get(level.level)!
+  useEffect(() => onScale(layout.scale), [layout.scale, onScale])
+
+  // Every area loaded, for walking a finer one up to its ancestor.
+  const everyArea = useMemo(() => {
+    const all = new Map<number, Area>(level.areas.map((a) => [a.area_id, a]))
+    for (const children of byParent.values()) for (const a of children.areas) all.set(a.area_id, a)
+    return all
+  }, [level, byParent])
+
+  // At a finer level, a faint outline round each of the root's areas, named,
+  // so the reader can still tell which field a theme came from.
+  const outlines = useMemo(() => {
+    if (layout.level === level.level || level.areas.length > 24) return []
+    const groups = new Map<number, Placed[]>()
+    for (const p of layout.placed) {
+      const a = ancestorAt(p.area.area_id, level.level, everyArea)
+      if (a === null) continue
+      const list = groups.get(a)
+      if (list) list.push(p)
+      else groups.set(a, [p])
+    }
+    const drawn = [...groups]
+      .map(([id, list]) => {
+        const hull = enclosing(list, 8)
+        const name = everyArea.get(id)?.name ?? ''
+        const w = Math.min(name.length * 6.2 + 10, width)
+        const labelY = Math.max(12, hull.y - hull.r - 6)
+        const box: Rect = { x: hull.x - w / 2, y: labelY - 10, w, h: 13 }
+        return { id, name, hull, labelY, box, named: false }
+      })
+      .sort((a, b) => b.hull.r - a.hull.r)
+    // Named largest first, and only where the name clears every name before it.
+    const taken: Rect[] = []
+    for (const o of drawn) {
+      const { box } = o
+      if (box.x < 0 || box.x + box.w > width) continue
+      if (taken.some((t) => t.x < box.x + box.w && box.x < t.x + t.w && t.y < box.y + box.h && box.y < t.y + t.h)) continue
+      o.named = true
+      taken.push(box)
+    }
+    return drawn
+  }, [layout, level, everyArea, width])
+
+  const labels = useMemo(
+    () =>
+      fitLabels(layout.placed, {
+        width,
+        captions: layout.placed.length <= 40,
+        crowded: layout.placed.length > 40 || width < 640,
+        reserved: [keyBox, ...outlines.filter((o) => o.named).map((o) => o.box)],
+      }),
+    [layout, width, outlines],
+  )
+
+  // A change of level splits each circle into its children, or gathers them
+  // back. Set before paint, so the finished level never flashes first.
+  const [morph, setMorph] = useState<Morph | null>(null)
+  const last = useRef<{ root: AreasLevel; shown: number } | null>(null)
+  useLayoutEffect(() => {
+    const previous = last.current
+    last.current = { root: level, shown: layout.level }
+    if (!previous || previous.root !== level || previous.shown === layout.level) return
+    if (prefersReducedMotion()) {
+      setMorph(null)
+      return
+    }
+    const lo = Math.min(previous.shown, layout.level)
+    const hi = Math.max(previous.shown, layout.level)
+    const coarse = layouts.get(lo)
+    const fine = layouts.get(hi)
+    if (!coarse || !fine) return
+    setMorph({
+      items: splitMorph(coarse.placed, fine.placed, (id) => ancestorAt(id, lo, everyArea)),
+      coarse: coarse.placed,
+      coarseLabels: fitLabels(coarse.placed, { width, captions: false, reserved: [keyBox] }),
+      split: layout.level > previous.shown,
+    })
+  }, [level, layout, layouts, everyArea, width, keyBox])
+  const endMorph = useCallback(() => setMorph(null), [])
+
+  const childNoun = levelNoun(layout.level + 1)
+  const at = new Map(layout.placed.map((p) => [p.area.area_id, p]))
+  // Lines are bridges between siblings, so they are drawn only at the root's
+  // own level, where every circle on screen is a sibling of every other.
+  const links = layout.level === level.level ? level.links : []
+
+  const contextMenu = useCallback(
+    (event: React.MouseEvent, area: Area | null) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const frame = box.current?.getBoundingClientRect()
+      const x = event.clientX - (frame?.left ?? 0)
+      const y = event.clientY - (frame?.top ?? 0)
+      onMenu(area ? { kind: 'area', area, x, y } : { kind: 'empty', x, y })
+    },
+    [onMenu],
+  )
 
   const cx = width / 2
   const cy = top + drawHeight / 2
@@ -370,86 +655,150 @@ function Canvas({
 
   return (
     <div ref={box} className="absolute inset-0" onContextMenu={(event) => contextMenu(event, null)}>
-      <svg width={width} height={height} role="img" aria-label="Fields of the corpus" className="block">
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label="Fields of the corpus"
+        className="block"
+        data-level={layout.level}
+      >
         <g fill="none" stroke="var(--dark-canvas-graticule)">
           <circle cx={cx} cy={cy} r={globe} />
           <ellipse cx={cx} cy={cy} rx={globe * 0.42} ry={globe} />
         </g>
         <g transform={`translate(0 ${top})`}>
-          {placed.map((p) => (
-            <AreaCircle
-              key={p.area.area_id}
-              placed={p}
-              childNoun={childNoun}
-              hovered={hover === p.area.area_id}
-              highlighted={highlight === p.area.area_id}
-              onHover={onHover}
-              onOpen={onOpen}
-              onMenu={contextMenu}
+          {morph ? (
+            <MorphLayer
+              items={morph.items}
+              coarse={morph.coarse}
+              coarseLabels={morph.coarseLabels}
+              split={morph.split}
+              onDone={endMorph}
             />
-          ))}
-          {level.links.map((link) => {
-            const a = at.get(link.area_a)
-            const b = at.get(link.area_b)
-            if (!a || !b) return null
-            // Edge to edge, not centre to centre: a line drawn through a
-            // circle crosses its label and makes the circle hard to click.
-            const segment = edgeToEdge(a, b)
-            if (!segment) return null
-            const [x1, y1, x2, y2] = segment
-            const cited = link.cited_claims > 0
-            const selected =
-              (selectedLink?.includes(link.area_a) && selectedLink.includes(link.area_b)) ||
-              (focused?.[0] === link.area_a && focused[1] === link.area_b)
-            const label = `${a.area.name} and ${b.area.name}: ${
-              cited
-                ? `${link.cited_claims} cited claim${link.cited_claims === 1 ? '' : 's'}, ${link.cited_sources} source${link.cited_sources === 1 ? '' : 's'}`
-                : 'similar passages, no cited claim'
-            }`
-            return (
-              <g key={`${link.area_a}-${link.area_b}`}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={selected ? 'var(--text)' : cited ? 'var(--accent-graph)' : 'var(--dark-canvas-neighbour)'}
-                  strokeOpacity={selected ? 1 : cited ? 0.6 : 0.5}
-                  strokeWidth={selected ? Math.max(3, linkWidth(link)) : linkWidth(link)}
-                  strokeDasharray={cited ? undefined : '4 5'}
+          ) : (
+            <>
+              {outlines.map((o) => (
+                <circle
+                  key={o.id}
+                  aria-hidden
+                  data-outline={o.id}
+                  cx={o.hull.x}
+                  cy={o.hull.y}
+                  r={o.hull.r}
+                  fill="none"
+                  stroke="var(--dark-canvas-neighbour)"
+                  strokeOpacity={0.28}
+                  strokeDasharray="2 5"
                 />
-                {/* A wide transparent twin, so a thin line is clickable. */}
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke="transparent"
-                  strokeWidth={14}
-                  className="cursor-pointer focus:outline-none"
-                  onFocus={() => onFocusLink([link.area_a, link.area_b])}
-                  onBlur={() => onFocusLink(null)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={label}
-                  onClick={() => onLink(link)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') onLink(link)
-                  }}
-                >
-                  <title>{label}</title>
-                </line>
+              ))}
+              {layout.placed.map((p) => (
+                <AreaCircle
+                  key={p.area.area_id}
+                  placed={p}
+                  label={labels.get(p.area.area_id)}
+                  childNoun={childNoun}
+                  hovered={hover === p.area.area_id}
+                  highlighted={highlight === p.area.area_id}
+                  onHover={onHover}
+                  onOpen={onOpen}
+                  onMenu={contextMenu}
+                />
+              ))}
+              {/* Over the circles, so the halo keeps a name legible where
+                  another field's circles pass under it. */}
+              <g aria-hidden className="pointer-events-none">
+                {outlines
+                  .filter((o) => o.named)
+                  .map((o) => (
+                    <text
+                      key={o.id}
+                      x={o.hull.x}
+                      y={o.labelY}
+                      textAnchor="middle"
+                      fontFamily="var(--font-mono)"
+                      fontSize={10}
+                      letterSpacing="0.04em"
+                      fill="var(--text-muted)"
+                      paintOrder="stroke"
+                      stroke="var(--ground-deep)"
+                      strokeWidth={4}
+                    >
+                      {o.name}
+                    </text>
+                  ))}
               </g>
-            )
-          })}
+            </>
+          )}
+          {morph
+            ? null
+            : links.map((link) => {
+                const a = at.get(link.area_a)
+                const b = at.get(link.area_b)
+                if (!a || !b) return null
+                // Edge to edge, not centre to centre: a line drawn through a
+                // circle crosses its label and makes the circle hard to click.
+                const segment = edgeToEdge(a, b)
+                if (!segment) return null
+                const [x1, y1, x2, y2] = segment
+                const cited = link.cited_claims > 0
+                const selected =
+                  (selectedLink?.includes(link.area_a) && selectedLink.includes(link.area_b)) ||
+                  (focused?.[0] === link.area_a && focused[1] === link.area_b)
+                const label = `${a.area.name} and ${b.area.name}: ${
+                  cited
+                    ? `${link.cited_claims} cited claim${link.cited_claims === 1 ? '' : 's'}, ${link.cited_sources} source${link.cited_sources === 1 ? '' : 's'}`
+                    : 'similar passages, no cited claim'
+                }`
+                return (
+                  <g key={`${link.area_a}-${link.area_b}`}>
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={selected ? 'var(--text)' : cited ? 'var(--accent-graph)' : 'var(--dark-canvas-neighbour)'}
+                      strokeOpacity={selected ? 1 : cited ? 0.6 : 0.5}
+                      strokeWidth={selected ? Math.max(3, linkWidth(link)) : linkWidth(link)}
+                      strokeDasharray={cited ? undefined : '4 5'}
+                    />
+                    {/* A wide transparent twin, so a thin line is clickable. */}
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="transparent"
+                      strokeWidth={14}
+                      className="cursor-pointer focus:outline-none"
+                      onFocus={() => onFocusLink([link.area_a, link.area_b])}
+                      onBlur={() => onFocusLink(null)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={label}
+                      onClick={() => onLink(link)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') onLink(link)
+                      }}
+                    >
+                      <title>{label}</title>
+                    </line>
+                  </g>
+                )
+              })}
         </g>
       </svg>
     </div>
   )
 }
 
-function AreaCircle({
+/**
+ * One circle and, where {@link fitLabels} found it room, its name. Memoised:
+ * a finer level draws hundreds, and hovering one should not redraw the rest.
+ */
+const AreaCircle = memo(function AreaCircle({
   placed,
+  label,
   childNoun,
   hovered,
   highlighted,
@@ -458,6 +807,7 @@ function AreaCircle({
   onMenu,
 }: {
   placed: Placed
+  label: Label | undefined
   childNoun: string
   hovered: boolean
   highlighted: boolean
@@ -467,11 +817,6 @@ function AreaCircle({
 }) {
   const { area, x, y, r } = placed
   const flagged = area.weak || area.stale
-  const lines = labelLines(area.name)
-  // Inside the circle when the longest line fits across it, else below it.
-  const longest = Math.max(...lines.map((line) => line.length))
-  const inside = r * 2 >= longest * (r >= 60 ? 7 : 6.2) + 10
-  const labelY = inside ? y - (lines.length - 1) * 8 : y + r + 14
   const caption =
     area.children > 0
       ? `${area.children} ${childNoun}${area.children === 1 ? '' : 's'} inside`
@@ -506,17 +851,17 @@ function AreaCircle({
         fill="var(--accent-graph-deep)"
         fillOpacity={hovered || highlighted ? 0.5 : 0.3}
         stroke={flagged ? 'var(--accent-attention)' : 'var(--accent-graph)'}
-        strokeWidth={highlighted ? 2.4 : 1.2}
-        strokeDasharray={flagged ? '5 4' : undefined}
+        strokeWidth={highlighted ? 2.4 : r < 12 ? 1 : 1.2}
+        strokeDasharray={flagged ? (r < 12 ? '3 2' : '5 4') : undefined}
       />
-      {lines.map((line, i) => (
+      {label?.lines.map((line, i) => (
         <text
           key={i}
           x={x}
-          y={labelY + i * 16}
+          y={label.y + i * label.lineHeight}
           textAnchor="middle"
           fontFamily="var(--font-sans)"
-          fontSize={r >= 60 ? 15 : 13}
+          fontSize={label.fontSize}
           fontWeight={600}
           fill="var(--text)"
           paintOrder="stroke"
@@ -526,22 +871,24 @@ function AreaCircle({
           {line}
         </text>
       ))}
-      <text
-        x={x}
-        y={labelY + lines.length * 16 + 2}
-        textAnchor="middle"
-        fontFamily="var(--font-mono)"
-        fontSize={10.5}
-        fill="var(--text-faint)"
-        paintOrder="stroke"
-        stroke="var(--ground-deep)"
-        strokeWidth={3}
-      >
-        {caption}
-      </text>
+      {label?.caption ? (
+        <text
+          x={x}
+          y={label.y + label.lines.length * label.lineHeight + 2}
+          textAnchor="middle"
+          fontFamily="var(--font-mono)"
+          fontSize={10.5}
+          fill="var(--text-faint)"
+          paintOrder="stroke"
+          stroke="var(--ground-deep)"
+          strokeWidth={3}
+        >
+          {caption}
+        </text>
+      ) : null}
     </g>
   )
-}
+})
 
 /**
  * The size key, drawn at the canvas's own scale: a key circle is exactly the
@@ -603,7 +950,7 @@ function AreaTip({ area }: { area: Area }) {
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute right-5 top-16 z-10 flex w-[280px] flex-col gap-1.5 border border-text/16 bg-surface/90 px-[13px] py-[11px] backdrop-blur-[10px]"
+      className="pointer-events-none absolute right-5 top-28 z-10 flex w-[280px] max-w-[calc(100%-40px)] sm:top-16 flex-col gap-1.5 border border-text/16 bg-surface/90 px-[13px] py-[11px] backdrop-blur-[10px]"
     >
       <span className="text-[13px] font-semibold leading-snug text-text">{area.name}</span>
       <span className="font-mono text-[10.5px] text-text-faint">
@@ -651,7 +998,7 @@ function LevelAside({
   const noun = capitalised(plural)
   const parentNoun = levelNoun(level.level - 1)
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col gap-3.5 overflow-y-auto border-r border-line bg-surface p-[18px]">
+    <aside className="hidden w-[280px] shrink-0 flex-col gap-3.5 overflow-y-auto border-r border-line bg-surface p-[18px] md:flex">
       <nav aria-label="Where you are" className="flex flex-col gap-1 font-mono text-[11px]">
         <a
           href="/map"
@@ -763,7 +1110,7 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
   }
 
   return (
-    <form role="search" onSubmit={search} className="relative">
+    <form role="search" onSubmit={search} className="relative min-w-0 max-w-full">
       <input
         value={text}
         onChange={(event) => {
@@ -772,7 +1119,7 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
         }}
         placeholder="Jump to a field or a term"
         aria-label="Jump to a field or a term"
-        className="h-9 w-[340px] border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-faint"
+        className="h-9 w-[340px] max-w-full border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-faint"
       />
       {error ? <p className="absolute left-0 top-10 w-[340px] border border-line bg-surface p-2 text-[12px] text-text">{error}</p> : null}
       {hits ? (
