@@ -14,7 +14,7 @@ import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
 import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
-import { getTermNeighbourhood } from './neighbourhood/api'
+import { getTermNeighbourhood, hasNeighbourhood } from './neighbourhood/api'
 import { TopicFilter } from './TopicFilter'
 import { WhereYouWere } from './WhereYouWere'
 import {
@@ -172,6 +172,9 @@ export function ExplorePage() {
       })
     return () => controller.abort()
   }, [asked, picked])
+
+  const showHood =
+    hood !== null && (hood.phase === 'failed' || (hood.phase === 'done' && hasNeighbourhood(hood.data)))
 
   // Read once, and the stamp advances immediately. Writing it later — on
   // unmount, or after the fetch — is how the delta ends up always zero: the
@@ -369,8 +372,14 @@ export function ExplorePage() {
         </div>
 
         {/* Results and the neighbourhood side by side (`P6-33`); stacked,
-            results first, below the width where both fit. */}
-        <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+            results first, below the width where both fit. The panel appears
+            once it has something to show; while it loads, or when it holds
+            nothing, the results keep the width. */}
+        <div
+          className={`mt-8 grid grid-cols-1 items-start gap-6 ${
+            showHood ? 'lg:grid-cols-[minmax(0,1fr)_400px]' : 'max-w-[1100px]'
+          }`}
+        >
           <section aria-live="polite">
             <ModeSwitch
               mode={mode}
@@ -420,7 +429,7 @@ export function ExplorePage() {
               />
             ) : null}
           </section>
-          {hood ? (
+          {showHood && hood ? (
             <NeighbourhoodPanel
               state={hood}
               shownChunkIds={shown}

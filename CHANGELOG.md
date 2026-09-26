@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.147.2] — 2026-09-26
+
+### Fixed
+
+- `B-78`: Find no longer shows an empty neighbourhood panel beside a question. A
+  question rarely names a node, and the panel took a quarter of the page to say
+  so; it now appears once it holds something, and the results keep the width
+
 ## [0.147.1] — 2026-09-26
 
 ### Changed

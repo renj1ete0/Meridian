@@ -68,6 +68,21 @@ export interface TermNeighbourhood {
   similar_floor: number
   passage_floor: number
 }
+/**
+ * Whether a neighbourhood holds anything a reader can follow. A question
+ * rarely names a node and often has nothing near it; a panel saying so
+ * beside every such search takes a quarter of the page to report an absence.
+ */
+export function hasNeighbourhood(data: TermNeighbourhood): boolean {
+  return (
+    data.anchor !== null ||
+    data.candidates.length > 0 ||
+    data.cited.length > 0 ||
+    data.similar.length > 0 ||
+    data.passages.length > 0
+  )
+}
+
 export const TERM_NEIGHBOURHOOD_FIELDS = [
   'term',
   'anchor',

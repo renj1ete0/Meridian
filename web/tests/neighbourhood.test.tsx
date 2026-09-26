@@ -32,6 +32,7 @@ import {
   TERM_FIELDS,
   TERM_NEIGHBOURHOOD_FIELDS,
   getTermNeighbourhood,
+  hasNeighbourhood,
   neighbourhoodQuery,
   type TermNeighbourhood,
 } from '../src/explore/neighbourhood/api'
@@ -282,6 +283,24 @@ describe('the panel is honest when there is little to show', () => {
   it('names a failure inside the panel', () => {
     render(<NeighbourhoodPanel state={{ phase: 'failed', message: 'The API returned 500.' }} />)
     expect(screen.getByText('The API returned 500.')).toBeTruthy()
+  })
+})
+
+describe('whether there is a neighbourhood to show', () => {
+  const empty = data({ anchor: null, candidates: [], cited: [], cited_total: 0, similar: [], similar_total: 0, passages: [] })
+
+  it('is nothing when no ring, name or passage holds anything', () => {
+    expect(hasNeighbourhood(empty)).toBe(false)
+  })
+
+  it.each([
+    ['an anchor', { anchor: { entity_id: 1, canonical_name: 'x', node_type: 'concept' } }],
+    ['a near name to pick', { candidates: [{ entity_id: 2, canonical_name: 'y', node_type: 'concept' }] }],
+    ['a cited term', { cited: data().cited }],
+    ['a similar term', { similar: data().similar }],
+    ['a passage', { passages: data().passages }],
+  ] as const)('is something when it has %s', (_, over) => {
+    expect(hasNeighbourhood({ ...empty, ...(over as Partial<TermNeighbourhood>) })).toBe(true)
   })
 })
 
