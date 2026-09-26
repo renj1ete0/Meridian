@@ -124,12 +124,20 @@ describe('the workspace', () => {
   // listed as unbuilt (or the reverse) fails here instead of being skipped.
   const UNBUILT = VIEWS.filter((v) => !BUILT_VIEWS.has(v)).map((v) => VIEW_LABEL[v])
 
-  it.each(UNBUILT)('%s says it is not built rather than faking it', async (view) => {
+  it('offers exactly the built views as tabs, and no dead one', async () => {
     serve(() => undefined)
     render(<NodePage entityId={1} />)
     await screen.findByText(/3 of 3 neighbours/)
-    fireEvent.click(screen.getByRole('tab', { name: view }))
-    expect(screen.getByText(`${view} is not built yet.`)).toBeTruthy()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(tabs).toEqual([...BUILT_VIEWS].map((v) => VIEW_LABEL[v]))
+    for (const view of UNBUILT) expect(screen.queryByRole('tab', { name: view })).toBeNull()
+  })
+
+  it.each(VIEWS.filter((v) => !BUILT_VIEWS.has(v)))('an old link to %s says it is not built rather than faking it', async (view) => {
+    window.history.replaceState({}, '', `/nodes/1?view=${view}`)
+    serve(() => undefined)
+    render(<NodePage entityId={1} />)
+    expect(await screen.findByText(`${VIEW_LABEL[view]} is not built yet.`)).toBeTruthy()
     expect(screen.queryByTestId('canvas')).toBeNull()
   })
 

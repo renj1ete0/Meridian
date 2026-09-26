@@ -118,6 +118,8 @@ type PathState =
 const BTN =
   'border border-line-strong bg-surface-raised px-3 py-[7px] text-[12.5px] text-text-muted hover:text-text disabled:opacity-50'
 
+const OFFERED_VIEWS = VIEWS.filter((v) => BUILT_VIEWS.has(v))
+
 export function NodePage({ entityId }: { entityId: number }) {
   const top = useTopOffset()
   const [url, setUrl] = useState<WorkspaceUrlState>(() => parseSearch(window.location.search))
@@ -381,14 +383,17 @@ export function NodePage({ entityId }: { entityId: number }) {
             onPick={(id) => refocus(id)}
           />
           <div role="tablist" aria-label="View" className="pointer-events-auto flex shrink-0 border border-line bg-ground-deep">
-            {VIEWS.map((v, i) => (
+            {/* Only the views that exist are offered: a tab whose whole content
+                is "not built yet" is a dead end (`P6-44`). An old link naming
+                one still opens, and says so. */}
+            {OFFERED_VIEWS.map((v, i) => (
               <button
                 key={v}
                 type="button"
                 role="tab"
                 aria-selected={url.view === v}
                 onClick={() => updateUrl({ ...url, view: v })}
-                className={`px-3 py-[7px] text-[12px] ${i < VIEWS.length - 1 ? 'border-r border-line' : ''} ${
+                className={`px-3 py-[7px] text-[12px] ${i < OFFERED_VIEWS.length - 1 ? 'border-r border-line' : ''} ${
                   url.view === v ? 'bg-surface-raised text-text' : 'text-text-faint hover:text-text-muted'
                 }`}
               >

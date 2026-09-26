@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.4] — 2026-09-26
+
+### Changed
+
+- `P6-44` (part): a concept page offers only the views that exist (Node-link,
+  Table, Matrix). Timeline and Coverage tabs led to a page saying they were not
+  built; an old link naming one still opens and says so
+
 ## [0.148.3] — 2026-09-26
 
 ### Fixed
