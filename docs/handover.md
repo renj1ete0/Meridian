@@ -33,8 +33,11 @@ add it here.
 >   Join or batch instead.
 > - **The label floor's band 0.45–0.48 holds over half of all labels** and is noisy on
 >   generic government pages (`B-83`, the operator's call).
-> - The embedding sidecar keeps computing a batch after its client is gone (`B-82`), so after
->   a deploy it runs at full CPU for a few minutes on nothing.
+> - **The timetable has no Admin route.** `config/schedule.yaml` seeds it at first boot only;
+>   `seedsearch` was moved to 3 hours on the live stack with a direct `UPDATE scheduled_jobs`
+>   (and `next_run_at` reset, since it keeps the old interval's next run) — `B-87`.
+> - **Search results were three times as often on-topic as followed links** since the crawl
+>   fixes; the directed share is now pinned by a test to the measured values (`B-86`).
 
 > **2026-09-25 close of day.** Also shipped from the operator's UI review: source titles
 > cleaned at write and in bulk (`B-69`, `worker.retitle`), gazetteer terms typed by head

@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.148.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
+**`v0.148.12`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
 against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -33,9 +33,10 @@ against a real Postgres, 616 frontend.
 > share 18%, embedding ~292/min so the backlog nearly holds against the crawl, on-topic yield
 > 72% of the 274 examined so far (early; re-measure once the window's chunks are embedded).
 >
-> **Next:** re-measure run 6's yield; `B-85` (harvest times out at 30 min); `B-82`; seed
-> searches more often while the directed queue is empty (the directed share fell after the
-> first minutes). **Needs the operator:** `B-83` — the label floor (0.45) lets in generic
+> **Evening:** `B-82`, `B-84`–`B-88` shipped (`v0.148.12`, deployed). Loop run 7 (1h,
+> `loop/run7/comparison.md`): search share 18% → 36%, embedding backlog now falling during a
+> crawl, examined window sources 64% on a topic. Every timetable job ok after the window.
+> Next: re-measure runs 6–7 yield by seed source once their chunks are embedded. **Needs the operator:** `B-83` — the label floor (0.45) lets in generic
 > government pages; raise it, add negatives, or describe topics.
 
 ## Earlier resume notes (written 2026-09-24)
@@ -1479,11 +1480,18 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
-- [ ] `B-85` **The nightly harvest times out** — killed at its 1800s limit twice by
-      2026-09-26 as the corpus grew. Find what it scans in full and make it incremental
+- [x] `B-88` **The duplicate pass marked a page a copy of itself** — `v0.148.12`. A
+      translation and a near copy disagreed about direction and made a loop
+- [x] `B-87` **Search seeding every 3 hours** — `v0.148.10`; the live timetable row was set
+      by hand (config seeds first boot only)
+- [x] `B-86` **Search results get a third of claims** — `v0.148.9`. Since the crawl fixes,
+      search-found sources were on a topic about three times as often as followed links
+- [x] `B-85` **The nightly harvest timed out** — `v0.148.8`. Quadratic boundary scan, a text
+      read that could not use the live-chunk index, and unindexed gazetteer lookups;
+      200 documents went from 45 s to under 7 s on the live corpus
 - [x] `B-84` **The duplicate pass failed daily past 32,767 sources** — `v0.148.7`. It bound
       every source id in one IN list; now a join, and the update is batched
-- [ ] `B-82` **The embedding sidecar finishes a request its client abandoned** — a batch is
+- [x] `B-82` **The embedding sidecar finishes a request its client abandoned** — `v0.148.11` — a batch is
       encoded in one thread call, so a backfill restarted mid-batch (every deploy) leaves
       the sidecar at full CPU for up to a few minutes on work nobody will store. Encode in
       slices and stop when the request is disconnected
