@@ -26,6 +26,7 @@ from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
 
 from meridian_core import annotations
+from meridian_core.answer import DEFAULT_ANSWER_CANDIDATES, DEFAULT_TOP, MAX_TOP
 from meridian_core.areaview import AreaNotFound, area_detail, areas_level, jump
 from meridian_core.bridgeview import bridge
 from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
@@ -47,6 +48,7 @@ from meridian_core.models import (
 from meridian_core.passagetopics import passage_topics_for
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
+from meridian_core.schemas.answer import AnswerRead
 from meridian_core.schemas.areas import (
     AreaDetailRead,
     AreaJumpRead,
@@ -79,7 +81,7 @@ from meridian_core.stats import corpus_stats
 from meridian_core.topicoverlaps import topic_overlaps
 
 from ..deps import ReadSession
-from ..search_service import WindowTooDeep, paged_search
+from ..search_service import WindowTooDeep, answer_search, paged_search
 
 router = APIRouter(prefix="/api/explore", tags=["explore"])
 
@@ -204,6 +206,40 @@ async def explore_search(
         # 422, not 500: the request is the thing that is wrong, and the message
         # names both remedies.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/answer", response_model=AnswerRead)
+async def explore_answer(
+    sess: ReadSession,
+    q: Annotated[str, Query(description="The question. Empty returns no groups.")] = "",
+    topic: Annotated[list[str] | None, Query(description="As on `/search`.")] = None,
+    topic_match: Annotated[Literal["any", "all"], Query()] = "any",
+    place: Annotated[list[str] | None, Query(description="As on `/search`.")] = None,
+    source_tier: Annotated[list[SourceTier] | None, Query()] = None,
+    language: Annotated[list[str] | None, Query()] = None,
+    candidates: Annotated[
+        int,
+        Query(ge=1, le=1000, description="How deep the one search goes before grouping."),
+    ] = DEFAULT_ANSWER_CANDIDATES,
+    top: Annotated[int, Query(ge=1, le=MAX_TOP, description="Sources shown per place.")] = (
+        DEFAULT_TOP
+    ),
+) -> AnswerRead:
+    """A question answered as evidence grouped by country, with coverage per country.
+
+    The same search `/search` runs, over the whole candidate pool rather than a
+    page, grouped by the places its sources are about. Nothing is generated:
+    each item is a source's best-matching passage. See `meridian_core.answer`
+    for the grouping and the coverage rule.
+    """
+    filters = SearchFilters(
+        source_tiers=source_tier,
+        languages=language,
+        topics=topic,
+        topics_all=topic_match == "all",
+        places=place,
+    )
+    return await answer_search(sess, q, filters=filters, candidates=candidates, top=top)
 
 
 @router.get("/topic-overlaps", response_model=TopicOverlapsRead)

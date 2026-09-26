@@ -48,8 +48,16 @@ from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core.answer import (
+    COVERAGE_RULE,
+    PRIMARY_TIERS,
+    STRONG_MIN_PUBLISHERS,
+    group_hits,
+    leading_topics,
+)
 from meridian_core.embedder import EmbeddingUnavailable, RemoteEmbedder
 from meridian_core.logging import get_logger
+from meridian_core.schemas.answer import AnswerGroupRead, AnswerRead
 from meridian_core.schemas.search import SearchHitRead, SearchResponse
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, search
 
@@ -218,4 +226,59 @@ async def paged_search(
         candidate_pool=candidates,
         lexical_candidates=result.lexical_candidates,
         vector_candidates=result.vector_candidates,
+    )
+
+
+async def answer_search(
+    sess: AsyncSession,
+    query: str,
+    *,
+    filters: SearchFilters,
+    candidates: int,
+    top: int,
+) -> AnswerRead:
+    """The whole candidate pool, grouped by place (see `meridian_core.answer`).
+
+    One search, not one per country: the grouping reads `places` off the hits
+    the fused ranking already produced, so the answer and the passage list are
+    the same evidence arranged two ways. The ranking itself is unchanged.
+    """
+    vector = await embed_query(query)
+    embedder_configured = RemoteEmbedder.from_env() is not None
+    # Fusion yields at most one entry per candidate from each arm, so this
+    # limit takes the whole pool.
+    result = await search(
+        sess,
+        query,
+        query_vector=vector,
+        filters=filters,
+        limit=2 * candidates,
+        candidates=candidates,
+    )
+    groups, unplaced = group_hits(result.hits, top=top)
+    log.info(
+        "explore answer",
+        extra={
+            "query_chars": len(query),
+            "arms": sorted(result.arms),
+            "hits": len(result.hits),
+            "groups": len(groups),
+        },
+    )
+    return AnswerRead(
+        query=query,
+        groups=[AnswerGroupRead.model_validate(group) for group in groups],
+        unplaced=AnswerGroupRead.model_validate(unplaced) if unplaced else None,
+        coverage_rule=COVERAGE_RULE,
+        strong_min_publishers=STRONG_MIN_PUBLISHERS,
+        strong_needs_tiers=sorted(PRIMARY_TIERS),
+        topics=leading_topics(result.hits),
+        passages_considered=len(result.hits),
+        sources_considered=len({hit.source_id for hit in result.hits}),
+        candidate_pool=candidates,
+        arms=sorted(result.arms),
+        degraded=result.degraded,
+        degraded_reason=_degraded_reason(
+            result.arms, vector is not None, embedder_configured=embedder_configured
+        ),
     )

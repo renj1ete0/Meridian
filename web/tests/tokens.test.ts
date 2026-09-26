@@ -190,9 +190,11 @@ describe('every colour utility names a role that exists', () => {
   // Tailwind does not reject a utility it cannot resolve, it drops the colour,
   // and the border fell back to `currentColor`: full text-colour outlines on
   // every card. A missing role fails nowhere else, so it fails here.
-  // `collapse` and `separate` are table layout (`border-collapse`), not colours.
+  // `collapse` and `separate` are table layout (`border-collapse`), not colours;
+  // `dashed` and the rest are border styles.
   const SIDES_AND_KEYWORDS = new Set([
     't', 'b', 'l', 'r', 'x', 'y', 'transparent', 'none', 'offset', 'collapse', 'separate',
+    'dashed', 'dotted', 'solid', 'double',
   ])
 
   function sources(dir: string): string[] {

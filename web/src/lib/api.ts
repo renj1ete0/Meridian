@@ -446,7 +446,7 @@ export function describeDetail(detail: unknown, status: number): string {
   return `The API returned ${status}.`
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, { headers: { accept: 'application/json' }, ...init })

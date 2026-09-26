@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.145.0] — 2026-09-26
+
+### Added
+
+- `P6-41`: an answer view for a question. `GET /api/explore/answer` runs the search
+  once over a deeper pool and groups the hits by country (cities fold into theirs),
+  one item per source, led by government and peer-reviewed sources and by publishers
+  not yet shown. Coverage is a stated count — strong means at least three publishers
+  including one government or peer-reviewed source — and sources never examined for
+  places are reported apart from those found about none. Find gains Answer | Passages
+  tabs; a thin country offers "Find more", which queues a search seed. No model
+
 ## [0.144.3] — 2026-09-25
 
 ### Fixed

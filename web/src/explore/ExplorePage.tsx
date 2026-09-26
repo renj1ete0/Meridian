@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { focusSearch } from '../lib/hotkeys'
 import { openSession } from '../lib/lastVisit'
+import { initialMode, rememberMode, type ResultMode } from '../lib/answer'
 import { Lockup } from '../ui/Mark'
+import { AnswerView } from './AnswerView'
 import { NotesPanel } from './Annotations'
 import { CorpusCounts, type CorpusFigures } from './CorpusCounts'
 import { EntryPoints, type EntryPointName } from './EntryPoints'
@@ -125,6 +127,9 @@ export function ExplorePage() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Answer (grouped by country) or passages (the ranked list). Decided per
+  // search: the reader's last choice, else whether the text reads as a question.
+  const [mode, setMode] = useState<ResultMode>('passages')
 
   const [stats, setStats] = useState<CorpusStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
@@ -241,6 +246,7 @@ export function ExplorePage() {
     inFlight.current = controller
 
     setPhase('searching')
+    setMode(initialMode(trimmed))
     setAsked(trimmed)
     setPicked(null)
     setError(null)
@@ -366,18 +372,30 @@ export function ExplorePage() {
             results first, below the width where both fit. */}
         <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
           <section aria-live="polite">
-            {phase === 'searching' ? (
+            <ModeSwitch
+              mode={mode}
+              onChange={(next) => {
+                setMode(next)
+                rememberMode(next)
+              }}
+            />
+
+            {mode === 'answer' && asked ? (
+              <AnswerView question={asked} topics={topics} match={topicMatch} places={places} />
+            ) : null}
+
+            {mode === 'passages' && phase === 'searching' ? (
               <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>
             ) : null}
 
-            {phase === 'failed' && error ? (
+            {mode === 'passages' && phase === 'failed' && error ? (
               // §4: an error names the cause and the scope. The API's own message
               // is the most specific thing available, so it is shown rather than
               // replaced with a generic line.
               <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{error}</p>
             ) : null}
 
-            {phase === 'done' && results ? (
+            {mode === 'passages' && phase === 'done' && results ? (
               <SearchOutcome
                 asked={asked}
                 results={results}
@@ -530,6 +548,37 @@ export function Geometry() {
         <circle cx="188" cy="230" r="5" opacity="0.8" />
       </g>
     </svg>
+  )
+}
+
+/**
+ * Answer or passages. Two tabs over the same search: the answer groups the
+ * evidence by country and states its coverage; passages is the ranked list.
+ */
+export function ModeSwitch({ mode, onChange }: { mode: ResultMode; onChange: (mode: ResultMode) => void }) {
+  const tabs: ReadonlyArray<[ResultMode, string]> = [
+    ['answer', 'Answer'],
+    ['passages', 'Passages'],
+  ]
+  return (
+    <div role="tablist" aria-label="Show results as" className="mb-4 inline-flex border border-line">
+      {tabs.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={mode === value}
+          onClick={() => onChange(value)}
+          className={`px-3 py-[5px] font-mono text-[11px] ${
+            mode === value
+              ? 'bg-accent-graph/10 text-accent-graph'
+              : 'text-text-faint hover:text-text-muted'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   )
 }
 

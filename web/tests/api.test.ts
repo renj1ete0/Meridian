@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
+import { ANSWER_FIELDS, ANSWER_GROUP_FIELDS, ANSWER_ITEM_FIELDS } from '../src/lib/answer'
 // P6-28: the bulk gazetteer decision.
 import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX } from '../src/lib/api'
 import {
@@ -158,6 +159,9 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['BridgeClaimRead', 'areas.py', BRIDGE_CLAIM_FIELDS],
     ['AreaSteeringRead', 'areas.py', AREA_STEERING_FIELDS],
     ['MapSteerRead', 'areas.py', MAP_STEER_FIELDS],
+    ['AnswerItemRead', 'answer.py', ANSWER_ITEM_FIELDS],
+    ['AnswerGroupRead', 'answer.py', ANSWER_GROUP_FIELDS],
+    ['AnswerRead', 'answer.py', ANSWER_FIELDS],
   ] as const
 
   it('parses real field names out of the schemas', () => {
