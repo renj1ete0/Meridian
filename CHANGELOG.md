@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.11] — 2026-09-26
+
+### Fixed
+
+- `B-82`: the embedding sidecar stops a batch whose client has gone. It encodes
+  32 texts per call and checks the connection between them, so a backfill
+  restarted mid-batch no longer leaves minutes of CPU spent on vectors nobody stores
+
 ## [0.148.10] — 2026-09-26
 
 ### Changed

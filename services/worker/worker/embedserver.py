@@ -23,10 +23,12 @@ slow response.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Annotated
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from meridian_core.logging import configure_logging, get_logger
@@ -38,6 +40,34 @@ log = get_logger(__name__)
 #: Matches `meridian_core.embedder.MAX_TEXTS`. A cap on both sides so the
 #: refusal is the same whichever end is older after a deploy.
 MAX_TEXTS = 256
+
+
+#: Texts encoded per thread call (`B-82`). Between slices the server checks the
+#: client is still there: a batch is minutes of CPU, and a backfill restarted
+#: mid-batch — every deploy — used to leave it running to the end for nobody.
+#: No cost on a CPU, which encodes one text at a time anyway.
+SLICE = 32
+
+
+class Abandoned(Exception):
+    """The client went away; the rest of the batch was not computed."""
+
+
+async def embed_in_slices(
+    embed: Callable[[Sequence[str]], list[list[float]]],
+    texts: Sequence[str],
+    gone: Callable[[], Awaitable[bool]],
+    size: int = SLICE,
+) -> list[list[float]]:
+    """``embed(texts)`` a slice at a time, off the event loop, stopping if ``gone()``."""
+    if size < 1:
+        raise ValueError("a slice holds at least one text")
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), size):
+        if start and await gone():
+            raise Abandoned(f"client left after {start} of {len(texts)} texts")
+        vectors.extend(await asyncio.to_thread(embed, texts[start : start + size]))
+    return vectors
 
 
 class EmbedRequest(BaseModel):
@@ -74,15 +104,17 @@ def create_app(embedder: object | None = None) -> FastAPI:
         }
 
     @app.post("/embed", response_model=EmbedResponse)
-    async def embed(request: Annotated[EmbedRequest, Body()]) -> EmbedResponse:
-        import asyncio
-
+    async def embed(request: Annotated[EmbedRequest, Body()], raw: Request) -> EmbedResponse:
         try:
             # In a thread: the model is CPU-bound and synchronous, and running
             # it on the event loop would stall every other request behind it —
             # including `/health`, which is what a supervisor uses to decide
             # whether this process is alive.
-            vectors = await asyncio.to_thread(model.embed, request.texts)
+            vectors = await embed_in_slices(model.embed, request.texts, raw.is_disconnected)
+        except Abandoned as exc:
+            # Nobody is reading the answer; 499 is for the log, not the client.
+            log.info("embedding abandoned", extra={"reason": str(exc)})
+            raise HTTPException(status_code=499, detail="client closed request") from exc
         except EmbeddingError as exc:
             # 503, not 500. The model failing to load is a dependency problem
             # the caller should retry past, and `RemoteEmbedder` turns any
