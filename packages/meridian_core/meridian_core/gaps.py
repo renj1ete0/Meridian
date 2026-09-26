@@ -557,6 +557,8 @@ FIELD_MIN_PASSAGES = 30
 @dataclasses.dataclass(frozen=True)
 class FieldStats:
     area_id: int
+    #: The field it sits in: the Map opens a level by its parent.
+    parent_id: int | None
     name: str
     terms: list[str]
     passages: int
@@ -621,6 +623,7 @@ def field_gaps(field: FieldStats, *, now: dt.datetime) -> list[Gap]:
             severity=round(0.2 + 0.15 * share + (0.1 if thin else 0.0), 3),
             evidence={
                 "area_id": field.area_id,
+                "parent_id": field.parent_id,
                 "passages": field.passages,
                 "sources": field.sources,
                 "on_topic_share": round(share, 3),
@@ -665,6 +668,7 @@ async def field_coverage(sess: AsyncSession) -> list[Gap]:
             field_gaps(
                 FieldStats(
                     area_id=r.area_id,
+                    parent_id=r.parent_id,
                     name=area_name(list(r.terms), r.field),
                     terms=usable_terms(list(r.terms)),
                     passages=r.passages,

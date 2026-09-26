@@ -18,6 +18,7 @@ import {
   findHref,
   getGaps,
   groupOf,
+  mapHrefOf,
   seedFromGap,
   type Gap,
   type GapAction,
@@ -224,6 +225,15 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
         {open?.query ? (
           <a href={findHref(open.query)} onClick={onInternalClick(findHref(open.query))} className={BUTTON_SECONDARY}>
             {open.label}
+          </a>
+        ) : null}
+        {mapHrefOf(gap.evidence) ? (
+          <a
+            href={mapHrefOf(gap.evidence)!}
+            onClick={onInternalClick(mapHrefOf(gap.evidence)!)}
+            className={BUTTON_SECONDARY}
+          >
+            See it on the Map
           </a>
         ) : null}
       </div>

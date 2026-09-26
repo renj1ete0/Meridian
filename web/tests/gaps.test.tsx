@@ -20,6 +20,7 @@ import {
   evidenceLine,
   findHref,
   groupOf,
+  mapHrefOf,
   type Gap,
   type Gaps,
 } from '../src/lib/gaps'
@@ -155,6 +156,15 @@ describe('helpers', () => {
         !client.includes(`evidence.${k}`),
     )
     expect(missing).toEqual([])
+  })
+
+  it('links a field gap to the level of the Map that draws it (P6-42)', () => {
+    expect(mapHrefOf({ area_id: 12, parent_id: 4 })).toBe('/map?area=4')
+    // A top-level field has no parent: the Map's first level draws it.
+    expect(mapHrefOf({ area_id: 12, parent_id: null })).toBe('/map')
+    // Any other gap has no place on the Map.
+    expect(mapHrefOf({ place: 'JP', sources: 1 })).toBeNull()
+    expect(mapHrefOf({ area_id: '12' })).toBeNull()
   })
 
   it('prints a place gap with its place first and the topic total (P2-23)', () => {

@@ -486,6 +486,7 @@ NOW = dt.datetime(2026, 9, 26, tzinfo=dt.UTC)
 def a_field(**over) -> gaps.FieldStats:
     base = dict(
         area_id=7,
+        parent_id=3,
         name="Transit fares",
         terms=["fare", "zone", "ticket", "rider"],
         passages=400,

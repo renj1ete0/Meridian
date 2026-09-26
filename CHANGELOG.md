@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.1] — 2026-09-26
+
+### Added
+
+- `P6-42` follow-up: a field gap says how many of its passages are government or
+  peer-reviewed, and offers "See it on the Map", opening the level that draws it
+
 ## [0.148.0] — 2026-09-26
 
 ### Added

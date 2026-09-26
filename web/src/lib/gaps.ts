@@ -127,6 +127,7 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
   if (has('sources')) out.push(`sources ${evidence.sources}`)
   if (has('strong_sources')) out.push(`gov/peer-reviewed ${evidence.strong_sources}`)
   if (has('passages')) out.push(`passages ${evidence.passages}`)
+  if (has('strong_passages')) out.push(`gov/peer-reviewed passages ${evidence.strong_passages}`)
   if (has('passage_sources') && evidence.passage_sources)
     out.push(`in other documents ${evidence.passage_sources}`)
   if (has('topic_sources')) out.push(`in the topic ${evidence.topic_sources}`)
@@ -148,6 +149,17 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
   if (has('topics') && evidence.topics) out.push(`topics ${evidence.topics}`)
   if (has('run')) out.push(`run ${evidence.run}`)
   return out
+}
+
+/**
+ * Where a field gap is drawn on the Map (`P6-42`): the level holding it, which
+ * the Map opens by its parent. Null for any other gap, or evidence without ids.
+ */
+export function mapHrefOf(evidence: Gap['evidence']): string | null {
+  const area = evidence.area_id
+  if (typeof area !== 'number') return null
+  const parent = evidence.parent_id
+  return typeof parent === 'number' ? `/map?area=${parent}` : '/map'
 }
 
 /** Which filter a gap falls under. */
