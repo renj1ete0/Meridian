@@ -14,7 +14,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { TopicFilter } from '../src/explore/TopicFilter'
+import { TopicFilter, topicWords } from '../src/explore/TopicFilter'
 
 function text(markup: string): string {
   return markup
@@ -31,7 +31,7 @@ describe('the control', () => {
   it('offers every configured topic', () => {
     const rendered = text(renderToStaticMarkup(<TopicFilter topics={TOPICS} active={[]} />))
 
-    for (const topic of TOPICS) expect(rendered).toContain(topic)
+    for (const topic of TOPICS) expect(rendered).toContain(topicWords(topic))
   })
 
   it('offers a way back to the whole corpus', () => {
@@ -150,5 +150,13 @@ describe('the same control over places (P2-23)', () => {
       <TopicFilter topics={['KR']} names={{}} active={[]} label="Place" />,
     )
     expect(text(markup)).toContain('KR')
+  })
+})
+
+describe('topic chips in words (P6-44)', () => {
+  it('reads a slug as words and toggles the slug', () => {
+    expect(topicWords('autonomous-vehicle')).toBe('autonomous vehicle')
+    expect(topicWords('on_demand--bus')).toBe('on demand bus')
+    expect(topicWords('walkability')).toBe('walkability')
   })
 })

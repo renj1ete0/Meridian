@@ -41,6 +41,15 @@ export interface TopicFilterProps {
   onMatch?: (match: 'any' | 'all') => void
 }
 
+/**
+ * A topic slug as words: "autonomous-vehicle" reads "autonomous vehicle". Slugs
+ * join every word with a hyphen, so a hyphen is read as a space. The value
+ * toggled is still the slug (`P6-44`).
+ */
+export function topicWords(slug: string): string {
+  return slug.replace(/[-_]+/g, ' ').trim()
+}
+
 export function TopicFilter({
   topics,
   active,
@@ -83,7 +92,7 @@ export function TopicFilter({
             className={chip(active.includes(topic))}
             title={names?.[topic] ? topic : undefined}
           >
-            {names?.[topic] ?? topic}
+            {names?.[topic] ?? topicWords(topic)}
           </button>
         ))}
         {onMatch && active.length > 1 ? (

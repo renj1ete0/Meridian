@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.6] — 2026-09-26
+
+### Changed
+
+- `P6-44` (part): topic chips read as words ("autonomous vehicle", not
+  "autonomous-vehicle"); the value a chip toggles is still the topic's slug
+
 ## [0.148.5] — 2026-09-26
 
 ### Changed
