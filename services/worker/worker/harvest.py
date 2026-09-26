@@ -120,8 +120,13 @@ async def document_text(sess: AsyncSession, source_id: int) -> str:
     text with no definition in it. Chunking has no overlap (`P2-02`), so the join
     reconstructs the document rather than duplicating it.
     """
+    # Live chunks only (`B-85`): superseded ones are text the page no longer
+    # holds, and the only index on source_id is the live one, so without this
+    # every document read was a scan of the whole table.
     rows = await sess.scalars(
-        select(Chunk.text).where(Chunk.source_id == source_id).order_by(Chunk.chunk_index)
+        select(Chunk.text)
+        .where(Chunk.source_id == source_id, Chunk.superseded_at.is_(None))
+        .order_by(Chunk.chunk_index)
     )
     return "\n".join(rows)
 
@@ -208,7 +213,8 @@ async def flag_ambiguous(sess: AsyncSession, acronym: str, stats: HarvestStats) 
     rows = list(
         await sess.scalars(
             select(GazetteerTerm).where(
-                GazetteerTerm.aliases.any(acronym),  # type: ignore[attr-defined]
+                # `@>`, not `= ANY`: only containment can use the GIN index.
+                GazetteerTerm.aliases.contains([acronym]),
                 GazetteerTerm.rejected_at.is_(None),
             )
         )

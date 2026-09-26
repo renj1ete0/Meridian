@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint, text
+from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -106,6 +106,11 @@ class GazetteerTerm(Base, TimestampMixin):
             "occurrence_count",
             postgresql_where=text("NOT approved AND rejected_at IS NULL"),
         ),
+        # The harvest's two lookups per definition (`B-85`): a canonical name
+        # case-insensitively, and every row claiming an alias. Without them each
+        # was a scan of the table the harvest itself keeps growing.
+        Index("ix_gazetteer_canonical_lower", func.lower(text("canonical"))),
+        Index("ix_gazetteer_aliases", "aliases", postgresql_using="gin"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

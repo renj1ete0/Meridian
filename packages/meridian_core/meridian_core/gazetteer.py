@@ -19,6 +19,7 @@ is a permanent piece of noise in the thing entity resolution trusts.
 
 from __future__ import annotations
 
+import bisect
 import dataclasses
 import re
 
@@ -361,6 +362,40 @@ def join_tokens(tokens: list[str]) -> str:
     return _BEFORE_COMMA.sub(",", _GLUED.sub(r"\1", " ".join(tokens)))
 
 
+#: How much of a clause is tokenised to find its last words (`B-85`).
+_LOOKBACK = 2000
+
+
+def boundary_ends(text: str) -> list[int]:
+    """Where each clause boundary in ``text`` ends, in order.
+
+    Found once per document (`B-85`). Scanning ``text[:end]`` again for every
+    bracket made a long report quadratic. The two agree: a scan of a prefix
+    makes the same match decisions as a scan of the whole, up to the one match
+    that straddles the prefix's end, which ends after it and so never counts.
+    """
+    return [hit.end() for hit in _BOUNDARY.finditer(text)]
+
+
+def clause_words(text: str, end: int, needed: int, ends: list[int] | None = None) -> list[str]:
+    """The last ``needed`` tokens of the clause that ends at ``end``.
+
+    Only the last stretch of a long clause is tokenised: tokens are contiguous,
+    so a window cut through a word changes only its first token, and when the
+    window holds more than ``needed`` the last ones are exact. Otherwise the
+    whole clause is read.
+    """
+    if ends is None:
+        ends = boundary_ends(text[:end])
+    i = bisect.bisect_right(ends, end)
+    boundary = ends[i - 1] if i else 0
+    start = max(boundary, end - _LOOKBACK)
+    tokens = tokenise(text[start:end])
+    if start > boundary and len(tokens) <= needed:
+        tokens = tokenise(text[boundary:end])
+    return tokens[-needed:]
+
+
 def find_acronyms(text: str) -> list[AcronymDefinition]:
     """Every ``Full Name Here (ACRONYM)`` this text defines.
 
@@ -371,6 +406,7 @@ def find_acronyms(text: str) -> list[AcronymDefinition]:
     parenthetical as an expansion.
     """
     found: dict[tuple[str, str], AcronymDefinition] = {}
+    ends = boundary_ends(text)
 
     for match in _CANDIDATE.finditer(text):
         letters = _looks_like_an_acronym(match.group(1))
@@ -379,11 +415,7 @@ def find_acronyms(text: str) -> list[AcronymDefinition]:
 
         # Only the current clause. Text before a full stop is a different
         # sentence, and an expansion stitched across one appeared nowhere.
-        before = text[: match.start()]
-        boundary = 0
-        for hit in _BOUNDARY.finditer(before):
-            boundary = hit.end()
-        words = tokenise(before[boundary:])[-(len(letters) + _WINDOW) * 2 :]
+        words = clause_words(text, match.start(), (len(letters) + _WINDOW) * 2, ends)
         if not words:
             continue
 

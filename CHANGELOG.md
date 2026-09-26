@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.8] — 2026-09-26
+
+### Fixed
+
+- `B-85`: the nightly acronym harvest ran past its 30-minute limit. Profiled on the
+  live corpus, 200 documents took 49 s: the acronym search re-scanned each document
+  from its start for every bracket (quadratic on long reports), each document's text
+  was read with a table scan because superseded chunks were not excluded, and both
+  gazetteer lookups per definition scanned the table. Boundaries are now found once
+  per document, the text read uses the live-chunk index, and the lookups have
+  indexes (migration `c7d2e9a1b4f3`)
+
 ## [0.148.7] — 2026-09-26
 
 ### Fixed

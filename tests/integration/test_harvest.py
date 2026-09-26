@@ -302,9 +302,7 @@ async def test_an_existing_term_is_corroborated_not_duplicated(clean, prefix) ->
     # A second row differing only in how it was written is the fragmentation
     # §5.5 exists to prevent, arriving through the table meant to fix it.
     clean.add(
-        GazetteerTerm(
-            canonical=EXPANSION, aliases=[ACRONYM], entity_type="agency", approved=True
-        )
+        GazetteerTerm(canonical=EXPANSION, aliases=[ACRONYM], entity_type="agency", approved=True)
     )
     await clean.flush()
     source = await a_document(clean, f"{prefix}/q", [f"The {EXPANSION.lower()} ({ACRONYM}) said."])
@@ -324,9 +322,7 @@ async def test_the_harvest_does_not_edit_an_approved_rows_aliases(clean, prefix)
     # mis-defines a curated term must not be able to teach it a wrong surface
     # form.
     clean.add(
-        GazetteerTerm(
-            canonical=EXPANSION, aliases=["PROV"], entity_type="agency", approved=True
-        )
+        GazetteerTerm(canonical=EXPANSION, aliases=["PROV"], entity_type="agency", approved=True)
     )
     await clean.flush()
     source = await a_document(clean, f"{prefix}/r", [f"The {EXPANSION} ({ACRONYM}) said."])
@@ -360,9 +356,7 @@ async def test_a_curated_row_is_never_auto_approved_by_the_harvest(clean, prefix
     # out. Corroboration from documents must not overturn it: the auto-approval
     # rule applies to the harvest's own findings only.
     clean.add(
-        GazetteerTerm(
-            canonical=EXPANSION, aliases=[ACRONYM], entity_type="agency", source="manual"
-        )
+        GazetteerTerm(canonical=EXPANSION, aliases=[ACRONYM], entity_type="agency", source="manual")
     )
     await clean.flush()
     ids = []
@@ -435,3 +429,26 @@ async def test_a_retype_report_writes_nothing(clean) -> None:
     await clean.refresh(term)
 
     assert term.entity_type == "concept" and stats.retyped["agency"] >= 1
+
+
+async def test_the_harvest_lookups_can_use_their_indexes(session_for):
+    """`B-85`: both per-definition lookups were table scans, on a table the
+    harvest grows every night. Sequential scans are switched off so the tiny
+    test table cannot hide a query that no index serves."""
+    from sqlalchemy import func, select, text
+
+    from meridian_core.models import GazetteerTerm
+
+    sess = await session_for("rw")
+    await sess.execute(text("SET LOCAL enable_seqscan = off"))
+    by_alias = select(GazetteerTerm).where(GazetteerTerm.aliases.contains(["LTA"]))
+    by_name = select(GazetteerTerm).where(
+        func.lower(GazetteerTerm.canonical) == "land transport authority"
+    )
+    for query, index in (
+        (by_alias, "ix_gazetteer_aliases"),
+        (by_name, "ix_gazetteer_canonical_lower"),
+    ):
+        compiled = query.compile(sess.bind, compile_kwargs={"literal_binds": True})
+        plan = "\n".join((await sess.execute(text(f"EXPLAIN {compiled}"))).scalars())
+        assert index in plan, plan
