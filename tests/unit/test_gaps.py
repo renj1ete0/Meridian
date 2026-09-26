@@ -192,6 +192,7 @@ def test_the_built_sources_and_the_pending_ones_do_not_overlap():
         "search-queries",
         "search-results",
         "question-set",
+        "areas",
     }
     assert built <= set(gaps.SOURCES)
 
@@ -203,13 +204,13 @@ def test_the_per_topic_search_yield_source_is_replaced_not_duplicated():
 
 def test_registering_a_pending_source_takes_it_off_the_pending_list(monkeypatch):
     monkeypatch.setattr(gaps, "SOURCES", dict(gaps.SOURCES))
-    monkeypatch.setattr(gaps, "PENDING", dict(gaps.PENDING))
+    monkeypatch.setattr(gaps, "PENDING", {"later": "arrives with a later task"})
 
-    @gaps.register("areas")
-    async def areas(sess):
+    @gaps.register("later")
+    async def later(sess):
         return []
 
-    assert "areas" in gaps.SOURCES and "areas" not in gaps.PENDING
+    assert "later" in gaps.SOURCES and "later" not in gaps.PENDING
 
 
 # -- action DTO rejection -----------------------------------------------------------
@@ -475,3 +476,86 @@ def test_the_route_depth_is_one_the_route_search_accepts():
     from meridian_core.route import MAX_ROUTE_DEPTH
 
     assert 1 <= gaps.ROUTE_DEPTH <= MAX_ROUTE_DEPTH
+
+
+# -- fields of the map (P6-42) ------------------------------------------------------
+
+NOW = dt.datetime(2026, 9, 26, tzinfo=dt.UTC)
+
+
+def a_field(**over) -> gaps.FieldStats:
+    base = dict(
+        area_id=7,
+        name="Transit fares",
+        terms=["fare", "zone", "ticket", "rider"],
+        passages=400,
+        sources=4,
+        examined=400,
+        on_topic=300,
+        topic_mix={"bus": 280, "walk": 40},
+        tier_mix={"government": 100, "press": 300},
+        newest_at=NOW - dt.timedelta(days=5),
+    )
+    base.update(over)
+    return gaps.FieldStats(**base)
+
+
+def test_a_field_on_the_topics_resting_on_few_sources_is_a_gap():
+    [gap] = gaps.field_gaps(a_field(), now=NOW)
+    assert gap.kind == "field_thin" and gap.source == "areas"
+    assert "4 sources" in gap.title
+    assert "75% about your topics" in gap.reason
+    seed = next(a for a in gap.actions if a.kind == "seed_query")
+    assert seed.topic == "bus", "the field's leading topic, not the first alphabetically"
+    assert seed.query == "fare zone ticket"
+
+
+def test_a_field_mostly_off_the_topics_is_never_a_gap():
+    """Thin evidence for material the crawl should not grow is not a gap."""
+    assert gaps.field_gaps(a_field(on_topic=199, sources=1, tier_mix={"press": 400}), now=NOW) == []
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"examined": None, "on_topic": None},  # build not measured
+        {"examined": 0, "on_topic": 0},  # nothing examined yet
+        {"passages": gaps.FIELD_MIN_PASSAGES - 1},  # too small to judge
+    ],
+)
+def test_an_unmeasured_or_tiny_field_is_not_judged(over):
+    assert gaps.field_gaps(a_field(sources=1, **over), now=NOW) == []
+
+
+def test_a_well_sourced_current_field_with_strong_sources_is_fine():
+    assert gaps.field_gaps(a_field(sources=gaps.THIN_SOURCES), now=NOW) == []
+
+
+def test_one_gap_per_field_however_many_reasons():
+    old = NOW - dt.timedelta(days=400)
+    [gap] = gaps.field_gaps(a_field(tier_mix={"press": 400}, newest_at=old), now=NOW)
+    assert "government or peer-reviewed" in gap.reason and "400 days" in gap.reason
+    assert "4 sources" in gap.reason
+
+
+def test_without_thin_sources_the_title_names_the_next_problem():
+    [weak] = gaps.field_gaps(a_field(sources=20, tier_mix={"press": 400}), now=NOW)
+    assert weak.kind == "field_weak" and "no government" in weak.title
+    old = NOW - dt.timedelta(days=400)
+    [stale] = gaps.field_gaps(a_field(sources=20, newest_at=old), now=NOW)
+    assert stale.kind == "field_stale" and "400 days" in stale.title
+
+
+def test_a_thin_field_outranks_an_otherwise_equal_weak_one():
+    [thin] = gaps.field_gaps(a_field(), now=NOW)
+    [weak] = gaps.field_gaps(a_field(sources=20, tier_mix={"press": 400}), now=NOW)
+    assert thin.severity > weak.severity
+    # And both stay below an empty topic, which is the first thing to fix.
+    assert thin.severity < 1.0
+
+
+def test_a_field_with_no_topic_counts_offers_only_reading():
+    """on_topic can be set while topic_mix is empty only in a hand-edited row;
+    even then the gap must not offer a seed with no topic to put it under."""
+    [gap] = gaps.field_gaps(a_field(topic_mix={}), now=NOW)
+    assert [a.kind for a in gap.actions] == ["open_search"]

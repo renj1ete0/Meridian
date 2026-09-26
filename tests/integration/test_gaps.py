@@ -552,8 +552,11 @@ async def test_the_list_reads_and_names_pending_sources(client, monkeypatch, tmp
     states = {s["name"]: s["status"] for s in body["sources"]}
     assert states["topic-coverage"] == "ok"
     assert states["question-set"] == "unavailable"  # no run file in tmp_path
-    assert states["areas"] == "pending"
+    # Built on P6-42: ok with a measured build, unavailable (with the reason)
+    # before one; never pending again.
+    assert states["areas"] in {"ok", "unavailable"}
     assert states["routes"] == "ok"  # built on P6-32; no longer pending
+    assert "pending" not in states.values()
     severities = [g["severity"] for g in body["gaps"]]
     assert severities == sorted(severities, reverse=True)
 

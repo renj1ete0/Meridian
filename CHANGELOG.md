@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.0] — 2026-09-26
+
+### Added
+
+- `P6-42` (part): Gaps lists fields of the map that are mostly about the topics
+  (half their examined passages or more) yet rest on fewer than 10 sources, hold
+  no government or peer-reviewed passage, or have had nothing new in 180 days —
+  one row per field with every reason, and a search seed under its leading topic.
+  A field mostly off the topics is never listed: thin evidence for material the
+  crawl should not grow is not a gap. The source reports "unavailable" with the
+  reason before a measured build exists; nothing on the Gaps line is "pending" now
+
 ## [0.147.4] — 2026-09-26
 
 ### Fixed

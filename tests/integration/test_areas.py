@@ -382,3 +382,58 @@ async def test_the_api_serves_on_topic_counts(client, committed):
             assert 0 <= area["on_topic"] <= area["examined"] <= area["passages"]
             counts = list(area["topic_mix"].values())
             assert counts == sorted(counts, reverse=True), "most first"
+
+
+async def test_gaps_lists_on_topic_fields_that_rest_on_few_sources(session_for, topic, monkeypatch):
+    """`P6-42` through Gaps: a real build, measured, read by the registered
+    source. Subject 0 is on the topic and rests on the seed's few sources;
+    subject 1 was examined and is off every topic, so it is no gap however
+    thin; the rest were never examined, so nothing is claimed about them."""
+    from meridian_core import gaps
+
+    monkeypatch.setattr(gaps, "FIELD_MIN_PASSAGES", 1)
+    sess = await session_for("rw")
+    chunks = await seed(sess, topic)
+    labels = await _label_passages(sess, chunks, topic)
+    report = await build_areas(sess, topics=[topic])
+
+    found = await gaps.SOURCES["areas"](sess)
+
+    deepest = max(
+        a.level for a in await sess.scalars(select(Area).where(Area.build_id == report.build_id))
+    )
+    leaves = {
+        a.area_id: a
+        for a in await sess.scalars(
+            select(Area).where(Area.build_id == report.build_id, Area.level == deepest)
+        )
+    }
+    members = dict(
+        (
+            await sess.execute(
+                select(AreaMember.chunk_id, AreaMember.area_id).where(
+                    AreaMember.build_id == report.build_id
+                )
+            )
+        ).all()
+    )
+    on_topic_leaves = {a for c, a in members.items() if labels[c]}
+    assert found, "the on-topic fields rest on fewer sources than the threshold"
+    assert {g.evidence["area_id"] for g in found} == on_topic_leaves
+    for gap in found:
+        assert gap.kind == "field_thin"
+        assert (
+            gap.evidence["sources"] == leaves[gap.evidence["area_id"]].sources < gaps.THIN_SOURCES
+        )
+        seed_action = next(a for a in gap.actions if a.kind == "seed_query")
+        assert seed_action.topic in {topic, f"{topic}-b"}
+
+
+async def test_gaps_says_fields_are_unavailable_before_a_measured_build(session_for):
+
+    from meridian_core import gaps
+
+    sess = await session_for("rw")
+    await sess.execute(delete(AreaBuild))  # rolled back by the fixture
+    with pytest.raises(gaps.SourceUnavailable, match="not been built"):
+        await gaps.SOURCES["areas"](sess)

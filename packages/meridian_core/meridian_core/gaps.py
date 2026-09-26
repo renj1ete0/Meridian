@@ -12,8 +12,7 @@ session to a list of :class:`Gap`, registered under a name. What exists today:
 - ``topic-coverage`` — per topic: thin (few sources), weak (few of them
   government or peer-reviewed), stale (the newest dated one is old). Each
   finding also counts on-topic *passages* (`P2-24`), including those inside
-  documents labelled with something else. Per *area* joins when `P6-30`'s
-  areas land: register another source.
+  documents labelled with something else.
 - ``place-coverage`` — per topic, the places of the comparison set (§7.2)
   with fewer than a few sources about them (`P2-23`). Unavailable until a
   source has been examined for places.
@@ -31,8 +30,13 @@ session to a list of :class:`Gap`, registered under a name. What exists today:
   links joins within a few hops, using `P6-32`'s claims-only answer: joined
   only by resemblance, or not at all. Bounded to a few pairs per read.
 
-``areas`` (`P6-30`) is listed as *pending* rather than silently absent, so an
-empty list is never mistaken for "no gaps of that kind".
+- ``areas`` (`P6-42`) — fields of the newest map build that are mostly about
+  the topics yet rest on few sources, hold no government or peer-reviewed
+  passage, or have had nothing new in months. A field mostly *off* the topics
+  is not a gap in the evidence; the Map shades it instead.
+
+A source the design names and nobody built is listed as *pending* rather than
+silently absent, so an empty list is never mistaken for "no gaps of that kind".
 
 **The held-out rule shapes the question-set actions.** `eval/README.md` forbids
 using a question as a seed or a steering reason, so a low-scoring item offers
@@ -115,9 +119,7 @@ GapSource = Callable[[AsyncSession], Awaitable[list[Gap]]]
 SOURCES: dict[str, GapSource] = {}
 
 #: Sources the design names that are not built yet, and the task that builds them.
-PENDING: dict[str, str] = {
-    "areas": "thin or weak areas arrive with P6-30",
-}
+PENDING: dict[str, str] = {}
 
 
 class SourceUnavailable(RuntimeError):
@@ -537,6 +539,145 @@ async def place_coverage(sess: AsyncSession) -> list[Gap]:
                     topic_sources=int(per_topic.get(topic, 0)),
                 )
             )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Fields of the map — clusters on the topics with thin evidence (`P6-42`)
+# ---------------------------------------------------------------------------
+
+#: A field counts as being about the topics when at least this share of its
+#: examined passages is labelled with one. Below it, thin evidence is not a
+#: gap: the field is mostly material the crawl should not grow.
+FIELD_ON_TOPIC = 0.5
+#: Fewer passages than this is too small a cluster to judge.
+FIELD_MIN_PASSAGES = 30
+
+
+@dataclasses.dataclass(frozen=True)
+class FieldStats:
+    area_id: int
+    name: str
+    terms: list[str]
+    passages: int
+    sources: int
+    examined: int | None
+    on_topic: int | None
+    topic_mix: dict[str, int]
+    tier_mix: dict[str, int]
+    newest_at: dt.datetime | None
+
+
+def field_gaps(field: FieldStats, *, now: dt.datetime) -> list[Gap]:
+    """The findings for one field of the map. Pure, so the thresholds are testable.
+
+    One gap per field, however many things are wrong with it, with every
+    reason stated: three rows for one cluster would crowd out other fields.
+    """
+    from .areaview import STALE_AFTER_DAYS
+
+    if not field.examined or field.on_topic is None or field.passages < FIELD_MIN_PASSAGES:
+        return []  # not measured, or too small to judge
+    share = field.on_topic / field.examined
+    if share < FIELD_ON_TOPIC:
+        return []
+    strong = sum(field.tier_mix.get(t, 0) for t in STRONG_TIERS)
+    reasons: list[str] = []
+    if field.sources < THIN_SOURCES:
+        reasons.append(
+            f"its {field.passages:,} passages come from {_plural(field.sources, 'source')}; "
+            f"fewer than {THIN_SOURCES} is thin"
+        )
+    if strong == 0:
+        reasons.append("none of its passages is from a government or peer-reviewed source")
+    stale_days = None if field.newest_at is None else (now - field.newest_at).days
+    if stale_days is not None and stale_days > STALE_AFTER_DAYS:
+        reasons.append(f"nothing new stored in {stale_days} days")
+    if not reasons:
+        return []
+    topic = (
+        max(field.topic_mix.items(), key=lambda kv: (kv[1], kv[0]))[0] if field.topic_mix else None
+    )
+    words = " ".join(field.terms[:3]) or field.name
+    thin = field.sources < THIN_SOURCES
+    return [
+        Gap(
+            id=f"field:{field.area_id}",
+            source="areas",
+            kind="field_thin" if thin else ("field_weak" if strong == 0 else "field_stale"),
+            subject=field.name if topic is None else f"{topic} · {field.name}",
+            title=(
+                f"{field.name} rests on {_plural(field.sources, 'source')}"
+                if thin
+                else f"{field.name} has no government or peer-reviewed source"
+                if strong == 0
+                else f"{field.name} has had nothing new in {stale_days} days"
+            ),
+            reason=(
+                f"A field of the map {round(share * 100)}% about your topics: "
+                + "; ".join(reasons)
+                + "."
+            ),
+            severity=round(0.2 + 0.15 * share + (0.1 if thin else 0.0), 3),
+            evidence={
+                "area_id": field.area_id,
+                "passages": field.passages,
+                "sources": field.sources,
+                "on_topic_share": round(share, 3),
+                "strong_passages": strong,
+            },
+            actions=(
+                (Action("seed_query", "Seed a search", topic=topic, query=words),) if topic else ()
+            )
+            + (Action("open_search", "Search it in Find", query=words),),
+        )
+    ]
+
+
+@register("areas")
+async def field_coverage(sess: AsyncSession) -> list[Gap]:
+    """The newest map build's finest fields that are on the topics and thin (`P6-42`).
+
+    Unavailable, rather than empty, until a build exists and has been measured
+    for topics: with nothing measured every field would pass, and "no gaps"
+    would be a claim nobody checked.
+    """
+    from .areaview import area_name, latest_build, usable_terms
+    from .models import Area
+
+    build = await latest_build(sess)
+    if build is None:
+        raise SourceUnavailable("the map has not been built yet")
+    deepest = await sess.scalar(select(func.max(Area.level)).where(Area.build_id == build.build_id))
+    rows = list(
+        await sess.scalars(
+            select(Area).where(Area.build_id == build.build_id, Area.level == deepest)
+        )
+    )
+    if not any(r.examined is not None for r in rows):
+        raise SourceUnavailable(
+            "the newest map build was not measured for topics; the next build will be"
+        )
+    now = dt.datetime.now(dt.UTC)
+    out: list[Gap] = []
+    for r in rows:
+        out.extend(
+            field_gaps(
+                FieldStats(
+                    area_id=r.area_id,
+                    name=area_name(list(r.terms), r.field),
+                    terms=usable_terms(list(r.terms)),
+                    passages=r.passages,
+                    sources=r.sources,
+                    examined=r.examined,
+                    on_topic=r.on_topic,
+                    topic_mix=dict(r.topic_mix or {}),
+                    tier_mix=dict(r.tier_mix),
+                    newest_at=r.newest_at,
+                ),
+                now=now,
+            )
+        )
     return out
 
 
