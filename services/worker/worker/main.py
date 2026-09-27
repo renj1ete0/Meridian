@@ -761,6 +761,8 @@ class Worker:
             topics=topics,
             task_types=task_types,
             directed=directed,
+            # `B-112`: not a page on a host this worker is already waiting on.
+            skip_domains=self._busy_domains(),
         )
         if task is None:
             return None
@@ -772,6 +774,10 @@ class Worker:
             task_type=task.task_type,
             priority=task.priority,
         )
+
+    def _busy_domains(self) -> set[str]:
+        limiter = getattr(self._crawler, "limiter", None)
+        return limiter.busy() if limiter is not None else set()
 
     async def _process(self, claim: Claim) -> None:
         """Fetch one claimed task and settle it.

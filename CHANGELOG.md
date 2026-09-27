@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.11] — 2026-09-27
+
+### Fixed
+
+- `B-112`: the claim skips page tasks on hosts this worker is already waiting on — a request
+  queued behind the host's limits, or its next start more than 5 s off — so one slow host
+  cannot hold every lane to its crawl delay. Lookups and queries are never skipped; skipped
+  pages keep their place in the queue
+
 ## [0.152.10] — 2026-09-27
 
 ### Added

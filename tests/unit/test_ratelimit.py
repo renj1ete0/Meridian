@@ -189,3 +189,74 @@ async def test_the_slot_is_released_when_the_body_raises() -> None:
     async with asyncio.timeout(1):
         async with limiter.slot("example.test", concurrency=1, delay_ms=0):
             pass
+
+
+# -- busy domains (B-112) --------------------------------------------------------
+
+
+async def test_a_domain_with_a_request_waiting_is_busy_and_stops_being_busy() -> None:
+    import asyncio
+
+    from worker.ratelimit import DomainLimiter
+
+    limiter = DomainLimiter()
+    release = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def hold():
+        async with limiter.slot("slow.test", concurrency=1, delay_ms=0):
+            entered.set()
+            await release.wait()
+
+    async def queue_behind():
+        async with limiter.slot("slow.test", concurrency=1, delay_ms=0):
+            pass
+
+    first = asyncio.create_task(hold())
+    await entered.wait()
+    assert "slow.test" not in limiter.busy(), "one request in flight, none waiting"
+    second = asyncio.create_task(queue_behind())
+    await asyncio.sleep(0)
+    assert "slow.test" in limiter.busy()
+    release.set()
+    await asyncio.gather(first, second)
+    assert limiter.busy() == set(), "a waiter that started is no longer counted"
+
+
+async def test_a_domain_whose_next_start_is_far_off_is_busy() -> None:
+    from worker.ratelimit import DomainLimiter
+
+    limiter = DomainLimiter()
+    async with limiter.slot("crawl-delay.test", concurrency=2, delay_ms=15_000):
+        pass
+    assert "crawl-delay.test" in limiter.busy(horizon_s=5)
+    assert "crawl-delay.test" not in limiter.busy(horizon_s=60)
+
+
+async def test_a_cancelled_waiter_is_not_counted_for_ever() -> None:
+    import asyncio
+
+    from worker.ratelimit import DomainLimiter
+
+    limiter = DomainLimiter()
+    release = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def hold():
+        async with limiter.slot("x.test", concurrency=1, delay_ms=0):
+            entered.set()
+            await release.wait()
+
+    async def wait_then_cancel():
+        async with limiter.slot("x.test", concurrency=1, delay_ms=0):
+            pass
+
+    first = asyncio.create_task(hold())
+    await entered.wait()
+    waiter = asyncio.create_task(wait_then_cancel())
+    await asyncio.sleep(0)
+    waiter.cancel()
+    await asyncio.gather(waiter, return_exceptions=True)
+    release.set()
+    await first
+    assert limiter.busy() == set()

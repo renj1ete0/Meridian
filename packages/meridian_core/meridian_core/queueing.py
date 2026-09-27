@@ -30,7 +30,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import random
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,8 +89,15 @@ async def claim_next(
     topics: list[str] | None = None,
     task_types: list[str] | None = None,
     directed: bool = False,
+    skip_domains: Collection[str] = (),
 ) -> QueueTask | None:
     """Claim the highest-priority eligible task, or return None if there is none.
+
+    ``skip_domains`` (`B-112`) leaves out page tasks on those domains or under
+    them: the worker's busy hosts. Priority order alone sent every lane to the
+    same few hosts at the top of the queue — one with a long crawl delay held
+    the whole worker to its pace. Lookups and queries are never skipped; they
+    do not wait on a host.
 
     ``directed`` narrows the claim to work somebody or something *chose* rather
     than followed (`B-61`): search results, queries, seeds and cited papers above
@@ -130,6 +137,15 @@ async def claim_next(
         stmt = stmt.where(QueueTask.topic.in_(topics))
     if task_types:
         stmt = stmt.where(QueueTask.task_type.in_(task_types))
+    if skip_domains:
+        host = func.regexp_replace(
+            func.lower(func.split_part(func.split_part(QueueTask.url_or_query, "://", 2), "/", 1)),
+            r"^www\.|:\d+$",
+            "",
+            "g",
+        )
+        on_busy = or_(*[or_(host == d, host.like(f"%.{d}")) for d in sorted(set(skip_domains))])
+        stmt = stmt.where(or_(QueueTask.task_type != "url", ~on_busy))
     if directed:
         stmt = stmt.where(
             or_(

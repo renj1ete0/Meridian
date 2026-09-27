@@ -34,6 +34,9 @@ from meridian_core.logging import get_logger
 
 log = get_logger(__name__)
 
+#: A domain whose next request cannot start within this long is busy (`B-112`).
+BUSY_HORIZON_S = 5.0
+
 
 class _DomainState:
     """The two limits for one domain, plus the clock they share."""
@@ -43,6 +46,8 @@ class _DomainState:
         self.limit = concurrency
         self.gate = asyncio.Lock()
         self.next_start = 0.0
+        #: Requests inside `slot` not yet started — queued behind the limits.
+        self.waiting = 0
 
 
 class DomainLimiter:
@@ -87,15 +92,38 @@ class DomainLimiter:
         state = self._state(domain, concurrency)
         started_waiting = time.monotonic()
 
-        async with state.semaphore:
-            async with state.gate:
-                now = time.monotonic()
-                wait_s = state.next_start - now
-                if wait_s > 0:
-                    await asyncio.sleep(wait_s)
-                    now = state.next_start
-                state.next_start = now + delay_ms / 1000
-            yield (time.monotonic() - started_waiting) * 1000
+        # Counted from arrival until the request may start (`B-112`), so the
+        # claim can see a domain with work already queued behind its limits.
+        state.waiting += 1
+        counted = True
+        try:
+            async with state.semaphore:
+                async with state.gate:
+                    now = time.monotonic()
+                    wait_s = state.next_start - now
+                    if wait_s > 0:
+                        await asyncio.sleep(wait_s)
+                        now = state.next_start
+                    state.next_start = now + delay_ms / 1000
+                state.waiting -= 1
+                counted = False
+                yield (time.monotonic() - started_waiting) * 1000
+        finally:
+            if counted:
+                state.waiting -= 1
+
+    def busy(self, *, horizon_s: float | None = None) -> set[str]:
+        """Domains a new request would wait on (`B-112`): one already has a
+        request queued behind its limits, or its next start is further off than
+        ``horizon_s``. The claim leaves their pages for later, so a lane takes
+        other work instead of parking behind one slow host."""
+        horizon = BUSY_HORIZON_S if horizon_s is None else horizon_s
+        now = time.monotonic()
+        return {
+            domain
+            for domain, state in self._domains.items()
+            if state.waiting > 0 or state.next_start - now > horizon
+        }
 
     def forget(self, domain: str) -> None:
         """Drop a domain's state.

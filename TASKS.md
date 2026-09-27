@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.10`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.11`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1529,6 +1529,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-112` **One slow host held the whole worker to its pace** — `v0.152.11`. Run 11: 245
+      fetches in an hour (runs 8–10 ≈1,500). The science results topped the queue on two hosts
+      (503 on a preprint server with a long crawl delay); every lane claimed there and waited on
+      its politeness limit. The claim now skips page tasks on hosts this worker is already
+      waiting on (a request queued, or next start >5 s away); they keep their place
 - [x] `B-111` **Ask the scholarly engines too** — `v0.152.10`. With every web engine refusing
       (`B-109`), SearXNG's science category still answered, on topic (Google Scholar 28/30,
       Semantic Scholar 30/30). Every subject now also gets a `!science …` query, taken early
