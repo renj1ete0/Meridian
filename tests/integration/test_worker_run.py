@@ -2039,6 +2039,37 @@ async def test_a_query_that_finds_nothing_is_done_not_retried(
     assert task.attempts == 0
 
 
+async def test_a_query_every_engine_refused_waits_and_is_asked_again(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-107`: nothing because the engines were throttled is not an answer. On
+    the live stack every web engine was suspended for rate or CAPTCHA, and each
+    query settled as done with nothing was lost for good — queries are never
+    asked twice."""
+    import datetime as dt
+
+    from worker.main import THROTTLED_QUERY_FLOOR_S
+
+    sess = await session_for("rw")
+    task = await enqueue_query(sess, "a query nobody answered", run_topic)
+    backend = FakeSearx(
+        SearchResults(
+            query="a query nobody answered",
+            urls=(),
+            unresponsive=("brave: Suspended: too many requests", "duckduckgo: CAPTCHA"),
+        )
+    )
+
+    worker, _ = with_search(sess, run_domain, run_topic, backend, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    await sess.refresh(task)
+    assert task.status == "pending", "a throttled query was settled as answered"
+    assert "search_throttled" in (task.error or "")
+    wait = task.next_attempt_at - dt.datetime.now(dt.UTC)
+    assert wait >= dt.timedelta(seconds=THROTTLED_QUERY_FLOOR_S - 60)
+
+
 async def test_an_unreachable_backend_retries_rather_than_abandoning(
     session_for, resolve, raw_store, run_domain, run_topic, cleanup
 ) -> None:

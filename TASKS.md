@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.6`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.7`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1521,6 +1521,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-107` **Throttled search engines lost queries for good** — `v0.152.7`. Found in run 10:
+      search 28 of 1,445 fetches. Every web engine behind SearXNG was suspended (rate limit,
+      CAPTCHA); only news answered. A query with no results because engines refused was
+      settled as done, and never asked again. Now retried after ≥30 min (6 times), and the
+      client leaves ≥15 s between queries so an hourly batch is not a burst
 - [x] `B-106` **"Crawl more of this" searched a field's commonest words** — `v0.152.6`. At the
       top level those were "shall public information"; now the field's name, the topic that
       holds it, and its first two-word term

@@ -37,8 +37,10 @@ the novelty gate's.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import os
+import time
 from collections.abc import Iterable
 from urllib.parse import urlsplit
 
@@ -57,6 +59,14 @@ DEFAULT_TIMEOUT_S = 30.0
 #: at 10 per page — but a bound on what one queue row may produce, so a single
 #: seed query cannot flood the frontier ahead of everything else in it.
 DEFAULT_MAX_RESULTS = 50
+
+#: The least time between two queries to the backend (`B-107`). The engines
+#: behind it rate-limit by client: a batch of queries sent back to back got
+#: every web engine suspended ("too many requests", CAPTCHA) within minutes.
+DEFAULT_MIN_INTERVAL_S = 15.0
+
+#: Words in an engine's unresponsive reason that mean "later", not "never".
+THROTTLE_WORDS = ("suspended", "captcha", "too many requests", "access denied", "timeout")
 
 #: Schemes worth queueing. `netguard` enforces this again at fetch time; here it
 #: saves the queue row rather than the request.
@@ -88,6 +98,18 @@ class SearchResults:
     def empty(self) -> bool:
         return not self.urls
 
+    @property
+    def throttled(self) -> bool:
+        """Nothing came back *because* the engines refused to answer (`B-107`).
+
+        Not the same as an empty answer: a suspended or CAPTCHA-walled engine
+        answers the same query in an hour. Settled as done, the query was lost
+        for good, since queries are never asked twice.
+        """
+        return self.empty and any(
+            word in reason.lower() for reason in self.unresponsive for word in THROTTLE_WORDS
+        )
+
 
 class SearxClient:
     """Thin client over SearXNG's JSON API (§6.4).
@@ -103,12 +125,16 @@ class SearxClient:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         max_results: int = DEFAULT_MAX_RESULTS,
         client: httpx.AsyncClient | None = None,
+        min_interval_s: float = 0.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.max_results = max_results
         self._client = client
         self._owns_client = client is None
+        self.min_interval_s = min_interval_s
+        self._pace = asyncio.Lock()
+        self._last = 0.0
 
     @classmethod
     def from_env(cls) -> SearxClient | None:
@@ -126,6 +152,7 @@ class SearxClient:
             url,
             timeout_s=_float_env("MERIDIAN_SEARCH_TIMEOUT_S", DEFAULT_TIMEOUT_S),
             max_results=_int_env("MERIDIAN_SEARCH_MAX_RESULTS", DEFAULT_MAX_RESULTS),
+            min_interval_s=_float_env("MERIDIAN_SEARCH_MIN_INTERVAL_S", DEFAULT_MIN_INTERVAL_S),
         )
 
     async def __aenter__(self) -> SearxClient:
@@ -170,6 +197,15 @@ class SearxClient:
         if not query or not query.strip():
             raise SearchError("refusing to search for an empty query")
 
+        # One query at a time, spaced (`B-107`): lanes claim queries together.
+        async with self._pace:
+            wait = self._last + self.min_interval_s - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last = time.monotonic()
+            return await self._search(query)
+
+    async def _search(self, query: str) -> SearchResults:
         try:
             response = await self._http().get(
                 f"{self.base_url}/search",
@@ -243,7 +279,9 @@ def _strings(entries: Iterable[object]) -> list[str]:
         if isinstance(entry, str):
             out.append(entry)
         elif isinstance(entry, (list, tuple)) and entry:
-            out.append(str(entry[0]))
+            # The reason too (`B-107`): "brave: Suspended: too many requests" is
+            # what tells a throttled engine from a broken one.
+            out.append(": ".join(str(part) for part in entry if part))
     return out
 
 

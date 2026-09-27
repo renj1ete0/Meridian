@@ -195,6 +195,11 @@ ENGLISH_ALTERNATE_BONUS = 10
 #: is whatever a page carried. At the same tier the answer goes first.
 SEARCH_RESULT_BONUS = 5
 
+#: A query whose engines were all throttled waits at least this long before it
+#: is asked again, and is retried this many times before it is given up (`B-107`).
+THROTTLED_QUERY_FLOOR_S = 1800
+THROTTLED_QUERY_RETRIES = 6
+
 #: Task types that look something up rather than fetch a page (`B-68`). They are
 #: claimed in their own turn of the directed slot and never in a topic's
 #: ordinary draw, which is for pages.
@@ -1059,6 +1064,18 @@ class Worker:
             # stops a dead backend from spinning the queue.
             disposition, detail = "retry", f"search_unavailable: {exc}"
         else:
+            if results.throttled:
+                # `B-107`: nothing because the engines refused, not because the
+                # web has nothing. Suspensions last minutes to hours, so the
+                # retry waits at least THROTTLED_QUERY_FLOOR_S, a few times over.
+                await self._settle(
+                    claim,
+                    "retry",
+                    f"search_throttled: {', '.join(results.unresponsive)[:300]}",
+                    floor_s=THROTTLED_QUERY_FLOOR_S,
+                    max_retries=THROTTLED_QUERY_RETRIES,
+                )
+                return
             # Answered — including answered with nothing. §6.4 says engine
             # failure is routine, so a query that returns no usable results is
             # done rather than retried: the same engines will be just as broken

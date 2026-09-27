@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.7] — 2026-09-27
+
+### Fixed
+
+- `B-107`: a search query that came back empty because every engine refused it (suspended
+  for rate, CAPTCHA, too many requests) is retried after at least 30 minutes, up to six
+  times, instead of being settled as answered and never asked again. The search client
+  leaves at least 15 seconds between queries (`MERIDIAN_SEARCH_MIN_INTERVAL_S`), and keeps
+  each unresponsive engine's reason, not only its name
+
 ## [0.152.6] — 2026-09-27
 
 ### Fixed

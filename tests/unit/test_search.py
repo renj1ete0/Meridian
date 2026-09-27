@@ -151,7 +151,8 @@ async def test_a_dead_engine_does_not_lose_the_engines_that_answered() -> None:
     results = await client_for(json_response(payload)).search("q")
 
     assert results.urls == ("https://a.test/1",)
-    assert set(results.unresponsive) == {"bing", "google scholar"}
+    assert set(results.unresponsive) == {"bing: timeout", "google scholar: CAPTCHA"}
+    assert not results.throttled, "a query some engines answered is answered"
 
 
 async def test_unresponsive_engines_reported_as_bare_strings_also_parse() -> None:
@@ -273,3 +274,67 @@ def test_a_nonsense_setting_fails_loudly(monkeypatch, name: str, value: str) -> 
 
     with pytest.raises(RuntimeError, match=name):
         SearxClient.from_env()
+
+
+# -- throttled engines, and pacing (B-107) --------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reasons",
+    [
+        [["brave", "Suspended: too many requests"], ["duckduckgo", "CAPTCHA"]],
+        [["google cse", "Suspended: too many requests"]],
+        [["startpage", "Suspended: CAPTCHA"]],
+    ],
+)
+async def test_nothing_because_the_engines_refused_is_throttled(reasons) -> None:
+    """The live failure: every web engine suspended, zero results, settled as
+    answered and so never asked again."""
+    results = await client_for(
+        json_response({"results": [], "unresponsive_engines": reasons})
+    ).search("q")
+    assert results.throttled
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"results": []},  # the web has nothing: an answer
+        {"results": [], "unresponsive_engines": [["bing", "unexpected crash"]]},  # broken, not busy
+        {"results": [{"url": "https://a.test/"}], "unresponsive_engines": [["brave", "Suspended"]]},
+    ],
+)
+async def test_an_answer_or_a_broken_engine_is_not_throttled(payload) -> None:
+    results = await client_for(json_response(payload)).search("q")
+    assert not results.throttled
+
+
+async def test_queries_are_spaced_and_never_sent_together(monkeypatch) -> None:
+    import asyncio
+
+    from worker import search as search_module
+
+    waits: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def record(seconds):
+        waits.append(seconds)
+        await real_sleep(0)
+
+    monkeypatch.setattr(search_module.asyncio, "sleep", record)
+    client = client_for(json_response({"results": []}), min_interval_s=10.0)
+
+    await asyncio.gather(*(client.search(f"q{i}") for i in range(3)))
+
+    assert len(waits) == 2, "the first query waits for nothing, the next two do"
+    assert all(9.0 < w <= 10.0 for w in waits)
+
+
+def test_the_deployed_client_is_paced_by_default(monkeypatch) -> None:
+    """Built from the environment, as the worker builds it, it spaces queries."""
+    from worker.search import DEFAULT_MIN_INTERVAL_S
+
+    monkeypatch.setenv("SEARXNG_URL", BASE)
+    monkeypatch.delenv("MERIDIAN_SEARCH_MIN_INTERVAL_S", raising=False)
+    client = SearxClient.from_env()
+    assert client is not None and client.min_interval_s == DEFAULT_MIN_INTERVAL_S > 0
