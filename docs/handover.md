@@ -29,6 +29,11 @@ add it here.
 > - **Stale `meridian_*.dist-info` folders reappear** after each version bump (the old one loses
 >   its RECORD), and uv then prints warnings on every command. Harmless; delete the ones with no
 >   RECORD. Cause not found.
+> - **Search engines rate-limit us, silently.** Run 10: every web engine behind SearXNG was
+>   suspended (too many requests, CAPTCHA); only news answered. Check with
+>   `docker compose exec worker python -c` hitting `$SEARXNG_URL/search?format=json` and read
+>   `unresponsive_engines`. `B-107` retries throttled queries and paces them 15 s apart; 93 of
+>   the day's empty queries were set back to pending by hand (error "B-107: revived").
 > - **An edge constraint that must hold across a merge is deferred** (`uq_edges_claim`): check it
 >   with `SET CONSTRAINTS uq_edges_claim IMMEDIATE` in a test, or it is never checked before a
 >   rollback.
