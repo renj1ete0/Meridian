@@ -34,6 +34,7 @@ import argparse
 import asyncio
 import contextlib
 import dataclasses
+import datetime as dt
 import time
 from collections import Counter
 
@@ -45,7 +46,7 @@ from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import GazetteerTerm, QueueTask, TopicConfig
 from meridian_core.queueing import enqueue
-from meridian_core.searchseeds import Query, TopicSeedInput, plan, topic_words
+from meridian_core.searchseeds import NEWS_BANG, Query, TopicSeedInput, plan, topic_words
 from meridian_core.translations import search_languages, translations_for
 
 log = get_logger(__name__)
@@ -120,6 +121,30 @@ def specific_enough(topic: TopicSeedInput) -> bool:
     )
 
 
+#: A news query may be asked again after this long (`B-105`). News is the one
+#: shape whose answers change: a news query found 29 new pages on average in the
+#: three days before this, against 11 for any other shape, and under the
+#: no-repeat rule each could be asked once, ever.
+NEWS_REPEAT = dt.timedelta(days=3)
+
+
+async def asked_before(sess: AsyncSession, *, now: dt.datetime | None = None) -> list[str]:
+    """Every query already queued — except news queries old enough to ask again."""
+    now = now or dt.datetime.now(dt.UTC)
+    rows = await sess.execute(
+        select(QueueTask.url_or_query, QueueTask.created_at).where(QueueTask.task_type == "query")
+    )
+    latest: dict[str, dt.datetime] = {}
+    for text_, created in rows:
+        if text_ not in latest or created > latest[text_]:
+            latest[text_] = created
+    return [
+        text_
+        for text_, created in latest.items()
+        if not (text_.startswith(NEWS_BANG) and created < now - NEWS_REPEAT)
+    ]
+
+
 async def pending_by_topic(sess: AsyncSession) -> dict[str, int]:
     rows = await sess.execute(
         select(QueueTask.topic, func.count())
@@ -151,9 +176,7 @@ async def run_once(
         waiting = await pending_by_topic(sess)
         backlogged = [t.topic for t in inputs if waiting.get(t.topic, 0) >= MAX_PENDING]
         inputs = [t for t in inputs if t.topic not in backlogged]
-        already = list(
-            await sess.scalars(select(QueueTask.url_or_query).where(QueueTask.task_type == "query"))
-        )
+        already = await asked_before(sess)
         seed = seed if seed is not None else int(time.time())
         queries = plan(inputs, already=already, per_topic=per_topic, seed=seed)
         # A node is filed under an active topic, then dropped if that topic is

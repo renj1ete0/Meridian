@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.4] — 2026-09-27
+
+### Changed
+
+- `B-105`: a news query (`!news …`) may be asked again three days after it was last asked.
+  Every other query is still asked once
+
 ## [0.152.3] — 2026-09-27
 
 ### Fixed
