@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1485,6 +1485,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
+      **Measured 2026-09-27, cap rejected:** ranking only the first N matches (N = 10k)
+      cut a broad word from 80–370 ms to about 55 ms, but the lexical top 50 kept only
+      14 ("transport"), 19 ("health") and 20 ("city") of 50; at N = 20k, 100–140 ms and
+      21–24 of 50. And a common two-word question ("public transport", 14k matches)
+      exceeds either cap. Faster and noticeably different is the wrong trade here; the
+      RUM index (ranking inside the index) is the option left
 - [x] `B-83` ⚑ **Re-calibrate the topic label floor on today's corpus** — `v0.149.5`, floor 0.50 (operator: "ok you can try", 2026-09-27; judgement in `meridian-calibration/b83/`). — found by the
       2026-09-26 information audit. Over half of all labelled sources (about 1,300 of 2,500)
       sit in the 0.45–0.48 band just above `LABEL_FLOOR`, and judged by title only about a
@@ -1497,6 +1503,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-104` **Search seeding hourly** — `v0.152.2`. Run 9 began with 8 search results
+      left: 6% of fetches from search against run 8's 32%. Live timetable row set by hand
+- [x] `B-103` **Topics with no vocabulary ran out of search queries** — `v0.152.1`. Found in
+      run 9: biology, economics and robotics have no approved gazetteer terms, so each had
+      about ten possible queries, all long asked; their search stopped. Queries now also
+      come from the subjects a description lists ("costs, pricing, fares") and their pairs
 - [x] `B-97` ⚑ **Gaps leads with empty topic × place pairings** — `v0.149.9`. Operator
       (2026-09-27): rank them below the other kinds. Place gaps now weigh at most 0.19,
       under every other kind's floor; still listed, last

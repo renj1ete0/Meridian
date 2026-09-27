@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.1] — 2026-09-27
+
+### Fixed
+
+- `B-103`: search queries from a topic's description. The subjects it lists (split on
+  punctuation and "and"/"or", clauses such as "how they are regulated" left out) become
+  queries with the topic's name and in pairs. Three topics with no approved vocabulary had
+  asked all ten queries their names allowed and had stopped being searched for
+
 ## [0.152.0] — 2026-09-27
 
 ### Added

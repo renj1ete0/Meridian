@@ -57,9 +57,42 @@ MECHANISM_BY_KIND = {
 #: Shapes that widen a topic without answering one of the five failure modes.
 #: Listed rather than implied, so a new shape has to be put in one set or the
 #: other (a test fails otherwise).
-WIDENING_KINDS = frozenset({"concept", "evidence", "news", "with_topic", "pair"})
+WIDENING_KINDS = frozenset({"concept", "evidence", "news", "with_topic", "pair", "facet"})
 
 _SPACE = re.compile(r"\s+")
+
+#: Words a description phrase starts with that carry no subject ("the", "their").
+_LEADING = frozenset(
+    "a an the their its his her our of in on to for with and or including such as around used".split()
+)
+#: A phrase starting with one of these is a clause ("how they are regulated"),
+#: which says what the operator wants to know, not what to search for.
+_CLAUSE = frozenset("how where what when why which who whose whether".split())
+_FACET_SPLIT = re.compile(r"[,;:.()]|\band\b|\bor\b")
+#: Facets longer than this are sentences, not subjects.
+MAX_FACET_WORDS = 5
+
+
+def description_facets(description: str | None) -> list[str]:
+    """The subjects a topic's description lists (`B-103`), in order, once each.
+
+    A description written for people lists what the topic covers — "costs,
+    pricing, fares, funding and financing". Each item is a subject a search can
+    ask for. Split on punctuation and on "and"/"or", leading function words
+    dropped, clauses ("how they are regulated") and single short words left
+    out. Deterministic, and nothing here is a model's output (§2.1).
+    """
+    out: dict[str, None] = {}
+    for piece in _FACET_SPLIT.split((description or "").lower()):
+        words = [w for w in re.findall(r"[a-z][a-z'-]*", piece)]
+        while words and words[0] in _LEADING:
+            words = words[1:]
+        if not words or words[0] in _CLAUSE or len(words) > MAX_FACET_WORDS:
+            continue
+        facet = " ".join(words)
+        if len(facet) >= 4:
+            out.setdefault(facet, None)
+    return list(out)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -118,6 +151,15 @@ def candidates(topic: TopicSeedInput) -> list[Query]:
     for lang, words in sorted(set(topic.translations)):
         add(f":{lang} {words}", "language")
         add(f"{NEWS_BANG} :{lang} {words}", "language_news")
+    # The description's own list of subjects (`B-103`): a topic with no approved
+    # vocabulary had only its name to search with, and ran out of queries.
+    facets = description_facets(topic.description)
+    for facet in facets:
+        if facet != name.lower() and name.lower() not in facet:
+            add(f"{facet} {name}", "facet")
+    for i, first in enumerate(facets):
+        for second in facets[i + 1 :]:
+            add(f"{first} {second}", "facet")
     if topic.description:
         # The description's opening words: an outsider's phrasing of the topic,
         # §7.4's mechanism 3 in the operator's own words.

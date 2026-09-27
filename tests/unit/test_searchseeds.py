@@ -82,3 +82,42 @@ def test_a_topic_whose_queries_are_exhausted_yields_nothing() -> None:
 def test_a_nonsense_budget_is_refused() -> None:
     with pytest.raises(ValueError):
         plan([WALK], already=[], per_topic=0, seed=0)
+
+
+# -- facets of a description (B-103) --------------------------------------------
+
+
+def test_a_description_lists_its_subjects_as_facets() -> None:
+    from meridian_core.searchseeds import description_facets
+
+    facets = description_facets(
+        "The economics of transport and urban mobility: costs, pricing, fares, "
+        "funding and financing, and how prices are set."
+    )
+    assert facets == ["economics of transport", "urban mobility", "costs", "pricing", "fares", "funding", "financing"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["how they are regulated", "where they are deployed", "and the", "a, an, of", "", None],
+)
+def test_clauses_and_function_words_are_never_facets(text) -> None:
+    from meridian_core.searchseeds import description_facets
+
+    assert description_facets(text) == []
+
+
+def test_a_topic_with_no_vocabulary_still_has_queries_to_ask() -> None:
+    """The failure this fixes: a topic with only its name ran out after ten."""
+    from meridian_core.searchseeds import TopicSeedInput, candidates
+
+    bare = TopicSeedInput(topic="robotics", description=None, terms=(), translations=())
+    described = TopicSeedInput(
+        topic="robotics",
+        description="Robots in public space, including delivery and service robots.",
+        terms=(),
+        translations=(),
+    )
+    extra = {q.text for q in candidates(described)} - {q.text for q in candidates(bare)}
+    assert {"delivery robotics", "robots in public space delivery"} <= extra
+    assert all(q.kind in ("facet", "description") for q in candidates(described) if q.text in extra)
