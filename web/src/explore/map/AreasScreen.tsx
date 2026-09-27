@@ -37,6 +37,8 @@ import {
   viewed,
   zoomAbout,
   zoomForDepth,
+  shadeOf,
+  type Shade,
   type View,
   type Area,
   type AreaDetail,
@@ -362,6 +364,7 @@ export function AreasView({
   // Route mode (`P6-39`): "Route from here…" picks the start; the next circle
   // clicked is the end, and the route is found among the lines on screen.
   const [routeFrom, setRouteFrom] = useState<Area | null>(null)
+  const [shade, setShade] = useState<Shade>('topic')
   const routeLinks = useMemo(
     () => (shown === level.level ? level.links : linksAt(level, byParent, shown)),
     [level, byParent, shown],
@@ -441,6 +444,7 @@ export function AreasView({
           selectedLink={panel.kind === 'bridge' ? [panel.a, panel.b] : null}
           routeLinks={panel.kind === 'route' ? (panel.hops ?? []) : []}
           routeEnds={panel.kind === 'route' ? [panel.from.area_id, panel.to.area_id] : routeFrom ? [routeFrom.area_id] : []}
+          shade={shade}
           onHover={setHover}
           onOpen={openArea}
           onLink={(link) => setPanel({ kind: 'bridge', a: link.area_a, b: link.area_b })}
@@ -468,16 +472,15 @@ export function AreasView({
             {loading || zooming ? ' · loading' : ''}
             {zoomError ? ` · ${zoomError}` : ''}
           </span>
-          {onDepth ? (
-            <div className="ml-auto">
-              <LevelControl levels={level.levels} value={wanted} onChange={zoomToDepth} />
-            </div>
-          ) : null}
+          <div className="ml-auto flex items-center gap-2">
+            <ShadeControl value={shade} onChange={setShade} />
+            {onDepth ? <LevelControl levels={level.levels} value={wanted} onChange={zoomToDepth} /> : null}
+          </div>
         </div>
 
         <SizeKey areas={rows} scale={scale} compact={frame.width < COMPACT_KEY_BELOW} />
         <p className="pointer-events-none absolute bottom-4 left-5 right-5 hidden truncate font-mono text-[11px] text-text-faint sm:block">
-          size = passages ·{' '}
+          size = passages · fill = {shade === 'research' ? 'share peer-reviewed, fullest = most on this map' : 'share on your topics'} ·{' '}
           solid = cited claim · dashed = similar passages
           {shown === level.level ? '' : ` (hover a circle) · outline = its ${levelNoun(level.level)}`} · scroll to
           zoom, drag to move, 0 for all · right-click for more
@@ -606,6 +609,7 @@ function Canvas({
   view = HOME,
   routeLinks = [],
   routeEnds = [],
+  shade = 'topic',
 }: {
   level: AreasLevel
   byParent: ReadonlyMap<number, AreasLevel>
@@ -626,6 +630,8 @@ function Canvas({
   routeLinks?: readonly AreaLink[]
   /** Its ends, ringed; one end while the reader is still choosing the other. */
   routeEnds?: readonly number[]
+  /** What the fill shows (`P6-42`). */
+  shade?: Shade
 }) {
   const box = useRef<HTMLDivElement>(null)
   const { width, height } = useSize(box)
@@ -722,6 +728,14 @@ function Canvas({
     }
     return drawn
   }, [layout, placedAll, level, everyArea, width])
+
+  // Research shares are small (the corpus is mostly government pages), so that
+  // fill runs up to the highest share on screen rather than to 1.
+  const shadeMax = useMemo(() => {
+    if (shade !== 'research') return 1
+    const values = layout.placed.map((p) => shadeOf(p.area, 'research') ?? 0)
+    return Math.max(0, ...values)
+  }, [layout, shade])
 
   const labels = useMemo(
     () =>
@@ -871,6 +885,8 @@ function Canvas({
                   onHover={onHover}
                   onOpen={onOpen}
                   onMenu={contextMenu}
+                  shade={shade}
+                  shadeMax={shadeMax}
                 />
               ))}
               {routeEnds.map((id) => {
@@ -992,6 +1008,8 @@ const AreaCircle = memo(function AreaCircle({
   onHover,
   onOpen,
   onMenu,
+  shade = 'topic',
+  shadeMax = 1,
 }: {
   placed: Placed
   label: Label | undefined
@@ -1001,10 +1019,16 @@ const AreaCircle = memo(function AreaCircle({
   onHover: (id: number | null) => void
   onOpen: (area: Area) => void
   onMenu: (event: React.MouseEvent, area: Area) => void
+  shade?: Shade
+  /** The fill's full scale: 1 for topic share; the highest share shown for research. */
+  shadeMax?: number
 }) {
   const { area, x, y, r } = placed
   const flagged = area.weak || area.stale
   const share = onTopicShare(area)
+  const raw = shadeOf(area, shade)
+  const fill = raw === null ? null : Math.min(1, raw / (shadeMax > 0 ? shadeMax : 1))
+  // Muted names mean "not about your topics", whatever the fill is showing.
   const background = share !== null && share < OFF_TOPIC_BELOW
   const caption =
     area.children > 0
@@ -1035,13 +1059,14 @@ const AreaCircle = memo(function AreaCircle({
       data-area={area.area_id}
       data-flagged={flagged ? 'true' : undefined}
       data-share={share === null ? undefined : share.toFixed(3)}
+      data-shade={raw === null ? undefined : raw.toFixed(3)}
     >
       <circle
         cx={x}
         cy={y}
         r={r}
         fill="var(--accent-graph-deep)"
-        fillOpacity={hovered || highlighted ? Math.max(0.5, shareFill(share)) : shareFill(share)}
+        fillOpacity={hovered || highlighted ? Math.max(0.5, shareFill(fill)) : shareFill(fill)}
         stroke={flagged ? 'var(--accent-attention)' : 'var(--accent-graph)'}
         strokeOpacity={background && !hovered && !highlighted ? 0.45 : 1}
         strokeWidth={highlighted ? 2.4 : r < 12 ? 1 : 1.2}
@@ -1583,6 +1608,32 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <h3 className="mt-1 font-mono text-[9.5px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
       {children}
     </h3>
+  )
+}
+
+/** Topic share or research share as the circles' fill (`P6-42`). */
+function ShadeControl({ value, onChange }: { value: Shade; onChange: (shade: Shade) => void }) {
+  const options: { shade: Shade; label: string; title: string }[] = [
+    { shade: 'topic', label: 'Topics', title: 'Fill by the share of passages on your topics' },
+    { shade: 'research', label: 'Research', title: 'Fill by the share of passages from peer-reviewed sources' },
+  ]
+  return (
+    <div role="group" aria-label="Fill shows" className="flex shrink-0 items-stretch border border-line-strong bg-surface">
+      {options.map((o) => (
+        <button
+          key={o.shade}
+          type="button"
+          aria-pressed={value === o.shade}
+          title={o.title}
+          onClick={() => onChange(o.shade)}
+          className={`h-8 px-2.5 font-mono text-[11px] ${
+            value === o.shade ? 'bg-surface-raised text-text' : 'text-text-faint hover:text-text-muted'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   )
 }
 

@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.5] — 2026-09-27
+
+### Added
+
+- `P6-42`: the Map's fill can show the research share of each field (peer-reviewed passages),
+  as well as the share on your topics — a Topics / Research switch beside the level control.
+  Research shares are small, so that fill runs up to the highest on screen and the legend says so
+
 ## [0.152.4] — 2026-09-27
 
 ### Changed

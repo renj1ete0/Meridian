@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1450,12 +1450,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       already tagged), coverage shown honestly (strong / thin / none), trust markers on every
       item (government, peer-reviewed, date, contested), and "Find more" on a thin country
       queuing a search. No model; the synthesis panel is a separate decision
-- [~] `P6-42` **The Map as a tool, not a picture** — UX priority 2. Done: semantic zoom
+- [x] `P6-42` **The Map as a tool, not a picture** — UX priority 2. Done: semantic zoom
       (`v0.146.0`), fields shaded and labelled by on-topic share with a per-topic breakdown
       (`v0.147.0`), on-topic fields with thin evidence listed in Gaps with a link back to the
       Map (`v0.148.0`, `v0.148.1`), the dead "Route from here…" item removed; "This is noise"
       on a field (`v0.150.0`): its sources read whole and about none of the topics go to junk,
-      undoable by mark. Left: shading by source quality and freshness as well as topic share
+      undoable by mark; fill by research share as well as topic share (`v0.152.5`). Freshness
+      was measured and not built: every field's newest source was from the same week
 - [x] `P6-43` **Watched questions** — `v0.151.0`. UX priority 3. Each saved view on the
       landing shows how many sources that answer it arrived since it was last opened
       ("7 new", "Nothing new"), counted by its words (as search's lexical arm matches them)

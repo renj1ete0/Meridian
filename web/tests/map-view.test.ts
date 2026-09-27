@@ -20,6 +20,8 @@ import {
   fitLabels,
   linksAt,
   routeBetween,
+  researchShare,
+  shadeOf,
   onScreen,
   panBy,
   viewed,
@@ -213,5 +215,23 @@ describe('a route between fields (P6-39)', () => {
   it('says null when nothing joins them, and nothing to walk from a place to itself', () => {
     expect(routeBetween([L(1, 2), L(3, 4)], 1, 4)).toBeNull()
     expect(routeBetween([], 7, 7)).toEqual([])
+  })
+})
+
+
+describe('fill by research share (P6-42)', () => {
+  it('is the peer-reviewed share of counted passages, government not included', () => {
+    expect(researchShare({ tier_mix: { government: 60, peer_reviewed: 30, informal: 10 } })).toBeCloseTo(0.3)
+    expect(researchShare({ tier_mix: { government: 100 } })).toBe(0)
+  })
+
+  it('refuses to guess with nothing counted', () => {
+    expect(researchShare({ tier_mix: {} })).toBeNull()
+  })
+
+  it('switches what the fill reads without touching the topic share', () => {
+    const a = area({ area_id: 1, examined: 10, on_topic: 9, tier_mix: { peer_reviewed: 1, government: 9 } })
+    expect(shadeOf(a, 'topic')).toBeCloseTo(0.9)
+    expect(shadeOf(a, 'research')).toBeCloseTo(0.1)
   })
 })

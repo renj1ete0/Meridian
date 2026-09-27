@@ -443,3 +443,17 @@ describe('route mode (P6-39)', () => {
     expect(onLevel).toHaveBeenCalledWith(2)
   })
 })
+
+
+describe('the fill control (P6-42)', () => {
+  it('fills by topic share by default and by research share when asked', () => {
+    const lv = level()
+    lv.areas[0] = { ...lv.areas[0]!, examined: 10, on_topic: 10, tier_mix: { peer_reviewed: 0, government: 10 } }
+    const { container } = render(<AreasView level={lv} onLevel={vi.fn()} />)
+    const shaded = () => container.querySelector('[data-area="1"]')!.getAttribute('data-shade')
+    expect(shaded()).toBe('1.000')
+    fireEvent.click(screen.getByRole('button', { name: 'Research' }))
+    expect(shaded()).toBe('0.000')
+    expect(container.textContent).toContain('share peer-reviewed')
+  })
+})

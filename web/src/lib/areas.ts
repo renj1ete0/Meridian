@@ -1253,6 +1253,26 @@ export function shareFill(share: number | null): number {
   return FILL_FAINT + (FILL_FULL - FILL_FAINT) * Math.sqrt(share)
 }
 
+/** What a circle's fill shows (`P6-42`): the share on the reader's topics, or of peer-reviewed passages. */
+export type Shade = 'topic' | 'research'
+
+/**
+ * The share of an area's passages from peer-reviewed sources, or null with none
+ * counted. Government is not counted with it: the corpus is mostly government
+ * pages, so government-or-research shades almost every field alike, while the
+ * research share alone runs from none to about a quarter.
+ */
+export function researchShare(area: Pick<Area, 'tier_mix'>): number | null {
+  const total = Object.values(area.tier_mix ?? {}).reduce((a, b) => a + b, 0)
+  if (total <= 0) return null
+  return Math.min(1, (area.tier_mix.peer_reviewed ?? 0) / total)
+}
+
+/** The fill a shade mode gives an area: the same curve for both, so they read alike. */
+export function shadeOf(area: Area, shade: Shade): number | null {
+  return shade === 'research' ? researchShare(area) : onTopicShare(area)
+}
+
 /** Below this share a field's name is drawn muted: it reads as background, not a subject. */
 export const OFF_TOPIC_BELOW = 0.1
 
