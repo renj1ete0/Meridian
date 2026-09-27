@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.9] — 2026-09-27
+
+### Changed
+
+- `B-97`: place gaps (a topic with few sources about one place) rank below every other
+  kind of gap, at most 0.19 against a floor of 0.2 elsewhere. Every topic is paired with
+  every place in the filter list, so most were pairings nobody asked about, and they led
+  Gaps whenever few other gaps were open. They stay listed, last
+
 ## [0.149.8] — 2026-09-27
 
 ### Fixed

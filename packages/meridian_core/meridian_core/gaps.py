@@ -410,6 +410,11 @@ async def _passage_counts(sess: AsyncSession) -> tuple[dict[str, int], dict[str,
 #: a comparison needs a few sources per place, not ten.
 PLACE_THIN = 3
 
+#: A place gap's weight: 0.04 with two sources up to 0.19 with none — under the
+#: lowest floor of every other kind (0.2), so place gaps always rank last.
+PLACE_SEVERITY_FLOOR = 0.04
+PLACE_SEVERITY_SPAN = 0.15
+
 
 def place_gaps(
     topic: str,
@@ -422,9 +427,11 @@ def place_gaps(
 ) -> list[Gap]:
     """The finding for one topic in one place. Pure, so the threshold is testable.
 
-    Ranked below the topic's own coverage gaps on purpose: a topic with nothing
-    at all is the first thing to fix, and a table of empty cells under it would
-    bury that.
+    Ranked below every other kind of gap (`B-97`, the operator's call): each
+    topic is paired with every place in the filter list, so most empty cells
+    are pairings nobody asked about ("no biology sources about <city>"), and at
+    their old weight they led the list whenever few other gaps were open. They
+    stay listed, last, for the reader who does want a topic in a place.
     """
     if sources >= PLACE_THIN:
         return []
@@ -451,7 +458,7 @@ def place_gaps(
                 f"({place}), of {topic_sources} labelled {topic} in all; fewer than "
                 f"{PLACE_THIN} leaves this place out of any comparison."
             ),
-            severity=round(0.25 + 0.2 * (1 - sources / PLACE_THIN), 3),
+            severity=round(PLACE_SEVERITY_FLOOR + PLACE_SEVERITY_SPAN * (1 - sources / PLACE_THIN), 3),
             evidence=evidence,
             actions=(
                 Action("seed_query", "Seed a search", topic=topic, query=words),

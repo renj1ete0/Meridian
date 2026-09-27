@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.8`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.149.9`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1494,10 +1494,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
-- [ ] `B-97` ⚑ **Gaps leads with empty topic × place pairings** — UX review 2026-09-27: the
-      top of Gaps is "No <topic> sources about <place>" for pairings nobody asked about
-      (every topic × every place in the filter list). Operator: which pairings matter —
-      only places a topic's question set names, or rank place gaps below field gaps?
+- [x] `B-97` ⚑ **Gaps leads with empty topic × place pairings** — `v0.149.9`. Operator
+      (2026-09-27): rank them below the other kinds. Place gaps now weigh at most 0.19,
+      under every other kind's floor; still listed, last
 - [x] `B-98` **Search snippets that are site navigation** — `v0.149.7`: the passage was prose; its first line was a widget prompt, now dropped from display. — a result's snippet can be a
       page's menu text ("I'm looking for…"). Prefer the best-matching non-boilerplate
       passage for the snippet

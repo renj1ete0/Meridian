@@ -560,3 +560,18 @@ def test_a_field_with_no_topic_counts_offers_only_reading():
     even then the gap must not offer a seed with no topic to put it under."""
     [gap] = gaps.field_gaps(a_field(topic_mix={}), now=NOW)
     assert [a.kind for a in gap.actions] == ["open_search"]
+
+
+def test_place_gaps_rank_below_every_other_kind():
+    """`B-97`: every topic is paired with every place, so empty cells are mostly
+    pairings nobody asked about; they come last. Compared with the lowest weight
+    each other kind can reach, read from the module rather than restated."""
+    empty = place(0)[0].severity
+    lowest_other = min(
+        [floor for floor, _ in gaps.QUERY_KINDS.values()]
+        + [value - gaps.ROUTE_TRUNCATED_PENALTY for value in gaps.ROUTE_KINDS.values()]
+        + [cover(sources=gaps.THIN_SOURCES, strong=gaps.WEAK_STRONG - 1)["weak"].severity]
+        + [0.2]  # a field gap's floor: 0.2 + 0.15 × share (+ 0.1 if thin)
+    )
+    assert empty < lowest_other
+    assert place(gaps.PLACE_THIN - 1)[0].severity > 0
