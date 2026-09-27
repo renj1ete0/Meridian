@@ -21,6 +21,13 @@ against a real Postgres, 925 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-09-27 afternoon.** Loop run 8 (`loop/run8/`, 1h): search 70% on a topic, followed
+> links 4% and two thirds of fetches → `B-90` (robots-refused search results not queued),
+> `B-91` (parent page recorded; measure in run 9, then `B-92`). Operator reported the Map
+> could not zoom after a level change and lines vanished → `B-93` (real zoom/pan, level
+> follows zoom, lines at every level). UX review of the reader journey → `B-94`–`B-96`
+> shipped, `B-97`–`B-102` open (`B-97` is the operator's). All deployed at `v0.149.3`.
+
 > **2026-09-27 morning.** `B-89` shipped and deployed (`v0.148.13`): long documents are
 > embedded from a sample first and the rest held unless the sample scores ≥ 0.41. The first
 > labeller pass held 102 of 179 sampled long documents; the backlog is ~131k, of which ~93k is
@@ -1487,6 +1494,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [ ] `B-97` ⚑ **Gaps leads with empty topic × place pairings** — UX review 2026-09-27: the
+      top of Gaps is "No <topic> sources about <place>" for pairings nobody asked about
+      (every topic × every place in the filter list). Operator: which pairings matter —
+      only places a topic's question set names, or rank place gaps below field gaps?
+- [ ] `B-98` **Search snippets that are site navigation** — a result's snippet can be a
+      page's menu text ("I'm looking for…"). Prefer the best-matching non-boilerplate
+      passage for the snippet
+- [ ] `B-99` **Reader-surface jargon on Find** — "hybrid" badge in the search box and
+      "Filters apply before the vector search." are operator language (`P6-44`)
+- [ ] `B-100` **Neighbourhood graph names cut to a dozen characters** — the small ring
+      graph truncates most node names; show full names on hover or wrap two lines
+- [ ] `B-101` **Map on a phone** — the size key covers a fifth of the canvas at 390px;
+      collapse it to a one-line key below 640px
+- [ ] `B-102` **Themes repeat their field's name** — many themes are named from the fixed
+      field list (`B-71`) and read the same as their siblings ("Transportation & Automotive
+      Engineering" several times); name the finest level by its distinctive terms instead
 - [x] `B-94` **A question offers the nodes its words name** — `v0.149.3`. UX review
       2026-09-27: a question in Find got "no node is named <the whole question>"
 - [x] `B-96` **"No place named 32" reads as "32 name no place"** — `v0.149.2`

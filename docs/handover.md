@@ -13,6 +13,19 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-27 afternoon — run 8, the Map as a map, UX review (`v0.149.3`, deployed).**
+> Run 8 split yield by how a page was found: search 70% on a topic, followed links 4%. The
+> queue never recorded a followed link's parent (`B-91` now does) — run 9 should measure
+> child yield by parent label before gating link-following (`B-92`). The Map's wheel now
+> zooms (level follows at 1.7× and 3.4×); levels share coordinates because each finer level
+> is laid out inside the coarser circles. Traps:
+> - **Run the web suite before committing a schema change.** `B-89` added a source field and
+>   broke the web drift test (`tests/api.test.ts`); fixed in `v0.148.16`.
+> - **A Playwright handle to Find's input goes stale after a search** (the field re-renders
+>   at a different size); query the input again after each submit.
+> - **The concept graph is small (≈256 nodes)**, so Find's neighbourhood is often empty for
+>   a subject that is well covered by passages. That is the graph's coverage, not a bug.
+
 > **2026-09-27 — `B-89`, long documents embedded from a sample (`v0.148.13`, deployed).**
 > After the overnight shutdown the backlog was ~153k, and over half of it sat in ~115 very long
 > documents, nearly all reached by followed links and mostly off-topic, never labelled because
