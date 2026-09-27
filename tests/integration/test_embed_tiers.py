@@ -12,22 +12,26 @@ import uuid
 from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from meridian_core.boilerplate import host_key
 from meridian_core.chunks import (
     EMBED_TIERS,
+    SAMPLE_HEAD,
+    SAMPLE_STRIDE,
     ChunkWrite,
     _host_of,
     chunks_without_embeddings,
     embed_tier,
     embedding_backlog,
+    in_sample,
     replace_chunks,
 )
 from meridian_core.hostscores import MIN_EXAMINED, OFFTOPIC_SHARE
 from meridian_core.models import Chunk, HostScore, QueueTask, Source
 from meridian_core.queueing import FOLLOWED_SOURCES
 from meridian_core.sources import upsert_source
+from meridian_core.topiclabels import TRIAGE_FLOOR
 from worker.embed import Backfill
 from worker.embeddings import FakeEmbedder
 from worker.vectors import LocalEmbedder
@@ -352,3 +356,106 @@ async def test_a_failing_first_tier_batch_is_stepped_past_not_retried_forever(se
     assert stats.failed_batches == 1
     assert good.embedding is not None and bad.embedding is None
     assert seen.count(seen[0]) == 1, "the failed batch came round again in the same pass"
+
+
+# --------------------------------------------------------------------------
+# A long document's sample first, the rest on what the sample earned (`B-89`)
+# --------------------------------------------------------------------------
+
+#: Long enough to have a rest well past the head, whatever the constants are.
+LONG = SAMPLE_HEAD + 4 * SAMPLE_STRIDE + 3
+
+
+async def sampled_ids(sess, chunks: list[Chunk]) -> set[int]:
+    rows = await sess.scalars(
+        select(Chunk.chunk_id).where(Chunk.chunk_id.in_([c.chunk_id for c in chunks]), in_sample())
+    )
+    return set(rows)
+
+
+async def label(sess, chunks: list[Chunk], *, sample_best: float | None) -> None:
+    source = await sess.get(Source, chunks[0].source_id)
+    source.topics_examined_at = func.now()
+    source.topic_sample_best = sample_best
+    await sess.flush()
+
+
+async def test_the_sample_spans_the_document_rather_than_its_opening(sess) -> None:
+    chunks = await page(sess, f"https://{host()}/long", chunks=LONG)
+    sample = await sampled_ids(sess, chunks)
+    indices = sorted(c.chunk_index for c in chunks if c.chunk_id in sample)
+
+    assert indices[:SAMPLE_HEAD] == list(range(SAMPLE_HEAD)), "the opening is read"
+    assert indices[-1] >= LONG - SAMPLE_STRIDE, "the sample stops short of the end"
+    assert len(sample) < len(chunks) / 2, "a long document's sample is most of it"
+
+
+async def test_a_short_document_is_all_sample(sess) -> None:
+    chunks = await page(sess, f"https://{host()}/short", chunks=SAMPLE_HEAD)
+    assert await sampled_ids(sess, chunks) == {c.chunk_id for c in chunks}
+
+
+@pytest.mark.parametrize("seed", ["search", None])
+async def test_the_rest_of_an_unread_document_waits_in_the_last_tier(sess, seed) -> None:
+    """Directed or not: a search result can be a thousand-page bill too."""
+    url = f"https://{host()}/long"
+    if seed:
+        await queued(sess, url, seed)
+    chunks = await page(sess, url, chunks=LONG)
+    sample = await sampled_ids(sess, chunks)
+    usual = "first" if seed else "then"
+
+    for chunk in chunks:
+        assert await tier_of(sess, chunk) == ({usual} if chunk.chunk_id in sample else {"last"})
+
+
+@pytest.mark.parametrize(
+    ("sample_best", "released"),
+    [
+        (TRIAGE_FLOOR, True),  # at the line is enough, as `<` says
+        (TRIAGE_FLOOR + 0.1, True),
+        (TRIAGE_FLOOR - 0.001, False),
+        (None, True),  # labelled from the whole text, then re-crawled: nothing to hold on
+    ],
+)
+async def test_the_rest_follows_what_the_sample_earned(sess, sample_best, released) -> None:
+    chunks = await page(sess, f"https://{host()}/long", chunks=LONG)
+    await label(sess, chunks, sample_best=sample_best)
+    rest = [c for c in chunks if c.chunk_id not in await sampled_ids(sess, chunks)]
+
+    for chunk in rest:
+        # Exactly one tier either way: a NULL comparison that fell out of every
+        # tier would leave the passage unembedded for good, silently.
+        assert await tier_of(sess, chunk) == ({"then"} if released else {"last"})
+
+
+async def test_an_off_topic_host_keeps_a_released_rest_last(sess) -> None:
+    """Holding adds a reason to wait; it never overrides the host's."""
+    h = host()
+    await judge(sess, h, on_topic_share=0.0)
+    chunks = await page(sess, f"https://{h}/long", chunks=LONG)
+    await label(sess, chunks, sample_best=0.9)
+    assert {t for c in chunks for t in await tier_of(sess, c)} == {"last"}
+
+
+async def test_a_held_rest_is_not_what_backpressure_waits_for(sess) -> None:
+    before = await embedding_backlog(sess, valuable_only=True)
+    chunks = await page(sess, f"https://{host()}/long", chunks=LONG)
+    sample = await sampled_ids(sess, chunks)
+
+    assert await embedding_backlog(sess, valuable_only=True) - before == len(sample)
+    await label(sess, chunks, sample_best=0.9)
+    assert await embedding_backlog(sess, valuable_only=True) - before == LONG
+
+
+async def test_a_later_documents_sample_goes_before_an_earlier_ones_rest(sess) -> None:
+    earlier = await page(sess, f"https://{host()}/a", chunks=LONG)
+    (later,) = await page(sess, f"https://{host()}/b")
+    sample = await sampled_ids(sess, earlier)
+
+    await backfill(sess, earlier[0], batch_size=LONG, max_batches=1).run_once()
+    for chunk in (*earlier, later):
+        await sess.refresh(chunk)
+
+    assert later.embedding is not None
+    assert {c.chunk_id for c in earlier if c.embedding is not None} == sample

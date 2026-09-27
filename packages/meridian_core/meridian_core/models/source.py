@@ -180,6 +180,14 @@ class Source(Base, TimestampMixin):
     #: labelling did rather than recomputing them.
     topic_scores: Mapped[dict | None] = mapped_column(JSONB)
 
+    #: The best topic score when the labels were read from a *sample* of the
+    #: source's passages rather than all of them (`B-89`); NULL when they were
+    #: read from the whole text, or never read. A long document is labelled
+    #: from its sample first, so the embedder learns whether the rest is worth
+    #: its time; this number is that verdict, and a non-NULL value is also the
+    #: labeller's note to itself to read the source again once it is whole.
+    topic_sample_best: Mapped[float | None] = mapped_column()
+
     #: Which places this source's content is about (task P2-23, §7.2).
     #:
     #: Normalised codes, most-evidenced first: ISO 3166-1 alpha-2 for a

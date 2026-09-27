@@ -252,11 +252,52 @@ def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
 #: Embedding tiers, in the order the backfill serves them (`B-66`).
 #: ``first`` — passages of directed sources (a search result, a person's seed, a
 #: cited paper) or of hosts judged on-topic; ``then`` — everything else that is
-#: not junk; ``last`` — hosts judged off-topic. Junk is in no tier.
+#: not junk; ``last`` — hosts judged off-topic, and the rest of a long document
+#: whose sample has not earned it (`B-89`). Junk is in no tier.
 EMBED_TIERS = ("first", "then", "last")
 
 #: The tier served newest first (`B-75`); the others go oldest first.
 NEWEST_FIRST_TIER = "first"
+
+#: A long document is embedded from a sample first (`B-89`): its opening
+#: passages and then every SAMPLE_STRIDE-th, so the sample spans the whole
+#: text rather than its front matter. A source of up to SAMPLE_HEAD passages
+#: is all sample. Chosen on a live corpus by labelling fully embedded sources
+#: from the sample and from everything: at 16/16 the sample's best score was
+#: within about 0.015 of the whole text's at the median, for about a sixth of
+#: the embedding on sources of 40 passages or more.
+SAMPLE_HEAD = 16
+SAMPLE_STRIDE = 16
+
+
+def in_sample(chunk=None):
+    """Whether a passage is in its source's sample. Needs no count of the source's
+    passages, so it costs the tier query nothing but arithmetic on the row."""
+    chunk = Chunk if chunk is None else chunk
+    return or_(chunk.chunk_index < SAMPLE_HEAD, chunk.chunk_index % SAMPLE_STRIDE == 0)
+
+
+def _held():
+    """The rest of a source whose sample has not earned it (`B-89`).
+
+    Past the sample, a passage waits in the last tier until the labeller has
+    read the sample — and stays there if the sample scored under
+    `topiclabels.TRIAGE_FLOOR`. The large documents a crawl brings back are
+    mostly off-topic (bills, data dictionaries, index pages of thousands of
+    passages), and without this each one costs hours of embedding before the
+    labeller may say so. Held is not dropped: the last tier is still served.
+    """
+    from .topiclabels import TRIAGE_FLOOR
+
+    return and_(
+        ~in_sample(),
+        # Spelled out rather than a bare `<`: NULL < x is NULL, and a NULL
+        # here would put the passage in no tier at all — never embedded.
+        or_(
+            Source.topics_examined_at.is_(None),
+            and_(Source.topic_sample_best.is_not(None), Source.topic_sample_best < TRIAGE_FLOOR),
+        ),
+    )
 
 
 def _host_of(url_column):
@@ -290,12 +331,13 @@ def embed_tier(tier: str):
     """The predicate for one embedding tier, over ``Chunk`` joined to ``Source``."""
     not_junk = Source.retention_tier != "junk"
     first = or_(_directed(), _host_standing(off_topic=False))
+    held = _held()
     if tier == "first":
-        return and_(not_junk, first)
+        return and_(not_junk, first, ~held)
     if tier == "then":
-        return and_(not_junk, ~first, ~_host_standing(off_topic=True))
+        return and_(not_junk, ~first, ~_host_standing(off_topic=True), ~held)
     if tier == "last":
-        return and_(not_junk, ~_directed(), _host_standing(off_topic=True))
+        return and_(not_junk, or_(held, and_(~_directed(), _host_standing(off_topic=True))))
     raise ValueError(f"no embedding tier {tier!r}; expected one of {EMBED_TIERS}")
 
 

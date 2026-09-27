@@ -56,6 +56,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import and_, exists, func, or_, select, type_coerce, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .chunks import in_sample
 from .logging import get_logger
 from .models import Chunk, GazetteerTerm, Source, TopicConfig
 from .models.source import EMBEDDING_DIM
@@ -106,6 +107,16 @@ LABEL_MARGIN = 0.04
 #: silver positives under it were search-result pages and bot-wall or error
 #: pages whose *titles* named a topic and whose text did not.
 OFFTOPIC_FLOOR = 0.30
+
+#: Below this, a sample's best score holds back the rest of its document
+#: (`B-89`; `chunks.SAMPLE_HEAD`). Under the floor rather than at it because a
+#: sample misreads the whole text by a few hundredths: on a live corpus, holding
+#: at LABEL_FLOOR would have held back about one on-topic long document in ten,
+#: and at this line about one in fifty — none of those over 300 passages —
+#: while still holding back most of the off-topic ones. Holding orders the
+#: embedding and deletes nothing, so a miss costs a delay, not a document. Not
+#: part of the basis: it decides what is embedded next, never a label.
+TRIAGE_FLOOR = LABEL_FLOOR - 0.04
 
 #: Generic, topic-free phrases whose mean embedding is the reference point.
 #: What every page shares — navigation, boilerplate, the vocabulary of being a
@@ -344,16 +355,26 @@ def _live(chunk=Chunk):
 def awaiting_labels(fingerprint: str):
     """The predicate for "this source needs (re-)labelling".
 
-    Has at least one live embedded chunk, has none still waiting for a vector —
-    labelling half a document would label the half that happened to embed first
-    — and is either unexamined, examined under a different basis, or has live
-    chunks newer than its examination (a re-crawl rewrote it).
+    Has at least one live embedded chunk, has no chunk of its *sample* still
+    waiting for a vector, and is either unexamined, examined under a different
+    basis, or has live chunks newer than its examination (a re-crawl rewrote
+    it). Or: was labelled from its sample and is now embedded whole.
+
+    The sample and not every chunk (`B-89`). Waiting for all of them made a
+    long document's labels, and so whether it was worth embedding, cost the
+    whole document; the sample (`chunks.in_sample`) spans the text rather than
+    being whichever half embedded first, which is what waiting guarded
+    against. A label read from it is provisional — ``topic_sample_best``
+    records it — and is read again from the whole text once that is embedded.
     """
     embedded = exists().where(
         Chunk.source_id == Source.source_id, _live(), Chunk.embedding.is_not(None)
     )
     pending = exists().where(
         Chunk.source_id == Source.source_id, _live(), Chunk.embedding.is_(None)
+    )
+    sample_pending = exists().where(
+        Chunk.source_id == Source.source_id, _live(), Chunk.embedding.is_(None), in_sample()
     )
     rewritten = exists().where(
         Chunk.source_id == Source.source_id,
@@ -362,13 +383,27 @@ def awaiting_labels(fingerprint: str):
     )
     return and_(
         embedded,
-        ~pending,
+        ~sample_pending,
         or_(
             Source.topics_examined_at.is_(None),
             Source.topic_basis.is_distinct_from(fingerprint),
             rewritten,
+            and_(Source.topic_sample_best.is_not(None), ~pending),
         ),
     )
+
+
+async def still_pending(sess: AsyncSession, source_ids: Sequence[int]) -> set[int]:
+    """Which of these sources have live chunks without a vector — whose labels,
+    if read now, are read from their sample (`B-89`)."""
+    if not source_ids:
+        return set()
+    rows = await sess.scalars(
+        select(Chunk.source_id)
+        .where(Chunk.source_id.in_(list(source_ids)), _live(), Chunk.embedding.is_(None))
+        .distinct()
+    )
+    return set(rows)
 
 
 async def sources_awaiting(
@@ -429,12 +464,17 @@ async def record_labels(
     scores: Mapping[str, float],
     fingerprint: str,
     now: dt.datetime,
+    sampled: bool = False,
 ) -> list[str]:
     """Write one source's labels, scores and basis. Returns the labels written.
 
     Replaces, never accumulates — unlike ``crawled_for``. A label is a claim
     about the text as it is now, under the topics as they are now, and the
     previous answer is exactly what a re-examination exists to supersede.
+
+    ``sampled`` says the scores came from part of the text (`B-89`); the best
+    of them is kept as ``topic_sample_best``, which decides whether the rest is
+    embedded and marks the labels for reading again. Whole text clears it.
     """
     labels = decide(scores)
     await sess.execute(
@@ -445,6 +485,7 @@ async def record_labels(
             topic_scores=dict(scores),
             topic_basis=fingerprint,
             topics_examined_at=now,
+            topic_sample_best=best_score(scores) if sampled else None,
         )
     )
     return labels
@@ -463,12 +504,15 @@ async def offtopic_candidates(
     Only under the current basis: a score computed against topics that have
     since changed says nothing about whether the page is off-topic *now*.
     Already-junk sources are left out, so the count is what a demotion would
-    change.
+    change. So are sources labelled from a sample (`B-89`): junk is never
+    embedded, so demoting on part of a text would stop the rest from ever
+    being read — the one outcome holding back was designed not to have.
     """
     rows = await sess.execute(
         select(Source.source_id, Source.topic_scores).where(
             Source.topic_basis == fingerprint,
             Source.topic_scores.is_not(None),
+            Source.topic_sample_best.is_(None),
             Source.retention_tier != "junk",
         )
     )

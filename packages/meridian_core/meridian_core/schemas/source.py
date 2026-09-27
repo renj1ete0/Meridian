@@ -88,6 +88,10 @@ class SourceRead(BaseModel):
     #: Each topic's similarity to the content under that basis: what the labels
     #: were decided from (`P2-21`).
     topic_scores: dict[str, float] | None = None
+    #: Set when the labels were read from a sample of a long document's
+    #: passages rather than all of them: the best score that sample earned
+    #: (`B-89`). NULL means the labels describe the whole text.
+    topic_sample_best: float | None = None
     #: Which places the content is about, most-evidenced first (`P2-23`): ISO
     #: 3166-1 alpha-2 for a country, UN/LOCODE without its space for a city.
     #: NULL means never examined; `[]` examined and about no place it names.

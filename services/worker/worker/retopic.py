@@ -77,6 +77,7 @@ from meridian_core.topiclabels import (
     LABEL_MARGIN,
     OFFTOPIC_FLOOR,
     REFERENCE_TEXTS,
+    TRIAGE_FLOOR,
     Basis,
     basis_fingerprint,
     best_score,
@@ -87,6 +88,7 @@ from meridian_core.topiclabels import (
     record_labels,
     source_vectors,
     sources_awaiting,
+    still_pending,
 )
 
 log = get_logger(__name__)
@@ -182,6 +184,10 @@ class LabelStats:
     lost_crawled_topic: int = 0
     offtopic: list[tuple[int, float]] = dataclasses.field(default_factory=list)
     demoted: int = 0
+    #: Read from a sample of a long document (`B-89`), and how many of those
+    #: samples held the rest of their document back.
+    sampled: int = 0
+    sampled_held: int = 0
     samples: list[Example] = dataclasses.field(default_factory=list)
     offtopic_samples: list[Example] = dataclasses.field(default_factory=list)
     seconds: float = 0.0
@@ -201,6 +207,8 @@ class LabelStats:
             "lost_crawled_topic": self.lost_crawled_topic,
             "offtopic_candidates": len(self.offtopic),
             "demoted": self.demoted,
+            "sampled": self.sampled,
+            "sampled_held": self.sampled_held,
             "seconds": round(self.seconds, 1),
             **(self.passages.as_dict() if self.passages is not None else {}),
         }
@@ -296,6 +304,7 @@ class Labeller:
                 if not ids:
                     break
                 vectors = await source_vectors(sess, ids)
+                partial = await still_pending(sess, ids)
                 rows = {
                     row.source_id: row
                     for row in await sess.scalars(select(Source).where(Source.source_id.in_(ids)))
@@ -308,7 +317,8 @@ class Labeller:
                     labels = decide(scores)
                     before = list(source.topic_labels) if source.topic_labels is not None else None
                     crawled = list(source.crawled_for or ())
-                    self._tally(stats, source, scores, labels, before, crawled, seen)
+                    sampled = source_id in partial
+                    self._tally(stats, source, scores, labels, before, crawled, seen, sampled)
                     seen += 1
                     if apply:
                         await record_labels(
@@ -317,6 +327,7 @@ class Labeller:
                             scores=scores,
                             fingerprint=basis.fingerprint,
                             now=now,
+                            sampled=sampled,
                         )
                 if apply:
                     await sess.commit()
@@ -428,7 +439,7 @@ class Labeller:
             _reservoir(stats.beyond_samples, example, sum(stats.beyond_source.values()), self._rng)
             stats.beyond_source.update(beyond)
 
-    def _tally(self, stats, source, scores, labels, before, crawled, seen) -> None:
+    def _tally(self, stats, source, scores, labels, before, crawled, seen, sampled) -> None:
         stats.examined += 1
         stats.by_count[min(len(labels), 3)] += 1
         stats.per_topic.update(labels)
@@ -453,7 +464,16 @@ class Labeller:
             slot = self._rng.randint(0, seen)
             if slot < EXAMPLES:
                 stats.samples[slot] = example
-        if best is not None and best < self._offtopic_floor and source.retention_tier != "junk":
+        if sampled:
+            stats.sampled += 1
+            stats.sampled_held += best is not None and best < TRIAGE_FLOOR
+        # A sample is never a demotion candidate, as in `offtopic_candidates`.
+        if (
+            best is not None
+            and best < self._offtopic_floor
+            and source.retention_tier != "junk"
+            and not sampled
+        ):
             stats.offtopic.append((source.source_id, best))
             if len(stats.offtopic_samples) < EXAMPLES:
                 stats.offtopic_samples.append(example)
@@ -527,6 +547,10 @@ def render(stats: LabelStats, *, apply: bool, demote_offtopic: bool, offtopic_fl
     print(f"  floor {LABEL_FLOOR}  margin {LABEL_MARGIN}  off-topic floor {offtopic_floor}")
     print(f"  examined         {stats.examined}")
     print(f"  labels changed   {stats.changed}")
+    print(
+        f"  from a sample    {stats.sampled}, the rest held back (best < {TRIAGE_FLOOR:.2f})"
+        f" {stats.sampled_held}"
+    )
     counts = stats.by_count
     print(f"  0 / 1 / 2 / 3+   {counts[0]} / {counts[1]} / {counts[2]} / {counts[3]}")
     for topic, n in sorted(stats.per_topic.items(), key=lambda kv: (-kv[1], kv[0])):

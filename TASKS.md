@@ -1480,6 +1480,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-89` **A long document is embedded from a sample first** — `v0.148.13`. Found
+      2026-09-27: over half the embedding backlog sat in about a hundred very long
+      documents (omnibus legal texts, spreadsheet dumps, index pages), unlabelled because
+      labelling waited for every passage. Now the sample (first 16, then every 16th) is
+      labelled first and the rest waits in the last tier unless the sample scores
+      ≥ 0.41. Measured on fully embedded live sources: sample best within ~0.015 of the
+      whole text's at the median; at 0.41 about 2% of on-topic sources of 40+ passages
+      are held (none of 300+), for about a third less embedding. Sample labels are re-read
+      once the whole text is embedded
 - [x] `B-88` **The duplicate pass marked a page a copy of itself** — `v0.148.12`. A
       translation and a near copy disagreed about direction and made a loop
 - [x] `B-87` **Search seeding every 3 hours** — `v0.148.10`; the live timetable row was set

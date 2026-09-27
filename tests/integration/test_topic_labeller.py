@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 from sqlalchemy import func, select, update
 
-from meridian_core.chunks import ChunkWrite, replace_chunks
+from meridian_core.chunks import SAMPLE_HEAD, SAMPLE_STRIDE, ChunkWrite, in_sample, replace_chunks
 from meridian_core.models import Chunk, Source
 from meridian_core.models.source import EMBEDDING_DIM
 from meridian_core.sources import upsert_source
@@ -31,6 +31,7 @@ from meridian_core.topiclabels import (
     LABEL_FLOOR,
     OFFTOPIC_FLOOR,
     REFERENCE_TEXTS,
+    TRIAGE_FLOOR,
     load_prototypes,
     topic_name,
 )
@@ -333,3 +334,112 @@ async def test_an_offtopic_floor_outside_its_range_is_refused(world, floor) -> N
 def test_the_offtopic_floor_sits_below_the_label_floor() -> None:
     assert 0 < OFFTOPIC_FLOOR < LABEL_FLOOR
 
+
+
+# --------------------------------------------------------------------------
+# A long document labelled from its sample, then from the whole (`B-89`)
+# --------------------------------------------------------------------------
+
+LONG = SAMPLE_HEAD + 4 * SAMPLE_STRIDE + 3
+
+
+async def long_source(sess, sample: list[float], rest: list[float] | None) -> int:
+    """A long source whose sample carries one vector and whose rest another,
+    or none yet."""
+    sid = await a_source(sess, sample, chunks=LONG)
+    await sess.execute(
+        update(Chunk).where(Chunk.source_id == sid, ~in_sample()).values(embedding=rest)
+    )
+    return sid
+
+
+async def test_a_long_document_is_labelled_from_its_sample(world) -> None:
+    sess, topics, emb, labeller = world
+    a = sorted(topics)[0]
+    sid = await long_source(sess, axis(emb.axes[topic_name(a)]), None)
+
+    stats = await labeller().run(apply=True)
+
+    row = await labels_of(sess, sid)
+    assert row.topic_labels == [a]
+    assert row.topic_sample_best == pytest.approx(1.0, abs=1e-3)
+    assert stats.sampled >= 1
+
+
+async def test_a_sample_still_embedding_waits(world) -> None:
+    sess, topics, emb, labeller = world
+    sid = await long_source(sess, axis(emb.axes[topic_name(sorted(topics)[0])]), None)
+    # The sample's last passage, far from its opening.
+    last_in_sample = (LONG - 1) // SAMPLE_STRIDE * SAMPLE_STRIDE
+    await sess.execute(
+        update(Chunk)
+        .where(Chunk.source_id == sid, Chunk.chunk_index == last_in_sample)
+        .values(embedding=None)
+    )
+
+    await labeller().run(apply=True)
+
+    assert (await labels_of(sess, sid)).topics_examined_at is None
+
+
+async def test_a_labelled_sample_is_not_read_again_while_the_rest_waits(world) -> None:
+    sess, topics, emb, labeller = world
+    await long_source(sess, axis(emb.axes[topic_name(sorted(topics)[0])]), None)
+    await labeller().run(apply=True)
+
+    again = await labeller().run(apply=True)
+
+    assert again.examined == 0
+
+
+async def test_the_whole_text_replaces_the_samples_labels(world) -> None:
+    """The sample said one topic; the whole document, read once embedded, says
+    another — and the whole is the answer that stands."""
+    sess, topics, emb, labeller = world
+    a, b = sorted(topics)[:2]
+    sid = await long_source(sess, axis(emb.axes[topic_name(a)]), None)
+    await labeller().run(apply=True)
+    assert (await labels_of(sess, sid)).topic_labels == [a]
+
+    await sess.execute(
+        update(Chunk)
+        .where(Chunk.source_id == sid, ~in_sample())
+        .values(embedding=axis(emb.axes[topic_name(b)]))
+    )
+    stats = await labeller().run(apply=True)
+
+    row = await labels_of(sess, sid)
+    assert row.topic_labels == [b], "the rest outnumbers the sample"
+    assert row.topic_sample_best is None
+    assert stats.sampled == 0
+    assert (await labeller().run(apply=True)).examined == 0
+
+
+async def test_a_short_document_is_never_marked_sampled(world) -> None:
+    sess, topics, emb, labeller = world
+    sid = await a_source(sess, axis(emb.axes[topic_name(sorted(topics)[0])]), chunks=SAMPLE_HEAD)
+
+    await labeller().run(apply=True)
+
+    assert (await labels_of(sess, sid)).topic_sample_best is None
+
+
+async def test_a_sample_is_never_demoted(world) -> None:
+    """Junk is never embedded, so junking on a sample would stop the rest
+    from ever being read."""
+    sess, _, _, labeller = world
+    sid = await long_source(sess, axis(ELSEWHERE), None)
+
+    stats = await labeller().run(apply=True, demote_offtopic=True)
+
+    row = await labels_of(sess, sid)
+    assert row.topic_sample_best is not None and row.topic_sample_best < TRIAGE_FLOOR
+    assert row.retention_tier != "junk"
+    assert sid not in {s for s, _ in stats.offtopic}
+    assert stats.sampled_held >= 1
+
+
+def test_the_triage_line_sits_between_the_two_floors() -> None:
+    """Under the label floor, so a sample's error does not hold back labelled
+    documents; over the off-topic floor, or it would hold back almost nothing."""
+    assert OFFTOPIC_FLOOR < TRIAGE_FLOOR < LABEL_FLOOR

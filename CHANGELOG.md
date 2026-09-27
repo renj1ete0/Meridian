@@ -68,6 +68,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.13] — 2026-09-27
+
+### Changed
+
+- `B-89`: a long document is embedded from a sample first — its opening passages and
+  every sixteenth after — and labelled from that sample. The rest is embedded next
+  only if the sample scored at least `TRIAGE_FLOOR` (the label floor less 0.04);
+  otherwise it waits in the last tier, which backpressure does not count. Labels read
+  from a sample are provisional (`sources.topic_sample_best`) and are read again from
+  the whole text once it is embedded; a sampled source is never an off-topic
+  demotion candidate. Most of the embedding backlog was a few very long, mostly
+  off-topic documents, each costing hours before it could be labelled
+
 ## [0.148.12] — 2026-09-26
 
 ### Fixed
