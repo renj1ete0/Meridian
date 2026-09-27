@@ -51,3 +51,26 @@ describe('readable', () => {
     }
   })
 })
+
+
+describe('a page’s own prompts at the start of a passage (B-98)', () => {
+  it('drops a short leading line that ends in an ellipsis', () => {
+    expect(readable("I'm looking for…\nAutonomous Vehicle Regulations\nSince 2013 the DMV has…")).toBe(
+      'Autonomous Vehicle Regulations\nSince 2013 the DMV has…',
+    )
+  })
+
+  it('drops several such lines, three dots or one character', () => {
+    expect(readable('Search...\nMenu…\nThe study found a rise.')).toBe('The study found a rise.')
+  })
+
+  it('keeps a long first line that happens to trail off', () => {
+    const long = 'Walkable streets were associated with more daily steps in every cohort…\nNext line.'
+    expect(readable(long)).toBe(long)
+  })
+
+  it('keeps an ellipsis anywhere but the start, and a passage that is only a prompt', () => {
+    expect(readable('Intro.\nMore…\nEnd.')).toBe('Intro.\nMore…\nEnd.')
+    expect(readable('Loading…')).toBe('Loading…')
+  })
+})

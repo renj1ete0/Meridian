@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.7] — 2026-09-27
+
+### Fixed
+
+- `B-98`: a passage shown in Find no longer opens with a page's own prompt ("I'm looking
+  for…", "Search…"): short leading lines ending in an ellipsis are dropped from the
+  display. The stored text is unchanged
+
 ## [0.149.6] — 2026-09-27
 
 ### Fixed

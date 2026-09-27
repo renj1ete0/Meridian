@@ -16,6 +16,11 @@ const AUTOLINK = /<(https?:\/\/[^>\s]+)>/g
 const BOLD = /(\*\*|__)(?=\S)([^*_\n]+?)(?<=\S)\1/g
 const HEADING = /^[ \t]{0,3}#{1,6}[ \t]+/gm
 const EMPTY_BRACKETS = /\[\s*\]/g
+// A short line ending in an ellipsis at the very start is a page's own prompt
+// ("I'm looking for…", "Search…"), a widget's label, not what the page says
+// (`B-98`). Only at the start and only short, so a sentence left unfinished
+// mid-passage is kept.
+const LEADING_PROMPTS = /^(?:[^\n]{1,40}(?:…|\.\.\.)[ \t]*\n+)+/
 
 export function readable(text: string): string {
   let out = text.replace(IMAGE, '')
@@ -29,4 +34,5 @@ export function readable(text: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+    .replace(LEADING_PROMPTS, '')
 }

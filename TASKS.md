@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.6`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
+**`v0.149.7`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
 against a real Postgres, 925 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1498,7 +1498,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       top of Gaps is "No <topic> sources about <place>" for pairings nobody asked about
       (every topic × every place in the filter list). Operator: which pairings matter —
       only places a topic's question set names, or rank place gaps below field gaps?
-- [ ] `B-98` **Search snippets that are site navigation** — a result's snippet can be a
+- [x] `B-98` **Search snippets that are site navigation** — `v0.149.7`: the passage was prose; its first line was a widget prompt, now dropped from display. — a result's snippet can be a
       page's menu text ("I'm looking for…"). Prefer the best-matching non-boilerplate
       passage for the snippet
 - [ ] `B-99` ⚑ **Reader-surface jargon on Find** — "hybrid" badge in the search box and
