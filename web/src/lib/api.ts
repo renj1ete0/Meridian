@@ -310,6 +310,8 @@ export interface Source {
   topic_basis: string | null
   /** Each topic's similarity to the content: what the labels were decided from. */
   topic_scores: Record<string, number> | null
+  /** Set when the labels were read from a sample of a long document (`B-89`): that sample's best score. */
+  topic_sample_best: number | null
   /** Which places the content is about, most-evidenced first (`P2-23`). Null: never examined. */
   places: string[] | null
   /** When the place pass last examined it, and under which basis (`P2-23`). */
@@ -360,6 +362,7 @@ export const SOURCE_FIELDS = [
   'topics_examined_at',
   'topic_basis',
   'topic_scores',
+  'topic_sample_best',
   'places',
   'places_examined_at',
   'place_basis',

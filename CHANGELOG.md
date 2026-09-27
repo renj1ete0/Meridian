@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.16] — 2026-09-27
+
+### Fixed
+
+- `B-89`: the web client's `Source` type now carries `topic_sample_best`. The field
+  was added to the API's schema without it, and the drift test comparing the two
+  failed; the web suite had not been run before that commit
+
 ## [0.148.15] — 2026-09-27
 
 ### Fixed

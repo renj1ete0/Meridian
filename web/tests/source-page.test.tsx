@@ -48,6 +48,7 @@ const SOURCE = {
   topics_examined_at: '2026-09-02T00:00:00Z',
   topic_basis: 'v1:test',
   topic_scores: { walkability: 0.6 },
+  topic_sample_best: null,
   places: null,
   places_examined_at: null,
   place_basis: null,
