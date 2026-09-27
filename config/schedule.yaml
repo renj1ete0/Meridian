@@ -135,10 +135,11 @@ jobs:
     # `B-87`: every 3 hours, from 6. A run's results were spent in about two
     # hours once search got a third of claims (`B-86`), leaving the directed
     # slot to fall through to followed links for the rest of the interval.
-    # `B-104`: hourly. Loop run 9 began with 8 search results left and spent
-    # 6% of its fetches on them (run 8: 32%); a run's results last about an
-    # hour. The per-topic backlog cap (24) still stops it outrunning search.
-    interval_seconds: 3600
+    # `B-104` made it hourly; `B-108` put it back to 3 hours the same day. Three
+    # times the queries a day was the likely trigger for every web engine
+    # suspending this client (rate limit, CAPTCHA) — run 10 got 2% of fetches
+    # from search. Queries are now also spaced 15 s apart (`B-107`).
+    interval_seconds: 10800
     enabled: true
 
   - name: translate

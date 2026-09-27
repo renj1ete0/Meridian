@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.8] — 2026-09-27
+
+### Changed
+
+- `B-108`: `seedsearch` back to every 3 hours (`B-104` had made it hourly the same day). Three
+  times the day's queries was the likely trigger for every web engine suspending this client
+
 ## [0.152.7] — 2026-09-27
 
 ### Fixed
