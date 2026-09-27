@@ -27,8 +27,11 @@ against a real Postgres, 934 frontend.
 > ran dry (6% of fetches) → `B-103`, `B-104`. `B-60` and `B-65` were tried and backed out, with
 > the reasons in their entries. Later: `B-60` shipped deferred (`v0.152.3`), `B-105` news
 > queries repeat after 3 days, `P6-42` research fill, `B-106` field searches. Live at
-> `v0.152.6`; timetable has `requeue_links` and `seedsearch` hourly (set by hand). Run 10
-> (16:25–17:25, `loop/run10/`) measures the search supply changes.
+> `v0.152.6`. Run 10 found every web search engine refusing this client (`B-109`, the operator's
+> call: a search API key); `B-107` retries/paces, `B-108` seeding back to 3h, `B-110` daily
+> backlog requeue (79k held), `B-111` `!science` queries (≈34 new results each, unthrottled).
+> Live at `v0.152.10`. Run 11 (18:08–19:08, `loop/run11/`) measures search share with science
+> supply.
 
 > **2026-09-27 afternoon.** Loop run 8 (`loop/run8/`, 1h): search 70% on a topic, followed
 > links 4% and two thirds of fetches → `B-90` (robots-refused search results not queued),
