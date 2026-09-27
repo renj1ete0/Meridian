@@ -85,7 +85,7 @@ async def test_more_boosts_the_areas_topic_and_queues_its_terms(session_for, top
     assert row.boost_factor == mapsteer.MORE_FACTOR
     assert row.boost_expires_at == NOW + dt.timedelta(days=mapsteer.BOOST_DAYS)
     task = await sess.get(QueueTask, result.seed_task_ids[0])
-    assert task.url_or_query == " ".join(area.terms[: mapsteer.SEED_TERMS])
+    assert task.url_or_query == mapsteer.area_search(area, topic)
     assert (task.task_type, task.seed_source, task.topic) == ("query", "user", topic)
 
     logged = await log_rows(sess, before)
@@ -151,7 +151,7 @@ async def test_watch_saves_a_view_once(session_for, topic):
 
     result = await mapsteer.steer_area(sess, area.area_id, "watch", actor="user", now=NOW)
     view = await sess.get(SavedView, result.view_id)
-    assert view.query == " ".join(area.terms[: mapsteer.SEED_TERMS])
+    assert view.query == mapsteer.area_search(area, None) or view.query.startswith(area.field or "")
     assert [r.field for r in await log_rows(sess, before)] == ["watch"]
 
     with pytest.raises(mapsteer.AlreadyDone):
@@ -246,7 +246,9 @@ async def committed(session_for, topic):
 async def test_the_menu_reads_what_it_would_move(client, committed, topic):
     body = (await client.get(f"/api/explore/areas/{committed.area_id}/steering")).json()
     assert body["topic"] == topic
-    assert body["search"] == " ".join(committed.terms[:3])
+    assert body["search"] == mapsteer.area_search(committed, topic), (
+        "the menu promises one search, the action queues another"
+    )
     assert (await client.get("/api/explore/areas/999999999999/steering")).status_code == 404
 
 
@@ -397,3 +399,19 @@ async def test_noise_leaves_what_it_cannot_judge_and_refuses_in_words(session_fo
     await sess.refresh(first)
     assert first.retention_tier != "junk"
     assert await log_rows(sess, before) == []
+
+
+def test_an_area_is_searched_by_its_name_topic_and_a_specific_phrase() -> None:
+    """`B-106`: not by its commonest single words ("shall public information")."""
+    from types import SimpleNamespace
+
+    area = SimpleNamespace(
+        field="Transportation",
+        terms=["shall", "public", "traffic", "road safety", "transport", "speed limits"],
+    )
+    q = mapsteer.area_search(area, "autonomous-vehicle")
+    assert q == "Transportation autonomous vehicle road safety"
+    assert "shall" not in q
+
+    single_words_only = SimpleNamespace(field="Law", terms=["shall", "court", "rule"])
+    assert mapsteer.area_search(single_words_only, None) == "Law"

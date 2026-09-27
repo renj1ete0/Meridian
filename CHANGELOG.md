@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.6] — 2026-09-27
+
+### Fixed
+
+- `B-106`: "Crawl more of this" on the Map searches the field's name, the topic that holds it,
+  and its first two-word term — not its three commonest words, which at the top level were
+  "shall public information". Watching a field saves the same query
+
 ## [0.152.5] — 2026-09-27
 
 ### Added

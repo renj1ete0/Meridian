@@ -41,7 +41,6 @@ BOOST_DAYS = 14
 DOMINANT_SHARE = 0.5
 #: A person's seed: above every link and every generated query (70).
 SEED_PRIORITY = 100
-SEED_TERMS = 3
 MIN_SUGGESTION = 3
 MAX_SUGGESTION = 200
 
@@ -71,6 +70,33 @@ class SteerResult:
     undo: str
     #: For a noise marking, the key that undoes it (`P6-42`).
     noise_mark: str | None = None
+
+
+def area_search(area, topic: str | None) -> str:
+    """What "more of this area" searches for (`B-106`).
+
+    Its name — from the fixed list of fields, so nothing a document carried —
+    then the topic that holds it, then its first two-word term. The area's top
+    single words were the query before, and at the top level those are the
+    corpus's commonest ("shall public information"), which search answers with
+    anything. A two-word term is specific where a single word is not.
+    """
+    from .areaview import usable_terms
+    from .searchseeds import topic_words
+
+    name = area_name(area.terms, area.field)
+    parts = [name]
+    if topic:
+        words = topic_words(topic)
+        if words.lower() not in name.lower():
+            parts.append(words)
+    phrase = next(
+        (t for t in usable_terms(list(area.terms)) if " " in t and t.lower() not in name.lower()),
+        None,
+    )
+    if phrase:
+        parts.append(phrase)
+    return " ".join(parts)
 
 
 async def area_topics(sess: AsyncSession, area) -> list[tuple[str | None, int]]:
@@ -149,7 +175,7 @@ async def steer_area(
             raise AlreadyDone(f"“{view_name}” is already a saved view.")
         view = SavedView(
             name=view_name,
-            query=" ".join(area.terms[:SEED_TERMS]),
+            query=area_search(area, topic),
             filters={},
             note=(
                 "Watching a map area by its distinctive terms: "
@@ -212,7 +238,7 @@ async def steer_area(
 
     seeds: list[int] = []
     if action == "more":
-        query = " ".join(area.terms[:SEED_TERMS])
+        query = area_search(area, topic)
         if not query:
             raise Refused("This area has no distinctive terms to search for.")
         try:
@@ -234,7 +260,7 @@ async def steer_area(
     elif action == "more":
         parts.append("No configured topic holds most of this area, so no weight was boosted.")
     if seeds:
-        parts.append(f"“{' '.join(area.terms[:SEED_TERMS])}” queued as a search.")
+        parts.append(f"“{area_search(area, topic)}” queued as a search.")
     return SteerResult(
         action,
         area_id,
@@ -290,15 +316,16 @@ async def area_steering(sess: AsyncSession, area_id: int) -> AreaSteeringRead:
     build = await latest_build(sess)
     area, _ = await _area_in(sess, build, area_id)
     topics = await area_topics(sess, area)
+    topic = dominant(topics, await configured_topics(sess))
     return AreaSteeringRead(
         area_id=area_id,
-        topic=dominant(topics, await configured_topics(sess)),
+        topic=topic,
         dominant_share=DOMINANT_SHARE,
         topics=[AreaTopicShare(topic=t, passages=n) for t, n in topics],
         more_factor=MORE_FACTOR,
         less_factor=LESS_FACTOR,
         boost_days=BOOST_DAYS,
-        search=" ".join(area.terms[:SEED_TERMS]),
+        search=area_search(area, topic),
         noise_sources=len(await noise_candidates(sess, area)),
     )
 

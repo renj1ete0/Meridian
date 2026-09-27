@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.6`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1519,6 +1519,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-106` **"Crawl more of this" searched a field's commonest words** — `v0.152.6`. At the
+      top level those were "shall public information"; now the field's name, the topic that
+      holds it, and its first two-word term
 - [x] `B-105` **News queries may be asked again** — `v0.152.4`. A news query added 29 new
       URLs on average against 11 for other shapes, but the no-repeat rule allowed each once
       ever. Now askable again 3 days after it was last asked
