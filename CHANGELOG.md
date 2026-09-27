@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.1] — 2026-09-27
+
+### Fixed
+
+- `B-95`: a search is written to the URL (`?q=`, `topic=`, `topic_match=`). Find read
+  a linked search but never wrote one, so a search could not be shared or bookmarked
+  and Back left the page. A new question is a new history entry; the same one
+  re-filtered replaces it; Back and Forward run the search the URL names
+
 ## [0.149.0] — 2026-09-27
 
 ### Changed

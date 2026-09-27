@@ -34,7 +34,7 @@ import {
   type SearchResponse,
   type TopicMatch,
 } from '../lib/api'
-import { findParams } from '../lib/topicweb'
+import { findHref, findParams } from '../lib/topicweb'
 
 /**
  * Explore — the landing and the search results (tasks P2-08, P6-27; spec
@@ -239,9 +239,27 @@ export function ExplorePage() {
   }, [])
 
   const run = useCallback(
-    (text: string, within: readonly string[] = [], where: readonly string[] = [], match: TopicMatch = 'any') => {
+    (
+      text: string,
+      within: readonly string[] = [],
+      where: readonly string[] = [],
+      match: TopicMatch = 'any',
+      history: 'push' | 'keep' = 'push',
+    ) => {
     const trimmed = text.trim()
     if (!trimmed) return
+
+    // The search in the URL (`B-95`), so it can be shared and Back returns to
+    // it. A new question is a new entry; the same one re-filtered replaces it,
+    // or every topic toggled would be a step of Back.
+    if (history === 'push') {
+      const href = findHref(trimmed, within, match)
+      const current = `${window.location.pathname}${window.location.search}`
+      if (href !== current) {
+        const same = findParams(window.location.search).q === trimmed
+        window.history[same ? 'replaceState' : 'pushState']({}, '', href)
+      }
+    }
 
     inFlight.current?.abort()
     const controller = new AbortController()
@@ -287,10 +305,33 @@ export function ExplorePage() {
       return
     }
     setQuery(linked.q)
-    run(linked.q, linked.topics, [], linked.match)
+    run(linked.q, linked.topics, [], linked.match, 'keep')
+  }, [run])
+
+  // Back and Forward between searches run the search the URL now names.
+  useEffect(() => {
+    const onPop = () => {
+      if (window.location.pathname !== '/') return
+      const linked = findParams(window.location.search)
+      setTopics(linked.topics)
+      setTopicMatch(linked.match)
+      if (linked.q) {
+        setQuery(linked.q)
+        run(linked.q, linked.topics, [], linked.match, 'keep')
+      } else {
+        inFlight.current?.abort()
+        setQuery('')
+        setAsked('')
+        setResults(null)
+        setPhase('idle')
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
   }, [run])
 
   function clear() {
+    if (window.location.search) window.history.pushState({}, '', '/')
     inFlight.current?.abort()
     setQuery('')
     setAsked('')

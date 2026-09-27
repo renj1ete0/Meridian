@@ -120,6 +120,21 @@ export function searchHref(selection: readonly string[], query = ''): string {
   return suffix ? `/?${suffix}` : '/'
 }
 
+/**
+ * Find's URL for a search as run (`B-95`): the words, the topics, and whether
+ * a source must carry all of them. The inverse of {@link findParams}, so a
+ * search can be shared, bookmarked, and come back on Back.
+ */
+export function findHref(query: string, topics: readonly string[], match: TopicMatch): string {
+  const params = new URLSearchParams()
+  const q = query.trim()
+  if (q) params.set('q', q)
+  for (const topic of topics) params.append('topic', topic)
+  if (topics.length > 0 && match === 'all') params.set('topic_match', 'all')
+  const suffix = params.toString()
+  return suffix ? `/?${suffix}` : '/'
+}
+
 /** What Find reads back out of its URL: `q`, repeated `topic`, `topic_match`. */
 export function findParams(search: string): { q: string; topics: string[]; match: TopicMatch } {
   const params = new URLSearchParams(search)
