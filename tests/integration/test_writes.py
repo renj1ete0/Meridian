@@ -165,6 +165,83 @@ async def test_the_same_claim_twice_is_corroboration_not_a_second_edge(world) ->
     assert edge.supporting_chunk_ids == sorted(chunks), "the citations accumulate"
 
 
+async def test_the_database_refuses_a_second_row_for_one_claim(world) -> None:
+    """`B-60`: rejection at the database, not only in `add_edge` — at commit, since
+    the check is deferred for merges; forced here with SET CONSTRAINTS."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    sess, run, left, right, _attr, chunks, _m = world
+    await add_edge(
+        sess,
+        run,
+        from_node=left.entity_id,
+        to_node=right.entity_id,
+        relation_type="supersedes",
+        supporting_chunk_ids=[chunks[0]],
+        now=NOW,
+        **BY,
+    )
+    with pytest.raises(IntegrityError, match="uq_edges_claim"):
+        async with sess.begin_nested():
+            sess.add(
+                Edge(
+                    from_node=left.entity_id,
+                    to_node=right.entity_id,
+                    relation_type="supersedes",
+                    supporting_chunk_ids=[chunks[1]],
+                    produced_at=NOW,
+                    **BY,
+                )
+            )
+            await sess.flush()
+            await sess.execute(text("SET CONSTRAINTS uq_edges_claim IMMEDIATE"))
+
+
+async def test_a_writer_that_loses_the_race_corroborates_instead_of_failing(
+    world, monkeypatch
+) -> None:
+    """Two writers both find no row; the second insert is refused and must turn
+    into corroboration, with the session still usable."""
+    sess, run, left, right, _attr, chunks, _m = world
+    first = await add_edge(
+        sess,
+        run,
+        from_node=left.entity_id,
+        to_node=right.entity_id,
+        relation_type="supersedes",
+        supporting_chunk_ids=[chunks[0]],
+        now=NOW,
+        **BY,
+    )
+    real = sess.scalar
+    missed: list[str] = []
+
+    async def lookup_misses_once(statement, *args, **kwargs):
+        if not missed and "FROM edges" in str(statement):
+            missed.append(str(statement))
+            return None  # as if the other writer had not committed yet
+        return await real(statement, *args, **kwargs)
+
+    monkeypatch.setattr(sess, "scalar", lookup_misses_once)
+    second = await add_edge(
+        sess,
+        run,
+        from_node=left.entity_id,
+        to_node=right.entity_id,
+        relation_type="supersedes",
+        supporting_chunk_ids=[chunks[1]],
+        now=NOW,
+        **BY,
+    )
+
+    assert missed, "the test never simulated the race"
+    assert second.row_id == first.row_id and second.created is False
+    edge = await sess.get(Edge, first.row_id)
+    await sess.refresh(edge)
+    assert edge.supporting_chunk_ids == sorted(chunks)
+
+
 async def test_only_a_new_edge_counts_towards_the_run(world) -> None:
     # §11.9 compares volume per run. Counting corroboration as a new edge would
     # make a run that learned nothing look productive.

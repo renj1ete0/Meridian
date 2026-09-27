@@ -202,6 +202,20 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
         # Traversal in both directions, for recursive-CTE neighbourhood queries.
         Index("ix_edges_from", "from_node", "relation_type"),
         Index("ix_edges_to", "to_node", "relation_type"),
+        # One row per claim (`B-60`): same subject, relation and object is the
+        # same claim, which `add_edge` corroborates. Here too, because two
+        # writers that each find no row both insert, and only the database sees
+        # both. Deferred to commit: a merge moves edges first and folds the
+        # duplicates that makes before it commits (`_fold_edges`), and a check
+        # per statement would refuse the move itself.
+        UniqueConstraint(
+            "from_node",
+            "relation_type",
+            "to_node",
+            name="uq_edges_claim",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
         CheckConstraint(
             "valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from",
             name="valid_period_ordered",

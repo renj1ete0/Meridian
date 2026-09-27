@@ -44,7 +44,8 @@ import datetime as dt
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
@@ -114,6 +115,7 @@ async def add_edge(
     valid_from: dt.date | None = None,
     valid_to: dt.date | None = None,
     now: dt.datetime,
+    _retry: bool = False,
 ) -> WriteResult:
     """Assert one relation, with the chunks that justify it (§11.6, §11.8).
 
@@ -194,8 +196,46 @@ async def add_edge(
         quality_tier=quality_tier,
         produced_at=now,
     )
-    sess.add(edge)
-    await sess.flush()
+    try:
+        # The claim constraint is deferred to commit for merges' sake (`B-60`);
+        # here it is checked at the insert, inside a savepoint, so a writer that
+        # loses the race finds out now and the caller's transaction survives.
+        async with sess.begin_nested():
+            await sess.execute(text("SET CONSTRAINTS uq_edges_claim IMMEDIATE"))
+            sess.add(edge)
+            await sess.flush()
+    except IntegrityError as exc:
+        if "uq_edges_claim" not in str(exc.orig) or _retry:
+            raise
+        lost = True
+    else:
+        lost = False
+    finally:
+        await sess.execute(text("SET CONSTRAINTS uq_edges_claim DEFERRED"))
+    if lost:
+        # Another writer inserted this claim between our read and our insert.
+        # Theirs stands; ours corroborates it, as if we had come second.
+        return await add_edge(
+            sess,
+            run,
+            from_node=from_node,
+            to_node=to_node,
+            relation_type=relation_type,
+            supporting_chunk_ids=supporting_chunk_ids,
+            confidence=confidence,
+            stance=stance,
+            certainty=certainty,
+            topic_labels=topic_labels,
+            similarity_dimension=similarity_dimension,
+            disanalogy=disanalogy,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            produced_by=produced_by,
+            model=model,
+            quality_tier=quality_tier,
+            now=now,
+            _retry=True,
+        )
     await record(sess, run, edges=1)
     return WriteResult(edge.edge_id, True, "edge created")
 

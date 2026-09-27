@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.3] — 2026-09-27
+
+### Fixed
+
+- `B-60`: the database refuses a second row for one claim — unique on (from_node,
+  relation_type, to_node), deferred to commit because a merge moves edges and then folds the
+  duplicates it made. `add_edge` checks it at its own insert and, on losing a race with
+  another writer, corroborates the other's row instead of failing
+
 ## [0.152.2] — 2026-09-27
 
 ### Changed

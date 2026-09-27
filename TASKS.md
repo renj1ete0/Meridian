@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1427,16 +1427,18 @@ deploy runbook whose first two commands could not work (`B-17`).
       (2026-09-24): the system proposes what to steer, and if the operator does not
       object within a window (default 12h, in the global policy row) it is applied,
       bounded, expiring and logged. Being built by a delegated agent
-- [ ] `B-60` **No database guard against a duplicate edge** — `add_edge` combines a
+- [x] `B-60` **No database guard against a duplicate edge** — `v0.152.3`: unique on the claim, *deferred to commit* (see below) — `add_edge` combines a
       repeated claim, but two concurrent calls could still insert two rows: there is
       no unique index on (from, relation, to). Add it after `worker.edgedupes --apply`
       has folded the live graph's existing duplicate (found by the `B-41` agent)
-      **Tried 2026-09-27, backed out:** a unique constraint on (from_node, relation_type,
+      **First try 2026-09-27, backed out:** an immediate unique constraint on (from_node, relation_type,
       to_node) broke 24 tests — a merge repoints the merged entity's edges one UPDATE at a
       time, and the moment two rows hold the same claim (before folding) the constraint
       refuses it; reversing a merge re-creates rows the same way. The merge must fold
       duplicates *before* repointing, and the reversal restore in an order that never
-      duplicates, before the constraint can go on. The live graph has no duplicates today
+      duplicates, before the constraint can go on. The live graph has no duplicates today.
+      **Shipped deferred instead:** checked at commit, after the merge has folded; `add_edge`
+      makes it immediate around its own insert to catch a lost race
 - [x] `P6-39` **The Map's route mode** — `v0.152.0`. "Route from here…" on a field, then a
       click on another: the shortest chain of the lines on screen, fewest similar-only hops
       among equals, drawn over the map with both ends ringed, and a panel of hops (cited or

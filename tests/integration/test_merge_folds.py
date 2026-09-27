@@ -609,3 +609,23 @@ async def test_the_command_reports_unless_told_to_apply(sess, trio) -> None:
     await run_pass(apply=True, session_factory=factory)
     sess.expire_all()
     assert await sess.get(Edge, moved.edge_id) is None
+
+
+async def test_a_colliding_merge_and_its_reversal_satisfy_the_claim_constraint(sess, trio) -> None:
+    """`B-60`: the constraint is deferred to commit because a merge moves first and
+    folds second. Checked here at each step, as a commit would check it: after the
+    merge, and after its reversal, there is never a second row for one claim."""
+    from sqlalchemy import text
+
+    from meridian_core.resolution import reverse
+
+    source, target, other = trio
+    await an_edge(sess, target.entity_id, other.entity_id, chunks=[1, 2])
+    await an_edge(sess, source.entity_id, other.entity_id, chunks=[2, 3])
+
+    entry = await merge(sess, source.entity_id, target.entity_id, decided_by="auto")
+    await sess.execute(text("SET CONSTRAINTS uq_edges_claim IMMEDIATE"))
+    await sess.execute(text("SET CONSTRAINTS uq_edges_claim DEFERRED"))
+
+    await reverse(sess, entry.merge_id, reversed_by="auto")
+    await sess.execute(text("SET CONSTRAINTS uq_edges_claim IMMEDIATE"))
