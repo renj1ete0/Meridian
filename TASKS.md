@@ -16,10 +16,17 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.148.12`. Phases 0–3 are built; phase 1's checkpoint is not.** 3136 backend tests
+**`v0.148.13`. Phases 0–3 are built; phase 1's checkpoint is not.** 4450 backend tests
 against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
+
+> **2026-09-27 morning.** `B-89` shipped and deployed (`v0.148.13`): long documents are
+> embedded from a sample first and the rest held unless the sample scores ≥ 0.41. The first
+> labeller pass held 102 of 179 sampled long documents; the backlog is ~131k, of which ~93k is
+> held (not counted by backpressure). Notes in `meridian-calibration/loop/b89/notes.md`. Next:
+> once the valuable backlog is under ~20k, loop run 8 (1h) to see whether the crawl, no longer
+> paused behind held passages, keeps its on-topic yield; then the runs 6–7 re-measure.
 
 > **2026-09-26.** Both in-flight branches merged (`P6-41` answer page, ticked after screenshots;
 > Map semantic zoom). The operator asked for a UX and information audit, then improvement and a

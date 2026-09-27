@@ -13,6 +13,21 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-27 — `B-89`, long documents embedded from a sample (`v0.148.13`, deployed).**
+> After the overnight shutdown the backlog was ~153k, and over half of it sat in ~115 very long
+> documents, nearly all reached by followed links and mostly off-topic, never labelled because
+> labelling waited for every passage. Now a source's sample (first 16 passages, then every
+> 16th; `chunks.in_sample`) is labelled first, and the rest waits in the `last` tier unless the
+> sample scores ≥ `TRIAGE_FLOOR` (0.41). Sample labels are provisional
+> (`sources.topic_sample_best` not NULL) and re-read once the whole text is embedded. Measured
+> before building (script pattern in `meridian-calibration/loop/b89/`): sample-vs-whole on/off
+> agreement 89–93%, so samples triage and never finalise. Traps:
+> - **A bare `x < NULL` in a tier predicate drops the passage from every tier**, silently and
+>   forever. The hold predicate spells out `IS NOT NULL`; a test guards it.
+> - **The worker's rootfs is read-only**: `docker cp` into it fails. Pipe a script in with
+>   `docker compose exec -T worker python - < script.py`.
+> - `worker.retopic`'s report now prints "from a sample N, the rest held back M".
+
 > **Start here — end of 2026-09-26 (+08, ~22:50).** `main` = `v0.148.12`, built and deployed;
 > every container up, every timetable job `ok`, worker ceiling back at 20000. Overnight the
 > crawl sits mostly paused behind the embedding backlog (~176k chunks, falling at roughly
