@@ -1426,6 +1426,8 @@ export interface SavedViewRecord {
   note: string | null
   last_opened_at: string | null
   created_at: string
+  /** Sources new since last opened that match it (`P6-43`), capped; null when not counted. */
+  new_since: number | null
 }
 
 export const SAVED_VIEW_FIELDS = [
@@ -1437,6 +1439,7 @@ export const SAVED_VIEW_FIELDS = [
   'note',
   'last_opened_at',
   'created_at',
+  'new_since',
 ] as const
 
 /** Mirrors `SavedViewsRead`. */

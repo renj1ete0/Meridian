@@ -537,6 +537,7 @@ export function ExplorePage() {
             id: String(view.view_id),
             name: view.name,
             at: view.last_opened_at ?? view.created_at,
+            fresh: view.new_since,
           }))}
           recentNodes={[]}
           onOpenView={(id) => {

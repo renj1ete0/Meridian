@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.151.0] — 2026-09-27
+
+### Added
+
+- `P6-43`: watched questions. Each saved view on the landing says how many sources that
+  answer it arrived since it was last opened — matched by its words the way search's
+  lexical arm matches them, and by its topic filter; junk and duplicates left out; capped
+  at 200. `SavedViewRead.new_since`, computed in the read-only list call
+
 ## [0.150.0] — 2026-09-27
 
 ### Added

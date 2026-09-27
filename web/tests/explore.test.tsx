@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest'
 import { CorpusCounts, UNKNOWN, type CorpusFigures } from '../src/explore/CorpusCounts'
 import { ENTRY_POINTS, EntryPoints } from '../src/explore/EntryPoints'
 import { FILTER_NOTE, MODE_MARKER, SearchField } from '../src/explore/SearchField'
-import { WhereYouWere } from '../src/explore/WhereYouWere'
+import { FRESH_CAP, WhereYouWere, freshText } from '../src/explore/WhereYouWere'
 import { DAGGER } from '../src/ui/Contested'
 
 const REPO = join(fileURLToPath(new URL('..', import.meta.url)), '..')
@@ -317,5 +317,34 @@ describe('the copy holds the voice guide', () => {
     // §4 lists them beside the banned words, and they are the fastest way for
     // this system's register to slip: warmth here comes from precision.
     for (const copy of rendered) expect(copy).not.toContain('!')
+  })
+})
+
+
+describe('watched questions (P6-43)', () => {
+  function row(fresh: number | null | undefined) {
+    return text(
+      renderToStaticMarkup(
+        <WhereYouWere savedViews={[{ id: '1', name: 'shade and heat', at: null, fresh }]} recentNodes={[]} />,
+      ),
+    )
+  }
+
+  it('says how much is new for a view, and when there is nothing', () => {
+    expect(row(7)).toContain('7 new')
+    expect(row(0)).toContain('Nothing new')
+    expect(row(0)).not.toContain('0 new')
+  })
+
+  it('claims nothing about a view that was not counted', () => {
+    for (const fresh of [null, undefined]) {
+      expect(row(fresh)).not.toContain('new')
+      expect(row(fresh)).toContain('Saved view')
+    }
+  })
+
+  it('reads a capped count as "more than", as the API caps it', () => {
+    expect(freshText(FRESH_CAP)).toBe(`${FRESH_CAP} new`)
+    expect(freshText(FRESH_CAP + 1)).toBe(`${FRESH_CAP}+ new`)
   })
 })

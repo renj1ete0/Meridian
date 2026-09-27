@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.150.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.151.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1441,8 +1441,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       Map (`v0.148.0`, `v0.148.1`), the dead "Route from here…" item removed; "This is noise"
       on a field (`v0.150.0`): its sources read whole and about none of the topics go to junk,
       undoable by mark. Left: shading by source quality and freshness as well as topic share
-- [ ] `P6-43` **Watched questions** — UX priority 3. A saved view becomes a question to watch:
-      "new evidence since you asked", replacing generic notifications on the landing page
+- [x] `P6-43` **Watched questions** — `v0.151.0`. UX priority 3. Each saved view on the
+      landing shows how many sources that answer it arrived since it was last opened
+      ("7 new", "Nothing new"), counted by its words (as search's lexical arm matches them)
+      and its topic filter, junk and duplicates left out, capped at 200. The bell's generic
+      notifications stay; they are about the system, these are about your questions
 - [~] `P6-44` **Plain language in reader views** — UX priority 4. Done 2026-09-26: the
       landing's counts and cards, Coverage opening Gaps, Find's summary line, concept pages
       offering only built views (`v0.148.2`–`v0.148.5`); the concept page's own labels and the

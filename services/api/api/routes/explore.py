@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
 
-from meridian_core import annotations
+from meridian_core import annotations, watch
 from meridian_core.answer import DEFAULT_ANSWER_CANDIDATES, DEFAULT_TOP, MAX_TOP
 from meridian_core.areaview import AreaNotFound, area_detail, areas_level, jump
 from meridian_core.bridgeview import bridge
@@ -753,7 +753,13 @@ async def list_views(sess: ReadSession) -> SavedViewsRead:
             SavedView.last_opened_at.desc().nullslast(), SavedView.created_at.desc()
         )
     )
-    return SavedViewsRead(views=[SavedViewRead.model_validate(row) for row in rows])
+    views = []
+    for row in rows:
+        view = SavedViewRead.model_validate(row)
+        # A question to watch (`P6-43`): what is new for it since it was last opened.
+        view.new_since = await watch.new_for_view(sess, row)
+        views.append(view)
+    return SavedViewsRead(views=views)
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,10 @@ class SavedViewRead(BaseModel):
     note: str | None
     last_opened_at: dt.datetime | None
     created_at: dt.datetime
+    #: Sources new since the view was last opened that match it (`P6-43`), up to
+    #: `watch.COUNT_CAP` + 1; None where nothing was counted — the view asks no
+    #: words or topic, or the response is one that does not count.
+    new_since: int | None = None
 
 
 class SavedViewCreate(BaseModel):

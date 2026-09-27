@@ -26,6 +26,15 @@ export interface SavedView {
   name: string
   /** When it was last opened, or created. Omitted, no time is shown. */
   at?: string | null
+  /** New sources that answer it since then (`P6-43`); null or omitted: not counted. */
+  fresh?: number | null
+}
+
+/** Past this a watched count reads "200+", as the API caps it (`watch.COUNT_CAP`). */
+export const FRESH_CAP = 200
+
+export function freshText(n: number): string {
+  return n > FRESH_CAP ? `${FRESH_CAP}+ new` : `${n} new`
 }
 
 export interface RecentNode {
@@ -83,7 +92,15 @@ export function WhereYouWere({
                 <span className="grow text-[13.5px] text-text/85 group-hover:text-accent-graph">
                   {view.name}
                 </span>
-                <span className={KIND}>Saved view</span>
+                {view.fresh ? (
+                  <span
+                    className="shrink-0 font-mono text-[10.5px] tabular-nums text-accent-graph"
+                    title="Sources that answer this view, new since you last opened it"
+                  >
+                    {freshText(view.fresh)}
+                  </span>
+                ) : null}
+                <span className={KIND}>{view.fresh === 0 ? 'Nothing new' : 'Saved view'}</span>
                 <span className={WHEN}>{view.at ? ago(view.at, now) : ''}</span>
               </button>
             </li>
