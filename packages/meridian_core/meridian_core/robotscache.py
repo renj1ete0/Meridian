@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+from collections.abc import Collection
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -75,6 +76,30 @@ async def load(sess: AsyncSession, origin: str, *, now: dt.datetime) -> CachedRo
     return entry if entry.is_fresh(now=now) else None
 
 
+async def load_many(
+    sess: AsyncSession, origins: Collection[str], *, now: dt.datetime
+) -> dict[str, CachedRobots]:
+    """The fresh entries for these origins, in one query (`B-90`).
+
+    For the prefilter, which asks about a page's worth of links at once. Fresh
+    only, as `load`; an origin with no fresh entry is simply absent. Errors are
+    a miss here too, but raised to the caller's savepoint rather than swallowed,
+    because a failed statement inside the caller's transaction must be rolled
+    back there before that transaction can be used again.
+    """
+    if not origins:
+        return {}
+    rows = await sess.scalars(
+        select(RobotsCacheEntry).where(
+            RobotsCacheEntry.origin.in_(list(origins)), RobotsCacheEntry.expires_at > now
+        )
+    )
+    return {
+        row.origin: CachedRobots(row.origin, row.outcome, row.body, row.fetched_at, row.expires_at)
+        for row in rows
+    }
+
+
 async def save(sess: AsyncSession, entry: CachedRobots) -> bool:
     """Write one entry, replacing whatever was there. Commits.
 
@@ -98,9 +123,7 @@ async def save(sess: AsyncSession, entry: CachedRobots) -> bool:
         # A fetch that will simply happen again. Rolled back so the session is
         # usable for whatever the caller does next.
         await sess.rollback()
-        log.warning(
-            "robots cache not written", extra={"origin": entry.origin, "detail": str(exc)}
-        )
+        log.warning("robots cache not written", extra={"origin": entry.origin, "detail": str(exc)})
         return False
 
 
@@ -113,9 +136,7 @@ async def purge_expired(sess: AsyncSession, *, now: dt.datetime) -> int:
     exists for the other reason to want it, which is starting a crawl from a
     clean slate without dropping the table.
     """
-    result = await sess.execute(
-        delete(RobotsCacheEntry).where(RobotsCacheEntry.expires_at <= now)
-    )
+    result = await sess.execute(delete(RobotsCacheEntry).where(RobotsCacheEntry.expires_at <= now))
     await sess.commit()
     return result.rowcount or 0
 

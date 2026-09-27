@@ -19,6 +19,11 @@ Four gates, cheapest first, and the order is the design:
    government page and lead nowhere a research corpus wants to go.
 4. **Already seen.** One query for the whole batch against `queue` and one
    against `sources`.
+5. **Refused by robots.txt** (`B-90`), when the crawl already holds a fresh
+   copy of the file. Nothing is fetched here: an origin never visited is
+   waved through and asked at fetch time as before. What this stops is a
+   search engine returning the same refusing site's pages every day, each of
+   which took a claim only to be refused.
 
 The database queries come last because they are the expensive ones, and by the
 time a batch of 500 links reaches them it is usually a batch of 40.
@@ -34,6 +39,7 @@ being wrong is a page that silently never enters the corpus.
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import re
 from collections.abc import Iterable, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -41,10 +47,15 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core import robotscache
 from meridian_core.logging import get_logger
 from meridian_core.models import FetchPolicy, Source
+from meridian_core.policy import resolve_policy
 from meridian_core.queueing import already_queued
 from meridian_core.tiering import registrable_domain
+
+from .robots import parse as parse_robots
+from .robots import robots_url
 
 log = get_logger(__name__)
 
@@ -422,7 +433,49 @@ class Prefilter:
             else:
                 kept.append(url)
 
+        # Last, and only over what survived: it parses files, and most of a
+        # page's links are gone by now.
+        refused = await self._robots_refused(sess, kept)
+        if refused:
+            kept = [url for url in kept if url not in refused]
+            dropped["robots_denied"] = len(refused)
+
         return Verdict(kept=tuple(kept), dois=tuple(identifiers), dropped=dropped)
+
+    async def _robots_refused(self, sess: AsyncSession, urls: Sequence[str]) -> set[str]:
+        """The URLs a fresh cached robots.txt refuses, under their domain's policy.
+
+        The crawler's own reading, not a second one: the same parser, the same
+        per-domain user agent, and a domain whose policy does not respect
+        robots.txt is never refused here. Only a file that was read counts —
+        ``missing`` permits everything, and ``unreachable`` is not the site's
+        answer, only the absence of one, which the fetch retries.
+
+        A cache is an optimisation (`robotscache`): any error here keeps every
+        URL, inside a savepoint so the caller's transaction survives it.
+        """
+        by_origin: dict[str, list[str]] = {}
+        for url in urls:
+            by_origin.setdefault(robots_url(url), []).append(url)
+        if not by_origin:
+            return set()
+
+        refused: set[str] = set()
+        try:
+            async with sess.begin_nested():
+                cached = await robotscache.load_many(sess, by_origin, now=dt.datetime.now(dt.UTC))
+                for origin, entry in cached.items():
+                    if entry.outcome != robotscache.OK:
+                        continue
+                    policy = await resolve_policy(sess, registrable_domain(origin))
+                    if not policy.respect_robots:
+                        continue
+                    rules = parse_robots(entry.body or "", policy.user_agent)
+                    refused.update(url for url in by_origin[origin] if not rules.allows(url))
+        except Exception:
+            log.warning("robots cache unreadable; nothing refused", exc_info=True)
+            return set()
+        return refused
 
     async def _inactive_domains(self, sess: AsyncSession, urls: Iterable[str]) -> set[str]:
         """Domains whose `fetch_policy` row says blocked or paused.

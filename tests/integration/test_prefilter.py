@@ -12,12 +12,16 @@ fixed number of round-trips, not 400 of them.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
+from meridian_core import robotscache
 from meridian_core.models import FetchPolicy, QueueTask, Source
+from meridian_core.models.robots import RobotsCacheEntry
+from meridian_core.policy import resolve_policy
 from meridian_core.queueing import claim_next, enqueue
 from meridian_core.tiering import priority_for_domain
 from worker.prefilter import Prefilter
@@ -42,6 +46,7 @@ async def cleanup(session_for, domain, topic):
     await sess.execute(delete(QueueTask).where(QueueTask.topic == topic))
     await sess.execute(delete(Source).where(Source.url.like(f"https://%{domain}%")))
     await sess.execute(delete(FetchPolicy).where(FetchPolicy.domain.like(f"%{domain}")))
+    await sess.execute(delete(RobotsCacheEntry).where(RobotsCacheEntry.origin.like(f"%{domain}%")))
     await sess.commit()
 
 
@@ -329,3 +334,140 @@ async def test_enqueue_does_no_filtering_of_its_own(session_for, domain, topic, 
 
     rows = await sess.execute(select(QueueTask).where(QueueTask.url_or_query == url))
     assert len(list(rows.scalars())) == 2
+
+
+# --------------------------------------------------------------------------
+# Refused by a robots.txt the crawl already holds (`B-90`)
+# --------------------------------------------------------------------------
+
+
+async def cache_robots(
+    sess,
+    domain: str,
+    body: str | None,
+    *,
+    outcome: str = robotscache.OK,
+    expires_in: dt.timedelta = dt.timedelta(hours=1),
+) -> None:
+    now = dt.datetime.now(dt.UTC)
+    sess.add(
+        RobotsCacheEntry(
+            origin=f"https://{domain}/robots.txt",
+            outcome=outcome,
+            body=body,
+            fetched_at=now,
+            expires_at=now + expires_in,
+        )
+    )
+    await sess.flush()
+
+
+async def our_agent(sess, domain: str) -> str:
+    """The token the crawler reads robots.txt as, from policy — not a copy of it."""
+    return (await resolve_policy(sess, domain)).user_agent.split("/")[0]
+
+
+async def test_a_path_the_cached_file_refuses_is_not_queued(
+    session_for, domain, topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await cache_robots(sess, domain, "User-agent: *\nDisallow: /private/\n")
+
+    verdict = await Prefilter().keep(
+        sess, [f"https://{domain}/private/a", f"https://{domain}/public/b"]
+    )
+
+    assert verdict.kept == (f"https://{domain}/public/b",)
+    assert verdict.dropped["robots_denied"] == 1
+
+
+async def test_the_crawlers_own_user_agent_is_the_one_read(
+    session_for, domain, topic, cleanup
+) -> None:
+    """A group for some other crawler does not refuse this one, and one for
+    this crawler does, whatever the wildcard group says."""
+    sess = await session_for("rw")
+    agent = await our_agent(sess, domain)
+    await cache_robots(
+        sess,
+        domain,
+        f"User-agent: SomeoneElse\nDisallow: /a\n\nUser-agent: {agent}\nDisallow: /b\n",
+    )
+
+    verdict = await Prefilter().keep(sess, [f"https://{domain}/a", f"https://{domain}/b"])
+
+    assert verdict.kept == (f"https://{domain}/a",)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "body", "expires_in"),
+    [
+        # Expired: the site may have changed its mind; the fetch will ask.
+        (robotscache.OK, "User-agent: *\nDisallow: /\n", dt.timedelta(seconds=-1)),
+        # No file permits everything.
+        (robotscache.MISSING, None, dt.timedelta(hours=1)),
+        # Unreadable is no answer at all, and the fetch retries it; refusing
+        # the URL for good here would turn an outage into a verdict.
+        (robotscache.UNREACHABLE, None, dt.timedelta(hours=1)),
+    ],
+)
+async def test_only_a_fresh_file_that_was_read_refuses(
+    session_for, domain, topic, cleanup, outcome, body, expires_in
+) -> None:
+    sess = await session_for("rw")
+    await cache_robots(sess, domain, body, outcome=outcome, expires_in=expires_in)
+
+    verdict = await Prefilter().keep(sess, [f"https://{domain}/x"])
+
+    assert verdict.kept == (f"https://{domain}/x",)
+    assert "robots_denied" not in verdict.dropped
+
+
+async def test_a_domain_that_does_not_respect_robots_is_not_refused(
+    session_for, domain, topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await cache_robots(sess, domain, "User-agent: *\nDisallow: /\n")
+    sess.add(FetchPolicy(domain=domain, settings={"respect_robots": False}))
+    await sess.flush()
+
+    verdict = await Prefilter().keep(sess, [f"https://{domain}/x"])
+
+    assert verdict.kept == (f"https://{domain}/x",)
+
+
+async def test_an_origin_never_visited_is_not_fetched_or_refused(
+    session_for, domain, topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    verdict = await Prefilter().keep(sess, [f"https://{domain}/x"])
+    assert verdict.kept == (f"https://{domain}/x",)
+
+
+async def test_another_origin_of_the_same_site_has_its_own_file(
+    session_for, domain, topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await cache_robots(sess, domain, "User-agent: *\nDisallow: /\n")
+
+    verdict = await Prefilter().keep(sess, [f"https://data.{domain}/x"])
+
+    assert verdict.kept == (f"https://data.{domain}/x",)
+
+
+async def test_a_broken_cache_keeps_everything_and_the_transaction(
+    session_for, domain, topic, cleanup, monkeypatch
+) -> None:
+    """An optimisation must not stop the crawl, nor poison the caller's
+    transaction the queue rows are about to be written in."""
+    sess = await session_for("rw")
+
+    async def broken(sess, origins, *, now):
+        await sess.execute(text("select 1/0"))
+
+    monkeypatch.setattr(robotscache, "load_many", broken)
+
+    verdict = await Prefilter().keep(sess, [f"https://{domain}/x"])
+
+    assert verdict.kept == (f"https://{domain}/x",)
+    assert await sess.scalar(text("select 1")) == 1

@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.148.13`. Phases 0–3 are built; phase 1's checkpoint is not.** 4450 backend tests
+**`v0.148.14`. Phases 0–3 are built; phase 1's checkpoint is not.** 4459 backend tests
 against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1487,6 +1487,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-90` **Search results a cached robots.txt refuses are not queued** — `v0.148.14`.
+      Found in loop run 8: a third of the window's search claims went to one site whose
+      robots.txt refuses everything, returned again by every search pass. The prefilter
+      now reads the crawl's fresh cached file (followed links too); a savepoint keeps a
+      cache error from poisoning the caller's transaction
 - [x] `B-89` **A long document is embedded from a sample first** — `v0.148.13`. Found
       2026-09-27: over half the embedding backlog sat in about a hundred very long
       documents (omnibus legal texts, spreadsheet dumps, index pages), unlabelled because

@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.14] — 2026-09-27
+
+### Fixed
+
+- `B-90`: the prefilter drops a URL that a fresh cached robots.txt already refuses,
+  read with the crawler's own parser and the domain's user agent, and never for a
+  domain whose policy does not respect robots.txt. Search kept returning pages of
+  one site that refuses all crawling, and each took a directed claim only to be
+  refused. Nothing is fetched to decide; an origin never visited is asked at fetch
+  time as before
+
 ## [0.148.13] — 2026-09-27
 
 ### Changed
