@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.4] — 2026-09-27
+
+### Fixed
+
+- `B-101`: on a phone the Map's size key is one short row; the full key covered about a
+  fifth of a 390px canvas
+
 ## [0.149.3] — 2026-09-27
 
 ### Fixed

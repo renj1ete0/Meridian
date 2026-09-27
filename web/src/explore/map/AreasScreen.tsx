@@ -446,7 +446,7 @@ export function AreasView({
           ) : null}
         </div>
 
-        <SizeKey areas={rows} scale={scale} />
+        <SizeKey areas={rows} scale={scale} compact={frame.width < COMPACT_KEY_BELOW} />
         <p className="pointer-events-none absolute bottom-4 left-5 right-5 hidden truncate font-mono text-[11px] text-text-faint sm:block">
           size = passages ·{' '}
           solid = cited claim · dashed = similar passages
@@ -594,7 +594,10 @@ function Canvas({
   )
 
   // Where the size key sits, bottom left: circles and labels keep out of it.
-  const keyBox = useMemo<Rect>(() => ({ x: 0, y: drawHeight - KEY_BOX.h, w: KEY_BOX.w, h: KEY_BOX.h }), [drawHeight])
+  const keyBox = useMemo<Rect>(() => {
+    const k = width < COMPACT_KEY_BELOW ? KEY_BOX_COMPACT : KEY_BOX
+    return { x: 0, y: drawHeight - k.h, w: k.w, h: k.h }
+  }, [drawHeight, width])
 
   // Every loaded level laid out once per size: the root's by its stored
   // positions, each finer one composed into the level above it.
@@ -1015,11 +1018,13 @@ const AreaCircle = memo(function AreaCircle({
  * size an area of that many passages is drawn at, so the two can be compared
  * by eye. Values that would not fit the key are left out rather than shrunk.
  */
-function SizeKey({ areas, scale }: { areas: readonly Area[]; scale: number }) {
+function SizeKey({ areas, scale, compact = false }: { areas: readonly Area[]; scale: number; compact?: boolean }) {
+  // On a phone, one short row (`B-101`): the full key covered a fifth of a
+  // 390px canvas, the part the map most needs.
   const values = keyValuesAtScale(
     areas.map((a) => a.passages),
     scale,
-    KEY_RADIUS,
+    compact ? KEY_RADIUS_COMPACT : KEY_RADIUS,
   )
   if (values.length === 0 || scale <= 0) return null
   const radii = values.map((v) => Math.max(1.5, radiusOf(v, scale)))
@@ -1031,6 +1036,26 @@ function SizeKey({ areas, scale }: { areas: readonly Area[]; scale: number }) {
     cursor += Math.max(r, 16) * 2 + 12
     return { value, r, x }
   })
+  if (compact) {
+    return (
+      <div
+        aria-label="Size key"
+        className="absolute bottom-3 left-3 flex items-center gap-2 border border-line bg-surface/90 px-2 py-1"
+      >
+        <svg width={cursor} height={height} aria-hidden>
+          {placed.map(({ value, r, x }) => (
+            <g key={value}>
+              <circle cx={x} cy={height - 2 - r} r={r} fill="var(--accent-graph-deep)" fillOpacity={0.35} stroke="var(--accent-graph)" />
+              <text x={x} y={10} textAnchor="middle" fontFamily="var(--font-mono)" fontSize={9.5} fill="var(--text-muted)">
+                {value.toLocaleString('en')}
+              </text>
+            </g>
+          ))}
+        </svg>
+        <span className="font-mono text-[9.5px] text-text-faint">passages</span>
+      </div>
+    )
+  }
   return (
     <div
       aria-label="Size key"
@@ -1061,10 +1086,14 @@ function SizeKey({ areas, scale }: { areas: readonly Area[]; scale: number }) {
   )
 }
 
-/** The largest circle the key will draw. */
+/** The largest circle the key will draw, and on a phone. */
 const KEY_RADIUS = 34
+const KEY_RADIUS_COMPACT = 11
+/** Below this canvas width the key is one short row. */
+export const COMPACT_KEY_BELOW = 640
 /** The room the key takes over the canvas, which circles keep out of. */
 const KEY_BOX = { w: 230, h: 150 }
+const KEY_BOX_COMPACT = { w: 170, h: 44 }
 
 function AreaTip({ area }: { area: Area }) {
   return (

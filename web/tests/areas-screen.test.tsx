@@ -390,3 +390,21 @@ describe('the map as a map (B-93)', () => {
     expect(onLevel).toHaveBeenCalledWith(1)
   })
 })
+
+
+describe('the size key on a phone (B-101)', () => {
+  it('is one short row below the compact width, and the full key above it', () => {
+    const wide = render(<AreasView level={level()} onLevel={vi.fn()} />)
+    expect(within(wide.container).getByLabelText('Size key').textContent).toContain('to scale')
+    cleanup()
+
+    const box = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 390, height: 700, top: 0, left: 0, right: 390, bottom: 700, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect)
+    const narrow = render(<AreasView level={level()} onLevel={vi.fn()} />)
+    const key = within(narrow.container).getByLabelText('Size key')
+    expect(key.textContent).not.toContain('to scale')
+    expect(key.textContent).toContain('passages')
+    box.mockRestore()
+  })
+})
