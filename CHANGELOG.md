@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.8] — 2026-09-27
+
+### Fixed
+
+- `B-102`: a Map area told apart by its own phrase drops the second field from its
+  name: "Transportation (robotaxis)", not "Transportation & Automotive Engineering
+  (robotaxis)", unless the short form would be shared. The live build, named before
+  the level-wide de-duplication existed, is renamed (`worker.areas --name-only`)
+
 ## [0.149.7] — 2026-09-27
 
 ### Fixed

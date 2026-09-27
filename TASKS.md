@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.7`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
-against a real Postgres, 925 frontend.
+**`v0.149.8`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
@@ -1508,7 +1508,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       graph truncates most node names; show full names on hover or wrap two lines
 - [x] `B-101` **Map on a phone** — `v0.149.4`, screenshot-checked at 390px. — the size key covers a fifth of the canvas at 390px;
       collapse it to a one-line key below 640px
-- [ ] `B-102` **Themes repeat their field's name** — many themes are named from the fixed
+- [x] `B-102` **Themes repeat their field's name** — `v0.149.8`. The live build predated the level-wide de-duplication (400 themes, 252 names); renamed, and names that carry a phrase drop the second field. Field-of-work naming (the operator's choice, `B-71`/`B-74`) kept. — many themes are named from the fixed
       field list (`B-71`) and read the same as their siblings ("Transportation & Automotive
       Engineering" several times); name the finest level by its distinctive terms instead
 - [x] `B-94` **A question offers the nodes its words name** — `v0.149.3`. UX review

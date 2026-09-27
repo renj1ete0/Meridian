@@ -100,7 +100,32 @@ def distinct_per_level(
             if phrase:
                 used.add(phrase)
                 out[i] = f"{name} ({phrase})"
-    return out
+    return _shortened(levels, out)
+
+
+def _shortened(levels: list[int], names: list[str | None]) -> list[str | None]:
+    """Drop the second field from a name that also carries its own phrase (`B-102`).
+
+    "Transportation & Automotive Engineering (robotaxis)" is told apart by the
+    phrase already; the second field only made it long, and on the Map most of
+    a theme's name was cut off. Shortened only where the short form stays
+    unique within its level, so no two areas end up sharing a name again.
+    """
+    short: list[str | None] = []
+    for name in names:
+        if name and " & " in name and name.endswith(")") and " (" in name:
+            head, phrase = name.rsplit(" (", 1)
+            short.append(f"{head.split(' & ', 1)[0]} ({phrase}")
+        else:
+            short.append(name)
+    taken: dict[tuple[int, str], int] = {}
+    for level, name in zip(levels, short, strict=True):
+        if name:
+            taken[(level, name)] = taken.get((level, name), 0) + 1
+    return [
+        s if s is None or taken[(level, s)] == 1 else original
+        for level, s, original in zip(levels, short, names, strict=True)
+    ]
 
 
 async def _embedder():
