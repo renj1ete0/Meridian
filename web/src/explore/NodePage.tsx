@@ -207,7 +207,7 @@ export function NodePage({ entityId }: { entityId: number }) {
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return
-        setDetailError(cause instanceof ApiError ? cause.message : 'That node could not be loaded.')
+        setDetailError(cause instanceof ApiError ? cause.message : 'That concept could not be loaded.')
       })
     return () => controller.abort()
   }, [entityId, written])
@@ -334,7 +334,7 @@ export function NodePage({ entityId }: { entityId: number }) {
         {missing ? (
           <Centre>
             <p className="text-[13px] text-accent-attention">{hoodError}</p>
-            <p className="mt-2 text-[12.5px] text-text-muted">Find another node from the rail.</p>
+            <p className="mt-2 text-[12.5px] text-text-muted">Find another concept from the rail.</p>
           </Centre>
         ) : hoodError ? (
           <Centre>
@@ -411,7 +411,7 @@ export function NodePage({ entityId }: { entityId: number }) {
         <div className="absolute bottom-4 left-[18px] right-[250px] font-mono text-[10.5px] text-text-faint">
           {path.phase === 'picking' ? (
             <div className="pointer-events-auto flex max-w-[360px] flex-col gap-2">
-              <span>Path from {focusName}: click a node, or find one.</span>
+              <span>Path from {focusName}: click a concept, or find one.</span>
               <NodeSearchBox onPick={pathTo} placeholder="Path to…" autoFocus exclude={[entityId]} dropUp />
             </div>
           ) : path.phase === 'loading' ? (
@@ -557,7 +557,7 @@ export function hoverLines(target: HoverTarget): { title: string; kind: string; 
     n.role === 'hint'
       ? 'click to focus'
       : [
-          `${n.degree} edge${n.degree === 1 ? '' : 's'}`,
+          `${n.degree} link${n.degree === 1 ? '' : 's'}`,
           `${n.sources} source${n.sources === 1 ? '' : 's'}`,
           n.newest ? `newest ${n.newest.slice(0, 7)}` : 'undated',
         ].join(' · ')

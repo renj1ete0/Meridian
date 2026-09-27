@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.9`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.149.10`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1445,9 +1445,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       "new evidence since you asked", replacing generic notifications on the landing page
 - [~] `P6-44` **Plain language in reader views** — UX priority 4. Done 2026-09-26: the
       landing's counts and cards, Coverage opening Gaps, Find's summary line, concept pages
-      offering only built views (`v0.148.2`–`v0.148.5`). Left: the concept page's own labels
-      (node type, "supporting chunks", "asserted"), the topic filter's slugs, and separating
-      reader from operator navigation. Reader screens say sources,
+      offering only built views (`v0.148.2`–`v0.148.5`); the concept page's own labels and the
+      Map's topic names (`v0.149.10`). Left, the operator's call: separating reader from
+      operator navigation — the mocks put Admin in the top bar beside Explore, Map and Gaps. Reader screens say sources,
       government, peer-reviewed, fields; nodes, edges, passages, tiers and basis stay in Admin.
       Reader and operator navigation separated
 - [ ] `P0-18` ⚑ **Task-based check with the operator's own questions** — for five of Q31–Q41,

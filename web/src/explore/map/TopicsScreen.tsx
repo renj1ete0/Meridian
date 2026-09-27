@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { ApiError, getTopicOverlaps, type TopicOverlaps } from '../../lib/api'
 import { navigate } from '../../lib/route'
+import { topicLabel } from './HoverCard'
 import {
   carrying,
   combinationsContaining,
@@ -215,7 +216,7 @@ export function Web({
             const on = chosen.has(link.a) && chosen.has(link.b)
             const w = linkWidth(link.shared, largest)
             const ends = rimToRim(a, b)
-            const label = `${link.a} and ${link.b}: ${fmt(link.shared)} ${link.shared === 1 ? 'source carries' : 'sources carry'} both`
+            const label = `${topicLabel(link.a)} and ${topicLabel(link.b)}: ${fmt(link.shared)} ${link.shared === 1 ? 'source carries' : 'sources carry'} both`
             return (
               <g
                 key={linkKey(link)}
@@ -254,7 +255,7 @@ export function Web({
         <g data-role="topics">
           {placed.map((p) => {
             const on = chosen.has(p.topic)
-            const label = `${p.topic}: ${fmt(p.sources)} ${p.sources === 1 ? 'source' : 'sources'}`
+            const label = `${topicLabel(p.topic)}: ${fmt(p.sources)} ${p.sources === 1 ? 'source' : 'sources'}`
             return (
               <g
                 key={p.topic}
@@ -286,7 +287,7 @@ export function Web({
                   className={`font-sans text-[12.5px] ${on ? 'fill-text' : 'fill-text-muted'}`}
                   style={{ paintOrder: 'stroke', stroke: 'var(--ground)', strokeWidth: 3.5 }}
                 >
-                  {p.topic}
+                  {topicLabel(p.topic)}
                 </text>
                 <text
                   x={p.label.x}
@@ -357,10 +358,10 @@ function Readout({
               <button
                 type="button"
                 onClick={() => onRemove(topic)}
-                aria-label={`Remove ${topic}`}
+                aria-label={`Remove ${topicLabel(topic)}`}
                 className="rounded-[var(--radius-chip)] border border-accent-graph/70 bg-accent-graph/10 px-2 py-[3px] font-mono text-[10.5px] leading-[1.4] text-accent-graph hover:bg-accent-graph/20"
               >
-                {topic} <span aria-hidden="true">×</span>
+                {topicLabel(topic)} <span aria-hidden="true">×</span>
               </button>
             </li>
           ))}
@@ -466,7 +467,7 @@ function Breakdown({
                     {combo.topics.map((topic, i) => (
                       <span key={topic}>
                         {i > 0 ? <span className="text-text-faint"> + </span> : null}
-                        <span className={chosen.has(topic) ? 'text-text' : 'text-text-muted'}>{topic}</span>
+                        <span className={chosen.has(topic) ? 'text-text' : 'text-text-muted'}>{topicLabel(topic)}</span>
                       </span>
                     ))}
                     {exact && selection.length > 0 ? (

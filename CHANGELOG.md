@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.10] — 2026-09-27
+
+### Changed
+
+- `P6-44`: plain words on the concept page and the Map's topic view. "Supporting chunks"
+  is "Passages that mention it", "Attributes · confidence" is "Properties", an annotation
+  is a note, edges are links, and a node is a concept; topic slugs on the Topics view read
+  as words ("on demand bus")
+
 ## [0.149.9] — 2026-09-27
 
 ### Changed

@@ -202,7 +202,7 @@ describe('path mode (P6-03)', () => {
     render(<NodePage entityId={1} />)
     await screen.findByText(/3 of 3 neighbours/)
     fireEvent.click(screen.getByText('Path from…'))
-    expect(screen.getByText(/Path from Focus: click a node/)).toBeTruthy()
+    expect(screen.getByText(/Path from Focus: click a concept/)).toBeTruthy()
     fireEvent.click(screen.getByText('canvas N3'))
     expect(await screen.findByText('path · 2 hops · Focus › Middle › Far')).toBeTruthy()
     expect(calls).toContain('/api/explore/graph/path?source=1&target=3')

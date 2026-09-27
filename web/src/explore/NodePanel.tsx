@@ -201,7 +201,7 @@ function ContestedBlock({ pair, here }: { pair: ContestedPair; here: number }) {
         // node's evidence first, because the reader arrived from here.
         <div className="grid grid-cols-2 gap-3 border-t border-accent-attention-deep pt-3">
           {[
-            { side: pair.ours, hit: ours, label: 'This node' },
+            { side: pair.ours, hit: ours, label: 'This concept' },
             { side: pair.theirs, hit: theirs, label: other.name },
           ].map(({ side, hit, label }) => (
             <div key={side.edge_id} className="flex min-w-0 flex-col gap-1.5">
@@ -218,7 +218,7 @@ function ContestedBlock({ pair, here }: { pair: ContestedPair; here: number }) {
                   <SourceLine hit={hit} />
                 </>
               ) : (
-                <span className="text-[12px] text-text-faint">No passage resolves for this edge.</span>
+                <span className="text-[12px] text-text-faint">No passage backs this link.</span>
               )}
             </div>
           ))}
@@ -311,10 +311,11 @@ export function NodePanel({
         </header>
 
         <section className="flex flex-col gap-3 border-b border-line px-5 py-4">
-          <h2 className={LBL}>Attributes · confidence</h2>
+          <h2 className={LBL}>Properties</h2>
           {detail.attributes.length === 0 ? (
             <p className="text-[12.5px] text-text-faint">
-              None tagged. Attributes come from the slow loop, so a node can exist with none.
+              None recorded yet. Properties are read from sources over time, so a concept can
+              have none.
             </p>
           ) : (
             <ul className="flex flex-wrap gap-1.5">
@@ -327,13 +328,13 @@ export function NodePanel({
 
         <section className="flex flex-col gap-3 border-b border-line px-5 py-4">
           <div className="flex items-baseline justify-between">
-            <h2 className={LBL}>Supporting chunks</h2>
+            <h2 className={LBL}>Passages that mention it</h2>
             <span className="font-mono text-[10px] text-text-faint">{detail.evidence_total}</span>
           </div>
           {detail.evidence.length === 0 ? (
             <p className="text-[12.5px] text-text-faint">
-              No passage cites this node yet. Its edges and attributes carry the evidence, and it
-              has none of either.
+              No passage cites this concept yet, and it has no links or properties to carry
+              evidence either.
             </p>
           ) : (
             <>
@@ -376,7 +377,7 @@ export function NodePanel({
 
         <section className="flex flex-col gap-2.5 px-5 py-3.5">
           <div className="flex items-baseline justify-between">
-            <h2 className={LBL}>My annotation</h2>
+            <h2 className={LBL}>My note</h2>
             {latest?.produced_at ? (
               <span className="font-mono text-[10px] text-text-faint">{latest.produced_at.slice(0, 10)}</span>
             ) : null}
@@ -388,13 +389,13 @@ export function NodePanel({
               {detail.annotations.length > 1 ? (
                 <p className="mt-2 font-mono text-[10px] text-text-faint">
                   {detail.annotations.length - 1} earlier note
-                  {detail.annotations.length === 2 ? '' : 's'} on this node.
+                  {detail.annotations.length === 2 ? '' : 's'} on this concept.
                 </p>
               ) : null}
             </div>
           ) : !composing ? (
             <p className="text-[12.5px] text-text-faint">
-              No note on this node. Yours is the one layer here nothing else can write.
+              No note on this concept. Yours is the one layer here nothing else can write.
             </p>
           ) : null}
           {composing ? (

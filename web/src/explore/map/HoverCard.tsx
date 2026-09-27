@@ -3,8 +3,9 @@ import { swatchVar, topicLine, type Swatch } from '../../lib/corpusmap'
 
 export const CARD_WIDTH = 280
 
+/** A topic as a reader reads it: `on-demand-bus` → `on demand bus` (`P6-44`). */
 export function topicLabel(topic: string | null): string {
-  return topic ?? 'Unlabelled'
+  return topic === null ? 'Unlabelled' : topic.replaceAll('-', ' ').replaceAll('_', ' ')
 }
 
 /** A topic's colour as a small square chip — square, as §5 asks of everything. */

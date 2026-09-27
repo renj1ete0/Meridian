@@ -104,8 +104,8 @@ describe('the panel', () => {
 
   it('states an empty attribute list and an empty evidence list', () => {
     render(<NodePanel detail={detail({ attributes: [], evidence: [], evidence_total: 0 })} />)
-    expect(screen.getByText(/None tagged/)).toBeTruthy()
-    expect(screen.getByText(/No passage cites this node yet/)).toBeTruthy()
+    expect(screen.getByText(/None recorded yet/)).toBeTruthy()
+    expect(screen.getByText(/No passage cites this concept yet/)).toBeTruthy()
   })
 
   it('opens with a few passages and reaches the rest', () => {
@@ -146,12 +146,12 @@ describe('the panel', () => {
     // Both passages, this node's first.
     const quotes = screen.getAllByText(/Schemes may reduce severity|No measurable change in walking trips/)
     expect(quotes.map((q) => q.textContent!.includes('Schemes'))).toContain(true)
-    expect(screen.getByText('This node')).toBeTruthy()
+    expect(screen.getByText('This concept')).toBeTruthy()
   })
 
   it('shows the latest note, and states the absence of one', () => {
     render(<NodePanel detail={detail()} />)
-    expect(screen.getByText(/No note on this node/)).toBeTruthy()
+    expect(screen.getByText(/No note on this concept/)).toBeTruthy()
     cleanup()
     const note = (title: string, at: string) => ({
       entity_id: 90,
@@ -171,7 +171,7 @@ describe('the panel', () => {
     )
     expect(screen.getByText('Latest')).toBeTruthy()
     expect(screen.getByText('2026-08-31')).toBeTruthy()
-    expect(screen.getByText('1 earlier note on this node.')).toBeTruthy()
+    expect(screen.getByText('1 earlier note on this concept.')).toBeTruthy()
     expect(screen.queryByText('Older')).toBeNull()
   })
 
