@@ -13,6 +13,20 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-27 evening — `v0.152.2` deployed.** Route mode, "this is noise", watched
+> questions, plain wording, label floor 0.50 (relabelled the corpus in 6 min; `topics` does it
+> anyway when the basis changes). Traps:
+> - **The search queue runs dry quietly.** Run 9's directed share fell from 32% to 6% with no
+>   error anywhere: 8 results pending. Check `url/search/pending` in `snapshot.sh`'s start file
+>   before trusting a run's search share. Topics with no approved vocabulary exhaust their
+>   queries (`B-103` gives them description facets).
+> - **A unique constraint on edges breaks merges** (`B-60` entry): merge repoints edge by edge.
+> - **Links queued now are fetched days later** — ~211k older frontier links sit ahead of them,
+>   so a 1h run cannot measure anything about links queued in the same hour.
+> - **`.venv` accumulated ~100 stale `meridian_*.dist-info` folders** with no RECORD, which
+>   printed a page of uv warnings per command; removed them.
+> - The timetable row for a new job must be inserted by hand on the live stack.
+
 > **2026-09-27 afternoon — run 8, the Map as a map, UX review (`v0.149.3`, deployed).**
 > Run 8 split yield by how a page was found: search 70% on a topic, followed links 4%. The
 > queue never recorded a followed link's parent (`B-91` now does) — run 9 should measure

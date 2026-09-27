@@ -21,6 +21,13 @@ against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-09-27 evening.** Built on the operator's "build all" and "keep refining": `B-83` (floor
+> 0.50, operator-approved), `B-97`–`B-104`, `P6-39` (route mode), `P6-42` (this is noise),
+> `P6-43` (watched questions), `P6-44` (wording). Loop run 9 (`loop/run9/comparison.md`): search
+> ran dry (6% of fetches) → `B-103`, `B-104`. `B-60` and `B-65` were tried and backed out, with
+> the reasons in their entries. Live at `v0.152.2`; timetable has `requeue_links` hourly and
+> `seedsearch` hourly (set by hand). Next: run 10 once seeding has refilled the search queue.
+
 > **2026-09-27 afternoon.** Loop run 8 (`loop/run8/`, 1h): search 70% on a topic, followed
 > links 4% and two thirds of fetches → `B-90` (robots-refused search results not queued),
 > `B-91` (parent page recorded; measure in run 9, then `B-92`). Operator reported the Map
@@ -1424,6 +1431,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       repeated claim, but two concurrent calls could still insert two rows: there is
       no unique index on (from, relation, to). Add it after `worker.edgedupes --apply`
       has folded the live graph's existing duplicate (found by the `B-41` agent)
+      **Tried 2026-09-27, backed out:** a unique constraint on (from_node, relation_type,
+      to_node) broke 24 tests — a merge repoints the merged entity's edges one UPDATE at a
+      time, and the moment two rows hold the same claim (before folding) the constraint
+      refuses it; reversing a merge re-creates rows the same way. The merge must fold
+      duplicates *before* repointing, and the reversal restore in an order that never
+      duplicates, before the constraint can go on. The live graph has no duplicates today
 - [x] `P6-39` **The Map's route mode** — `v0.152.0`. "Route from here…" on a field, then a
       click on another: the shortest chain of the lines on screen, fewest similar-only hops
       among equals, drawn over the map with both ends ringed, and a panel of hops (cited or
