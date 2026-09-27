@@ -19,6 +19,7 @@ import {
   depthForZoom,
   fitLabels,
   linksAt,
+  routeBetween,
   onScreen,
   panBy,
   viewed,
@@ -175,5 +176,42 @@ describe('names inside a circle', () => {
     expect(label!.lines[0]).toMatch(/^Transport\S*…?$/)
     expect(label!.lines.join(' ')).toContain('…')
     expect(label!.box.w).toBeLessThanOrEqual(p.r * 2)
+  })
+})
+
+
+describe('a route between fields (P6-39)', () => {
+  const L = (a: number, b: number, cited = 0, sources = cited) => ({ ...link(a, b, cited), cited_sources: sources })
+
+  it('takes the fewest hops, then the fewest by resemblance only', () => {
+    const links = [L(1, 2), L(2, 4), L(1, 3, 1), L(3, 4, 2), L(1, 5), L(5, 6), L(6, 4, 3)]
+    const route = routeBetween(links, 1, 4)!
+    expect(route.map((h) => [h.area_a, h.area_b])).toEqual([
+      [1, 3],
+      [3, 4],
+    ])
+  })
+
+  it('never prefers a longer route of claims to a shorter one of resemblance', () => {
+    const links = [L(1, 4), L(1, 2, 5), L(2, 3, 5), L(3, 4, 5)]
+    expect(routeBetween(links, 1, 4)!.length).toBe(1)
+  })
+
+  it('among equal routes, the one with more sources behind its claims', () => {
+    const links = [L(1, 2, 1, 1), L(2, 4, 1, 1), L(1, 3, 1, 9), L(3, 4, 1, 9)]
+    expect(routeBetween(links, 1, 4)!.map((h) => h.area_b)).toEqual([3, 4])
+  })
+
+  it('orients each hop along the way, whichever way the link was stored', () => {
+    const route = routeBetween([L(2, 1, 1), L(3, 2, 1)], 1, 3)!
+    expect(route.map((h) => [h.area_a, h.area_b])).toEqual([
+      [1, 2],
+      [2, 3],
+    ])
+  })
+
+  it('says null when nothing joins them, and nothing to walk from a place to itself', () => {
+    expect(routeBetween([L(1, 2), L(3, 4)], 1, 4)).toBeNull()
+    expect(routeBetween([], 7, 7)).toEqual([])
   })
 })

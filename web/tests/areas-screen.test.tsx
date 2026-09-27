@@ -408,3 +408,38 @@ describe('the size key on a phone (B-101)', () => {
     box.mockRestore()
   })
 })
+
+
+describe('route mode (P6-39)', () => {
+  it('routes from a right-clicked field to the next one clicked, and says when none joins them', () => {
+    const joined = level({ links: [cited] })
+    const { container, unmount } = render(<AreasView level={joined} onLevel={vi.fn()} />)
+    fireEvent.contextMenu(container.querySelector('[data-area="1"]')!)
+    fireEvent.click(screen.getByText('Route from here…'))
+    expect(screen.getByText(/Route from .*click another/)).toBeTruthy()
+    expect(container.querySelector('[data-route-end="1"]')).toBeTruthy()
+
+    fireEvent.click(container.querySelector('[data-area="2"]')!)
+    const panel = screen.getByRole('complementary', { name: 'Route' })
+    expect(panel.textContent).toContain('every hop cited')
+    expect(container.querySelector('[data-route-end="2"]')).toBeTruthy()
+    unmount()
+
+    const apart = render(<AreasView level={level({ links: [] })} onLevel={vi.fn()} />)
+    fireEvent.contextMenu(apart.container.querySelector('[data-area="1"]')!)
+    fireEvent.click(screen.getByText('Route from here…'))
+    fireEvent.click(apart.container.querySelector('[data-area="2"]')!)
+    expect(screen.getByRole('complementary', { name: 'Route' }).textContent).toContain('No chain of lines')
+  })
+
+  it('picking the start does not open it, and Escape cancels', () => {
+    const onLevel = vi.fn()
+    const { container } = render(<AreasView level={level({ links: [cited] })} onLevel={onLevel} />)
+    fireEvent.contextMenu(container.querySelector('[data-area="1"]')!)
+    fireEvent.click(screen.getByText('Route from here…'))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByText(/Route from .*click another/)).toBeNull()
+    fireEvent.click(container.querySelector('[data-area="2"]')!)
+    expect(onLevel).toHaveBeenCalledWith(2)
+  })
+})

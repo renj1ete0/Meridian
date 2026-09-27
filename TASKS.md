@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.151.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1424,11 +1424,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       repeated claim, but two concurrent calls could still insert two rows: there is
       no unique index on (from, relation, to). Add it after `worker.edgedupes --apply`
       has folded the live graph's existing duplicate (found by the `B-41` agent)
-- [ ] `P6-39` **The Map's route mode** — "Route from here…" still ships disabled. Routes
-      (`P6-32`) run between nodes and terms; the Map works in areas. Needs an
-      area-hop source for `route()` (its `HopSource` protocol takes one), the
-      two-click pick on the canvas, the route drawn with cited and similar hops
-      distinguished, and screenshots against the Route board on the design canvas
+- [x] `P6-39` **The Map's route mode** — `v0.152.0`. "Route from here…" on a field, then a
+      click on another: the shortest chain of the lines on screen, fewest similar-only hops
+      among equals, drawn over the map with both ends ringed, and a panel of hops (cited or
+      similar only, each opening its bridge). No chain is said as a finding. Among the areas
+      drawn, not through concept nodes (`route()`'s `HopSource` stays the way to join the two)
 - [x] `P6-41` **An answer page for a question** — `v0.145.0`, screenshot-checked on the live
       corpus 2026-09-26 (and `B-80`). UX priority 1 (agreed 2026-09-25). People come
       with a question, not to browse clusters: evidence grouped by country (places are

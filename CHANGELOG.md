@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.0] — 2026-09-27
+
+### Added
+
+- `P6-39`: route mode on the Map. "Route from here…" on a field, then click another: the
+  shortest chain of the lines drawn at that level, preferring cited hops among equally short
+  routes and then more sources behind them, is drawn with its ends ringed and listed hop by
+  hop, each opening its bridge. "No chain of lines joins these two" is shown as a finding.
+  Escape cancels
+
 ## [0.151.1] — 2026-09-27
 
 ### Added

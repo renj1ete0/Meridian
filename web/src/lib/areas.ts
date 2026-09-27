@@ -727,6 +727,58 @@ export function linksAt(root: AreasLevel, byParent: ReadonlyMap<number, AreasLev
   return out
 }
 
+/**
+ * The best chain of bridges from one area to another among `links` (`P6-39`):
+ * fewest hops first; among those, fewest similar-only hops, since a route of
+ * cited claims says more than one of resemblance; then the most independent
+ * sources behind its cited hops. Null when no chain joins them — a finding,
+ * not a failure: two subjects the corpus never connects are a gap.
+ *
+ * Each returned link is oriented along the route (`area_a` is the stop before).
+ */
+export function routeBetween(links: readonly AreaLink[], from: number, to: number): AreaLink[] | null {
+  if (from === to) return []
+  const next = new Map<number, AreaLink[]>()
+  for (const link of links) {
+    for (const [a, b] of [
+      [link.area_a, link.area_b],
+      [link.area_b, link.area_a],
+    ] as const) {
+      const oriented = { ...link, area_a: a, area_b: b }
+      const list = next.get(a)
+      if (list) list.push(oriented)
+      else next.set(a, [oriented])
+    }
+  }
+  // Cost compared as a tuple: [hops, similar-only hops, -cited sources].
+  type Cost = [number, number, number]
+  const better = (x: Cost, y: Cost) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2]
+  const best = new Map<number, { cost: Cost; via: AreaLink | null }>([[from, { cost: [0, 0, 0], via: null }]])
+  const open: number[] = [from]
+  while (open.length > 0) {
+    open.sort((x, y) => better(best.get(x)!.cost, best.get(y)!.cost))
+    const here = open.shift()!
+    if (here === to) break
+    const at = best.get(here)!.cost
+    for (const link of next.get(here) ?? []) {
+      const cost: Cost = [at[0] + 1, at[1] + (link.cited_claims > 0 ? 0 : 1), at[2] - link.cited_sources]
+      const known = best.get(link.area_b)
+      if (!known || better(cost, known.cost) < 0) {
+        best.set(link.area_b, { cost, via: link })
+        if (!open.includes(link.area_b)) open.push(link.area_b)
+      }
+    }
+  }
+  if (!best.has(to)) return null
+  const path: AreaLink[] = []
+  for (let at = to; at !== from; ) {
+    const via = best.get(at)!.via!
+    path.unshift(via)
+    at = via.area_a
+  }
+  return path
+}
+
 // --------------------------------------------------------------------------
 // The view: a zoom and a pan over the laid-out map
 

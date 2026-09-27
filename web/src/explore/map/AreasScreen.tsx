@@ -28,6 +28,7 @@ import {
   radiusOf,
   splitMorph,
   zoomCaption,
+  routeBetween,
   HOME,
   depthForZoom,
   linksAt,
@@ -89,6 +90,7 @@ type Panel =
   | { kind: 'none' }
   | { kind: 'area'; areaId: number; detail?: AreaDetail; error?: string }
   | { kind: 'bridge'; a: number; b: number; bridge?: Bridge; error?: string }
+  | { kind: 'route'; from: Area; to: Area; hops: AreaLink[] | null }
 
 type Menu =
   | { kind: 'area'; area: Area; x: number; y: number }
@@ -357,13 +359,36 @@ export function AreasView({
     }
   }, [panel])
 
+  // Route mode (`P6-39`): "Route from here…" picks the start; the next circle
+  // clicked is the end, and the route is found among the lines on screen.
+  const [routeFrom, setRouteFrom] = useState<Area | null>(null)
+  const routeLinks = useMemo(
+    () => (shown === level.level ? level.links : linksAt(level, byParent, shown)),
+    [level, byParent, shown],
+  )
+  useEffect(() => {
+    if (!routeFrom) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRouteFrom(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [routeFrom])
+  useEffect(() => setRouteFrom(null), [level.parent?.area_id, shown])
+
   const openArea = useCallback(
     (area: Area) => {
       setMenu(null)
+      if (routeFrom) {
+        if (area.area_id === routeFrom.area_id) return
+        setPanel({ kind: 'route', from: routeFrom, to: area, hops: routeBetween(routeLinks, routeFrom.area_id, area.area_id) })
+        setRouteFrom(null)
+        return
+      }
       if (area.children > 0) onLevel(area.area_id)
       else setPanel({ kind: 'area', areaId: area.area_id })
     },
-    [onLevel],
+    [onLevel, routeFrom, routeLinks],
   )
 
   const empty = level.build === null
@@ -414,6 +439,8 @@ export function AreasView({
           hover={hover}
           highlight={highlight}
           selectedLink={panel.kind === 'bridge' ? [panel.a, panel.b] : null}
+          routeLinks={panel.kind === 'route' ? (panel.hops ?? []) : []}
+          routeEnds={panel.kind === 'route' ? [panel.from.area_id, panel.to.area_id] : routeFrom ? [routeFrom.area_id] : []}
           onHover={setHover}
           onOpen={openArea}
           onLink={(link) => setPanel({ kind: 'bridge', a: link.area_a, b: link.area_b })}
@@ -435,7 +462,9 @@ export function AreasView({
             }}
           />
           <span className="min-w-0 font-mono text-[11px] text-text-faint" aria-live="polite">
-            {zoomCaption(level, shown, rows.length)}
+            {routeFrom
+              ? `Route from ${routeFrom.name}: click another ${levelNoun(shown)} · Esc to cancel`
+              : zoomCaption(level, shown, rows.length)}
             {loading || zooming ? ' · loading' : ''}
             {zoomError ? ` · ${zoomError}` : ''}
           </span>
@@ -463,19 +492,32 @@ export function AreasView({
             actions={actions}
             onClose={() => setMenu(null)}
             onOpen={openArea}
+            onRoute={(area) => {
+              setMenu(null)
+              setPanel({ kind: 'none' })
+              setRouteFrom(area)
+            }}
           />
         ) : null}
       </div>
 
       {panel.kind !== 'none' ? (
         <aside
-          aria-label={panel.kind === 'bridge' ? 'Bridge' : 'Field'}
+          aria-label={panel.kind === 'bridge' ? 'Bridge' : panel.kind === 'route' ? 'Route' : 'Field'}
           className="absolute inset-y-0 right-0 z-30 flex w-full max-w-[380px] shrink-0 flex-col gap-3.5 overflow-y-auto border-l border-line bg-surface p-5 md:static md:w-[380px]"
         >
           {panel.kind === 'bridge' ? (
             <BridgePanel
               panel={panel}
               areas={byId}
+              onClose={() => setPanel({ kind: 'none' })}
+            />
+          ) : panel.kind === 'route' ? (
+            <RoutePanel
+              route={panel}
+              areas={byId}
+              noun={levelNoun(shown)}
+              onBridge={(link) => setPanel({ kind: 'bridge', a: link.area_a, b: link.area_b })}
               onClose={() => setPanel({ kind: 'none' })}
             />
           ) : (
@@ -562,6 +604,8 @@ function Canvas({
   onScale,
   top = 64,
   view = HOME,
+  routeLinks = [],
+  routeEnds = [],
 }: {
   level: AreasLevel
   byParent: ReadonlyMap<number, AreasLevel>
@@ -578,6 +622,10 @@ function Canvas({
   top?: number
   /** The zoom and pan the reader has; the layout itself never moves. */
   view?: View
+  /** A route's hops, drawn as selected whatever the other filters say (`P6-39`). */
+  routeLinks?: readonly AreaLink[]
+  /** Its ends, ringed; one end while the reader is still choosing the other. */
+  routeEnds?: readonly number[]
 }) {
   const box = useRef<HTMLDivElement>(null)
   const { width, height } = useSize(box)
@@ -733,12 +781,15 @@ function Canvas({
   // ones (similar passages, no cited claim) would cover the map: they show
   // for the circle in hand. Cited ones always show; they are the rare kind.
   const focusId = hover ?? highlight
+  const onRoute = new Set(routeLinks.map((l) => [l.area_a, l.area_b].sort((x, y) => x - y).join('-')))
+  const routeKey = (l: AreaLink) => [l.area_a, l.area_b].sort((x, y) => x - y).join('-')
   const links = linksAt(level, byParent, layout.level).filter(
     (link) =>
       layout.level === level.level ||
       link.cited_claims > 0 ||
       link.area_a === focusId ||
-      link.area_b === focusId,
+      link.area_b === focusId ||
+      onRoute.has(routeKey(link)),
   )
   const fieldLinks: AreaLink[] = []
   if (layout.level > level.level) {
@@ -822,7 +873,25 @@ function Canvas({
                   onMenu={contextMenu}
                 />
               ))}
-              {/* Over the circles, so the halo keeps a name legible where
+              {routeEnds.map((id) => {
+                const p = placedAll.find((q) => q.area.area_id === id)
+                return p ? (
+                  <circle
+                    key={`end${id}`}
+                    data-route-end={id}
+                    aria-hidden
+                    cx={p.x}
+                    cy={p.y}
+                    r={p.r + 5}
+                    fill="none"
+                    stroke="var(--accent-attention)"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    className="pointer-events-none"
+                  />
+                ) : null
+              })}
+                            {/* Over the circles, so the halo keeps a name legible where
                   another field's circles pass under it. */}
               <g aria-hidden className="pointer-events-none">
                 {outlines
@@ -860,6 +929,7 @@ function Canvas({
                 const [x1, y1, x2, y2] = segment
                 const cited = link.cited_claims > 0
                 const selected =
+                  onRoute.has(routeKey(link)) ||
                   (selectedLink?.includes(link.area_a) && selectedLink.includes(link.area_b)) ||
                   (focused?.[0] === link.area_a && focused[1] === link.area_b)
                 const label = `${a.name} and ${b.name}: ${
@@ -1354,12 +1424,14 @@ function ContextMenu({
   actions,
   onClose,
   onOpen,
+  onRoute,
 }: {
   menu: NonNullable<Menu>
   level: AreasLevel
   actions?: MapActions
   onClose: () => void
   onOpen: (area: Area) => void
+  onRoute?: (area: Area) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -1435,6 +1507,11 @@ function ContextMenu({
           Zoom in
         </MenuItem>
       ) : null}
+      {onRoute ? (
+        <MenuItem onClick={() => onRoute(area)} note="then click where to; the way the lines join them">
+          Route from here…
+        </MenuItem>
+      ) : null}
       <MenuItem
         onClick={() => {
           onClose()
@@ -1506,6 +1583,72 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <h3 className="mt-1 font-mono text-[9.5px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
       {children}
     </h3>
+  )
+}
+
+/** A route between two areas (`P6-39`): each hop, cited or only similar, and a way into its bridge. */
+function RoutePanel({
+  route,
+  areas,
+  noun,
+  onBridge,
+  onClose,
+}: {
+  route: Extract<Panel, { kind: 'route' }>
+  areas: Map<number, Area>
+  noun: string
+  onBridge: (link: AreaLink) => void
+  onClose: () => void
+}) {
+  const title = `${route.from.name} → ${route.to.name}`
+  const name = (id: number) => areas.get(id)?.name ?? `#${id}`
+  if (route.hops === null) {
+    return (
+      <>
+        <PanelHead label="Route" title={title} onClose={onClose} />
+        <p className="text-[13px] leading-[1.55] text-text">
+          No chain of lines joins these two {noun}s on this map.
+        </p>
+        <p className="text-[12.5px] leading-[1.55] text-text-muted">
+          That is a finding, not a failure: nothing the corpus holds connects them at this level, cited or
+          by resemblance. It is a gap worth a search from either side.
+        </p>
+      </>
+    )
+  }
+  const similarOnly = route.hops.filter((h) => h.cited_claims === 0).length
+  return (
+    <>
+      <PanelHead label="Route" title={title} onClose={onClose} />
+      <p className="font-mono text-[11px] text-text-faint">
+        {route.hops.length} hop{route.hops.length === 1 ? '' : 's'} ·{' '}
+        {similarOnly === 0 ? 'every hop cited' : `${similarOnly} by resemblance only`}
+      </p>
+      <ol className="flex flex-col gap-2">
+        {route.hops.map((hop, i) => {
+          const cited = hop.cited_claims > 0
+          return (
+            <li key={`${hop.area_a}-${hop.area_b}`} className="border border-line bg-surface-raised p-3">
+              <div className="text-[13px] leading-[1.45] text-text">
+                <span className="font-mono text-[10.5px] text-text-faint">{i + 1}.</span> {name(hop.area_a)} →{' '}
+                {name(hop.area_b)}
+              </div>
+              <div className="mt-1.5 flex items-center gap-2">
+                {cited ? <Chip tone="graph">cited</Chip> : <Chip>similar only</Chip>}
+                <span className="font-mono text-[10.5px] text-text-faint">
+                  {cited
+                    ? `${hop.cited_claims} claim${hop.cited_claims === 1 ? '' : 's'} · ${hop.cited_sources} source${hop.cited_sources === 1 ? '' : 's'}`
+                    : `${hop.similar_pairs} similar passage pair${hop.similar_pairs === 1 ? '' : 's'}`}
+                </span>
+                <button type="button" onClick={() => onBridge(hop)} className="ml-auto text-[12px] text-accent-graph">
+                  Bridge
+                </button>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </>
   )
 }
 
