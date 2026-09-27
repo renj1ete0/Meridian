@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.9] — 2026-09-27
+
+### Added
+
+- `B-110`: `worker.requeue --apply` runs daily, applying the day's host verdicts to links
+  already queued. Run by hand on 2026-09-27 it held about 79,000 links to off-topic or
+  over-cap hosts and raised about 21,000 to on-topic ones
+
 ## [0.152.8] — 2026-09-27
 
 ### Changed

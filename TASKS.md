@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.8`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.9`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1526,6 +1526,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-110` **Apply host verdicts to the queued backlog daily** — `v0.152.9`. `worker.requeue`
+      (`B-48`) had run by hand only; on 2026-09-27 it held ~79k of a 233k frontier backlog
+      (arXiv listings, a statute library, a university repository) and raised ~21k. Daily now
 - [x] `B-108` **Search seeding back to every 3 hours** — `v0.152.8`. `B-104`'s hourly pass
       tripled the day's queries and was the likely trigger of `B-109`
 - [x] `B-107` **Throttled search engines lost queries for good** — `v0.152.7`. Found in run 10:
