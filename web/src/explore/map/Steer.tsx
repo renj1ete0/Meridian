@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { addTopic, ApiError, getTopics } from '../../lib/api'
 import {
   getAreaSteering,
+  restoreNoise,
   steerArea,
   suggestSearch,
   topicNameFrom,
@@ -98,6 +99,17 @@ export function AreaSteerItems({ area, close }: { area: Area; close: () => void 
       <MenuItem disabled={busy} onClick={() => run('watch')} note="saves a view of its terms">
         Watch for new sources
       </MenuItem>
+      <MenuItem
+        disabled={busy || steering.noise_sources === 0}
+        onClick={() => run('noise')}
+        note={
+          steering.noise_sources > 0
+            ? `marks ${steering.noise_sources.toLocaleString('en')} source${steering.noise_sources === 1 ? '' : 's'} read and found about none of the topics as junk · undoable`
+            : 'no source here was read and found about none of the topics'
+        }
+      >
+        This is noise
+      </MenuItem>
       <p className="px-3 pb-1 text-[11px] text-text-faint">Reversible in Admin · written to the steering log</p>
       <div className="my-1.5 border-t border-line" />
     </>
@@ -105,12 +117,28 @@ export function AreaSteerItems({ area, close }: { area: Area; close: () => void 
 }
 
 function OutcomeNote({ outcome, close }: { outcome: NonNullable<Outcome>; close: () => void }) {
+  const [undone, setUndone] = useState<string | null>(null)
+  const mark = outcome.kind === 'done' ? outcome.result.noise_mark : null
   return (
     <div role="status" className="flex flex-col gap-1.5 px-3 py-2">
       {outcome.kind === 'done' ? (
         <>
           <p className="text-[12.5px] leading-[1.5] text-text">{outcome.result.message}</p>
           <p className="text-[11.5px] leading-[1.5] text-text-faint">{outcome.result.undo}</p>
+          {mark && !undone ? (
+            <button
+              type="button"
+              onClick={() =>
+                restoreNoise(mark)
+                  .then((r) => setUndone(`${r.restored.toLocaleString('en')} sources put back.`))
+                  .catch((cause: unknown) => setUndone(messageOf(cause, 'The undo did not go through.')))
+              }
+              className="self-start text-[12px] text-accent-attention"
+            >
+              Undo
+            </button>
+          ) : null}
+          {undone ? <p className="text-[12px] text-text-muted">{undone}</p> : null}
         </>
       ) : (
         <p className="text-[12.5px] leading-[1.5] text-accent-attention">{outcome.message}</p>
@@ -150,6 +178,7 @@ function MakeTopic({
             boost_expires_at: null,
             seed_task_ids: [],
             view_id: null,
+            noise_mark: null,
             message: `“${name.trim()}” is a topic now, starting at its floor.`,
             undo: 'Archive it from Admin › Topics; nothing is deleted.',
           },

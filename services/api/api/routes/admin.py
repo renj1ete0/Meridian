@@ -86,7 +86,12 @@ from meridian_core.schemas.annotations import (
     AnnotationEdit,
     AnnotationRead,
 )
-from meridian_core.schemas.areas import MapSteerCreate, MapSteerRead, MapSuggestCreate
+from meridian_core.schemas.areas import (
+    MapSteerCreate,
+    MapSteerRead,
+    MapSuggestCreate,
+    NoiseRestoreRead,
+)
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
@@ -1377,6 +1382,18 @@ async def steer_area(
     await sess.commit()
     log.info("map steer", extra={"area_id": area_id, "action": body.action})
     return MapSteerRead.model_validate(result)
+
+
+@router.post("/map/noise/{mark}/restore", response_model=NoiseRestoreRead)
+async def restore_noise(mark: str, _: AdminAllowed, sess: WriteSession) -> NoiseRestoreRead:
+    """Undo one "this is noise" marking: every source it moved goes back (`P6-42`)."""
+    restored = await mapsteer.restore_noise(sess, mark, actor=ACTOR, now=_now())
+    if restored == 0:
+        await sess.rollback()
+        raise HTTPException(status_code=404, detail=f"No source carries the mark “{mark}”.")
+    await sess.commit()
+    log.info("map noise restored", extra={"mark": mark, "restored": restored})
+    return NoiseRestoreRead(mark=mark, restored=restored)
 
 
 @router.post("/map/suggest", response_model=MapSteerRead, status_code=201)

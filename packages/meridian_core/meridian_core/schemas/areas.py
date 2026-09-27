@@ -196,12 +196,14 @@ class AreaSteeringRead(BaseModel):
     less_factor: float
     boost_days: int
     search: str
+    #: Sources "this is noise" would mark: read whole, about no topic, mostly here.
+    noise_sources: int = 0
 
 
 class MapSteerCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["more", "less", "watch"]
+    action: Literal["more", "less", "watch", "noise"]
 
 
 class MapSuggestCreate(BaseModel):
@@ -225,3 +227,12 @@ class MapSteerRead(BaseModel):
     view_id: int | None
     message: str
     undo: str
+    #: A noise marking's key, which `POST /map/noise/{mark}/restore` undoes (`P6-42`).
+    noise_mark: str | None = None
+
+
+class NoiseRestoreRead(BaseModel):
+    """What undoing one noise marking put back."""
+
+    mark: str
+    restored: int

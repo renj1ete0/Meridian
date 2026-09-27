@@ -24,7 +24,7 @@ import dataclasses
 import datetime as dt
 from typing import Literal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import steering
@@ -45,7 +45,7 @@ SEED_TERMS = 3
 MIN_SUGGESTION = 3
 MAX_SUGGESTION = 200
 
-Action = Literal["more", "less", "watch"]
+Action = Literal["more", "less", "watch", "noise"]
 
 
 class Refused(ValueError):
@@ -69,6 +69,8 @@ class SteerResult:
     message: str
     #: Where it can be undone.
     undo: str
+    #: For a noise marking, the key that undoes it (`P6-42`).
+    noise_mark: str | None = None
 
 
 async def area_topics(sess: AsyncSession, area) -> list[tuple[str | None, int]]:
@@ -177,6 +179,9 @@ async def steer_area(
             f"Saved as the view “{view_name}”; it opens that search with whatever is new.",
             "Explore › saved views — delete it there.",
         )
+
+    if action == "noise":
+        return await _mark_noise(sess, area, name, actor=actor, reason=reason, now=now)
 
     if action == "less" and topic is None:
         raise Refused(
@@ -294,4 +299,145 @@ async def area_steering(sess: AsyncSession, area_id: int) -> AreaSteeringRead:
         less_factor=LESS_FACTOR,
         boost_days=BOOST_DAYS,
         search=" ".join(area.terms[:SEED_TERMS]),
+        noise_sources=len(await noise_candidates(sess, area)),
     )
+
+
+# ---------------------------------------------------------------------------
+# "This is noise" (`P6-42`)
+# ---------------------------------------------------------------------------
+
+#: The share of a source's live passages that must lie in the field before
+#: marking the field marks the source: a page with a paragraph in a noisy field
+#: and the rest elsewhere is not that field's noise.
+NOISE_SHARE = 0.5
+
+#: Seed sources a person chose; never marked from the map.
+PERSON_CHOSEN = ("user",)
+
+
+async def noise_candidates(sess: AsyncSession, area) -> list[int]:
+    """Sources this area would mark: read, about none of the topics, mostly here.
+
+    Only sources the labeller read *whole* and found about no topic
+    (``topic_labels = {}`` and no sample label): the map says where the noise
+    is, the labels say which of it is noise. A labelled source in the field
+    stays whatever the field is called, and a source a person seeded stays.
+    """
+    from .areaview import _leaves_under
+
+    leaves = _leaves_under(area)
+    here = (
+        select(Chunk.source_id, func.count().label("n"))
+        .join(AreaMember, AreaMember.chunk_id == Chunk.chunk_id)
+        .where(
+            AreaMember.build_id == area.build_id,
+            AreaMember.area_id.in_(leaves),
+            Chunk.superseded_at.is_(None),
+        )
+        .group_by(Chunk.source_id)
+        .subquery()
+    )
+    total = (
+        select(Chunk.source_id, func.count().label("n"))
+        .where(Chunk.superseded_at.is_(None), Chunk.source_id.in_(select(here.c.source_id)))
+        .group_by(Chunk.source_id)
+        .subquery()
+    )
+    chosen = select(QueueTask.url_or_query).where(QueueTask.seed_source.in_(PERSON_CHOSEN))
+    rows = await sess.scalars(
+        select(Source.source_id)
+        .join(here, here.c.source_id == Source.source_id)
+        .join(total, total.c.source_id == Source.source_id)
+        .where(
+            Source.topic_labels == [],
+            Source.topic_sample_best.is_(None),
+            Source.retention_tier != "junk",
+            here.c.n >= total.c.n * NOISE_SHARE,
+            Source.url.not_in(chosen),
+        )
+        .order_by(Source.source_id)
+    )
+    return list(rows)
+
+
+def noise_mark(area_id: int, now: dt.datetime) -> str:
+    """The key one marking is undone by: which area, and when."""
+    return f"{now:%Y%m%dT%H%M%S}-a{area_id}"
+
+
+async def _mark_noise(sess, area, name, *, actor, reason, now) -> SteerResult:
+    ids = await noise_candidates(sess, area)
+    if not ids:
+        raise Refused(
+            f"Nothing in “{name}” is marked: no source here was read whole and found to be "
+            "about none of the topics. Its sources carry a topic, or have not been read yet."
+        )
+    mark = noise_mark(area.area_id, now)
+    rows = await sess.execute(
+        select(Source.source_id, Source.retention_tier, Source.extra).where(
+            Source.source_id.in_(ids)
+        )
+    )
+    for source_id, tier, extra in rows:
+        # The tier it had, kept on the row, so undoing restores it exactly.
+        note = {**(extra or {}), "noise_mark": {"mark": mark, "was": tier}}
+        await sess.execute(
+            update(Source)
+            .where(Source.source_id == source_id)
+            .values(retention_tier="junk", extra=note)
+        )
+    await steering.record(
+        sess,
+        actor=actor,
+        topic=None,
+        field="noise",
+        old=None,
+        new=f"{mark}: {len(ids)} sources",
+        reason=reason,
+        now=now,
+    )
+    return SteerResult(
+        "noise",
+        area.area_id,
+        None,
+        None,
+        None,
+        [],
+        None,
+        f"{len(ids)} sources in “{name}” that are about none of the topics were marked junk: "
+        "search, the map and synthesis leave them out, and nothing was deleted.",
+        f"Undo restores every one: mark {mark}.",
+        noise_mark=mark,
+    )
+
+
+async def restore_noise(sess: AsyncSession, mark: str, *, actor: str, now: dt.datetime) -> int:
+    """Put back every source one marking moved, at the tier it had. Returns how many."""
+    rows = await sess.execute(
+        select(Source.source_id, Source.extra).where(
+            Source.extra["noise_mark"]["mark"].astext == mark
+        )
+    )
+    restored = 0
+    for source_id, extra in rows:
+        was = (extra or {}).get("noise_mark", {}).get("was") or "primary"
+        kept = {k: v for k, v in (extra or {}).items() if k != "noise_mark"}
+        await sess.execute(
+            update(Source)
+            .where(Source.source_id == source_id, Source.retention_tier == "junk")
+            .values(retention_tier=was, extra=kept or None)
+        )
+        restored += 1
+    if restored:
+        await steering.record(
+            sess,
+            actor=actor,
+            topic=None,
+            field="noise",
+            old=mark,
+            new=f"restored {restored}",
+            reason=f"undo of map noise mark {mark}",
+            now=now,
+        )
+    return restored

@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.150.0] — 2026-09-27
+
+### Added
+
+- `P6-42`: "This is noise" on a Map field. It marks as junk the field's sources that were
+  read whole and found about none of the topics and that lie mostly in the field (half
+  their passages or more); a source a person seeded, one labelled from a sample, or one
+  never read is left alone. The menu says how many it would mark; nothing is deleted, the
+  previous tier is kept on each source, and Undo (`POST /api/admin/map/noise/{mark}/restore`)
+  puts every one back
+
 ## [0.149.10] — 2026-09-27
 
 ### Changed

@@ -1094,6 +1094,8 @@ export interface AreaSteering {
   boost_days: number
   /** What "more" queues as a search. */
   search: string
+  /** Sources "this is noise" would mark: read whole, about no topic, mostly here (`P6-42`). */
+  noise_sources: number
 }
 
 export interface MapSteerResult {
@@ -1106,9 +1108,11 @@ export interface MapSteerResult {
   view_id: number | null
   message: string
   undo: string
+  /** A noise marking's key, which {@link restoreNoise} undoes (`P6-42`). */
+  noise_mark: string | null
 }
 
-export type SteerAction = 'more' | 'less' | 'watch'
+export type SteerAction = 'more' | 'less' | 'watch' | 'noise'
 
 export const AREA_STEERING_FIELDS = [
   'area_id',
@@ -1119,6 +1123,7 @@ export const AREA_STEERING_FIELDS = [
   'less_factor',
   'boost_days',
   'search',
+  'noise_sources',
 ] as const
 export const MAP_STEER_FIELDS = [
   'action',
@@ -1130,6 +1135,7 @@ export const MAP_STEER_FIELDS = [
   'view_id',
   'message',
   'undo',
+  'noise_mark',
 ] as const
 export type AssertAreaSteering = Expect<Equal<keyof AreaSteering, (typeof AREA_STEERING_FIELDS)[number]>>
 export type AssertMapSteer = Expect<Equal<keyof MapSteerResult, (typeof MAP_STEER_FIELDS)[number]>>
@@ -1149,6 +1155,11 @@ function postJson<T>(path: string, body: unknown, init?: RequestInit): Promise<T
 
 export function steerArea(areaId: number, action: SteerAction, init?: RequestInit): Promise<MapSteerResult> {
   return postJson<MapSteerResult>(`/api/admin/map/areas/${areaId}/steer`, { action }, init)
+}
+
+/** Undo one "this is noise" marking: every source it moved goes back. */
+export function restoreNoise(mark: string, init?: RequestInit): Promise<{ mark: string; restored: number }> {
+  return postJson(`/api/admin/map/noise/${encodeURIComponent(mark)}/restore`, {}, init)
 }
 
 export function suggestSearch(text: string, topic: string | null, init?: RequestInit): Promise<MapSteerResult> {

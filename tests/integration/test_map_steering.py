@@ -20,11 +20,13 @@ from sqlalchemy import delete, func, select
 from api.main import create_app
 from meridian_core import mapsteer, steering
 from meridian_core.areabuild import build_areas
-from meridian_core.areaview import AreaNotFound
+from meridian_core.areaview import AreaNotFound, _leaves_under
 from meridian_core.db import dispose_engines
 from meridian_core.models import (
     Area,
     AreaBuild,
+    AreaMember,
+    Chunk,
     QueueTask,
     SavedView,
     Source,
@@ -267,3 +269,131 @@ async def test_the_admin_routes_steer_and_refuse(client, committed, topic):
     # Reversible through the existing seed route while it is pending.
     task_id = made.json()["seed_task_ids"][0]
     assert (await client.delete(f"/api/admin/seeds/{task_id}")).status_code == 204
+
+
+# --------------------------------------------------------------------------
+# "This is noise" (P6-42): off-topic sources of one field to junk, undoably
+# --------------------------------------------------------------------------
+
+
+async def sources_in(sess, area: Area) -> list[Source]:
+    ids = await sess.scalars(
+        select(Chunk.source_id)
+        .join(AreaMember, AreaMember.chunk_id == Chunk.chunk_id)
+        .where(AreaMember.build_id == area.build_id, AreaMember.area_id.in_(_leaves_under(area)))
+        .distinct()
+    )
+    return list(await sess.scalars(select(Source).where(Source.source_id.in_(list(ids)))))
+
+
+async def share_in(sess, area: Area, source_id: int) -> float:
+    here = await sess.scalar(
+        select(func.count())
+        .select_from(Chunk)
+        .join(AreaMember, AreaMember.chunk_id == Chunk.chunk_id)
+        .where(
+            AreaMember.build_id == area.build_id,
+            AreaMember.area_id.in_(_leaves_under(area)),
+            Chunk.source_id == source_id,
+        )
+    )
+    total = await sess.scalar(
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.source_id == source_id, Chunk.superseded_at.is_(None))
+    )
+    return here / total
+
+
+async def noisy(sess, topic):
+    """An area whose sources are read: the one most inside it about no topic, the
+    rest labelled."""
+    leaf = await mapped(sess, topic)
+    # A field, as the Map offers it: the top-level area with a source most
+    # inside it. Which field that is depends on the clustering, so it is found.
+    fields = list(
+        await sess.scalars(select(Area).where(Area.build_id == leaf.build_id, Area.level == 1))
+    )
+    best = None
+    for field in fields:
+        members = await sources_in(sess, field)
+        if len(members) < 2:
+            continue
+        shares = {m.source_id: await share_in(sess, field, m.source_id) for m in members}
+        members.sort(key=lambda m: -shares[m.source_id])
+        if shares[members[0].source_id] >= mapsteer.NOISE_SHARE:
+            best = (field, members)
+            break
+    assert best is not None, (
+        "no field holds a source mostly; the test would only prove the share rule"
+    )
+    area, members = best
+    for i, source in enumerate(members):
+        source.topic_labels = [] if i == 0 else [topic]
+        source.topics_examined_at = NOW
+        source.topic_sample_best = None
+    await sess.flush()
+    return area, members
+
+
+async def test_noise_marks_only_what_was_read_and_found_about_nothing(session_for, topic):
+    sess = await session_for("rw")
+    area, members = await noisy(sess, topic)
+    preview = await mapsteer.area_steering(sess, area.area_id)
+    before = await last_log(sess)
+    tier_before = members[0].retention_tier
+
+    result = await mapsteer.steer_area(sess, area.area_id, "noise", actor="user", now=NOW)
+
+    for m in members:
+        await sess.refresh(m)
+    assert members[0].retention_tier == "junk"
+    assert members[0].extra["noise_mark"] == {"mark": result.noise_mark, "was": tier_before}
+    assert all(m.retention_tier != "junk" for m in members[1:]), "a labelled source was marked"
+    assert preview.noise_sources == 1, "the menu's count is not what the action marks"
+    assert [r.field for r in await log_rows(sess, before)] == ["noise"]
+    # Nothing deleted: the source keeps its passages.
+    assert await sess.scalar(
+        select(func.count()).select_from(Chunk).where(Chunk.source_id == members[0].source_id)
+    )
+
+
+async def test_undo_puts_back_exactly_what_was_marked(session_for, topic):
+    sess = await session_for("rw")
+    area, members = await noisy(sess, topic)
+    tiers = {m.source_id: m.retention_tier for m in members}
+    result = await mapsteer.steer_area(sess, area.area_id, "noise", actor="user", now=NOW)
+
+    restored = await mapsteer.restore_noise(sess, result.noise_mark, actor="user", now=NOW)
+
+    assert restored == 1
+    for m in members:
+        await sess.refresh(m)
+        assert m.retention_tier == tiers[m.source_id]
+        assert "noise_mark" not in (m.extra or {})
+    assert await mapsteer.restore_noise(sess, result.noise_mark, actor="user", now=NOW) == 0
+
+
+@pytest.mark.parametrize("why", ["labelled", "sampled", "unread", "seeded"])
+async def test_noise_leaves_what_it_cannot_judge_and_refuses_in_words(session_for, topic, why):
+    """Rejection: a sample, a source never read, and a person's seed are never marked."""
+    sess = await session_for("rw")
+    area, members = await noisy(sess, topic)
+    first = members[0]
+    if why == "labelled":
+        first.topic_labels = [topic]
+    elif why == "sampled":
+        first.topic_sample_best = 0.1
+    elif why == "unread":
+        first.topic_labels = None
+    else:
+        sess.add(QueueTask(url_or_query=first.url, task_type="url", seed_source="user", priority=1))
+    await sess.flush()
+    before = await last_log(sess)
+
+    with pytest.raises(mapsteer.Refused, match="Nothing in"):
+        await mapsteer.steer_area(sess, area.area_id, "noise", actor="user", now=NOW)
+
+    await sess.refresh(first)
+    assert first.retention_tier != "junk"
+    assert await log_rows(sess, before) == []
