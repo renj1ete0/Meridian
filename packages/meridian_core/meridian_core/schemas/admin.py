@@ -400,17 +400,19 @@ class AgentsRead(BaseModel):
 
 
 class AgentEdit(BaseModel):
-    """The only field Admin writes.
+    """What Admin may change on an agent: whether it runs, and which model.
 
-    Models, endpoints and task types are deployment configuration and belong in
+    Endpoints and task types are deployment configuration and belong in
     `config/agents.yaml` and its migrations, where a change is reviewable.
-    Enabling is different in kind: it is the switch that starts spending, and it
-    is the one thing an operator needs at three in the morning.
+    Enabling is different in kind: it is the switch that starts spending. The
+    model is too (`P6-06`): which model a local server runs is the operator's
+    choice, made often, and a `${VARIABLE}` is accepted for one read from .env.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool
+    enabled: bool | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^\S(.*\S)?$")
 
 
 class RunRowRead(BaseModel):

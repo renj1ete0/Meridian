@@ -78,3 +78,24 @@ agents:
     health_url: "${LOCAL_LLM_HEALTH_URL}"
     availability: opportunistic
     wake_mac: "${LOCAL_LLM_MAC}"
+
+  # The "Ask the graph" panel (`P6-06`). A local OpenAI-compatible server —
+  # llama.cpp, Ollama, vLLM — named entirely by the environment, so choosing a
+  # model is an .env edit (or Admin → Agents), not a migration:
+  #   LOCAL_CHAT_LLM_URL=http://<host>:8080/v1     LOCAL_CHAT_MODEL=<model name>
+  # Read-only: it answers from retrieved passages and writes nothing to the graph.
+  - agent_id: local-chat
+    provider: openai_compatible
+    model: "${LOCAL_CHAT_MODEL}"
+    api_key_env_var: null
+    task_types: [chat]
+    token_scope: read
+    cost_tier: free
+    quality_tier: 2
+    max_context: null
+    enabled: false
+    fallback_agent_id: null
+    endpoint: "${LOCAL_CHAT_LLM_URL}"
+    health_url: null
+    availability: opportunistic
+    wake_mac: null

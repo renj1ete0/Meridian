@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
 
-from meridian_core import annotations, watch
+from meridian_core import annotations, chat, watch
 from meridian_core.answer import DEFAULT_ANSWER_CANDIDATES, DEFAULT_TOP, MAX_TOP
 from meridian_core.areaview import AreaNotFound, area_detail, areas_level, jump
 from meridian_core.bridgeview import bridge
@@ -36,6 +36,7 @@ from meridian_core.mapsteer import area_steering
 from meridian_core.models import (
     AttributeDefinition,
     AttributeValue,
+    ChatThread,
     Chunk,
     Edge,
     Entity,
@@ -55,6 +56,12 @@ from meridian_core.schemas.areas import (
     AreasRead,
     AreaSteeringRead,
     BridgeRead,
+)
+from meridian_core.schemas.chat import (
+    ChatMessageRead,
+    ChatThreadDetailRead,
+    ChatThreadRead,
+    ChatThreadsRead,
 )
 from meridian_core.schemas.corpusmap import CorpusMapRead
 from meridian_core.schemas.enums import SourceTier
@@ -880,3 +887,29 @@ async def explore_crawl_health(sess: ReadSession) -> CrawlHealthRead:
     read-only role.
     """
     return CrawlHealthRead.model_validate(await crawl_health(sess))
+
+
+# ---------------------------------------------------------------------------
+# Ask the graph: the conversations (tasks P6-06, P6-07)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/chat/threads", response_model=ChatThreadsRead)
+async def list_chat_threads(
+    sess: ReadSession, limit: Annotated[int, Query(ge=1, le=100)] = 20
+) -> ChatThreadsRead:
+    """Earlier questions, most recent first — the panel's history (`P6-07`)."""
+    rows, total = await chat.recent_threads(sess, limit=limit)
+    return ChatThreadsRead(threads=[ChatThreadRead.model_validate(r) for r in rows], total=total)
+
+
+@router.get("/chat/threads/{thread_id}", response_model=ChatThreadDetailRead)
+async def read_chat_thread(thread_id: int, sess: ReadSession) -> ChatThreadDetailRead:
+    messages = await chat.thread_messages(sess, thread_id)
+    if messages is None:
+        raise HTTPException(status_code=404, detail=f"No conversation {thread_id}.")
+    thread = await sess.get(ChatThread, thread_id)
+    return ChatThreadDetailRead(
+        thread=ChatThreadRead.model_validate(thread),
+        messages=[ChatMessageRead.model_validate(m) for m in messages],
+    )

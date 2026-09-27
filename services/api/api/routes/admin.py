@@ -31,7 +31,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
-from meridian_core import annotations, mapsteer, steering
+from meridian_core import annotations, chat, mapsteer, steering
 from meridian_core.areaview import AreaNotFound
 from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.gazetteer import loading_report
@@ -92,6 +92,7 @@ from meridian_core.schemas.areas import (
     MapSuggestCreate,
     NoiseRestoreRead,
 )
+from meridian_core.schemas.chat import ChatAsk, ChatExchangeRead, ChatMessageRead, ChatThreadRead
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
@@ -101,6 +102,7 @@ from meridian_core.search import SearchFilters
 from meridian_core.validation import ValidationError, check_seed_allowed
 
 from ..deps import AdminAllowed, WriteSession
+from ..search_service import embed_query
 
 log = get_logger(__name__)
 
@@ -1222,13 +1224,23 @@ async def edit_agent(
     if agent is None:
         raise HTTPException(status_code=404, detail=f"No agent {agent_id!r}.")
 
-    if agent.enabled != body.enabled:
+    if body.enabled is not None and agent.enabled != body.enabled:
         agent.enabled = body.enabled
         await sess.flush()
         log.info(
             "agent toggled from admin",
             extra={"agent": agent_id, "enabled": body.enabled},
         )
+    if body.model is not None and agent.model != body.model:
+        # `P6-06`: which model a local server runs is the operator's choice,
+        # and waiting on a migration to change it was the wrong trade. A
+        # `${VARIABLE}` is kept verbatim and read at call time.
+        log.info(
+            "agent model changed from admin",
+            extra={"agent": agent_id, "was": agent.model, "now": body.model},
+        )
+        agent.model = body.model
+        await sess.flush()
     await sess.commit()
     return await list_agents(_, sess)
 
@@ -1411,3 +1423,37 @@ async def suggest_search(
     await sess.commit()
     log.info("map suggestion", extra={"seed_task_ids": result.seed_task_ids})
     return MapSteerRead.model_validate(result)
+
+
+# ---------------------------------------------------------------------------
+# Ask the graph (tasks P6-06, P6-07)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/chat/ask", response_model=ChatExchangeRead)
+async def ask_the_graph(body: ChatAsk, _: AdminAllowed, sess: WriteSession) -> ChatExchangeRead:
+    """One question answered from the corpus, both turns stored.
+
+    Under Admin because it writes (the thread) and spends (a model's tokens),
+    and §12.6 puts every write here. A model that cannot answer is not an
+    error response: the stored answer carries the reason, so the panel shows it
+    in the thread where it happened.
+    """
+    try:
+        exchange = await chat.ask_corpus(
+            sess,
+            body.question,
+            thread_id=body.thread_id,
+            context_entity_ids=body.context_entity_ids,
+            embed=embed_query,
+            now=_now(),
+        )
+    except chat.ChatRefused as exc:
+        await sess.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await sess.commit()
+    return ChatExchangeRead(
+        thread=ChatThreadRead.model_validate(exchange.thread),
+        question=ChatMessageRead.model_validate(exchange.question),
+        answer=ChatMessageRead.model_validate(exchange.answer),
+    )

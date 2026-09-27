@@ -158,16 +158,42 @@ async def test_enabling_an_agent_is_the_one_write(
     assert "disabled" in rows[marker]["blocked_by"]
 
 
-async def test_the_model_cannot_be_edited_from_admin(
+async def test_the_model_can_be_chosen_from_admin(
     client, open_admin, registry, marker: str
 ) -> None:
-    """A model string is reviewable configuration with a migration behind it
-    (`P4-15` found the seeded registry shipping a placeholder). A form that
-    could rewrite it would route that decision around review."""
+    """`P6-06`, the operator's call: which model a (local) agent runs is chosen
+    often and should not wait on a migration. It was refused until then; the
+    endpoint and task types still are."""
+    response = await client.patch(f"/api/admin/agents/{marker}", json={"model": "qwen-local-7b"})
+
+    assert response.status_code == 200
+    rows = {r["agent_id"]: r for r in response.json()["rows"]}
+    assert rows[marker]["model"] == "qwen-local-7b"
+    assert rows[marker]["enabled"] is True, "changing the model left the switch alone"
+
+    # A variable is kept verbatim, to be read at call time.
     response = await client.patch(
-        f"/api/admin/agents/{marker}", json={"enabled": True, "model": "something-else"}
+        f"/api/admin/agents/{marker}", json={"model": "${LOCAL_CHAT_MODEL}"}
+    )
+    assert {r["agent_id"]: r for r in response.json()["rows"]}[marker]["model"] == (
+        "${LOCAL_CHAT_MODEL}"
     )
 
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"model": ""},
+        {"model": "  padded  "},
+        {"model": "x" * 201},
+        {"endpoint": "http://elsewhere"},
+        {"task_types": ["chat"]},
+    ],
+)
+async def test_what_admin_may_not_write_is_refused(
+    client, open_admin, registry, marker: str, body
+) -> None:
+    response = await client.patch(f"/api/admin/agents/{marker}", json=body)
     assert response.status_code == 422
 
 

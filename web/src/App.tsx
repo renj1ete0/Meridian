@@ -1,3 +1,4 @@
+import { AskContextProvider, AskPanel } from './explore/AskPanel'
 import { useEffect, useState } from 'react'
 
 import { AboutPage } from './about/AboutPage'
@@ -75,6 +76,7 @@ export function App() {
 
   return (
     <TopBarSlotProvider value={slot}>
+      <AskContextProvider>
       <div className="flex min-h-screen flex-col bg-ground text-text">
         <TopBar
           section={section}
@@ -96,7 +98,10 @@ export function App() {
           {route.name === 'about' ? <AboutPage /> : null}
           {route.name === 'explore' ? <ExplorePage /> : null}
         </main>
+        {/* On the reader's screens only: Admin is for configuring, not asking. */}
+        {section !== 'admin' ? <AskPanel /> : null}
       </div>
+      </AskContextProvider>
     </TopBarSlotProvider>
   )
 }

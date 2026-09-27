@@ -1,3 +1,4 @@
+import { useAskSubjects } from './AskPanel'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { NodePanel } from './NodePanel'
@@ -308,6 +309,9 @@ export function NodePage({ entityId }: { entityId: number }) {
   const view: GraphView = unavailable && url.view === 'node-link' ? 'table' : url.view
   const focusName = hood?.focus.canonical_name ?? detail?.entity.canonical_name ?? `#${entityId}`
   const missing = hoodError && detailError
+  // §12.4, canvas → question: the concept in focus is the panel's context.
+  const knownName = hood?.focus.canonical_name ?? detail?.entity.canonical_name
+  useAskSubjects(knownName ? [{ entityId, name: knownName }] : [])
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-10 flex bg-ground text-text" style={{ top }}>

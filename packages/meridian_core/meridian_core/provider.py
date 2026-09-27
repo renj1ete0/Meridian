@@ -47,6 +47,7 @@ written.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import datetime as dt
 import hashlib
@@ -69,6 +70,7 @@ __all__ = [
     "Completion",
     "NotConfigured",
     "ProviderError",
+    "ask",
     "complete",
 ]
 
@@ -197,16 +199,10 @@ async def _call_openai_compatible(
     """The local tier (§11.7). Ollama, llama.cpp and vLLM all speak this."""
     import httpx
 
-    endpoint = (agent.endpoint or "").strip()
-    if not endpoint:
-        raise NotConfigured(f"{agent.agent_id} has no endpoint configured.")
-    if endpoint.startswith("${"):
-        # The registry stores `${LOCAL_LLM_URL}` verbatim and resolves at call
-        # time, the same as the key. An unresolved one is a variable nobody set.
-        name = endpoint[2:-1]
-        endpoint = os.environ.get(name, "").strip()
-        if not endpoint:
-            raise NotConfigured(f"{agent.agent_id} reads its endpoint from {name}, which is unset.")
+    endpoint = resolved(agent, agent.endpoint, "endpoint")
+    # The model can name a variable too (`P6-06`): which model a local server
+    # runs is chosen in .env, like its address, not by a migration.
+    model = resolved(agent, agent.model, "model")
 
     messages = ([{"role": "system", "content": system}] if system else []) + [
         {"role": "user", "content": prompt}
@@ -220,7 +216,7 @@ async def _call_openai_compatible(
         async with httpx.AsyncClient(timeout=timeout_s) as client:
             response = await client.post(
                 f"{endpoint.rstrip('/')}/chat/completions",
-                json={"model": agent.model, "messages": messages, "max_tokens": max_tokens},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens},
                 headers=headers,
             )
             response.raise_for_status()
@@ -236,6 +232,23 @@ async def _call_openai_compatible(
 
     usage = body.get("usage") or {}
     return text, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+
+
+def resolved(agent: Agent, value: str | None, what: str) -> str:
+    """A registry value, with a `${VARIABLE}` read from the environment.
+
+    The registry stores `${LOCAL_LLM_URL}` verbatim and resolves at call time,
+    the same as the key. An unresolved one is a variable nobody set.
+    """
+    value = (value or "").strip()
+    if not value:
+        raise NotConfigured(f"{agent.agent_id} has no {what} configured.")
+    if value.startswith("${") and value.endswith("}"):
+        name = value[2:-1]
+        value = os.environ.get(name, "").strip()
+        if not value:
+            raise NotConfigured(f"{agent.agent_id} reads its {what} from {name}, which is unset.")
+    return value
 
 
 #: Where a relay agent's prompts and answers are exchanged (`P4-18`).
@@ -387,6 +400,57 @@ async def complete(
             text=text,
             agent_id=agent.agent_id,
             model=agent.model or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+
+    raise ProviderError(f"every agent for {task_type!r} refused: {'; '.join(failures)}")
+
+
+async def ask(
+    sess: AsyncSession,
+    task_type: str,
+    *,
+    prompt: str,
+    system: str | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> Completion:
+    """`complete` for work that is not a synthesis run (`P6-06`): a reader's question.
+
+    Walks the same chain, with the same refusals, and reserves nothing against a
+    run — there is none. The caller holds the cap: `chat` checks a daily token
+    allowance before it calls, for the reason every cap here has no default.
+    """
+    chain = await chain_for(sess, task_type)
+    if not chain:
+        raise NoAgentAvailable(f"no enabled agent declares {task_type!r}.")
+
+    failures: list[str] = []
+    for agent in chain:
+        shape = _SHAPES.get(agent.provider)
+        if shape is None:
+            failures.append(f"{agent.agent_id}: unknown provider {agent.provider!r}")
+            continue
+        if not (agent.model or "").strip() or (agent.model or "").startswith("<"):
+            failures.append(f"{agent.agent_id}: no model string is configured")
+            continue
+        try:
+            text, input_tokens, output_tokens = await shape(
+                agent, prompt=prompt, system=system, max_tokens=max_tokens, timeout_s=timeout_s
+            )
+        except ProviderError as exc:
+            log.warning("agent could not answer", extra={"agent": agent.agent_id})
+            failures.append(str(exc))
+            continue
+        model = agent.model or ""
+        if model.startswith("${"):
+            with contextlib.suppress(NotConfigured):
+                model = resolved(agent, model, "model")
+        return Completion(
+            text=text,
+            agent_id=agent.agent_id,
+            model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )

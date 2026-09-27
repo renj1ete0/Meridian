@@ -19,6 +19,15 @@
  * type follows the DTO transitively. Same device as the `SOURCE_TIER` test in
  * `ui.test.tsx`.
  */
+import {
+  CHAT_CITATION_FIELDS,
+  CHAT_EXCHANGE_FIELDS,
+  CHAT_MESSAGE_FIELDS,
+  CHAT_NODE_FIELDS,
+  CHAT_THREAD_DETAIL_FIELDS,
+  CHAT_THREAD_FIELDS,
+  CHAT_THREADS_FIELDS,
+} from '../src/lib/chat'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -162,6 +171,13 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['AnswerItemRead', 'answer.py', ANSWER_ITEM_FIELDS],
     ['AnswerGroupRead', 'answer.py', ANSWER_GROUP_FIELDS],
     ['AnswerRead', 'answer.py', ANSWER_FIELDS],
+    ['ChatCitationRead', 'chat.py', CHAT_CITATION_FIELDS],
+    ['ChatNodeRead', 'chat.py', CHAT_NODE_FIELDS],
+    ['ChatMessageRead', 'chat.py', CHAT_MESSAGE_FIELDS],
+    ['ChatThreadRead', 'chat.py', CHAT_THREAD_FIELDS],
+    ['ChatThreadsRead', 'chat.py', CHAT_THREADS_FIELDS],
+    ['ChatThreadDetailRead', 'chat.py', CHAT_THREAD_DETAIL_FIELDS],
+    ['ChatExchangeRead', 'chat.py', CHAT_EXCHANGE_FIELDS],
   ] as const
 
   it('parses real field names out of the schemas', () => {

@@ -1764,14 +1764,21 @@ export function getAgents(init?: RequestInit): Promise<Agents> {
   return request<Agents>('/api/admin/agents', init)
 }
 
-/** Enable or disable one agent. Returns the whole registry, because
- * `unserved_tasks` is computed across rows — disabling the only agent that
- * declares a task type changes a fact about every other row's screen. */
-export function editAgent(agentId: string, enabled: boolean, init?: RequestInit): Promise<Agents> {
+/** What Admin may change on an agent: whether it is on, and which model it
+ * asks for. Mirrors `AgentEdit`; every other column stays config. */
+export interface AgentChange {
+  enabled?: boolean
+  model?: string
+}
+
+/** Change one agent. Returns the whole registry, because `unserved_tasks` is
+ * computed across rows — disabling the only agent that declares a task type
+ * changes a fact about every other row's screen. */
+export function editAgent(agentId: string, change: AgentChange, init?: RequestInit): Promise<Agents> {
   return request<Agents>(`/api/admin/agents/${encodeURIComponent(agentId)}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(change),
     ...init,
   })
 }

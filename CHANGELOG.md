@@ -68,6 +68,23 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.154.0] — 2026-09-27
+
+### Added
+
+- `P6-06`/`P6-07`: "Ask the graph", the reader's question panel, wired but **not yet run
+  against a model**. A toggle on every reading surface opens a panel that answers from
+  retrieved passages and the graph edges they support, with the node being read as
+  removable context. The server keeps only citations (`[n]`) and node references (`{Nn}`)
+  that were in the context it framed, and stores each exchange as a thread
+  (`chat_threads`, `chat_messages`) so earlier questions reopen. Answered by a new
+  `chat` task type through the registry; the seeded `local-chat` row (OpenAI-compatible,
+  disabled) reads its endpoint and model from `LOCAL_CHAT_LLM_URL` and `LOCAL_CHAT_MODEL`
+  when called. A daily token cap (`MERIDIAN_CHAT_DAILY_TOKENS`, default 200000) refuses
+  in words. With no agent reachable, the answer says which setting to change
+- Admin → Agents: the model string can now be changed per row (`PATCH {model}`), validated
+  on both sides; every other registry column stays config
+
 ## [0.153.0] — 2026-09-27
 
 ### Added

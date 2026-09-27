@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from meridian_core.models.chat import CHAT_ROLE
 from meridian_core.models.config import (
     AVAILABILITY,
     DOMAIN_STATUS,
@@ -94,6 +95,9 @@ AgentAvailability = Literal[*AVAILABILITY.enums]
 #: What a steering proposal changes, and where it is in its life (`P6-38`).
 ProposalKind = Literal[*PROPOSAL_KIND.enums]
 ProposalStatus = Literal[*PROPOSAL_STATUS.enums]
+
+#: Who wrote a chat message (`P6-06`).
+ChatRole = Literal[*CHAT_ROLE.enums]
 
 # mixins.py — shared by `sources` and `fetch_policy` (`P4-14`)
 TrustState = Literal[*TRUST_STATE.enums]

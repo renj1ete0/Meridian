@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.153.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.154.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1772,8 +1772,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       re-derive. Its citations ride on the edges too, since every edge here
       names the chunks behind it. Composer on both reading surfaces, never in
       Admin (§12.6)
-- [ ] `P6-06` Synthesis panel: collapsible toggle, thread, node chips, inline citations
-- [ ] `P6-07` Conversation history within the synthesis panel
+- [ ] `P6-06` Synthesis panel: collapsible toggle, thread, node chips, inline citations —
+      **built in `v0.154.0`, not yet run against a model.** Panel, `chat` task type, the
+      disabled `local-chat` row, server-side citation checks and a daily token cap are
+      in; what remains is pointing `LOCAL_CHAT_LLM_URL`/`LOCAL_CHAT_MODEL` at a real
+      OpenAI-compatible server, enabling the row, and judging answers. Tick then
+- [ ] `P6-07` Conversation history within the synthesis panel — built with `P6-06`
+      (`v0.154.0`): threads persist, "earlier questions" reopens them. Ticks with it
 - [x] `P6-08` Notifications panel, filterable by type — `v0.60.0`. Reads the
       rows `P5-07` writes before it delivers, so a deployment with no bot token
       still sees what would have been sent. By type rather than read state, per

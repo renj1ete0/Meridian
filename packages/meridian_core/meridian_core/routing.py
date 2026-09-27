@@ -94,6 +94,10 @@ TARGET_TIER: Final[dict[str, int]] = {
     # "Any multilingual. Mechanical."
     "translation": QUALITY_TIER_MIN,
     "triage": QUALITY_TIER_MIN,
+    # "Ask the graph" (`P6-06`): answering a reader from retrieved passages.
+    # Interactive, so the aim is whatever answers well enough quickly — a local
+    # model first — rather than the frontier by default.
+    "chat": 2,
 }
 
 #: Every task type the system routes. Derived, so a task with no target tier

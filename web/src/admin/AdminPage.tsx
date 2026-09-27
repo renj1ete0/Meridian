@@ -694,7 +694,12 @@ export function AdminPage() {
                   // The whole registry comes back, because `unserved_tasks` is
                   // a fact across rows: disabling the only agent that declares
                   // a task type changes what every other row's screen says.
-                  setAgents(await editAgent(agentId, enabled))
+                  setAgents(await editAgent(agentId, { enabled }))
+                })
+              }
+              onModel={(agentId, model) =>
+                steer(agentId, async () => {
+                  setAgents(await editAgent(agentId, { model }))
                 })
               }
             />

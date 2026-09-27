@@ -55,6 +55,7 @@ ENUM_PAIRS = [
     ("GrantProfile", models.config.GRANT_PROFILE),
     ("ProposalKind", models.config.PROPOSAL_KIND),
     ("ProposalStatus", models.config.PROPOSAL_STATUS),
+    ("ChatRole", models.chat.CHAT_ROLE),
 ]
 
 

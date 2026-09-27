@@ -5,6 +5,7 @@ Alembic autogenerate reflects against.
 """
 
 from .areas import Area, AreaBridge, AreaBuild, AreaMember
+from .chat import ChatMessage, ChatThread
 from .config import (
     Agent,
     AgentToken,
@@ -43,6 +44,8 @@ from .source import (
 from .views import SavedView
 
 __all__ = [
+    "ChatMessage",
+    "ChatThread",
     "CURRENT_SCHEMA_VERSION",
     "EMBEDDING_DIM",
     "QUALITY_TIER_MAX",

@@ -302,6 +302,10 @@ NOT_READ_BY_PYTHON = {
     "WATCHTOWER_NOTIFICATION_URL",
     "REPO_USER",
     "REPO_PASS",
+    # Read through the registry: an agent row's `${NAME}` endpoint or model is
+    # expanded where the call is made (`provider.resolved`). Held to a row that
+    # names them by `test_registry_variables_are_named_by_a_row`.
+    *(REGISTRY_VARIABLES := {"LOCAL_CHAT_LLM_URL", "LOCAL_CHAT_MODEL"}),
 }
 
 
@@ -351,6 +355,18 @@ def test_every_variable_compose_sets_is_read_by_something() -> None:
 
     assert not unread, (
         f"compose sets these and no Python reads them — check the spelling: {sorted(unread)}"
+    )
+
+
+def test_registry_variables_are_named_by_a_row() -> None:
+    """The exemption above is only true while a seeded agent row still says
+    `${NAME}`. Renamed in the registry and not in compose, the variable would
+    be set, exempt, and read by nothing."""
+    registry = (REPO / "config" / "agents.yaml").read_text()
+    unnamed = {name for name in REGISTRY_VARIABLES if f"${{{name}}}" not in registry}
+
+    assert not unnamed, (
+        f"exempted as registry variables but no agent row names them: {sorted(unnamed)}"
     )
 
 

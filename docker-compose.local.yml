@@ -428,6 +428,16 @@ services:
       # here so it is obvious this stack has no authentication at all.
       MERIDIAN_ADMIN_ALLOW_ANONYMOUS: "true"
       MERIDIAN_EVAL_RUNS_DIR: /data/eval-runs
+      # "Ask the graph" (`P6-06`): the `local-chat` agent row reads its
+      # endpoint and model from these when it is called, so pointing it at a
+      # different server is an edit to `.env`, not to the registry. Empty is
+      # the default: the row ships disabled and says why it cannot answer.
+      LOCAL_CHAT_LLM_URL: ${LOCAL_CHAT_LLM_URL:-}
+      LOCAL_CHAT_MODEL: ${LOCAL_CHAT_MODEL:-}
+      MERIDIAN_CHAT_DAILY_TOKENS: ${MERIDIAN_CHAT_DAILY_TOKENS:-200000}
+    # A model server on this machine, as `http://host.docker.internal:<port>/v1`.
+    # Docker Desktop provides the name; Linux Docker needs it mapped.
+    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ${DATA_ROOT:-./.localdata}/raw:/data/raw:ro
       - ${DATA_ROOT:-./.localdata}/figures:/data/figures:ro
