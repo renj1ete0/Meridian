@@ -977,3 +977,31 @@ async def test_a_refusal_is_never_offered_to_the_store(monkeypatch) -> None:
     await worker.run()
 
     assert store.persisted == []
+
+
+# -- busy hosts never stop a claim (B-112) ---------------------------------------
+
+
+@pytest.mark.parametrize("limiter", ["missing", "no_busy", "raises"])
+async def test_a_broken_busy_host_lookup_never_stops_the_worker_claiming(
+    monkeypatch, limiter
+) -> None:
+    """Skipping busy hosts is an optimisation. A crawler whose limiter lacks it,
+    or whose lookup fails, must still claim — the first version hung a lane in a
+    retry loop instead."""
+    store = FakeStore([FakeTask(task_id=1, attempts=0)])
+    crawler = FakeCrawler()
+    if limiter == "no_busy":
+        crawler.limiter = object()
+    elif limiter == "raises":
+
+        class Broken:
+            def busy(self):
+                raise RuntimeError("limiter state unreadable")
+
+        crawler.limiter = Broken()
+    worker = build(store, crawler, monkeypatch, max_tasks=1)
+
+    await asyncio.wait_for(worker.run(), timeout=10)
+
+    assert [c["task_id"] for c in crawler.calls] == [1]

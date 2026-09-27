@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.12] — 2026-09-27
+
+### Fixed
+
+- `B-112`: reading which hosts are busy can no longer stop a claim — a limiter without the
+  method, or one that fails, means nothing is skipped. v0.152.11 was committed and deployed
+  on a test run that had hung on exactly that, without completing
+
 ## [0.152.11] — 2026-09-27
 
 ### Fixed

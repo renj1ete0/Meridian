@@ -776,8 +776,16 @@ class Worker:
         )
 
     def _busy_domains(self) -> set[str]:
-        limiter = getattr(self._crawler, "limiter", None)
-        return limiter.busy() if limiter is not None else set()
+        """Hosts to leave for later (`B-112`). An optimisation, so it can never
+        stop a claim: anything wrong here means no host is skipped."""
+        busy = getattr(getattr(self._crawler, "limiter", None), "busy", None)
+        if not callable(busy):
+            return set()
+        try:
+            return set(busy())
+        except Exception:
+            log.exception("could not read busy hosts; claiming without skipping any")
+            return set()
 
     async def _process(self, claim: Claim) -> None:
         """Fetch one claimed task and settle it.
