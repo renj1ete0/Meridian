@@ -28,6 +28,15 @@ import {
   radiusOf,
   splitMorph,
   zoomCaption,
+  HOME,
+  depthForZoom,
+  linksAt,
+  onScreen,
+  panBy,
+  viewed,
+  zoomAbout,
+  zoomForDepth,
+  type View,
   type Area,
   type AreaDetail,
   type AreaJumpHit,
@@ -256,7 +265,55 @@ export function AreasView({
   const canvasFrame = useRef<HTMLDivElement>(null)
   const overlay = useRef<HTMLDivElement>(null)
   const overlayHeight = useHeight(overlay, 36)
-  useZoomGestures(canvasFrame, (direction) => onDepth?.(wanted + direction), level.build !== null && !!onDepth)
+
+  // The view over the map (a zoom and a pan), in the drawing's own frame:
+  // below the overlay, above the key. The level of detail follows the zoom.
+  const frame = useSize(canvasFrame)
+  const drawTop = Math.max(64, overlayHeight + 28)
+  const drawHeight = Math.max(200, frame.height - drawTop - CANVAS_BOTTOM)
+  const [view, setView] = useState<View>(HOME)
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const wantedRef = useRef(wanted)
+  wantedRef.current = wanted
+  const follow = useCallback(
+    (next: View) => {
+      setView(next)
+      const depthNow = depthForZoom(next.k, level.level, level.levels)
+      if (depthNow !== wantedRef.current) onDepth?.(depthNow)
+    },
+    [level.level, level.levels, onDepth],
+  )
+  const zoomToDepth = useCallback(
+    (target: number) => {
+      const d = Math.max(level.level, Math.min(level.levels, target))
+      const v = viewRef.current
+      setView(zoomAbout(v, zoomForDepth(d, level.level) / v.k, frame.width / 2, drawHeight / 2, frame.width, drawHeight))
+      onDepth?.(d)
+    },
+    [level.level, level.levels, onDepth, frame.width, drawHeight],
+  )
+  useZoomGestures(
+    canvasFrame,
+    {
+      onZoom: (factor, x, y) =>
+        follow(zoomAbout(viewRef.current, factor, x, y - drawTop, frame.width, drawHeight)),
+      onPan: (dx, dy) => follow(panBy(viewRef.current, dx, dy, frame.width, drawHeight)),
+      onStep: (direction) => zoomToDepth(wanted + direction),
+      onReset: () => follow(HOME),
+    },
+    level.build !== null && !!onDepth,
+  )
+  // Another field opened, or a new build: the whole of it, from the top.
+  useEffect(() => setView(HOME), [level.parent?.area_id, level.build?.build_id])
+  // A level asked for from elsewhere — the URL, Back — brings the zoom to it.
+  useEffect(() => {
+    const v = viewRef.current
+    if (depthForZoom(v.k, level.level, level.levels) === wanted) return
+    setView(zoomAbout(v, zoomForDepth(wanted, level.level) / v.k, frame.width / 2, drawHeight / 2, frame.width, drawHeight))
+    // Only when the level asked for moves, not when the frame does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, level.level, level.levels])
 
   const [panel, setPanel] = useState<Panel>({ kind: 'none' })
   const [menu, setMenu] = useState<Menu>(null)
@@ -327,7 +384,8 @@ export function AreasView({
     )
   }
 
-  const byId = new Map(rows.map((a) => [a.area_id, a]))
+  // The root's fields too: a line between two fields is drawn at every level.
+  const byId = new Map([...level.areas, ...rows].map((a) => [a.area_id, a]))
   const zooming = shown < wanted && !zoomError
 
   return (
@@ -347,7 +405,7 @@ export function AreasView({
         ref={canvasFrame}
         data-theme="dark"
         className="relative min-w-0 flex-1 bg-ground-deep text-text"
-        style={{ touchAction: 'pan-x pan-y' }}
+        style={{ touchAction: 'none' }}
       >
         <Canvas
           level={level}
@@ -361,7 +419,8 @@ export function AreasView({
           onLink={(link) => setPanel({ kind: 'bridge', a: link.area_a, b: link.area_b })}
           onMenu={setMenu}
           onScale={setScale}
-          top={Math.max(64, overlayHeight + 28)}
+          top={drawTop}
+          view={view}
         />
 
         <div ref={overlay} className="absolute inset-x-5 top-4 z-[1] flex flex-wrap items-center gap-2.5">
@@ -382,18 +441,17 @@ export function AreasView({
           </span>
           {onDepth ? (
             <div className="ml-auto">
-              <LevelControl levels={level.levels} value={wanted} onChange={onDepth} />
+              <LevelControl levels={level.levels} value={wanted} onChange={zoomToDepth} />
             </div>
           ) : null}
         </div>
 
         <SizeKey areas={rows} scale={scale} />
-        <p className="pointer-events-none absolute bottom-4 left-5 right-5 hidden font-mono text-[11px] text-text-faint sm:block">
+        <p className="pointer-events-none absolute bottom-4 left-5 right-5 hidden truncate font-mono text-[11px] text-text-faint sm:block">
           size = passages ·{' '}
-          {shown === level.level
-            ? 'solid = a cited claim spans both, thicker = more sources · dashed = similar passages · '
-            : `outline = the ${levelNoun(level.level)} each came from · `}
-          click to zoom in · scroll, pinch or +/− for more or less detail · right-click for more
+          solid = cited claim · dashed = similar passages
+          {shown === level.level ? '' : ` (hover a circle) · outline = its ${levelNoun(level.level)}`} · scroll to
+          zoom, drag to move, 0 for all · right-click for more
         </p>
 
         {hover !== null && byId.get(hover) ? <AreaTip area={byId.get(hover)!} /> : null}
@@ -476,6 +534,9 @@ function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; hei
  * same passages as the level above, so at a share of 1 they cover the same
  * area; the spacing lets them spread into the room the coarser level left.
  */
+/** Room kept at the bottom of the canvas for the key's line. */
+const CANVAS_BOTTOM = 40
+
 const SHRINK = [1, 0.98, 0.9]
 const SPREAD = [0, 0.95, 0.85]
 const GAPS = [14, 5, 2.5]
@@ -500,6 +561,7 @@ function Canvas({
   onMenu,
   onScale,
   top = 64,
+  view = HOME,
 }: {
   level: AreasLevel
   byParent: ReadonlyMap<number, AreasLevel>
@@ -514,6 +576,8 @@ function Canvas({
   onScale: (scale: number) => void
   /** Room kept clear at the top for what floats over the canvas there. */
   top?: number
+  /** The zoom and pan the reader has; the layout itself never moves. */
+  view?: View
 }) {
   const box = useRef<HTMLDivElement>(null)
   const { width, height } = useSize(box)
@@ -521,7 +585,7 @@ function Canvas({
   // so an outline would be a box round nothing.
   const [focused, onFocusLink] = useState<[number, number] | null>(null)
   // Room at the bottom for the key.
-  const bottom = 40
+  const bottom = CANVAS_BOTTOM
   const drawHeight = Math.max(200, height - top - bottom)
   const maxRadius = fitRadius(
     level.areas.map((a) => a.passages),
@@ -557,7 +621,15 @@ function Canvas({
   }, [level, byParent, width, drawHeight, maxRadius, keyBox])
 
   const layout = layouts.get(shown) ?? layouts.get(level.level)!
-  useEffect(() => onScale(layout.scale), [layout.scale, onScale])
+  useEffect(() => onScale(layout.scale * view.k), [layout.scale, view.k, onScale])
+
+  // The layout as the view shows it: every circle, for lines and outlines,
+  // and those on screen, for drawing and naming.
+  const placedAll = useMemo(() => layout.placed.map((p) => viewed(p, view)), [layout, view])
+  const placed = useMemo(
+    () => placedAll.filter((p) => onScreen(p, width, drawHeight)),
+    [placedAll, width, drawHeight],
+  )
 
   // Every area loaded, for walking a finer one up to its ancestor.
   const everyArea = useMemo(() => {
@@ -571,7 +643,7 @@ function Canvas({
   const outlines = useMemo(() => {
     if (layout.level === level.level || level.areas.length > 24) return []
     const groups = new Map<number, Placed[]>()
-    for (const p of layout.placed) {
+    for (const p of placedAll) {
       const a = ancestorAt(p.area.area_id, level.level, everyArea)
       if (a === null) continue
       const list = groups.get(a)
@@ -598,17 +670,17 @@ function Canvas({
       taken.push(box)
     }
     return drawn
-  }, [layout, level, everyArea, width])
+  }, [layout, placedAll, level, everyArea, width])
 
   const labels = useMemo(
     () =>
-      fitLabels(layout.placed, {
+      fitLabels(placed, {
         width,
-        captions: layout.placed.length <= 40,
-        crowded: layout.placed.length > 40 || width < 640,
+        captions: placed.length <= 40,
+        crowded: placed.length > 40 || width < 640,
         reserved: [keyBox, ...outlines.filter((o) => o.named).map((o) => o.box)],
       }),
-    [layout, width, outlines],
+    [placed, width, outlines],
   )
 
   // A change of level splits each circle into its children, or gathers them
@@ -628,20 +700,48 @@ function Canvas({
     const coarse = layouts.get(lo)
     const fine = layouts.get(hi)
     if (!coarse || !fine) return
+    // Drawn as the reader sees them now, so a split set off by zooming
+    // happens where they are looking.
+    const coarsePlaced = coarse.placed.map((p) => viewed(p, view))
+    const finePlaced = fine.placed.map((p) => viewed(p, view))
     setMorph({
-      items: splitMorph(coarse.placed, fine.placed, (id) => ancestorAt(id, lo, everyArea)),
-      coarse: coarse.placed,
-      coarseLabels: fitLabels(coarse.placed, { width, captions: false, reserved: [keyBox] }),
+      items: splitMorph(coarsePlaced, finePlaced, (id) => ancestorAt(id, lo, everyArea)),
+      coarse: coarsePlaced,
+      coarseLabels: fitLabels(coarsePlaced.filter((p) => onScreen(p, width, drawHeight)), {
+        width,
+        captions: false,
+        reserved: [keyBox],
+      }),
       split: layout.level > previous.shown,
     })
+    // The view at the moment the level changed; a pan during the split does not restart it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level, layout, layouts, everyArea, width, keyBox])
   const endMorph = useCallback(() => setMorph(null), [])
 
   const childNoun = levelNoun(layout.level + 1)
-  const at = new Map(layout.placed.map((p) => [p.area.area_id, p]))
-  // Lines are bridges between siblings, so they are drawn only at the root's
-  // own level, where every circle on screen is a sibling of every other.
-  const links = layout.level === level.level ? level.links : []
+  // Lines at every level (`linksAt`): siblings' bridges between circles, and
+  // below the root the root's own bridges between the outlines of its fields,
+  // so a link between two fields does not vanish on zooming in.
+  const ends = new Map<number, { x: number; y: number; r: number; name: string }>(
+    placedAll.map((p) => [p.area.area_id, { x: p.x, y: p.y, r: p.r, name: p.area.name }]),
+  )
+  // Below the root a level has hundreds of sibling lines, and the dashed
+  // ones (similar passages, no cited claim) would cover the map: they show
+  // for the circle in hand. Cited ones always show; they are the rare kind.
+  const focusId = hover ?? highlight
+  const links = linksAt(level, byParent, layout.level).filter(
+    (link) =>
+      layout.level === level.level ||
+      link.cited_claims > 0 ||
+      link.area_a === focusId ||
+      link.area_b === focusId,
+  )
+  const fieldLinks: AreaLink[] = []
+  if (layout.level > level.level) {
+    for (const o of outlines) ends.set(o.id, { x: o.hull.x, y: o.hull.y, r: o.hull.r, name: everyArea.get(o.id)?.name ?? '' })
+    if (outlines.length > 0) fieldLinks.push(...level.links)
+  }
 
   const contextMenu = useCallback(
     (event: React.MouseEvent, area: Area | null) => {
@@ -656,8 +756,9 @@ function Canvas({
   )
 
   const cx = width / 2
-  const cy = top + drawHeight / 2
-  const globe = Math.min(width, drawHeight) * 0.46
+  const globe = Math.min(width, drawHeight) * 0.46 * view.k
+  const gx = cx * view.k + view.x
+  const gy = top + (drawHeight / 2) * view.k + view.y
 
   return (
     <div ref={box} className="absolute inset-0" onContextMenu={(event) => contextMenu(event, null)}>
@@ -670,10 +771,17 @@ function Canvas({
         data-level={layout.level}
       >
         <g fill="none" stroke="var(--dark-canvas-graticule)">
-          <circle cx={cx} cy={cy} r={globe} />
-          <ellipse cx={cx} cy={cy} rx={globe * 0.42} ry={globe} />
+          <circle cx={gx} cy={gy} r={globe} />
+          <ellipse cx={gx} cy={gy} rx={globe * 0.42} ry={globe} />
         </g>
-        <g transform={`translate(0 ${top})`}>
+        <defs>
+          <clipPath id="map-draw">
+            <rect x={0} y={0} width={width} height={drawHeight} />
+          </clipPath>
+        </defs>
+        {/* Clipped to the drawing's own frame, so a zoomed map stays out from
+            under the controls above it and the key's line below. */}
+        <g transform={`translate(0 ${top})`} clipPath="url(#map-draw)">
           {morph ? (
             <MorphLayer
               items={morph.items}
@@ -698,7 +806,7 @@ function Canvas({
                   strokeDasharray="2 5"
                 />
               ))}
-              {layout.placed.map((p) => (
+              {placed.map((p) => (
                 <AreaCircle
                   key={p.area.area_id}
                   placed={p}
@@ -738,9 +846,9 @@ function Canvas({
           )}
           {morph
             ? null
-            : links.map((link) => {
-                const a = at.get(link.area_a)
-                const b = at.get(link.area_b)
+            : [...fieldLinks.map((link) => ({ link, between: 'fields' })), ...links.map((link) => ({ link, between: '' }))].map(({ link, between }) => {
+                const a = ends.get(link.area_a)
+                const b = ends.get(link.area_b)
                 if (!a || !b) return null
                 // Edge to edge, not centre to centre: a line drawn through a
                 // circle crosses its label and makes the circle hard to click.
@@ -751,13 +859,13 @@ function Canvas({
                 const selected =
                   (selectedLink?.includes(link.area_a) && selectedLink.includes(link.area_b)) ||
                   (focused?.[0] === link.area_a && focused[1] === link.area_b)
-                const label = `${a.area.name} and ${b.area.name}: ${
+                const label = `${a.name} and ${b.name}: ${
                   cited
                     ? `${link.cited_claims} cited claim${link.cited_claims === 1 ? '' : 's'}, ${link.cited_sources} source${link.cited_sources === 1 ? '' : 's'}`
                     : 'similar passages, no cited claim'
                 }`
                 return (
-                  <g key={`${link.area_a}-${link.area_b}`}>
+                  <g key={`${link.area_a}-${link.area_b}`} data-link={between || 'siblings'} opacity={between ? 0.55 : 1}>
                     <line
                       x1={x1}
                       y1={y1}

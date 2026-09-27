@@ -31,7 +31,7 @@ export function LevelControl({
     <div
       role="group"
       aria-label="Level of detail"
-      title="Scroll, pinch or press + and − to change the level"
+      title="Scroll or pinch to zoom, drag to move, + and − for a level, 0 or double-click for the whole map"
       className="flex shrink-0 items-stretch border border-line-strong bg-surface"
     >
       <button
@@ -73,87 +73,158 @@ export function LevelControl({
   )
 }
 
-/** Wheel movement, in pixels, that makes one step of level. A mouse notch is about 100. */
-const WHEEL_STEP = 80
-/** After a step, gestures are ignored this long, so one flick is one level. */
-const STEP_LOCK_MS = 420
+/**
+ * How much one pixel of wheel travel zooms. A mouse notch (about 100 px) is a
+ * little under 1.2×; a trackpad's stream of small deltas is smooth; a pinch
+ * on a trackpad arrives as a wheel with ctrl held and small deltas, so it is
+ * weighted up to feel like a pinch.
+ */
+const WHEEL_RATE = 0.0017
+const PINCH_WEIGHT = 6
+/** Travel, in pixels, before a press becomes a drag rather than a click. */
+const DRAG_SLOP = 4
 
 function typing(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
+export interface ZoomHandlers {
+  /** Zoom by `factor` about (x, y), in the element's own pixels. */
+  onZoom: (factor: number, x: number, y: number) => void
+  /** Move the view by a drag of (dx, dy) pixels. */
+  onPan: (dx: number, dy: number) => void
+  /** + or −: one level of detail in or out. */
+  onStep: (direction: 1 | -1) => void
+  /** Back to the whole map. */
+  onReset: () => void
+}
+
+/** The factor one wheel event zooms by: towards the reader is in. */
+export function wheelFactor(deltaY: number, deltaMode: number, ctrlKey: boolean): number {
+  const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? 400 : 1
+  const travel = Math.max(-300, Math.min(300, deltaY * unit * (ctrlKey ? PINCH_WEIGHT : 1)))
+  return Math.exp(-travel * WHEEL_RATE)
+}
+
 /**
- * Wheel, trackpad pinch (a wheel event with ctrl held), two-finger touch
- * pinch, and + / − on the keyboard, each as one step in or out. Scrolling
- * towards the reader, or spreading two fingers, is "in": more detail.
+ * The Map's gestures (a map's, not a document's): the wheel and a pinch zoom
+ * the view about the pointer, a drag pans it, + and − step the level of
+ * detail, and a double-click on empty ground goes back to the whole map.
+ * The level itself follows the zoom, so these are the only gestures needed.
+ *
+ * A drag must not also be a click: the press that starts it is usually on a
+ * circle, and a circle's click opens it. So a drag past {@link DRAG_SLOP}
+ * swallows the click that ends it.
  */
 export function useZoomGestures(
   ref: React.RefObject<HTMLElement | null>,
-  onStep: (direction: 1 | -1) => void,
+  handlers: ZoomHandlers,
   active = true,
 ): void {
-  const step = useRef(onStep)
-  step.current = onStep
+  const current = useRef(handlers)
+  current.current = handlers
 
   useEffect(() => {
     const element = ref.current
     if (!element || !active) return
-    let total = 0
-    let quietSince = 0
-    let lockedUntil = 0
-    let pinchFrom = 0
+    let press: { id: number; x: number; y: number; dragging: boolean } | null = null
+    let swallowClick = false
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinch = 0
 
-    function fire(direction: 1 | -1) {
-      lockedUntil = performance.now() + STEP_LOCK_MS
-      total = 0
-      step.current(direction)
+    const local = (clientX: number, clientY: number) => {
+      const box = element.getBoundingClientRect()
+      return { x: clientX - box.left, y: clientY - box.top }
     }
 
     function onWheel(event: WheelEvent) {
       event.preventDefault()
-      const now = performance.now()
-      if (now - quietSince > 250) total = 0
-      quietSince = now
-      if (now < lockedUntil) return
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1
-      // A pinch reports small deltas; weight it so a deliberate pinch is a step.
-      total += event.deltaY * unit * (event.ctrlKey ? 8 : 1)
-      if (Math.abs(total) >= WHEEL_STEP) fire(total < 0 ? 1 : -1)
+      const at = local(event.clientX, event.clientY)
+      current.current.onZoom(wheelFactor(event.deltaY, event.deltaMode, event.ctrlKey), at.x, at.y)
     }
 
-    function spread(touches: TouchList): number {
-      const a = touches[0]!
-      const b = touches[1]!
-      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-    }
-    function onTouchStart(event: TouchEvent) {
-      pinchFrom = event.touches.length === 2 ? spread(event.touches) : 0
-    }
-    function onTouchMove(event: TouchEvent) {
-      if (event.touches.length !== 2 || pinchFrom <= 0) return
-      if (performance.now() < lockedUntil) return
-      const ratio = spread(event.touches) / pinchFrom
-      if (ratio > 1.3 || ratio < 0.77) {
-        pinchFrom = spread(event.touches)
-        fire(ratio > 1 ? 1 : -1)
+    function onPointerDown(event: PointerEvent) {
+      if (event.pointerType === 'touch') {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (touches.size === 2) {
+          const [a, b] = [...touches.values()]
+          pinch = Math.hypot(a!.x - b!.x, a!.y - b!.y)
+          press = null
+          return
+        }
       }
+      if (event.button !== 0 || touches.size > 1) return
+      press = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false }
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      if (event.pointerType === 'touch' && touches.has(event.pointerId)) {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        if (touches.size === 2 && pinch > 0) {
+          const [a, b] = [...touches.values()]
+          const spread = Math.hypot(a!.x - b!.x, a!.y - b!.y)
+          const mid = local((a!.x + b!.x) / 2, (a!.y + b!.y) / 2)
+          current.current.onZoom(spread / pinch, mid.x, mid.y)
+          pinch = spread
+          return
+        }
+      }
+      if (!press || press.id !== event.pointerId) return
+      const dx = event.clientX - press.x
+      const dy = event.clientY - press.y
+      if (!press.dragging && Math.hypot(dx, dy) < DRAG_SLOP) return
+      press.dragging = true
+      press.x = event.clientX
+      press.y = event.clientY
+      current.current.onPan(dx, dy)
+    }
+
+    function onPointerUp(event: PointerEvent) {
+      touches.delete(event.pointerId)
+      if (touches.size < 2) pinch = 0
+      if (press && press.id === event.pointerId) {
+        swallowClick = press.dragging
+        press = null
+      }
+    }
+
+    function onClick(event: MouseEvent) {
+      if (!swallowClick) return
+      swallowClick = false
+      event.stopPropagation()
+      event.preventDefault()
+    }
+
+    function onDoubleClick(event: MouseEvent) {
+      // Empty ground only: a circle's own double-click is two opens.
+      if ((event.target as Element | null)?.closest?.('[data-area]')) return
+      current.current.onReset()
     }
 
     function onKey(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || typing(event.target)) return
-      if (event.key === '+' || event.key === '=') fire(1)
-      else if (event.key === '-' || event.key === '_') fire(-1)
+      if (event.key === '+' || event.key === '=') current.current.onStep(1)
+      else if (event.key === '-' || event.key === '_') current.current.onStep(-1)
+      else if (event.key === '0') current.current.onReset()
     }
 
     element.addEventListener('wheel', onWheel, { passive: false })
-    element.addEventListener('touchstart', onTouchStart, { passive: true })
-    element.addEventListener('touchmove', onTouchMove, { passive: true })
+    element.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+    element.addEventListener('click', onClick, true)
+    element.addEventListener('dblclick', onDoubleClick)
     window.addEventListener('keydown', onKey)
     return () => {
       element.removeEventListener('wheel', onWheel)
-      element.removeEventListener('touchstart', onTouchStart)
-      element.removeEventListener('touchmove', onTouchMove)
+      element.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      element.removeEventListener('click', onClick, true)
+      element.removeEventListener('dblclick', onDoubleClick)
       window.removeEventListener('keydown', onKey)
     }
   }, [ref, active])

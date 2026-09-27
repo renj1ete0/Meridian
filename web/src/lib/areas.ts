@@ -712,6 +712,92 @@ export function loadedTo(root: AreasLevel, byParent: ReadonlyMap<number, AreasLe
 }
 
 /**
+ * The lines to draw at `depth` (the Map's lines at every level, not only the
+ * root's): at the root's own level its links; below it, each parent's links
+ * between its own children, since the build links siblings. Links between
+ * fields are drawn separately, between the fields' outlines.
+ */
+export function linksAt(root: AreasLevel, byParent: ReadonlyMap<number, AreasLevel>, depth: number): AreaLink[] {
+  if (depth <= root.level) return root.links
+  const out: AreaLink[] = []
+  for (const parent of rowsAt(root, byParent, depth - 1)) {
+    const children = parent.children > 0 ? byParent.get(parent.area_id) : undefined
+    if (children) out.push(...children.links)
+  }
+  return out
+}
+
+// --------------------------------------------------------------------------
+// The view: a zoom and a pan over the laid-out map
+
+/** Where the reader is looking: screen = base × k + (x, y). */
+export interface View {
+  k: number
+  x: number
+  y: number
+}
+
+export const HOME: View = { k: 1, x: 0, y: 0 }
+
+/**
+ * The magnification at which each level below the root takes over, by how
+ * many levels below it. A finer level is laid out inside the coarser one's
+ * circles, so the two share coordinates and zooming in simply reveals it —
+ * the semantic zoom of a map, where more detail appears as there is room
+ * for it.
+ */
+export const ZOOM_FOR_DEPTH = [1, 1.7, 3.4] as const
+
+/** As far in as the view goes: a theme then fills a good part of the screen. */
+export const MAX_ZOOM = 14
+
+/** The level a magnification shows, between the root's and the deepest there is. */
+export function depthForZoom(k: number, rootLevel: number, levels: number): number {
+  let depth = rootLevel
+  for (let i = 1; i < ZOOM_FOR_DEPTH.length && rootLevel + i <= levels; i++) {
+    if (k >= ZOOM_FOR_DEPTH[i]! - 1e-9) depth = rootLevel + i
+  }
+  return depth
+}
+
+/** The magnification that shows `depth`, the inverse of {@link depthForZoom}. */
+export function zoomForDepth(depth: number, rootLevel: number): number {
+  const i = Math.max(0, Math.min(ZOOM_FOR_DEPTH.length - 1, depth - rootLevel))
+  return ZOOM_FOR_DEPTH[i]!
+}
+
+/**
+ * Zoom by `factor` about the screen point (px, py), which stays where it is,
+ * then keep the map covering the frame: never smaller than it fits, never
+ * panned so far that an edge of it comes away from the frame's edge.
+ */
+export function zoomAbout(view: View, factor: number, px: number, py: number, width: number, height: number): View {
+  const k = Math.max(1, Math.min(MAX_ZOOM, view.k * factor))
+  const f = k / view.k
+  return clampView({ k, x: px - (px - view.x) * f, y: py - (py - view.y) * f }, width, height)
+}
+
+/** Move the view by a drag of (dx, dy) screen pixels, kept inside the frame. */
+export function panBy(view: View, dx: number, dy: number, width: number, height: number): View {
+  return clampView({ k: view.k, x: view.x + dx, y: view.y + dy }, width, height)
+}
+
+export function clampView(view: View, width: number, height: number): View {
+  const clamp = (v: number, lo: number) => Math.max(lo, Math.min(0, v))
+  return { k: view.k, x: clamp(view.x, width * (1 - view.k)), y: clamp(view.y, height * (1 - view.k)) }
+}
+
+/** A circle as the view shows it. */
+export function viewed<T extends { x: number; y: number; r: number }>(p: T, view: View): T {
+  return { ...p, x: p.x * view.k + view.x, y: p.y * view.k + view.y, r: p.r * view.k }
+}
+
+/** Whether a circle as shown touches the frame at all; one wholly outside is not drawn. */
+export function onScreen(p: { x: number; y: number; r: number }, width: number, height: number): boolean {
+  return p.x + p.r >= 0 && p.x - p.r <= width && p.y + p.r >= 0 && p.y - p.r <= height
+}
+
+/**
  * Each level fetched once: the same parent asked for twice shares one
  * request, and a failed request is forgotten so it can be tried again.
  * Requests are not cancelled when the view moves on: what was asked for is
@@ -834,7 +920,10 @@ function insideLabel(p: { x: number; y: number; r: number }, name: string, capti
     const label = insideAt(p, name, captionChars, fontSize)
     if (label) return label
   }
-  return null
+  // Last, small and shortened rather than nothing: a name hung below a circle
+  // is refused where the circles are dense, and then a circle with room for
+  // most of its name inside carried none (the zoomed-in Map).
+  return insideAt(p, name, captionChars, 9, true)
 }
 
 function insideAt(
@@ -842,6 +931,7 @@ function insideAt(
   name: string,
   captionChars: number,
   fontSize: number,
+  truncate = false,
 ): Label | null {
   const lineHeight = fontSize + 3
   // A band across the middle of the circle, narrower than its diameter so
@@ -851,8 +941,13 @@ function insideAt(
   const caption = captionChars > 0 && captionChars * CAPTION_CHAR + 6 <= across
   const maxChars = Math.floor((across - 6) / (fontSize * CHAR_WIDTH))
   if (maxChars < 5) return null
-  const lines = wrapWords(name, maxChars, 3)
-  if (!lines) return null
+  const wrapped = wrapWords(name, maxChars, 3, truncate)
+  if (!wrapped) return null
+  // Shortened, a word too long for the circle is cut rather than the whole
+  // name dropped: "Transporta…" says more than nothing, and hover says all.
+  const lines = truncate
+    ? wrapped.map((line) => (line.length > maxChars ? `${line.slice(0, maxChars - 1).trimEnd()}…` : line))
+    : wrapped
   const longest = Math.max(...lines.map((line) => line.length))
   const width = longest * fontSize * CHAR_WIDTH + 6
   const height = lines.length * lineHeight + (caption ? 13 : 0)

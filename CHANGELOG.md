@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.0] — 2026-09-27
+
+### Changed
+
+- `B-93`: the Map zooms like a map. The wheel and a pinch zoom the view about the
+  pointer, a drag pans it, and 0 or a double-click on empty ground returns to the whole
+  map; the level of detail follows the zoom (fields, then subfields at 1.7×, themes at
+  3.4×) and the level buttons zoom to their level. Before, the wheel only switched
+  level, so the finest level — hundreds of small circles — could not be magnified at
+  all. Lines are now drawn at every level: siblings' bridges between circles, and the
+  fields' bridges between the fields' outlines; dashed similar-only lines below the
+  root show for the circle under the pointer. The drawing is clipped clear of the
+  controls, and a circle too small for its whole name shows its start
+
 ## [0.148.16] — 2026-09-27
 
 ### Fixed

@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.148.15`. Phases 0–3 are built; phase 1's checkpoint is not.** 4460 backend tests
-against a real Postgres, 616 frontend.
+**`v0.149.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4460 backend tests
+against a real Postgres, 921 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
@@ -1487,6 +1487,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-93` **The Map zooms like a map, with lines at every level** — `v0.149.0`. From
+      the operator (2026-09-27): after changing level by zooming the map could not be
+      zoomed, and cross-field lines were not visible. The wheel only stepped the level;
+      lines were drawn at the root level only. Now zoom/pan with the level following the
+      magnification; sibling and field lines at every level. Screenshot-checked live
 - [x] `B-91` **A followed link records its parent page** — `v0.148.15`. Loop run 8:
       search results 70% on a topic, followed links 4% (English alone 4%), and followed
       links were two thirds of fetches — a fan-out into sibling subdomains of large sites,

@@ -10,6 +10,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { modeFromSearch } from '../src/explore/MapPage'
@@ -314,5 +315,78 @@ describe('the URL', () => {
     expect(areaFromSearch('?area=-3')).toBeNull()
     expect(modeFromSearch('?view=points')).toBe('points')
     expect(modeFromSearch('')).toBe('areas')
+  })
+})
+
+
+describe('the map as a map (B-93)', () => {
+  function withChildren() {
+    const root = level()
+    const byParent = new Map([
+      [1, level({ level: 2, parent: root.areas[0]!, areas: [area({ area_id: 11, passages: 300 }), area({ area_id: 12, passages: 300 })] })],
+      [2, level({ level: 2, parent: root.areas[1]!, areas: [area({ area_id: 21, passages: 150 }), area({ area_id: 22, passages: 150 })] })],
+    ])
+    return { root, byParent }
+  }
+
+  function frame(container: HTMLElement): HTMLElement {
+    return container.querySelector('[data-theme="dark"]') as HTMLElement
+  }
+
+  it('changes the level of detail by zooming, not by a separate gesture', () => {
+    const { root, byParent } = withChildren()
+    const onDepth = vi.fn()
+    const { container } = render(<AreasView level={root} onLevel={vi.fn()} byParent={byParent} onDepth={onDepth} />)
+
+    for (let i = 0; i < 6; i++) fireEvent.wheel(frame(container), { deltaY: -100, clientX: 400, clientY: 300 })
+
+    expect(onDepth).toHaveBeenCalled()
+    expect(onDepth.mock.calls.at(-1)![0]).toBeGreaterThan(1)
+  })
+
+  it('zooms back out to the root, and never asks for a level that is not there', () => {
+    const { root, byParent } = withChildren()
+    const onDepth = vi.fn()
+    // The level held the way the page holds it, so what is asked for comes back.
+    function Page() {
+      const [depth, setDepth] = useState(1)
+      return (
+        <AreasView
+          level={root}
+          onLevel={vi.fn()}
+          byParent={byParent}
+          depth={depth}
+          onDepth={(d) => {
+            onDepth(d)
+            setDepth(d)
+          }}
+        />
+      )
+    }
+    const { container } = render(<Page />)
+
+    for (let i = 0; i < 40; i++) fireEvent.wheel(frame(container), { deltaY: -300, clientX: 400, clientY: 300 })
+    for (let i = 0; i < 40; i++) fireEvent.wheel(frame(container), { deltaY: 300, clientX: 400, clientY: 300 })
+
+    const asked = onDepth.mock.calls.map((c) => c[0] as number)
+    expect(Math.max(...asked)).toBeLessThanOrEqual(root.levels)
+    expect(asked.at(-1)).toBe(1)
+  })
+
+  it('does not open a circle a drag started on', () => {
+    const { root, byParent } = withChildren()
+    const onLevel = vi.fn()
+    const { container } = render(<AreasView level={root} onLevel={onLevel} byParent={byParent} onDepth={vi.fn()} />)
+    const circle = container.querySelector('[data-area="1"]') as Element
+
+    fireEvent.pointerDown(circle, { pointerId: 1, button: 0, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 160, clientY: 130 })
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 160, clientY: 130 })
+    fireEvent.click(circle)
+    expect(onLevel).not.toHaveBeenCalled()
+
+    // The next plain click still opens it: only the drag's own click is eaten.
+    fireEvent.click(circle)
+    expect(onLevel).toHaveBeenCalledWith(1)
   })
 })
