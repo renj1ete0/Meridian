@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.2] — 2026-09-27
+
+### Fixed
+
+- `B-96`: the Answer view's chip for sources that name no place reads "32 name no
+  place", not "No place named 32"
+
 ## [0.149.1] — 2026-09-27
 
 ### Fixed

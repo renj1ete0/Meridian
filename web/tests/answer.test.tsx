@@ -137,7 +137,7 @@ describe('the grouped answer', () => {
     // Thin is dashed, not only differently coloured.
     expect(chips[1]!.className).toContain('border-dashed')
     expect(chips[1]!.textContent).toContain('thin')
-    expect(chips[2]!.textContent).toContain('No place named')
+    expect(chips[2]!.textContent).toContain('name no place')
     expect(chips[2]!.textContent).toContain('5')
     // Each chip jumps to its section.
     expect(chips[0]!.getAttribute('href')).toBe('#answer-DE')
