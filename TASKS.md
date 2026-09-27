@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
+**`v0.149.6`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
 against a real Postgres, 925 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1504,7 +1504,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-99` ⚑ **Reader-surface jargon on Find** — "hybrid" badge in the search box and
       "Filters apply before the vector search." read as operator language, but both are in
       the approved mocks and defended in design-system §8. Operator: keep, or reword?
-- [ ] `B-100` **Neighbourhood graph names cut to a dozen characters** — the small ring
+- [x] `B-100` **Neighbourhood graph names cut to a dozen characters** — `v0.149.6`, screenshot-checked. — the small ring
       graph truncates most node names; show full names on hover or wrap two lines
 - [x] `B-101` **Map on a phone** — `v0.149.4`, screenshot-checked at 390px. — the size key covers a fifth of the canvas at 390px;
       collapse it to a one-line key below 640px

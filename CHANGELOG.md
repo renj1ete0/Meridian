@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.6] — 2026-09-27
+
+### Fixed
+
+- `B-100`: names in Find's neighbourhood diagram wrap onto two lines of about sixteen
+  characters instead of being cut at fourteen, and each node's full name shows on hover
+
 ## [0.149.5] — 2026-09-27
 
 ### Changed

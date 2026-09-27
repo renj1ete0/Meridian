@@ -22,6 +22,7 @@ import {
   relationText,
   arcPositions,
   labelAt,
+  labelLines,
   shortLabel,
 } from '../src/explore/neighbourhood/NeighbourhoodPanel'
 import {
@@ -318,5 +319,33 @@ describe('the client', () => {
       .mockResolvedValue(new Response(JSON.stringify(data()), { status: 200 }))
     await getTermNeighbourhood({ q: 'walkway' })
     expect(String(fetched.mock.calls[0]![0])).toBe('/api/explore/neighbourhood?q=walkway')
+  })
+})
+
+
+describe('names in the ring diagram (B-100)', () => {
+  it('keeps a short name whole on one line', () => {
+    expect(labelLines('street trees')).toEqual(['street trees'])
+  })
+
+  it('wraps a long name onto two lines at a word, each within the width', () => {
+    const lines = labelLines('pavement lifespan extension', 16)
+    expect(lines).toHaveLength(2)
+    expect(lines.every((line) => line.length <= 16)).toBe(true)
+    expect(lines.join(' ').replace('…', '')).toContain('pavement lifespan')
+  })
+
+  it('shortens only what does not fit in two lines, and never loses the start', () => {
+    const lines = labelLines('Permit to Deploy Autonomous Vehicles on Public Streets', 16)
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toBe('Permit to Deploy')
+    expect(lines[1]!.endsWith('…')).toBe(true)
+    expect(lines.every((line) => line.length <= 16)).toBe(true)
+  })
+
+  it('cuts a single word too long for a line rather than dropping it', () => {
+    const lines = labelLines('Supercalifragilisticexpialidocious', 16)
+    expect(lines).toHaveLength(1)
+    expect(lines[0]!.length).toBeLessThanOrEqual(16)
   })
 })

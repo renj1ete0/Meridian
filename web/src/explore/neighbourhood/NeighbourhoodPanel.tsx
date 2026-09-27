@@ -90,6 +90,22 @@ export function shortLabel(name: string, max = 18): string {
   return name.length <= max ? name : `${name.slice(0, max - 1).trimEnd()}…`
 }
 
+/**
+ * A name on up to two lines of about `width` characters (`B-100`), shortened
+ * only past that: one line of fourteen left most names unreadable ("pavement
+ * lifes…"), and the diagram has the room for a second.
+ */
+export function labelLines(name: string, width = 16): string[] {
+  if (name.length <= width) return [name]
+  const words = name.split(/\s+/)
+  let first = ''
+  let i = 0
+  while (i < words.length && `${first} ${words[i]}`.trim().length <= width) first = `${first} ${words[i++]}`.trim()
+  if (!first) return [shortLabel(name, width)]
+  const rest = words.slice(i).join(' ')
+  return rest ? [first, shortLabel(rest, width)] : [first]
+}
+
 /** `reduces →` when the anchor is the subject, `← obstructs` when it is the object. */
 export function relationText(relation: Relation): string {
   const words = relation.relation_type.replace(/_/g, ' ')
@@ -181,8 +197,13 @@ function RingDiagram({ data }: { data: TermNeighbourhood }) {
               paintOrder="stroke"
             >
               {/* Few outer nodes leave room for longer names. */}
-              {shortLabel(term.canonical_name, similar.length <= 4 ? 20 : 14)}
+              {labelLines(term.canonical_name, similar.length <= 4 ? 20 : 15).map((line, n) => (
+                <tspan key={n} x={label.x} dy={n === 0 ? 0 : 12}>
+                  {line}
+                </tspan>
+              ))}
             </text>
+            <title>{term.canonical_name}</title>
           </g>
         )
       })}
@@ -220,13 +241,18 @@ function RingDiagram({ data }: { data: TermNeighbourhood }) {
               strokeWidth="3.5"
               paintOrder="stroke"
             >
-              {shortLabel(term.canonical_name, 15)}
+              {labelLines(term.canonical_name, 16).map((line, n) => (
+                <tspan key={n} x={label.x} dy={n === 0 ? 0 : 13}>
+                  {line}
+                </tspan>
+              ))}
               {term.contested ? (
                 <tspan fontFamily="IBM Plex Mono" fontSize="10" dy="-4" fill={canvas('accent-attention')}>
                   †
                 </tspan>
               ) : null}
             </text>
+            <title>{term.canonical_name}</title>
           </g>
         )
       })}
