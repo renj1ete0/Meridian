@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hmac
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Annotated
@@ -86,6 +87,11 @@ def create_app(embedder: object | None = None) -> FastAPI:
     model = embedder or BGEEmbedder(settings)
 
     app = FastAPI(title="Meridian embedder", summary="Vectors for the corpus and its queries.")
+    # A shared secret, when the sidecar runs on another machine (`P3-12`): its
+    # port is then on the LAN, and anything there could use the CPU. Unset on a
+    # single machine, where only the compose network reaches it. `/health`
+    # stays open so a supervisor needs no secret.
+    token = os.environ.get("MERIDIAN_EMBEDDER_TOKEN", "").strip()
 
     @app.get("/health")
     async def health() -> dict[str, object]:
@@ -105,6 +111,10 @@ def create_app(embedder: object | None = None) -> FastAPI:
 
     @app.post("/embed", response_model=EmbedResponse)
     async def embed(request: Annotated[EmbedRequest, Body()], raw: Request) -> EmbedResponse:
+        if token and not hmac.compare_digest(
+            raw.headers.get("authorization", ""), f"Bearer {token}"
+        ):
+            raise HTTPException(status_code=401, detail="A valid embedder token is required.")
         try:
             # In a thread: the model is CPU-bound and synchronous, and running
             # it on the event loop would stall every other request behind it —

@@ -53,6 +53,9 @@ IMAGES=(
   # arm64 Pi. Cross-building it here once is minutes; building it there is the
   # database being unavailable while it happens.
   "postgres|deploy/postgres/Dockerfile|deploy/postgres"
+  # The hardened browser (`P1-26`). Pushed for the same reason as postgres: a
+  # server that pulls should not have to build anything (`P3-12`).
+  "crawl4ai|deploy/crawl4ai/Dockerfile|deploy/crawl4ai"
 )
 
 DRY_RUN=0
@@ -175,8 +178,8 @@ if [ ${#built[@]} -gt 0 ]; then
   [ "$DRY_RUN" = 1 ] && echo "meridian: would push" || echo "meridian: pushed"
   printf '  %s\n' "${built[@]}"
   echo ""
-  echo "  Pin these in docker-compose.yml on the Pi, then:"
-  echo "    docker compose pull && docker compose up -d"
+  echo "  To roll these out to servers following the stable channel (P3-12):"
+  echo "    make promote SHA=${TAG}"
 fi
 
 if [ ${#skipped[@]} -gt 0 ]; then

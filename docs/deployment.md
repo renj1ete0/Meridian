@@ -1,5 +1,10 @@
 # Deploying the stack
 
+> **Two ARM boards with automatic updates?** See [deploy-sbc.md](deploy-sbc.md)
+> (`P3-12`): images pulled from GHCR, promoted to a `stable` channel that
+> Watchtower follows, and the embedding model on a board of its own. This page
+> remains the reference for everything that layout shares.
+
 The runbook for putting Meridian on the server it is meant to live on, and for
 the two runs that close phase 1: the bounded **smoke run** (does the stack come
 up and talk to itself) and `P1-16`, the **48h unattended run** whose output
@@ -60,8 +65,9 @@ probably is not, so there are two routes:
 
 - **Build on the server.** `docker compose build` over an SSH session. Slowest,
   needs no registry, and is the right call for a first smoke run.
-- **Build and push multi-arch.** What `make build-push` is *for*. See §6 — the
-  script it calls is still missing (`P1-37`).
+- **Build and push multi-arch.** What `make build-push` is *for*: every image,
+  both architectures, tagged by commit; `make promote SHA=…` then points the
+  `stable` channel at it (`P3-12`, [deploy-sbc.md](deploy-sbc.md)).
 
 ---
 

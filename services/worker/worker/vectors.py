@@ -74,8 +74,13 @@ class PreferRemote:
         *,
         local: AsyncEmbedder | None = None,
         local_factory=None,
+        remote_only: bool = False,
     ) -> None:
         self._remote = remote
+        #: Never load the model here (`P3-12`): the sidecar is on another machine
+        #: because this one cannot spare the memory. A failed call is a failed
+        #: batch, retried next pass, not a 2.3 GB load beside Postgres.
+        self._remote_only = remote_only
         self._local = local
         # A factory rather than an instance, because constructing the local
         # embedder is what this class exists to avoid doing unnecessarily —
@@ -103,6 +108,13 @@ class PreferRemote:
         if not texts:
             return []
 
+        if self._remote is not None and self._remote_only:
+            try:
+                return await self._remote.embed(texts)
+            except (EmbeddingUnavailable, ValueError) as exc:
+                # EmbeddingError, which the backfill counts and steps past.
+                raise EmbeddingError(f"remote-only embedder unavailable: {exc}") from exc
+
         if self._remote is not None:
             try:
                 return await self._remote.embed(texts)
@@ -126,6 +138,12 @@ SIDECAR_WAIT_S = 180.0
 SIDECAR_POLL_S = 5.0
 
 
+def remote_only_from_env() -> bool:
+    """``MERIDIAN_EMBED_REMOTE_ONLY`` (`P3-12`): the model is on another machine
+    and must never be loaded in this one."""
+    return os.environ.get("MERIDIAN_EMBED_REMOTE_ONLY", "").strip().lower() in {"1", "true", "yes"}
+
+
 async def build_embedder(
     remote: RemoteEmbedder | None = None,
     *,
@@ -143,6 +161,12 @@ async def build_embedder(
     (``MERIDIAN_EMBEDDER_WAIT_S``, default :data:`SIDECAR_WAIT_S`).
     """
     candidate = remote if remote is not None else RemoteEmbedder.from_env()
+    remote_only = remote_only_from_env()
+    if candidate is None and remote_only:
+        raise EmbeddingError(
+            "MERIDIAN_EMBED_REMOTE_ONLY is set but MERIDIAN_EMBEDDER_URL is not: "
+            "nothing to embed with, and loading the model here is what was ruled out"
+        )
     if candidate is None:
         log.info("no embedding sidecar configured; the model loads in this process")
         return PreferRemote(None)
@@ -154,6 +178,13 @@ async def build_embedder(
     while described is None and time.monotonic() < deadline:
         await asyncio.sleep(poll_s)
         described = await candidate.describe()
+    if described is None and remote_only:
+        # Keep asking the sidecar, batch by batch; never load the model here.
+        log.warning(
+            "embedding sidecar did not answer; remote-only, so batches wait for it",
+            extra={"url": candidate.base_url},
+        )
+        return PreferRemote(candidate, remote_only=True)
     if described is None:
         log.warning(
             "embedding sidecar did not answer; the model loads in this process",
@@ -169,7 +200,7 @@ async def build_embedder(
             "loaded": described.get("loaded"),
         },
     )
-    return PreferRemote(candidate)
+    return PreferRemote(candidate, remote_only=remote_only)
 
 
 __all__ = [

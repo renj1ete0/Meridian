@@ -305,3 +305,29 @@ async def test_a_real_batch_is_given_more_than_the_default_thirty_seconds() -> N
 
     assert seen and seen[0] == len(texts) * SECONDS_PER_TEXT
     assert seen[0] > 30.0, "the batch was held to the query timeout"
+
+
+async def test_the_client_sends_the_token_from_the_environment(monkeypatch) -> None:
+    """P3-12: the other half of the sidecar's check; a mismatch here is a 401 on
+    every batch, which reads as an embedder that is down."""
+    import httpx
+
+    from meridian_core.embedder import RemoteEmbedder
+
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        return httpx.Response(200, json={"vectors": [[0.0] * 4], "dimensions": 4, "model": "m"})
+
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_URL", "http://embedder.lan:8100")
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_TOKEN", "s3cret")
+    client = RemoteEmbedder.from_env()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    await client.embed(["a"])
+    monkeypatch.delenv("MERIDIAN_EMBEDDER_TOKEN")
+    bare = RemoteEmbedder.from_env()
+    bare._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    await bare.embed(["a"])
+
+    assert seen == ["Bearer s3cret", None]

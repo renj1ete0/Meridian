@@ -152,3 +152,23 @@ def test_the_route_still_answers_a_full_batch(client) -> None:
     response = client.post("/embed", json={"texts": texts})
     assert response.status_code == 200
     assert len(response.json()["vectors"]) == MAX_TEXTS
+
+
+# -- the shared token, when the sidecar is on another machine (P3-12) -------------
+
+
+def test_with_a_token_set_embedding_needs_it_and_health_does_not(monkeypatch) -> None:
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_TOKEN", "s3cret")
+    guarded = TestClient(create_app(FakeEmbedder()))
+
+    assert guarded.get("/health").status_code == 200, "a supervisor needs no secret"
+    for headers in ({}, {"Authorization": "Bearer wrong"}, {"Authorization": "s3cret"}):
+        assert guarded.post("/embed", json={"texts": ["a"]}, headers=headers).status_code == 401
+    ok = guarded.post("/embed", json={"texts": ["a"]}, headers={"Authorization": "Bearer s3cret"})
+    assert ok.status_code == 200 and len(ok.json()["vectors"]) == 1
+
+
+def test_without_a_token_the_sidecar_is_open_as_before(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBEDDER_TOKEN", raising=False)
+    open_ = TestClient(create_app(FakeEmbedder()))
+    assert open_.post("/embed", json={"texts": ["a"]}).status_code == 200

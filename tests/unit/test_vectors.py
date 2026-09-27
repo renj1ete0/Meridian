@@ -277,3 +277,52 @@ async def test_the_local_adapter_short_circuits_an_empty_batch() -> None:
             raise AssertionError("should not have been called")
 
     assert await LocalEmbedder(Exploding()).embed([]) == []
+
+
+# --------------------------------------------------------------------------
+# Remote only: the model is on another machine (P3-12)
+# --------------------------------------------------------------------------
+
+
+async def test_remote_only_never_builds_the_local_model_when_the_sidecar_is_down(
+    monkeypatch,
+) -> None:
+    """On the stack's board, loading 2.3 GB beside Postgres is the failure."""
+    from worker.embeddings import EmbeddingError
+
+    monkeypatch.setenv("MERIDIAN_EMBED_REMOTE_ONLY", "1")
+    remote = FakeRemote(described=None, fail=EmbeddingUnavailable("connection refused"))
+    embedder = await build_embedder(remote, wait_s=0)
+    embedder._local_factory = FakeLocal
+
+    assert embedder.using_remote is True, "a down sidecar still is the only embedder"
+    with pytest.raises(EmbeddingError):
+        await embedder.embed(["a"])
+    assert FakeLocal.built == 0
+
+
+@pytest.mark.parametrize("failure", [EmbeddingUnavailable("down"), EmbedderMismatch("other model")])
+async def test_remote_only_fails_the_batch_instead_of_falling_back(failure) -> None:
+    """A failed batch is retried next pass; a local load is not undone."""
+    from worker.embeddings import EmbeddingError
+
+    embedder = PreferRemote(FakeRemote(fail=failure), local_factory=FakeLocal, remote_only=True)
+    with pytest.raises(EmbeddingError):
+        await embedder.embed(["a"])
+    assert FakeLocal.built == 0
+    assert embedder.using_remote is True, "the next batch asks the sidecar again"
+
+
+async def test_remote_only_with_no_sidecar_configured_is_refused(monkeypatch) -> None:
+    from worker.embeddings import EmbeddingError
+
+    monkeypatch.setenv("MERIDIAN_EMBED_REMOTE_ONLY", "1")
+    monkeypatch.delenv("MERIDIAN_EMBEDDER_URL", raising=False)
+    with pytest.raises(EmbeddingError, match="MERIDIAN_EMBEDDER_URL"):
+        await build_embedder()
+
+
+async def test_without_remote_only_the_fallback_is_unchanged(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBED_REMOTE_ONLY", raising=False)
+    embedder = await build_embedder(FakeRemote(described=None), wait_s=0)
+    assert embedder.using_remote is False

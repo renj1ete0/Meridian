@@ -11,7 +11,7 @@
 -include .env.dev
 export
 
-.PHONY: dev-up dev-down up down logs migrate seed quickstart preflight \
+.PHONY: promote dev-up dev-down up down logs migrate seed quickstart preflight \
         local-up local-down local-logs \
         snapshot-corpus restore-corpus backup test bench-search build-push build-worker
 
@@ -89,6 +89,12 @@ bench-search:
 
 build-push:
 	./scripts/build_and_push.sh
+
+# Point the `stable` channel at a pushed commit; servers running Watchtower
+# follow it (`P3-12`). Rollback is promoting the previous SHA.
+promote:
+	@test -n "$(SHA)" || { echo 'usage: make promote SHA=<commit>'; exit 1; }
+	./scripts/promote.sh $(SHA)
 
 # Build the worker image locally, for the host's own architecture. The build
 # context is the repo root because the services share a uv workspace; multi-arch

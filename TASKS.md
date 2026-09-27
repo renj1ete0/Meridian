@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.12`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.153.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -820,6 +820,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       it may forever. Every query is logged either way, which is §12.4's actual
       request: the queries an agent writes here are the next curated tools.
       Registered only when `PG_GUEST_URL` is set
+- [ ] `P3-12` **Two ARM boards, pull-based, auto-updating** — `v0.153.0`, built; not yet run on the
+      boards (tick when it has). Operator (2026-09-27): split across two 16 GB arm64 SBCs, a
+      deployment guide, auto-redeploy via Watchtower as in their british-shorthair repo.
+      Images from GHCR at a `stable` channel moved only by `make promote SHA=…`; Watchtower
+      (label opt-in, `autoupdate` profile) on both boards; `migrate` runs on a promoted tools
+      image; embedder on board 2 behind a shared token, reached over `lan` through one nft
+      exception, and `embed` remote-only so board 1 never loads the model. Guide:
+      `docs/deploy-sbc.md`
 - [~] `P3-05` Cloudflare Tunnel + Access in front of the API — the code side
       is done and the rest is **your Cloudflare account**. `cloudflared` is in
       compose, `P3-08` verifies assertions, `P3-03` enforces scopes, and

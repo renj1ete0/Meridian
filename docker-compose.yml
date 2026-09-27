@@ -43,7 +43,9 @@ services:
     # because §3 chose one store for the queue, the metadata and the graph and
     # no published image has both (`P4-01`).
     build: { context: ./deploy/postgres }
-    image: meridian/postgres:pg17-age          # TODO: pin by digest before production
+    # Pulled, not built, on an arm64 server (`P3-12`): AGE compiles from source.
+    # Never auto-updated — a database upgrade is done by hand, with a snapshot.
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-postgres:${MERIDIAN_POSTGRES_TAG:-stable}
     env_file: .env
     networks: [internal]                   # no egress, ever
     volumes:
@@ -89,7 +91,7 @@ services:
   crawl4ai:
     <<: *common
     build: { context: ./deploy/crawl4ai }  # pinned base + hardened config (P1-26)
-    image: meridian/crawl4ai:0.9.2
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-crawl4ai:${MERIDIAN_CRAWL4AI_TAG:-stable}
     shm_size: 1g
     networks: [egress]                     # NO route to postgres, by construction
     environment:
@@ -125,6 +127,8 @@ services:
   embedder:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     command: ["python", "-m", "worker.embedserver"]
     networks: [internal]
     environment:
@@ -172,6 +176,7 @@ services:
   # installs `uv`, and `postgres` only resolves inside the compose network.
   tools:
     build: { context: ., dockerfile: deploy/tools/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-tools:${MERIDIAN_TAG:-stable}
     profiles: [tools]
     env_file: .env
     networks: [internal]
@@ -227,6 +232,7 @@ services:
   # it belongs in the deploy runbook ahead of `up`, not in somebody's memory.
   modelfetch:
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
     command: ["python", "-m", "worker.fetchmodel"]
     profiles: [tools]
     networks: [egress]
@@ -240,6 +246,8 @@ services:
   worker:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     env_file: .env
     # The only service on both: it fetches the open web and writes the results
     # to Postgres, and nothing else in the stack does both.
@@ -310,6 +318,8 @@ services:
   embed:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     command: ["python", "-m", "worker.embed"]
     healthcheck:
       test: ["CMD", "python", "-m", "worker.liveness"]
@@ -324,7 +334,7 @@ services:
       # `B-76`: the sidecar, loaded, before the backfill decides whether to use it.
       embedder: { condition: service_healthy }
     environment:
-      MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      MERIDIAN_EMBEDDER_URL: ${MERIDIAN_EMBEDDER_URL:-http://embedder:8100}
       MERIDIAN_EMBED_CACHE: /models
       # `P2-19`'s fallback loads the model in *this* process when the sidecar
       # does not answer, and this network has no route out — so without this
@@ -371,6 +381,8 @@ services:
   scheduler:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     command: ["python", "-m", "worker.scheduler"]
     healthcheck:
       test: ["CMD", "python", "-m", "worker.liveness"]
@@ -388,7 +400,7 @@ services:
       # topic's prototype through the sidecar (`P2-21`). Declared here rather
       # than left to `.env`: a scheduled labeller with no embedder exits 2
       # every hour, and every new source stays unlabelled.
-      MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      MERIDIAN_EMBEDDER_URL: ${MERIDIAN_EMBEDDER_URL:-http://embedder:8100}
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
@@ -406,6 +418,8 @@ services:
   bot:
     <<: *common
     build: { context: ., dockerfile: services/worker/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     command: ["python", "-m", "worker.bot"]
     # The loop touches the liveness file each time round the poll, so a bot
     # still running and no longer listening — a token revoked, a socket wedged
@@ -442,6 +456,8 @@ services:
   orchestrator:
     <<: *common
     build: { context: ., dockerfile: services/orchestrator/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-orchestrator:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     env_file: .env
     # `network_mode` and `networks` are mutually exclusive and compose refuses a
     # file setting both; this used to set `network_mode: bridge` *and* a network
@@ -455,7 +471,7 @@ services:
       # Entity resolution weighs what a name means as well as its words (`B-40`).
       # Absent, it degrades to words alone — which is how two names for one
       # thing became separate nodes that no person was ever asked about.
-      MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      MERIDIAN_EMBEDDER_URL: ${MERIDIAN_EMBEDDER_URL:-http://embedder:8100}
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       # Written by this container as uid 1001. An answer is written into it
@@ -475,6 +491,8 @@ services:
   api:
     <<: *common
     build: { context: ., dockerfile: services/api/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-api:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     env_file: .env
     networks: [internal]          # cloudflared fronts it; it needs no egress
     depends_on:
@@ -501,6 +519,8 @@ services:
   web:
     <<: *common
     build: { context: ./web }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-web:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }   # `P3-12`: auto-updated on promote
     networks: [internal]
     depends_on: [api]
 
@@ -513,6 +533,56 @@ services:
     networks: [internal, egress]
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+  # --- Pull-based updates (`P3-12`) -------------------------------------------
+  #
+  # Both behind the `autoupdate` profile: `docker compose up -d` never starts
+  # them, `docker compose --profile autoupdate up -d` does. What reaches the
+  # server is what was *promoted* (`make promote SHA=…` retags a pushed commit
+  # as `stable`), so promoting is the approval, migrations included.
+
+  # Runs `alembic upgrade head` once each time it starts, then idles. Watchtower
+  # restarts it when a promoted tools image arrives, which is when a new
+  # migration can. A failure exits, retries, and never reports healthy — loud,
+  # which is the difference from the migrate-on-boot the `tools` note warns off.
+  migrate:
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-tools:${MERIDIAN_TAG:-stable}
+    profiles: [autoupdate]
+    env_file: .env
+    networks: [internal]
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: ["sh", "-c", "alembic upgrade head && touch /tmp/migrated && exec sleep infinity"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/migrated"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+    restart: on-failure:5
+    labels: { com.centurylinklabs.watchtower.enable: "true" }
+    logging: *logging
+
+  # Checks the registry for the labelled services' tags and restarts those whose
+  # image changed. Postgres, the browser, SearXNG and cloudflared carry no label
+  # and are never touched. Needs a read-only registry token for private images —
+  # without one it sees nothing and says nothing (the British-shorthair lesson).
+  watchtower:
+    image: nickfedor/watchtower:latest
+    profiles: [autoupdate]
+    restart: unless-stopped
+    networks: [egress]          # the registry and Telegram, nothing else
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: ${TZ:-Asia/Singapore}
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-3600}
+      REPO_USER: ${GHCR_READ_USER:-}
+      REPO_PASS: ${GHCR_READ_PAT:-}
+      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
+    logging: *logging
 
 # Subnets are pinned so that host firewall rules have a stable target (`P1-25`).
 #

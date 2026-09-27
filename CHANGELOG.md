@@ -68,6 +68,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.153.0] — 2026-09-27
+
+### Added
+
+- `P3-12`: deploying on two arm64 boards with automatic updates (`docs/deploy-sbc.md`).
+  Services built from this repo name their registry image at a channel tag
+  (`${MERIDIAN_TAG:-stable}`); `make promote SHA=…` points `stable` at a pushed commit, and
+  Watchtower (opt-in label, `autoupdate` profile) pulls and restarts what changed. A
+  `migrate` service runs `alembic upgrade head` when a promoted tools image arrives.
+  `deploy/split/remote-embedder.yml` runs the stack without the model; `deploy/embedder-node/`
+  runs the model on a second board behind `MERIDIAN_EMBEDDER_TOKEN`, reached over `lan`
+  through one nft exception (`lan_allow`), with `embed` remote-only
+  (`MERIDIAN_EMBED_REMOTE_ONLY`) so the stack's board never loads the model. `crawl4ai` is
+  now pushed with the rest, so a server builds nothing
+
 ## [0.152.12] — 2026-09-27
 
 ### Fixed

@@ -25,6 +25,20 @@
 # that is working — see the deployment runbook §7 for the command.
 
 table inet meridian {
+  # Machines on the LAN that Meridian's `lan` network may reach, one address and
+  # port each (`P3-12`): the embedding node, when the model runs on a second
+  # machine. Empty by default, so nothing changes until an element is added:
+  #
+  #   add element inet meridian lan_allow { 192.168.1.20 . 8100 }
+  #
+  # Only the `lan` subnet (172.31.242.0/24) can use it, and only the services
+  # that call the embedder sit on `lan` — never the worker, which fetches the
+  # open web. Put the element in this file, not only on the command line, or it
+  # is gone after a reboot.
+  set lan_allow {
+    type ipv4_addr . inet_service
+  }
+
   chain forward {
     # priority -10: ahead of Docker's own forward rules, which end in ACCEPT
     # for anything they recognise. Sitting after them would mean this never runs.
@@ -34,6 +48,9 @@ table inet meridian {
     # from Postgres: Docker allocates bridge subnets inside 172.16.0.0/12, which
     # is RFC1918, so the stack would be blocking itself.
     ip saddr 172.31.240.0/22 ip daddr 172.31.240.0/22 accept
+
+    # The named LAN services, from `lan` only, before the private-range drop.
+    ip saddr 172.31.242.0/24 ip daddr . tcp dport @lan_allow accept
 
     # Everything else private, from anywhere in Meridian's networks.
     ip saddr 172.31.240.0/22 ip daddr {

@@ -1,0 +1,34 @@
+# Machine 1 of two: everything but the embedding model (`P3-12`).
+#
+#   docker compose -f docker-compose.yml -f deploy/split/remote-embedder.yml \
+#     --profile autoupdate up -d
+#
+# In `.env`:  MERIDIAN_EMBEDDER_URL=http://<machine 2>:8100
+#             MERIDIAN_EMBEDDER_TOKEN=<the same long random string as machine 2>
+# and the nft element that lets `lan` reach it (deploy/egress-restrict.nft).
+#
+# What changes here, and only this:
+#   - the local `embedder` is parked in a profile nothing starts;
+#   - nothing waits for it to be healthy;
+#   - the services that ask it for vectors join `lan`, the one network allowed a
+#     route to a named LAN address. The worker is not among them: it fetches the
+#     open web and never calls the embedder itself.
+
+services:
+  embedder:
+    profiles: [local-embedder]
+
+  embed:
+    depends_on: !override
+      postgres: { condition: service_healthy }
+    networks: !override [internal, lan]
+    environment:
+      # Never load the model on this board, even when board 2 is down: that is
+      # 2.3 GB and every core, beside Postgres and the browser. Batches wait.
+      MERIDIAN_EMBED_REMOTE_ONLY: "1"
+
+  api:
+    networks: !override [internal, lan]
+
+  scheduler:
+    networks: !override [internal, egress, lan]

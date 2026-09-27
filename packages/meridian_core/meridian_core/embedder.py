@@ -100,8 +100,11 @@ class RemoteEmbedder:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         client: httpx.AsyncClient | None = None,
         expect_model: str | None = None,
+        token: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        #: Sent as a bearer token when the sidecar asks for one (`P3-12`).
+        self._headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._timeout = timeout_s
         self._client = client
         self._owns_client = client is None
@@ -128,6 +131,7 @@ class RemoteEmbedder:
             # sides of the boundary read one setting rather than two that can
             # disagree silently.
             expect_model=os.environ.get("MERIDIAN_EMBED_MODEL", "").strip() or None,
+            token=os.environ.get("MERIDIAN_EMBEDDER_TOKEN", "").strip() or None,
         )
 
     def _http(self) -> httpx.AsyncClient:
@@ -176,6 +180,7 @@ class RemoteEmbedder:
             response = await self._http().post(
                 f"{self.base_url}/embed",
                 json={"texts": list(texts)},
+                headers=self._headers,
                 # Sized to the request rather than fixed. A batch is not a
                 # query that got longer: it is N times the work, and a timeout
                 # that ignores N is a timeout that only fits the smallest call

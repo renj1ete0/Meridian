@@ -1,0 +1,70 @@
+# Machine 2 of two: the embedding model on its own (`P3-12`).
+#
+# The model is the one part of Meridian that wants a whole machine's memory and
+# CPU, and it talks to the rest over one HTTP call, so it moves cleanly.
+#
+#   cd deploy/embedder-node
+#   cp env.example .env && chmod 600 .env        # fill it in
+#   docker compose --profile tools run --rm modelfetch   # 2.3 GB of weights, once
+#   docker compose up -d
+#
+# Its port is on the LAN. Keep it there: firewall 8100 to machine 1's address,
+# and set MERIDIAN_EMBEDDER_TOKEN on both machines — the sidecar refuses /embed
+# without it. /health stays open for supervisors.
+
+name: meridian-embedder
+
+services:
+  embedder:
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }
+    command: ["python", "-m", "worker.embedserver"]
+    restart: unless-stopped
+    ports:
+      - "${EMBEDDER_BIND:-0.0.0.0}:8100:8100"
+    environment:
+      MERIDIAN_EMBEDDER_PORT: "8100"
+      MERIDIAN_EMBED_CACHE: /models
+      MERIDIAN_EMBEDDER_TOKEN: ${MERIDIAN_EMBEDDER_TOKEN:?set MERIDIAN_EMBEDDER_TOKEN - the port is on the LAN}
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - ${MODELS_DIR:-/srv/meridian/models}:/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=4).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          memory: ${EMBEDDER_MEMORY:-8G}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # The weights, fetched once into MODELS_DIR. Separate because the sidecar runs
+  # with HF_HUB_OFFLINE and must never reach the network itself.
+  modelfetch:
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    profiles: [tools]
+    command: ["python", "-m", "worker.fetchmodel"]
+    environment:
+      MERIDIAN_EMBED_CACHE: /models
+    volumes:
+      - ${MODELS_DIR:-/srv/meridian/models}:/models
+    restart: "no"
+
+  watchtower:
+    image: nickfedor/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: ${TZ:-Asia/Singapore}
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-3600}
+      REPO_USER: ${GHCR_READ_USER:-}
+      REPO_PASS: ${GHCR_READ_PAT:-}
+      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
