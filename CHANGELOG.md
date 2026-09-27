@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.151.1] — 2026-09-27
+
+### Added
+
+- `B-92`: `worker.requeue_links`, hourly: a pending followed link whose page has since been
+  read and found about none of the topics moves to the host gate's floor priority (1). Only
+  down, never deleted, idempotent; links from on-topic pages keep their rank
+
 ## [0.151.0] — 2026-09-27
 
 ### Added

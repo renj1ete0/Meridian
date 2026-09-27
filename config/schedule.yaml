@@ -169,6 +169,15 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: requeue_links
+    module: worker.requeue_links
+    args: ["--apply"]
+    # `B-92`: a pending followed link whose page has since been read and found
+    # about none of the topics moves to the host gate's floor priority. Only
+    # down, never deleted, idempotent; hourly, after `topics`.
+    interval_seconds: 3600
+    enabled: true
+
   - name: requeue_dois
     module: worker.requeue_dois
     args: ["--apply"]
