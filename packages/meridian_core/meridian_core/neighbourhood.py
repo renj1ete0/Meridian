@@ -98,6 +98,118 @@ def _singular(word: str) -> str:
     return word[:-1]
 
 
+#: Words a question is made of that name nothing: asked for one at a time,
+#: each would offer every node with "does" or "with" in its name.
+QUESTION_WORDS = frozenset(
+    [
+        "about",
+        "after",
+        "also",
+        "among",
+        "and",
+        "are",
+        "because",
+        "been",
+        "being",
+        "between",
+        "both",
+        "could",
+        "does",
+        "doing",
+        "during",
+        "each",
+        "from",
+        "have",
+        "having",
+        "into",
+        "more",
+        "most",
+        "much",
+        "other",
+        "over",
+        "should",
+        "some",
+        "such",
+        "than",
+        "that",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "under",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "will",
+        "with",
+        "within",
+        "without",
+        "would",
+        "affect",
+        "affects",
+        "effect",
+        "effects",
+        "impact",
+        "impacts",
+        "relate",
+        "relates",
+        "related",
+        "relationship",
+        "role",
+        "all",
+        "and",
+        "any",
+        "are",
+        "but",
+        "can",
+        "did",
+        "does",
+        "for",
+        "had",
+        "has",
+        "her",
+        "his",
+        "how",
+        "its",
+        "may",
+        "not",
+        "our",
+        "she",
+        "the",
+        "too",
+        "two",
+        "use",
+        "was",
+        "way",
+        "who",
+        "why",
+        "yet",
+        "you",
+    ]
+)
+
+#: How many of a question's words are looked up, and how many nodes offered.
+MAX_QUERY_WORDS = 6
+MAX_CANDIDATES = 10
+
+
+def query_words(term: str) -> list[str]:
+    """The words of a query worth looking up as node names, in order, once each.
+
+    Three letters or more — "bus" and "car" are subjects — and not a
+    question's own vocabulary, which would match inside too many names.
+    """
+    words = re.findall(r"[^\W_][\w-]*", term.lower())
+    return [w for w in dict.fromkeys(words) if len(w) >= 3 and w not in QUESTION_WORDS]
+
+
 @dataclasses.dataclass(frozen=True)
 class NameCandidate:
     entity_id: int
@@ -429,12 +541,23 @@ async def neighbourhood(
 
     candidates: list[TermRead] = []
     if anchor is None and term.strip():
-        found = await graphview.search_nodes(sess, term)
-        candidates = [
-            TermRead(entity_id=m.entity_id, canonical_name=m.canonical_name, node_type=m.node_type)
-            for m in found.matches
-            if not m.is_annotation
-        ]
+        matches = list((await graphview.search_nodes(sess, term)).matches)
+        if not matches:
+            # A question names no node as a whole, but its words may (`B-94`):
+            # "how does X affect Y" offers X and Y rather than nothing.
+            for word in query_words(term)[:MAX_QUERY_WORDS]:
+                matches.extend((await graphview.search_nodes(sess, word, limit=4)).matches)
+        seen: set[int] = set()
+        for m in matches:
+            if m.is_annotation or m.entity_id in seen:
+                continue
+            seen.add(m.entity_id)
+            candidates.append(
+                TermRead(
+                    entity_id=m.entity_id, canonical_name=m.canonical_name, node_type=m.node_type
+                )
+            )
+        candidates = candidates[:MAX_CANDIDATES]
 
     return TermNeighbourhoodRead(
         term=term,

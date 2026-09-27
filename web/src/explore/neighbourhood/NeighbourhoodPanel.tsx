@@ -381,7 +381,9 @@ function Body({
 
       {!data.anchor && data.candidates.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <span className={LABEL}>Nodes with that in their name</span>
+          <span className={LABEL}>
+            {/\s/.test(data.term.trim()) ? 'Nodes its words name' : 'Nodes with that in their name'}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {data.candidates.map((term) => (
               <button

@@ -21,7 +21,12 @@ from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.graphview import NodeNotFound
 from meridian_core.models import Chunk, Edge, Entity, Observation, Source
 from meridian_core.models.source import EMBEDDING_DIM
-from meridian_core.neighbourhood import PASSAGE_FLOOR, SIMILAR_FLOOR, neighbourhood
+from meridian_core.neighbourhood import (
+    MAX_CANDIDATES,
+    PASSAGE_FLOOR,
+    SIMILAR_FLOOR,
+    neighbourhood,
+)
 from meridian_core.sources import upsert_source
 
 pytestmark = pytest.mark.usefixtures("require_db")
@@ -226,6 +231,25 @@ async def test_a_term_that_names_no_node_has_no_anchor_and_offers_candidates(
     # The outer ring still answers, measured from the term as typed.
     assert body.similar_basis == "term"
     assert world.id("Covered Walkways") in [s.entity_id for s in body.similar]
+
+
+async def test_a_question_offers_the_nodes_its_words_name(session_for, world) -> None:
+    """`B-94`: the whole question names nothing, so its words are looked up."""
+    sess = await ro(session_for)
+    question = f"how does {world.marker}-canopy relate to {world.name('covered')} streets"
+    body = await neighbourhood(sess, question)
+    assert body.anchor is None
+    offered = [t.entity_id for t in body.candidates]
+    assert world.id("Covered Walkways") in offered
+    assert len(offered) == len(set(offered)), "a node offered twice"
+    assert len(offered) <= MAX_CANDIDATES
+
+
+async def test_a_question_made_only_of_question_words_offers_nothing(session_for, world) -> None:
+    """Rejection: "does" and "with" are inside many names and name none of them."""
+    sess = await ro(session_for)
+    body = await neighbourhood(sess, "what does this have to do with that")
+    assert body.anchor is None and body.candidates == []
 
 
 async def test_a_merged_node_is_never_the_anchor(session_for, world) -> None:

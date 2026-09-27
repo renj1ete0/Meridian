@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.3] — 2026-09-27
+
+### Fixed
+
+- `B-94`: a question in Find offers the nodes its words name. The neighbourhood
+  looked the whole query up as one name, so "how does X affect Y" offered nothing
+  when X and Y are both nodes. When the whole names nothing, up to six of its words
+  (three letters or more, a question's own vocabulary left out) are looked up, and at
+  most ten nodes offered
+
 ## [0.149.2] — 2026-09-27
 
 ### Fixed

@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4460 backend tests
-against a real Postgres, 921 frontend.
+**`v0.149.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
+against a real Postgres, 925 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
@@ -1487,6 +1487,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-94` **A question offers the nodes its words name** — `v0.149.3`. UX review
+      2026-09-27: a question in Find got "no node is named <the whole question>"
 - [x] `B-96` **"No place named 32" reads as "32 name no place"** — `v0.149.2`
 - [x] `B-95` **A search is in the URL** — `v0.149.1`. UX review 2026-09-27: Find read
       `?q=` but never wrote it; a search could not be shared and Back left the page
