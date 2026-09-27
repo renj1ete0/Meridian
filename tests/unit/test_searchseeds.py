@@ -20,7 +20,16 @@ def texts(queries) -> list[str]:
 
 def test_every_shape_is_produced() -> None:
     kinds = {q.kind for q in candidates(WALK)}
-    assert kinds == {"concept", "evidence", "counter", "news", "with_topic", "pair", "description"}
+    assert kinds == {
+        "concept",
+        "evidence",
+        "counter",
+        "news",
+        "science",
+        "with_topic",
+        "pair",
+        "description",
+    }
 
 
 def test_news_queries_use_the_news_category() -> None:
@@ -57,7 +66,7 @@ def test_plan_never_repeats_a_query_already_queued_whatever_its_case() -> None:
 
 def test_plan_takes_one_of_each_leading_shape_before_filling() -> None:
     picked = plan([WALK], already=[], per_topic=4, seed=3)
-    assert {q.kind for q in picked} == {"news", "counter", "concept", "evidence"}
+    assert {q.kind for q in picked} == {"news", "science", "counter", "concept"}
 
 
 def test_plan_is_per_topic_and_capped() -> None:
@@ -94,7 +103,15 @@ def test_a_description_lists_its_subjects_as_facets() -> None:
         "The economics of transport and urban mobility: costs, pricing, fares, "
         "funding and financing, and how prices are set."
     )
-    assert facets == ["economics of transport", "urban mobility", "costs", "pricing", "fares", "funding", "financing"]
+    assert facets == [
+        "economics of transport",
+        "urban mobility",
+        "costs",
+        "pricing",
+        "fares",
+        "funding",
+        "financing",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -120,4 +137,29 @@ def test_a_topic_with_no_vocabulary_still_has_queries_to_ask() -> None:
     )
     extra = {q.text for q in candidates(described)} - {q.text for q in candidates(bare)}
     assert {"delivery robotics", "robots in public space delivery"} <= extra
-    assert all(q.kind in ("facet", "description") for q in candidates(described) if q.text in extra)
+    assert all(
+        q.kind in ("facet", "description", "science")
+        for q in candidates(described)
+        if q.text in extra
+    )
+
+
+def test_every_topic_can_ask_the_scholarly_engines() -> None:
+    """`B-111`: a science query per subject, and each pass takes one first."""
+    from meridian_core.searchseeds import SCIENCE_BANG, TopicSeedInput, candidates, plan
+
+    topic = TopicSeedInput(
+        topic="robotics", description="Delivery and service robots.", terms=(), translations=()
+    )
+    science = [q for q in candidates(topic) if q.kind == "science"]
+    assert science and all(q.text.startswith(f"{SCIENCE_BANG} ") for q in science)
+    assert any(q.kind == "science" for q in plan([topic], already=[], per_topic=3, seed=1))
+
+
+def test_a_science_query_is_never_the_bang_alone() -> None:
+    from meridian_core.searchseeds import SCIENCE_BANG, TopicSeedInput, candidates
+
+    topic = TopicSeedInput(topic="x-y", description=None, terms=("abcd",), translations=())
+    assert all(
+        len(q.text) > len(SCIENCE_BANG) + 1 for q in candidates(topic) if q.kind == "science"
+    )

@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.10] — 2026-09-27
+
+### Added
+
+- `B-111`: search seeding also asks SearXNG's scholarly engines — a `!science …` query for each
+  concept and description facet, taken early in each pass as news is
+
 ## [0.152.9] — 2026-09-27
 
 ### Added

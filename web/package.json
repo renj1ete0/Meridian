@@ -1,7 +1,7 @@
 {
   "name": "meridian-web",
   "private": true,
-  "version": "0.152.9",
+  "version": "0.152.10",
   "type": "module",
   "scripts": {
     "dev": "vite",

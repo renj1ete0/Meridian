@@ -36,6 +36,10 @@ from collections.abc import Iterable, Sequence
 #: SearXNG's category bang for news engines.
 NEWS_BANG = "!news"
 
+#: SearXNG's category bang for scholarly engines (`B-111`). They answered, and on
+#: topic (28–30 of 30), while every general web engine refused this client.
+SCIENCE_BANG = "!science"
+
 #: Evidence-shaped suffixes: what a question about a concept is usually after.
 EVIDENCE = ("evaluation", "study", "evidence", "outcomes")
 
@@ -57,17 +61,41 @@ MECHANISM_BY_KIND = {
 #: Shapes that widen a topic without answering one of the five failure modes.
 #: Listed rather than implied, so a new shape has to be put in one set or the
 #: other (a test fails otherwise).
-WIDENING_KINDS = frozenset({"concept", "evidence", "news", "with_topic", "pair", "facet"})
+WIDENING_KINDS = frozenset(
+    {"concept", "evidence", "news", "with_topic", "pair", "facet", "science"}
+)
 
 _SPACE = re.compile(r"\s+")
 
 #: Words a description phrase starts with that carry no subject ("the", "their").
 _LEADING = frozenset(
-    "a an the their its his her our of in on to for with and or including such as around used".split()
+    [
+        "a",
+        "an",
+        "the",
+        "their",
+        "its",
+        "his",
+        "her",
+        "our",
+        "of",
+        "in",
+        "on",
+        "to",
+        "for",
+        "with",
+        "and",
+        "or",
+        "including",
+        "such",
+        "as",
+        "around",
+        "used",
+    ]
 )
 #: A phrase starting with one of these is a clause ("how they are regulated"),
 #: which says what the operator wants to know, not what to search for.
-_CLAUSE = frozenset("how where what when why which who whose whether".split())
+_CLAUSE = frozenset(["how", "where", "what", "when", "why", "which", "who", "whose", "whether"])
 _FACET_SPLIT = re.compile(r"[,;:.()]|\band\b|\bor\b")
 #: Facets longer than this are sentences, not subjects.
 MAX_FACET_WORDS = 5
@@ -142,6 +170,7 @@ def candidates(topic: TopicSeedInput) -> list[Query]:
         for pattern in COUNTER:
             add(pattern.format(concept), "counter")
         add(f"{NEWS_BANG} {concept}", "news")
+        add(f"{SCIENCE_BANG} {concept}", "science")
     for term in terms:
         if name.lower() not in term.lower():
             add(f"{term} {name}", "with_topic")
@@ -157,6 +186,7 @@ def candidates(topic: TopicSeedInput) -> list[Query]:
     for facet in facets:
         if facet != name.lower() and name.lower() not in facet:
             add(f"{facet} {name}", "facet")
+            add(f"{SCIENCE_BANG} {facet} {name}", "science")
     for i, first in enumerate(facets):
         for second in facets[i + 1 :]:
             add(f"{first} {second}", "facet")
@@ -175,7 +205,7 @@ def plan(
     already: Iterable[str],
     per_topic: int,
     seed: int,
-    kinds_first: Sequence[str] = ("news", "counter", "language", "concept", "evidence"),
+    kinds_first: Sequence[str] = ("news", "science", "counter", "language", "concept", "evidence"),
 ) -> list[Query]:
     """``per_topic`` new queries for each topic.
 
