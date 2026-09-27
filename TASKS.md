@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.152.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
+**`v0.152.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
 against a real Postgres, 934 frontend.
 
 ## Resume here (written 2026-09-26, end of session)

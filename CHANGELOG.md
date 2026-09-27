@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.152.2] — 2026-09-27
+
+### Changed
+
+- `B-104`: `seedsearch` runs hourly (was every 3 hours). A pass's search results last about
+  an hour at the directed share; the per-topic backlog cap (24 unanswered) still applies
+
 ## [0.152.1] — 2026-09-27
 
 ### Fixed
