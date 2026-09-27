@@ -68,6 +68,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.149.5] — 2026-09-27
+
+### Changed
+
+- `B-83`: the topic label floor is 0.50 (was 0.45), with the operator's go-ahead.
+  Judged by reading 25 live sources per band, labels in 0.45–0.48 were right 16% of
+  the time, 0.48–0.50 32%, 0.50–0.52 48%, 0.55+ every time sampled; the wrong ones were
+  generic government pages. The passage floor follows it, as designed, and the sample
+  triage line (`B-89`) moves with it to 0.46. The basis changes, so every source and
+  passage is re-labelled on the next `topics` run
+
 ## [0.149.4] — 2026-09-27
 
 ### Fixed

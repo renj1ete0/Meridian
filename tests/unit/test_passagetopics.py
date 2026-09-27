@@ -76,15 +76,17 @@ def test_a_different_source_basis_is_a_different_passage_basis() -> None:
 
 
 @pytest.mark.parametrize(
-    ("name", "value"),
+    ("name", "step"),
     [
-        ("PASSAGE_FLOOR", 0.5),
-        ("PASSAGE_MARGIN", 0.08),
-        ("LISTING_SHARE", 0.7),
-        ("PASSAGE_VERSION", 99),
+        ("PASSAGE_FLOOR", 0.05),
+        ("PASSAGE_MARGIN", 0.04),
+        ("LISTING_SHARE", 0.2),
+        ("PASSAGE_VERSION", 1),
     ],
 )
-def test_moving_a_passage_threshold_moves_the_basis(monkeypatch, name, value) -> None:
+def test_moving_a_passage_threshold_moves_the_basis(monkeypatch, name, step) -> None:
+    """Moved *from wherever it is now*: a fixed target collides with the value
+    the day someone recalibrates to it, and the test then proves nothing."""
     before = passage_fingerprint("v1:abc")
-    monkeypatch.setattr(passagetopics, name, value)
+    monkeypatch.setattr(passagetopics, name, getattr(passagetopics, name) + step)
     assert passage_fingerprint("v1:abc") != before

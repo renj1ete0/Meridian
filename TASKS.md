@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.149.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
+**`v0.149.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 4552 backend tests
 against a real Postgres, 925 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1482,7 +1482,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       index; an extension to add to the Postgres image), or ranking only the first N
       matches of a very broad query and letting the vector arm carry it. Low urgency
       while real questions are multi-word
-- [ ] `B-83` ⚑ **Re-calibrate the topic label floor on today's corpus** — found by the
+- [x] `B-83` ⚑ **Re-calibrate the topic label floor on today's corpus** — `v0.149.5`, floor 0.50 (operator: "ok you can try", 2026-09-27; judgement in `meridian-calibration/b83/`). — found by the
       2026-09-26 information audit. Over half of all labelled sources (about 1,300 of 2,500)
       sit in the 0.45–0.48 band just above `LABEL_FLOOR`, and judged by title only about a
       third to two fifths of a sample of 25 there were on their topic: generic government

@@ -86,11 +86,21 @@ log = get_logger(__name__)
 #     duplicate. They are still labelled — see `source_vectors` — and are also
 #     the sources search already hides.
 #
+# Re-measured on the live corpus (`B-83`), which the silver set did not
+# resemble: it held no generic government pages, and a crawl of government
+# sites is mostly those. Judged by reading, sources whose best score sat in
+# 0.45–0.48 were right about one time in six, 0.48–0.50 one in three, 0.50–0.52
+# about half, and 0.55 and over every time sampled. Agency "about" pages,
+# budget speeches, tax and careers pages share a topic's vocabulary without
+# being about it. At 0.50, each true label given up removes nearly four false
+# ones; at 0.52 the trade is about even, so the floor stops at 0.50.
+#
 # Re-measure before moving any of these; `python -m worker.retopic` prints the
 # distribution it saw, which is where the next calibration starts.
 
-#: The absolute floor. A topic below it is not a label however it ranks.
-LABEL_FLOOR = 0.45
+#: The absolute floor. A topic below it is not a label however it ranks. Was
+#: 0.45 (the silver set's line) until `B-83`.
+LABEL_FLOOR = 0.50
 
 #: How far below the best topic another may sit and still be a label. Adjacent
 #: topics in one field score close together on a page about either; inside this
