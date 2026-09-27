@@ -1473,7 +1473,7 @@ class Worker:
             log.info("frontier not expanded: off-topic host", extra={"url": claim.url})
             return 0
 
-        alternate = await self._queue_english_alternate(sess, claim, document)
+        alternate = await self._queue_english_alternate(sess, claim, document, source)
         verdict = await self._prefilter.keep(sess, document.links)
 
         # Identifiers first, and as `doi` tasks (`B-23`). A `doi.org` link
@@ -1512,6 +1512,10 @@ class Worker:
                 topic=claim.topic,
                 seed_source="frontier",
                 priority=decision.applied_to(priority),
+                # `B-91`: which page carried the link, as a cited DOI already
+                # records. Without it nobody can ask whether an on-topic page's
+                # links are on-topic more often than an off-topic page's.
+                parent_source_id=source.source_id if source is not None else None,
             )
             queued += 1
 
@@ -1531,7 +1535,11 @@ class Worker:
         return queued + dois + alternate
 
     async def _queue_english_alternate(
-        self, sess: AsyncSession, claim: Claim, document: ExtractedDocument
+        self,
+        sess: AsyncSession,
+        claim: Claim,
+        document: ExtractedDocument,
+        source: Source | None = None,
     ) -> int:
         """Queue a non-English page's declared English version first (`B-57`).
 
@@ -1555,6 +1563,7 @@ class Worker:
             seed_source="frontier",
             priority=decision.applied_to(priority_with_urgency(url, tiers, HALF_LIFE_DAYS))
             + ENGLISH_ALTERNATE_BONUS,
+            parent_source_id=source.source_id if source is not None else None,
         )
         return 1
 

@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.148.15] — 2026-09-27
+
+### Fixed
+
+- `B-91`: a followed link records the page that carried it (`queue.parent_source_id`),
+  as a cited DOI already did. Without it a run could not ask whether links from
+  on-topic pages are on-topic more often than links from off-topic ones
+
 ## [0.148.14] — 2026-09-27
 
 ### Fixed

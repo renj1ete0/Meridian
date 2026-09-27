@@ -1176,6 +1176,33 @@ async def test_a_fetched_page_puts_its_links_in_the_queue(
     }
 
 
+async def test_a_queued_link_records_the_page_that_carried_it(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-91`: the parent is what lets a run ask whether an on-topic page's
+    links are worth more than an off-topic page's. The same row a cited DOI
+    would point at, not a second notion of "the page"."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = linking_page("/child")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    seed = await sess.scalar(
+        select(QueueTask).where(QueueTask.topic == run_topic, QueueTask.seed_source != "frontier")
+    )
+    child = await sess.scalar(
+        select(QueueTask).where(QueueTask.url_or_query == f"https://{run_domain}/child")
+    )
+    parent = await sess.get(Source, child.parent_source_id)
+    assert parent is not None, "the link was queued without its page"
+    assert parent.url == seed.url_or_query
+
+
 async def test_a_queued_link_inherits_the_topic_of_the_page_that_linked_it(
     session_for, resolve, raw_store, run_domain, run_topic, cleanup
 ) -> None:

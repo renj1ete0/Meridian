@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.148.14`. Phases 0–3 are built; phase 1's checkpoint is not.** 4459 backend tests
+**`v0.148.15`. Phases 0–3 are built; phase 1's checkpoint is not.** 4460 backend tests
 against a real Postgres, 616 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1487,6 +1487,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       precision, and every filter, Gaps count and Map shade moves with it): raise the floor
       to about 0.48–0.50; add generic-page negatives to the prototypes; or describe the
       noisiest topics. Measure with `worker.retopic`'s report before moving it
+- [x] `B-91` **A followed link records its parent page** — `v0.148.15`. Loop run 8:
+      search results 70% on a topic, followed links 4% (English alone 4%), and followed
+      links were two thirds of fetches — a fan-out into sibling subdomains of large sites,
+      ten exploratory links per new host. The parent was never recorded, so whether the
+      parent's label predicts the child's could not be measured. Next: measure it in run 9
+      and, if it does, gate link-following on it (`B-92`)
+- [ ] `B-92` **Follow links from pages that earned it** — after run 9's measurement (`B-91`)
 - [x] `B-90` **Search results a cached robots.txt refuses are not queued** — `v0.148.14`.
       Found in loop run 8: a third of the window's search claims went to one site whose
       robots.txt refuses everything, returned again by every search pass. The prefilter
