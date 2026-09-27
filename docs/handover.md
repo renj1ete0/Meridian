@@ -26,6 +26,12 @@ add it here.
 > - **`.venv` accumulated ~100 stale `meridian_*.dist-info` folders** with no RECORD, which
 >   printed a page of uv warnings per command; removed them.
 > - The timetable row for a new job must be inserted by hand on the live stack.
+> - **Stale `meridian_*.dist-info` folders reappear** after each version bump (the old one loses
+>   its RECORD), and uv then prints warnings on every command. Harmless; delete the ones with no
+>   RECORD. Cause not found.
+> - **An edge constraint that must hold across a merge is deferred** (`uq_edges_claim`): check it
+>   with `SET CONSTRAINTS uq_edges_claim IMMEDIATE` in a test, or it is never checked before a
+>   rollback.
 
 > **2026-09-27 afternoon — run 8, the Map as a map, UX review (`v0.149.3`, deployed).**
 > Run 8 split yield by how a page was found: search 70% on a topic, followed links 4%. The

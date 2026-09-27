@@ -25,8 +25,10 @@ against a real Postgres, 934 frontend.
 > 0.50, operator-approved), `B-97`–`B-104`, `P6-39` (route mode), `P6-42` (this is noise),
 > `P6-43` (watched questions), `P6-44` (wording). Loop run 9 (`loop/run9/comparison.md`): search
 > ran dry (6% of fetches) → `B-103`, `B-104`. `B-60` and `B-65` were tried and backed out, with
-> the reasons in their entries. Live at `v0.152.2`; timetable has `requeue_links` hourly and
-> `seedsearch` hourly (set by hand). Next: run 10 once seeding has refilled the search queue.
+> the reasons in their entries. Later: `B-60` shipped deferred (`v0.152.3`), `B-105` news
+> queries repeat after 3 days, `P6-42` research fill, `B-106` field searches. Live at
+> `v0.152.6`; timetable has `requeue_links` and `seedsearch` hourly (set by hand). Run 10
+> (16:25–17:25, `loop/run10/`) measures the search supply changes.
 
 > **2026-09-27 afternoon.** Loop run 8 (`loop/run8/`, 1h): search 70% on a topic, followed
 > links 4% and two thirds of fetches → `B-90` (robots-refused search results not queued),
