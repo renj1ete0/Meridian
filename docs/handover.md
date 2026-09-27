@@ -13,6 +13,32 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-27 night — `v0.154.0`: "Ask the graph" wired, not yet run against a model.**
+> `P6-06`/`P6-07` stay open until a real model has answered. What exists:
+> - **Panel** (`web/src/explore/AskPanel.tsx`): toggle bottom-right on every reading surface
+>   except Admin; the node page registers itself as removable context via `useAskSubjects`.
+>   Earlier questions come from `GET /api/explore/chat/threads`; asking is
+>   `POST /api/admin/chat/ask` (a write: it spends tokens and stores a thread).
+> - **Server** (`meridian_core/chat.py`): hybrid search on the question plus the context names,
+>   ≤ 8 passages (≤ 2 per source), then graph edges whose `supporting_chunk_ids` overlap them.
+>   The prompt is framed (`framing.py`); the answer's `[n]` and `{Nn}` markers are checked and
+>   anything not in the given context is removed before storing (`check_answer`).
+> - **Model choice is configuration.** Task type `chat`; seeded row `local-chat`
+>   (`openai_compatible`, **disabled**) with endpoint `${LOCAL_CHAT_LLM_URL}` and model
+>   `${LOCAL_CHAT_MODEL}`, expanded at call time by `provider.resolved`. Admin → Agents can
+>   now change any row's model string. `MERIDIAN_CHAT_DAILY_TOKENS` (default 200000) caps
+>   a UTC day.
+> - **To try it:** set `LOCAL_CHAT_LLM_URL=http://host.docker.internal:<port>/v1` and
+>   `LOCAL_CHAT_MODEL=<name the server reports>` in the env the local compose reads, `up -d
+>   --no-deps api`, then Enable `local-chat` in Admin → Agents. The local compose maps
+>   `host.docker.internal` for the API. In production the API has **no route out**: the
+>   model server must be reachable on `lan` (two-board layout) with an nft `lan_allow` entry.
+> - **Traps:** a new enum column needs a `schemas/enums.py` alias and an `ENUM_PAIRS` row
+>   (`test_drift`); an env var only read through a registry `${VAR}` must be listed in
+>   `REGISTRY_VARIABLES` in `test_compose_topology.py`. With no agent enabled, "chat" appears
+>   in Admin's "Nothing serves" line: that is correct.
+> - **Not pushed to GHCR / not promoted.** The code is pushed to GitHub only.
+
 > **2026-09-27 evening — `v0.152.2` deployed.** Route mode, "this is noise", watched
 > questions, plain wording, label floor 0.50 (relabelled the corpus in 6 min; `topics` does it
 > anyway when the basis changes). Traps:

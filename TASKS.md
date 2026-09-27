@@ -16,10 +16,17 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.154.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4555 backend tests
-against a real Postgres, 934 frontend.
+**`v0.154.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4662 backend tests
+against a real Postgres, 973 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
+
+> **2026-09-27 night — `v0.154.0`.** `P6-06`/`P6-07` "Ask the graph" built and wired to a
+> configurable local model (`local-chat`, disabled; `LOCAL_CHAT_LLM_URL`, `LOCAL_CHAT_MODEL`,
+> model editable in Admin → Agents), **not yet run against a model** by the operator's
+> instruction. Next: point it at a local OpenAI-compatible server, enable, judge answers, then
+> tick. Also still open: `P2-15` embedding-model benchmark (paused), `B-109` search API key,
+> `B-99` and moving Admin out of reader navigation (operator calls). Details: handover §0.
 
 > **2026-09-27 evening.** Built on the operator's "build all" and "keep refining": `B-83` (floor
 > 0.50, operator-approved), `B-97`–`B-104`, `P6-39` (route mode), `P6-42` (this is noise),
