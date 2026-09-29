@@ -21,7 +21,7 @@ against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-09-29 — `v0.155.0`, live locally, committed, not pushed; GHCR held by the operator.**
+> **2026-09-29 — `v0.155.0`, live locally, pushed to GitHub; GHCR held by the operator.**
 > `B-65` shipped (RUM ranking, broad words 2–3× faster, rankings unchanged or within a row or two),
 > `P6-10` shipped (the contested list), `B-53` measured and handed to the operator. Still
 > open: `P6-06`/`P6-07` need a model (a local server answers on the host loopback only; the API

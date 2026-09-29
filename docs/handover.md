@@ -14,7 +14,7 @@ add it here.
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
 > **2026-09-29 — `v0.155.0`: RUM ranking, the contested list, `B-53` measured.** Live locally;
-> committed, **not pushed, not on GHCR** (operator: hold GHCR).
+> pushed to GitHub, **not on GHCR** (operator: hold GHCR).
 > - **`B-65`: the database image now carries `rum`** (PGDG `postgresql-17-rum`, also published
 >   for arm64). **Rebuild `meridian/postgres` before migrating**, or `CREATE EXTENSION rum`
 >   fails on a missing control file. The migration builds `ix_chunks_search_rum` in under a minute
