@@ -522,6 +522,10 @@ def open_admin(monkeypatch) -> None:
 
 @pytest.fixture
 async def client() -> AsyncIterator[httpx.AsyncClient]:
+    # The route keeps its answer for minutes (`B-121`); each test reads its own.
+    from api.routes.gaps import KEPT_GAPS
+
+    KEPT_GAPS.forget()
     app = create_app()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://api.test"
@@ -709,3 +713,25 @@ async def test_actions_are_closed_when_admin_is(client, monkeypatch, committed_t
 
 async def test_the_list_route_accepts_no_write(client):
     assert (await client.post("/api/explore/gaps", json={})).status_code == 405
+
+
+async def test_the_list_is_kept_and_says_when_it_was_worked_out(client, monkeypatch, tmp_path):
+    """`B-121`: a second read inside the window is the same list, not a recount —
+    the count of every on-topic passage took seconds on each visit."""
+    from api.routes import gaps as route
+
+    monkeypatch.setenv("MERIDIAN_EVAL_RUNS_DIR", str(tmp_path))
+    calls = 0
+    real = route.compute_gaps
+
+    async def counted():
+        nonlocal calls
+        calls += 1
+        return await real()
+
+    monkeypatch.setattr(route, "compute_gaps", counted)
+    first = (await client.get("/api/explore/gaps")).json()
+    second = (await client.get("/api/explore/gaps")).json()
+
+    assert calls == 1
+    assert first["computed_at"] == second["computed_at"]

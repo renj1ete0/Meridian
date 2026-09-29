@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.6] — 2026-09-29
+
+### Fixed
+
+- `B-121`: `/api/explore/gaps` keeps its answer for 15 minutes and refreshes it in the
+  background after that, so the Gaps page no longer waits several seconds for a recount of
+  every on-topic passage on each visit. `computed_at` says how old the list is.
+
 ## [0.156.5] — 2026-09-29
 
 ### Fixed

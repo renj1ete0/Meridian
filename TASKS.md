@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.6`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-121` **Gaps took seconds on every visit** — `v0.156.6`. Site review: "Loading the gaps"
+      for 3.5–3.8 s each time. Timed per source: topic coverage counts every on-topic passage in
+      the corpus (a union over every live passage), most of it, and it grows with the corpus. The
+      list moves with the crawl, over hours, so the route keeps its answer for 15 minutes and
+      refreshes behind the reader after that (`api/cache.py`, stale-while-revalidate, one refresh
+      at a time, a failed refresh keeps the old list); only the first read after a restart
+      waits. At the API, not in `gaps.py`, so the core's own tests still read fresh counts
 - [x] `B-120` **The node page on a phone** — `v0.156.4`. Site review: the three fixed columns
       (filters 236px, graph, panel 384px) left a 390px screen no graph and a clipped panel. Below
       `lg` they now stack and the page scrolls — graph (62% of the height), panel, filters — with

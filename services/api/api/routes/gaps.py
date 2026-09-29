@@ -14,6 +14,7 @@ import datetime as dt
 from fastapi import APIRouter, HTTPException
 
 from meridian_core import gaps
+from meridian_core.db import session_ro
 from meridian_core.logging import get_logger
 from meridian_core.schemas.gaps import (
     GapActionResult,
@@ -24,7 +25,8 @@ from meridian_core.schemas.gaps import (
     GapsRead,
 )
 
-from ..deps import AdminAllowed, ReadSession, WriteSession
+from ..cache import Kept
+from ..deps import AdminAllowed, WriteSession
 
 log = get_logger(__name__)
 
@@ -36,15 +38,33 @@ def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
-@explore_router.get("/gaps", response_model=GapsRead)
-async def list_gaps(sess: ReadSession) -> GapsRead:
-    """Every gap the registered sources find, most severe first."""
-    found, statuses = await gaps.find_gaps(sess)
+#: How long a computed gap list is served before a background refresh (`B-121`).
+#: Gaps move with the crawl, over hours; computing them counts every on-topic
+#: passage and took several seconds on each visit.
+GAPS_TTL_S = 900
+
+KEPT_GAPS: Kept[GapsRead] = Kept(GAPS_TTL_S)
+
+
+async def compute_gaps() -> GapsRead:
+    """The gap list on its own read-only session, so it can refresh in the background."""
+    async with session_ro() as sess:
+        found, statuses = await gaps.find_gaps(sess)
     return GapsRead(
         gaps=[GapRead.model_validate(g) for g in found],
         sources=[GapSourceRead.model_validate(s) for s in statuses],
         computed_at=_now(),
     )
+
+
+@explore_router.get("/gaps", response_model=GapsRead)
+async def list_gaps() -> GapsRead:
+    """Every gap the registered sources find, most severe first.
+
+    Kept for :data:`GAPS_TTL_S` and refreshed behind the reader; ``computed_at``
+    says when this list was worked out.
+    """
+    return await KEPT_GAPS.get(compute_gaps)
 
 
 def _refuse(exc: Exception) -> HTTPException:
