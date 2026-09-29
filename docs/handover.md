@@ -13,6 +13,24 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-29 — `v0.155.0`: RUM ranking, the contested list, `B-53` measured.** Live locally;
+> committed, **not pushed, not on GHCR** (operator: hold GHCR).
+> - **`B-65`: the database image now carries `rum`** (PGDG `postgresql-17-rum`, also published
+>   for arm64). **Rebuild `meridian/postgres` before migrating**, or `CREATE EXTENSION rum`
+>   fails on a missing control file. The migration builds `ix_chunks_search_rum` in about 45 s
+>   on ~600k passages, holding chunk writes meanwhile. The lexical arm takes RUM's best 1000
+>   and reorders them by `ts_rank_cd`; `LEXICAL_POOL` explains the measurement.
+> - **The planner now answers plain `@@` from RUM too**, even on the live corpus, so the GIN
+>   index may be redundant. Check the watch and area-view plans before dropping it.
+> - **`P6-10`**: `/contested` and `GET /api/explore/graph/contested`. The live graph has 0
+>   contested of 196 links, so the page shows its empty state; the populated layout was only
+>   seen with injected data (Playwright `page.route`).
+> - **`B-53`** is now an operator decision; the numbers are in TASKS and
+>   `meridian-calibration/b53/notes.md`. `translation_lookups` is empty: `B-52` has never run,
+>   for want of `MERIDIAN_CONTACT_EMAIL`.
+> - Running `uv run pytest` directly (not `make test`) needs `.env.dev` exported
+>   (`set -a; . ./.env.dev; set +a`), or API tests fail on `PG_RO_URL is not set`.
+
 > **2026-09-27 night — `v0.154.0`: "Ask the graph" wired, not yet run against a model.**
 > `P6-06`/`P6-07` stay open until a real model has answered. What exists:
 > - **Panel** (`web/src/explore/AskPanel.tsx`): toggle bottom-right on every reading surface

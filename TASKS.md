@@ -21,6 +21,13 @@ against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-09-29 — `v0.155.0`, live locally, committed, not pushed; GHCR held by the operator.**
+> `B-65` shipped (RUM ranking, broad words 2–3× faster, rankings unchanged within 1–2 of 100),
+> `P6-10` shipped (the contested list), `B-53` measured and handed to the operator. Still
+> open: `P6-06`/`P6-07` need a model (a local server answers on 127.0.0.1:13305 only; the API
+> container cannot reach it until it listens on the Docker bridge), `P2-15` paused, and the
+> operator's calls: `B-109`, `B-99`, `B-53`, Admin in reader navigation. Details: handover §0.
+
 > **2026-09-27 night — `v0.154.0`.** `P6-06`/`P6-07` "Ask the graph" built and wired to a
 > configurable local model (`local-chat`, disabled; `LOCAL_CHAT_LLM_URL`, `LOCAL_CHAT_MODEL`,
 > model editable in Admin → Agents), **not yet run against a model** by the operator's
