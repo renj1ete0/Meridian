@@ -13,6 +13,18 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-29 night — site review, `B-119`–`B-126` (`v0.156.11`).** Traps:
+> - **`readable()` is display-only and conservative on purpose.** It joins a line break only
+>   when the next line starts lower-case, the line ends on a comma or a joining word ("of",
+>   "the"), and most breaks in the passage are mid-sentence. A looser rule, run over 300 stored
+>   passages, merged headings and navigation labels into sentences. Re-run that sample
+>   (`json_agg(text)` from `chunks tablesample`) before loosening it.
+> - **`/api/explore/gaps` is cached in-process** (`api/cache.py`, 15 min, stale-while-revalidate).
+>   A test that reads it must call `KEPT_GAPS.forget()` first, as `test_gaps.py`'s client does.
+> - **Sitemap entries are boosted only when their path matches a topic**; most do not, so a
+>   proven host's sitemap pages mostly sit at the bottom (-10). Measure before changing.
+> - **The colour-token test scans tests too**: use names, not hex, for fake palette values.
+
 > **2026-09-29 evening — runs 15–16, `B-115`–`B-118` (`v0.156.2`).** Proven hosts first
 > (`B-115`) took run 15 to 35% of new pages on a topic and 4× run 14's count; sitemaps of proven
 > hosts are mined hourly (`B-116`, `B-118`); four more search engines (`B-117`). Traps:

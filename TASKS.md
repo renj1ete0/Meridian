@@ -16,10 +16,22 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.11`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
-against a real Postgres, 981 frontend.
+**`v0.156.11`. Phases 0–3 are built; phase 1's checkpoint is not.** 4721 backend tests
+against a real Postgres, 1001 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
+
+> **2026-09-29 night — `v0.156.11`, live locally, pushed to GitHub; GHCR held.** Evening: proven
+> hosts first (`B-115`, run 15: 35% of new pages on a topic, 4× run 14's count), sitemaps of
+> proven hosts mined hourly (`B-116`, `B-118`; working — 14 read, 2,023 page links queued, but
+> only 7 topic-matched and boosted, the rest wait at the bottom), four more search engines
+> (`B-117`). Site review fixed (`B-119`–`B-126`): passages read as prose, node page on a phone,
+> Gaps kept (3.6 s → 4 ms), Admin opens on Topics, harvesting only on-topic documents, label
+> collisions, toggle clearance, neutral zero. **Next:** a 1h run to measure sitemap-sourced yield
+> and decide whether a proven host's unmatched sitemap pages deserve more than the bottom of the
+> queue; the daily yield report in Admin → Crawl health (proposed, not yet agreed). **Operator:**
+> `MERIDIAN_CONTACT_EMAIL` (for `B-52`/`B-53` and to unblock the encyclopedia), `B-109`, `B-99`,
+> the 27,729 queued gazetteer terms, a model for the Ask panel.
 
 > **2026-09-29 afternoon — loop runs 12–14, `v0.155.2` live, unpushed.** `B-113` (an off-topic
 > site's unjudged subdomains ordered last) raised new pages on a topic from 16% to 28% (run 13).
