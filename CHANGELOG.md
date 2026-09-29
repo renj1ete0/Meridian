@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.7] — 2026-09-29
+
+### Changed
+
+- `B-122`: Admin opens on Topics, as the `AdminLight` artboard does, rather than on the
+  gazetteer approval queue.
+
 ## [0.156.6] — 2026-09-29
 
 ### Fixed

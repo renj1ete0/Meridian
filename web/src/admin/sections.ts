@@ -67,11 +67,14 @@ export const SECTIONS: readonly SectionDef[] = [
 ]
 
 /**
- * Where bare `/admin` lands. The gazetteer queue, as it always has: it is the
- * weekly task (§5.6) and the section most visits are for. A fresh install
- * is sent to Seeds instead, by `AdminPage`.
+ * Where bare `/admin` lands: Topics, as the `AdminLight` artboard draws it
+ * (`B-122`). It was the gazetteer queue, as the weekly task (§5.6), until the
+ * queue grew to tens of thousands of harvested terms — a landing page that
+ * opens on a backlog nobody will clear reads as the system being behind,
+ * while Topics is what steers the crawl. The queue is one click away. A fresh
+ * install is sent to Seeds instead, by `AdminPage`.
  */
-export const DEFAULT_SECTION: Section = 'gazetteer'
+export const DEFAULT_SECTION: Section = 'topics'
 
 export function hrefForSection(section: Section): string {
   const def = SECTIONS.find((s) => s.key === section)

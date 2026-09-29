@@ -222,6 +222,11 @@ describe('where Admin opens', () => {
     expect(screen.getByRole('link', { name: def.label }).getAttribute('aria-current')).toBe('page')
   })
 
+  it('opens on Topics, as the artboard does (B-122)', () => {
+    expect(DEFAULT_SECTION).toBe('topics')
+    expect(SECTIONS.some((s) => s.key === DEFAULT_SECTION)).toBe(true)
+  })
+
   it('opens a fresh install on Seeds', async () => {
     stubApi({ firstRun: true })
     at('/admin')
