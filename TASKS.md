@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.7`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.8`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-123` **Terms harvested from off-topic pages** — `v0.156.8`. The site review's first page
+      of gazetteer approvals was radio and telecom acronyms. `worker.harvest` read every document
+      with text; 27,729 terms waited, all harvested, none carrying a topic. Now only documents
+      labelled on a topic are read; unlabelled ones wait for their label, off-topic ones are never
+      read. The queued backlog is left for the operator to judge
 - [x] `B-122` **Admin opened on a backlog** — `v0.156.7`. Bare `/admin` landed on Gazetteer
       approvals (the weekly task, §5.6) while `AdminLight` draws Topics; with the queue at tens
       of thousands of terms it read as the system being behind. Opens on Topics now

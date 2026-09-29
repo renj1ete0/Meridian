@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.8] — 2026-09-29
+
+### Changed
+
+- `B-123`: acronym harvesting reads only documents labelled on a topic, so the gazetteer
+  approval queue stops filling with terms from pages about none of them.
+
 ## [0.156.7] — 2026-09-29
 
 ### Changed

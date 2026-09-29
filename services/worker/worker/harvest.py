@@ -95,7 +95,7 @@ class HarvestStats:
 
 
 async def sources_awaiting_harvest(sess: AsyncSession, limit: int) -> list[int]:
-    """The queue: documents with text that nobody has read for acronyms.
+    """The queue: on-topic documents with text that nobody has read for acronyms.
 
     ``acronyms_harvested_at IS NULL`` is the whole predicate, the same shape the
     novelty gate uses — so a pass killed in hour three keeps everything it
@@ -104,7 +104,17 @@ async def sources_awaiting_harvest(sess: AsyncSession, limit: int) -> list[int]:
     """
     rows = await sess.scalars(
         select(Source.source_id)
-        .where(Source.acronyms_harvested_at.is_(None), Source.text_available.is_(True))
+        .where(
+            Source.acronyms_harvested_at.is_(None),
+            Source.text_available.is_(True),
+            # On a topic only (`B-123`). Every document with text was read, and
+            # the approval queue filled with tens of thousands of terms from
+            # pages about none of the topics — radio specifications, clinical
+            # codes — burying the few worth approving. A document not yet
+            # labelled waits for its label; one labelled off-topic is never
+            # read for terms. Nothing already queued is touched.
+            func.cardinality(Source.topic_labels) > 0,
+        )
         .order_by(Source.source_id)
         .limit(limit)
     )

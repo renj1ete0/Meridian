@@ -68,11 +68,20 @@ async def clean(session_for, prefix):
     await sess.commit()
 
 
-async def a_document(sess, url: str, texts: list[str], *, text_available: bool = True) -> Source:
-    """A source with text, in the harvest's queue."""
+async def a_document(
+    sess,
+    url: str,
+    texts: list[str],
+    *,
+    text_available: bool = True,
+    topic_labels: list[str] | None = None,
+) -> Source:
+    """A source with text, labelled on a topic, in the harvest's queue."""
     source, _ = await upsert_source(
         sess, url, checksum=f"sha256:{uuid.uuid4().hex}", text_available=text_available
     )
+    # On a topic unless told otherwise: only those are read for terms (`B-123`).
+    source.topic_labels = ["walkability"] if topic_labels is None else topic_labels
     await replace_chunks(
         sess,
         source.source_id,
@@ -111,6 +120,27 @@ async def test_a_metadata_only_document_is_not_queued(clean, prefix) -> None:
     source = await a_document(clean, f"{prefix}/b", [], text_available=False)
 
     assert source.source_id not in await sources_awaiting_harvest(clean, 500)
+
+
+async def test_an_off_topic_document_is_never_read_for_terms(clean, prefix) -> None:
+    """`B-123`: terms from pages about none of the topics filled the approval
+    queue by the tens of thousands and buried the ones worth approving."""
+    source = await a_document(clean, f"{prefix}/off", ["Prose."], topic_labels=[])
+
+    assert source.source_id not in await sources_awaiting_harvest(clean, 500)
+
+
+async def test_an_unlabelled_document_waits_for_its_label(clean, prefix) -> None:
+    source, _ = await upsert_source(
+        clean, f"{prefix}/new", checksum=f"sha256:{uuid.uuid4().hex}", text_available=True
+    )
+    await replace_chunks(clean, source.source_id, [ChunkWrite(text="Prose.", chunk_index=0)])
+    assert source.topic_labels is None
+    assert source.source_id not in await sources_awaiting_harvest(clean, 500)
+
+    source.topic_labels = ["walkability"]
+    await clean.flush()
+    assert source.source_id in await sources_awaiting_harvest(clean, 500)
 
 
 async def test_a_harvested_document_leaves_the_queue(clean, prefix) -> None:
