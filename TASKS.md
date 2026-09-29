@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.155.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-116` **Mine proven hosts through their sitemaps** — `v0.156.0`. `P1-28` built the
+      sitemap parser, its defences and the claim handler, and nothing ever queued a sitemap:
+      the robots.txt sitemap list rode on every fetch result and was read by no one, so the
+      `sitemap` seed source had zero rows. `worker.sitemapmine` (hourly, after `hostscore`)
+      queues the same-host sitemaps a proven host's cached robots.txt names, or
+      `/sitemap.xml` when it names none; once per sitemap. Entries go through the host policy
+      like any followed link — capped per host, topic-matched paths boosted as proven, the rest
+      at the bottom. The handler had queued matched entries at plain tier priority, ignoring
+      the host decision; fixed. First pass: of 35 proven hosts, 24 advertise sitemaps
 - [x] `B-115` **Proven hosts first** — `v0.155.3`. Tested before building: judged only on
       their pages from before loop runs 12–14, hosts at or above `FULL_SHARE` had 52% of their
       next pages on a topic, unjudged hosts 14%, borderline 10%; a read of sampled titles found

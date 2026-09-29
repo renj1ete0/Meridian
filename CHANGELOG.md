@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.0] — 2026-09-29
+
+### Added
+
+- `B-116`: `worker.sitemapmine`, hourly — queues the sitemaps of proven hosts from their
+  cached robots.txt (or `/sitemap.xml`), once each. Their entries pass the host policy
+  like followed links, so they are capped per host and topic-matched pages carry the proven
+  boost. Sitemap discovery had been built in `P1-28` and never triggered.
+
+### Fixed
+
+- A topic-matched sitemap entry is queued through the host's decision (boost, scaling)
+  rather than at plain tier priority.
+
 ## [0.155.3] — 2026-09-29
 
 ### Changed

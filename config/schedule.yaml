@@ -122,6 +122,16 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: sitemapmine
+    module: worker.sitemapmine
+    args: ["--apply"]
+    # `B-116`: queues the sitemaps of proven hosts (on a topic at or above the
+    # share that earns `B-115`'s boost), read from the cached robots.txt. A
+    # sitemap is queued once, so the pass is idempotent; hourly, after
+    # `hostscore`, so a host proven this hour is mined the next.
+    interval_seconds: 3600
+    enabled: true
+
   - name: seedsearch
     module: worker.seedsearch
     args: ["--once"]

@@ -1013,7 +1013,12 @@ class Worker:
                     topic = self._topics.best_topic(url)
                     if topic is not None:
                         matched += 1
-                        priority = priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
+                        # Through the host's decision, so a proven host's pages
+                        # carry its boost (`B-115`, `B-116`) and a thin one's
+                        # its scaling, exactly as a followed link would.
+                        priority = decision.applied_to(
+                            priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
+                        )
                     else:
                         # Not dropped. A sitemap URL that matches no topic is
                         # not known to be irrelevant — the path may simply be

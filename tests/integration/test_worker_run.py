@@ -1869,6 +1869,37 @@ async def test_a_sitemap_row_says_it_came_from_a_sitemap(
     assert rows.scalar_one().seed_source == "sitemap"
 
 
+async def test_a_proven_hosts_sitemap_pages_carry_its_boost(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-116`: a matched sitemap URL is ranked through the host's decision, so
+    a proven host's pages are fetched before unjudged links, as its followed
+    links are (`B-115`). An unmatched one still waits at the bottom."""
+    from meridian_core.hostscores import PROVEN_BOOST, HostPolicy, Score
+    from worker.main import UNMATCHED_SITEMAP_PRIORITY
+    from worker.topicmatch import TopicVocabulary
+
+    sess = await session_for("rw")
+    await set_tier(sess, run_domain, "press")
+    await enqueue(sess, run_domain, run_topic, path="/sitemap.xml", task_type="sitemap")
+    worker, _ = with_frontier(
+        sess,
+        serve_xml(urlset(run_domain, "/walkability/plan", "/misc")),
+        run_domain,
+        run_topic,
+        resolver=resolve,
+        max_tasks=1,
+    )
+    worker._hosts = HostPolicy({run_domain: Score(40, 40)})
+    worker._topics = TopicVocabulary.from_terms([], topics=["walkability"])
+
+    await worker.run()
+
+    rows = {r.url_or_query: r.priority for r in await rows_for(sess, run_domain, "sitemap")}
+    assert rows[f"https://{run_domain}/walkability/plan"] > PROVEN_BOOST
+    assert rows[f"https://{run_domain}/misc"] == UNMATCHED_SITEMAP_PRIORITY
+
+
 async def test_a_sitemap_is_not_stored_as_a_source(
     session_for, resolve, raw_store, run_domain, run_topic, cleanup
 ) -> None:
