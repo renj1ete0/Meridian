@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-118` **Mined sitemaps were never claimed** — `v0.156.2`. Run 16: all 103 sitemaps
+      `B-116` queued were still pending an hour later, at a priority above everything. Every
+      claim draws a topic and takes only tasks filed under it; the sitemaps had none, so only
+      the last-resort fallback could claim them, and it never runs while any topic has work.
+      Now filed under the proven host's commonest topic, and a pending sitemap with none is
+      refiled on the next pass. Also found: the hourly job failed with "No module named
+      worker.sitemapmine" because the scheduler has its own image and only the worker's was
+      rebuilt
 - [x] `B-117` **More search engines** — `v0.156.1`. Searched how self-hosted SearXNG deals
       with engines refusing a single address: keep the engines that answer from it and spread
       queries over more of them. From this machine brave and startpage were suspended, qwant

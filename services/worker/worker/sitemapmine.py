@@ -15,6 +15,13 @@ followed link — capped per host, boosted as proven — so a sitemap of fifty
 thousand URLs queues at most the host's cap, topic-matched paths first and the
 rest at the bottom.
 
+**Filed under the host's commonest topic.** Every claim draws a topic and
+takes only tasks filed under it, so a sitemap queued with none is claimable
+only by the last-resort fallback, which never runs while any topic has work:
+the first deployment queued a hundred and fetched none. The host's commonest
+label is the topic its pages were proven on; a sitemap left pending with no
+topic is given one on the next pass.
+
 The sitemap URLs come from the robots.txt already cached for the crawl, so the
 pass itself makes no request; a host that advertises none gets the conventional
 ``/sitemap.xml``, which costs one fetch to find out. A sitemap is queued once —
@@ -28,17 +35,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import collections
 import contextlib
 import dataclasses
 import time
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 
 from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.boilerplate import host_key
 from meridian_core.db import dispose_engines, session
 from meridian_core.hostscores import FULL_SHARE, PROVEN_BOOST, Score, Standing, load
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
+from meridian_core.models import QueueTask, Source
 from meridian_core.models.robots import RobotsCacheEntry
 from meridian_core.policy import resolve_policy, source_tier_map
 from meridian_core.queueing import already_queued, enqueue
@@ -63,6 +72,7 @@ class MineStats:
     queued: list[str] = dataclasses.field(default_factory=list)
     conventional: int = 0
     already: int = 0
+    refiled: int = 0
 
 
 def sitemaps_for(host: str, body: str | None, user_agent: str) -> list[str]:
@@ -76,6 +86,25 @@ def sitemaps_for(host: str, body: str | None, user_agent: str) -> list[str]:
         url for url in (parse(body, user_agent).sitemaps if body else ()) if host_key(url) == host
     ]
     return named or [f"https://{host}{CONVENTIONAL}"]
+
+
+#: How many of a host's labelled sources to read for its commonest topic.
+TOPIC_SAMPLE = 500
+
+
+async def commonest_topic(sess, host: str) -> str | None:
+    """The label most of the host's on-topic pages carry — what it was proven on."""
+    prefixes = [f"{scheme}://{www}{host}/" for scheme in ("https", "http") for www in ("", "www.")]
+    rows = await sess.scalars(
+        select(Source.topic_labels)
+        .where(
+            or_(*[Source.url.startswith(p) for p in prefixes]),
+            Source.topic_labels.is_not(None),
+        )
+        .limit(TOPIC_SAMPLE)
+    )
+    counts = collections.Counter(t for labels in rows for t in labels or ())
+    return counts.most_common(1)[0][0] if counts else None
 
 
 async def run_pass(*, apply: bool, session_factory=session) -> MineStats:
@@ -95,8 +124,21 @@ async def run_pass(*, apply: bool, session_factory=session) -> MineStats:
             urls = sitemaps_for(host, body, policy.user_agent)
             if urls[0].endswith(CONVENTIONAL) and len(urls) == 1:
                 stats.conventional += 1
+            topic = await commonest_topic(sess, host)
             known = await already_queued(sess, urls)
             stats.already += len(known)
+            if apply and known and topic is not None:
+                refiled = await sess.execute(
+                    update(QueueTask)
+                    .where(
+                        QueueTask.url_or_query.in_(sorted(known)),
+                        QueueTask.task_type == "sitemap",
+                        QueueTask.status == "pending",
+                        QueueTask.topic.is_(None),
+                    )
+                    .values(topic=topic)
+                )
+                stats.refiled += refiled.rowcount or 0
             for url in urls:
                 if url in known:
                     continue
@@ -107,6 +149,7 @@ async def run_pass(*, apply: bool, session_factory=session) -> MineStats:
                     await enqueue(
                         sess,
                         url,
+                        topic=topic,
                         seed_source="sitemap",
                         task_type="sitemap",
                         priority=priority_with_urgency(url, tiers, HALF_LIFE_DAYS) + PROVEN_BOOST,
@@ -136,7 +179,8 @@ def main() -> None:
         stats = asyncio.run(go())
     print(
         f"proven hosts {stats.proven}  sitemaps queued {len(stats.queued)}  "
-        f"already queued {stats.already}  conventional guesses {stats.conventional}"
+        f"already queued {stats.already}  refiled {stats.refiled}  "
+        f"conventional guesses {stats.conventional}"
     )
     for url in stats.queued[:40]:
         print(f"  {url}")

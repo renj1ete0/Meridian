@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.2] — 2026-09-29
+
+### Fixed
+
+- `B-118`: a mined sitemap is filed under its host's commonest topic, so topic-scoped
+  claims can take it; before, none of the first hundred was ever claimed. Pending sitemaps
+  with no topic are refiled by the next pass.
+
 ## [0.156.1] — 2026-09-29
 
 ### Changed

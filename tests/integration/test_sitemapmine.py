@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from meridian_core.hostscores import MIN_EXAMINED, PROVEN_BOOST, recompute
 from meridian_core.models import QueueTask
+from meridian_core.queueing import claim_next
 from meridian_core.models.robots import RobotsCacheEntry
 from meridian_core.sources import upsert_source
 from worker.sitemapmine import CONVENTIONAL, run_pass, sitemaps_for
@@ -138,3 +139,40 @@ async def test_a_report_writes_nothing(sess) -> None:
 
     assert f"https://{h}{CONVENTIONAL}" in stats.queued
     assert await sitemap_rows(sess, h) == []
+
+
+async def test_a_mined_sitemap_is_claimable_by_its_hosts_topic(sess) -> None:
+    """Every claim draws a topic; a sitemap filed under none was never fetched."""
+    h = host()
+    await labelled(sess, h, MIN_EXAMINED, on=MIN_EXAMINED)
+    await recompute(sess)
+
+    await run_pass(apply=True, session_factory=factory(sess))
+
+    [row] = await sitemap_rows(sess, h)
+    assert row.topic == "walkability"
+    claimed = await claim_next(
+        sess, worker_id="t", topics=["walkability"], task_types=["sitemap"]
+    )
+    # Other tests' rows may rank higher; ours must at least be eligible.
+    assert claimed is not None
+
+
+async def test_a_pending_sitemap_with_no_topic_is_refiled(sess) -> None:
+    h = host()
+    await labelled(sess, h, MIN_EXAMINED, on=MIN_EXAMINED)
+    await recompute(sess)
+    sess.add(
+        QueueTask(
+            url_or_query=f"https://{h}{CONVENTIONAL}",
+            task_type="sitemap",
+            seed_source="sitemap",
+            priority=100,
+        )
+    )
+    await sess.flush()
+
+    stats = await run_pass(apply=True, session_factory=factory(sess))
+
+    [row] = await sitemap_rows(sess, h)
+    assert row.topic == "walkability" and stats.refiled >= 1
