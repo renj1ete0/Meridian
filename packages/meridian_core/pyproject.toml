@@ -1,6 +1,6 @@
 [project]
 name = "meridian-core"
-version = "0.155.0"
+version = "0.155.1"
 description = "Shared models, schemas, and database access for Meridian services"
 requires-python = ">=3.12"
 license = "MIT"
@@ -27,6 +27,10 @@ dependencies = [
     # in on the worker's closure, which is why the API image was the first to
     # notice it was missing — the same accident `pyyaml` and `httpx` document.
     "numpy>=2.0",
+    # `hostscores.site_of` reads the public-suffix list (`B-113`). It rode in on
+    # the worker's closure through `courlan`; declared here because this package
+    # imports it. MPL-1.1 of its three licences (docs/licences.md).
+    "tld>=0.13",
 ]
 
 [build-system]

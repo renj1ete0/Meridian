@@ -16,6 +16,7 @@ from meridian_core.hostscores import (
     Standing,
     decide,
     follows_links,
+    site_of,
 )
 
 
@@ -97,3 +98,72 @@ def test_scaling_never_sinks_a_kept_link_to_the_downranked_or_held_band() -> Non
 
 def test_an_unknown_host_is_not_scaled() -> None:
     assert decide(Score(0, 0), government=False, pending=0).applied_to(60) == 60
+
+
+# ---------------------------------------------------------------------------
+# An unjudged subdomain takes an off-topic site's verdict (B-113)
+# ---------------------------------------------------------------------------
+
+
+def off_site(n: int = 5) -> dict[str, Score]:
+    """Siblings under one site, each too thin to judge alone, off-topic together.
+
+    A real public suffix, because the site is read from the suffix list and a
+    reserved one such as `.test` is not on it.
+    """
+    return {f"s{i}.b113-site.com": Score(MIN_EXAMINED - 1, 0) for i in range(n)}
+
+
+def test_siblings_too_thin_alone_judge_their_site_together() -> None:
+    policy = HostPolicy(off_site())
+    assert all(policy.score(h).standing is Standing.UNKNOWN for h in off_site())
+    assert policy.site_score("new.b113-site.com").standing is Standing.OFF_TOPIC
+
+
+def test_an_unjudged_subdomain_of_an_offtopic_site_is_ordered_last_not_dropped() -> None:
+    """Never dropped: a subdomain can share a registrable domain and nothing else."""
+    decision = HostPolicy(off_site()).admit("https://new.b113-site.com/a", government=False)
+    assert decision.queue is True
+    assert decision.priority == DOWNRANKED_PRIORITY
+    assert decision.reason == "site_off_topic"
+
+
+def test_the_site_verdict_is_capped_like_any_unknown_host() -> None:
+    policy = HostPolicy(off_site())
+    decisions = [
+        policy.admit(f"https://new.b113-site.com/{i}", government=False)
+        for i in range(EXPLORE_PENDING + 1)
+    ]
+    assert [d.queue for d in decisions] == [True] * EXPLORE_PENDING + [False]
+    assert decisions[-1].reason == "site_off_topic_capped"
+
+
+def test_a_subdomain_with_its_own_verdict_keeps_it() -> None:
+    """The site speaks only for hosts nobody has judged."""
+    # On a topic by its own share, while the site as a whole is not.
+    scores = off_site() | {"lab.b113-site.com": Score(MIN_EXAMINED, 2)}
+    policy = HostPolicy(scores)
+    assert policy.site_score("lab.b113-site.com").standing is Standing.OFF_TOPIC
+    decision = policy.admit("https://lab.b113-site.com/a", government=False)
+    assert decision.reason.startswith("on_topic") and decision.priority is None
+
+
+def test_an_on_topic_site_lends_nothing_to_a_new_subdomain() -> None:
+    policy = HostPolicy({"a.b113-site.com": Score(MIN_EXAMINED, MIN_EXAMINED)})
+    assert policy.admit("https://new.b113-site.com/a", government=False).reason == "unknown"
+
+
+def test_a_public_suffix_is_never_one_site() -> None:
+    """Two government sites under one national suffix are two sites: grouping
+    at the suffix would let one off-topic agency order every other one last."""
+    policy = HostPolicy({"agency-a.gov.uk": Score(MIN_EXAMINED, 0)})
+    assert policy.admit("https://agency-b.gov.uk/a", government=True).reason == "unknown"
+    assert site_of("x.blog.gov.uk") == "blog.gov.uk"
+    assert site_of("blog.gov.uk") is None
+    assert site_of("agency.go.kr") is None
+
+
+def test_a_bare_site_host_is_judged_as_itself() -> None:
+    """The registrable domain itself has no parent to defer to."""
+    policy = HostPolicy(off_site())
+    assert policy.admit("https://b113-site.com/a", government=False).reason == "unknown"

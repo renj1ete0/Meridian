@@ -24,6 +24,15 @@ whose *next* page is unlikely to be either. So:
   cannot fill the queue before anyone has.
 - **any host** — never more than :data:`MAX_PENDING` queued links, however
   relevant. Diversity is a property of the queue, not only of each link.
+- **unknown host on an off-topic site** (`B-113`) — a subdomain nobody has
+  judged, whose registrable domain is off-topic across its judged siblings. A
+  site that serves every office, county or blog from its own subdomain would
+  otherwise be explored ten links at a time per subdomain, and a loop run found
+  dozens of such siblings taking a third of the followed-link fetches. It is
+  queued at :data:`DOWNRANKED_PRIORITY`, capped as unknown, and never dropped:
+  a hospital and a law school can share a registrable domain and nothing else,
+  so the sibling verdict orders the subdomain last rather than excluding it,
+  and its own verdict replaces the site's once it has one.
 
 Nothing here deletes, and nothing here calls a model: the scores are written by
 a scheduled pass from labels a separate pass wrote, and read here as numbers.
@@ -38,6 +47,8 @@ from collections.abc import Mapping
 
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from tld import get_fld
 
 from .boilerplate import host_key
 from .logging import get_logger
@@ -140,6 +151,31 @@ def decide(score: Score, *, government: bool, pending: int) -> Decision:
     return Decision(True, reason=standing.value)
 
 
+def site_of(host: str | None) -> str | None:
+    """The registrable domain a host belongs to, or None if it is one itself.
+
+    Read from the public-suffix list, so `a.b.gov.uk` belongs to `b.gov.uk`
+    and two unrelated sites under a shared suffix are never one site.
+    """
+    if not host:
+        return None
+    site = get_fld(f"https://{host}", fail_silently=True)
+    return site if site and site != host else None
+
+
+def decide_on_site(site: Score, *, pending: int) -> Decision | None:
+    """The verdict an unjudged host takes from its site, if the site has one.
+
+    Only an off-topic site speaks for its subdomains, and only to order them
+    last: an on-topic site says nothing about a subdomain it has never served.
+    """
+    if site.standing is not Standing.OFF_TOPIC:
+        return None
+    if pending >= EXPLORE_PENDING:
+        return Decision(False, reason="site_off_topic_capped")
+    return Decision(True, DOWNRANKED_PRIORITY, "site_off_topic")
+
+
 def follows_links(score: Score) -> bool:
     """Whether a page on this host should have its own links followed.
 
@@ -221,13 +257,25 @@ class HostPolicy:
     """
 
     def __init__(self, scores: Mapping[str, Score] | None = None) -> None:
-        self._scores = dict(scores or {})
         self._queued: Counter[str] = Counter()
+        self.replace(scores or {})
 
     def replace(self, scores: Mapping[str, Score]) -> None:
         """New scores from a fresh read; the local counts start again with them."""
         self._scores = dict(scores)
         self._queued.clear()
+        # Each site's judged pages, summed over every host under it (`B-113`).
+        examined: Counter[str] = Counter()
+        on_topic: Counter[str] = Counter()
+        for host, score in self._scores.items():
+            site = site_of(host) or host
+            examined[site] += score.examined
+            on_topic[site] += score.on_topic
+        self._sites = {s: Score(examined[s], on_topic[s]) for s in examined}
+
+    def site_score(self, host: str | None) -> Score:
+        """What the host's whole site has shown, over all its hosts."""
+        return self._sites.get(site_of(host) or host or "", Score())
 
     def score(self, host: str | None) -> Score:
         return self._scores.get(host or "", Score())
@@ -241,7 +289,12 @@ class HostPolicy:
         if not host:
             return Decision(False, reason="no_host")
         score = self.score(host)
-        decision = decide(score, government=government, pending=score.pending + self._queued[host])
+        pending = score.pending + self._queued[host]
+        decision = None
+        if score.standing is Standing.UNKNOWN and site_of(host) is not None:
+            decision = decide_on_site(self.site_score(host), pending=pending)
+        if decision is None:
+            decision = decide(score, government=government, pending=pending)
         if decision.queue:
             self._queued[host] += 1
         return decision

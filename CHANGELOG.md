@@ -68,6 +68,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.155.1] — 2026-09-29
+
+### Fixed
+
+- `B-113`: a subdomain nobody has judged takes its site's verdict when the site
+  (registrable domain, from the public-suffix list) is off-topic across its judged
+  hosts: queued at the lowest priority and capped as an unknown host, never dropped.
+  Before, each sibling subdomain of an off-topic site was explored afresh. `tld` is
+  now declared by `meridian_core`, which imports it.
+
 ## [0.155.0] — 2026-09-29
 
 ### Added

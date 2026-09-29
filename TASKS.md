@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.155.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.155.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1551,6 +1551,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-113` **An off-topic site's unjudged subdomains were each explored afresh** — `v0.155.1`.
+      Run 12: two thirds of fetches came from followed links, and the new government pages
+      examined were almost all off-topic. Large sites that serve every office, county or blog
+      from its own subdomain were the cause: each subdomain started unjudged with ten links
+      to explore, so a site judged off-topic over thousands of pages was re-explored through
+      dozens of siblings. An unjudged subdomain now takes its registrable domain's verdict
+      (public-suffix list, so a national suffix is never one site) when that is off-topic:
+      queued last and capped as unknown, never dropped, and replaced by its own verdict once
+      it has one. The daily requeue applies it to the backlog: about a tenth of it moved
 - [x] `B-112` **One slow host held the whole worker to its pace** — `v0.152.11`. Run 11: 245
       fetches in an hour (runs 8–10 ≈1,500). The science results topped the queue on two hosts
       (503 on a preprint server with a long crawl delay); every lane claimed there and waited on
