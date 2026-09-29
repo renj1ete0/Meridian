@@ -49,6 +49,10 @@ export function flattenTables(text: string): string {
     .join('\n')
 }
 
+// A line ending on a word that cannot end a sentence: what follows continues
+// it, even capitalised ("researchers at / Argonne", "Suite of / Tools").
+const JOINING_WORD = /\b(?:of|and|or|the|a|an|to|for|in|at|on|by|with|from|as|that)$/i
+
 // A flattened table row.
 const TABLE_CELLS = / · /
 
@@ -66,7 +70,8 @@ const STANDS_ALONE = /^\s*(?:[-*•▪◦]\s|\d{1,3}[.)]\s|[A-Z][A-Z0-9 &-]{2,}$
  * purpose (a label, then its value), and joining those would run them together.
  * So a passage counts as wrapped only when most of its line breaks fall
  * mid-sentence, and then only breaks that plainly continue are joined — the
- * next line in lower case, or this one ending on a comma. One after a full
+ * next line in lower case, or this one ending on a comma or on a word such as
+ * "of" or "the" that no sentence ends with. One after a full
  * stop, before a capitalised line, a list item or a blank line stays. A word hyphenated across the
  * break is put back together.
  */
@@ -85,7 +90,7 @@ export function unwrapLines(text: string): string {
     // on in lower case, or this one stopped on a comma. A capitalised next line
     // may be a heading, a label or a table row, and running it into the line
     // above reads worse than the break did.
-    const continues = /^\s*[a-z(]/.test(line) || /[,&]$/.test(prev)
+    const continues = /^\s*[a-z(]/.test(line) || /[,&]$/.test(prev) || JOINING_WORD.test(prev)
     const keep =
       !prev ||
       !line.trim() ||

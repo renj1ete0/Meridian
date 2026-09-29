@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.5] — 2026-09-29
+
+### Fixed
+
+- `B-119`: a line ending on a word no sentence ends with ("of", "the", "at"…) is joined to
+  the next even when it starts with a capital, so PDF title and credit lines read as one.
+
 ## [0.156.4] — 2026-09-29
 
 ### Fixed

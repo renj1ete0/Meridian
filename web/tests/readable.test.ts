@@ -91,6 +91,13 @@ describe('text a PDF layout broke into lines', () => {
     )
   })
 
+  it('joins a line that ends on a word no sentence ends with, even before a capital', () => {
+    const text = 'The Suite of\nTools, developed by researchers at\nArgonne National Laboratory for the\nU.S. Department of Energy (DOE)\nClean Cities Network'
+    expect(readable(text)).toBe(
+      'The Suite of Tools, developed by researchers at Argonne National Laboratory for the U.S. Department of Energy (DOE)\nClean Cities Network',
+    )
+  })
+
   it('does not run a heading or a label into the sentence below it', () => {
     // A navigation page's lines: most breaks mid-sentence, but each next line
     // is capitalised — a new item, not a continuation.
