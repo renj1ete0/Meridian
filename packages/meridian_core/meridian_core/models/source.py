@@ -437,6 +437,18 @@ class Chunk(Base, TimestampMixin):
         # per chunk, which is the tradeoff GIN is built for. GiST would be the
         # choice only if the corpus churned.
         Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
+        # RUM alongside it, for ranking (`B-65`). GIN answers "which passages
+        # match" cheaply and stays for every `@@` that is not ranked; RUM keeps
+        # term positions in the index, so `ORDER BY search_vector <=> query`
+        # reads matches out best first without touching the heap. Its inserts
+        # cost about ten times GIN's (≈2 ms a passage, measured), which at the
+        # busiest hour seen is under a minute an hour.
+        Index(
+            "ix_chunks_search_rum",
+            "search_vector",
+            postgresql_using="rum",
+            postgresql_ops={"search_vector": "rum_tsvector_ops"},
+        ),
         # --- the vector half of hybrid retrieval (§12.5, task P2-04) -------
         #
         # `vector_cosine_ops` because that is the operator everything here

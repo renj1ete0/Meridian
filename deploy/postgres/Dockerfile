@@ -72,6 +72,17 @@ COPY --from=builder /usr/lib/postgresql/${PG_MAJOR}/lib/age.so \
 COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/extension/age* \
      /usr/share/postgresql/${PG_MAJOR}/extension/
 
+# RUM, for ranked text search (`B-65`). GIN finds the matching passages fast
+# but cannot rank them: every match's `search_vector` is read back out of the
+# heap and TOAST to score it, so one common word costs hundreds of
+# milliseconds. RUM keeps the positions in the index and returns matches in
+# rank order. A packaged build from the PGDG repository the base image already
+# trusts, so nothing is compiled; PostgreSQL licence, read from the package's
+# `copyright` file (`docs/licences.md`).
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y "postgresql-${PG_MAJOR}-rum" \
+    && rm -rf /var/lib/apt/lists/*
+
 # The licence travels with the binary. `B-11`'s rule is that a verdict is read
 # off an artefact, and an artefact that does not carry its licence cannot be
 # re-checked later without downloading the source again.
@@ -99,4 +110,4 @@ RUN echo "shared_preload_libraries = 'age'" \
     >> /usr/share/postgresql/postgresql.conf.sample \
     && rm /usr/share/postgresql/postgresql.conf.sample.age
 
-LABEL org.opencontainers.image.description="PostgreSQL 17 with pgvector and Apache AGE"
+LABEL org.opencontainers.image.description="PostgreSQL 17 with pgvector, Apache AGE and RUM"

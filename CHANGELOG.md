@@ -68,6 +68,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.154.1] — 2026-09-29
+
+### Changed
+
+- `B-65`: lexical search ranks through a RUM index. The database image adds the
+  `rum` extension (PGDG package, PostgreSQL licence) and a migration builds
+  `ix_chunks_search_rum` beside the GIN index. The lexical arm takes the best 1000
+  matches in RUM's order, reading the index only, and orders those by `ts_rank_cd`
+  as before. On a copy of the live corpus the reranked top 50 matched the old
+  ranking for ten of twelve questions and 48–49 of 50 for the other two; queries
+  matching fewer passages than the pool rank exactly as before. Inserts cost about
+  2 ms more per passage. **Needs the rebuilt `meridian/postgres` image before the
+  migration runs.**
+
 ## [0.154.0] — 2026-09-27
 
 ### Added

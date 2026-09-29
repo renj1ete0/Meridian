@@ -19,11 +19,12 @@ import math
 import uuid
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from meridian_core.chunks import ChunkWrite, replace_chunks, store_embeddings
 from meridian_core.models import Chunk, Source
 from meridian_core.models.source import EMBEDDING_DIM
+from meridian_core import search as search_module
 from meridian_core.search import SearchFilters, search
 from meridian_core.sources import upsert_source
 
@@ -396,3 +397,95 @@ async def test_a_caller_cannot_ask_for_superseded_chunks(
     )
 
     assert result.hits == []
+
+
+# --------------------------------------------------------------------------
+# The lexical arm ranks in two steps: RUM's pool, then cover density (B-65)
+# --------------------------------------------------------------------------
+
+
+async def test_under_the_pool_the_order_is_exactly_cover_density(
+    session_for, scope, term, cleanup
+) -> None:
+    """Drift: the two-step ranking against the one-step one it replaced.
+
+    RUM's own distance ignores how close the terms sit, which is the thing
+    ``ts_rank_cd`` rewards; the pool exists so that difference never reaches a
+    caller. With fewer matches than the pool, both must agree row for row —
+    compared against ``ts_rank_cd`` computed here, not against a hardcoded
+    order that would have to be edited when the stemmer changes.
+    """
+    sess = await session_for("rw")
+    texts = [
+        f"{term} harbour.",
+        f"{term} and then, much later in a long sentence, a harbour.",
+        f"{term} {term} {term}, no second word.",
+        f"harbour {term} harbour {term}.",
+        f"A single {term} among many other ordinary words in this passage.",
+    ]
+    await a_source(sess, scope, texts, [at(0.5, 3 + i) for i in range(len(texts))])
+    # `or`, so every passage matches and the order is decided by density and
+    # proximity rather than by which passages carry both words.
+    query = f"{term} or harbour"
+
+    expected = list(
+        (
+            await sess.execute(
+                text(
+                    "SELECT c.chunk_id FROM chunks c JOIN sources s USING (source_id) "
+                    "WHERE s.language = :scope AND c.superseded_at IS NULL "
+                    "AND c.search_vector @@ websearch_to_tsquery('english', :q) "
+                    "ORDER BY ts_rank_cd(c.search_vector, websearch_to_tsquery('english', :q)) "
+                    "DESC, c.chunk_id"
+                ),
+                {"scope": scope, "q": query},
+            )
+        ).scalars()
+    )
+    got = await search_module._lexical(sess, query, only(scope), candidates=10)
+
+    assert len(expected) == 5, "fixture drifted: every passage should match the term"
+    assert got == expected
+
+
+async def test_a_filter_is_inside_the_pool_not_applied_after_it(
+    session_for, scope, term, cleanup, monkeypatch
+) -> None:
+    """The vector arm's rule, again for the pool (§12.5).
+
+    The press passages repeat the term and so lead RUM's order; with a pool of
+    two, a filter applied after the pool would leave nothing. The government
+    passage behind them must still be found.
+    """
+    monkeypatch.setattr(search_module, "LEXICAL_POOL", 2)
+    sess = await session_for("rw")
+    await a_source(
+        sess, scope, [f"{term} {term} {term} {term}."], [at(0.5, 3)], source_tier="press"
+    )
+    await a_source(sess, scope, [f"{term} {term} {term}."], [at(0.5, 4)], source_tier="press")
+    await a_source(
+        sess, scope, [f"Once, {term}, in passing."], [at(0.5, 5)], source_tier="government"
+    )
+
+    result = await search(
+        sess, term, filters=only(scope, source_tiers=["government"]), candidates=2
+    )
+
+    assert [h.text for h in result.hits] == [f"Once, {term}, in passing."]
+
+
+async def test_the_pool_is_never_shallower_than_the_candidates(
+    session_for, scope, term, cleanup, monkeypatch
+) -> None:
+    """A pool smaller than the candidate count would silently truncate the arm,
+    and fusion would see a lexical side shallower than it asked for — the
+    `hnsw.ef_search` failure (``EF_SEARCH_FACTOR``) in another place."""
+    monkeypatch.setattr(search_module, "LEXICAL_POOL", 1)
+    sess = await session_for("rw")
+    await a_source(
+        sess, scope, [f"{term} {i}." for i in range(5)], [at(0.5, 3 + i) for i in range(5)]
+    )
+
+    got = await search_module._lexical(sess, term, only(scope), candidates=5)
+
+    assert len(got) == 5

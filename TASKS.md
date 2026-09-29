@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.154.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4662 backend tests
+**`v0.154.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4667 backend tests
 against a real Postgres, 973 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1510,7 +1510,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       to topics taking at least their share of fetches at under half the crawl's
       average yield per fetch, never to thin ones; boosts only where more crawl would
       help (under-drawn, or yielding)
-- [ ] `B-65` **The lexical arm is the slow half of search** — measured at corpus size
+- [x] `B-65` — `v0.154.1`, a RUM index ranks the best 1000 matches, `ts_rank_cd` orders those. **Measured live (2026-09-29, ~600k passages, default filters):** broad words 2–3× faster ("health" 353 → 125 ms, "transport" 196 → 85 ms); top 100 identical for 12 of 14 questions, 98–99 of 100 for "public transport"/"public health"; narrow questions (under ~10k matches) 5–20 ms *slower*, the price of the second step. Open: the planner now answers plain `@@` from RUM too, so the GIN index (≈330 MB, cheap inserts) may be redundant — drop it only after checking watches and area views still plan well. **The lexical arm is the slow half of search** — measured at corpus size
       it is roughly ten times slower than the vector arm and sets hybrid latency.
       **Diagnosed 2026-09-25:** the GIN index is used; cost is linear in the number
       of *matching* passages (about 4 µs each), almost all of it reading each match's

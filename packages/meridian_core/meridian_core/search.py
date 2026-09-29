@@ -39,7 +39,7 @@ import dataclasses
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import ColumnElement, Select, and_, cast, func, or_, select
+from sqlalchemy import ColumnElement, Float, Select, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,15 @@ EF_SEARCH_FACTOR = 2
 DEFAULT_CANDIDATES = 100
 
 DEFAULT_LIMIT = 20
+
+#: How many matches RUM's own order hands to ``ts_rank_cd`` (`B-65`). RUM's
+#: distance ignores how close the terms sit, which is what ``ts_rank_cd``
+#: rewards, so the pool must be deep enough that cover density's best are in
+#: it. Measured on the live corpus (~600k passages, twelve questions): at 1000
+#: the reranked top 50 was identical for ten and 48–49 of 50 for the other two
+#: ("public transport", "public health"); at 200 it kept as few as 19. Costs
+#: ~20–70 ms, against 200–570 ms for ranking every match.
+LEXICAL_POOL = 1000
 
 #: Media types whose extractor produces pages rather than flat text (§6.6).
 #:
@@ -342,12 +351,26 @@ async def _lexical(
     ``ts_rank_cd`` rather than ``ts_rank``: cover density accounts for how close
     the matched terms are to each other, which is most of what distinguishes a
     passage about the subject from one that mentions every term once.
+
+    **Ranked in two steps** (`B-65`). The RUM index hands back the best
+    :data:`LEXICAL_POOL` matches by its own distance, reading the index only;
+    ``ts_rank_cd`` then orders just those. Ranking every match with
+    ``ts_rank_cd`` read each one's vector out of the heap, which a common word
+    made a few hundred milliseconds. When a query matches fewer passages than
+    the pool, the result is exactly the one-step ranking.
     """
     tsquery = func.websearch_to_tsquery(cast(TS_CONFIG, REGCONFIG), query)
-    stmt = (
+    pool = (
         _arm(filters)
+        .add_columns(Chunk.search_vector)
         .where(Chunk.search_vector.op("@@")(tsquery))
-        .order_by(func.ts_rank_cd(Chunk.search_vector, tsquery).desc(), Chunk.chunk_id)
+        .order_by(Chunk.search_vector.op("<=>", return_type=Float)(tsquery))
+        .limit(max(LEXICAL_POOL, candidates))
+        .subquery()
+    )
+    stmt = (
+        select(pool.c.chunk_id)
+        .order_by(func.ts_rank_cd(pool.c.search_vector, tsquery).desc(), pool.c.chunk_id)
         .limit(candidates)
     )
     return list((await sess.execute(stmt)).scalars())

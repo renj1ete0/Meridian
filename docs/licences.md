@@ -104,6 +104,7 @@ bundle and have not been audited package by package — see *What is not covered
 | `nginx:1.27-alpine` | nginx: BSD-2-Clause; Alpine base | no image label | Fine |
 | `node:22-slim` | Node.js: MIT; Debian base | no image label | Fine |
 | **Apache AGE 1.7.0** | **Apache-2.0** | the `LICENSE` inside `apache-age-1.7.0-src.tar.gz` from downloads.apache.org, and the copy the image now ships at `/usr/share/doc/apache-age/LICENSE` | Fine |
+| **RUM 1.3.15** (`postgresql-17-rum`, PGDG) | **PostgreSQL** | `/usr/share/doc/postgresql-17-rum/copyright` in the database image (`License: PostgreSQL`) | Fine |
 
 ### SearXNG is AGPL, and that is the one to understand
 

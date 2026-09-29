@@ -235,4 +235,54 @@ async def test_the_planner_uses_the_index_for_a_match(session_for) -> None:
     rendered = "\n".join(row[0] for row in plan)
     await sess.rollback()
 
-    assert "ix_chunks_search_vector" in rendered, f"planner ignored the index:\n{rendered}"
+    # Either text index qualifies: since `B-65` RUM answers `@@` as well, and
+    # on a near-empty table the planner may prefer it. What must not appear is
+    # a scan that used neither.
+    assert "ix_chunks_search_vector" in rendered or "ix_chunks_search_rum" in rendered, (
+        f"planner ignored the index:\n{rendered}"
+    )
+
+
+# --------------------------------------------------------------------------
+# The ranking index (B-65)
+# --------------------------------------------------------------------------
+
+
+async def test_a_rum_index_covers_the_search_vector_for_ranking(session_for) -> None:
+    """Completeness: without it the lexical arm's `<=>` still runs, by reading
+    and sorting every match — correct, and as slow as before `B-65`."""
+    sess = await session_for("rw")
+    row = (
+        await sess.execute(
+            text(
+                "SELECT am.amname, opc.opcname FROM pg_index i "
+                "JOIN pg_class c ON c.oid = i.indexrelid "
+                "JOIN pg_am am ON am.oid = c.relam "
+                "JOIN pg_opclass opc ON opc.oid = i.indclass[0] "
+                "WHERE i.indrelid = 'chunks'::regclass AND c.relname = 'ix_chunks_search_rum'"
+            )
+        )
+    ).one_or_none()
+    assert row is not None, "ix_chunks_search_rum is missing"
+    assert tuple(row) == ("rum", "rum_tsvector_ops")
+
+
+async def test_the_planner_ranks_through_the_rum_index(session_for) -> None:
+    """The index must serve the *ordering*, not only the match. An opclass
+    without positions (`rum_tsvector_hash_ops` is one) would still be chosen
+    for `@@` and leave the sort to read every row."""
+    sess = await session_for("rw")
+    await sess.execute(text("SET LOCAL enable_seqscan = off"))
+    plan = await sess.execute(
+        text(
+            "EXPLAIN SELECT chunk_id FROM chunks "
+            "WHERE search_vector @@ websearch_to_tsquery('english', 'harbour') "
+            "ORDER BY search_vector <=> websearch_to_tsquery('english', 'harbour') LIMIT 10"
+        )
+    )
+    rendered = "\n".join(row[0] for row in plan)
+    await sess.rollback()
+
+    assert "ix_chunks_search_rum" in rendered and "Order By" in rendered, (
+        f"the ranking did not come from the index:\n{rendered}"
+    )
