@@ -93,10 +93,10 @@ DEFAULT_LIMIT = 20
 #: How many matches RUM's own order hands to ``ts_rank_cd`` (`B-65`). RUM's
 #: distance ignores how close the terms sit, which is what ``ts_rank_cd``
 #: rewards, so the pool must be deep enough that cover density's best are in
-#: it. Measured on the live corpus (~600k passages, twelve questions): at 1000
-#: the reranked top 50 was identical for ten and 48–49 of 50 for the other two
-#: ("public transport", "public health"); at 200 it kept as few as 19. Costs
-#: ~20–70 ms, against 200–570 ms for ranking every match.
+#: it. Measured on a real corpus: at this depth the reranked top 50 was the
+#: one-step ranking, or within one or two rows of it for common two-word
+#: questions; at a fifth of it, less than half survived for some. Costs a few
+#: tens of milliseconds, against several hundred for ranking every match.
 LEXICAL_POOL = 1000
 
 #: Media types whose extractor produces pages rather than flat text (§6.6).

@@ -3,7 +3,7 @@
 Task B-65. The lexical arm's cost was never finding matches — the GIN index does
 that — but ranking them: `ts_rank_cd` reads every match's `search_vector` back
 out of the heap and TOAST, so a single common word matching tens of thousands of
-passages took 200–570 ms on the live corpus. RUM stores term positions in the
+passages took several hundred milliseconds. RUM stores term positions in the
 index and returns matches in rank order (`<=>`), so ranking reads the index only.
 
 GIN stays. It serves every unranked `@@` (watches, area views) and costs a tenth
@@ -13,8 +13,8 @@ of RUM per insert.
 `could not open extension control file ".../rum.control"`, the database is
 running an older image — the fix is the image, not this file.
 
-Not `CONCURRENTLY`: no migration here runs outside a transaction, and on a corpus
-of ~600k passages the build takes about a minute, during which chunk writes wait.
+Not `CONCURRENTLY`: no migration here runs outside a transaction, and on a large
+corpus the build takes about a minute, during which chunk writes wait.
 """
 
 from collections.abc import Sequence

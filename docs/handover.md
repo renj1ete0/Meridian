@@ -17,13 +17,13 @@ add it here.
 > committed, **not pushed, not on GHCR** (operator: hold GHCR).
 > - **`B-65`: the database image now carries `rum`** (PGDG `postgresql-17-rum`, also published
 >   for arm64). **Rebuild `meridian/postgres` before migrating**, or `CREATE EXTENSION rum`
->   fails on a missing control file. The migration builds `ix_chunks_search_rum` in about 45 s
->   on ~600k passages, holding chunk writes meanwhile. The lexical arm takes RUM's best 1000
+>   fails on a missing control file. The migration builds `ix_chunks_search_rum` in under a minute
+>   on the local corpus, holding chunk writes meanwhile. The lexical arm takes RUM's best 1000
 >   and reorders them by `ts_rank_cd`; `LEXICAL_POOL` explains the measurement.
 > - **The planner now answers plain `@@` from RUM too**, even on the live corpus, so the GIN
 >   index may be redundant. Check the watch and area-view plans before dropping it.
-> - **`P6-10`**: `/contested` and `GET /api/explore/graph/contested`. The live graph has 0
->   contested of 196 links, so the page shows its empty state; the populated layout was only
+> - **`P6-10`**: `/contested` and `GET /api/explore/graph/contested`. The live graph has no
+>   contested pair yet, so the page shows its empty state; the populated layout was only
 >   seen with injected data (Playwright `page.route`).
 > - **`B-53`** is now an operator decision; the numbers are in TASKS and
 >   `meridian-calibration/b53/notes.md`. `translation_lookups` is empty: `B-52` has never run,

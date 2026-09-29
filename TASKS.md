@@ -22,9 +22,9 @@ against a real Postgres, 981 frontend.
 ## Resume here (written 2026-09-26, end of session)
 
 > **2026-09-29 — `v0.155.0`, live locally, committed, not pushed; GHCR held by the operator.**
-> `B-65` shipped (RUM ranking, broad words 2–3× faster, rankings unchanged within 1–2 of 100),
+> `B-65` shipped (RUM ranking, broad words 2–3× faster, rankings unchanged or within a row or two),
 > `P6-10` shipped (the contested list), `B-53` measured and handed to the operator. Still
-> open: `P6-06`/`P6-07` need a model (a local server answers on 127.0.0.1:13305 only; the API
+> open: `P6-06`/`P6-07` need a model (a local server answers on the host loopback only; the API
 > container cannot reach it until it listens on the Docker bridge), `P2-15` paused, and the
 > operator's calls: `B-109`, `B-99`, `B-53`, Admin in reader navigation. Details: handover §0.
 
@@ -1517,7 +1517,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       to topics taking at least their share of fetches at under half the crawl's
       average yield per fetch, never to thin ones; boosts only where more crawl would
       help (under-drawn, or yielding)
-- [x] `B-65` — `v0.154.1`, a RUM index ranks the best 1000 matches, `ts_rank_cd` orders those. **Measured live (2026-09-29, ~600k passages, default filters):** broad words 2–3× faster ("health" 353 → 125 ms, "transport" 196 → 85 ms); top 100 identical for 12 of 14 questions, 98–99 of 100 for "public transport"/"public health"; narrow questions (under ~10k matches) 5–20 ms *slower*, the price of the second step. Open: the planner now answers plain `@@` from RUM too, so the GIN index (≈330 MB, cheap inserts) may be redundant — drop it only after checking watches and area views still plan well. **The lexical arm is the slow half of search** — measured at corpus size
+- [x] `B-65` — `v0.154.1`, a RUM index ranks the best 1000 matches, `ts_rank_cd` orders those. **Measured live (2026-09-29, default filters):** broad single words 2–3× faster; top 100 identical for most questions and within one or two rows for common two-word ones; narrow questions a little *slower*, the price of the second step. Open: the planner now answers plain `@@` from RUM too, so the GIN index (≈330 MB, cheap inserts) may be redundant — drop it only after checking watches and area views still plan well. **The lexical arm is the slow half of search** — measured at corpus size
       it is roughly ten times slower than the vector arm and sets hybrid latency.
       **Diagnosed 2026-09-25:** the GIN index is used; cost is linear in the number
       of *matching* passages (about 4 µs each), almost all of it reading each match's
@@ -1707,13 +1707,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       Measure on real non-English sources once `B-52` seeds have fetched some;
       options are per-language prototypes from `translation_lookups` or a
       language-aware floor
-      **Measured 2026-09-29** (`meridian-calibration/b53/notes.md`): 152 pairs of the
-      same page in English and another language (13 English pages, 28 languages). The
-      gap is proportional, not constant: none for off-topic pages (−0.002), −0.035 in
-      0.38–0.45, −0.05 for the one clearly on-topic page, which lost its label in all
-      three translations. Topic order survives translation (r 0.95–0.99); height does
-      not. The low Korean label rate (0.1% of 690) is mostly real — generic agency
-      landing pages. Thin because `B-52` has never written a seed
+      **Measured 2026-09-29** (`meridian-calibration/b53/notes.md`): the same pages
+      in English and other languages, paired by URL. The gap is proportional, not
+      constant: none for off-topic pages, a few hundredths in the middle band, and
+      enough at the top that an on-topic page lost its label in every translation.
+      Topic order survives translation; height does not. The lowest-labelled language
+      is mostly generic landing pages, so its rate is largely real. Thin because `B-52` has never written a seed
       (`translation_lookups` empty; needs `MERIDIAN_CONTACT_EMAIL`). ⚑ Operator's
       choice: a non-English floor near 0.46, a proportional rescale, per-language
       prototypes after `B-52` runs, or wait for more pages
@@ -1817,7 +1816,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       the owner's and not add to them. Filters are validated against
       `SearchFilters` before storing, because a view that silently drops a filter
       when reopened hands back a result set the reader believes is narrowed
-- [x] `P6-10` Coverage grid and contested list as entry points — `v0.155.0`, the contested list: `/api/explore/graph/contested` (each pair once, newest first, one-sided marks included) and `/contested`, opened from the landing's Contested card. Screenshot-checked light, dark and phone with injected pairs; the live graph has 0 contested of 196 links, so live shows the stated absence. The coverage grid half stays cut (2026-09-23); Coverage opens Gaps
+- [x] `P6-10` Coverage grid and contested list as entry points — `v0.155.0`, the contested list: `/api/explore/graph/contested` (each pair once, newest first, one-sided marks included) and `/contested`, opened from the landing's Contested card. Screenshot-checked light, dark and phone with injected pairs; the live graph has no contested pair yet, so live shows the stated absence. The coverage grid half stays cut (2026-09-23); Coverage opens Gaps
 - [x] `P6-11` Explore landing state with since-last-visit delta — `v0.61.0`.
       `stats?since=` plus a `localStorage` stamp read once per session and
       advanced immediately, so the delta means "since you were last here" and
