@@ -90,7 +90,8 @@ export function SearchField({
             large ? 'h-9 text-[15px]' : 'h-8 text-[14px]'
           }`}
         />
-        <span className="shrink-0 border border-line px-1.5 py-[3px] font-mono text-[9.5px] leading-none text-text-faint">
+        {/* Not on a phone, where it took the room the placeholder needs (`B-125`). */}
+        <span className="hidden shrink-0 border border-line px-1.5 py-[3px] font-mono text-[9.5px] leading-none text-text-faint sm:inline">
           {MODE_MARKER}
         </span>
       </div>

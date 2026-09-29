@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.10] — 2026-09-29
+
+### Fixed
+
+- `B-125`: the question toggle no longer covers content — reading pages keep room at their
+  foot, the node panel's footer keeps its corner clear — and the search box's mode marker is
+  hidden on a phone, where it crowded the placeholder.
+
 ## [0.156.9] — 2026-09-29
 
 ### Fixed
