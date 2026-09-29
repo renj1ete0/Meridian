@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.4] — 2026-09-29
+
+### Fixed
+
+- `B-120`: the node page stacks below the `lg` breakpoint — graph, panel, filters, scrolling —
+  instead of three fixed columns that clipped the panel and hid the graph on a phone.
+
 ## [0.156.3] — 2026-09-29
 
 ### Fixed

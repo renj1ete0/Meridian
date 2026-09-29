@@ -277,7 +277,7 @@ export function NodePanel({
   return (
     <aside
       aria-label={`Node: ${entity.canonical_name}`}
-      className="flex h-full min-h-0 w-[384px] shrink-0 flex-col border-l border-line bg-surface"
+      className="order-2 flex w-full shrink-0 flex-col border-t border-line bg-surface lg:order-none lg:h-full lg:min-h-0 lg:w-[384px] lg:border-l lg:border-t-0"
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         <header className="relative flex flex-col gap-3 border-b border-line px-5 pb-4 pt-5">

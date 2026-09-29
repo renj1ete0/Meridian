@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-120` **The node page on a phone** — `v0.156.4`. Site review: the three fixed columns
+      (filters 236px, graph, panel 384px) left a 390px screen no graph and a clipped panel. Below
+      `lg` they now stack and the page scrolls — graph (62% of the height), panel, filters — with
+      room under the last controls for the question toggle. Desktop unchanged; screenshot-checked
+      at 390, 820 and 1440 wide, no horizontal overflow
 - [x] `B-119` **Passages read as a PDF's columns and raw tables** — `v0.156.3`. Found by the
       2026-09-29 site review: text extracted from PDFs kept every layout line break, so a source
       page showed a ragged column of three or four words a line and Find broke sentences mid-way;

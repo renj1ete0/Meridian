@@ -314,7 +314,15 @@ export function NodePage({ entityId }: { entityId: number }) {
   useAskSubjects(knownName ? [{ entityId, name: knownName }] : [])
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-10 flex bg-ground text-text" style={{ top }}>
+    // Three columns from `lg` up, as the artboard draws them. Below it they
+    // stack and the page scrolls (`B-120`): graph first, then the panel, then
+    // the filters — at a phone's width the fixed columns clipped the panel and
+    // left the graph no width at all. `pb-24` keeps the last controls clear of
+    // the question panel's toggle.
+    <div
+      className="fixed inset-x-0 bottom-0 z-10 flex flex-col overflow-y-auto bg-ground pb-24 text-text lg:flex-row lg:overflow-hidden lg:pb-0"
+      style={{ top }}
+    >
       <FilterRail
         facets={hood?.facets ?? null}
         filters={url.filters}
@@ -333,7 +341,7 @@ export function NodePage({ entityId }: { entityId: number }) {
       <section
         aria-label="Graph"
         data-theme="dark"
-        className="relative min-w-0 flex-1 overflow-hidden bg-ground-deep text-text"
+        className="relative order-1 h-[62vh] min-w-0 shrink-0 overflow-hidden bg-ground-deep text-text lg:order-none lg:h-auto lg:flex-1 lg:shrink"
       >
         {missing ? (
           <Centre>
@@ -469,7 +477,7 @@ export function NodePage({ entityId }: { entityId: number }) {
           writeError={writeError}
         />
       ) : (
-        <aside className="w-[384px] shrink-0 border-l border-line bg-surface px-5 py-5">
+        <aside className="order-2 w-full shrink-0 border-t border-line bg-surface px-5 py-5 lg:order-none lg:w-[384px] lg:border-l lg:border-t-0">
           {detailError ? (
             <p className="text-[13px] text-accent-attention">{detailError}</p>
           ) : (

@@ -192,7 +192,7 @@ export function FilterRail({
   return (
     <nav
       aria-label="Graph filters"
-      className="flex h-full min-h-0 w-[236px] shrink-0 flex-col gap-5 overflow-y-auto border-r border-line bg-ground px-4 py-[18px]"
+      className="order-3 flex w-full shrink-0 flex-col gap-5 border-t border-line bg-ground px-4 py-[18px] lg:order-none lg:h-full lg:min-h-0 lg:w-[236px] lg:overflow-y-auto lg:border-r lg:border-t-0"
     >
       <NodeSearchBox onPick={onPickNode} placeholder="Find a node" />
 
