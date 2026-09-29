@@ -1700,6 +1700,16 @@ deploy runbook whose first two commands could not work (`B-17`).
       Measure on real non-English sources once `B-52` seeds have fetched some;
       options are per-language prototypes from `translation_lookups` or a
       language-aware floor
+      **Measured 2026-09-29** (`meridian-calibration/b53/notes.md`): 152 pairs of the
+      same page in English and another language (13 English pages, 28 languages). The
+      gap is proportional, not constant: none for off-topic pages (−0.002), −0.035 in
+      0.38–0.45, −0.05 for the one clearly on-topic page, which lost its label in all
+      three translations. Topic order survives translation (r 0.95–0.99); height does
+      not. The low Korean label rate (0.1% of 690) is mostly real — generic agency
+      landing pages. Thin because `B-52` has never written a seed
+      (`translation_lookups` empty; needs `MERIDIAN_CONTACT_EMAIL`). ⚑ Operator's
+      choice: a non-English floor near 0.46, a proportional rescale, per-language
+      prototypes after `B-52` runs, or wait for more pages
 - [x] `B-54` **Schedule `worker.docdupes`** — `v0.124.1`, timetable row shipped
       *disabled*: read the first live report, then enable it in Admin
 - [x] `B-55` **Seeds and watches are not in the steering audit** — `v0.125.1` for seeds (a "watch" does not exist yet; it arrives with `P6-35`) — `POST /api/admin/seeds`
