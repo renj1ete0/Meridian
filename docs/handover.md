@@ -13,6 +13,21 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-29 evening — runs 15–16, `B-115`–`B-118` (`v0.156.2`).** Proven hosts first
+> (`B-115`) took run 15 to 35% of new pages on a topic and 4× run 14's count; sitemaps of proven
+> hosts are mined hourly (`B-116`, `B-118`); four more search engines (`B-117`). Traps:
+> - **The scheduler has its own image.** Rebuilding only `worker` left the scheduler without a
+>   new module ("No module named worker.sitemapmine"). Build every app service:
+>   `build worker embed scheduler bot orchestrator api web`, then `up -d --no-deps` the same.
+> - **Every claim draws a topic.** A task queued with `topic=NULL` is claimable only by the
+>   unscoped fallback, which never runs while any topic has work: `B-116`'s hundred sitemaps sat
+>   at the top of the queue unclaimed. Test new task sources with a topic-scoped `claim_next`.
+> - **Loop runs lift the embedding ceiling; normal operation does not.** After a run the
+>   backlog is above 20k and the crawl pauses until it drains — expected, and the reason the
+>   yield per embedded page, not fetches per hour, is the number that matters.
+> - **Proven hosts dominate followed-link fetches now** (84% in run 15). Watch the tier mix and
+>   host count: politeness and the per-host cap of 500 are what keep it from narrowing further.
+
 > **2026-09-29 afternoon — loop runs 12–14, `B-113`, `B-114` (`v0.155.2`).** Traps:
 > - **`docker compose up -d --build <services>` recreates Postgres too** when its image is
 >   local; `embed` then crashes on name resolution until it is back (7 restarts). Deploy app
