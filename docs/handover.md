@@ -13,6 +13,18 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-09-29 afternoon — loop runs 12–14, `B-113`, `B-114` (`v0.155.2`).** Traps:
+> - **`docker compose up -d --build <services>` recreates Postgres too** when its image is
+>   local; `embed` then crashes on name resolution until it is back (7 restarts). Deploy app
+>   services with `--no-deps`.
+> - **The query task type is `query`, not `search`**: `queue.task_type='query'` for pending
+>   searches; `seed_source='search'` marks the result URLs.
+> - **`B-114` blocks by note** (`fetch_policy.updated_by='refusals'`) and lifts after 30 days.
+>   `en.wikipedia.org` is among the blocked: it refuses clients with no contact address. Once
+>   `MERIDIAN_CONTACT_EMAIL` is set, unblock it in Admin; a hand unblock gets a fresh window.
+> - **Yield by how a page was found** is the number to watch (runs 12–14 comparison): search
+>   ~40–50% on a topic, followed links ~2%, mostly the pre-`B-91` backlog.
+
 > **2026-09-29 — `v0.155.0`: RUM ranking, the contested list, `B-53` measured.** Live locally;
 > pushed to GitHub, **not on GHCR** (operator: hold GHCR).
 > - **`B-65`: the database image now carries `rum`** (PGDG `postgresql-17-rum`, also published

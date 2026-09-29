@@ -21,6 +21,15 @@ against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-09-29 afternoon — loop runs 12–14, `v0.155.2` live, unpushed.** `B-113` (an off-topic
+> site's unjudged subdomains ordered last) raised new pages on a topic from 16% to 28% (run 13).
+> `B-114` (domains refusing every request blocked) halved HTTP errors (run 14). Found: pages from
+> search are ~40–50% on a topic, pages from followed links ~2%, and the followed links are almost
+> all the backlog queued before `B-91` recorded parents; children of on-topic parents ran 4 of 5.
+> Search runs dry within the hour (queries every 3h, `B-108`). **Operator decision:** more search
+> supply (`B-109`, or a shorter seedsearch interval now some engines answer again) and/or fetching
+> less of the pre-`B-91` backlog. Notes: `meridian-calibration/loop/run12`–`run14`.
+
 > **2026-09-29 — `v0.155.0`, live locally, pushed to GitHub; GHCR held by the operator.**
 > `B-65` shipped (RUM ranking, broad words 2–3× faster, rankings unchanged or within a row or two),
 > `P6-10` shipped (the contested list), `B-53` measured and handed to the operator. Still
