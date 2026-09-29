@@ -850,6 +850,65 @@ function Canvas({
         {/* Clipped to the drawing's own frame, so a zoomed map stays out from
             under the controls above it and the key's line below. */}
         <g transform={`translate(0 ${top})`} clipPath="url(#map-draw)">
+          {/* Links first, under the circles (`B-124`): drawn over them, a long
+              line crossed the names and captions of every circle on its way. */}
+          {morph
+            ? null
+            : [...fieldLinks.map((link) => ({ link, between: 'fields' })), ...links.map((link) => ({ link, between: '' }))].map(({ link, between }) => {
+                const a = ends.get(link.area_a)
+                const b = ends.get(link.area_b)
+                if (!a || !b) return null
+                // Edge to edge, not centre to centre: a line drawn through a
+                // circle crosses its label and makes the circle hard to click.
+                const segment = edgeToEdge(a, b)
+                if (!segment) return null
+                const [x1, y1, x2, y2] = segment
+                const cited = link.cited_claims > 0
+                const selected =
+                  onRoute.has(routeKey(link)) ||
+                  (selectedLink?.includes(link.area_a) && selectedLink.includes(link.area_b)) ||
+                  (focused?.[0] === link.area_a && focused[1] === link.area_b)
+                const label = `${a.name} and ${b.name}: ${
+                  cited
+                    ? `${link.cited_claims} cited claim${link.cited_claims === 1 ? '' : 's'}, ${link.cited_sources} source${link.cited_sources === 1 ? '' : 's'}`
+                    : 'similar passages, no cited claim'
+                }`
+                return (
+                  <g key={`${link.area_a}-${link.area_b}`} data-link={between || 'siblings'} opacity={between ? 0.55 : 1}>
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={selected ? 'var(--text)' : cited ? 'var(--accent-graph)' : 'var(--dark-canvas-neighbour)'}
+                      strokeOpacity={selected ? 1 : cited ? 0.6 : 0.5}
+                      strokeWidth={selected ? Math.max(3, linkWidth(link)) : linkWidth(link)}
+                      strokeDasharray={cited ? undefined : '4 5'}
+                    />
+                    {/* A wide transparent twin, so a thin line is clickable. */}
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="transparent"
+                      strokeWidth={14}
+                      className="cursor-pointer focus:outline-none"
+                      onFocus={() => onFocusLink([link.area_a, link.area_b])}
+                      onBlur={() => onFocusLink(null)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={label}
+                      onClick={() => onLink(link)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') onLink(link)
+                      }}
+                    >
+                      <title>{label}</title>
+                    </line>
+                  </g>
+                )
+              })}
           {morph ? (
             <MorphLayer
               items={morph.items}
@@ -932,63 +991,6 @@ function Canvas({
               </g>
             </>
           )}
-          {morph
-            ? null
-            : [...fieldLinks.map((link) => ({ link, between: 'fields' })), ...links.map((link) => ({ link, between: '' }))].map(({ link, between }) => {
-                const a = ends.get(link.area_a)
-                const b = ends.get(link.area_b)
-                if (!a || !b) return null
-                // Edge to edge, not centre to centre: a line drawn through a
-                // circle crosses its label and makes the circle hard to click.
-                const segment = edgeToEdge(a, b)
-                if (!segment) return null
-                const [x1, y1, x2, y2] = segment
-                const cited = link.cited_claims > 0
-                const selected =
-                  onRoute.has(routeKey(link)) ||
-                  (selectedLink?.includes(link.area_a) && selectedLink.includes(link.area_b)) ||
-                  (focused?.[0] === link.area_a && focused[1] === link.area_b)
-                const label = `${a.name} and ${b.name}: ${
-                  cited
-                    ? `${link.cited_claims} cited claim${link.cited_claims === 1 ? '' : 's'}, ${link.cited_sources} source${link.cited_sources === 1 ? '' : 's'}`
-                    : 'similar passages, no cited claim'
-                }`
-                return (
-                  <g key={`${link.area_a}-${link.area_b}`} data-link={between || 'siblings'} opacity={between ? 0.55 : 1}>
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke={selected ? 'var(--text)' : cited ? 'var(--accent-graph)' : 'var(--dark-canvas-neighbour)'}
-                      strokeOpacity={selected ? 1 : cited ? 0.6 : 0.5}
-                      strokeWidth={selected ? Math.max(3, linkWidth(link)) : linkWidth(link)}
-                      strokeDasharray={cited ? undefined : '4 5'}
-                    />
-                    {/* A wide transparent twin, so a thin line is clickable. */}
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke="transparent"
-                      strokeWidth={14}
-                      className="cursor-pointer focus:outline-none"
-                      onFocus={() => onFocusLink([link.area_a, link.area_b])}
-                      onBlur={() => onFocusLink(null)}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={label}
-                      onClick={() => onLink(link)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') onLink(link)
-                      }}
-                    >
-                      <title>{label}</title>
-                    </line>
-                  </g>
-                )
-              })}
         </g>
       </svg>
     </div>

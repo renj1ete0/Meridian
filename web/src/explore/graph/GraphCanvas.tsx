@@ -69,7 +69,49 @@ type LabelData = {
   isFocus?: boolean
 }
 
-export function makeLabelDrawer(fonts: { sans: string; mono: string }, halo: string, dagger: string, caption: string) {
+/** A drawn label's box, in viewport pixels. */
+export interface LabelBox {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+/**
+ * Which labels fit this frame (`B-124`). Sigma draws a label for every node,
+ * and on a dense neighbourhood they ran into each other ("stopping sight
+ * distances|uired sight distances"), worst on a phone. Greedy: a label whose
+ * box overlaps one already drawn this frame is left out — its node is still
+ * drawn and still names itself on hover. The focus is always drawn. Reset on
+ * every frame, so panning and zooming bring labels back as room appears.
+ */
+export class LabelPlacer {
+  private boxes: LabelBox[] = []
+
+  reset(): void {
+    this.boxes = []
+  }
+
+  /** Place the box if it overlaps none already placed; say whether it was. */
+  place(box: LabelBox, force = false): boolean {
+    if (!force && this.boxes.some((b) => box.x0 < b.x1 && b.x0 < box.x1 && box.y0 < b.y1 && b.y0 < box.y1)) {
+      return false
+    }
+    this.boxes.push(box)
+    return true
+  }
+}
+
+/** Breathing room kept between two labels, in pixels. */
+const LABEL_GAP = 3
+
+export function makeLabelDrawer(
+  fonts: { sans: string; mono: string },
+  halo: string,
+  dagger: string,
+  caption: string,
+  placer?: LabelPlacer,
+) {
   return function drawLabel(context: CanvasRenderingContext2D, data: LabelData): void {
     if (!data.label) return
     const size = data.isFocus ? 14 : 12
@@ -83,6 +125,16 @@ export function makeLabelDrawer(fonts: { sans: string; mono: string }, halo: str
     context.font = `400 10px ${fonts.mono}`
     const daggerWidth = data.dagger ? context.measureText(DAGGER).width + 1 : 0
     const left = data.x - (labelWidth + daggerWidth) / 2
+
+    if (placer) {
+      const box = {
+        x0: left - LABEL_GAP,
+        x1: left + labelWidth + daggerWidth + LABEL_GAP,
+        y0: y - size - LABEL_GAP,
+        y1: y + (data.caption ? 16 : 4) + LABEL_GAP,
+      }
+      if (!placer.place(box, data.isFocus)) return
+    }
 
     context.lineJoin = 'round'
     context.strokeStyle = halo
@@ -172,7 +224,10 @@ export function GraphCanvas({ scene, onNodeClick, onHover, apiRef, onUnavailable
 
         let renderer: InstanceType<typeof Sigma>
         try {
-          const drawLabel = makeLabelDrawer(fonts, palette.ground, palette.contested, palette.caption)
+          const placer = new LabelPlacer()
+          const drawLabel = makeLabelDrawer(fonts, palette.ground, palette.contested, palette.caption, placer)
+          // The hovered node always names itself, whatever it was crowded out by.
+          const drawHover = makeLabelDrawer(fonts, palette.ground, palette.contested, palette.caption)
           renderer = new Sigma(graph, element, {
             zIndex: true,
             renderEdgeLabels: scene.edgeLabels,
@@ -186,8 +241,9 @@ export function GraphCanvas({ scene, onNodeClick, onHover, apiRef, onUnavailable
             defaultDrawNodeLabel: drawLabel as never,
             // The hover card is the hover state; Sigma's white hover box would
             // be a second, unstyled one.
-            defaultDrawNodeHover: drawLabel as never,
+            defaultDrawNodeHover: drawHover as never,
           })
+          renderer.on('beforeRender', () => placer.reset())
         } catch (cause) {
           onUnavailable?.(
             cause instanceof Error && /webgl/i.test(cause.message)

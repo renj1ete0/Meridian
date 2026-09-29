@@ -193,6 +193,15 @@ describe('the bridge panel', () => {
     expect(within(panel).getByText('cosine 0.81')).toBeTruthy()
   })
 
+  it('draws links under the circles, so no line crosses a name (B-124)', () => {
+    const { container } = render(<AreasView level={level({ links: [cited] })} onLevel={() => {}} />)
+    const link = container.querySelector('[data-link]')
+    const circle = container.querySelector('[data-area]')
+    expect(link && circle).toBeTruthy()
+    // Earlier in the document is lower in SVG paint order.
+    expect(link!.compareDocumentPosition(circle!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('says outright when two areas share no cited claim', async () => {
     vi.stubGlobal(
       'fetch',

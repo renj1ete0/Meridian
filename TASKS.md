@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.8`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.9`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-124` **Labels ran into each other** — `v0.156.9`. Site review: on the node graph two
+      neighbours' names overprinted ("stopping sight distances|uired sight distances"), worst on
+      a phone; on the Map long links were painted over the circles they crossed, through names and
+      captions. The graph now places labels greedily each frame — one that would overlap a label
+      already drawn is left out, the focus always drawn, every node still named on hover — and
+      the Map paints links under the circles
 - [x] `B-123` **Terms harvested from off-topic pages** — `v0.156.8`. The site review's first page
       of gazetteer approvals was radio and telecom acronyms. `worker.harvest` read every document
       with text; 27,729 terms waited, all harvested, none carrying a topic. Now only documents

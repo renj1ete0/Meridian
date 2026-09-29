@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.9] — 2026-09-29
+
+### Fixed
+
+- `B-124`: graph labels no longer overprint — a label that would overlap one already drawn
+  is left out for that frame (the focus always drawn, every node named on hover) — and the
+  Map paints links beneath circles so no line crosses a name.
+
 ## [0.156.8] — 2026-09-29
 
 ### Changed
