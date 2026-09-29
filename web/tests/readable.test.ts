@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { readable } from '../src/lib/readable'
+import { flattenTables, readable, unwrapLines } from '../src/lib/readable'
 
 describe('readable', () => {
   it('keeps a link’s words and drops its address', () => {
@@ -72,5 +72,72 @@ describe('a page’s own prompts at the start of a passage (B-98)', () => {
   it('keeps an ellipsis anywhere but the start, and a passage that is only a prompt', () => {
     expect(readable('Intro.\nMore…\nEnd.')).toBe('Intro.\nMore…\nEnd.')
     expect(readable('Loading…')).toBe('Loading…')
+  })
+})
+
+describe('text a PDF layout broke into lines', () => {
+  const wrapped = [
+    'The free AFLEET suite of tools',
+    'simplifies the task of estimating',
+    'petroleum use, greenhouse gas',
+    'emissions and cost of ownership.',
+    'A second paragraph starts here and',
+    'runs on.',
+  ].join('\n')
+
+  it('joins lines broken mid-sentence into running text', () => {
+    expect(readable(wrapped)).toBe(
+      'The free AFLEET suite of tools simplifies the task of estimating petroleum use, greenhouse gas emissions and cost of ownership.\nA second paragraph starts here and runs on.',
+    )
+  })
+
+  it('does not run a heading or a label into the sentence below it', () => {
+    // A navigation page's lines: most breaks mid-sentence, but each next line
+    // is capitalised — a new item, not a continuation.
+    const menu = 'Request Data\nRequest Mediation of Disputes\nIf a request is rejected, you may\nsubmit an application\nNews'
+    expect(readable(menu)).toBe(
+      'Request Data\nRequest Mediation of Disputes\nIf a request is rejected, you may submit an application\nNews',
+    )
+  })
+
+  it('puts a word hyphenated across the break back together', () => {
+    expect(unwrapLines('the trans-\nport network and\nthe bus service and\nthe rail line')).toBe(
+      'the transport network and the bus service and the rail line',
+    )
+  })
+
+  it('leaves a page whose lines were broken on purpose alone', () => {
+    // Most breaks end a sentence or a label: not a wrapped passage.
+    const labelled = 'Source: LTA.\nDaily bus ridership rose.\nIt fell in 2020.\nIt recovered.'
+    expect(readable(labelled)).toBe(labelled)
+  })
+
+  it('keeps list items and blank-line paragraphs on their own lines', () => {
+    const text = 'Three measures were\nintroduced in the plan\nwhich covered\n- lower speed limits\n- kerb extensions\n\nThe next part'
+    expect(readable(text)).toBe(
+      'Three measures were introduced in the plan which covered\n- lower speed limits\n- kerb extensions\n\nThe next part',
+    )
+  })
+
+  it('does nothing to a passage with too few breaks to judge', () => {
+    expect(unwrapLines('one line\nand another')).toBe('one line\nand another')
+  })
+})
+
+describe('Markdown tables in a passage', () => {
+  it('drops the separator row and joins each row’s cells', () => {
+    const table = 'Average daily ridership\n| Number (’000) | 2017 | 2018 |\n|---|---|---|\n| Bus | 3,939 | 4,000 |'
+    expect(flattenTables(table)).toBe('Average daily ridership\nNumber (’000) · 2017 · 2018\nBus · 3,939 · 4,000')
+    expect(readable(table)).not.toMatch(/\||---/)
+  })
+
+  it('keeps each row on its own line inside a wrapped passage, and drops a bare pipe line', () => {
+    const text = '|\n| 2008 | Age | Included |\n| 2008 | Age | Excluded |\nwhich the survey\nreported and\nthe office kept'
+    expect(readable(text)).toBe('2008 · Age · Included\n2008 · Age · Excluded\nwhich the survey reported and the office kept')
+  })
+
+  it('handles aligned separators and leaves a lone pipe in prose alone', () => {
+    expect(flattenTables('| a | b |\n| :-- | --: |')).toBe('a · b')
+    expect(flattenTables('either this | or that')).toBe('either this | or that')
   })
 })

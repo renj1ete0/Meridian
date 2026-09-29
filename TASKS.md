@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-119` **Passages read as a PDF's columns and raw tables** — `v0.156.3`. Found by the
+      2026-09-29 site review: text extracted from PDFs kept every layout line break, so a source
+      page showed a ragged column of three or four words a line and Find broke sentences mid-way;
+      Markdown tables showed as pipes and dashes. The display view (`readable`, `B-79`) now joins
+      breaks that plainly continue (next line in lower case, or a trailing comma) in a passage
+      whose breaks mostly fall mid-sentence, rejoins hyphenated words, and flattens table rows to
+      cells joined by a middle dot. Headings, labels, list items and rows keep their lines. Run
+      over 300 stored passages before shipping: a fifth rejoined, none merged a heading. The
+      source page now uses the same view; stored text is unchanged (§2.4)
 - [x] `B-118` **Mined sitemaps were never claimed** — `v0.156.2`. Run 16: all 103 sitemaps
       `B-116` queued were still pending an hour later, at a priority above everything. Every
       claim draws a topic and takes only tasks filed under it; the sitemaps had none, so only

@@ -10,6 +10,7 @@ import {
   type NoteDraft,
   type Source,
 } from '../lib/api'
+import { readable } from '../lib/readable'
 import { onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
 import { NoteComposer } from './Annotations'
@@ -250,7 +251,7 @@ function Passages({
             key={chunk.chunk_id}
             className={`flex flex-col gap-2.5 px-5 py-4 ${on ? 'bg-accent-graph/5' : ''}`}
           >
-            <p className="whitespace-pre-wrap text-[14.5px] leading-[1.62] text-text/90">{chunk.text}</p>
+            <p className="whitespace-pre-wrap text-[14.5px] leading-[1.62] text-text/90">{readable(chunk.text)}</p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-[10px] text-text-faint">
               <label className={`flex cursor-pointer items-center gap-1.5 ${on ? 'text-accent-graph' : 'hover:text-text-muted'}`}>
                 <input

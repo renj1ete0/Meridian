@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.3] — 2026-09-29
+
+### Fixed
+
+- `B-119`: passages read as prose. The display view joins line breaks a PDF's layout put
+  mid-sentence, rejoins hyphenated words and turns Markdown table rows into cells joined by
+  a middle dot; headings, labels, lists and rows keep their lines. The source page uses the
+  same view. Stored text is unchanged.
+
 ## [0.156.2] — 2026-09-29
 
 ### Fixed
