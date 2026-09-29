@@ -5,6 +5,9 @@ labels `worker.retopic` writes and from the pending queue. The fetch loop reads
 the table every housekeeping tick to decide which links are worth queueing.
 Scheduled hourly, after `topics`; derived, so a missed run only means the loop
 decides on the previous hour's numbers. ``--report`` prints without writing.
+
+It also blocks domains that refused every request in the last month (`B-114`,
+``policy.block_refusing_domains``) — reversible in Admin.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import time
 from meridian_core.db import dispose_engines, session
 from meridian_core.hostscores import MIN_EXAMINED, Standing, load, recompute
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
+from meridian_core.policy import block_refusing_domains, refusing_domains
 
 log = get_logger(__name__)
 
@@ -24,6 +28,12 @@ log = get_logger(__name__)
 async def run_once(*, write: bool) -> list[tuple[str, int, int, int, str]]:
     async with session() as sess:
         await recompute(sess)
+        # Domains that refused every request (`B-114`): blocked on a write,
+        # listed on a report. Hourly, beside the relevance scores, because both
+        # decide what the crawl spends its politeness slots on.
+        refusing = await (block_refusing_domains(sess) if write else refusing_domains(sess))
+        for domain, n in refusing:
+            print(f"{'blocked' if write else 'would block'}: {domain} ({n} requests, all refused)")
         scores = await load(sess)
         rows = [
             (host, s.examined, s.on_topic, s.pending, s.standing.value)

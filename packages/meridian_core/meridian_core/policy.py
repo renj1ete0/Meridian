@@ -20,10 +20,11 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
+from .models import FetchAttempt
 from .models import FetchPolicy as FetchPolicyRow
 from .tiering import jittered_delay_ms, registrable_domain, resolve_tier
 
@@ -380,6 +381,139 @@ async def apply_fetch_outcome(
     if signal == "unreachable":
         return await record_failure(sess, domain, blocked_after=blocked_after)
     return False
+
+
+# --------------------------------------------------------------------------
+# A domain that refuses every request (task B-114)
+# --------------------------------------------------------------------------
+#
+# A 403 is "alive" above, and rightly for one URL: the domain answered. But a
+# domain that has answered 403 to *every* request never accumulates failures,
+# so the counter never blocks it, and each search result or link to it costs a
+# politeness slot for nothing. Publishers that refuse crawlers outright are the
+# common case, and a scholarly search hands their URLs back constantly.
+#
+# Not a consecutive rule. Domains that do serve pages also return long unbroken
+# runs of 403s (a forbidden section, a bot check on some paths), so any run
+# length low enough to help would block sites the corpus reads. The rule is
+# instead "never once anything but a refusal": no answer of any other kind.
+
+#: The status a refusing domain answers with.
+REFUSED_STATUS = 403
+
+#: Requests that must have gone out, all refused, before a domain is blocked.
+REFUSAL_MIN_ATTEMPTS = 20
+
+#: How far back the refusals are counted.
+REFUSAL_WINDOW_DAYS = 30
+
+#: Who writes the block, so a later pass can tell its own verdict from a person's.
+REFUSAL_ACTOR = "refusals"
+
+
+async def refusing_domains(
+    sess: AsyncSession, *, now: dt.datetime | None = None
+) -> list[tuple[str, int]]:
+    """Active domains that refused every request in the window, with the count.
+
+    Only requests that went out are counted: a robots denial or a refusal to
+    fetch an already-blocked domain says nothing about the domain. Where a
+    person last edited the domain's row, only attempts after that edit count,
+    so unblocking a domain in Admin gives it a fresh window rather than being
+    undone at the next pass.
+    """
+    now = now or dt.datetime.now(dt.UTC)
+    since = now - dt.timedelta(days=REFUSAL_WINDOW_DAYS)
+
+    async def tally(after: dt.datetime, domains: list[str] | None = None) -> dict[str, int]:
+        refused = (FetchAttempt.outcome == "http_error") & (
+            FetchAttempt.status_code == REFUSED_STATUS
+        )
+        stmt = (
+            select(FetchAttempt.domain, func.count())
+            .where(
+                FetchAttempt.attempted_at > after,
+                FetchAttempt.outcome.not_in(sorted(DOMAIN_NO_SIGNAL)),
+            )
+            .group_by(FetchAttempt.domain)
+            .having(func.count() >= REFUSAL_MIN_ATTEMPTS, func.bool_and(refused))
+        )
+        if domains is not None:
+            stmt = stmt.where(FetchAttempt.domain.in_(domains))
+        return dict((await sess.execute(stmt)).all())
+
+    candidates = await tally(since)
+    if not candidates:
+        return []
+    policies = {
+        row.domain: row
+        for row in await sess.scalars(
+            select(FetchPolicyRow).where(FetchPolicyRow.domain.in_(sorted(candidates)))
+        )
+    }
+    found = []
+    for domain, n in sorted(candidates.items()):
+        row = policies.get(domain)
+        if row is not None and row.status != "active":
+            continue
+        # Counted only since the row was last set by hand, or since this rule
+        # lifted its own block: either way the older refusals were answered.
+        if row is not None and row.updated_by not in (None, "worker"):
+            recount = await tally(max(since, row.updated_at or since), [domain])
+            if domain not in recount:
+                continue
+            n = recount[domain]
+        found.append((domain, n))
+    return found
+
+
+async def block_refusing_domains(
+    sess: AsyncSession, *, now: dt.datetime | None = None
+) -> list[tuple[str, int]]:
+    """Block every domain :func:`refusing_domains` finds. Does not commit.
+
+    ``blocked``, with a note naming the rule, so the verdict is visible and
+    reversible in Admin like any other block.
+
+    **The block expires.** A blocked domain is never requested, so no new
+    evidence can arrive to lift it; a site that stops refusing — a bot check
+    relaxed, a contact address configured for a service that asks for one —
+    would stay blocked forever. So a block this rule made lifts after
+    :data:`REFUSAL_WINDOW_DAYS`, and the domain is judged afresh on the next
+    :data:`REFUSAL_MIN_ATTEMPTS` requests. A block anyone else made is not
+    touched.
+    """
+    stamp = now or dt.datetime.now(dt.UTC)
+    expired = await sess.scalars(
+        select(FetchPolicyRow).where(
+            FetchPolicyRow.status == "blocked",
+            FetchPolicyRow.updated_by == REFUSAL_ACTOR,
+            FetchPolicyRow.updated_at < stamp - dt.timedelta(days=REFUSAL_WINDOW_DAYS),
+        )
+    )
+    for row in expired:
+        row.status = "active"
+        row.note = f"refusal block lifted after {REFUSAL_WINDOW_DAYS} days; judged afresh — B-114"
+        row.updated_at = stamp
+    await sess.flush()
+
+    found = await refusing_domains(sess, now=now)
+    for domain, n in found:
+        row = await sess.scalar(select(FetchPolicyRow).where(FetchPolicyRow.domain == domain))
+        if row is None:
+            row = FetchPolicyRow(domain=domain, settings={}, consecutive_failures=0)
+            sess.add(row)
+        row.status = "blocked"
+        row.note = (
+            f"auto-blocked: all {n} requests in {REFUSAL_WINDOW_DAYS} days refused "
+            f"(HTTP {REFUSED_STATUS}) — B-114"
+        )
+        row.updated_at = stamp
+        row.updated_by = REFUSAL_ACTOR
+    await sess.flush()
+    if found:
+        log.info("blocked refusing domains", extra={"domains": len(found)})
+    return found
 
 
 async def record_render_outcome(

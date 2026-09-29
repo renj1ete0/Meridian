@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.155.2] — 2026-09-29
+
+### Fixed
+
+- `B-114`: a domain that refused every request (HTTP 403, at least 20 in 30 days, no
+  other answer) is blocked by the hourly `hostscore` pass, with a note. A 403 resets the
+  consecutive-failure counter, so such a domain was never blocked before. The block
+  lifts itself after 30 days; blocks and unblocks set by hand are left alone.
+
 ## [0.155.1] — 2026-09-29
 
 ### Fixed

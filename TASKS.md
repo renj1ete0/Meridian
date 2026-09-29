@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.155.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.155.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1551,6 +1551,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-114` **A domain that refused every request was never blocked** — `v0.155.2`. Run 13:
+      HTTP errors doubled as scholarly search supplied half the fetches, nearly all 403s from
+      publishers that refuse crawlers outright. A 403 counts as "the domain answered", which
+      resets the failure counter, so a domain refusing every request could never reach the
+      auto-block. Now the hourly `hostscore` pass blocks a domain whose every request in 30
+      days (at least 20) was a 403, with a note; a single answer of any other kind spares it.
+      Not a consecutive rule: domains the corpus reads return unbroken runs of 403s too. The
+      block lifts itself after 30 days and the domain is judged afresh; a block or unblock
+      set by hand is respected. First pass: two dozen domains
 - [x] `B-113` **An off-topic site's unjudged subdomains were each explored afresh** — `v0.155.1`.
       Run 12: two thirds of fetches came from followed links, and the new government pages
       examined were almost all off-topic. Large sites that serve every office, county or blog
