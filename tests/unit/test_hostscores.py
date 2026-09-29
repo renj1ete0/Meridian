@@ -11,6 +11,7 @@ from meridian_core.hostscores import (
     MAX_PENDING,
     MIN_EXAMINED,
     OFFTOPIC_SHARE,
+    PROVEN_BOOST,
     HostPolicy,
     Score,
     Standing,
@@ -86,9 +87,38 @@ def test_a_thin_on_topic_hosts_links_are_scaled_by_its_share() -> None:
     assert decision.applied_to(60) == round(60 * 0.10 / FULL_SHARE)
 
 
-def test_a_host_at_the_full_share_keeps_its_tier_priority() -> None:
+def test_a_proven_host_ranks_above_every_unjudged_link(monkeypatch) -> None:
+    """`B-115`: proven by yield, not by tier. The lowest tier's proven link must
+    outrank the highest tier's unjudged one, or a proven news site still waits
+    behind every government page nobody has judged."""
     full = Score(100, int(FULL_SHARE * 100))
-    assert decide(full, government=False, pending=0).applied_to(60) == 60
+    proven = decide(full, government=False, pending=0)
+    unjudged = decide(Score(), government=False, pending=0)
+    tiers = [5, 10, 30, 50, 60]
+    assert proven.reason == "proven"
+    assert min(proven.applied_to(t) for t in tiers) > max(unjudged.applied_to(t + 5) for t in tiers)
+
+
+def test_the_boost_is_larger_than_any_tier_priority() -> None:
+    """Drift: read the tier map rather than hardcoding it, so a tier raised
+    past the boost fails here instead of quietly re-ordering the queue."""
+    import yaml
+    from pathlib import Path
+
+    tiers = yaml.safe_load(
+        (Path(__file__).parents[2] / "config" / "source_tiers.yaml").read_text()
+    )["priority_by_tier"]
+    assert PROVEN_BOOST > max(tiers.values())
+
+
+def test_a_proven_host_is_still_capped() -> None:
+    full = Score(100, int(FULL_SHARE * 100))
+    assert decide(full, government=False, pending=MAX_PENDING).queue is False
+
+
+def test_a_thin_on_topic_host_gets_no_boost() -> None:
+    thin = Score(100, int(FULL_SHARE * 100) - 1)
+    assert decide(thin, government=False, pending=0).applied_to(60) <= 60
 
 
 def test_scaling_never_sinks_a_kept_link_to_the_downranked_or_held_band() -> None:

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import pytest
 from sqlalchemy import select
 
-from meridian_core.hostscores import MIN_EXAMINED, Standing, load, recompute
+from meridian_core.hostscores import MIN_EXAMINED, PROVEN_BOOST, Standing, load, recompute
 from meridian_core.models import QueueTask
 from meridian_core.sources import upsert_source
 from worker.requeue import HELD_PRIORITY, run_pass
@@ -175,4 +175,30 @@ async def test_requeue_brings_a_kept_link_to_its_current_tier_priority(sess) -> 
             )
         )
     ).one()
-    assert priority == priority_with_urgency(url, await source_tier_map(sess), HALF_LIFE_DAYS)
+    # Fully on a topic, so proven (`B-115`): its tier priority plus the boost.
+    tier = priority_with_urgency(url, await source_tier_map(sess), HALF_LIFE_DAYS)
+    assert priority == tier + PROVEN_BOOST
+
+
+async def test_requeue_lifts_a_proven_hosts_waiting_links_above_an_unjudged_hosts(sess) -> None:
+    """`B-115`, applied to the backlog: queued before the host was proven, fetched first after."""
+    proven, unjudged = host(), host()
+    await labelled(sess, proven, 20, on=20)
+    await queued(sess, proven, 1, priority=1)
+    await queued(sess, unjudged, 1, priority=60)
+    await recompute(sess)
+
+    await run_pass(apply=True, session_factory=factory(sess))
+
+    rows = dict(
+        (
+            await sess.execute(
+                select(QueueTask.url_or_query, QueueTask.priority).where(
+                    QueueTask.url_or_query.like(f"https://{proven}/%")
+                    | QueueTask.url_or_query.like(f"https://{unjudged}/%")
+                )
+            )
+        ).all()
+    )
+    by_host = {u.split("/")[2]: p for u, p in rows.items()}
+    assert by_host[proven] > by_host[unjudged]

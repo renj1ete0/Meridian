@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.155.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.155.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,16 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-115` **Proven hosts first** — `v0.155.3`. Tested before building: judged only on
+      their pages from before loop runs 12–14, hosts at or above `FULL_SHARE` had 52% of their
+      next pages on a topic, unjudged hosts 14%, borderline 10%; a read of sampled titles found
+      the verdicts right at both ends, with some false negatives on general pages. Yet proven
+      hosts took 3.5% of those runs' fetches, because priority is the source tier and a proven
+      host in a low tier queued below every unjudged government link. A proven host's links now
+      get `PROVEN_BOOST` on top of the tier, above any tier priority; caps still hold, search
+      keeps its reserved claims, and the daily requeue applies it to the backlog. First of the
+      operator's "tap proven sites" plan: then sitemaps of proven hosts (`B-116`), more search
+      engines, and the pre-`B-91` backlog only when nothing better waits
 - [x] `B-114` **A domain that refused every request was never blocked** — `v0.155.2`. Run 13:
       HTTP errors doubled as scholarly search supplied half the fetches, nearly all 403s from
       publishers that refuse crawlers outright. A 403 counts as "the domain answered", which

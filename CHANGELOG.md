@@ -68,6 +68,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.155.3] — 2026-09-29
+
+### Changed
+
+- `B-115`: links on a proven host (judged on a topic at or above `FULL_SHARE`) are queued
+  at their tier priority plus `PROVEN_BOOST`, above any tier, so they are fetched before
+  links to hosts nobody has judged. Measured first: a proven host's next page was on a
+  topic about half the time, an unjudged host's about one time in seven.
+
 ## [0.155.2] — 2026-09-29
 
 ### Fixed

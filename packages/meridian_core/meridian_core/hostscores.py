@@ -88,6 +88,17 @@ FULL_SHARE = 0.25
 #: below everything that earned its place.
 DOWNRANKED_PRIORITY = 1
 
+#: Added to a *proven* host's links (`B-115`): judged on a topic at or above
+#: :data:`FULL_SHARE`. Larger than any tier priority, so every proven link
+#: ranks above every link to a host nobody has judged. The tier ranks a
+#: source's authority, not whether its next page is worth fetching: measured
+#: over three loop runs, a proven host's next page was on a topic about half the
+#: time and an unjudged host's about one time in seven, yet proven hosts in a
+#: low tier queued below unjudged government links and took a thirtieth of the
+#: fetches. Search keeps its reserved claims, so this orders followed links
+#: among themselves and never starves discovery.
+PROVEN_BOOST = 65
+
 
 class Standing(enum.StrEnum):
     ON_TOPIC = "on_topic"
@@ -120,13 +131,15 @@ class Decision:
     reason: str = "ok"
     #: Multiplies the caller's priority when ``priority`` is None.
     weight: float = 1.0
+    #: Added to the caller's priority when ``priority`` is None (`B-115`).
+    boost: int = 0
 
     def applied_to(self, computed: int) -> int:
         """The priority to queue at, given the one the tier and urgency gave."""
         if self.priority is not None:
             return self.priority
         if self.weight >= 1.0:
-            return computed
+            return computed + self.boost
         return max(DOWNRANKED_PRIORITY + 1, round(computed * self.weight))
 
 
@@ -148,6 +161,8 @@ def decide(score: Score, *, government: bool, pending: int) -> Decision:
         return Decision(False, reason=f"{standing.value}_capped")
     if standing is Standing.ON_TOPIC and score.share < FULL_SHARE:
         return Decision(True, reason="on_topic_thin", weight=score.share / FULL_SHARE)
+    if standing is Standing.ON_TOPIC:
+        return Decision(True, reason="proven", boost=PROVEN_BOOST)
     return Decision(True, reason=standing.value)
 
 
