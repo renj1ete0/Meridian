@@ -117,7 +117,10 @@ describe('the corpus counts', () => {
     // §6: the tint never appears without the mark. A count is exactly where a
     // reader who cannot distinguish brass would otherwise lose which figure is
     // which.
-    const markup = renderToStaticMarkup(<CorpusCounts counts={null} />)
+    // Above zero, where it is marked at all (`B-126`).
+    const markup = renderToStaticMarkup(
+      <CorpusCounts counts={{ documents: 5, nodes: 4, edges: 3, contested: 2 }} />,
+    )
     const withoutColour = markup.replace(/class="[^"]*"/g, '')
 
     expect(withoutColour).toContain(DAGGER)
@@ -348,3 +351,25 @@ describe('watched questions (P6-43)', () => {
     expect(freshText(FRESH_CAP + 1)).toBe(`${FRESH_CAP}+ new`)
   })
 })
+
+describe('the contested count is marked only when something is contested (B-126)', () => {
+  const figures = (contested: number): CorpusFigures => ({ documents: 5, nodes: 4, edges: 3, contested })
+
+  it('draws a zero neutral, with no brass and no dagger', () => {
+    const markup = renderToStaticMarkup(<CorpusCounts counts={figures(0)} />)
+    expect(markup).not.toContain('text-accent-attention')
+    expect(markup).not.toContain('†')
+  })
+
+  it('draws a real count in brass with the dagger, never one without the other', () => {
+    const markup = renderToStaticMarkup(<CorpusCounts counts={figures(3)} />)
+    expect(markup).toContain('text-accent-attention')
+    expect(markup).toContain('†')
+  })
+
+  it('draws an unknown count neutral too', () => {
+    const markup = renderToStaticMarkup(<CorpusCounts counts={null} />)
+    expect(markup).not.toContain('text-accent-attention')
+  })
+})
+

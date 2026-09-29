@@ -68,6 +68,12 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.11] — 2026-09-29
+
+### Fixed
+
+- `B-126`: the landing's contested count is brass with the dagger only when above zero.
+
 ## [0.156.10] — 2026-09-29
 
 ### Fixed

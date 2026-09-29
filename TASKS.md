@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.10`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.11`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-126` **A zero drawn in the attention colour** — `v0.156.11`. The landing's contested
+      count was brass with the dagger at 0, drawing the eye to nothing. Brass and dagger now appear
+      together only above zero; unknown and zero are neutral
 - [x] `B-125` **The question toggle covered content** — `v0.156.10`. Site review: the toggle
       (bottom-right, where the artboard puts it) sat on the node panel's footer and, on a phone,
       over the last lines of a page; the search box's "hybrid" marker took the placeholder's

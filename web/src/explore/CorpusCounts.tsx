@@ -17,6 +17,7 @@ import { DAGGER } from '../ui/Contested'
  * `contested` carries the dagger as text beside its brass figure, because §6's
  * rule is that the tint never appears without the mark — and a count is exactly
  * where a reader colour-blind to brass would otherwise lose the distinction.
+ * Both only above zero: nothing contested is nothing to mark.
  */
 
 export interface CorpusFigures {
@@ -50,7 +51,10 @@ export function CorpusCounts({ counts }: CorpusCountsProps) {
   return (
     <dl className="grid grid-cols-2 gap-y-5 border-y border-line/70 py-5 sm:flex sm:gap-y-0">
       {CELLS.map(({ key, label }, index) => {
-        const contested = key === 'contested'
+        // Brass and the dagger only when something *is* contested (`B-126`):
+        // the tint means "look here", and a zero drawn in it drew the eye to
+        // nothing. Unknown and zero are neutral, like the other three.
+        const contested = key === 'contested' && (counts?.contested ?? 0) > 0
         return (
           <div
             key={key}
