@@ -29,5 +29,19 @@ engines:
     disabled: true
   - name: duckduckgo
     disabled: false
+  # More web engines (2026-09-29): off by default in SearXNG. From this machine
+  # the defaults refused (brave, startpage: suspended; qwant, baidu: CAPTCHA)
+  # while these answered, and on three test queries 98–100% of their results
+  # mentioned a query word — the `B-51` test that took bing web out at 67%.
+  # Spreading queries over more engines is the self-hosted answer to being
+  # rate-limited: each sees fewer requests. Queries do reach these providers.
+  - name: yep
+    disabled: false
+  - name: yandex
+    disabled: false
+  - name: naver
+    disabled: false
+  - name: mwmbl
+    disabled: false
   - name: arxiv
     disabled: false

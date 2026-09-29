@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.156.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+**`v0.156.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
 against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1560,6 +1560,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-117` **More search engines** — `v0.156.1`. Searched how self-hosted SearXNG deals
+      with engines refusing a single address: keep the engines that answer from it and spread
+      queries over more of them. From this machine brave and startpage were suspended, qwant
+      and baidu asked for a CAPTCHA; yep, yandex, naver and mwmbl (off by default) answered,
+      98–100% relevant on `B-51`'s test. Enabled; bing web stays off (67%)
 - [x] `B-116` **Mine proven hosts through their sitemaps** — `v0.156.0`. `P1-28` built the
       sitemap parser, its defences and the claim handler, and nothing ever queued a sitemap:
       the robots.txt sitemap list rode on every fetch result and was read by no one, so the

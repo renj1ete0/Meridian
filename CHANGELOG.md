@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.1] — 2026-09-29
+
+### Changed
+
+- `B-117`: SearXNG queries four more web engines (yep, yandex, naver, mwmbl), which answer
+  from this machine and passed the `B-51` relevance test, so each engine sees fewer
+  requests.
+
 ## [0.156.0] — 2026-09-29
 
 ### Added
