@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  CONTESTED_LIST_FIELDS,
   CONTESTED_PAIR_FIELDS,
   CONTESTED_SIDE_FIELDS,
   EVIDENCE_FIELDS,
@@ -62,6 +63,7 @@ describe('the graph client types match the DTOs', () => {
     ['EvidenceRead', EVIDENCE_FIELDS],
     ['ContestedSideRead', CONTESTED_SIDE_FIELDS],
     ['ContestedPairRead', CONTESTED_PAIR_FIELDS],
+    ['ContestedListRead', CONTESTED_LIST_FIELDS],
     ['GraphNodeDetailRead', GRAPH_NODE_DETAIL_FIELDS],
     ['NodeMatchRead', NODE_MATCH_FIELDS],
     ['NodeSearchRead', NODE_SEARCH_FIELDS],

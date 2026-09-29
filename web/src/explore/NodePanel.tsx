@@ -109,7 +109,7 @@ function Chip({ attribute }: { attribute: NodeAttribute }) {
   )
 }
 
-function SourceLine({ hit, certainty }: { hit: SearchHit; certainty?: string | null }) {
+export function SourceLine({ hit, certainty }: { hit: SearchHit; certainty?: string | null }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <a

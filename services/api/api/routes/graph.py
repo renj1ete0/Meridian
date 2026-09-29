@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from meridian_core import graphview
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graphview import (
+    ContestedListRead,
     GraphFilters,
     GraphNodeDetailRead,
     NeighbourhoodRead,
@@ -26,6 +27,16 @@ from meridian_core.schemas.graphview import (
 from ..deps import ReadSession
 
 router = APIRouter(prefix="/api/explore/graph", tags=["explore", "graph"])
+
+
+@router.get("/contested", response_model=ContestedListRead)
+async def graph_contested(
+    sess: ReadSession,
+    limit: Annotated[int, Query(ge=1, le=graphview.MAX_CONTESTED)] = graphview.DEFAULT_CONTESTED,
+) -> ContestedListRead:
+    """The contested list (§12.5's third entry point): each disagreement once,
+    newest first, both sides with their first passage."""
+    return await graphview.contested_pairs(sess, limit=limit)
 
 
 @router.get("/nodes/{entity_id}/neighbourhood", response_model=NeighbourhoodRead)

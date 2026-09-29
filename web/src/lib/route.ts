@@ -21,6 +21,7 @@ export type Route =
   | { name: 'admin' }
   | { name: 'map' }
   | { name: 'gaps' }
+  | { name: 'contested' }
   | { name: 'about' }
 
 const SOURCE = /^\/sources\/(\d+)\/?$/
@@ -38,6 +39,8 @@ const GAPS = /^\/gaps\/?$/
 
 const ABOUT = /^\/about\/?$/
 
+const CONTESTED = /^\/contested\/?$/
+
 export function parseRoute(pathname: string): Route {
   const match = SOURCE.exec(pathname)
   if (match) return { name: 'source', sourceId: Number(match[1]) }
@@ -47,6 +50,7 @@ export function parseRoute(pathname: string): Route {
   if (MAP.test(pathname)) return { name: 'map' }
   if (GAPS.test(pathname)) return { name: 'gaps' }
   if (ABOUT.test(pathname)) return { name: 'about' }
+  if (CONTESTED.test(pathname)) return { name: 'contested' }
   return { name: 'explore' }
 }
 

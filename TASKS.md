@@ -16,8 +16,8 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.154.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4667 backend tests
-against a real Postgres, 973 frontend.
+**`v0.155.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4674 backend tests
+against a real Postgres, 981 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
@@ -1810,7 +1810,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       the owner's and not add to them. Filters are validated against
       `SearchFilters` before storing, because a view that silently drops a filter
       when reopened hands back a result set the reader believes is narrowed
-- [ ] `P6-10` Coverage grid and contested list as entry points
+- [x] `P6-10` Coverage grid and contested list as entry points — `v0.155.0`, the contested list: `/api/explore/graph/contested` (each pair once, newest first, one-sided marks included) and `/contested`, opened from the landing's Contested card. Screenshot-checked light, dark and phone with injected pairs; the live graph has 0 contested of 196 links, so live shows the stated absence. The coverage grid half stays cut (2026-09-23); Coverage opens Gaps
 - [x] `P6-11` Explore landing state with since-last-visit delta — `v0.61.0`.
       `stats?since=` plus a `localStorage` stamp read once per session and
       advanced immediately, so the delta means "since you were last here" and

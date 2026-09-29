@@ -26,7 +26,7 @@ import pytest
 from sqlalchemy import delete, or_, select
 
 from meridian_core.chunks import ChunkWrite, replace_chunks
-from meridian_core.graphview import MAX_NEIGHBOURS, edge_passes, is_cross_topic
+from meridian_core.graphview import MAX_CONTESTED, MAX_NEIGHBOURS, edge_passes, is_cross_topic
 from meridian_core.models import (
     AttributeDefinition,
     AttributeValue,
@@ -667,4 +667,114 @@ async def test_a_depth_past_the_ceiling_is_refused(client, world) -> None:
         "/api/explore/graph/path",
         params={"source": world.id("S"), "target": world.id("T"), "max_depth": 99},
     )
+    assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------
+# The contested list (task P6-10, §12.5's third entry point)
+# --------------------------------------------------------------------------
+
+
+async def contested(client, **params) -> dict:
+    # The ceiling, so fixtures from other tests or the dev corpus cannot push
+    # this test's pairs off the page.
+    params.setdefault("limit", MAX_CONTESTED)
+    response = await client.get("/api/explore/graph/contested", params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def mine(w: World, body: dict) -> list[tuple[int, int]]:
+    ids = {e.edge_id for e in w.edge.values()}
+    return [
+        (p["ours"]["edge_id"], p["theirs"]["edge_id"])
+        for p in body["pairs"]
+        if p["ours"]["edge_id"] in ids
+    ]
+
+
+async def test_each_disagreement_is_listed_once(client, world) -> None:
+    """§9 marks both edges; reading every mark would list the pair twice."""
+    body = await contested(client)
+
+    fc, fd = world.edge["FC"].edge_id, world.edge["FD"].edge_id
+    assert mine(world, body) == [(min(fc, fd), max(fc, fd))]
+    pair = next(p for p in body["pairs"] if p["ours"]["edge_id"] == min(fc, fd))
+    assert {pair["ours"]["to_name"], pair["theirs"]["to_name"]} == {
+        f"{world.marker} Charlie",
+        f"{world.marker} Delta",
+    }
+    assert pair["theirs"]["evidence"] is not None and pair["ours"]["evidence"] is not None
+
+
+async def test_a_pair_marked_from_one_side_is_still_listed(client, world, session_for) -> None:
+    """The other edge is fetched by id, not found by its own mark."""
+    sess = await session_for("rw")
+    await sess.execute(
+        Edge.__table__.update()
+        .where(Edge.edge_id == world.edge["FD"].edge_id)
+        .values(contested_with=[])
+    )
+    await sess.commit()
+
+    fc, fd = world.edge["FC"].edge_id, world.edge["FD"].edge_id
+    assert mine(world, await contested(client)) == [(min(fc, fd), max(fc, fd))]
+
+
+async def test_a_mark_naming_a_missing_edge_is_not_half_a_pair(
+    client, world, session_for
+) -> None:
+    sess = await session_for("rw")
+    await sess.execute(
+        Edge.__table__.update()
+        .where(Edge.edge_id == world.edge["FX"].edge_id)
+        .values(contested_with=[987654321])
+    )
+    await sess.commit()
+
+    body = await contested(client)
+
+    assert world.edge["FX"].edge_id not in {
+        s["edge_id"] for p in body["pairs"] for s in (p["ours"], p["theirs"])
+    }
+
+
+async def test_the_cap_is_applied_and_the_total_still_counts_every_pair(
+    client, world, session_for
+) -> None:
+    sess = await session_for("rw")
+    fa, ac = world.edge["FA"].edge_id, world.edge["AC"].edge_id
+    await sess.execute(
+        Edge.__table__.update().where(Edge.edge_id == fa).values(contested_with=[ac])
+    )
+    await sess.commit()
+
+    body = await contested(client, limit=1)
+
+    assert len(body["pairs"]) == 1
+    assert body["total"] >= 2, "the total must count pairs the cap left out"
+
+
+async def test_newest_disagreement_first(client, world, session_for) -> None:
+    sess = await session_for("rw")
+    fa, ac = world.edge["FA"].edge_id, world.edge["AC"].edge_id
+    await sess.execute(
+        Edge.__table__.update()
+        .where(Edge.edge_id.in_([fa, ac]))
+        .values(contested_with=[fa], created_at=dt.datetime(2000, 1, 1, tzinfo=dt.UTC))
+    )
+    await sess.execute(
+        Edge.__table__.update().where(Edge.edge_id == fa).values(contested_with=[ac])
+    )
+    await sess.commit()
+
+    order = mine(world, await contested(client))
+
+    fc, fd = world.edge["FC"].edge_id, world.edge["FD"].edge_id
+    assert order == [(min(fc, fd), max(fc, fd)), (min(fa, ac), max(fa, ac))]
+
+
+@pytest.mark.parametrize("limit", [0, MAX_CONTESTED + 1])
+async def test_a_limit_outside_the_bounds_is_refused(client, limit) -> None:
+    response = await client.get("/api/explore/graph/contested", params={"limit": limit})
     assert response.status_code == 422

@@ -248,6 +248,14 @@ export interface ContestedPair {
 
 export const CONTESTED_PAIR_FIELDS = ['ours', 'theirs'] as const
 
+/** Mirrors `ContestedListRead`: every disagreement once, newest first (`P6-10`). */
+export interface ContestedList {
+  pairs: ContestedPair[]
+  total: number
+}
+
+export const CONTESTED_LIST_FIELDS = ['pairs', 'total'] as const
+
 /** Mirrors `GraphNodeDetailRead`. */
 export interface GraphNodeDetail {
   entity: Entity
@@ -406,6 +414,11 @@ export function getNeighbourhood(
 
 export function getGraphNode(entityId: number, init?: RequestInit): Promise<GraphNodeDetail> {
   return request<GraphNodeDetail>(`/api/explore/graph/nodes/${entityId}`, init)
+}
+
+export function getContested(limit?: number, init?: RequestInit): Promise<ContestedList> {
+  const query = limit === undefined ? '' : `?${new URLSearchParams({ limit: String(limit) })}`
+  return request<ContestedList>(`/api/explore/graph/contested${query}`, init)
 }
 
 export function searchNodes(q: string, limit = 8, init?: RequestInit): Promise<NodeSearch> {

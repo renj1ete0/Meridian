@@ -68,6 +68,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.155.0] — 2026-09-29
+
+### Added
+
+- `P6-10`: the contested list, the landing's third entry point. `GET
+  /api/explore/graph/contested` lists every disagreement §9 marked, each pair once
+  (lower edge id first), newest first, with both sides' first passage; `total` counts
+  pairs past the cap (default 50, ceiling 200). A pair marked from one side only is
+  still listed. `/contested` draws both sides alike, and states the absence when no
+  pair exists. The landing's Contested card now opens it. The coverage grid half of
+  `P6-10` stays cut (2026-09-23).
+
 ## [0.154.1] — 2026-09-29
 
 ### Changed

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { AboutPage } from './about/AboutPage'
 import { AdminPage } from './admin/AdminPage'
+import { ContestedPage } from './explore/ContestedPage'
 import { ExplorePage } from './explore/ExplorePage'
 import { GapsPage } from './explore/GapsPage'
 import { MapPage } from './explore/MapPage'
@@ -96,6 +97,7 @@ export function App() {
           {route.name === 'map' ? <MapPage /> : null}
           {route.name === 'gaps' ? <GapsPage /> : null}
           {route.name === 'about' ? <AboutPage /> : null}
+          {route.name === 'contested' ? <ContestedPage /> : null}
           {route.name === 'explore' ? <ExplorePage /> : null}
         </main>
         {/* On the reader's screens only: Admin is for configuring, not asking. */}

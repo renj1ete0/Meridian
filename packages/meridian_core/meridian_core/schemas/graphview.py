@@ -209,6 +209,14 @@ class ContestedPairRead(BaseModel):
     theirs: ContestedSideRead
 
 
+class ContestedListRead(BaseModel):
+    """Every contested pair in the graph, each once (task P6-10, §12.5)."""
+
+    pairs: list[ContestedPairRead]
+    #: Pairs before the cap, so a capped list can say how many it left out.
+    total: int
+
+
 class GraphNodeDetailRead(BaseModel):
     """The node panel beside the canvas (§12.5, design `Explore`)."""
 

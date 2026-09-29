@@ -44,6 +44,7 @@ from .models import AttributeDefinition, AttributeValue, Chunk, Edge, Entity, So
 from .passagetopics import passage_topics_for
 from .schemas.graph import EntityRead
 from .schemas.graphview import (
+    ContestedListRead,
     ContestedPairRead,
     ContestedSideRead,
     EvidenceRead,
@@ -82,6 +83,11 @@ MAX_PATH_VISITED = 20_000
 
 #: Passages the node panel carries. The same cap the older node route uses.
 MAX_EVIDENCE = 40
+
+#: Pairs the contested list shows at once, and the most a caller may ask for.
+#: Each pair hydrates two passages, so the ceiling bounds the response.
+DEFAULT_CONTESTED = 50
+MAX_CONTESTED = 200
 MAX_PANEL_ANNOTATIONS = 10
 
 DEFAULT_MATCHES = 10
@@ -638,6 +644,95 @@ async def hydrate_chunks(sess: AsyncSession, chunk_ids: Iterable[int]) -> dict[i
     }
 
 
+def _side(
+    edge: Edge, names: dict[int, str], hits: dict[int, SearchHitRead]
+) -> ContestedSideRead:
+    """One edge of a contested pair, with its first passage hydrated."""
+    first = edge.supporting_chunk_ids[0] if edge.supporting_chunk_ids else None
+    return ContestedSideRead(
+        edge_id=edge.edge_id,
+        relation_type=edge.relation_type,
+        from_entity_id=edge.from_node,
+        from_name=names.get(edge.from_node, f"#{edge.from_node}"),
+        to_entity_id=edge.to_node,
+        to_name=names.get(edge.to_node, f"#{edge.to_node}"),
+        certainty=edge.certainty,
+        stance=edge.stance,
+        evidence=hits.get(first) if first is not None else None,
+    )
+
+
+async def contested_pairs(sess: AsyncSession, *, limit: int = DEFAULT_CONTESTED) -> ContestedListRead:
+    """Every disagreement §9 marked, across the graph (task P6-10, §12.5).
+
+    The third entry point beside search and coverage. **Each pair once**: §9
+    names the disagreement on both edges, so reading `contested_with` from every
+    edge would list each pair twice, once from either side. The side with the
+    lower edge id is ``ours`` — an arbitrary order, and stated as one, because
+    on a list with no node to arrive from neither side is the reader's.
+
+    Newest disagreement first: the list is an entry point, and the reader
+    returning to it wants what changed. ``total`` counts pairs before the cap,
+    so a capped list says so. A `contested_with` id naming an edge that no
+    longer exists is dropped, as on the node panel.
+    """
+    edges = (
+        await sess.scalars(
+            select(Edge)
+            .where(_contested_clause())
+            .order_by(Edge.created_at.desc(), Edge.edge_id.desc())
+        )
+    ).all()
+    by_id = {edge.edge_id: edge for edge in edges}
+    # The other side need not name this one back: §9 marks both, but a pair
+    # marked from one side only is still a disagreement, so fetch what is named.
+    named = sorted({c for edge in edges for c in edge.contested_with or ()} - by_id.keys())
+    if named:
+        by_id.update(
+            {e.edge_id: e for e in (await sess.scalars(select(Edge).where(Edge.edge_id.in_(named))))}
+        )
+
+    found: list[tuple[Edge, Edge]] = []
+    seen: set[tuple[int, int]] = set()
+    for edge in edges:
+        for other_id in edge.contested_with or ():
+            other = by_id.get(other_id)
+            if other is None or other_id == edge.edge_id:
+                continue
+            key = (min(edge.edge_id, other_id), max(edge.edge_id, other_id))
+            if key in seen:
+                continue
+            seen.add(key)
+            first, second = (edge, other) if edge.edge_id < other_id else (other, edge)
+            found.append((first, second))
+
+    shown = found[:limit]
+    ids = {n for a, b in shown for e in (a, b) for n in (e.from_node, e.to_node)}
+    names = (
+        {
+            e_id: name
+            for e_id, name in await sess.execute(
+                select(Entity.entity_id, Entity.canonical_name).where(
+                    Entity.entity_id.in_(sorted(ids))
+                )
+            )
+        }
+        if ids
+        else {}
+    )
+    hits = await hydrate_chunks(
+        sess,
+        [e.supporting_chunk_ids[0] for a, b in shown for e in (a, b) if e.supporting_chunk_ids],
+    )
+    return ContestedListRead(
+        pairs=[
+            ContestedPairRead(ours=_side(a, names, hits), theirs=_side(b, names, hits))
+            for a, b in shown
+        ],
+        total=len(found),
+    )
+
+
 async def node_detail(sess: AsyncSession, entity_id: int) -> GraphNodeDetailRead:
     """Everything the panel beside the canvas shows, in one request (§12.5)."""
     entity = await sess.get(Entity, entity_id)
@@ -753,22 +848,10 @@ async def node_detail(sess: AsyncSession, entity_id: int) -> GraphNodeDetailRead
         ),
     )
 
-    def side(edge: Edge) -> ContestedSideRead:
-        first = edge.supporting_chunk_ids[0] if edge.supporting_chunk_ids else None
-        return ContestedSideRead(
-            edge_id=edge.edge_id,
-            relation_type=edge.relation_type,
-            from_entity_id=edge.from_node,
-            from_name=names.get(edge.from_node, f"#{edge.from_node}"),
-            to_entity_id=edge.to_node,
-            to_name=names.get(edge.to_node, f"#{edge.to_node}"),
-            certainty=edge.certainty,
-            stance=edge.stance,
-            evidence=hits.get(first) if first is not None else None,
-        )
-
     pairs = [
-        ContestedPairRead(ours=side(edge), theirs=side(against[other_id]))
+        ContestedPairRead(
+            ours=_side(edge, names, hits), theirs=_side(against[other_id], names, hits)
+        )
         for edge in incident
         for other_id in edge.contested_with or ()
         # An id naming an edge that no longer exists is dropped rather than

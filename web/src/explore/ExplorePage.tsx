@@ -521,7 +521,11 @@ export function ExplorePage() {
           )
         ) : (
           <EntryPoints
-            actions={{ search: () => focusSearch(), coverage: () => navigate('/gaps') }}
+            actions={{
+              search: () => focusSearch(),
+              coverage: () => navigate('/gaps'),
+              contested: () => navigate('/contested'),
+            }}
             unavailable={unavailable}
             descriptions={descriptions}
           />
