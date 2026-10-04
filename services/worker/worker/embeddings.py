@@ -155,6 +155,29 @@ def on_accelerator(device: str | None) -> bool:
     return bool(torch.cuda.is_available() or (mps is not None and mps.is_available()))
 
 
+def device_memory(device: str | None) -> int | None:
+    """Bytes on the CUDA device the model will run on; None for anything else.
+
+    A GPU's batch is bounded by the GPU's memory, not by the container's: the
+    embedder is held to a few GiB of RAM while the card beside it may have
+    tens, and sizing from RAM gave a GPU a batch of two (`B-129`). MPS shares
+    the machine's memory, so it, a CPU, and a CUDA device that cannot be read
+    fall back to :func:`visible_memory`.
+    """
+    kind, _, index = (device or "cuda").partition(":")
+    if kind.lower() != "cuda":
+        return None
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return None
+        _free, total = torch.cuda.mem_get_info(int(index) if index else None)
+        return int(total)
+    except Exception:  # noqa: BLE001 — any failure here means "not known", never "fail to start"
+        return None
+
+
 def auto_batch_size(memory: int | None, *, max_tokens: int = DEFAULT_MAX_TOKENS) -> int:
     """On an accelerator, the largest power-of-two batch that fits, capped.
 
@@ -219,13 +242,15 @@ class EmbedderSettings:
             batch_size = CPU_BATCH_SIZE
             log.info("embedding batch sized for a CPU", extra={"batch_size": batch_size})
         else:
-            memory = visible_memory()
+            on_card = device_memory(device)
+            memory = on_card if on_card is not None else visible_memory()
             batch_size = auto_batch_size(memory, max_tokens=max_tokens)
             log.info(
                 "embedding batch sized from memory",
                 extra={
                     "batch_size": batch_size,
                     "memory_gib": None if memory is None else round(memory / 2**30, 1),
+                    "memory_of": "device" if on_card is not None else "host",
                 },
             )
         dtype = os.environ.get("MERIDIAN_EMBED_DTYPE", "").strip().lower()

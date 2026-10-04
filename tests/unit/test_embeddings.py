@@ -363,6 +363,73 @@ def test_an_explicit_batch_size_wins_over_the_memory(monkeypatch) -> None:
 def test_on_an_accelerator_the_batch_is_sized_from_memory(monkeypatch) -> None:
     monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
     monkeypatch.setenv("MERIDIAN_EMBED_DEVICE", "cuda")
+    monkeypatch.setattr(embeddings, "device_memory", lambda device: None)
+    monkeypatch.setattr(embeddings, "visible_memory", lambda: 16 * GIB)
+    assert EmbedderSettings.from_env().batch_size == embeddings.auto_batch_size(16 * GIB)
+
+
+def test_a_gpu_is_sized_from_its_own_memory_not_the_containers(monkeypatch) -> None:
+    """`B-129`: a 4 GiB container beside a 24 GiB card gave the card a batch of two."""
+    monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
+    monkeypatch.setenv("MERIDIAN_EMBED_DEVICE", "cuda")
+    monkeypatch.setattr(embeddings, "device_memory", lambda device: 24 * GIB)
+    monkeypatch.setattr(embeddings, "visible_memory", lambda: 4 * GIB)
+
+    batch = EmbedderSettings.from_env().batch_size
+
+    assert batch == embeddings.auto_batch_size(24 * GIB)
+    assert batch > embeddings.auto_batch_size(4 * GIB)
+
+
+class _FakeCuda:
+    def __init__(self, *, available=True, total=12 * GIB, fails=False) -> None:
+        self._available, self._total, self._fails = available, total, fails
+        self.asked: list[object] = []
+
+    def is_available(self) -> bool:
+        return self._available
+
+    def mem_get_info(self, index=None):
+        self.asked.append(index)
+        if self._fails:
+            raise RuntimeError("CUDA driver initialization failed")
+        return (self._total // 2, self._total)
+
+
+def _with_cuda(monkeypatch, cuda: _FakeCuda) -> None:
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(cuda=cuda))
+
+
+@pytest.mark.parametrize(("device", "index"), [(None, None), ("cuda", None), ("cuda:1", 1)])
+def test_device_memory_reads_the_total_of_the_named_card(monkeypatch, device, index) -> None:
+    """Total, not free: free memory at startup is whatever another process held then."""
+    cuda = _FakeCuda(total=12 * GIB)
+    _with_cuda(monkeypatch, cuda)
+    assert embeddings.device_memory(device) == 12 * GIB
+    assert cuda.asked == [index]
+
+
+@pytest.mark.parametrize("device", ["cpu", "mps", "cpu:0"])
+def test_device_memory_is_not_asked_of_anything_but_cuda(monkeypatch, device) -> None:
+    cuda = _FakeCuda()
+    _with_cuda(monkeypatch, cuda)
+    assert embeddings.device_memory(device) is None
+    assert cuda.asked == []
+
+
+@pytest.mark.parametrize("cuda", [_FakeCuda(available=False), _FakeCuda(fails=True)])
+def test_an_unreadable_card_falls_back_rather_than_failing(monkeypatch, cuda) -> None:
+    _with_cuda(monkeypatch, cuda)
+    assert embeddings.device_memory("cuda") is None
+
+
+def test_a_card_that_cannot_be_read_is_sized_from_the_host(monkeypatch) -> None:
+    monkeypatch.delenv("MERIDIAN_EMBED_BATCH_SIZE", raising=False)
+    monkeypatch.setenv("MERIDIAN_EMBED_DEVICE", "cuda")
+    _with_cuda(monkeypatch, _FakeCuda(fails=True))
     monkeypatch.setattr(embeddings, "visible_memory", lambda: 16 * GIB)
     assert EmbedderSettings.from_env().batch_size == embeddings.auto_batch_size(16 * GIB)
 

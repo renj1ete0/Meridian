@@ -1572,6 +1572,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-129` **A GPU was sized from the container's RAM** — `v0.156.13`. `auto_batch_size`
+      read `visible_memory()` (cgroup limit or `MemTotal`) on an accelerator too, so the
+      embedder's 4 GiB limit gave a card of any size a batch of two. CUDA now reads the card's
+      total with `torch.cuda.mem_get_info`; MPS (shared memory), a CPU, or a card that cannot be
+      read keep the old path. Found reviewing the stack for a server with a GPU. Not yet run on
+      a real card
 - [x] `B-128` **A budget test expired at the month's end** — test only. `_budget_read` (the
       Admin screen) reads the real clock while the test placed its run at the file's fixed
       `NOW` in mid-September, so on 1 October the run fell outside "this month" and the screen

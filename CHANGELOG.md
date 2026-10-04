@@ -68,6 +68,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.13] — 2026-10-04
+
+### Fixed
+
+- `B-129`: on a CUDA device the embedding batch is sized from the card's memory, not the
+  container's RAM limit, which had given a GPU a batch of two.
+
 ## [0.156.12] — 2026-10-04
 
 ### Fixed
