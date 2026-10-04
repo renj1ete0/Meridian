@@ -1600,6 +1600,12 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
       --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
       no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [x] `B-144` **Postgres could not build a vector index** — deploy config, no bump. A parallel
+      index build allocates `maintenance_work_mem` in `/dev/shm`, which Docker caps at 64MB, and
+      `B-132` had raised the default to 512MB: on the server any HNSW build or rebuild would
+      have failed with "could not resize shared memory segment". Found when the `B-136`
+      benchmark failed exactly that way. Postgres now has `shm_size: ${PG_SHM_SIZE:-1g}` in every
+      stack, and a test requires each stack's shm to exceed its `maintenance_work_mem`
 - [x] `B-143` **A web test expired with the calendar** — test only. The boost form refuses an
       expiry in the past, and the test typed 2026-10-01, which became the past. The same trap
       as `P5-09` and `B-128`; the date is now 30 days from the test's own clock

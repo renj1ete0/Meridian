@@ -75,6 +75,7 @@ services:
     # from production by having one of the two.
     build: { context: ./deploy/postgres }
     image: meridian/postgres:pg17-age
+    shm_size: 1g                           # parallel index builds use /dev/shm (`B-144`)
     networks: [internal]
     volumes:
       # A named volume rather than a bind mount, for the reason the dev file

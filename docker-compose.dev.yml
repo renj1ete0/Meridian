@@ -24,6 +24,7 @@ services:
     # that is otherwise correct.
     build: { context: ./deploy/postgres }
     image: meridian/postgres:pg17-age
+    shm_size: 1g                           # parallel index builds use /dev/shm (`B-144`)
     # See docker-compose.yml: a sample file is read only by `initdb`, so the
     # flag is what actually guarantees it on an existing data directory.
     command: ["postgres", "-c", "shared_preload_libraries=age"]

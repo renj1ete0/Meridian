@@ -614,3 +614,32 @@ def test_every_postgres_setting_is_documented_for_the_operator(compose: dict) ->
     example = (REPO / ".env.example").read_text()
     undocumented = {n for n in _postgres_command_variables(compose) if n not in example}
     assert not undocumented, f"set in compose and missing from .env.example: {undocumented}"
+
+
+def _bytes(size: str) -> int:
+    number, unit = re.fullmatch(r"(\d+)\s*([kmgKMG]?)[bB]?", size.strip()).groups()
+    return int(number) * 1024 ** {"": 0, "k": 1, "m": 2, "g": 3}[unit.lower()]
+
+
+def _default(value: str) -> str:
+    match = re.fullmatch(r"\$\{[A-Z_]+:-([^}]+)\}", value)
+    return match.group(1) if match else value
+
+
+@pytest.mark.parametrize("path", COMPOSE_FILES, ids=lambda p: p.name)
+def test_postgres_has_room_for_a_parallel_index_build(path) -> None:
+    """`B-144`: Docker's 64MB /dev/shm made every vector-index build fail.
+
+    A parallel build allocates maintenance_work_mem in shared memory, so the container's
+    shm must be at least that large.
+    """
+    services = yaml.safe_load(path.read_text()).get("services") or {}
+    postgres = services.get("postgres")
+    if not isinstance(postgres, dict) or "image" not in postgres and "build" not in postgres:
+        pytest.skip("no postgres service in this file")
+    shm = postgres.get("shm_size")
+    assert shm, f"{path.name}: postgres has Docker's 64MB /dev/shm"
+    command = str(postgres.get("command", ""))
+    match = re.search(r"maintenance_work_mem=(\$\{[^}]+\}|\S+)", command)
+    work_mem = _default(match.group(1)) if match else "64MB"
+    assert _bytes(_default(str(shm))) > _bytes(work_mem)

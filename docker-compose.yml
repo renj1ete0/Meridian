@@ -48,6 +48,10 @@ services:
     image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-postgres:${MERIDIAN_POSTGRES_TAG:-stable}
     env_file: .env
     networks: [internal]                   # no egress, ever
+    # Parallel index builds put maintenance_work_mem in /dev/shm, which Docker caps at 64MB
+    # unless told otherwise: with PG_MAINTENANCE_WORK_MEM at its default a vector-index build
+    # failed with "could not resize shared memory segment" (`B-144`). Keep it above that.
+    shm_size: ${PG_SHM_SIZE:-1g}
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/pgdata:/var/lib/postgresql/data
       - ./scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
