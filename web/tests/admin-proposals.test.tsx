@@ -201,7 +201,7 @@ describe('the panel', () => {
   it('leads each pending proposal with when it applies by itself', () => {
     render(<ProposalsPanel proposals={list()} now={NOW} />)
     const card = screen.getByRole('article', { name: /Proposal 7/ })
-    expect(card.textContent).toContain('Applies automatically at 2026-09-24 21:00 UTC')
+    expect(card.textContent).toContain('Applies automatically at 2026-09-25 05:00 GMT+8')
     expect(card.textContent).toContain('in 9 h')
     expect(card.textContent).toContain('produced 5% of new on-topic sources')
     expect(card.textContent).toContain('new sources 2 of 42 (5%)')
@@ -274,7 +274,7 @@ describe('the panel', () => {
     )
     const row = screen.getByText('Refused by steering: outside bounds').closest('tr')!
     expect(row.textContent).toContain('failed')
-    expect(row.textContent).toContain('2026-09-24 10:00')
+    expect(row.textContent).toContain('2026-09-24 18:00') // display zone, GMT+8
   })
 })
 

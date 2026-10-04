@@ -7,6 +7,7 @@
  * `describeDetail`), so a refusal reads the same as everywhere else in Admin.
  */
 import { ApiError, describeDetail } from './api'
+import { stampOf, zoneLabel } from './time'
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
@@ -148,9 +149,9 @@ export function evidenceFacts(evidence: Proposal['evidence']): string[] {
   return out
 }
 
-/** `2026-09-24 21:40 UTC`, as Admin prints times. */
-export function utc(iso: string): string {
-  return `${iso.slice(0, 16).replace('T', ' ')} UTC`
+/** `2026-09-24 21:40 GMT+8`: a time as Admin prints it, in the display zone (ADR 0009). */
+export function zoned(iso: string): string {
+  return `${stampOf(iso)} ${zoneLabel(iso)}`
 }
 
 /** How long until it applies, in the largest unit that is not zero. */

@@ -74,7 +74,7 @@ from typing import Any
 from sqlalchemy import func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import gaps, steering
+from . import gaps, steering, timefmt
 from .logging import get_logger
 from .models import (
     FetchAttempt,
@@ -518,13 +518,14 @@ async def record_drafts(
 
 async def notify(sess: AsyncSession, proposal: SteeringProposal) -> None:
     """One notification per new proposal, in the Approvals group (§8)."""
+    zone = await timefmt.display_zone(sess)
     sess.add(
         Notification(
             notification_type="steering_proposal",
             title=f"Proposed: {title_for(proposal)}",
             body=(
                 f"{proposal.reason} Applies by itself at "
-                f"{proposal.apply_after:%Y-%m-%d %H:%M} UTC unless rejected in Admin."
+                f"{timefmt.format_instant(proposal.apply_after, zone)} unless rejected in Admin."
             ),
             payload={
                 "proposal_id": proposal.proposal_id,

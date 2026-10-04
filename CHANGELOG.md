@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.158.0] — 2026-10-04
+
+### Added
+
+- `B-145`: every time a person reads is shown in one display zone, `Asia/Singapore` (GMT+8)
+  by default and changeable in **Admin → Display** (`GET /api/explore/settings`, `PUT
+  /api/admin/settings/display-timezone`). Storage stays UTC `timestamptz`; formatting goes
+  through `web/src/lib/time.ts` and `meridian_core.timefmt` only. Pages that mixed the
+  browser's zone and UTC now agree. ADR 0009.
+
 ## [0.157.1] — 2026-10-04
 
 ### Changed

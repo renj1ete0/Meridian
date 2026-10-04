@@ -6,6 +6,7 @@ import { readable } from '../lib/readable'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
 import { DAGGER } from '../ui/Contested'
 import { TIER_LABEL, type SourceTier } from '../ui/Tier'
+import { dayOf } from '../lib/time'
 
 /**
  * The node panel beside the canvas (tasks P6-04, P6-01; spec §12.5; design
@@ -379,7 +380,7 @@ export function NodePanel({
           <div className="flex items-baseline justify-between">
             <h2 className={LBL}>My note</h2>
             {latest?.produced_at ? (
-              <span className="font-mono text-[10px] text-text-faint">{latest.produced_at.slice(0, 10)}</span>
+              <span className="font-mono text-[10px] text-text-faint">{dayOf(latest.produced_at)}</span>
             ) : null}
           </div>
           {latest ? (

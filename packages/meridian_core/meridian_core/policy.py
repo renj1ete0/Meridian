@@ -60,8 +60,15 @@ RENDER_JS_TTL = dt.timedelta(days=7)
 #: - ``search_languages`` — what search seeds are written in (`B-52`).
 #: - ``steering_proposal_window_hours`` — how long a steering proposal waits
 #:   for an objection before it applies itself (`P6-38`).
+#: - ``display_timezone`` — the zone times are shown in (`B-145`, ADR 0009).
 NOT_FETCH_SETTINGS = frozenset(
-    {"source_tiers", "frontier", "search_languages", "steering_proposal_window_hours"}
+    {
+        "source_tiers",
+        "frontier",
+        "search_languages",
+        "steering_proposal_window_hours",
+        "display_timezone",
+    }
 )
 
 

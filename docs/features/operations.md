@@ -49,6 +49,17 @@ rotation. Every run logs its `run_id`, carried through async tasks by a context 
 **Crawl health** (Admin) answers "when did it stop, and why": a verdict in words, 24 hours of
 attempts by outcome with empty hours drawn, and the queue beside the embedding backlog.
 
+<a id="display-time-zone"></a>**Display time zone** (`B-145`, ADR 0009). Every instant is stored
+as `timestamptz` (UTC) and sent as ISO 8601 with an offset. Only text a person reads is
+converted, into one display zone: `display_timezone` in the global fetch-policy row,
+`Asia/Singapore` (GMT+8) unless changed in **Admin → Display**. An unknown stored value falls
+back to the default, with a warning. The browser formats through `web/src/lib/time.ts`, which
+loads the zone from `GET /api/explore/settings` at start-up. The server formats notification
+and confirmation text through `meridian_core.timefmt`, labelled with the offset
+(`2026-10-05 08:00 GMT+8`). Calendar dates (publication dates) are not shifted. Budget months
+and the Ask panel's daily cap still reset at UTC midnight, where provider billing resets. A
+web test fails if any file but `time.ts` formats a time.
+
 ## Design choices
 
 - **No cron files** (§13.1). The timetable is data, editable from a UI, and travels with a

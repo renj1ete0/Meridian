@@ -28,6 +28,7 @@ import {
   type GapSource,
 } from '../lib/gaps'
 import { onInternalClick } from '../lib/route'
+import { stampOf, zoneLabel } from '../lib/time'
 
 /**
  * Gaps (task P6-36): one ranked list of what the corpus cannot yet answer.
@@ -139,7 +140,9 @@ export const SOURCE_NAMES: Record<string, string> = {
 export function SourceLine({ sources, computedAt }: { sources: GapSource[]; computedAt: string }) {
   return (
     <section aria-label="Gap sources" className="flex flex-col gap-1.5">
-      <span className={LABEL}>Checked {computedAt.slice(0, 16).replace('T', ' ')} UTC</span>
+      <span className={LABEL}>
+        Checked {stampOf(computedAt)} {zoneLabel(computedAt)}
+      </span>
       <ul className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-text-muted">
         {sources.map((s) => (
           <li key={s.name} title={s.note ?? undefined}>

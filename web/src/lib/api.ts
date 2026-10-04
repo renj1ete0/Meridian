@@ -555,6 +555,34 @@ export function corpusStats(
   return request<CorpusStats>(`/api/explore/stats${suffix}`, init)
 }
 
+/** Mirrors `DisplaySettingsRead` (`B-145`, ADR 0009). */
+export interface DisplaySettings {
+  /** An IANA zone name; every time a reader sees is shown in it. */
+  display_timezone: string
+  /** `GMT+8` and the like, at the moment of the request. */
+  label: string
+}
+
+export const DISPLAY_SETTINGS_FIELDS = ['display_timezone', 'label'] as const
+
+export type AssertDisplaySettings = Expect<
+  Equal<keyof DisplaySettings, (typeof DISPLAY_SETTINGS_FIELDS)[number]>
+>
+
+export function displaySettings(init?: RequestInit): Promise<DisplaySettings> {
+  return request<DisplaySettings>('/api/explore/settings', init)
+}
+
+/** Change the display zone (Admin). Refused unless it is an IANA name the server knows. */
+export function setDisplayTimezone(zone: string, init?: RequestInit): Promise<DisplaySettings> {
+  return request<DisplaySettings>('/api/admin/settings/display-timezone', {
+    ...init,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    body: JSON.stringify({ display_timezone: zone }),
+  })
+}
+
 /** Mirrors `MapPointRead` (`P6-26`, `P6-29`). */
 export interface MapPoint {
   chunk_id: number

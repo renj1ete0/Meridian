@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { stampOf } from '../lib/time'
 
 /**
  * Admin's visual vocabulary (task P6-28, design-system §5, `AdminLight` mock).
@@ -176,7 +177,7 @@ export function Loading({ what }: { what: string }) {
   return <p className="text-[12.5px] text-text-muted">Loading {what}.</p>
 }
 
-/** A timestamp as the mock prints it: `2026-09-04 21:40`, UTC. */
+/** A timestamp as the mock prints it, `2026-09-04 21:40`, in the display zone (ADR 0009). */
 export function stamp(iso: string | null): string {
-  return iso === null ? '—' : iso.slice(0, 16).replace('T', ' ')
+  return iso === null ? '—' : stampOf(iso)
 }

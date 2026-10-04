@@ -10,6 +10,7 @@ import {
   type ChatThread,
 } from '../lib/chat'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
+import { clockOf, dayOf, shortDayOf } from '../lib/time'
 
 /**
  * "Ask the graph" (tasks P6-06, P6-07) — `SynthesisPanel.dc.html` and
@@ -84,14 +85,11 @@ function AskGlyph({ size = 17, className = '' }: { size?: number; className?: st
 const LABEL = 'font-mono text-[10px] uppercase tracking-[var(--tracking-label)] text-text-faint'
 
 function clock(iso: string): string {
-  const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return clockOf(iso)
 }
 
 function day(iso: string, now = new Date()): string {
-  const d = new Date(iso)
-  if (d.toDateString() === now.toDateString()) return 'Today'
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+  return dayOf(iso) === dayOf(now) ? 'Today' : shortDayOf(iso)
 }
 
 function messageOf(cause: unknown, fallback: string): string {

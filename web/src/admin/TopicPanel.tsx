@@ -4,6 +4,7 @@ import type { SteeringEntry, TopicRow, TopicStatus, Topics } from '../lib/api'
 import { BoostsTable, type BoostChange } from './BoostsTable'
 import { weight } from './Reweight'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, Badge, Card, LABEL, LINK_ACTION, PageHeader } from './ui'
+import { shortDayOf } from '../lib/time'
 
 /**
  * Topic weights (tasks P6-12, P6-28; spec §10, §10.1, §10.2; `AdminLight`).
@@ -107,14 +108,11 @@ export function statusSince(
     (e) => e.topic === topic && e.field === 'status' && e.new_value === status,
   )
   if (!entry) return null
-  // Written out rather than `toLocaleDateString`: ICU versions disagree on
-  // "Sep" and "Sept", and a date that changes shape between machines is a
-  // column that stops lining up.
-  const date = new Date(entry.changed_at)
-  return `${String(date.getUTCDate()).padStart(2, '0')} ${MONTHS[date.getUTCMonth()]}`
+  // In the display zone (ADR 0009); `shortDayOf` writes the month out itself, because ICU
+  // versions disagree on "Sep" and "Sept".
+  return shortDayOf(entry.changed_at)
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** The middle caption under a slider: what the row draws, or why it draws nothing. */
 export function caption(row: TopicRow, entries: readonly SteeringEntry[]): string {

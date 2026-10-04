@@ -13,6 +13,7 @@ import {
   TH,
   TableCard,
 } from './ui'
+import { dayOf, startOfDayIso } from '../lib/time'
 
 /**
  * Boosts (task P6-28, spec §10; `AdminLight`'s "Active boosts").
@@ -39,9 +40,9 @@ export function boostExpired(row: TopicRow): boolean {
   return row.topic.boost_factor !== null && row.topic.boost_expires_at !== null && !row.boost_active
 }
 
-/** `YYYY-MM-DD`, `days` from now. */
+/** `YYYY-MM-DD` in the display zone, `days` from now. */
 export function dayFromNow(days: number, now: Date = new Date()): string {
-  return new Date(now.getTime() + days * 86_400_000).toISOString().slice(0, 10)
+  return dayOf(new Date(now.getTime() + days * 86_400_000))
 }
 
 /** A multiplier as typed, or null unless it is a positive number. */
@@ -99,9 +100,9 @@ export function BoostsTable({
             if (!chosen || multiplier === null || !expires) return
             onBoost?.(chosen, {
               boost_factor: multiplier,
-              // Midnight UTC at the start of the chosen day: a date is what
-              // a person picks, and the server needs a moment.
-              boost_expires_at: `${expires}T00:00:00Z`,
+              // The start of the chosen day in the display zone: a date is what a person
+              // picks, and the server needs a moment (ADR 0009).
+              boost_expires_at: startOfDayIso(expires),
             })
             setAdding(false)
           }}
@@ -189,7 +190,7 @@ export function BoostsTable({
                   className={`${TDM} whitespace-nowrap ${row.boost_active ? '' : 'text-text-faint'}`}
                 >
                   {row.boost_active ? '' : 'expired '}
-                  {row.topic.boost_expires_at?.slice(0, 10)}
+                  {row.topic.boost_expires_at ? dayOf(row.topic.boost_expires_at) : null}
                 </td>
                 <td className={`${TD} whitespace-nowrap text-right`}>
                   {row.boost_active ? (

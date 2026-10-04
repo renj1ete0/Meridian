@@ -1,5 +1,6 @@
 import type { CrawlHealth, HourBucket, Liveness, LivenessState } from '../lib/api'
 import { Card, LABEL, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
+import { clockOf, zoneLabel } from '../lib/time'
 
 /**
  * Crawl health (task P6-25, spec §12.5, §13.4).
@@ -191,7 +192,8 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Crawl health">
-        As of {health.as_of.slice(11, 16)} UTC. Refreshes every 30 seconds while this is open.
+        As of {clockOf(health.as_of)} {zoneLabel(health.as_of)}. Refreshes every 30 seconds while
+        this is open.
       </PageHeader>
 
       <div

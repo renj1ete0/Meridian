@@ -1600,6 +1600,15 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
       --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
       no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [x] `B-145` **Times shown in one display zone** — `v0.158.0`,
+      [ADR 0009](docs/adr/0009-times-stored-in-utc-shown-in-a-display-zone.md). Storage was
+      already right (all `timestamptz`, ISO 8601 on the wire); display was not: some screens
+      used the browser's zone (`getHours`), others UTC (`getUTCDate`, sliced ISO strings), so
+      one page could show two clocks. Now `display_timezone` (global policy row, default
+      `Asia/Singapore`) drives `web/src/lib/time.ts` and `meridian_core.timefmt`; Admin →
+      Display changes it (an IANA name, validated). A web test fails on any formatter outside
+      `time.ts`; boost expiries picked as a date now start at midnight in the zone. Admin →
+      Display has no mock yet
 - [x] `B-144` **Postgres could not build a vector index** — deploy config, no bump. A parallel
       index build allocates `maintenance_work_mem` in `/dev/shm`, which Docker caps at 64MB, and
       `B-132` had raised the default to 512MB: on the server any HNSW build or rebuild would

@@ -55,6 +55,7 @@ import {
 import { readable } from '../../lib/readable'
 import { hrefForSource, navigate, onInternalClick } from '../../lib/route'
 import { LevelControl, MorphLayer, useZoomGestures } from './Zoom'
+import { dayOf } from '../../lib/time'
 
 /**
  * The Map screen's default view (task P6-34): the corpus as nested areas.
@@ -1201,7 +1202,7 @@ function AreaTip({ area }: { area: Area }) {
       <span className="text-[13px] font-semibold leading-snug text-text">{area.name}</span>
       <span className="font-mono text-[10.5px] text-text-faint">
         {area.passages.toLocaleString('en')} passages · {area.sources.toLocaleString('en')} sources
-        {area.newest_at ? ` · newest ${area.newest_at.slice(0, 10)}` : ''}
+        {area.newest_at ? ` · newest ${dayOf(area.newest_at)}` : ''}
       </span>
       <TopicShare area={area} />
       <TierMix mix={area.tier_mix} total={area.passages} />
@@ -1809,7 +1810,7 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
         <>
           <span className="font-mono text-[11px] text-text-faint">
             {detail.area.passages.toLocaleString('en')} passages · {detail.area.sources.toLocaleString('en')} sources
-            {detail.area.newest_at ? ` · newest ${detail.area.newest_at.slice(0, 10)}` : ''}
+            {detail.area.newest_at ? ` · newest ${dayOf(detail.area.newest_at)}` : ''}
           </span>
           <TopicShare area={detail.area} />
           <TierMix mix={detail.area.tier_mix} total={detail.area.passages} />

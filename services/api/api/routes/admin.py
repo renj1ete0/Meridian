@@ -97,8 +97,10 @@ from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, Topic
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
 from meridian_core.schemas.queue import QueueTaskRead
+from meridian_core.schemas.settings import DisplaySettingsRead, DisplayZoneEdit
 from meridian_core.schemas.views import SavedViewCreate, SavedViewEdit, SavedViewRead
 from meridian_core.search import SearchFilters
+from meridian_core.timefmt import ZONE_KEY, zone_label
 from meridian_core.validation import ValidationError, check_seed_allowed
 
 from ..deps import AdminAllowed, WriteSession
@@ -619,6 +621,25 @@ async def _policy_row(sess, domain: str) -> FetchPolicy:
     if row is None:
         raise HTTPException(status_code=404, detail=f"No fetch policy for {domain!r}.")
     return row
+
+
+@router.put("/settings/display-timezone", response_model=DisplaySettingsRead)
+async def set_display_timezone(
+    edit: DisplayZoneEdit, _: AdminAllowed, sess: WriteSession
+) -> DisplaySettingsRead:
+    """Change the zone times are shown in (`B-145`, ADR 0009). Stored times do not move."""
+    row = await sess.get(FetchPolicy, GLOBAL_DOMAIN)
+    if row is None:
+        raise HTTPException(
+            status_code=409, detail="The global policy row is missing; run the seed."
+        )
+    row.settings = {**(row.settings or {}), ZONE_KEY: edit.display_timezone}
+    row.updated_by = "admin"
+    await sess.commit()
+    log.info("display time zone changed", extra={"zone": edit.display_timezone})
+    return DisplaySettingsRead(
+        display_timezone=edit.display_timezone, label=zone_label(edit.display_timezone)
+    )
 
 
 @router.patch("/fetch-policy/{domain}", response_model=FetchPolicyRowRead)

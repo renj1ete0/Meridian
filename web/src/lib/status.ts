@@ -17,6 +17,7 @@
  */
 
 import type { CrawlProgress, Notification, RunRow } from './api'
+import { clockOf, dayOf, daysBetween } from './time'
 
 // --------------------------------------------------------------------------
 // The status pill
@@ -43,11 +44,10 @@ export function runHealth(history: RunHistory | null): RunHealth {
   return latest.status === 'failed' ? 'failed' : 'ok'
 }
 
-/** `HH:MM` in the reader's zone, from a full ISO timestamp. */
+/** `HH:MM` in the display zone (ADR 0009), from a full ISO timestamp. */
 export function clock(iso: string): string {
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return '—'
-  return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  if (Number.isNaN(new Date(iso).getTime())) return '—'
+  return clockOf(iso)
 }
 
 /**
@@ -176,18 +176,15 @@ export function writeSeenAt(at: Date = new Date()): void {
 /**
  * The day heading a notification sits under: `Today`, `Yesterday`, or its date.
  *
- * Local days, because "today" is the reader's today. `created_at` is always a
- * full timestamp, so `Date` is safe here — the date-only shift the API client
- * warns about applies to bare `YYYY-MM-DD` strings, which this never receives.
+ * Days in the display zone (ADR 0009), so "today" is the operator's today wherever the page is
+ * opened. `created_at` is a full timestamp; bare `YYYY-MM-DD` strings never reach this.
  */
 export function dayHeading(iso: string, now: Date = new Date()): string {
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return iso.slice(0, 10)
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  const days = Math.round((startOf(now) - startOf(at)) / 86_400_000)
+  if (Number.isNaN(new Date(iso).getTime())) return iso.slice(0, 10)
+  const days = daysBetween(dayOf(iso), dayOf(now))
   if (days === 0) return 'Today'
   if (days === 1) return 'Yesterday'
-  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`
+  return dayOf(iso)
 }
 
 /**
@@ -198,9 +195,7 @@ export function ago(iso: string, now: Date = new Date()): string {
   const heading = dayHeading(iso, now)
   if (heading === 'Today') return 'today'
   if (heading === 'Yesterday') return 'yesterday'
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return heading
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  const days = Math.round((startOf(now) - startOf(at)) / 86_400_000)
+  if (Number.isNaN(new Date(iso).getTime())) return heading
+  const days = daysBetween(dayOf(iso), dayOf(now))
   return days > 0 && days < 30 ? `${days} days ago` : heading
 }

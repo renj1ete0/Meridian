@@ -1,5 +1,6 @@
 import type { RunRow, SteeringEntry } from '../lib/api'
 import { LABEL, stamp } from './ui'
+import { dayOf } from '../lib/time'
 
 /**
  * The right rail on the steering pages (task P6-28, spec §10.1, §11.10;
@@ -48,7 +49,7 @@ export function auditLine(entry: SteeringEntry): string {
     case 'boost_expires_at':
       return next === null
         ? `${topic} boost expiry cleared`
-        : `${topic} boost until ${next.slice(0, 10)}`
+        : `${topic} boost until ${dayOf(next)}`
     case 'watch':
       // `P6-35`: a saved view of an area's terms, from the map.
       return next === null ? `${topic} stopped watching: ${old ?? '—'}` : `${topic} watching: ${next}`

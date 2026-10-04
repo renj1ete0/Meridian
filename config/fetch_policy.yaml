@@ -116,3 +116,7 @@ search_languages: [ja, ko, zh, de, fr, nl, id, ms, th]
 # (`P6-38`, §10.2: the system steers itself by default). Hours. Accepting one in
 # Admin applies it at once; rejecting it means it never applies.
 steering_proposal_window_hours: 12
+
+# The zone times are shown in (ADR 0009, `B-145`): an IANA name. Stored times stay UTC.
+# Changed in Admin; this seeds a fresh install.
+display_timezone: Asia/Singapore

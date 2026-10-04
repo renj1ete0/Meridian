@@ -5,7 +5,7 @@ import {
   evidenceFacts,
   outcomeLine,
   untilLine,
-  utc,
+  zoned,
   type Proposal,
   type Proposals,
 } from '../lib/proposals'
@@ -163,7 +163,7 @@ function PendingCard({
             </span>
           </h3>
           <p className="font-mono text-[11px] text-text-muted">
-            Applies automatically at <span className="text-text">{utc(p.apply_after)}</span> ·{' '}
+            Applies automatically at <span className="text-text">{zoned(p.apply_after)}</span> ·{' '}
             {untilLine(p.apply_after, now)}
           </p>
         </div>

@@ -24,6 +24,7 @@ from meridian_core.schemas.gaps import (
     GapSourceRead,
     GapsRead,
 )
+from meridian_core.timefmt import display_zone, format_instant
 
 from ..cache import Kept
 from ..deps import AdminAllowed, WriteSession
@@ -111,12 +112,13 @@ async def boost_from_gap(body: GapBoost, _: AdminAllowed, sess: WriteSession) ->
     except (LookupError, ValueError, steering.InfeasibleWeights) as exc:
         await sess.rollback()
         raise _refuse(exc) from exc
+    zone = await display_zone(sess)
     await sess.commit()
     log.info("gap boosted", extra={"gap": body.gap_id, "topic": body.topic})
     return GapActionResult(
         kind="boost_topic",
         topic=body.topic,
         expires_at=expires,
-        detail=f"boost ×{body.factor:g} until {expires:%Y-%m-%d %H:%M} UTC",
+        detail=f"boost ×{body.factor:g} until {format_instant(expires, zone)}",
         undo="expires by itself; clear it sooner in Admin › Topics",
     )

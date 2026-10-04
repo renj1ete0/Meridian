@@ -81,10 +81,12 @@ from meridian_core.schemas.search import (
     SourceFiguresRead,
     TopicOverlapsRead,
 )
+from meridian_core.schemas.settings import DisplaySettingsRead
 from meridian_core.schemas.source import ChunkRead, SourceRead
 from meridian_core.schemas.views import SavedViewRead, SavedViewsRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for
 from meridian_core.stats import corpus_stats
+from meridian_core.timefmt import display_zone, zone_label
 from meridian_core.topicoverlaps import topic_overlaps
 
 from ..deps import ReadSession
@@ -257,6 +259,13 @@ async def explore_topic_overlaps(sess: ReadSession) -> TopicOverlapsRead:
     in all of it, then searches with ``topic_match=all``.
     """
     return await topic_overlaps(sess)
+
+
+@router.get("/settings", response_model=DisplaySettingsRead)
+async def explore_settings(sess: ReadSession) -> DisplaySettingsRead:
+    """Deployment-wide display settings: the zone times are shown in (`B-145`, ADR 0009)."""
+    zone = await display_zone(sess)
+    return DisplaySettingsRead(display_timezone=zone, label=zone_label(zone))
 
 
 @router.get("/stats", response_model=CorpusStatsRead)

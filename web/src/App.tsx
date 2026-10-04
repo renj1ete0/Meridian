@@ -9,9 +9,11 @@ import { GapsPage } from './explore/GapsPage'
 import { MapPage } from './explore/MapPage'
 import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
+import { displaySettings } from './lib/api'
 import { focusSearch, isCommandK } from './lib/hotkeys'
 import { useRoute, type Route } from './lib/route'
 import { applyTheme, readTheme, writeTheme, type Theme } from './lib/theme'
+import { displayZone, setDisplayZone } from './lib/time'
 import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
 
 /**
@@ -57,6 +59,20 @@ export function App() {
     applyTheme(theme)
   }, [theme])
 
+  // The display zone (ADR 0009). Until it answers, times read in the default zone; when it
+  // does, `zone` changes and every page re-renders in the deployment's zone.
+  const [zone, setZone] = useState(displayZone)
+  useEffect(() => {
+    const controller = new AbortController()
+    displaySettings({ signal: controller.signal })
+      .then((settings) => {
+        setDisplayZone(settings.display_timezone)
+        setZone(displayZone())
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [])
+
   // ⌘K from anywhere. Registered once, on the document, so it works whatever
   // has focus — including inside another input, where a reader mid-note who
   // wants to look something up should not have to click out first.
@@ -92,7 +108,7 @@ export function App() {
             own documents unaddressable. */}
         {/* Room at the foot of every reading page for the question toggle, so
             the last content can scroll clear of it (`B-125`). Admin has none. */}
-        <main className={`relative flex-1 ${section !== 'admin' ? 'pb-20' : ''}`}>
+        <main data-zone={zone} className={`relative flex-1 ${section !== 'admin' ? 'pb-20' : ''}`}>
           {route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
           {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
           {route.name === 'admin' ? <AdminPage /> : null}

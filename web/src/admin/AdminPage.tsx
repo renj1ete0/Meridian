@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AgentsPanel } from './AgentsPanel'
 import type { BoostChange } from './BoostsTable'
 import { CrawlHealthPanel } from './CrawlHealthPanel'
+import { DisplayPanel } from './DisplayPanel'
 import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
 import { GazetteerQueue, PAGE_SIZE } from './GazetteerQueue'
@@ -707,6 +708,8 @@ export function AdminPage() {
             <Loading what="the registry" />
           )
         ) : null}
+
+        {section === 'display' ? <DisplayPanel /> : null}
 
         {section === 'health' ? (
           health ? (

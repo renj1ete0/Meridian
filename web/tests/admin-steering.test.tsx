@@ -22,6 +22,7 @@ import {
   type TopicConfig,
   type TopicRow,
 } from '../src/lib/api'
+import { startOfDayIso } from '../src/lib/time'
 
 function text(markup: string): string {
   return markup
@@ -208,7 +209,7 @@ describe('topic weights, driven', () => {
       }),
     ])
 
-    expect(since).toBe('weight kept · acquisition suspended 04 Sep')
+    expect(since).toBe('weight kept · acquisition suspended 05 Sep')
   })
 })
 
@@ -366,9 +367,10 @@ describe('boosts', () => {
     fireEvent.change(screen.getByLabelText('Boost expires'), { target: { value: day } })
     fireEvent.click(screen.getByRole('button', { name: 'Add boost' }))
 
+    // The start of the chosen day in the display zone (ADR 0009), not UTC midnight.
     expect(onBoost).toHaveBeenCalledWith('biology', {
       boost_factor: 1.6,
-      boost_expires_at: `${day}T00:00:00Z`,
+      boost_expires_at: startOfDayIso(day),
     })
   })
 

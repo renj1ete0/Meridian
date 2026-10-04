@@ -19,7 +19,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/map` | `MapPage` | Areas and topics as nested circles, zoom by level, bridges, steering | `Main.dc.html` |
 | `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
-| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health | `AdminLight.dc.html` |
+| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health, display (time zone; no mock yet) | `AdminLight.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |
 
 The **Ask panel** (`explore/AskPanel.tsx`) is a toggle on every reading surface except Admin.
@@ -38,6 +38,8 @@ See [ask-the-graph.md](ask-the-graph.md).
 
 ## Conventions
 
+- Times are formatted only through `lib/time.ts`, in the deployment's display zone
+  (ADR 0009). A test fails on `getHours()`, UTC getters, or sliced ISO strings anywhere else.
 - TSDoc on exported components, hooks and functions (AGENTS.md, "Code and comment
   standards").
 - Pages own their width (`P6-27`); `main` does not force a column.

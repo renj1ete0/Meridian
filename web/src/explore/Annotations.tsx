@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { hrefForNode, onInternalClick } from '../lib/route'
 import { DataChip } from '../ui/Tier'
 import type { Annotation, AnnotationTarget, NoteDraft } from '../lib/api'
+import { dayOf } from '../lib/time'
 
 /**
  * Writing and reading the reader's own notes (task P6-05, spec §12.5, §12.6).
@@ -187,7 +188,7 @@ export function NoteList({ notes, inContextOf }: NoteListProps) {
               {/* Written, not created. A note rewritten this morning is a note
                   the reader touched this morning, whatever month the row
                   appeared in. */}
-              <DataChip>written {(note.produced_at ?? note.created_at).slice(0, 10)}</DataChip>
+              <DataChip>written {dayOf((note.produced_at ?? note.created_at))}</DataChip>
               {note.supporting_chunk_ids.length > 0 ? (
                 <DataChip>
                   {note.supporting_chunk_ids.length} passage

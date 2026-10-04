@@ -27,7 +27,7 @@ from typing import Literal
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import steering
+from . import steering, timefmt
 from .areaview import _area_in, _leaves_under, area_name, latest_build
 from .models import AreaMember, Chunk, QueueTask, SavedView, Source, TopicConfig
 from .queueing import enqueue
@@ -225,10 +225,9 @@ async def steer_area(
         if row is None:  # pragma: no cover - dominant() only names configured topics
             raise Refused(f"“{topic}” is not a configured topic.")
         if steering.boost_is_active(row, now=now):
-            notes.append(
-                f"It replaces the ×{row.boost_factor:g} boost that ran to "
-                f"{row.boost_expires_at:%Y-%m-%d}."
-            )
+            zone = await timefmt.display_zone(sess)
+            ran_to = timefmt.format_instant(row.boost_expires_at, zone, date_only=True)
+            notes.append(f"It replaces the ×{row.boost_factor:g} boost that ran to {ran_to}.")
         if row.status != steering.DRAWING:
             notes.append(f"“{topic}” is {row.status}, so the boost applies once it is active.")
         boost = MORE_FACTOR if action == "more" else LESS_FACTOR

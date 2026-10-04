@@ -61,6 +61,14 @@ can, and runs as the first step of `make test`.
 - **TSDoc** (`/** … */`) on exported components, hooks and functions: one summary
   sentence, then `@param` / `@returns` where they add something the types do not.
 
+**Dates and times** (ADR 0009)
+
+- Store instants as `timestamptz` (UTC) and send them as ISO 8601 with an offset. Never store
+  local time, and never create a naive `datetime` for an instant.
+- A calendar fact with no time of day (a publication date) is a `date` and is never shifted.
+- Format for people only through `meridian_core.timefmt` (server) and `web/src/lib/time.ts`
+  (web), which use the deployment's display zone and label the offset.
+
 **Comments and docstrings: documentation lives in `docs/`**
 
 - A docstring says what a thing is or does, and anything a caller must know: units, side
