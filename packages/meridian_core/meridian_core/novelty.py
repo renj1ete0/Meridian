@@ -41,6 +41,7 @@ from sqlalchemy.orm import aliased
 
 from .logging import get_logger
 from .models import Chunk, Source
+from .vectorindex import indexed_distance
 
 log = get_logger(__name__)
 
@@ -233,7 +234,7 @@ async def nearest_earlier_neighbours(
 
     candidate = aliased(Chunk, name="candidate")
     subject = aliased(Chunk, name="subject")
-    distance = candidate.embedding.cosine_distance(subject.embedding)
+    distance = indexed_distance(candidate.embedding, subject.embedding)
 
     nearest = (
         select(candidate.chunk_id.label("neighbour_id"), distance.label("distance"))

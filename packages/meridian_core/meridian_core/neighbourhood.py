@@ -44,6 +44,7 @@ from .schemas.neighbourhood import (
     TermRead,
 )
 from .search import EF_SEARCH_FACTOR, SearchFilters, _arm
+from .vectorindex import indexed_distance
 
 #: Cosine floor for the outer ring. Measured on a live graph's name vectors:
 #: pairs at or above 0.70 were near-synonyms or narrower forms of one another;
@@ -447,7 +448,7 @@ async def similar_passages(
     await sess.execute(
         select(func.set_config("hnsw.ef_search", str(max(pool * EF_SEARCH_FACTOR, 40)), True))
     )
-    distance = Chunk.embedding.cosine_distance(list(vector))
+    distance = indexed_distance(Chunk.embedding, vector)
     stmt = (
         _arm(SearchFilters())
         .add_columns(Chunk.source_id, distance)

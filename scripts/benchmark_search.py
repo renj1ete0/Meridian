@@ -144,7 +144,9 @@ def _nearest_sql(vector: Sequence[float], k: int, *, explain: bool = False):
     prefix = "EXPLAIN " if explain else ""
     return text(
         prefix + "SELECT chunk_id FROM chunks WHERE embedding IS NOT NULL "
-        "ORDER BY embedding <=> :v LIMIT :k"
+        # The indexed expression (`B-136`, `meridian_core.vectorindex`); ordering by the plain
+        # column would measure a full scan.
+        "ORDER BY embedding::halfvec(1024) <=> CAST(:v AS halfvec(1024)) LIMIT :k"
     ).bindparams(
         bindparam("v", value=list(vector), type_=Vector(EMBEDDING_DIM)),
         bindparam("k", value=k),
@@ -153,7 +155,7 @@ def _nearest_sql(vector: Sequence[float], k: int, *, explain: bool = False):
 
 async def index_is_used(sess: AsyncSession, vector: Sequence[float], k: int) -> bool:
     plan = await sess.execute(_nearest_sql(vector, k, explain=True))
-    return "ix_chunks_embedding_hnsw" in "\n".join(row[0] for row in plan)
+    return "ix_chunks_embedding_hnsw_half" in "\n".join(row[0] for row in plan)
 
 
 async def recall_at_k(sess: AsyncSession, vectors: list[list[float]], k: int, ef: int) -> float:

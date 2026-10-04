@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.157.1] — 2026-10-04
+
+### Changed
+
+- `B-136`: the passage vector index is built over half-precision copies of the vectors (a
+  third of the size; recall within a point; faster), built concurrently by the migration.
+  Every passage nearest-neighbour query goes through `vectorindex.indexed_distance`. ADR 0007.
+
 ## [0.157.0] — 2026-10-04
 
 ### Added

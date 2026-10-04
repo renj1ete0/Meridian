@@ -351,7 +351,9 @@ async def test_nearest_in_a_subset_never_rides_the_vector_index(session_for):
         )
         return "\n".join(rows)
 
-    assert "hnsw" in (await plan(f"embedding <=> {vector}")).lower() or "Index Scan" in (
-        await plan(f"embedding <=> {vector}")
-    ), "the bare distance does use the index — the test would see a regression"
+    # The control: the indexed expression (half precision since `B-136`) does use the index,
+    # so the test would see a regression.
+    indexed = f"embedding::halfvec(1024) <=> {vector}::halfvec(1024)"
+    assert "ix_chunks_embedding_hnsw_half" in await plan(indexed)
     assert "Index Scan" not in await plan(f"(embedding <=> {vector}) + 0")
+    assert "Index Scan" not in await plan(f"({indexed}) + 0")

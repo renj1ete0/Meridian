@@ -465,11 +465,12 @@ class Chunk(Base, TimestampMixin):
         # HNSW rather than IVFFlat: IVFFlat needs a representative sample to
         # build its lists and is therefore wrong to create on an empty table,
         # which is exactly when a migration runs.
+        # Half precision (`B-136`, ADR 0007); queries must order by
+        # `vectorindex.indexed_distance` to use it.
         Index(
-            "ix_chunks_embedding_hnsw",
-            "embedding",
+            "ix_chunks_embedding_hnsw_half",
+            sql_text("(embedding::halfvec(1024)) halfvec_cosine_ops"),
             postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
 

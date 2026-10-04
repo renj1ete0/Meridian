@@ -20,6 +20,7 @@ from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
 from .passagetopics import carries_all_topics, on_topic_passage
 from .trust import READABLE_STATES
+from .vectorindex import indexed_distance
 
 log = get_logger(__name__)
 
@@ -367,7 +368,7 @@ async def _vector(
         select(func.set_config("hnsw.ef_search", str(max(candidates * EF_SEARCH_FACTOR, 40)), True))
     )
 
-    distance = Chunk.embedding.cosine_distance(list(vector))
+    distance = indexed_distance(Chunk.embedding, vector)
     stmt = (
         _arm(filters)
         .where(Chunk.embedding.is_not(None))

@@ -1624,13 +1624,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       extraction. Tests read the seed and assert the ADR's order for synthesis and that the Ask
       panel never reaches the relay. Two integration tests that encoded §11.3's quality-first
       rule were rewritten to the decision
-- [ ] `B-136` ⚑ **Vector index at half precision** — proposal, not built. The HNSW index is
-      5.8 GB on 868k passages (1024-dim float32) and grows with the corpus; it is most of what a
-      semantic search reads. pgvector's `halfvec` expression index (`embedding::halfvec(1024)`)
-      would roughly halve it. It needs a migration and every vector query rewritten to use the
-      cast, so measure recall@k and latency against the current index with
-      `make bench-search` before deciding. Worth it if the server cannot hold the index in
-      `shared_buffers` (`B-132`)
+- [x] `B-136` **A half-precision vector index** — `v0.157.1`,
+      [ADR 0007](docs/adr/0007-half-precision-vector-index.md). Benchmarked first on a
+      200,000-passage sample against exact top-10 (`meridian-calibration/loop/b136/`): a third
+      of the size, recall@10 within a point, faster median and tail. Migration `b136ba1f0000`
+      builds `ix_chunks_embedding_hnsw_half` concurrently and drops the full-precision index.
+      `meridian_core.vectorindex.indexed_distance` is the one expression; tests check Postgres
+      plans it through the index and that no passage query orders by the plain column. The
+      first benchmark run found `B-144`
 - [ ] `B-135` **A model on the server, live or scheduled** — decided (ADR 0002); the order is
       built (`B-137`). Remaining: run synthesis unattended once a stage is configured. Two model paths exist
       and neither has run. (a) **Live:** the Ask panel (`P6-06`/`P6-07`) calls `local-chat`

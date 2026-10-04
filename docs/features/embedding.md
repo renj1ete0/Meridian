@@ -55,6 +55,16 @@ changed.
 `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` passages in the `first` and `then` tiers wait. The `last`
 tier does not count, or the crawl would pause for good behind off-topic text.
 
+<a id="the-vector-index"></a>**The vector index** (`B-136`, ADR 0007). Passages are found by an
+HNSW index built over half-precision copies of the vectors,
+`(embedding::halfvec(1024)) halfvec_cosine_ops`; the stored vectors stay full precision. On a
+200,000-passage benchmark against exact nearest neighbours, the half-precision index was a
+third of the size, with recall@10 within a point of full precision and lower median and tail
+latency. A query uses the index only if it orders by exactly the indexed expression, so
+every passage nearest-neighbour query goes through `vectorindex.indexed_distance`. A test
+fails if one orders by the plain column, which would silently become a full scan. Bridges
+deliberately avoid the index (`+ 0`) to get an exact answer within a subset.
+
 ## Design choices
 
 - **One model, checked on every response.** A vector from a different model is meaningless

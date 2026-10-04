@@ -17,6 +17,7 @@ arm says so.
 query ──► lexical arm: websearch_to_tsquery over chunks.search_vector
             RUM index: best LEXICAL_POOL (1000) by match, re-ordered by ts_rank_cd
       ──► vector arm: query embedded by the embedding service, HNSW nearest neighbours
+            over the half-precision index (vectorindex.indexed_distance)
       ──► the same filter predicate inside both (search._conditions)
       ──► reciprocal rank fusion (k = 60), then ageing decay per source tier
       ──► one page of hits, each with source, ranks per arm, age and decay factor
