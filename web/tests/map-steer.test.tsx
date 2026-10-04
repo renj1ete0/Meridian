@@ -1,9 +1,8 @@
+// @vitest-environment jsdom
 /**
  * Steering from the map (task P6-35): the menu says what an action will move
  * before it moves it, refuses "less" of an area no topic holds, and reports
  * the server's own words — result, undo path, or refusal.
- *
- * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

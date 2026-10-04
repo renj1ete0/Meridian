@@ -188,7 +188,7 @@ export function Web({
   const height = Math.round(narrow ? width * 1.3 : Math.min(Math.max(width * 0.62, 380), 600))
   const placed = useMemo(
     () => layoutTopics(totals, width, height, { minR: narrow ? 9 : 14, below: narrow }),
-    [totals, width, height],
+    [totals, width, height, narrow],
   )
   const at = new Map(placed.map((p) => [p.topic, p]))
   const largest = links[0]?.shared ?? 0

@@ -1,8 +1,7 @@
+// @vitest-environment jsdom
 /**
  * `/?q=` runs a search on arrival (task P6-34): how the map's "Open in Find"
  * hands an area's terms over to Explore.
- *
- * @vitest-environment jsdom
  */
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

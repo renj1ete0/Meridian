@@ -1,8 +1,7 @@
+// @vitest-environment jsdom
 /**
  * The Map's clusters read as fields of work, not as geography: the tab says
  * "Fields", while the URL keeps its older `view=areas` so saved links open.
- *
- * @vitest-environment jsdom
  */
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

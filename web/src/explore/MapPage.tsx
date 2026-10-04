@@ -203,7 +203,7 @@ function useThemeTick(): number {
 /**
  * Everything but the fetch, so it renders the same in a test as on the page.
  *
- * ``webgl`` is for tests and for the one caller that already knows; left out,
+ * `webgl` is for tests and for the one caller that already knows; left out,
  * the page asks the browser after mounting.
  */
 export function MapView({

@@ -44,6 +44,10 @@ See [ask-the-graph.md](ask-the-graph.md).
 - TSDoc on exported components, hooks and functions (AGENTS.md, "Code and comment
   standards").
 - Pages own their width (`P6-27`); `main` does not force a column.
+- Linted by oxlint and formatted by Prettier (`B-142`, ADR 0012); both run in `make lint`.
+  The hooks rules are errors. Where an effect deliberately leaves a dependency out (a scene
+  built once per mount, a callback recreated every render), the comment above the
+  `eslint-disable-next-line` says why.
 - Before calling a UI change done, screenshot it and compare it with the mock.
 
 ## Failure modes and traps
@@ -52,8 +56,14 @@ See [ask-the-graph.md](ask-the-graph.md).
   `web/tests/api.test.ts`, not in the Python suite.
 - **A Playwright handle to Find's input goes stale after a search**, because the field
   re-renders. Query it again after each submit.
+- **TSDoc is not Markdown or reST.** A double-backtick span reads as empty, and a
+  `@vitest-environment` pragma inside a `/** */` block reads as a malformed tag; the pragma
+  goes on its own `//` line.
+- **The package builds with TypeScript 7**, which has no JavaScript compiler API, so tools
+  built on it (typescript-eslint, older editor plugins) cannot load it.
 
 ## Tests
 
 `web/tests/*.test.ts(x)`: one file per surface (`explore`, `map-*`, `graph-*`, `gaps`,
-`admin-*`, `ask-panel`, `contested-page` …) plus the API drift test.
+`admin-*`, `ask-panel`, `contested-page` …) plus the API drift test, and `lint-config.test.ts`, which lints a file breaking each rule
+so a rule that stops applying fails the suite.

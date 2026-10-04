@@ -39,6 +39,8 @@ export function NodeSearchBox({
   const [active, setActive] = useState(0)
   const [open, setOpen] = useState(false)
   const list = useId()
+  // `exclude` is compared by content: a new array each render must not refetch.
+  const excludeKey = exclude.join(',')
 
   useEffect(() => {
     const q = text.trim()
@@ -51,7 +53,8 @@ export function NodeSearchBox({
     const timer = window.setTimeout(() => {
       searchNodes(q, 8, { signal: controller.signal })
         .then((found) => {
-          setMatches(found.matches.filter((m) => !exclude.includes(m.entity_id)))
+          const hidden = new Set(excludeKey.split(',').filter(Boolean).map(Number))
+          setMatches(found.matches.filter((m) => !hidden.has(m.entity_id)))
           setError(null)
           setActive(0)
         })
@@ -64,8 +67,7 @@ export function NodeSearchBox({
       window.clearTimeout(timer)
       controller.abort()
     }
-    // `exclude` is compared by content; a new array each render must not refetch.
-  }, [text, exclude.join(',')])
+  }, [text, excludeKey])
 
   function pick(match: NodeMatch) {
     onPick(match.entity_id, match)

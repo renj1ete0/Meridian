@@ -77,6 +77,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.162.1] — 2026-10-04
+
+### Changed
+
+- `B-142`: the web package is linted and formatted, in `make lint`. oxlint, because the
+  package's TypeScript 7 cannot host typescript-eslint, runs the React hooks rules, unused
+  variables, no unexplained `any`, TSDoc syntax and the correctness category. Prettier
+  formats (one formatting-only commit, listed in `.git-blame-ignore-revs`). ADR 0012.
+  The nine hook-dependency findings were not live bugs (each missing value followed from one
+  already listed); three were tidied, six are deliberate and now say so.
+
 ## [0.162.0] — 2026-10-04
 
 ### Added

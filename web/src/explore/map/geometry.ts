@@ -32,7 +32,7 @@ export function parseColour(value: string): RGB | null {
   return null
 }
 
-/** ``a`` moved ``t`` of the way to ``b``. */
+/** `a` moved `t` of the way to `b`. */
 export function mix(a: RGB, b: RGB, t: number): RGB {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
@@ -48,7 +48,7 @@ export function positionsOf(points: readonly Pick<MapPoint, 'x' | 'y' | 'z'>[]):
   return out
 }
 
-/** Interleaved rgb per point, looked up by topic; unknown topics take ``fallback``. */
+/** Interleaved rgb per point, looked up by topic; unknown topics take `fallback`. */
 export function coloursOf(
   points: readonly Pick<MapPoint, 'topic'>[],
   colours: ReadonlyMap<string | null, RGB>,
@@ -108,7 +108,7 @@ export function bounds(
 
 /**
  * How far the camera must sit from a sphere's centre for the sphere to fit the
- * view, with ``margin`` to spare. Limited by whichever of the vertical and
+ * view, with `margin` to spare. Limited by whichever of the vertical and
  * horizontal field of view is narrower, so a tall narrow window fits too.
  */
 export function fitDistance(radius: number, fovDegrees: number, aspect: number, margin = 1.08): number {
@@ -121,7 +121,7 @@ export function fitDistance(radius: number, fovDegrees: number, aspect: number, 
 /**
  * A point through a column-major 4×4 view-projection matrix onto the screen.
  *
- * Returns ``[x, y, depth]`` in CSS pixels, depth in normalised device units
+ * Returns `[x, y, depth]` in CSS pixels, depth in normalised device units
  * (−1 near, 1 far), or null for a point behind the camera or beyond the clip
  * planes — which cannot be under the cursor however close its projection lands.
  */
@@ -149,7 +149,7 @@ export function toViewport(
  *
  * Picking is done in screen space rather than by casting a ray at a world-space
  * threshold. A ray threshold is in scene units, so it grows and shrinks with
- * zoom: generous when zoomed in, impossible when zoomed out. ``radius`` here is
+ * zoom: generous when zoomed in, impossible when zoomed out. `radius` here is
  * pixels, the unit a hand actually misses by. Of the points inside it the one
  * nearest the cursor wins, and between two at the same spot, the nearer the
  * camera — the one drawn in front.

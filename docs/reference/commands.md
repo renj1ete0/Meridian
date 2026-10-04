@@ -5,7 +5,8 @@
 | Target | What it does |
 |---|---|
 | `make test` | `make lint`, then the Python suite (needs the dev Postgres up) |
-| `make lint` | `ruff check .` and `ruff format --check .` |
+| `make lint` | `ruff check .`, `ruff format --check .`, and the web package's `npm run lint` (oxlint, then `prettier --check`) |
+| `npm run format` (in `web/`) | Rewrites the web package with Prettier |
 | `make dev-up` / `dev-down` | The dev stack (`docker-compose.dev.yml`): Postgres and services for tests |
 | `make local-up` / `local-down` / `local-logs` | The full local stack (`docker-compose.local.yml`) |
 | `make up` / `down` / `logs` | The production stack (`docker-compose.yml`) |

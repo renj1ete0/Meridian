@@ -22,6 +22,7 @@ chosen.
 | [0009](0009-times-stored-in-utc-shown-in-a-display-zone.md) | Times are stored in UTC and shown in one display zone (GMT+8 by default) | 2026-10-04 | Accepted |
 | [0010](0010-growth-page-placement-and-range.md) | The growth page has its own section and opens on 30 days, filterable | 2026-10-04 | Accepted |
 | [0011](0011-tokens-may-be-set-not-to-expire.md) | Tokens may be set not to expire, and say so | 2026-10-04 | Accepted |
+| [0012](0012-web-linting-with-oxlint-and-prettier.md) | The web package is linted by oxlint and formatted by Prettier | 2026-10-04 | Accepted |
 
 ## Template
 

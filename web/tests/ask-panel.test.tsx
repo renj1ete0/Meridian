@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * "Ask the graph" (tasks P6-06, P6-07).
  *
@@ -5,8 +6,6 @@
  * is tested is what the reader relies on — only checked citations become links,
  * the selection travels as context and can be removed, a follow-up stays in its
  * thread, and a model that could not answer says why where the answer would be.
- *
- * @vitest-environment jsdom
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

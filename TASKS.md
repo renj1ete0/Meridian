@@ -1613,9 +1613,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       comments and docstrings, so this is done per feature, as each one gets its doc, and
       whenever a file is touched. Tick a feature here once its modules are trimmed.
       Done: search (`search.py`, `search_service.py`)
-- [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
-      --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
-      no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [x] `B-142` **Linting and formatting for the web package** — `v0.162.1`, ADR 0012. oxlint
+      rather than ESLint: the package's TypeScript 7 has no compiler API for typescript-eslint.
+      Hooks rules, unused vars, no `any`, TSDoc syntax, correctness; Prettier in its own
+      formatting commit; both in `make lint`, with a test that each rule still fires. Found:
+      9 hook dependency findings (none live; 3 tidied, 6 deliberate and marked), TSDoc broken by reST double backticks and
+      by vitest pragmas inside doc blocks. Left off: the React Compiler rules (ADR 0012)
 - [x] `B-139` **The site's views as MCP tools** — `v0.160.0`. `find_nodes`, `get_node`,
       `find_route`, `term_neighbourhood`, `list_areas`, `get_area`, `list_gaps`,
       `list_contested`; each calls the page's own function (a test compares the map and

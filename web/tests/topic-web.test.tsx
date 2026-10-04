@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The web of topics (task B-72): the Map's Topics view and its hand-off to Find.
  *
@@ -7,8 +8,6 @@
  * superset, an empty selection read as "nothing" — and a hand-off that drops
  * `topic_match=all` on the way to Find, which silently turns "where these
  * meet" into "any of these".
- *
- * @vitest-environment jsdom
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'

@@ -156,6 +156,7 @@ export function GazetteerQueue({
       body.current?.querySelectorAll<HTMLTableRowElement>('tr[data-term]')[next]?.focus()
     }
     // Only a new set of rows should move focus, not a cursor step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows])
 
   const shown: Record<GazetteerState, number> = {

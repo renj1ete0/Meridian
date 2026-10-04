@@ -30,7 +30,7 @@ const designSystem = readFileSync(join(REPO, 'docs/design/design-system.md'), 'u
 const tokensCss = readFileSync(TOKENS, 'utf8')
 const appCss = readFileSync(join(WEB, 'src/styles/app.css'), 'utf8')
 
-/** A published row is `| \`accent.graph\` | \`<hex>\` | 8.9 | role |`. */
+/** A published row: role, hex and ratio as backticked cells, then the use, pipe-separated. */
 function publishedTokens(heading: string): Map<string, string> {
   const section = designSystem.split(`### ${heading}`)[1]
   if (!section) throw new Error(`design-system.md has no "### ${heading}" section`)

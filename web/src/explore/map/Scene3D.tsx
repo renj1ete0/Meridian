@@ -354,6 +354,7 @@ export function Scene3D({
       live.current = null
     }
     // Built once per mount; later changes arrive through the effects below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // New data: new buffers, and a fresh fit, since the old framing was for other points.
@@ -367,6 +368,7 @@ export function Scene3D({
     setHover(null)
     if (scene.width > 1) fit()
     // Colours and visibility have their own effects; this one is the data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positions])
 
   useEffect(() => {

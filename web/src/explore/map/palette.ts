@@ -51,7 +51,7 @@ export function paletteFrom(read: Read, swatches: ReadonlyMap<string | null, Swa
   }
 }
 
-/** The palette as it currently resolves on ``element``. */
+/** The palette as it currently resolves on `element`. */
 export function readPalette(element: Element, swatches: ReadonlyMap<string | null, Swatch>): CanvasPalette | null {
   const style = getComputedStyle(element)
   return paletteFrom((property) => style.getPropertyValue(property), swatches)

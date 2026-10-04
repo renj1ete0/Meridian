@@ -138,10 +138,10 @@ export function legendOrder(topics: Iterable<string | null>): (string | null)[] 
 }
 
 /**
- * Map [-1, 1] coordinates onto a square plot inside a ``width × height`` box.
+ * Map [-1, 1] coordinates onto a square plot inside a `width × height` box.
  *
  * Square, not stretched to the box: the axes are scaled alike, and stretching
- * one would make distances along it look larger than they are. ``y`` is
+ * one would make distances along it look larger than they are. `y` is
  * flipped so up on the screen is positive, as on any plot.
  */
 export function toScreen(
@@ -157,7 +157,7 @@ export function toScreen(
 }
 
 /**
- * The visible point nearest a cursor, within ``radius`` pixels, or null.
+ * The visible point nearest a cursor, within `radius` pixels, or null.
  *
  * A hit target larger than the dot: dots are a few pixels across, and a hover
  * that needed pixel accuracy would feel broken. The last-drawn point wins a tie,

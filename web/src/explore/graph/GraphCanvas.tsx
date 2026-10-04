@@ -344,6 +344,7 @@ export function GraphCanvas({ scene, onNodeClick, onHover, apiRef, onUnavailable
     }
     // The scene is rebuilt only when the data changes; handlers are read
     // through a ref so a new callback does not tear the renderer down.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene])
 
   return (

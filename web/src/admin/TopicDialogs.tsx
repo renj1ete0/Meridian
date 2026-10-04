@@ -47,6 +47,7 @@ function usePreview(key: string | null, preview: Preview) {
       window.clearTimeout(timer)
     }
     // `preview` is recreated every render; `key` is what it depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
   return { after, refusal }

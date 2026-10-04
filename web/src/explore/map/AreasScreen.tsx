@@ -748,7 +748,7 @@ function Canvas({
         crowded: placed.length > 40 || width < 640,
         reserved: [keyBox, ...outlines.filter((o) => o.named).map((o) => o.box)],
       }),
-    [placed, width, outlines],
+    [placed, width, outlines, keyBox],
   )
 
   // A change of level splits each circle into its children, or gathers them

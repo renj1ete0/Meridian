@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The corpus map (tasks P6-26, P6-29).
  *
@@ -7,8 +8,6 @@
  * keeps meaning it, that a dot lands where its coordinates say and the cursor
  * finds it there, that the camera frames what is shown, that the page says how
  * partial the picture is, and that a browser without WebGL still gets a map.
- *
- * @vitest-environment jsdom
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'

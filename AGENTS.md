@@ -58,6 +58,9 @@ can, and runs as the first step of `make test`.
 
 - `strict` TypeScript (`tsc -b`), React function components, no `any` without a comment
   saying why.
+- **oxlint** (`web/.oxlintrc.json`) and **Prettier** (`web/.prettierrc.json`: no semicolons,
+  single quotes, 100 columns), both in `make lint` (ADR 0012). `npm run format` rewrites;
+  an `eslint-disable-next-line` needs a comment above it saying why.
 - **TSDoc** (`/** … */`) on exported components, hooks and functions: one summary
   sentence, then `@param` / `@returns` where they add something the types do not.
 

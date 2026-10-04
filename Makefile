@@ -77,11 +77,12 @@ restore-corpus:
 backup:
 	./scripts/backup.sh
 
-# PEP 8 / PEP 257 via ruff, and the formatter, before the suite: AGENTS.md
-# "Code and comment standards".
+# PEP 8 / PEP 257 via ruff, and the formatter, before the suite; the web package
+# through oxlint and Prettier (B-142): AGENTS.md "Code and comment standards".
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
+	cd web && npm run --silent lint
 
 test: lint
 	uv run pytest

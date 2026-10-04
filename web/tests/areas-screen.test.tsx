@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The Map screen's areas (task P6-34).
  *
@@ -6,8 +7,6 @@
  * drawn differently and never merged in the bridge panel; clicking zooms or
  * opens; right-click offers only what exists, with route disabled and saying
  * why.
- *
- * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'

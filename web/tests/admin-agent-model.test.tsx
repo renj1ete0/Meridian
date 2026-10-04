@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * Choosing an agent's model from Admin (tasks P6-06, P6-07).
  *
@@ -5,8 +6,6 @@
  * at it has to be able to follow without a release. What matters: the string
  * sent is the one typed, a string the server would refuse is stopped before it
  * is sent, and a refused save keeps what was typed rather than pretending.
- *
- * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

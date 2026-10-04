@@ -1,8 +1,7 @@
+// @vitest-environment jsdom
 /**
  * The answer page: evidence grouped by country, coverage stated against its
  * rule, and "find more" queuing exactly the search it says it will.
- *
- * @vitest-environment jsdom
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -242,7 +241,7 @@ describe('find more', () => {
     server({ '/api/admin/seeds': { status: 409, body: { detail: 'That is already queued.' } } })
     render(<AnswerBody answer={answer()} question={QUESTION} topic="trading" />)
     fireEvent.click(screen.getByRole('button', { name: 'Find more about France' }))
-    await screen.findByText('Already queued — results arrive as the crawler fetches them.')
+    expect(await screen.findByText('Already queued — results arrive as the crawler fetches them.')).toBeTruthy()
   })
 
   it('shows the server’s refusal and leaves the button to retry', async () => {
@@ -294,7 +293,7 @@ describe('fetching the answer', () => {
   it('names a failure rather than showing an empty page', async () => {
     server({ '/api/explore/answer': { status: 500, body: { detail: 'The database is down.' } } })
     render(<AnswerView question={QUESTION} topics={['a']} match="all" places={[]} />)
-    await screen.findByText('The database is down.')
+    expect(await screen.findByText('The database is down.')).toBeTruthy()
   })
 })
 

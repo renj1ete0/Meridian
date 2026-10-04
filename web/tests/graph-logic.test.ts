@@ -213,10 +213,10 @@ describe('node looks, per the published table', () => {
       gnode({ contested: true, cross_topic: true }),
       gnode(),
     ]
-    for (const node of cases) {
+    for (const node of cases.filter((n) => n.role !== 'focus')) {
       const look = nodeLook(node, P, { maxSupport: 2 })
       const brass = look.color === P.contested || look.labelColor === P.contested
-      if (node.role !== 'focus') expect(brass, node.canonical_name).toBe(look.dagger)
+      expect(brass, node.canonical_name).toBe(look.dagger)
     }
     // The focus carries the dagger when any of its edges is contested.
     expect(nodeLook(gnode({ role: 'focus' }), P, { maxSupport: 1, focusContested: true }).dagger).toBe(true)
