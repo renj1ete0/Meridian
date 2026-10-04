@@ -1572,6 +1572,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-132` **Postgres sized for a board, fixed in compose** — deploy config, no bump. The
+      production command hard-coded `shared_buffers=2GB` and left `effective_cache_size`,
+      `maintenance_work_mem` (64MB) and `random_page_cost` (4) at their defaults. On the local
+      corpus the vector index alone is 5.8 GB, and the cache hit rate was 81%. Each setting is
+      now `${PG_…:-default}`, with guidance in `.env.example`; tests require a default for each
+      and an `.env.example` entry. **On the server:** size `PG_SHARED_BUFFERS` to hold the
+      vector index
 - [ ] `B-131` **An override for a GPU server** — deploy config, no bump. The operator moved
       production from single-board computers to a server and may add a GPU (2026-10-04).
       `deploy/gpu/gpu-embedder.yml`: the sidecar reserves one NVIDIA device with

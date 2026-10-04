@@ -65,11 +65,19 @@ services:
     # age` then fails with "unhandled cypher(cstring) function call", which
     # names nothing anybody can act on. A flag here applies to both a fresh
     # database and one that predates AGE.
+    #
+    # Memory is set from `.env` (`B-132`), with defaults that keep the board
+    # layout's figures. On a server, size them to it: `.env.example` says how.
+    # The vector index is the thing to fit — it is most of what a semantic
+    # search reads, and a search that misses the cache reads it from disk.
     command: >
       postgres
       -c shared_preload_libraries=age
-      -c shared_buffers=2GB
-      -c work_mem=32MB
+      -c shared_buffers=${PG_SHARED_BUFFERS:-2GB}
+      -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-6GB}
+      -c maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-512MB}
+      -c work_mem=${PG_WORK_MEM:-32MB}
+      -c random_page_cost=${PG_RANDOM_PAGE_COST:-1.1}
       -c max_connections=40
       -c synchronous_commit=on
     healthcheck:

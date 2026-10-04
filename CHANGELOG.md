@@ -8,6 +8,11 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Deploy: Postgres's memory settings come from `.env` (`B-132`): `PG_SHARED_BUFFERS`,
+  `PG_EFFECTIVE_CACHE_SIZE`, `PG_MAINTENANCE_WORK_MEM`, `PG_WORK_MEM`, `PG_RANDOM_PAGE_COST`,
+  with sizing guidance in `.env.example`. Defaults keep `shared_buffers` and `work_mem`; three
+  are new: `effective_cache_size` 6GB, `maintenance_work_mem` 512MB (was 64MB) and
+  `random_page_cost` 1.1 (was 4)
 - Deploy: `deploy/gpu/gpu-embedder.yml` (`B-131`) gives the embedding sidecar an NVIDIA GPU,
   sends the backfill's bigger batches to it, and keeps the backfill from loading the model on
   its own CPU; `docs/deployment.md` §3b. Validated with `docker compose config`, not yet run on

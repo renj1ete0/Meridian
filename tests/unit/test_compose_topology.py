@@ -590,3 +590,27 @@ def test_a_service_running_its_own_command_says_what_its_health_is(
         f"healthcheck, which is probing a process they do not run. Declare one "
         f"or set `healthcheck: {{disable: true}}`"
     )
+
+
+# --------------------------------------------------------------------------
+# Postgres's memory is the operator's to size (`B-132`)
+# --------------------------------------------------------------------------
+
+
+def _postgres_command_variables(compose: dict) -> set[str]:
+    command = compose["services"]["postgres"]["command"]
+    return set(re.findall(r"\$\{([A-Z_]+):-[^}]+\}", str(command)))
+
+
+def test_postgres_memory_is_set_from_the_environment_with_a_default(compose: dict) -> None:
+    """A bare `${VAR}` with no default starts Postgres with an empty setting and it refuses."""
+    names = _postgres_command_variables(compose)
+    assert {"PG_SHARED_BUFFERS", "PG_EFFECTIVE_CACHE_SIZE", "PG_MAINTENANCE_WORK_MEM"} <= names
+    command = str(compose["services"]["postgres"]["command"])
+    assert not re.search(r"\$\{PG_[A-Z_]+\}", command), "every PG_ setting needs a default"
+
+
+def test_every_postgres_setting_is_documented_for_the_operator(compose: dict) -> None:
+    example = (REPO / ".env.example").read_text()
+    undocumented = {n for n in _postgres_command_variables(compose) if n not in example}
+    assert not undocumented, f"set in compose and missing from .env.example: {undocumented}"
