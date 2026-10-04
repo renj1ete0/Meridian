@@ -128,6 +128,12 @@ OFFTOPIC_FLOOR = 0.30
 #: part of the basis: it decides what is embedded next, never a label.
 TRIAGE_FLOOR = LABEL_FLOOR - 0.04
 
+#: A document at least this long needs :data:`LONG_TRIAGE_FLOOR` instead (`B-133`, ADR 0006):
+#: long listings beat the ordinary floor on one matching line. Measured on fully embedded
+#: sources; see docs/features/topics.md.
+LONG_DOCUMENT = 1000
+LONG_TRIAGE_FLOOR = LABEL_FLOOR - 0.02
+
 #: Generic, topic-free phrases whose mean embedding is the reference point.
 #: What every page shares — navigation, boilerplate, the vocabulary of being a
 #: document at all. Changing the list changes the basis, so every source is
@@ -412,6 +418,27 @@ async def still_pending(sess: AsyncSession, source_ids: Sequence[int]) -> set[in
     rows = await sess.scalars(
         select(Chunk.source_id)
         .where(Chunk.source_id.in_(list(source_ids)), _live(), Chunk.embedding.is_(None))
+        .distinct()
+    )
+    return set(rows)
+
+
+def triage_floor(*, long_document: bool) -> float:
+    """The sample score a document's rest needs to be embedded early (`B-89`, `B-133`)."""
+    return LONG_TRIAGE_FLOOR if long_document else TRIAGE_FLOOR
+
+
+async def long_sources(sess: AsyncSession, source_ids: Sequence[int]) -> set[int]:
+    """Which of these sources have at least :data:`LONG_DOCUMENT` live passages."""
+    if not source_ids:
+        return set()
+    rows = await sess.scalars(
+        select(Chunk.source_id)
+        .where(
+            Chunk.source_id.in_(list(source_ids)),
+            _live(),
+            Chunk.chunk_index >= LONG_DOCUMENT - 1,
+        )
         .distinct()
     )
     return set(rows)

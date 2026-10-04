@@ -543,3 +543,82 @@ async def test_an_older_copy_waits_behind_a_newer_ordinary_page(sess) -> None:
         await sess.refresh(chunk)
     assert plain.embedding is not None and canonical[0].embedding is not None
     assert copy.embedding is None
+
+
+# --------------------------------------------------------------------------
+# A very long document's sample has a higher bar (`B-133`, ADR 0006)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def short_long_document(monkeypatch):
+    """A "long" document of a size a test can write; the rule reads the constant at call time."""
+    from meridian_core import topiclabels
+
+    size = SAMPLE_HEAD + 2 * SAMPLE_STRIDE + 1
+    monkeypatch.setattr(topiclabels, "LONG_DOCUMENT", size)
+    return size
+
+
+def test_the_long_floor_sits_between_the_triage_and_label_floors() -> None:
+    from meridian_core.topiclabels import LABEL_FLOOR, LONG_TRIAGE_FLOOR, triage_floor
+
+    assert TRIAGE_FLOOR < LONG_TRIAGE_FLOOR < LABEL_FLOOR
+    assert triage_floor(long_document=False) == TRIAGE_FLOOR
+    assert triage_floor(long_document=True) == LONG_TRIAGE_FLOOR
+
+
+@pytest.mark.parametrize(
+    ("extra", "score_at", "held"),
+    [
+        (0, "between", True),  # exactly the long size is long
+        (-1, "between", False),  # one passage short is not
+        (0, "long_floor", False),  # at the long floor is enough, as `<` says
+        (0, "below", True),  # under the ordinary floor is held at any length
+        (-1, "below", True),
+    ],
+)
+async def test_the_rest_of_a_long_document_needs_the_higher_bar(
+    sess, short_long_document, extra, score_at, held
+) -> None:
+    from meridian_core.topiclabels import LONG_TRIAGE_FLOOR
+
+    score = {
+        "between": (TRIAGE_FLOOR + LONG_TRIAGE_FLOOR) / 2,
+        "long_floor": LONG_TRIAGE_FLOOR,
+        "below": TRIAGE_FLOOR - 0.01,
+    }[score_at]
+    chunks = await page(sess, f"https://{host()}/doc", chunks=short_long_document + extra)
+    await label(sess, chunks, sample_best=score)
+    rest = [c for c in chunks if c.chunk_id not in await sampled_ids(sess, chunks)]
+
+    for chunk in rest:
+        assert await tier_of(sess, chunk) == ({"last"} if held else {"then"})
+
+
+async def test_superseded_passages_do_not_make_a_document_long(sess, short_long_document) -> None:
+    """Only live text counts: a page that shrank on re-crawl is judged at its new length."""
+    from meridian_core.topiclabels import LONG_TRIAGE_FLOOR
+
+    chunks = await page(sess, f"https://{host()}/shrank", chunks=short_long_document)
+    for chunk in chunks[-1:]:
+        chunk.superseded_at = func.now()
+    await sess.flush()
+    await label(sess, chunks, sample_best=(TRIAGE_FLOOR + LONG_TRIAGE_FLOOR) / 2)
+    rest = [c for c in chunks[:-1] if c.chunk_id not in await sampled_ids(sess, chunks)]
+    assert rest
+    for chunk in rest:
+        assert await tier_of(sess, chunk) == {"then"}
+
+
+async def test_the_reports_long_documents_are_the_rules_long_documents(
+    sess, short_long_document
+) -> None:
+    """`retopic` counts what is held with `long_sources`; it must agree with the tier rule."""
+    from meridian_core.topiclabels import long_sources
+
+    long_one = await page(sess, f"https://{host()}/long", chunks=short_long_document)
+    short_one = await page(sess, f"https://{host()}/short", chunks=short_long_document - 1)
+    ids = [long_one[0].source_id, short_one[0].source_id]
+
+    assert await long_sources(sess, ids) == {long_one[0].source_id}

@@ -43,6 +43,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from .logging import get_logger
 from .models import Chunk, Source
@@ -291,15 +292,26 @@ def _held():
     passages), and without this each one costs hours of embedding before the
     labeller may say so. Held is not dropped: the last tier is still served.
     """
-    from .topiclabels import TRIAGE_FLOOR
+    from .topiclabels import LONG_DOCUMENT, LONG_TRIAGE_FLOOR, TRIAGE_FLOOR
 
+    # A live passage at index LONG_DOCUMENT - 1 or beyond: one probe of uq_chunks_live_index.
+    longer = aliased(Chunk)
+    long_document = exists().where(
+        longer.source_id == Source.source_id,
+        longer.chunk_index >= LONG_DOCUMENT - 1,
+        longer.superseded_at.is_(None),
+    )
+    best = Source.topic_sample_best
     return and_(
         ~in_sample(),
         # Spelled out rather than a bare `<`: NULL < x is NULL, and a NULL
         # here would put the passage in no tier at all — never embedded.
         or_(
             Source.topics_examined_at.is_(None),
-            and_(Source.topic_sample_best.is_not(None), Source.topic_sample_best < TRIAGE_FLOOR),
+            and_(
+                best.is_not(None),
+                or_(best < TRIAGE_FLOOR, and_(best < LONG_TRIAGE_FLOOR, long_document)),
+            ),
         ),
     )
 

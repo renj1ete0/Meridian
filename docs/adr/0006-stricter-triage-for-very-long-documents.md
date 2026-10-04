@@ -20,6 +20,9 @@ embedded early. Shorter documents keep the current floor.
 
 ## Consequences
 
+- Built in `B-133`: `LONG_DOCUMENT` = 1,000 passages, `LONG_TRIAGE_FLOOR` = 0.48 (the label
+  floor less 0.02). The backlog count that pauses the crawl became about twice as slow,
+  roughly a second, run once a minute.
 - Holding back delays a document; it deletes nothing. A wrongly held document is still
   embedded, from the last tier.
 - The sample of very long on-topic documents was small, so the threshold is re-measured once

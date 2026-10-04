@@ -75,6 +75,8 @@ from meridian_core.passagetopics import (
 from meridian_core.topiclabels import (
     LABEL_FLOOR,
     LABEL_MARGIN,
+    LONG_DOCUMENT,
+    LONG_TRIAGE_FLOOR,
     OFFTOPIC_FLOOR,
     REFERENCE_TEXTS,
     TRIAGE_FLOOR,
@@ -84,11 +86,13 @@ from meridian_core.topiclabels import (
     decide,
     demote,
     load_prototypes,
+    long_sources,
     offtopic_candidates,
     record_labels,
     source_vectors,
     sources_awaiting,
     still_pending,
+    triage_floor,
 )
 
 log = get_logger(__name__)
@@ -309,6 +313,7 @@ class Labeller:
                     break
                 vectors = await source_vectors(sess, ids)
                 partial = await still_pending(sess, ids)
+                long_ones = await long_sources(sess, partial)
                 rows = {
                     row.source_id: row
                     for row in await sess.scalars(select(Source).where(Source.source_id.in_(ids)))
@@ -322,7 +327,17 @@ class Labeller:
                     before = list(source.topic_labels) if source.topic_labels is not None else None
                     crawled = list(source.crawled_for or ())
                     sampled = source_id in partial
-                    self._tally(stats, source, scores, labels, before, crawled, seen, sampled)
+                    self._tally(
+                        stats,
+                        source,
+                        scores,
+                        labels,
+                        before,
+                        crawled,
+                        seen,
+                        sampled,
+                        long_document=source_id in long_ones,
+                    )
                     seen += 1
                     if apply:
                         await record_labels(
@@ -443,7 +458,9 @@ class Labeller:
             _reservoir(stats.beyond_samples, example, sum(stats.beyond_source.values()), self._rng)
             stats.beyond_source.update(beyond)
 
-    def _tally(self, stats, source, scores, labels, before, crawled, seen, sampled) -> None:
+    def _tally(
+        self, stats, source, scores, labels, before, crawled, seen, sampled, *, long_document=False
+    ) -> None:
         stats.examined += 1
         stats.by_count[min(len(labels), 3)] += 1
         stats.per_topic.update(labels)
@@ -470,7 +487,8 @@ class Labeller:
                 stats.samples[slot] = example
         if sampled:
             stats.sampled += 1
-            stats.sampled_held += best is not None and best < TRIAGE_FLOOR
+            floor = triage_floor(long_document=long_document)
+            stats.sampled_held += best is not None and best < floor
         # A sample is never a demotion candidate, as in `offtopic_candidates`.
         if (
             best is not None
@@ -554,7 +572,8 @@ def render(stats: LabelStats, *, apply: bool, demote_offtopic: bool, offtopic_fl
     print(f"  examined         {stats.examined}")
     print(f"  labels changed   {stats.changed}")
     print(
-        f"  from a sample    {stats.sampled}, the rest held back (best < {TRIAGE_FLOOR:.2f})"
+        f"  from a sample    {stats.sampled}, the rest held back (best < {TRIAGE_FLOOR:.2f},"
+        f" or {LONG_TRIAGE_FLOOR:.2f} from {LONG_DOCUMENT} passages)"
         f" {stats.sampled_held}"
     )
     counts = stats.by_count

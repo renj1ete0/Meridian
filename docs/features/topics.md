@@ -43,8 +43,15 @@ from a sample (its opening passages and every 16th after them) and labelled from
 provisionally (`topic_sample_best` is set). The rest is embedded early only if the sample's
 best score is at least `TRIAGE_FLOOR` (0.46, below the label floor because a sample misreads
 the whole by a few hundredths). Otherwise it waits in the last embedding tier. When the whole
-text has been embedded, the labels are read again from all of it. ADR 0006 sets a slightly
-higher bar for documents of 1,000+ passages (`B-133`).
+text has been embedded, the labels are read again from all of it.
+
+Documents of `LONG_DOCUMENT` (1,000) live passages or more need `LONG_TRIAGE_FLOOR` (0.48)
+instead (`B-133`, ADR 0006). Long listings of titles beat the ordinary floor with a single
+matching line. Measured on fully embedded sources of that length, the higher bar held back no
+on-topic document and clearly more off-topic text. Length is tested by whether a live passage
+exists at index 999 or beyond, which is one index probe. That doubled the cost of the backlog
+count (run once a minute) and left the tier queries unchanged. `triage_floor()` and
+`long_sources()` are the one definition, shared by the hold rule and the `retopic` report.
 
 **Overlaps** (`B-72`). Because a source can carry several topics, the corpus is a web rather
 than a partition. `topicoverlaps` counts sources by exact combination, and search can require

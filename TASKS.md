@@ -1631,15 +1631,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       API's server-side refusal fallback is deliberately not enabled: the registry chain
       already handles refusals, and a server-side fallback would answer from a model the
       edge's provenance does not record
-- [ ] `B-133` ⚑ **Huge listing pages pass the sample triage** — measured, not built. Four
-      ranking-list pages of ~3,000 passages each were a quarter of one day's new passages; their
-      samples scored 0.49–0.50 (best topic of the sample mean), above `TRIAGE_FLOOR` 0.46, and
-      three of the four were off-topic as a whole. Measured on 2,717 fully embedded sources
-      (`meridian-calibration/loop/b128/size_bands.py`): for ≥1,000 passages a floor of 0.48
-      held 0 of 5 on-topic and 56 of 59 off-topic (84% of off-topic passages deferred, against
-      74% at 0.46); for 300–1,000 it would have held 2 of 64 on-topic. Option: a floor of 0.48
-      for documents of ≥1,000 passages only. Small sample; much less pressing once embedding
-      runs on a GPU (`B-131`)
+- [x] `B-133` **A higher sample bar for very long documents** — `v0.156.17`,
+      [ADR 0006](docs/adr/0006-stricter-triage-for-very-long-documents.md). From
+      `LONG_DOCUMENT` (1,000) live passages the rest is held unless the sample scores
+      `LONG_TRIAGE_FLOOR` (0.48). Measured before building
+      (`meridian-calibration/loop/b128/size_bands.py`): in that band 0.48 held no on-topic
+      document and deferred clearly more off-topic text than 0.46. Length is one index probe;
+      tier queries unchanged, the backlog count about 2× slower (once a minute).
+      `triage_floor()`/`long_sources()` are shared with the `retopic` report so the two agree
 - [x] `B-132` **Postgres sized for a board, fixed in compose** — deploy config, no bump. The
       production command hard-coded `shared_buffers=2GB` and left `effective_cache_size`,
       `maintenance_work_mem` (64MB) and `random_page_cost` (4) at their defaults. On the local

@@ -38,7 +38,7 @@ the tiers are re-checked every batch:
 |---|---|---|
 | `first` | Directed pages (search results, seeds, cited papers) and pages on proven hosts | Newest first, so labels and host scores react to the latest crawl |
 | `then` | Everything else that is not junk | Oldest first |
-| `last` | Off-topic hosts; the rest of a long document whose sample did not earn it (`B-89`); copies of earlier sources (`B-127`) | Oldest first |
+| `last` | Off-topic hosts; the rest of a long document whose sample did not earn it (`B-89`, with a higher bar from 1,000 passages, `B-133`); copies of earlier sources (`B-127`) | Oldest first |
 | none | Junk | Never embedded |
 
 **Long documents are sampled first** (`B-89`). The first 16 passages and every 16th after them

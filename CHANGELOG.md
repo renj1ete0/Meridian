@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.17] — 2026-10-04
+
+### Changed
+
+- `B-133`: the rest of a document of 1,000 or more passages is embedded early only when its
+  sample scores at least 0.48, rather than the ordinary 0.46. Long listings no longer pass on
+  one matching line. ADR 0006.
+
 ## [0.156.16] — 2026-10-04
 
 ### Changed
