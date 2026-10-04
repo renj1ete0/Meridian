@@ -196,6 +196,34 @@ You want `meridian`, `meridian_rw` and `meridian_ro`. If `meridian_rw` is
 missing, the init script did not run — stop, fix `.env`, `docker compose down -v`
 and start over. This is much cheaper now than after a 48h run.
 
+## 3b. A server with an NVIDIA GPU (optional)
+
+The embedder is the slowest stage on a CPU. Measured on a 24-thread x86 machine it embeds about
+5 passages a second, while a crawl can produce passages several times faster, and the crawl
+pauses whenever 20,000 wait (`MERIDIAN_WORKER_MAX_EMBED_BACKLOG`). A GPU removes that bottleneck.
+
+```bash
+docker compose -f docker-compose.yml -f deploy/gpu/gpu-embedder.yml up -d
+docker compose logs embedder | grep "batch sized"   # want "memory_of": "device"
+```
+
+Needs on the host: an NVIDIA driver recent enough for the CUDA build in the image
+(`docker compose exec embedder python -c "import torch; print(torch.version.cuda)"` —
+13.0 wants driver 580 or later) and the NVIDIA Container Toolkit. The CUDA libraries ship
+inside the image. `"memory_of": "host"` in that log line means the card was not seen, and the
+model is running on the CPU.
+
+What the override changes, and why each change is there, is in its header. In short: the
+sidecar gets the card, and the batch is sized from the card's memory (`B-129`). The backfill
+sends bigger batches, split into requests of up to 256 (`B-130`), and is not allowed to load
+the model on its own CPU. Not yet run on a real card: the batch cap (`MAX_AUTO_BATCH`, 32)
+and float32 precision both stay until one is measured. `MERIDIAN_EMBED_BATCH_SIZE` and
+`MERIDIAN_EMBED_DTYPE=bfloat16` are the settings to try first.
+
+On a GPU, Postgres is likely the next limit rather than the model. Measure the HNSW insert rate and
+the backfill's batch query (`chunks_without_embeddings`) before raising the backlog
+ceiling.
+
 ---
 
 ## 4. The smoke run

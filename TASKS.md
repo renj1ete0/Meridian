@@ -1572,6 +1572,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [ ] `B-131` **An override for a GPU server** — deploy config, no bump. The operator moved
+      production from single-board computers to a server and may add a GPU (2026-10-04).
+      `deploy/gpu/gpu-embedder.yml`: the sidecar reserves one NVIDIA device with
+      `MERIDIAN_EMBED_DEVICE=cuda`, 8G RAM; the backfill draws 1024 a batch with
+      `MERIDIAN_EMBED_REMOTE_ONLY`. Held by `tests/unit/test_gpu_override.py`; documented in
+      `docs/deployment.md` §3b. **Open until run on a real card:** confirm `memory_of: device`,
+      measure passages/s, then decide `MAX_AUTO_BATCH`, bfloat16 on the card, and whether the
+      backlog ceiling (20k) should rise
 - [x] `B-130` **A bigger embedding batch moved the model off the sidecar** — `v0.156.14`.
       `MERIDIAN_EMBED_CHUNK_BATCH` is documented and the sidecar client refuses more than
       `MAX_TEXTS` (256) per request with ValueError, which `PreferRemote` reads as "sidecar

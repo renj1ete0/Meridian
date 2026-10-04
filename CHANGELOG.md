@@ -8,6 +8,10 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Deploy: `deploy/gpu/gpu-embedder.yml` (`B-131`) gives the embedding sidecar an NVIDIA GPU,
+  sends the backfill's bigger batches to it, and keeps the backfill from loading the model on
+  its own CPU; `docs/deployment.md` §3b. Validated with `docker compose config`, not yet run on
+  a card
 - Docs: `docs/deployment.md` audited before the first real deploy. New §1b lists
   every key and what each unlocks — **none are needed to crawl and search**.
   §0's service inventory was three services and one phase out of date, §3 did
