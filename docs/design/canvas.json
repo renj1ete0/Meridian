@@ -30,7 +30,11 @@
 
     { "file": "ReportScope.dc.html", "x": 0, "y": 7320, "w": 1440, "h": 1060, "title": "21 · Draft — scope & pre-flight" },
     { "file": "ReportOutput.dc.html", "x": 1520, "y": 7320, "w": 1440, "h": 980, "title": "22 · Draft — output" },
-    { "file": "ReportJob.dc.html", "x": 3040, "y": 7320, "w": 560, "h": 620, "title": "23 · Draft — job states" }
+    { "file": "ReportJob.dc.html", "x": 3040, "y": 7320, "w": 560, "h": 620, "title": "23 · Draft — job states" },
+
+    { "file": "CorpusGrowth.dc.html", "x": 0, "y": 8540, "w": 1440, "h": 900, "title": "24 · Corpus growth (B-140)" },
+    { "file": "AdminAssistantAccess.dc.html", "x": 1520, "y": 8540, "w": 1440, "h": 900, "title": "25 · Admin · Assistant access (B-146)" },
+    { "file": "AdminDisplay.dc.html", "x": 3040, "y": 8540, "w": 1440, "h": 900, "title": "26 · Admin · Display (B-145)" }
   ],
   "annotations": [
     {

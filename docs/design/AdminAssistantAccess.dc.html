@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #5C6A85; }
+    .nav { font-size: 13px; color: #4E5A73; padding: 8px 12px; }
+    .navon { font-size: 13px; color: #101A2E; background: #FFFFFF; border-left: 2px solid #0D6F7C; padding: 8px 12px 8px 10px; font-weight: 500; }
+    .th { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 8.5px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #5C6A85; text-align: left; padding: 0 12px 8px 0; border-bottom: 1px solid #DBE0EA; }
+    .td { font-size: 12.5px; color: #33405A; padding: 10px 12px 10px 0; border-bottom: 1px solid #EDF0F5; }
+    .tdm { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11.5px; color: #33405A; padding: 10px 12px 10px 0; border-bottom: 1px solid #EDF0F5; font-variant-numeric: tabular-nums; }
+    .card { background: #FFFFFF; border: 1px solid #DBE0EA; }
+    .btn { font-size: 12.5px; color: #33405A; background: #FFFFFF; border: 1px solid #A9B4C6; padding: 7px 12px; }
+    .btnp { font-size: 12.5px; color: #FFFFFF; background: #0D6F7C; border: 1px solid #0D6F7C; padding: 7px 13px; font-weight: 500; }
+    .field { height: 30px; border: 1px solid #A9B4C6; background: #FFFFFF; display: flex; align-items: center; padding: 0 9px; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 11.5px; color: #101A2E; box-sizing: border-box; }
+    .chip { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; padding: 2px 6px; border: 1px solid #C3CBD9; background: #EFF1F5; color: #4E5A73; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; overflow: hidden; background: #F1F3F7; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;">
+  <div style="height: 54px; flex-shrink: 0; border-bottom: 1px solid #DBE0EA; background: #FFFFFF; display: flex; align-items: center; gap: 20px; padding: 0 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <svg viewBox="0 0 100 100" width="22" height="22" fill="none" style="display: block;"><circle cx="50" cy="50" r="38" stroke="#101A2E" stroke-width="3.6"></circle><ellipse cx="50" cy="50" rx="17" ry="38" stroke="#101A2E" stroke-width="3.6"></ellipse><circle cx="50" cy="88" r="5" fill="#101A2E"></circle><circle cx="50" cy="50" r="6" fill="#101A2E"></circle><circle cx="50" cy="12" r="7" fill="#0D6F7C"></circle></svg>
+      <span style="font-size: 15px; font-weight: 500; color: #101A2E;">Meridian</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #DBE0EA;"></div>
+    <div style="display: flex; gap: 4px;"><span style="font-size: 12.5px; color: #4E5A73; padding: 6px 12px;">Explore</span><span style="font-size: 12.5px; color: #101A2E; background: #E7EBF2; padding: 6px 12px;">Admin</span></div>
+    <div style="margin-left: auto;"><span class="m" style="display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #4E5A73; border: 1px solid #DBE0EA; padding: 5px 10px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #0D6F7C; display: block;"></span>queue 412 · fetch 96% · 08:12</span></div>
+  </div>
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+    <div style="width: 196px; flex-shrink: 0; border-right: 1px solid #DBE0EA; padding: 18px 0; display: flex; flex-direction: column; gap: 3px;"><div class="lbl" style="padding: 0 14px 10px;">Steering</div><div class="nav">Topic weights</div><div class="nav">Pins &amp; boosts</div><div class="nav">Proposals</div><div class="nav">Seeds</div><div class="lbl" style="padding: 20px 14px 10px;">System</div><div class="nav">Agent registry</div><div class="nav">Gazetteer approvals</div><div class="nav">Enrichment queue</div><div class="nav">Run history</div><div class="nav">Fetch policy</div><div class="nav">Crawl health</div><div class="navon">Assistant access</div><div class="nav">Display</div></div>
+    <div style="flex-grow: 1; min-width: 0; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; overflow: hidden;"><div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;">
+  <div style="display: flex; flex-direction: column; gap: 6px;"><div style="font-size: 25px; font-weight: 600; letter-spacing: -0.008em; color: #101A2E;">Assistant access</div>
+  <div style="font-size: 13px; line-height: 1.55; color: #4E5A73; max-width: 82ch;">Let an assistant (Claude, Gemini, any MCP client) answer from the corpus with citations, on its own model. A token can read; it can never write. Issue one per device, so one can be revoked without the others.</div></div></div>
+<div style="display: flex; gap: 14px;">
+  <div class="card" style="flex-grow: 1; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px;">
+    <span class="lbl">Where /mcp can be reached</span>
+    <div style="display: flex; gap: 26px;">
+      <div style="display:flex;flex-direction:column;gap:5px;"><span style="font-size:12.5px;color:#101A2E;font-weight:500;">This server</span><span class="m" style="font-size:11px;color:#33405A;">http://localhost:8080/mcp</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px;"><span style="font-size:12.5px;color:#101A2E;font-weight:500;">LAN</span><span class="m" style="font-size:11px;color:#33405A;">http://192.168.1.5:8080/mcp</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px;"><span style="font-size:12.5px;color:#101A2E;font-weight:500;">Public</span><span class="m" style="font-size:11px;color:#5C6A85;">off · the tunnel is not configured</span></div>
+    </div>
+  </div>
+  <div class="card" style="width: 470px; flex-shrink: 0; padding: 18px 22px; display: flex; flex-direction: column; gap: 12px;">
+    <span class="lbl">Issue a token</span>
+    <div style="display: flex; gap: 10px; align-items: flex-end;">
+      <label style="display:flex;flex-direction:column;gap:5px;flex-grow:1;"><span class="lbl" style="font-size:8.5px;">Held by</span><span class="field">laptop-claude-code</span></label>
+      <label style="display:flex;flex-direction:column;gap:5px;width:118px;"><span class="lbl" style="font-size:8.5px;">Profile</span><span class="field" style="justify-content:space-between;">reader <span style="color:#5C6A85;">▾</span></span></label>
+      <label style="display:flex;flex-direction:column;gap:5px;width:86px;"><span class="lbl" style="font-size:8.5px;">Expires</span><span class="field" style="justify-content:space-between;">90 days <span style="color:#5C6A85;">▾</span></span></label>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:11.5px;color:#5C6A85;">reader: search, sources, graph, map, gaps · analyst adds read-only SQL</span><span class="btnp">Issue token</span></div>
+  </div>
+</div>
+
+<div class="card" style="border-color: #0D6F7C; padding: 18px 22px; display: flex; flex-direction: column; gap: 12px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:14px;font-weight:600;color:#101A2E;">Token 3592 for laptop-claude-code</span><span class="m" style="font-size:10.5px;color:#5C6A85;">reader · expires 2027-01-03 08:12 GMT+8</span></div>
+  <div style="display:flex;gap:10px;align-items:center;"><span class="m" style="flex-grow:1;font-size:13px;color:#101A2E;background:#F1F3F7;border:1px solid #DBE0EA;padding:9px 12px;">zU5XFPH42j3gZX8KCwE1uoldu_E8Mmr10aisriZw2HE</span><span class="btn">Copy</span></div>
+  <div style="font-size:12.5px;color:#7A4F0E;">This is the only time this token is shown. Store it in the client now. Anyone holding it who can reach /mcp can read the whole corpus until it expires or is revoked.</div>
+  <div style="display:flex;gap:2px;border-bottom:1px solid #DBE0EA;"><span style="font-size:12px;color:#101A2E;border-bottom:2px solid #0D6F7C;padding:6px 12px;">Claude Code</span><span style="font-size:12px;color:#4E5A73;padding:6px 12px;">Gemini CLI</span><span style="font-size:12px;color:#4E5A73;padding:6px 12px;">Other clients</span></div>
+  <div class="m" style="font-size:11.5px;color:#33405A;background:#F1F3F7;border:1px solid #DBE0EA;padding:10px 12px;line-height:1.6;">claude mcp add --transport http meridian http://localhost:8080/mcp \<br>&nbsp;&nbsp;--header "Authorization: Bearer zU5XFPH42j3gZX8KCwE1uoldu_E8Mmr10aisriZw2HE"</div>
+</div>
+
+<div class="card" style="padding: 18px 22px; display: flex; flex-direction: column; gap: 10px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;"><span class="lbl">Tokens · 3 active</span><span class="m" style="font-size:11px;color:#0D6F7C;">Show revoked</span></div>
+  <table style="border-collapse: collapse; width: 100%;">
+    <tr><th class="th">ID</th><th class="th">Held by</th><th class="th">Profile</th><th class="th">Expires</th><th class="th">State</th><th class="th"></th></tr>
+    <tr><td class="tdm">3592</td><td class="td">laptop-claude-code</td><td class="tdm">reader</td><td class="tdm">2027-01-03 08:12 GMT+8</td><td class="td">active</td><td class="td" style="text-align:right;"><span class="btn">Revoke</span></td></tr>
+    <tr><td class="tdm">3571</td><td class="td">server-gemini-cli</td><td class="tdm">analyst</td><td class="tdm">2026-12-20 21:40 GMT+8</td><td class="td">active</td><td class="td" style="text-align:right;"><span class="btn">Revoke</span></td></tr>
+    <tr><td class="tdm">3502</td><td class="td">phone-claude</td><td class="tdm">reader</td><td class="tdm">never</td><td class="td">active <span class="chip" style="border-color:#E6B061;background:#FBF3E4;color:#7A4F0E;">no expiry</span></td><td class="td" style="text-align:right;"><span class="btn">Revoke</span></td></tr>
+    <tr style="opacity:0.55;"><td class="tdm">3410</td><td class="td">old-desktop</td><td class="tdm">reader</td><td class="tdm">2026-09-30 10:00 GMT+8</td><td class="td">expired</td><td class="td"></td></tr>
+  </table>
+</div></div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
