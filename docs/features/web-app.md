@@ -20,7 +20,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
 | `/growth` | `GrowthPage` | How the corpus grew: pages per topic per day, passages, sites, graph, map; 7 days, 30 days or all, filterable by topic | `CorpusGrowth.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
-| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health, display (time zone; no mock yet) | `AdminLight.dc.html` |
+| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminDisplay.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |
 
 The **Ask panel** (`explore/AskPanel.tsx`) is a toggle on every reading surface except Admin.

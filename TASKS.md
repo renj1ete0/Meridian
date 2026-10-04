@@ -1621,10 +1621,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
-- [ ] `B-146` **Admin → Assistant access** — mock first (`docs/design/`), then build: list
-      tokens (never secrets), issue one with a profile and expiry and show it once with client
-      setup, revoke; say where `/mcp` is reachable and warn when that is public (ADR 0003).
-      The command in `B-138` does all of this today
+- [x] `B-146` **Admin → Assistant access** — `v0.162.0`, ADRs 0003 and 0011, mock
+      `docs/design/AdminAssistantAccess.dc.html`. Lists tokens (never secrets), issues one with
+      a profile and an expiry (or none, flagged) and shows it once with setup for Claude Code,
+      Gemini CLI and other clients, revokes; shows where `/mcp` is reachable from the browser's
+      own address and warns harder when that is public. `/api/admin/tokens`
 - [x] `B-138` **Assistants can connect over MCP** — `v0.159.0`,
       [ADR 0003](docs/adr/0003-external-assistants-over-mcp.md). Found while building it: nginx
       had no `/mcp` route, so the tunnel served the web app there; token verification needed

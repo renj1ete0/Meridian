@@ -96,7 +96,7 @@ async def _list(include_revoked: bool) -> int:
             if row.revoked
             else ("expired" if row.expires_at and row.expires_at <= now else "active")
         )
-        expires = format_instant(row.expires_at, zone) if row.expires_at else "never"
+        expires = format_instant(row.expires_at, zone) if row.expires_at else "never (no expiry)"
         tools = ", ".join(sorted(row.allowed_tools or [])) or "no tools"
         print(f"{row.token_id:>5}  {state:<8} {row.agent_id:<28} expires {expires}  [{tools}]")
     return 0

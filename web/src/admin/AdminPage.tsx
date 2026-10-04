@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AgentsPanel } from './AgentsPanel'
 import type { BoostChange } from './BoostsTable'
 import { CrawlHealthPanel } from './CrawlHealthPanel'
+import { AssistantAccessPanel } from './AssistantAccessPanel'
 import { DisplayPanel } from './DisplayPanel'
 import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
@@ -709,6 +710,7 @@ export function AdminPage() {
           )
         ) : null}
 
+        {section === 'access' ? <AssistantAccessPanel /> : null}
         {section === 'display' ? <DisplayPanel /> : null}
 
         {section === 'health' ? (

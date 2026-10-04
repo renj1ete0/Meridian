@@ -6,10 +6,12 @@ connect to it and answer questions from the corpus with citations, using their o
 Meridian holds the corpus and its provenance; it generates nothing here.
 
 - **Code:** `services/api/api/mcp/server.py` (tools and instructions), `auth.py` (token
-  verification), `main.py` (mounting, transport security);
+  verification), `main.py` (mounting, transport security), `routes/tokens.py` (the Admin
+  screen's API), `web/src/admin/AssistantAccessPanel.tsx`;
   `packages/meridian_core/meridian_core/tokens.py`, `grants.py`, `readonly_query.py`
-- **Tasks:** `P3-01`–`P3-10`, `B-138`, `B-139`
-- **Decisions:** [ADR 0003](../adr/0003-external-assistants-over-mcp.md)
+- **Tasks:** `P3-01`–`P3-10`, `B-138`, `B-139`, `B-146`
+- **Decisions:** [ADR 0003](../adr/0003-external-assistants-over-mcp.md),
+  [ADR 0011](../adr/0011-tokens-may-be-set-not-to-expire.md)
 
 ## How it works
 
@@ -68,8 +70,12 @@ In short:
 
 - `web` proxies `/mcp` to the API (unbuffered, for server-sent events). The tunnel reaches it,
   and `deploy/lan/publish-web.yml` publishes it on the server or the LAN.
-- `python -m api.tokens issue|list|revoke` (in the API container) issues a token per device,
-  scoped to a profile, 90 days by default, printed once with client setup.
+- **Admin → Assistant access** issues a token per device, scoped to a profile, 90 days by
+  default or never (flagged "no expiry", ADR 0011). The secret is shown once, with setup for
+  Claude Code, Gemini CLI and other clients, built from the address the browser is on. The
+  table lists tokens (never secrets) and revokes them. It warns harder when that address is
+  public. Behind it: `GET/POST /api/admin/tokens`, `POST /api/admin/tokens/{id}/revoke`.
+- `python -m api.tokens issue|list|revoke` (in the API container) does the same from a shell.
 - Tokens verify with no further configuration. `MERIDIAN_MCP_ISSUER_URL` and
   `MERIDIAN_MCP_RESOURCE_URL` default to local placeholders, and only matter for clients that
   discover authentication through OAuth metadata (claude.ai through the tunnel).
@@ -85,11 +91,9 @@ In short:
 - **DNS-rebinding protection** through `MERIDIAN_MCP_ALLOWED_HOSTS` and
   `MERIDIAN_MCP_ALLOWED_ORIGINS`.
 
-## Known gaps
-
-- Admin has no token screen yet; tokens are issued with the command (`B-146`, mock first).
-
 ## Tests
 
 `tests/integration/test_mcp.py`, `test_mcp_auth.py`, `test_tokens.py`, `test_grants.py`,
-`test_guest_role.py`, `test_readonly_query.py`.
+`test_guest_role.py`, `test_readonly_query.py`, `test_admin_tokens.py` (the screen's API:
+the secret returned once and only its hash stored, never-expiring tokens flagged, revoke, and
+holder names refused). Web: `web/tests/admin-access.test.tsx`.

@@ -29,6 +29,7 @@ export type Section =
   | 'domains'
   | 'health'
   | 'display'
+  | 'access'
 
 export interface SectionDef {
   key: Section
@@ -65,6 +66,8 @@ export const SECTIONS: readonly SectionDef[] = [
   // `P6-25`. Beside Fetch policy because they are read together: an outcome
   // mix full of refusals is answered by that domain's policy row.
   { key: 'health', label: 'Crawl health', path: 'crawl', group: 'system' },
+  // `B-146`, ADRs 0003 and 0011: tokens for assistants over MCP.
+  { key: 'access', label: 'Assistant access', path: 'access', group: 'system' },
   // `B-145`, ADR 0009: the zone every time is shown in.
   { key: 'display', label: 'Display', path: 'display', group: 'system' },
 ]

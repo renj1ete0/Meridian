@@ -43,6 +43,13 @@ tokens print the right address. Then `docker compose up -d --no-deps api`.
 
 ## 4. Issue a token
 
+The simplest way is **Admin → Assistant access**: name the device, pick a profile and an
+expiry, and press *Issue token*. The token and the setup for each client are shown once. The
+same page lists and revokes tokens. Open Admin on the address the assistant will use, since
+that is the address the setup is written for.
+
+From a shell, the same:
+
 ```bash
 docker compose exec api python -m api.tokens issue laptop-claude-code --profile reader
 ```

@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.162.0] — 2026-10-04
+
+### Added
+
+- `B-146`: Admin → Assistant access. Issue an MCP token per device with a profile and an
+  expiry (or none, flagged), see it once with ready-to-paste setup for Claude Code, Gemini CLI
+  and other clients, list and revoke tokens. The page shows where `/mcp` is reachable and warns
+  when that address is public. `GET/POST /api/admin/tokens`,
+  `POST /api/admin/tokens/{id}/revoke`. ADRs 0003 and 0011.
+
 ## [0.161.0] — 2026-10-04
 
 ### Added

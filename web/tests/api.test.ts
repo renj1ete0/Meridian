@@ -35,6 +35,7 @@ import {
   MAP_SIZE_FIELDS,
   TOPIC_GROWTH_FIELDS,
 } from '../src/lib/growth'
+import { TOKEN_ISSUED_FIELDS, TOKEN_ROW_FIELDS, TOKENS_FIELDS } from '../src/lib/tokens'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -155,6 +156,9 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['GrowthCount', 'growth.py', GROWTH_COUNT_FIELDS],
     ['TopicGrowth', 'growth.py', TOPIC_GROWTH_FIELDS],
     ['MapSize', 'growth.py', MAP_SIZE_FIELDS],
+    ['TokenRowRead', 'tokens.py', TOKEN_ROW_FIELDS],
+    ['TokensRead', 'tokens.py', TOKENS_FIELDS],
+    ['TokenIssued', 'tokens.py', TOKEN_ISSUED_FIELDS],
     ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
     ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],
