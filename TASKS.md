@@ -21,14 +21,20 @@ against a real Postgres, 1001 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-04 — `v0.156.14`, production target is now a server (maybe GPU).** Stack was off
-> 30 Sep–4 Oct. Shipped: `B-127` (copies embedded last; a fifth of the backlog), `B-128` (budget
-> test expired at the month's end), `B-129` (GPU batch sized from the card), `B-130` (batches
-> over 256 no longer leave the sidecar), `B-131` (GPU override, open until run on a card),
-> `B-132` (Postgres memory from `.env`). **Operator:** `B-133`–`B-136` (triage floor, model
-> generation, a model on the server, half-precision index), plus everything below. **Next:** on
-> the server, run the GPU override and measure passages/s; then the sitemap-yield hour that is
-> still owed, once the backlog drains.
+> **2026-10-04 (late) — `v0.158.0`, all stacks stopped, local DB migrated to head.** Production
+> target is a server, maybe with a GPU (ADR 0001). Decided and built: model order
+> local → hosted API → Claude → relay (`B-137`, ADR 0002), current Claude models at effort high
+> (`B-134`, ADR 0004), stricter triage for very long documents (`B-133`, ADR 0006),
+> half-precision vector index after a benchmark (`B-136`, ADR 0007), one display zone, GMT+8
+> by default (`B-145`, ADR 0009). Fixed: copies embedded last (`B-127`), GPU batch sizing and
+> request splitting (`B-129`, `B-130`), Postgres memory and shm (`B-132`, `B-144`), three
+> calendar-expired tests (`B-128`, `B-143`). Conventions: PEP 8/257 enforced by `make test`
+> (`B-141`), docs restructured with a document per feature (`D-02`), decisions in `docs/adr/`.
+> **Next, approved:** `B-138` MCP tokens (command + Admin, fix the profile/tool drift),
+> `B-139` graph/area/gap/growth MCP tools, `B-140` the growth page (draw a mock in
+> `docs/design/` first and get it approved), `D-01` move comment narrative into the feature
+> docs, `B-142` ESLint/Prettier. **On the server:** run the GPU override and measure (`B-131`).
+> **To restart locally:** `make local-up` (the database is already migrated).
 
 > **2026-09-29 night — `v0.156.11`, live locally, pushed to GitHub; GHCR held.** Evening: proven
 > hosts first (`B-115`, run 15: 35% of new pages on a topic, 4× run 14's count), sitemaps of

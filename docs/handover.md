@@ -13,6 +13,19 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-04 (late) — `v0.157.0`–`v0.158.0`.** Traps:
+> - **Passage vector queries must order by `vectorindex.indexed_distance`.** The index is on
+>   `embedding::halfvec(1024)`; ordering by the plain column silently becomes a full scan. A
+>   test scans for it. Bridges' `exact_distance` avoids the index on purpose.
+> - **Postgres needs `shm_size`** for parallel index builds (`B-144`); every compose file has
+>   it now and a test holds it above `maintenance_work_mem`.
+> - **Routing is by `route_order` first** (`B-137`); tests that named a head row now ask
+>   `chain_for`. A new seeded agent row needs an order, or a test fails.
+> - **Never format a time outside `lib/time.ts` / `timefmt`** (`B-145`); a web test fails.
+>   Tests that pin a date expire: compute dates from the test's own clock.
+> - **Every `uv run` after a version bump warns about stale `dist-info`**; delete the
+>   `meridian_*.dist-info` folders that have no `RECORD`.
+
 > **2026-10-04 — production moves to a server; `B-127`–`B-132` (`v0.156.14`).** The operator
 > dropped the single-board-computer target: production is Docker on a server, possibly with an
 > NVIDIA GPU, and models may run live or on a schedule. The stack had been off from 30 Sep to
