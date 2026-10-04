@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.12] — 2026-10-04
+
+### Fixed
+
+- `B-127`: passages of a source marked as a copy of an earlier one are embedded last and no
+  longer hold the crawl back. Every reader surface already left copies out, so their vectors
+  were spent on nothing; at the time a fifth of the waiting backlog was copies.
+
 ## [0.156.11] — 2026-09-29
 
 ### Fixed

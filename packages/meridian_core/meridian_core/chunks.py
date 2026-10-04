@@ -252,8 +252,9 @@ def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
 #: Embedding tiers, in the order the backfill serves them (`B-66`).
 #: ``first`` — passages of directed sources (a search result, a person's seed, a
 #: cited paper) or of hosts judged on-topic; ``then`` — everything else that is
-#: not junk; ``last`` — hosts judged off-topic, and the rest of a long document
-#: whose sample has not earned it (`B-89`). Junk is in no tier.
+#: not junk; ``last`` — hosts judged off-topic, the rest of a long document
+#: whose sample has not earned it (`B-89`), and copies of an earlier source
+#: (`B-127`). Junk is in no tier.
 EMBED_TIERS = ("first", "then", "last")
 
 #: The tier served newest first (`B-75`); the others go oldest first.
@@ -327,17 +328,29 @@ def _directed():
     )
 
 
+def _a_copy():
+    """A source marked as a copy of an earlier one (`B-44`), whatever found it.
+
+    Search, the map, Gaps and synthesis all leave a copy out, so a vector for
+    the rest of one is spent on nothing a reader sees (`B-127`). Last rather
+    than no tier: the mark is re-judged daily and cleared when it no longer
+    holds, and the near and translation rules compare mean vectors, so a copy
+    is never kept from the embedder for good.
+    """
+    return Source.duplicate_of.is_not(None)
+
+
 def embed_tier(tier: str):
     """The predicate for one embedding tier, over ``Chunk`` joined to ``Source``."""
     not_junk = Source.retention_tier != "junk"
     first = or_(_directed(), _host_standing(off_topic=False))
-    held = _held()
+    waits = or_(_held(), _a_copy())
     if tier == "first":
-        return and_(not_junk, first, ~held)
+        return and_(not_junk, first, ~waits)
     if tier == "then":
-        return and_(not_junk, ~first, ~_host_standing(off_topic=True), ~held)
+        return and_(not_junk, ~first, ~_host_standing(off_topic=True), ~waits)
     if tier == "last":
-        return and_(not_junk, or_(held, and_(~_directed(), _host_standing(off_topic=True))))
+        return and_(not_junk, or_(waits, and_(~_directed(), _host_standing(off_topic=True))))
     raise ValueError(f"no embedding tier {tier!r}; expected one of {EMBED_TIERS}")
 
 

@@ -459,3 +459,87 @@ async def test_a_later_documents_sample_goes_before_an_earlier_ones_rest(sess) -
 
     assert later.embedding is not None
     assert {c.chunk_id for c in earlier if c.embedding is not None} == sample
+
+
+# --------------------------------------------------------------------------
+# A copy of an earlier source waits behind everything else (`B-127`)
+# --------------------------------------------------------------------------
+
+
+async def mark_copy(sess, chunks: list[Chunk], *, of: list[Chunk], reason: str = "exact") -> None:
+    source = await sess.get(Source, chunks[0].source_id)
+    source.duplicate_of = of[0].source_id
+    source.duplicate_reason = reason
+    await sess.flush()
+
+
+@pytest.mark.parametrize("reason", ["exact", "near", "translation"])
+@pytest.mark.parametrize("seed", ["search", None])
+async def test_a_copy_is_last_however_it_was_found(sess, seed, reason) -> None:
+    """Directed or not: a search result that is a mirror answers nothing its original does not."""
+    canonical = await page(sess, f"https://{host()}/original")
+    url = f"https://{host()}/mirror"
+    if seed:
+        await queued(sess, url, seed)
+    copy = await page(sess, url, chunks=3)
+    await mark_copy(sess, copy, of=canonical, reason=reason)
+
+    for chunk in copy:
+        assert await tier_of(sess, chunk) == {"last"}
+    assert await tier_of(sess, canonical[0]) == {"then"}, "the original is not held with it"
+
+
+async def test_a_copy_on_an_on_topic_host_is_still_last(sess) -> None:
+    """The host's standing is about new pages; this one is not new."""
+    h = host()
+    await judge(sess, h, on_topic_share=0.9)
+    canonical = await page(sess, f"https://{host()}/original")
+    copy = await page(sess, f"https://{h}/mirror")
+    await mark_copy(sess, copy, of=canonical)
+    assert await tier_of(sess, copy[0]) == {"last"}
+
+
+async def test_a_junk_copy_is_in_no_tier(sess) -> None:
+    canonical = await page(sess, f"https://{host()}/original")
+    copy = await page(sess, f"https://{host()}/mirror", junk=True)
+    await mark_copy(sess, copy, of=canonical)
+    assert await tier_of(sess, copy[0]) == set()
+
+
+async def test_a_cleared_mark_returns_the_copy_to_its_tier(sess) -> None:
+    """`worker.docdupes --apply` clears marks that no longer hold; nothing stays stranded."""
+    canonical = await page(sess, f"https://{host()}/original")
+    url = f"https://{host()}/was-a-mirror"
+    await queued(sess, url, "search")
+    copy = await page(sess, url)
+    await mark_copy(sess, copy, of=canonical)
+    assert await tier_of(sess, copy[0]) == {"last"}
+
+    source = await sess.get(Source, copy[0].source_id)
+    source.duplicate_of = source.duplicate_reason = None
+    await sess.flush()
+    assert await tier_of(sess, copy[0]) == {"first"}
+
+
+async def test_a_copy_is_not_what_backpressure_waits_for(sess) -> None:
+    canonical = await page(sess, f"https://{host()}/original")
+    before = await embedding_backlog(sess, valuable_only=True)
+    copy = await page(sess, f"https://{host()}/mirror", chunks=4)
+    assert await embedding_backlog(sess, valuable_only=True) - before == 4
+
+    await mark_copy(sess, copy, of=canonical)
+    assert await embedding_backlog(sess, valuable_only=True) - before == 0
+    assert await embedding_backlog(sess) >= 4, "still counted in the whole backlog"
+
+
+async def test_an_older_copy_waits_behind_a_newer_ordinary_page(sess) -> None:
+    canonical = await page(sess, f"https://{host()}/original")
+    (copy,) = await page(sess, f"https://{host()}/mirror")
+    await mark_copy(sess, [copy], of=canonical)
+    (plain,) = await page(sess, f"https://{host()}/plain")
+
+    await backfill(sess, canonical[0], batch_size=1, max_batches=2).run_once()
+    for chunk in (copy, plain, canonical[0]):
+        await sess.refresh(chunk)
+    assert plain.embedding is not None and canonical[0].embedding is not None
+    assert copy.embedding is None

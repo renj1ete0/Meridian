@@ -1572,6 +1572,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-127` **Copies were embedded like originals** — `v0.156.12`. The embedding tiers never
+      read `sources.duplicate_of`, so a source `worker.docdupes` had marked as a copy was
+      embedded in full and counted in the backlog that pauses the crawl, though search, the map,
+      Gaps and synthesis all leave it out. Found 2026-10-04: about a fifth of the waiting
+      passages, and about a tenth of everything ever embedded, belonged to copies. A copy now
+      waits in the last tier (not none: the mark is re-judged daily and the near and translation
+      rules compare mean vectors)
 - [x] `B-126` **A zero drawn in the attention colour** — `v0.156.11`. The landing's contested
       count was brass with the dagger at 0, drawing the eye to nothing. Brass and dagger now appear
       together only above zero; unknown and zero are neutral
