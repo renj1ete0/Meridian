@@ -111,7 +111,7 @@ async def test_a_completion_carries_what_a_derived_write_must_record(registry, a
 
     # §2.3 and §11.12: every derived write names the agent and the exact model.
     assert result.agent_id == "hosted-frontier"
-    assert result.model == "claude-opus-5"
+    assert result.model == (await sess.get(Agent, "hosted-frontier")).model
     assert result.text == "an answer"
     assert result.total_tokens == 150
 

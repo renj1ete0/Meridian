@@ -1623,14 +1623,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       runs under the profile-gated `orchestrator` service; no timetable row starts it, and
       `hosted-*` and `local-llamacpp` are seeded disabled. Operator decisions: which model where,
       the budget caps (Admin's budget screen; the local stack has $25 a month and 750k tokens a run), and whether the local or hosted rows go first
-- [ ] `B-134` ⚑ **Seeded hosted models are the previous generation** — `config/agents.yaml`
-      seeds `claude-opus-5` and `claude-sonnet-5`. `claude-opus-5-5` costs less ($4/$20 per
-      MTok against $5/$25) and `claude-sonnet-5-5` the same as Sonnet 5. `provider._call_anthropic`
-      already sends a shape both accept: adaptive thinking, streamed, no forced tool choice,
-      no prefill. One difference to decide: Opus 5.5 defaults to effort `medium` where Opus 5
-      used `high`, so relation extraction would want `output_config.effort` set explicitly.
-      A fresh server is seeded from this file; on an existing one, change the model string in
-      Admin → Agents. No edge has been written yet, so nothing needs re-deriving
+- [x] `B-134` **Hosted rows on the current Claude models, at an explicit effort** —
+      `v0.156.16`, [ADR 0004](docs/adr/0004-hosted-claude-generation.md). Seed and a data
+      migration (only rows still on the previous seeded strings) move to `claude-opus-5-5` and
+      `claude-sonnet-5-5`; `provider._call_anthropic` sends `output_config.effort` from
+      `MERIDIAN_MODEL_EFFORT` (default `high`, invalid values refused before any call). The
+      API's server-side refusal fallback is deliberately not enabled: the registry chain
+      already handles refusals, and a server-side fallback would answer from a model the
+      edge's provenance does not record
 - [ ] `B-133` ⚑ **Huge listing pages pass the sample triage** — measured, not built. Four
       ranking-list pages of ~3,000 passages each were a quarter of one day's new passages; their
       samples scored 0.49–0.50 (best topic of the sample mean), above `TRIAGE_FLOOR` 0.46, and

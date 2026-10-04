@@ -44,7 +44,7 @@ then hosted OpenAI-compatible, then relay), built in `B-137`.
 
 | Provider | Talks to | Credential |
 |---|---|---|
-| `anthropic` | The Claude API, through the official SDK, streamed, adaptive thinking | Variable named by `api_key_env_var` |
+| `anthropic` | The Claude API, through the official SDK, streamed, adaptive thinking, effort from `MERIDIAN_MODEL_EFFORT` (default `high`) | Variable named by `api_key_env_var` |
 | `openai_compatible` | Any `/v1/chat/completions`: vLLM, llama.cpp, Ollama, or a hosted API such as DeepSeek or OpenRouter | Optional bearer key from `api_key_env_var` |
 | `relay` | A folder: the prompt is written to `<key>.prompt.json`, and the run defers until `<key>.answer.txt` exists | None; an attended Claude session answers |
 
@@ -75,6 +75,9 @@ vocabularies in the prompt are read from the schema's own constraints.
   it already holds.
 - **Deferred is not failed.** When no model is reachable, the run defers at its stage and the
   next wake continues.
+- **Model refusals move down the chain.** A safety refusal reads as one more agent that
+  could not answer. The API's own server-side fallback is not used: it would answer from a
+  different model while provenance records the row's model.
 - **One refusal does not end a run.** Malformed items, out-of-range citations and refused
   writes are journalled, and the batch goes on.
 

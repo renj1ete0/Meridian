@@ -294,3 +294,119 @@ def test_the_same_passages_under_a_fresh_fence_are_the_same_question() -> None:
     assert relay_key(template.format(d=first), None) != relay_key(
         template.format(d=first).replace("a passage", "another passage"), None
     ), "only the fence is ignored; the passages still count"
+
+
+# --------------------------------------------------------------------------
+# Effort is set explicitly, and the seeded models are current (`B-134`, ADR 0004)
+# --------------------------------------------------------------------------
+
+
+def test_effort_defaults_to_high(monkeypatch) -> None:
+    from meridian_core.provider import DEFAULT_EFFORT, EFFORT_ENV, effort
+
+    monkeypatch.delenv(EFFORT_ENV, raising=False)
+    assert effort() == DEFAULT_EFFORT == "high"
+
+
+@pytest.mark.parametrize("value", ["low", "MEDIUM", " xhigh ", "max"])
+def test_effort_can_be_set_from_the_environment(monkeypatch, value) -> None:
+    from meridian_core.provider import EFFORT_ENV, effort
+
+    monkeypatch.setenv(EFFORT_ENV, value)
+    assert effort() == value.strip().lower()
+
+
+@pytest.mark.parametrize("value", ["extreme", "0", "budget_tokens"])
+def test_an_effort_the_api_would_reject_is_refused_before_any_call(monkeypatch, value) -> None:
+    from meridian_core.provider import EFFORT_ENV, effort
+
+    monkeypatch.setenv(EFFORT_ENV, value)
+    with pytest.raises(NotConfigured, match=EFFORT_ENV):
+        effort()
+
+
+class _FakeStream:
+    def __init__(self, sent: dict) -> None:
+        self._sent = sent
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+    async def get_final_message(self):
+        import types
+
+        return types.SimpleNamespace(
+            stop_reason="end_turn",
+            content=[types.SimpleNamespace(type="text", text="ok")],
+            usage=types.SimpleNamespace(input_tokens=3, output_tokens=2),
+        )
+
+
+def _fake_anthropic(monkeypatch) -> dict:
+    import sys
+    import types
+
+    sent: dict = {}
+
+    class AsyncAnthropic:
+        def __init__(self, **kwargs) -> None:
+            self.messages = types.SimpleNamespace(stream=self._stream)
+
+        def _stream(self, **kwargs):
+            sent.update(kwargs)
+            return _FakeStream(sent)
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "anthropic", types.SimpleNamespace(AsyncAnthropic=AsyncAnthropic)
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    return sent
+
+
+async def test_the_request_carries_adaptive_thinking_and_the_configured_effort(
+    monkeypatch,
+) -> None:
+    from meridian_core.provider import EFFORT_ENV, _call_anthropic
+
+    sent = _fake_anthropic(monkeypatch)
+    monkeypatch.setenv(EFFORT_ENV, "max")
+
+    text, _, _ = await _call_anthropic(
+        agent(api_key_env_var="ANTHROPIC_API_KEY"),
+        prompt="p",
+        system=None,
+        max_tokens=10,
+        timeout_s=1,
+    )
+
+    assert text == "ok"
+    assert sent["thinking"] == {"type": "adaptive"}
+    assert sent["output_config"] == {"effort": "max"}
+    assert "budget_tokens" not in str(sent), "rejected by every current model"
+
+
+def test_the_migration_and_the_seed_name_the_same_models() -> None:
+    """A fresh install (the seed) and an upgraded one (the migration) must end up alike."""
+    import importlib.util
+
+    path = next(
+        pathlib.Path(__file__)
+        .resolve()
+        .parents[2]
+        .glob("migrations/versions/*_hosted_rows_use_the_current_models.py")
+    )
+    spec = importlib.util.spec_from_file_location("b134", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    seeded = {
+        row["agent_id"]: row["model"] for row in yaml.safe_load(REGISTRY.read_text())["agents"]
+    }
+
+    for agent_id, (_, current) in module.MODELS.items():
+        assert seeded[agent_id] == current

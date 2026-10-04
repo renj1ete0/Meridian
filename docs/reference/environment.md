@@ -90,6 +90,7 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `LOCAL_CHAT_LLM_URL`, `LOCAL_CHAT_MODEL` | unset | Endpoint and model of the Ask panel's local row |
 | `MERIDIAN_RELAY_DIR` | unset | Folder where relay prompts and answers are exchanged |
 | `MERIDIAN_CHAT_DAILY_TOKENS` | 200000 | Daily token cap for the Ask panel (UTC day) |
+| `MERIDIAN_MODEL_EFFORT` | `high` | Reasoning effort sent to Anthropic models: `low`, `medium`, `high`, `xhigh`, `max` (ADR 0004) |
 | `MERIDIAN_SYNTHESIS_ON_TOPIC_ONLY` | off | Synthesis reads only passages labelled on a topic |
 
 Which variable a model row reads is set on the row (`api_key_env_var`, `${VAR}` in `endpoint`

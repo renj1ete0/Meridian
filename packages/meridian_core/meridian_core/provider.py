@@ -148,6 +148,21 @@ def _estimate(prompt: str, system: str | None, max_tokens: int) -> int:
     return max(1, text // CHARS_PER_TOKEN) + max_tokens
 
 
+#: Reasoning effort sent to Anthropic models (ADR 0004). Set explicitly rather than left to
+#: the model's default, which differs between generations.
+EFFORT_ENV: Final[str] = "MERIDIAN_MODEL_EFFORT"
+EFFORTS: Final[tuple[str, ...]] = ("low", "medium", "high", "xhigh", "max")
+DEFAULT_EFFORT: Final[str] = "high"
+
+
+def effort() -> str:
+    """The configured reasoning effort; refuses a value the API would reject."""
+    value = os.environ.get(EFFORT_ENV, "").strip().lower() or DEFAULT_EFFORT
+    if value not in EFFORTS:
+        raise NotConfigured(f"{EFFORT_ENV} must be one of {', '.join(EFFORTS)}, got {value!r}.")
+    return value
+
+
 async def _call_anthropic(
     agent: Agent, *, prompt: str, system: str | None, max_tokens: int, timeout_s: float
 ) -> tuple[str, int, int]:
@@ -165,10 +180,9 @@ async def _call_anthropic(
         "model": agent.model,
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
-        # Adaptive thinking: relation extraction and gap analysis are exactly
-        # the reasoning this is for, and the depth is left to the model rather
-        # than to a number nobody can tune from here.
         "thinking": {"type": "adaptive"},
+        # Explicit, because model defaults differ by generation (ADR 0004).
+        "output_config": {"effort": effort()},
     }
     if system:
         kwargs["system"] = system

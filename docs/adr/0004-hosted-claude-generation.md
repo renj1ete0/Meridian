@@ -22,7 +22,11 @@ model's default.
 - A fresh install is seeded with the new models. An existing database is updated through
   its registry rows, which is where the model is authoritative once seeded.
 - No edge has been written by a hosted model yet, so nothing needs to be re-derived.
-- Effort becomes a setting that can be changed if cost or quality says it should move.
+- Effort becomes a setting (`MERIDIAN_MODEL_EFFORT`) that can be changed if cost or quality
+  says it should move.
+- The API's server-side refusal fallback is not enabled. A refusal already moves to the next
+  agent in the registry chain, and a server-side fallback would answer from a model that the
+  edge's provenance does not record.
 
 ## Alternatives considered
 

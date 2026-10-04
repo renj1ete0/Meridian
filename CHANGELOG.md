@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.16] — 2026-10-04
+
+### Changed
+
+- `B-134`: the hosted rows use `claude-opus-5-5` and `claude-sonnet-5-5` (seed and a data
+  migration for rows still on the previous models), and every Anthropic request sets its
+  reasoning effort explicitly, `high` by default (`MERIDIAN_MODEL_EFFORT`). ADR 0004.
+
 ## [0.156.15] — 2026-10-04
 
 ### Changed
