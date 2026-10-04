@@ -17,8 +17,9 @@ chosen.
 | [0004](0004-hosted-claude-generation.md) | Hosted Claude rows use the current generation at high effort | 2026-10-04 | Accepted |
 | [0005](0005-growth-page-for-readers.md) | Readers can see how the corpus grew | 2026-10-04 | Accepted |
 | [0006](0006-stricter-triage-for-very-long-documents.md) | A stricter sample bar for very long documents | 2026-10-04 | Accepted |
-| [0007](0007-half-precision-vector-index.md) | A half-precision vector index, if it measures as well | 2026-10-04 | Accepted, gated on a benchmark |
+| [0007](0007-half-precision-vector-index.md) | A half-precision vector index, if it measures as well | 2026-10-04 | Accepted, built |
 | [0008](0008-release-channels.md) | Code is published to GitHub; images wait | 2026-10-04 | Accepted |
+| [0009](0009-times-stored-in-utc-shown-in-a-display-zone.md) | Times are stored in UTC and shown in one display zone (GMT+8 by default) | 2026-10-04 | Accepted |
 
 ## Template
 
