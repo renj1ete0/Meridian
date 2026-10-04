@@ -1572,6 +1572,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-130` **A bigger embedding batch moved the model off the sidecar** — `v0.156.14`.
+      `MERIDIAN_EMBED_CHUNK_BATCH` is documented and the sidecar client refuses more than
+      `MAX_TEXTS` (256) per request with ValueError, which `PreferRemote` reads as "sidecar
+      unusable": it logged once and loaded a second copy of the model in-process, or with
+      `MERIDIAN_EMBED_REMOTE_ONLY` failed every batch. Found preparing the GPU override, which
+      wants bigger batches. The backfill's batch is now sent in requests of at most `MAX_TEXTS`
 - [x] `B-129` **A GPU was sized from the container's RAM** — `v0.156.13`. `auto_batch_size`
       read `visible_memory()` (cgroup limit or `MemTotal`) on an accelerator too, so the
       embedder's 4 GiB limit gave a card of any size a batch of two. CUDA now reads the card's

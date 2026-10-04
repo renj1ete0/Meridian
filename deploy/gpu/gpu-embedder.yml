@@ -1,0 +1,42 @@
+# The embedding model on an NVIDIA GPU (`B-130`).
+#
+#   docker compose -f docker-compose.yml -f deploy/gpu/gpu-embedder.yml up -d
+#
+# Needs, on the host: an NVIDIA driver new enough for the CUDA build torch was
+# installed with (the image reports it: `python -c "import torch;
+# print(torch.version.cuda)"`; 13.0 needs driver 580 or later) and the NVIDIA
+# Container Toolkit, so that `docker run --gpus all ... nvidia-smi` works.
+# Nothing else: the CUDA libraries ship inside the image with torch.
+#
+# Check it took: the embedder's start-up log says "embedding batch sized from
+# memory" with `memory_of: device` (`B-129`). `host` means the card was not
+# seen and the model is on the CPU.
+#
+# What changes here, and only this:
+#   - the sidecar is given one GPU and told to use it;
+#   - it gets more RAM, for the CUDA context beside the weights;
+#   - the backfill draws bigger batches, because on a GPU the query that picks
+#     a batch (under a second on a large corpus) would otherwise cost about as
+#     long as embedding it;
+#   - the backfill never falls back to loading the model itself. That container
+#     has no GPU, so a fallback would put the model on its CPU next to Postgres
+#     and look busy while embedding at a fiftieth of the speed. Batches wait
+#     for the sidecar instead, and the backlog alert says so.
+
+services:
+  embedder:
+    environment:
+      MERIDIAN_EMBED_DEVICE: cuda
+    deploy:
+      resources:
+        limits: { memory: 8G }
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  embed:
+    environment:
+      MERIDIAN_EMBED_CHUNK_BATCH: "1024"
+      MERIDIAN_EMBED_REMOTE_ONLY: "1"

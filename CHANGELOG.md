@@ -68,6 +68,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.14] — 2026-10-04
+
+### Fixed
+
+- `B-130`: a backfill batch larger than one sidecar request is sent in several requests. A
+  `MERIDIAN_EMBED_CHUNK_BATCH` above 256 used to make every request fail the client's cap,
+  which the backfill read as an unusable sidecar and loaded the model in its own process.
+
 ## [0.156.13] — 2026-10-04
 
 ### Fixed

@@ -27,7 +27,12 @@ import time
 from collections.abc import Sequence
 from typing import Protocol
 
-from meridian_core.embedder import EmbedderMismatch, EmbeddingUnavailable, RemoteEmbedder
+from meridian_core.embedder import (
+    MAX_TEXTS,
+    EmbedderMismatch,
+    EmbeddingUnavailable,
+    RemoteEmbedder,
+)
 from meridian_core.logging import get_logger
 
 from .embeddings import BGEEmbedder, Embedder, EmbedderSettings, EmbeddingError
@@ -104,20 +109,35 @@ class PreferRemote:
             extra={"reason": reason},
         )
 
+    async def _ask_remote(self, texts: Sequence[str]) -> list[list[float]]:
+        """The sidecar's vectors, asked for at most ``MAX_TEXTS`` at a time (`B-130`).
+
+        The backfill's batch is ``MERIDIAN_EMBED_CHUNK_BATCH`` and the sidecar takes
+        ``MAX_TEXTS`` per request. Asked for more in one call, the client raised
+        ValueError, which reads here as "the sidecar is unusable" — so raising the
+        batch for a GPU quietly moved embedding onto this process's CPU, or with
+        remote-only failed every batch.
+        """
+        assert self._remote is not None
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), MAX_TEXTS):
+            vectors.extend(await self._remote.embed(texts[start : start + MAX_TEXTS]))
+        return vectors
+
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
 
         if self._remote is not None and self._remote_only:
             try:
-                return await self._remote.embed(texts)
+                return await self._ask_remote(texts)
             except (EmbeddingUnavailable, ValueError) as exc:
                 # EmbeddingError, which the backfill counts and steps past.
                 raise EmbeddingError(f"remote-only embedder unavailable: {exc}") from exc
 
         if self._remote is not None:
             try:
-                return await self._remote.embed(texts)
+                return await self._ask_remote(texts)
             except EmbedderMismatch as exc:
                 # Distinct from "down", and worth its own line: somebody has
                 # pointed this at the wrong service, and the corpus is one

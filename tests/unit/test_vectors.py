@@ -326,3 +326,71 @@ async def test_without_remote_only_the_fallback_is_unchanged(monkeypatch) -> Non
     monkeypatch.delenv("MERIDIAN_EMBED_REMOTE_ONLY", raising=False)
     embedder = await build_embedder(FakeRemote(described=None), wait_s=0)
     assert embedder.using_remote is False
+
+
+# --------------------------------------------------------------------------
+# A backfill batch bigger than one request (`B-130`)
+# --------------------------------------------------------------------------
+
+
+class CappedRemote(FakeRemote):
+    """Refuses more than one request's worth, as `RemoteEmbedder` does, and numbers its vectors."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sizes: list[int] = []
+
+    async def embed(self, texts):
+        from meridian_core.embedder import MAX_TEXTS
+
+        if len(texts) > MAX_TEXTS:
+            raise ValueError(f"{len(texts)} texts exceeds the {MAX_TEXTS} cap for one request")
+        self.sizes.append(len(texts))
+        return [[float(t), 0.0] for t in texts]
+
+
+@pytest.mark.parametrize("remote_only", [False, True])
+async def test_a_batch_over_the_request_cap_stays_on_the_sidecar(remote_only) -> None:
+    from meridian_core.embedder import MAX_TEXTS
+
+    remote = CappedRemote()
+    embedder = PreferRemote(remote, local_factory=FakeLocal, remote_only=remote_only)
+    texts = [str(i) for i in range(2 * MAX_TEXTS + 7)]
+
+    vectors = await embedder.embed(texts)
+
+    assert remote.sizes == [MAX_TEXTS, MAX_TEXTS, 7]
+    assert [v[0] for v in vectors] == [float(t) for t in texts], "order kept across requests"
+    assert FakeLocal.built == 0
+    assert embedder.using_remote is True
+
+
+async def test_the_real_client_still_refuses_an_oversized_request() -> None:
+    """The cap this splits for is real; if it went, the split would hide nothing."""
+    from meridian_core.embedder import MAX_TEXTS, RemoteEmbedder
+
+    with pytest.raises(ValueError, match="cap"):
+        await RemoteEmbedder("http://embedder.test").embed(["x"] * (MAX_TEXTS + 1))
+
+
+def test_the_client_and_server_caps_agree() -> None:
+    from meridian_core.embedder import MAX_TEXTS as client
+    from worker.embedserver import MAX_TEXTS as server
+
+    assert client == server
+
+
+async def test_a_failure_part_way_through_a_split_batch_fails_the_whole_batch() -> None:
+    """Half a batch of vectors would pair the rest of the chunks with nobody's."""
+    from meridian_core.embedder import MAX_TEXTS
+    from worker.embeddings import EmbeddingError
+
+    class FailsSecond(CappedRemote):
+        async def embed(self, texts):
+            if self.sizes:
+                raise EmbeddingUnavailable("went away")
+            return await super().embed(texts)
+
+    embedder = PreferRemote(FailsSecond(), local_factory=FakeLocal, remote_only=True)
+    with pytest.raises(EmbeddingError):
+        await embedder.embed([str(i) for i in range(MAX_TEXTS + 1)])
