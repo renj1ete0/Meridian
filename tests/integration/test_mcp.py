@@ -286,6 +286,7 @@ SITE_TOOLS = (
     "get_area",
     "list_gaps",
     "list_contested",
+    "corpus_growth",
 )
 
 

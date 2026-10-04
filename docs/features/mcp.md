@@ -29,6 +29,7 @@ Meridian holds the corpus and its provenance; it generates nothing here.
 | `list_areas`, `get_area` | The corpus map: one level of areas, or one area's stats and typical passages |
 | `list_gaps` | What the corpus cannot answer yet, with reasons |
 | `list_contested` | Claims sources disagree about, both sides kept |
+| `corpus_growth` | How the corpus grew, day by day, for 7 days, 30 days or all time, by topic |
 
 Each site tool calls the function its page calls, so an assistant and the site cannot
 disagree; a test compares them. `search_chunks` embeds the query with the same service as
@@ -86,7 +87,6 @@ In short:
 
 ## Known gaps
 
-- A growth tool comes with the growth page (`B-140`).
 - Admin has no token screen yet; tokens are issued with the command (`B-146`, mock first).
 
 ## Tests

@@ -482,4 +482,20 @@ def build_mcp(
             )
         return found.model_dump(mode="json")
 
+    @mcp.tool()
+    async def corpus_growth(range: str = "30d", topic: list[str] | None = None) -> dict[str, Any]:  # noqa: A002
+        """How the corpus grew, day by day: pages per topic, passages, sites, the graph, the map.
+
+        `range` is "7d", "30d" or "all". Days are calendar days in the deployment's display zone.
+        A day with `crawled: false` is one the crawl did not run, not one that found nothing.
+        """
+        require_tool("corpus_growth")
+        from ..routes.growth import KEPT_GROWTH, RANGES, compute_growth
+
+        if range not in RANGES:
+            return {"error": f"range must be one of {', '.join(RANGES)}"}
+        topics = tuple(sorted({t for t in topic or [] if t.strip()}))
+        found = await KEPT_GROWTH.get((range, topics), lambda: compute_growth(range, topics))
+        return found.model_dump(mode="json")
+
     return mcp

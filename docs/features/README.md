@@ -36,6 +36,7 @@ the Ask panel.
 | Read | [map.md](map.md) | The corpus map, areas, bridges between areas, naming by field |
 | Read | [knowledge-graph.md](knowledge-graph.md) | Entities and edges, resolution, writes and validation, the graph workspace, routes, notes |
 | Read | [gaps.md](gaps.md) | The ranked list of what the corpus cannot answer yet |
+| Read | [growth.md](growth.md) | How the corpus grew, day by day, by topic |
 | Read | [ask-the-graph.md](ask-the-graph.md) | Questions answered by a model from cited passages |
 | Steer | [steering.md](steering.md) | Topic weights, boosts, automatic proposals, steering from the map |
 | Reason | [synthesis.md](synthesis.md) | The orchestrator, model routing and providers, budgets, prompt framing |

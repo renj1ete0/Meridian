@@ -218,6 +218,7 @@ MINIMAL_ARGS = {
     "get_area": {"area_id": 1},
     "list_gaps": {},
     "list_contested": {},
+    "corpus_growth": {},
 }
 
 

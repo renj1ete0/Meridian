@@ -6,6 +6,7 @@ import { AdminPage } from './admin/AdminPage'
 import { ContestedPage } from './explore/ContestedPage'
 import { ExplorePage } from './explore/ExplorePage'
 import { GapsPage } from './explore/GapsPage'
+import { GrowthPage } from './explore/GrowthPage'
 import { MapPage } from './explore/MapPage'
 import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
@@ -25,7 +26,10 @@ import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
  */
 export function sectionOf(route: Route): Section | null {
   if (route.name === 'about') return null
-  return route.name === 'admin' || route.name === 'map' || route.name === 'gaps'
+  return route.name === 'admin' ||
+    route.name === 'map' ||
+    route.name === 'gaps' ||
+    route.name === 'growth'
     ? route.name
     : 'explore'
 }
@@ -114,6 +118,7 @@ export function App() {
           {route.name === 'admin' ? <AdminPage /> : null}
           {route.name === 'map' ? <MapPage /> : null}
           {route.name === 'gaps' ? <GapsPage /> : null}
+          {route.name === 'growth' ? <GrowthPage /> : null}
           {route.name === 'about' ? <AboutPage /> : null}
           {route.name === 'contested' ? <ContestedPage /> : null}
           {route.name === 'explore' ? <ExplorePage /> : null}

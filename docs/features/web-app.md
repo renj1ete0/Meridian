@@ -18,6 +18,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/nodes/:id` | `NodePage` | A node's neighbourhood (graph, table or matrix view), its evidence, notes | `Main.dc.html` |
 | `/map` | `MapPage` | Areas and topics as nested circles, zoom by level, bridges, steering | `Main.dc.html` |
 | `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
+| `/growth` | `GrowthPage` | How the corpus grew: pages per topic per day, passages, sites, graph, map; 7 days, 30 days or all, filterable by topic | `CorpusGrowth.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
 | `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health, display (time zone; no mock yet) | `AdminLight.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |

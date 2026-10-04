@@ -108,8 +108,8 @@ describe('the client types match the DTOs', () => {
 })
 
 describe('routing', () => {
-  it('has a Gaps section between Map and Admin', () => {
-    expect(NAV.map((n) => n.label)).toEqual(['Explore', 'Map', 'Gaps', 'Admin'])
+  it('has a Gaps section after Map, then Growth (ADR 0010), then Admin', () => {
+    expect(NAV.map((n) => n.label)).toEqual(['Explore', 'Map', 'Gaps', 'Growth', 'Admin'])
     expect(sectionOf(parseRoute('/gaps'))).toBe('gaps')
     expect(parseRoute('/gaps/').name).toBe('gaps')
     expect(parseRoute('/gapsx').name).toBe('explore')

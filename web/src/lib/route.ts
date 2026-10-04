@@ -21,6 +21,7 @@ export type Route =
   | { name: 'admin' }
   | { name: 'map' }
   | { name: 'gaps' }
+  | { name: 'growth' }
   | { name: 'contested' }
   | { name: 'about' }
 
@@ -37,6 +38,8 @@ const MAP = /^\/map\/?$/
 
 const GAPS = /^\/gaps\/?$/
 
+const GROWTH = /^\/growth\/?$/
+
 const ABOUT = /^\/about\/?$/
 
 const CONTESTED = /^\/contested\/?$/
@@ -49,6 +52,7 @@ export function parseRoute(pathname: string): Route {
   if (ADMIN.test(pathname)) return { name: 'admin' }
   if (MAP.test(pathname)) return { name: 'map' }
   if (GAPS.test(pathname)) return { name: 'gaps' }
+  if (GROWTH.test(pathname)) return { name: 'growth' }
   if (ABOUT.test(pathname)) return { name: 'about' }
   if (CONTESTED.test(pathname)) return { name: 'contested' }
   return { name: 'explore' }

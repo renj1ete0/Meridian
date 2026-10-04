@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.161.0] — 2026-10-04
+
+### Added
+
+- `B-140`: the Growth page (`/growth`): pages kept on each topic per day, passages, sites, the
+  knowledge graph and the map, over 7 days, 30 days (the default) or all time, filterable by
+  topic, with days in the display zone and the days the crawl was off drawn as gaps. Also as
+  `GET /api/explore/growth` and the `corpus_growth` MCP tool. Map builds now leave a history
+  row (`area_build_history`). ADRs 0005 and 0010.
+
 ## [0.160.0] — 2026-10-04
 
 ### Added

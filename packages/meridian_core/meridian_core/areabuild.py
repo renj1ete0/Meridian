@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .areas import _normalise_rows, distinctive_terms, nest
 from .bridges import build_bridges
 from .corpusmap import project
-from .models import Area, AreaBuild, AreaMember, Chunk, ChunkTopics, Source
+from .models import Area, AreaBuild, AreaBuildHistory, AreaMember, Chunk, ChunkTopics, Source
 from .search import SearchFilters, _conditions
 
 #: A leaf holds roughly this many passages. Small enough that a sub-area is
@@ -174,6 +174,39 @@ class _Leaf:
     examined: int = 0
     on_topic: int = 0
     topics: Counter[str] = dataclasses.field(default_factory=Counter)
+
+
+async def record_history(sess: AsyncSession, build: AreaBuild) -> None:
+    """Keep this build's size after the build itself is pruned (`B-140`)."""
+    from .areaview import WEAK_BELOW_SOURCES
+
+    counts = dict(
+        (
+            await sess.execute(
+                select(Area.level, func.count())
+                .where(Area.build_id == build.build_id)
+                .group_by(Area.level)
+            )
+        ).all()
+    )
+    weak = await sess.scalar(
+        select(func.count()).where(
+            Area.build_id == build.build_id, Area.level == 2, Area.sources < WEAK_BELOW_SOURCES
+        )
+    )
+    await sess.refresh(build, ["computed_at"])
+    sess.add(
+        AreaBuildHistory(
+            build_id=build.build_id,
+            computed_at=build.computed_at,
+            passages=build.passages,
+            regions=counts.get(1, 0),
+            areas=counts.get(2, 0),
+            sub_areas=counts.get(3, 0),
+            weak_areas=weak or 0,
+        )
+    )
+    await sess.flush()
 
 
 async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) -> BuildReport:
@@ -361,6 +394,7 @@ async def build_areas(sess: AsyncSession, *, topics: list[str] | None = None) ->
 
     await sess.flush()
     bridges = await build_bridges(sess, build.build_id)
+    await record_history(sess, build)
 
     newest = select(AreaBuild.build_id).order_by(AreaBuild.build_id.desc()).limit(KEEP_BUILDS)
     await sess.execute(delete(AreaBuild).where(AreaBuild.build_id.not_in(newest.scalar_subquery())))

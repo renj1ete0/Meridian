@@ -1612,6 +1612,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       contested answers), and the instructions gain "cited is not similar" and "the map and
       gaps are measurements". Found: `search_chunks` never embedded the query, so assistants
       got word-matching only while Find was hybrid; fixed. The growth tool comes with `B-140`
+- [x] `B-140` **How the corpus grew** — `v0.161.0`, [ADR 0005](docs/adr/0005-growth-page-for-readers.md),
+      [ADR 0010](docs/adr/0010-growth-page-placement-and-range.md), mock
+      `docs/design/CorpusGrowth.dc.html`. `meridian_core.growth` counts everything by calendar
+      day in the display zone, as of one instant: pages per topic (a multi-topic page once),
+      gaps for days with no fetch, passages, sources, new sites, the graph, and the map from
+      the new `area_build_history` (builds are pruned; the migration seeds it from the builds
+      that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
+      (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
+      with a table view. Checked against the mock with a built page and canned data
 - [ ] `B-146` **Admin → Assistant access** — mock first (`docs/design/`), then build: list
       tokens (never secrets), issue one with a profile and expiry and show it once with client
       setup, revoke; say where `/mcp` is reachable and warn when that is public (ADR 0003).

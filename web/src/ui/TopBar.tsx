@@ -50,6 +50,8 @@ export const NAV = [
   { path: '/', label: 'Explore', name: 'explore' },
   { path: '/map', label: 'Map', name: 'map' },
   { path: '/gaps', label: 'Gaps', name: 'gaps' },
+  // `B-140`, ADR 0010: its own section, beside Map and Gaps.
+  { path: '/growth', label: 'Growth', name: 'growth' },
   { path: '/admin', label: 'Admin', name: 'admin' },
 ] as const
 

@@ -28,6 +28,13 @@ import {
   CHAT_THREAD_FIELDS,
   CHAT_THREADS_FIELDS,
 } from '../src/lib/chat'
+import {
+  GROWTH_COUNT_FIELDS,
+  GROWTH_DAY_FIELDS,
+  GROWTH_FIELDS,
+  MAP_SIZE_FIELDS,
+  TOPIC_GROWTH_FIELDS,
+} from '../src/lib/growth'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -143,6 +150,11 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['SavedViewRead', 'views.py', SAVED_VIEW_FIELDS],
     ['SavedViewsRead', 'views.py', SAVED_VIEWS_FIELDS],
     ['DisplaySettingsRead', 'settings.py', DISPLAY_SETTINGS_FIELDS],
+    ['GrowthRead', 'growth.py', GROWTH_FIELDS],
+    ['GrowthDay', 'growth.py', GROWTH_DAY_FIELDS],
+    ['GrowthCount', 'growth.py', GROWTH_COUNT_FIELDS],
+    ['TopicGrowth', 'growth.py', TOPIC_GROWTH_FIELDS],
+    ['MapSize', 'growth.py', MAP_SIZE_FIELDS],
     ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
     ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],

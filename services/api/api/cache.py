@@ -71,3 +71,29 @@ class Kept[T]:
         """Wait for a refresh in flight. For tests and shutdown."""
         if self._refresh is not None:
             await asyncio.gather(self._refresh, return_exceptions=True)
+
+
+class KeptByKey[K, T]:
+    """One `Kept` per key, the least recently read dropped beyond ``limit`` (`B-140`).
+
+    For reads parameterised by a few options, such as a window and a topic filter. The bound
+    keeps an arbitrary mix of filters from growing the cache without end.
+    """
+
+    def __init__(
+        self, ttl_s: float, *, limit: int = 32, clock: Callable[[], float] = time.monotonic
+    ):
+        self.ttl_s = ttl_s
+        self.limit = limit
+        self._clock = clock
+        self._kept: dict[K, Kept[T]] = {}
+
+    def forget(self) -> None:
+        self._kept.clear()
+
+    async def get(self, key: K, load: Callable[[], Awaitable[T]]) -> T:
+        kept = self._kept.pop(key, None) or Kept[T](self.ttl_s, clock=self._clock)
+        self._kept[key] = kept  # most recently read last
+        while len(self._kept) > self.limit:
+            self._kept.pop(next(iter(self._kept)))
+        return await kept.get(load)

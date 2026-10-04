@@ -83,6 +83,15 @@ export function shortDayOf(at: Date | string, inZone: string = zone): string {
   return `${pad(p.day)} ${MONTHS[p.month - 1]}`
 }
 
+/**
+ * `05 Oct` from a calendar date (`YYYY-MM-DD`). A date has no time of day and no zone, so it
+ * is never converted (ADR 0009): converting it as an instant can land on the day before.
+ */
+export function shortDateOf(date: string): string {
+  const [, m = 1, d = 1] = date.split('-').map(Number)
+  return `${pad(d)} ${MONTHS[m - 1]}`
+}
+
 /** `GMT+8`: the display zone's offset at an instant, as a reader says it. */
 export function zoneLabel(at: Date | string = new Date(), inZone: string = zone): string {
   const minutes = zoneOffsetMinutes(typeof at === 'string' ? new Date(at) : at, inZone)

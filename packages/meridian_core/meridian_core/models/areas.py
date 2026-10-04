@@ -46,6 +46,25 @@ class AreaBuild(Base):
     params: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
 
+class AreaBuildHistory(Base):
+    """One row per map build, kept when the build itself is pruned (`B-140`, ADR 0005).
+
+    Builds are rebuilt wholesale and all but the last two are deleted, so this is the only
+    record of how the map grew. No foreign key: it outlives the build it describes.
+    """
+
+    __tablename__ = "area_build_history"
+
+    build_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    computed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    passages: Mapped[int] = mapped_column(Integer, nullable=False)
+    regions: Mapped[int] = mapped_column(Integer, nullable=False)
+    areas: Mapped[int] = mapped_column(Integer, nullable=False)
+    sub_areas: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Areas (level 2) resting on fewer than `areaview.WEAK_BELOW_SOURCES` sources.
+    weak_areas: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class Area(Base):
     __tablename__ = "areas"
 

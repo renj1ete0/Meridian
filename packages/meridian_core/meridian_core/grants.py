@@ -53,6 +53,7 @@ READ_TOOLS: frozenset[str] = frozenset(
         "get_area",
         "list_gaps",
         "list_contested",
+        "corpus_growth",
     }
 )
 

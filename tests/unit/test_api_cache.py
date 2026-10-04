@@ -103,3 +103,25 @@ async def test_a_first_read_that_fails_raises_rather_than_serving_nothing() -> N
     load, _ = loader([RuntimeError("down")])
     with pytest.raises(RuntimeError):
         await kept.get(load)
+
+
+async def test_keyed_values_are_kept_apart_and_bounded() -> None:
+    """`B-140`: one value per key, and the least recently read dropped past the limit."""
+    from api.cache import KeptByKey
+
+    kept: KeptByKey[str, str] = KeptByKey(60, limit=2)
+    loads: list[str] = []
+
+    def loader(key: str):
+        async def load() -> str:
+            loads.append(key)
+            return key.upper()
+
+        return load
+
+    assert await kept.get("a", loader("a")) == "A"
+    assert await kept.get("b", loader("b")) == "B"
+    assert await kept.get("a", loader("a")) == "A", "kept, not reloaded"
+    await kept.get("c", loader("c"))  # evicts b, the least recently read
+    await kept.get("b", loader("b"))
+    assert loads == ["a", "b", "c", "b"]
