@@ -20,6 +20,8 @@ chosen.
 | [0007](0007-half-precision-vector-index.md) | A half-precision vector index, if it measures as well | 2026-10-04 | Accepted, built |
 | [0008](0008-release-channels.md) | Code is published to GitHub; images wait | 2026-10-04 | Accepted |
 | [0009](0009-times-stored-in-utc-shown-in-a-display-zone.md) | Times are stored in UTC and shown in one display zone (GMT+8 by default) | 2026-10-04 | Accepted |
+| [0010](0010-growth-page-placement-and-range.md) | The growth page has its own section and opens on 30 days, filterable | 2026-10-04 | Accepted |
+| [0011](0011-tokens-may-be-set-not-to-expire.md) | Tokens may be set not to expire, and say so | 2026-10-04 | Accepted |
 
 ## Template
 
