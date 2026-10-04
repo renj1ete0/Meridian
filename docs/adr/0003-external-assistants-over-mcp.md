@@ -27,6 +27,11 @@ on their own subscription.
 
 ## Consequences
 
+- Built in `B-138`. Two things the context did not know: nginx sent `/mcp` to the web app,
+  and production published no port, so "the server or the LAN" needs
+  `deploy/lan/publish-web.yml` (no router port forwarding). Token verification no longer
+  needs the issuer and resource URLs set.
+
 - An assistant on the server, the LAN or a VPN needs no port forwarding. A web or mobile
   client needs the public tunnel that compose already provides.
 - Every answer an assistant gives can carry Meridian's citations, because every tool

@@ -32,6 +32,10 @@ switch. Only a SHA-256 hash is stored (tokens are 256 random bits, so a slow has
 latency and no protection). A NULL tool list grants **nothing**, not everything. The transport
 verifies the token; each tool then checks that this token is scoped to it.
 
+**Profiles** are fixed sets of tools, held to the tools the server defines by a test
+(`B-138`): `reader` (search, source details, what is new, overview), `analyst` and `operator`
+(both add read-only SQL).
+
 **Grants** (`grants.py`, `P3-06`). Access for someone other than the operator is granted to a
 *person*, with a named profile (`reader`, `analyst`, `operator`), never a free-form tool list.
 Revoking the person revokes all their tokens. Raw files and topics outside the grant are off
@@ -47,18 +51,18 @@ tools to build next.
 
 ## Connecting an assistant
 
-Issuing a token needs no public address. What decides who can use a token is where `/mcp` can
-be reached (ADR 0003):
+Step by step in [guides/connecting-an-assistant.md](../guides/connecting-an-assistant.md).
+In short:
 
-| Assistant runs | URL | Needs |
-|---|---|---|
-| On the server | `http://localhost:<api-port>/mcp` | Nothing |
-| On the LAN or a VPN | `http://<server>:<api-port>/mcp` | The port reachable on that network |
-| claude.ai web or mobile | `https://<tunnel-host>/mcp` | The `cloudflared` tunnel |
-
-A command and an Admin screen to issue and revoke tokens, and setup notes per client, are
-`B-138`. Until then, tokens are issued with `meridian_core.tokens.issue_token` from a Python
-shell.
+- `web` proxies `/mcp` to the API (unbuffered, for server-sent events). The tunnel reaches it,
+  and `deploy/lan/publish-web.yml` publishes it on the server or the LAN.
+- `python -m api.tokens issue|list|revoke` (in the API container) issues a token per device,
+  scoped to a profile, 90 days by default, printed once with client setup.
+- Tokens verify with no further configuration. `MERIDIAN_MCP_ISSUER_URL` and
+  `MERIDIAN_MCP_RESOURCE_URL` default to local placeholders, and only matter for clients that
+  discover authentication through OAuth metadata (claude.ai through the tunnel).
+- The transport answers only the host names in `MERIDIAN_MCP_ALLOWED_HOSTS` (localhost when
+  unset).
 
 ## Design choices
 
@@ -71,10 +75,8 @@ shell.
 
 ## Known gaps
 
-- **Profiles and tools have drifted.** `grants.PROFILE_TOOLS` names `get_chunk`,
-  `export_markdown` and `export_bibtex`, which the server does not define, and no profile
-  includes `list_new_since` or `corpus_overview`. To be fixed with a drift test in `B-138`.
 - Graph, area, gap and growth tools are planned (`B-139`).
+- Admin has no token screen yet; tokens are issued with the command (`B-146`, mock first).
 
 ## Tests
 

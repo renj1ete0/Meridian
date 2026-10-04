@@ -104,7 +104,8 @@ or `model`); see [features/synthesis.md](../features/synthesis.md).
 | `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | unset | Verify Cloudflare Access assertions; unset disables the middleware |
 | `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` | off | Allow `/api/admin/*` without verified identity (local use only) |
 | `MERIDIAN_MCP_ALLOW_ANONYMOUS` | off | Allow MCP tools without a token (local use only) |
-| `MERIDIAN_MCP_ISSUER_URL`, `MERIDIAN_MCP_RESOURCE_URL` | unset | Token issuer and resource for the MCP surface |
+| `MERIDIAN_MCP_ISSUER_URL`, `MERIDIAN_MCP_RESOURCE_URL` | `http://localhost`, `…/mcp` | Name this server in OAuth metadata; set to the public URL behind the tunnel. Tokens verify either way (`B-138`) |
+| `WEB_BIND`, `WEB_PORT` | `127.0.0.1`, 8080 | Where `deploy/lan/publish-web.yml` publishes the web front door (and `/mcp`) |
 | `MERIDIAN_MCP_ALLOWED_HOSTS`, `MERIDIAN_MCP_ALLOWED_ORIGINS` | unset | DNS-rebinding protection lists for the MCP transport |
 | `MERIDIAN_SERVE_RAW` | off | Serve stored raw files to readers (redistribution: a decision, not a default) |
 | `MERIDIAN_VERSION` | from the image | Reported on `/health` |

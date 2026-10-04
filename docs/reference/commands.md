@@ -62,6 +62,16 @@ ones take `--once` to run a single pass and exit.
 | `worker.digest` | always | Digest and alerts |
 | `worker.sweep` | `--apply` | Retention sweep (the only pass that deletes files) |
 
+## API commands
+
+Run in the API container: `docker compose exec api python -m api.<name> …`.
+
+| Command | What it does |
+|---|---|
+| `api.tokens issue <name> [--profile reader\|analyst\|operator] [--days 90]` | Issue an MCP token, printed once with client setup |
+| `api.tokens list [--all]` | List tokens (never their secrets) |
+| `api.tokens revoke <id>` | Turn a token off |
+
 ## Scripts
 
 | Script | What it does |

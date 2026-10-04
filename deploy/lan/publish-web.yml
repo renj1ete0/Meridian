@@ -1,0 +1,25 @@
+# Publish the web front door on this server, for assistants on the server or the LAN
+# (`B-138`, ADR 0003).
+#
+#   docker compose -f docker-compose.yml -f deploy/lan/publish-web.yml up -d web
+#
+# Without this the only way in is the Cloudflare tunnel. `web` serves the site and proxies
+# `/api` and `/mcp` to the API, so publishing it is enough for an MCP client.
+#
+#   WEB_BIND=127.0.0.1   (default) this server only: Claude Code or Gemini CLI run here
+#   WEB_BIND=<LAN IP>    machines on the LAN or a VPN such as Tailscale
+#
+# The MCP transport answers only the Host names it is told to. For anything but localhost,
+# set MERIDIAN_MCP_ALLOWED_HOSTS (e.g. `192.168.1.5:8080`) and MERIDIAN_MCP_ALLOWED_ORIGINS in
+# .env and recreate `api`. Admin is still gated: set MERIDIAN_ADMIN_ALLOW_ANONYMOUS only if
+# nobody else can reach this port.
+#
+# Why `lan` too: a container only on `internal` (no gateway) cannot publish a port; the line
+# is silently inert (`B-18`). `lan` is the bridge the split layout already uses, and the nft
+# rules (deploy/egress-restrict.nft) still decide what it may reach outbound.
+
+services:
+  web:
+    networks: !override [internal, lan]
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:8080"

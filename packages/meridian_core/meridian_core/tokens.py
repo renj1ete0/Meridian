@@ -173,3 +173,15 @@ async def revoke_token(sess: AsyncSession, token_id: int) -> bool:
     await sess.flush()
     log.info("token revoked", extra={"token_id": token_id, "agent_id": row.agent_id})
     return True
+
+
+#: Default life of a token issued for an assistant (ADR 0003).
+DEFAULT_DAYS = 90
+
+
+async def list_tokens(sess: AsyncSession, *, include_revoked: bool = False) -> list[AgentToken]:
+    """Issued tokens, newest first. Never the secret; only the hash is stored."""
+    stmt = select(AgentToken).order_by(AgentToken.token_id.desc())
+    if not include_revoked:
+        stmt = stmt.where(AgentToken.revoked.is_(False))
+    return list(await sess.scalars(stmt))

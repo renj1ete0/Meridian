@@ -43,6 +43,10 @@ log = get_logger(__name__)
 #: breaks every configured client — it is API, not a detail.
 MCP_PATH = "/mcp"
 
+#: Names this server when `MERIDIAN_MCP_ISSUER_URL` is unset. Tokens are Meridian's own, so a
+#: placeholder is enough for verification; set the real public URL behind a tunnel.
+DEFAULT_MCP_ISSUER = "http://localhost"
+
 
 def mcp_auth() -> dict[str, object]:
     """Whether the MCP surface verifies tokens, and against what.
@@ -51,10 +55,9 @@ def mcp_auth() -> dict[str, object]:
     configured — is one forgotten environment variable away from publishing the
     corpus, and the person who forgets is deploying rather than reading this.
 
-    `AuthSettings` is only constructed when authentication is on, because it
-    requires issuer and resource URLs that a loopback development machine has no
-    meaningful answer for, and demanding them there would push everybody towards
-    turning auth off to get started.
+    Tokens are Meridian's own (`meridian_core.tokens`), so verification needs no external
+    issuer; the URLs default to local placeholders and only name this server in the
+    metadata a client may read. See docs/features/mcp.md.
     """
     from .auth import MeridianTokenVerifier, allows_anonymous
 
@@ -65,20 +68,11 @@ def mcp_auth() -> dict[str, object]:
         )
         return {}
 
-    issuer = os.environ.get("MERIDIAN_MCP_ISSUER_URL")
-    resource = os.environ.get("MERIDIAN_MCP_RESOURCE_URL")
-    if not (issuer and resource):
-        # No credentials configured and no opt-out: the tools will refuse
-        # everything. Said loudly, because the symptom is every call failing
-        # and the cause is an absent environment variable.
-        log.warning(
-            "mcp surface has no verifier; every tool will refuse",
-            extra={
-                "fix": "set MERIDIAN_MCP_ISSUER_URL and MERIDIAN_MCP_RESOURCE_URL, "
-                "or MERIDIAN_MCP_ALLOW_ANONYMOUS for local use"
-            },
-        )
-        return {}
+    # Unset, the surface still verifies Meridian's own tokens (`B-138`): they are issued and
+    # checked here, so the URLs only name this server in the OAuth metadata clients may read.
+    # Requiring them made every issued token useless on a deployment that had not set them.
+    issuer = os.environ.get("MERIDIAN_MCP_ISSUER_URL") or DEFAULT_MCP_ISSUER
+    resource = os.environ.get("MERIDIAN_MCP_RESOURCE_URL") or f"{issuer.rstrip('/')}{MCP_PATH}"
 
     return {
         "token_verifier": MeridianTokenVerifier(resource=resource),

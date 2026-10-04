@@ -38,6 +38,9 @@ async def restore(session_for):
     before = (row.settings or {}).get(ZONE_KEY)
     await sess.commit()
     yield
+    # The API wrote through another connection: expire, or this reads the cached row and
+    # "restores" a value it never saw change, which SQLAlchemy then skips as no change.
+    sess.expire_all()
     row = await sess.scalar(select(FetchPolicy).where(FetchPolicy.domain == GLOBAL_DOMAIN))
     settings = dict(row.settings or {})
     if before is None:

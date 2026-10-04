@@ -37,21 +37,17 @@ log = get_logger(__name__)
 #: `operator` is not "everything" — there is deliberately no write tool here,
 #: because writes belong to the orchestrator's own credential and a grant is
 #: for *reading* somebody else's corpus (§2.1).
+#: The read tools every profile carries: the corpus as the site shows it.
+READ_TOOLS: frozenset[str] = frozenset(
+    {"search_chunks", "get_source_metadata", "list_new_since", "corpus_overview"}
+)
+
+#: Held to the tools the MCP server defines by a drift test (`B-138`): the earlier lists named
+#: three tools that did not exist and missed two that did.
 PROFILE_TOOLS: dict[str, frozenset[str]] = {
-    "reader": frozenset({"search_chunks", "get_source_metadata", "get_chunk"}),
-    "analyst": frozenset(
-        {"search_chunks", "get_source_metadata", "get_chunk", "run_readonly_query"}
-    ),
-    "operator": frozenset(
-        {
-            "search_chunks",
-            "get_source_metadata",
-            "get_chunk",
-            "run_readonly_query",
-            "export_markdown",
-            "export_bibtex",
-        }
-    ),
+    "reader": READ_TOOLS,
+    "analyst": READ_TOOLS | {"run_readonly_query"},
+    "operator": READ_TOOLS | {"run_readonly_query"},
 }
 
 #: Source tiers, most to least authoritative. `max_source_tier` names a floor
@@ -61,6 +57,7 @@ TIER_ORDER = ("government", "academic", "industry", "press", "informal")
 
 __all__ = [
     "PROFILE_TOOLS",
+    "READ_TOOLS",
     "TIER_ORDER",
     "GrantError",
     "ResolvedGrant",

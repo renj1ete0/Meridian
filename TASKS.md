@@ -1606,6 +1606,19 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
       --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
       no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [ ] `B-146` **Admin → Assistant access** — mock first (`docs/design/`), then build: list
+      tokens (never secrets), issue one with a profile and expiry and show it once with client
+      setup, revoke; say where `/mcp` is reachable and warn when that is public (ADR 0003).
+      The command in `B-138` does all of this today
+- [x] `B-138` **Assistants can connect over MCP** — `v0.159.0`,
+      [ADR 0003](docs/adr/0003-external-assistants-over-mcp.md). Found while building it: nginx
+      had no `/mcp` route, so the tunnel served the web app there; token verification needed
+      `MERIDIAN_MCP_ISSUER_URL`/`…_RESOURCE_URL` or every tool refused; production published
+      no port, so "server or LAN" needed a way in (`deploy/lan/publish-web.yml`, local-only by
+      default); and the grant profiles named three tools the server lacks and missed two it
+      has. Built: `python -m api.tokens issue|list|revoke`, the nginx route, default URLs,
+      the override, fixed profiles with a drift test, an end-to-end test that a token
+      initialises an MCP session, and `docs/guides/connecting-an-assistant.md`
 - [x] `B-145` **Times shown in one display zone** — `v0.158.0`,
       [ADR 0009](docs/adr/0009-times-stored-in-utc-shown-in-a-display-zone.md). Storage was
       already right (all `timestamptz`, ISO 8601 on the wire); display was not: some screens

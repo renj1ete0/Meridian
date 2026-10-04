@@ -294,3 +294,47 @@ def test_anonymous_mode_advertises_no_authentication(monkeypatch) -> None:
     routes = [getattr(r, "path", "") for r in app.state.mcp.streamable_http_app().routes]
 
     assert not any(".well-known" in path for path in routes)
+
+
+# --------------------------------------------------------------------------
+# A token works with no MCP URLs configured (`B-138`)
+# --------------------------------------------------------------------------
+
+
+async def test_a_token_works_without_issuer_or_resource_urls(
+    session_for, agent, cleanup, monkeypatch
+) -> None:
+    """Before, unset URLs meant "every tool will refuse": issued tokens were useless."""
+    import httpx
+
+    from api.main import create_app
+
+    monkeypatch.setenv("MERIDIAN_MCP_ALLOW_ANONYMOUS", "")
+    monkeypatch.delenv("MERIDIAN_MCP_ISSUER_URL", raising=False)
+    monkeypatch.delenv("MERIDIAN_MCP_RESOURCE_URL", raising=False)
+    sess = await session_for("rw")
+    secret, _ = await issue_token(sess, agent_id=agent, allowed_tools=TOOLS)
+    await sess.commit()
+
+    app = create_app()
+    body = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "0"},
+        },
+    }
+    headers = {"accept": "application/json, text/event-stream", "host": "localhost"}
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            refused = await client.post("/mcp/", json=body, headers=headers)
+            allowed = await client.post(
+                "/mcp/", json=body, headers={**headers, "authorization": f"Bearer {secret}"}
+            )
+
+    assert refused.status_code == 401
+    assert allowed.status_code == 200, allowed.text

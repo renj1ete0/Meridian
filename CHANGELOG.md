@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.159.0] — 2026-10-04
+
+### Added
+
+- `B-138`: external assistants can connect. `python -m api.tokens issue|list|revoke` issues MCP
+  tokens per device, printed once with Claude Code and Gemini CLI setup; nginx now proxies
+  `/mcp` (it served the web app there); tokens verify without the issuer/resource URLs set;
+  `deploy/lan/publish-web.yml` publishes the front door on the server or the LAN. Profiles
+  name only tools the server has. Guide: `docs/guides/connecting-an-assistant.md`. ADR 0003.
+
 ## [0.158.0] — 2026-10-04
 
 ### Added

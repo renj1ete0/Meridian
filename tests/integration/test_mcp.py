@@ -248,3 +248,26 @@ async def test_a_missing_source_is_an_answer_not_a_crash(mcp) -> None:
     should be told so, not handed a stack trace it will paste into its reply."""
     body = await call(mcp, "get_source_metadata", source_id=10**12)
     assert "error" in body
+
+
+# --------------------------------------------------------------------------
+# Profiles name the tools the server has (`B-138`)
+# --------------------------------------------------------------------------
+
+
+async def test_every_profile_tool_exists_on_the_server(mcp) -> None:
+    """A profile naming a missing tool grants a capability nobody can use, silently."""
+    from meridian_core.grants import PROFILE_TOOLS
+
+    registered = {tool.name for tool in await mcp.list_tools()}
+    for profile, tools in PROFILE_TOOLS.items():
+        assert tools <= registered, f"{profile} names tools the server lacks: {tools - registered}"
+
+
+async def test_every_server_tool_is_in_some_profile(mcp) -> None:
+    """A tool no profile carries can only be reached by a hand-scoped token."""
+    from meridian_core.grants import PROFILE_TOOLS
+
+    granted = set().union(*PROFILE_TOOLS.values())
+    registered = {tool.name for tool in await mcp.list_tools()}
+    assert registered <= granted, f"no profile carries: {registered - granted}"
