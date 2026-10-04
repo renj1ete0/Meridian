@@ -36,16 +36,20 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy import select
 
+from meridian_core import areaview, graphview, neighbourhood
+from meridian_core import route as routing
 from meridian_core.db import guest_configured, session_guest, session_ro
 from meridian_core.framing import frame_passages
 from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
 from meridian_core.readonly_query import run_readonly_query as execute_readonly
+from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.search import SearchFilters, search
 from meridian_core.stats import corpus_stats
 
 from ..auth import require_tool
+from ..search_service import embed_query
 
 log = get_logger(__name__)
 
@@ -77,6 +81,15 @@ Rules for using it well:
 5. SAY WHAT IS THIN. If the evidence you found is sparse, stale, or all from one
    source, say so in your answer. A confident summary of two press articles is
    worse than an honest report that only two exist.
+
+6. CITED IS NOT SIMILAR. The graph, route and neighbourhood tools return two
+   kinds of connection, always labelled: `cited` means a passage states the
+   link; `similar` means two things only read alike. Never report a similar
+   link as something a source says.
+
+7. THE MAP AND GAPS ARE MEASUREMENTS. Areas are clusters of passages, named by
+   field of work; "weak" and "stale" are counts, not judgements. Gaps are what
+   the corpus cannot answer yet, each with its reason in numbers.
 """
 
 #: Wording that travels with a degraded search. Phrased for a model to repeat,
@@ -176,11 +189,11 @@ def build_mcp(
             # should see what was quarantined, or a false positive is invisible.
             cleared_only=True,
         )
+        # The same query vector Find uses (`B-139`); None, and so word-matching only, when
+        # no embedding service answers. `retrieval` says which.
+        vector = await embed_query(query)
         async with session_ro() as sess:
-            # No query vector: this deployment has no embedder (`P2-07`,
-            # `P2-17`). The honest consequence rides in `retrieval` rather than
-            # being left for the caller to infer from an empty list.
-            result = await search(sess, query, filters=filters, limit=limit)
+            result = await search(sess, query, query_vector=vector, filters=filters, limit=limit)
 
         return {
             "retrieval": LEXICAL_ONLY if result.degraded else HYBRID,
@@ -354,5 +367,119 @@ def build_mcp(
                     "Narrow the query rather than assuming this is all of it."
                 ),
             }
+
+    # ----------------------------------------------------------------------
+    # What the site shows: the graph, the map, gaps (`B-139`, ADR 0003). Each
+    # tool calls the function its page calls, so the two cannot disagree.
+    # ----------------------------------------------------------------------
+
+    @mcp.tool()
+    async def find_nodes(query: str, limit: int = 10) -> dict[str, Any]:
+        """Knowledge-graph nodes whose name or alias matches, to get an `entity_id`."""
+        require_tool("find_nodes")
+        async with session_ro() as sess:
+            found = await graphview.search_nodes(sess, query, limit=min(limit, 50))
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def get_node(entity_id: int, neighbours: int = 30) -> dict[str, Any]:
+        """One node: its attributes, evidence and contested pairs, and its neighbours.
+
+        Neighbours are ranked by `support`, the number of distinct passages behind the edge.
+        Every edge cites passages; quote them with their source, not as the graph's own words.
+        """
+        require_tool("get_node")
+        limit = max(1, min(neighbours, graphview.MAX_NEIGHBOURS))
+        async with session_ro() as sess:
+            try:
+                detail = await graphview.node_detail(sess, entity_id)
+                around = await graphview.neighbourhood(sess, entity_id, GraphFilters(), limit=limit)
+            except graphview.NodeNotFound as missing:
+                return {"error": str(missing)}
+        return {
+            "node": detail.model_dump(mode="json"),
+            "neighbourhood": around.model_dump(mode="json"),
+        }
+
+    @mcp.tool()
+    async def find_route(source: str, target: str, max_depth: int = 4) -> dict[str, Any]:
+        """How two subjects connect: each a node id or a free-text term.
+
+        Every hop is `cited` (a passage states it) or `similar` (they only read alike).
+        `cited_only` is the answer from stated links alone; when it is empty, the corpus never
+        states a connection within that many hops, which is itself a finding.
+        """
+        require_tool("find_route")
+
+        def end(value: str) -> routing.Endpoint:
+            value = value.strip()
+            return (
+                routing.Endpoint(entity_id=int(value))
+                if value.isdigit()
+                else routing.Endpoint(term=value)
+            )
+
+        depth = max(1, min(max_depth, routing.MAX_ROUTE_DEPTH))
+        async with session_ro() as sess:
+            try:
+                found = await routing.route(
+                    sess, end(source), end(target), max_depth=depth, embed=embed_query
+                )
+            except graphview.NodeNotFound as missing:
+                return {"error": str(missing)}
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def term_neighbourhood(term: str) -> dict[str, Any]:
+        """What passages state a link to (inner ring) and what only reads alike (outer ring)."""
+        require_tool("term_neighbourhood")
+        async with session_ro() as sess:
+            found = await neighbourhood.neighbourhood(sess, term.strip(), embed=embed_query)
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def list_areas(parent_id: int | None = None) -> dict[str, Any]:
+        """One level of the corpus map: the regions, or the children of `parent_id`.
+
+        Areas are clusters of passages named by field of work, with counts, and with `weak`
+        and `stale` measured rather than judged.
+        """
+        require_tool("list_areas")
+        async with session_ro() as sess:
+            try:
+                found = await areaview.areas_level(sess, parent_id=parent_id)
+            except areaview.AreaNotFound as missing:
+                return {"error": str(missing)}
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def get_area(area_id: int) -> dict[str, Any]:
+        """One map area: its stats, distinctive terms and most typical passages."""
+        require_tool("get_area")
+        async with session_ro() as sess:
+            try:
+                found = await areaview.area_detail(sess, area_id)
+            except areaview.AreaNotFound as missing:
+                return {"error": str(missing)}
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def list_gaps() -> dict[str, Any]:
+        """What the corpus cannot answer yet, most severe first, each with its reason."""
+        require_tool("list_gaps")
+        from ..routes.gaps import KEPT_GAPS, compute_gaps
+
+        found = await KEPT_GAPS.get(compute_gaps)
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def list_contested(limit: int = 20) -> dict[str, Any]:
+        """Claims sources disagree about. Both sides are kept; neither is resolved."""
+        require_tool("list_contested")
+        async with session_ro() as sess:
+            found = await graphview.contested_pairs(
+                sess, limit=max(1, min(limit, graphview.MAX_CONTESTED))
+            )
+        return found.model_dump(mode="json")
 
     return mcp

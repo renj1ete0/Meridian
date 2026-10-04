@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.160.0] — 2026-10-04
+
+### Added
+
+- `B-139`: MCP tools for what the site shows: `find_nodes`, `get_node`, `find_route`,
+  `term_neighbourhood`, `list_areas`, `get_area`, `list_gaps`, `list_contested`, each calling
+  the function its page calls, and in every profile. `search_chunks` now embeds the query, so
+  assistants get hybrid search (it was word-matching only). ADR 0003.
+
 ## [0.159.0] — 2026-10-04
 
 ### Added

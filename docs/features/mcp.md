@@ -22,6 +22,17 @@ Meridian holds the corpus and its provenance; it generates nothing here.
 | `list_new_since` | Passages added after a mark, for an assistant keeping up with the corpus |
 | `corpus_overview` | Counts and topics |
 | `run_readonly_query` | Arbitrary `SELECT`, with a statement timeout and row cap, on the guest role |
+| `find_nodes` | Graph nodes by name or alias, to get an `entity_id` |
+| `get_node` | A node's attributes, evidence and contested pairs, and its neighbours ranked by support |
+| `find_route` | How two subjects connect, hop by hop, each `cited` or `similar`, with the claims-only answer beside it |
+| `term_neighbourhood` | What passages state a link to, and what only reads alike, for a term |
+| `list_areas`, `get_area` | The corpus map: one level of areas, or one area's stats and typical passages |
+| `list_gaps` | What the corpus cannot answer yet, with reasons |
+| `list_contested` | Claims sources disagree about, both sides kept |
+
+Each site tool calls the function its page calls, so an assistant and the site cannot
+disagree; a test compares them. `search_chunks` embeds the query with the same service as
+Find (`B-139`), so assistants get hybrid search where the site does.
 
 The server's **instructions** are written for a model to act on, and the same warnings ride
 on every result: a word-matching search that found nothing does not mean the corpus lacks the
@@ -75,7 +86,7 @@ In short:
 
 ## Known gaps
 
-- Graph, area, gap and growth tools are planned (`B-139`).
+- A growth tool comes with the growth page (`B-140`).
 - Admin has no token screen yet; tokens are issued with the command (`B-146`, mock first).
 
 ## Tests

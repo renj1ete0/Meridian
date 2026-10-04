@@ -271,3 +271,72 @@ async def test_every_server_tool_is_in_some_profile(mcp) -> None:
     granted = set().union(*PROFILE_TOOLS.values())
     registered = {tool.name for tool in await mcp.list_tools()}
     assert registered <= granted, f"no profile carries: {registered - granted}"
+
+
+# --------------------------------------------------------------------------
+# What the site shows, as tools (`B-139`)
+# --------------------------------------------------------------------------
+
+SITE_TOOLS = (
+    "find_nodes",
+    "get_node",
+    "find_route",
+    "term_neighbourhood",
+    "list_areas",
+    "get_area",
+    "list_gaps",
+    "list_contested",
+)
+
+
+async def test_the_site_tools_are_registered_and_describe_themselves(mcp) -> None:
+    tools = {tool.name: tool for tool in await mcp.list_tools()}
+    for name in SITE_TOOLS:
+        assert name in tools, f"{name} is not registered"
+        assert tools[name].description
+
+
+def test_the_instructions_keep_cited_and_similar_apart(mcp) -> None:
+    assert "CITED IS NOT SIMILAR" in mcp.instructions
+
+
+async def test_the_map_tool_answers_what_the_map_page_answers(mcp, session_for) -> None:
+    from meridian_core import areaview
+
+    sess = await session_for("ro")
+    expected = (await areaview.areas_level(sess, parent_id=None)).model_dump(mode="json")
+    assert await call(mcp, "list_areas") == expected
+
+
+async def test_the_contested_tool_answers_what_the_page_answers(mcp, session_for) -> None:
+    from meridian_core import graphview
+
+    sess = await session_for("ro")
+    expected = (await graphview.contested_pairs(sess, limit=20)).model_dump(mode="json")
+    assert await call(mcp, "list_contested", limit=20) == expected
+
+
+async def test_a_missing_node_is_an_answer_not_a_crash(mcp) -> None:
+    body = await call(mcp, "get_node", entity_id=10**9)
+    assert "error" in body
+
+
+async def test_node_search_and_gaps_answer(mcp) -> None:
+    assert isinstance(await call(mcp, "find_nodes", query="a"), dict)
+    gaps = await call(mcp, "list_gaps")
+    assert "gaps" in gaps and "sources" in gaps
+
+
+async def test_search_asks_for_a_query_vector(mcp, monkeypatch) -> None:
+    """MCP search was lexical-only although the embedding service exists (`B-139`)."""
+    from api.mcp import server
+
+    asked: list[str] = []
+
+    async def embed(query: str):
+        asked.append(query)
+        return None
+
+    monkeypatch.setattr(server, "embed_query", embed)
+    await call(mcp, "search_chunks", query="anything at all")
+    assert asked == ["anything at all"]

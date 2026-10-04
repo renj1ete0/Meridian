@@ -39,7 +39,21 @@ log = get_logger(__name__)
 #: for *reading* somebody else's corpus (§2.1).
 #: The read tools every profile carries: the corpus as the site shows it.
 READ_TOOLS: frozenset[str] = frozenset(
-    {"search_chunks", "get_source_metadata", "list_new_since", "corpus_overview"}
+    {
+        "search_chunks",
+        "get_source_metadata",
+        "list_new_since",
+        "corpus_overview",
+        # What the site shows (`B-139`).
+        "find_nodes",
+        "get_node",
+        "find_route",
+        "term_neighbourhood",
+        "list_areas",
+        "get_area",
+        "list_gaps",
+        "list_contested",
+    }
 )
 
 #: Held to the tools the MCP server defines by a drift test (`B-138`): the earlier lists named

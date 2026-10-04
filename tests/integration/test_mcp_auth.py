@@ -209,6 +209,15 @@ MINIMAL_ARGS = {
     # otherwise, and the probe below reconciles the list against what is
     # actually registered rather than assuming.
     "run_readonly_query": {"query": "SELECT 1"},
+    # What the site shows (`B-139`).
+    "find_nodes": {"query": "x"},
+    "get_node": {"entity_id": 1},
+    "find_route": {"source": "a", "target": "b"},
+    "term_neighbourhood": {"term": "x"},
+    "list_areas": {},
+    "get_area": {"area_id": 1},
+    "list_gaps": {},
+    "list_contested": {},
 }
 
 

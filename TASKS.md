@@ -1606,6 +1606,12 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
       --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
       no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [x] `B-139` **The site's views as MCP tools** — `v0.160.0`. `find_nodes`, `get_node`,
+      `find_route`, `term_neighbourhood`, `list_areas`, `get_area`, `list_gaps`,
+      `list_contested`; each calls the page's own function (a test compares the map and
+      contested answers), and the instructions gain "cited is not similar" and "the map and
+      gaps are measurements". Found: `search_chunks` never embedded the query, so assistants
+      got word-matching only while Find was hybrid; fixed. The growth tool comes with `B-140`
 - [ ] `B-146` **Admin → Assistant access** — mock first (`docs/design/`), then build: list
       tokens (never secrets), issue one with a profile and expiry and show it once with client
       setup, revoke; say where `/mcp` is reachable and warn when that is public (ADR 0003).
