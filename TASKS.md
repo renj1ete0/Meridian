@@ -21,6 +21,15 @@ against a real Postgres, 1001 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-04 — `v0.156.14`, production target is now a server (maybe GPU).** Stack was off
+> 30 Sep–4 Oct. Shipped: `B-127` (copies embedded last; a fifth of the backlog), `B-128` (budget
+> test expired at the month's end), `B-129` (GPU batch sized from the card), `B-130` (batches
+> over 256 no longer leave the sidecar), `B-131` (GPU override, open until run on a card),
+> `B-132` (Postgres memory from `.env`). **Operator:** `B-133`–`B-136` (triage floor, model
+> generation, a model on the server, half-precision index), plus everything below. **Next:** on
+> the server, run the GPU override and measure passages/s; then the sitemap-yield hour that is
+> still owed, once the backlog drains.
+
 > **2026-09-29 night — `v0.156.11`, live locally, pushed to GitHub; GHCR held.** Evening: proven
 > hosts first (`B-115`, run 15: 35% of new pages on a topic, 4× run 14's count), sitemaps of
 > proven hosts mined hourly (`B-116`, `B-118`; working — 14 read, 2,023 page links queued, but
@@ -1572,6 +1581,40 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [ ] `B-136` ⚑ **Vector index at half precision** — proposal, not built. The HNSW index is
+      5.8 GB on 868k passages (1024-dim float32) and grows with the corpus; it is most of what a
+      semantic search reads. pgvector's `halfvec` expression index (`embedding::halfvec(1024)`)
+      would roughly halve it. It needs a migration and every vector query rewritten to use the
+      cast, so measure recall@k and latency against the current index with
+      `make bench-search` before deciding. Worth it if the server cannot hold the index in
+      `shared_buffers` (`B-132`)
+- [ ] `B-135` ⚑ **A model on the server, live or scheduled** — proposal. Two model paths exist
+      and neither has run. (a) **Live:** the Ask panel (`P6-06`/`P6-07`) calls `local-chat`
+      (`${LOCAL_CHAT_LLM_URL}`), but in production the API has no route out, so the model
+      server must be on `lan` with an nft rule. On one GPU server a model server (vLLM or
+      llama.cpp, OpenAI-compatible) could instead be a compose service on `internal`, profile-
+      gated like `orchestrator`, sharing the card with the embedder. Size the card for both.
+      (b) **Scheduled:** synthesis (`python -m worker.orchestrate --daemon`, daily by default)
+      runs under the profile-gated `orchestrator` service; no timetable row starts it, and
+      `hosted-*` and `local-llamacpp` are seeded disabled. Operator decisions: which model where,
+      the budget caps (Admin's budget screen; the local stack has $25 a month and 750k tokens a run), and whether the local or hosted rows go first
+- [ ] `B-134` ⚑ **Seeded hosted models are the previous generation** — `config/agents.yaml`
+      seeds `claude-opus-5` and `claude-sonnet-5`. `claude-opus-5-5` costs less ($4/$20 per
+      MTok against $5/$25) and `claude-sonnet-5-5` the same as Sonnet 5. `provider._call_anthropic`
+      already sends a shape both accept: adaptive thinking, streamed, no forced tool choice,
+      no prefill. One difference to decide: Opus 5.5 defaults to effort `medium` where Opus 5
+      used `high`, so relation extraction would want `output_config.effort` set explicitly.
+      A fresh server is seeded from this file; on an existing one, change the model string in
+      Admin → Agents. No edge has been written yet, so nothing needs re-deriving
+- [ ] `B-133` ⚑ **Huge listing pages pass the sample triage** — measured, not built. Four
+      ranking-list pages of ~3,000 passages each were a quarter of one day's new passages; their
+      samples scored 0.49–0.50 (best topic of the sample mean), above `TRIAGE_FLOOR` 0.46, and
+      three of the four were off-topic as a whole. Measured on 2,717 fully embedded sources
+      (`meridian-calibration/loop/b128/size_bands.py`): for ≥1,000 passages a floor of 0.48
+      held 0 of 5 on-topic and 56 of 59 off-topic (84% of off-topic passages deferred, against
+      74% at 0.46); for 300–1,000 it would have held 2 of 64 on-topic. Option: a floor of 0.48
+      for documents of ≥1,000 passages only. Small sample; much less pressing once embedding
+      runs on a GPU (`B-131`)
 - [x] `B-132` **Postgres sized for a board, fixed in compose** — deploy config, no bump. The
       production command hard-coded `shared_buffers=2GB` and left `effective_cache_size`,
       `maintenance_work_mem` (64MB) and `random_page_cost` (4) at their defaults. On the local

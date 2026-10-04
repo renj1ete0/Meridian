@@ -13,6 +13,29 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-04 — production moves to a server; `B-127`–`B-132` (`v0.156.14`).** The operator
+> dropped the single-board-computer target: production is Docker on a server, possibly with an
+> NVIDIA GPU, and models may run live or on a schedule. The stack had been off from 30 Sep to
+> 4 Oct. Traps:
+> - **Copies were embedded** (`B-127`). The tiers never read `sources.duplicate_of`; a fifth of
+>   the waiting backlog was copies. Now last tier.
+> - **`MERIDIAN_EMBED_CHUNK_BATCH` > 256 silently left the sidecar** (`B-130`): the client's
+>   per-request cap raised ValueError, which `PreferRemote` reads as "unusable", and it loaded
+>   the model in-process. Fixed by splitting. Any new "unusable" path deserves the same look.
+> - **A GPU was sized from the container's RAM** (`B-129`). Check the embedder's start-up line
+>   for `memory_of: device` on the server.
+> - **GPU override** `deploy/gpu/gpu-embedder.yml` (`B-131`) is validated with `docker compose
+>   config` only; this dev machine has an AMD iGPU. The image's torch is `+cu130`, which needs
+>   NVIDIA driver ≥ 580.
+> - **Postgres memory is in `.env` now** (`B-132`). `random_page_cost` went 4 → 1.1 for every
+>   deploy: recheck the watch and area plans after deploying.
+> - **Tests that pin a date expire** (`B-128`, as `P5-09`): the budget screen reads the real
+>   clock. `grep -rn "datetime(2026" tests` lists 26 more fixed instants; most are pure-function
+>   inputs, but any compared against `now()` will fail on some future date.
+> - Operator decisions recorded: `B-133` (triage floor for huge documents, measured), `B-134`
+>   (seeded hosted models are the previous generation), `B-135` (a model on the server, live or
+>   scheduled), `B-136` (half-precision vector index).
+
 > **2026-09-29 night — site review, `B-119`–`B-126` (`v0.156.11`).** Traps:
 > - **`readable()` is display-only and conservative on purpose.** It joins a line break only
 >   when the next line starts lower-case, the line ends on a comma or a joining word ("of",
