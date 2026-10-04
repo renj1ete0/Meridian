@@ -191,9 +191,11 @@ async def record_passage_labels(
     fingerprint: str,
     now: dt.datetime,
 ) -> int:
-    """Write a batch of passage labels. Replaces, never accumulates — for the
-    reason `record_labels` does: a label is a claim about the vector as it is
-    now under the topics as they are now. Returns rows written."""
+    """Write a batch of passage labels.
+
+    Replaces, never accumulates — for the reason `record_labels` does: a label is a claim about the
+    vector as it is now under the topics as they are now. Returns rows written.
+    """
     if not rows:
         return 0
     values = [
@@ -241,8 +243,9 @@ def on_topic_passage(topics: Sequence[str]):
 
 
 def carries_all_topics(topics: Sequence[str]):
-    """A predicate over ``Chunk`` joined to ``Source``: between them, the passage's
-    own labels and its source's carry every one of ``topics`` (`B-72`).
+    """A predicate over ``Chunk`` joined to ``Source`` carrying every one of ``topics``.
+
+    Between them, the passage's own labels and its source's must carry each topic (`B-72`).
 
     Together rather than each alone: a chapter on one topic inside a document
     labelled with the other is where two topics genuinely meet.

@@ -36,9 +36,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "chunks", sa.Column("superseded_at", sa.DateTime(timezone=True), nullable=True)
-    )
+    op.add_column("chunks", sa.Column("superseded_at", sa.DateTime(timezone=True), nullable=True))
 
     # Unique among the live chunks only.
     op.drop_constraint("uq_chunks_source_id_chunk_index", "chunks", type_="unique")

@@ -168,7 +168,6 @@ def canonical(pairs: Iterable[Pair], *, protected: set[int] = frozenset()) -> di
     Exact beats near for the same source. A protected (cited) source is never
     marked, and a chain through one stops there: its copies point at it.
     """
-
     order = {"exact": 0, "translation": 1, "near": 2}
 
     def rank(pair: Pair) -> tuple[int, int]:

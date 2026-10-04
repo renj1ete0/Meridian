@@ -1,5 +1,6 @@
-"""DTOs for entities, edges, and the attribute system (mirrors
-``meridian_core.models.graph``, §5.4, §5.5, §7).
+"""DTOs for entities, edges, and the attribute system.
+
+Mirrors ``meridian_core.models.graph`` (§5.4, §5.5, §7).
 """
 
 from __future__ import annotations
@@ -16,11 +17,11 @@ from .enums import AttributeScope, AttributeStatus, Certainty, NodeType, Stance
 
 
 class EntityCreate(ProvenanceFields):
-    """``embedding`` is accepted on write — entity resolution needs it for
-    similarity search at write time (§5.5) — but is never returned; see
-    ``EntityRead``. ``merged_from``/``redirects_to`` are excluded: merges are a
-    separate, reversible admin operation, not something a caller sets when
-    first proposing an entity.
+    """An entity as proposed by a caller.
+
+    ``embedding`` is accepted on write, because entity resolution needs it for similarity search
+    (§5.5), but is never returned; see ``EntityRead``. ``merged_from`` and ``redirects_to`` are
+    excluded: merging is a separate, reversible admin operation.
     """
 
     canonical_name: str = Field(min_length=1)
@@ -40,8 +41,10 @@ class EntityCreate(ProvenanceFields):
 
 
 class EntityRead(BaseModel):
-    """No ``embedding`` field: a 1024-float vector has no business in an API
-    response payload (task P0-10 requirement 5)."""
+    """An entity as returned to a caller.
+
+    No ``embedding`` field: a 1024-float vector has no place in an API response (task P0-10).
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,10 +69,12 @@ class EntityRead(BaseModel):
 
 
 class EdgeCreate(ProvenanceFields):
-    """``supporting_chunk_ids`` must be non-empty: an edge without provenance
-    is not assertable and cannot be re-derived from source (spec §2 principle
-    3; task P0-10 requirement 6). ``relation_type`` is free text on the model
-    (no CHECK constraint), so it stays a plain validated string here too."""
+    """An edge as proposed by a caller.
+
+    ``supporting_chunk_ids`` must be non-empty: an edge without provenance cannot be asserted or
+    re-derived from source (spec §2 principle 3; task P0-10). ``relation_type`` is free text on the
+    model, with no CHECK constraint, so it stays a plain validated string here too.
+    """
 
     from_node: int
     to_node: int
@@ -130,10 +135,12 @@ class EdgeRead(BaseModel):
 
 
 class AttributeDefinitionCreate(CreateBase):
-    """Audit signals (discrimination, usage_count, consecutive_audit_failures,
-    last_audited_at) are computed by the audit process, not caller input —
-    that is the whole reason ``AttributeDefinitionRead`` carries more fields
-    than this class (§7.3)."""
+    """An attribute definition as written by a caller.
+
+    Audit signals (discrimination, usage_count, consecutive_audit_failures, last_audited_at) are
+    computed by the audit process, which is why ``AttributeDefinitionRead`` carries more fields
+    than this class (§7.3).
+    """
 
     name: str = Field(min_length=1)
     description: str | None = None
@@ -161,8 +168,7 @@ class AttributeDefinitionRead(BaseModel):
 
 
 class AttributeValueCreate(ProvenanceFields):
-    """``supporting_chunk_ids`` non-empty for the same reason as on
-    ``EdgeCreate`` (§2 principle 3)."""
+    """``supporting_chunk_ids`` is non-empty, for the same reason as on ``EdgeCreate``."""
 
     entity_id: int
     attribute_id: int

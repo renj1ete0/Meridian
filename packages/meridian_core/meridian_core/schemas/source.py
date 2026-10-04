@@ -1,5 +1,6 @@
-"""DTOs for sources, chunks, and figures (mirrors ``meridian_core.models.source``,
-§5.2, §5.3, §6.6).
+"""DTOs for sources, chunks, and figures.
+
+Mirrors ``meridian_core.models.source`` (§5.2, §5.3, §6.6).
 """
 
 from __future__ import annotations
@@ -112,9 +113,11 @@ class SourceRead(BaseModel):
 
 
 class ChunkCreate(CreateBase):
-    """Written by the worker at extraction time (§5.3). ``embedding`` is
-    optional because the vector is added one stage later, by the embedding
-    step (queue: ``fetched`` -> ``extracted`` -> ``embedded``)."""
+    """Written by the worker at extraction time (§5.3).
+
+    ``embedding`` is optional because the vector is added one stage later, by the embedding step
+    (queue: ``fetched`` -> ``extracted`` -> ``embedded``).
+    """
 
     source_id: int
     text: str = Field(min_length=1)
@@ -124,10 +127,11 @@ class ChunkCreate(CreateBase):
 
 
 class ChunkRead(BaseModel):
-    """Deliberately has no ``embedding`` field: a 1024-float bge-m3 vector per
-    chunk has no business riding along in an API response payload (task P0-10
-    requirement 5). Callers that need the vector go through a dedicated
-    similarity-search endpoint, not the chunk read model."""
+    """A chunk as returned to a caller.
+
+    Deliberately has no ``embedding`` field: a 1024-float vector per chunk has no place in an API
+    response (task P0-10). Callers that need vectors use the similarity-search path instead.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 

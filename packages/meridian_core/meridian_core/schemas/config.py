@@ -1,5 +1,6 @@
-"""DTOs for database-resident configuration (mirrors
-``meridian_core.models.config``, §13.1, §10, §6.4, §11.3, §11.4).
+"""DTOs for database-resident configuration.
+
+Mirrors ``meridian_core.models.config`` (§13.1, §10, §6.4, §11.3, §11.4).
 
 ``AgentToken`` (credential hashes) deliberately has no DTO here: it is never a
 service boundary object, only ever read and written by the auth layer itself
@@ -24,10 +25,12 @@ from .enums import (
 
 
 class TopicConfigCreate(CreateBase):
-    """``topic`` is the primary key and is supplied by the caller rather than
-    generated, so this and ``TopicConfigRead`` end up sharing almost every
-    field (§10) — the split still earns its keep once an update path needs to
-    accept a partial payload while reads stay whole."""
+    """A topic as written by a caller.
+
+    ``topic`` is the primary key and is supplied by the caller rather than generated, so this and
+    ``TopicConfigRead`` share almost every field (§10). The split earns its keep once an update path
+    needs to accept a partial payload while reads stay whole.
+    """
 
     topic: str = Field(min_length=1)
     weight: float = 0.0
@@ -58,9 +61,11 @@ class TopicConfigRead(BaseModel):
 
 
 class SteeringLogCreate(CreateBase):
-    """Append-only audit row (§10.1). ``changed_at`` is supplied by the writer
-    rather than server-defaulted, so the timestamp always reflects when the
-    steering decision was made, not when this row happened to be flushed."""
+    """Append-only audit row (§10.1).
+
+    ``changed_at`` is supplied by the writer rather than server-defaulted, so the timestamp always
+    reflects when the steering decision was made, not when this row happened to be flushed.
+    """
 
     changed_at: dt.datetime
     actor: str = Field(min_length=1)  # "user" | "orchestrator"
@@ -85,8 +90,11 @@ class SteeringLogRead(BaseModel):
 
 
 class FetchPolicyCreate(CreateBase):
-    """``consecutive_failures`` is not caller input — the worker increments it
-    on failure, so every new policy row starts at zero (§6.4)."""
+    """A fetch policy as written by a caller.
+
+    ``consecutive_failures`` is not caller input: the worker increments it on failure, so every new
+    policy row starts at zero (§6.4).
+    """
 
     domain: str = Field(min_length=1)  # '*' = global default
     settings: dict | None = None
@@ -129,8 +137,10 @@ class FetchPolicyRead(BaseModel):
 
 
 class AgentCreate(CreateBase):
-    """``api_key_env_var`` names an environment variable; it is never the
-    secret value itself (spec §11.11)."""
+    """An agent registry row as written by a caller.
+
+    ``api_key_env_var`` names an environment variable; it is never the secret itself (§11.11).
+    """
 
     agent_id: str = Field(min_length=1)
     provider: str = Field(min_length=1)

@@ -98,9 +98,7 @@ def ok(body: str = DISALLOWS) -> FetchResult:
 
 
 def failed(outcome: str, status: int | None = None) -> FetchResult:
-    return FetchResult(
-        requested_url=URL, final_url=URL, outcome=outcome, status_code=status
-    )
+    return FetchResult(requested_url=URL, final_url=URL, outcome=outcome, status_code=status)
 
 
 def policy_for(origin: str) -> ResolvedPolicy:

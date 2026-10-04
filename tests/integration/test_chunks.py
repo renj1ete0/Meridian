@@ -202,9 +202,7 @@ async def test_the_old_rows_survive_the_replacement(session_for, url, cleanup) -
     assert sorted(r.text for r in everything) == ["a", "b", "c", "x"]
 
 
-async def test_a_citation_still_resolves_after_the_page_changes(
-    session_for, url, cleanup
-) -> None:
+async def test_a_citation_still_resolves_after_the_page_changes(session_for, url, cleanup) -> None:
     # The whole point. An id taken from an edge's provenance has to keep
     # resolving to the text the edge was derived from, and §2.4 makes that text
     # the thing the graph is re-derived from — so it cannot be the current
@@ -270,9 +268,7 @@ async def test_two_live_chunks_cannot_share_an_index(session_for, url, cleanup) 
     await sess.rollback()
 
 
-async def test_a_superseded_chunk_is_not_counted_in_the_corpus(
-    session_for, url, cleanup
-) -> None:
+async def test_a_superseded_chunk_is_not_counted_in_the_corpus(session_for, url, cleanup) -> None:
     # "How much is in here" means the text on the pages now. Counting retired
     # generations would make the corpus appear to grow every time a page
     # changed, which is the opposite of what happened.
@@ -286,9 +282,7 @@ async def test_a_superseded_chunk_is_not_counted_in_the_corpus(
     assert await chunk_count(sess, source.source_id, live_only=False) == 4
 
 
-async def test_a_superseded_chunk_is_not_queued_for_embedding(
-    session_for, url, cleanup
-) -> None:
+async def test_a_superseded_chunk_is_not_queued_for_embedding(session_for, url, cleanup) -> None:
     # Embedding text that is no longer on the page spends the model's time
     # producing a vector nothing may search.
     sess = await session_for("rw")
@@ -359,9 +353,7 @@ async def test_purging_keeps_the_live_set(session_for, url, cleanup) -> None:
     assert [r.text for r in await all_chunks_for(sess, source.source_id)] == ["x"]
 
 
-async def test_deleting_a_source_takes_its_retired_chunks_too(
-    session_for, url, cleanup
-) -> None:
+async def test_deleting_a_source_takes_its_retired_chunks_too(session_for, url, cleanup) -> None:
     # `delete_chunks` is for the caller that means it. Leaving retired rows
     # behind would leave chunks referring to a source that no longer exists —
     # the orphaning this task exists to prevent, in the other direction.

@@ -278,8 +278,11 @@ async def record(
     reason: str,
     now: dt.datetime,
 ) -> None:
-    """One audit row. Values are stringified, because the column is TEXT and the
-    log has to hold a float, a status and a boolean without three columns."""
+    """One audit row.
+
+    Values are stringified, because the column is TEXT and the log has to hold a float, a status and
+    a boolean without three columns.
+    """
     sess.add(
         SteeringLog(
             changed_at=now,

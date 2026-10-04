@@ -142,9 +142,7 @@ async def test_shutdown_hands_claims_back(clean, prefix) -> None:
 # --------------------------------------------------------------------------
 
 
-async def test_the_next_run_is_measured_from_now_not_from_the_missed_slot(
-    clean, prefix
-) -> None:
+async def test_the_next_run_is_measured_from_now_not_from_the_missed_slot(clean, prefix) -> None:
     """The property that stops a burst after downtime.
 
     A machine off for a day leaves a daily job overdue by 24 hours. Adding the
@@ -175,9 +173,7 @@ async def test_a_successful_run_is_recorded(clean, prefix) -> None:
 async def test_a_failure_keeps_its_reason(clean, prefix) -> None:
     job = await a_job(clean, prefix)
 
-    await settle_job(
-        clean, job.job_id, status="failed", duration_ms=5, error="boom", now=NOW
-    )
+    await settle_job(clean, job.job_id, status="failed", duration_ms=5, error="boom", now=NOW)
     await clean.refresh(job)
 
     assert job.last_status == "failed"
@@ -190,9 +186,7 @@ async def test_a_long_error_does_not_make_the_row_unreadable(clean, prefix) -> N
     unreadable in the UI that has to display it."""
     job = await a_job(clean, prefix)
 
-    await settle_job(
-        clean, job.job_id, status="failed", duration_ms=5, error="x" * 50_000, now=NOW
-    )
+    await settle_job(clean, job.job_id, status="failed", duration_ms=5, error="x" * 50_000, now=NOW)
     await clean.refresh(job)
 
     assert job.last_error is not None and len(job.last_error) <= 2000

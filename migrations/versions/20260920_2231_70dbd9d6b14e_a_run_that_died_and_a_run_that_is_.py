@@ -45,8 +45,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 SETTLED = (
-    "superseded by P4-08: more than one unfinished run existed, "
-    "and at most one is now permitted"
+    "superseded by P4-08: more than one unfinished run existed, and at most one is now permitted"
 )
 
 

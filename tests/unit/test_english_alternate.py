@@ -11,7 +11,8 @@ BASE = "https://site.test/de/seite"
 
 
 def head(*links: str) -> str:
-    return f"<html lang='de'><head>{''.join(links)}</head><body><a href='/x' hreflang='en'>x</a></body></html>"
+    body = "<body><a href='/x' hreflang='en'>x</a></body>"
+    return f"<html lang='de'><head>{''.join(links)}</head>{body}</html>"
 
 
 @pytest.mark.parametrize(

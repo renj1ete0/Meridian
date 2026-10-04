@@ -240,9 +240,10 @@ class DoiResolver:
         return self._client
 
     def _user_agent(self) -> str:
-        """Identifiable and contactable (§14.2), which is also what the polite
-        pools want. OpenAlex reads a mailto here; Unpaywall reads the query
-        parameter instead, and gets both."""
+        """Identifiable and contactable (§14.2), which is also what the polite pools want.
+
+        OpenAlex reads a mailto here; Unpaywall reads the query parameter instead, and gets both.
+        """
         if self._settings.contact_email:
             return f"MeridianBot/0.1 (mailto:{self._settings.contact_email})"
         return "MeridianBot/0.1"
@@ -349,8 +350,11 @@ class DoiResolver:
         )
 
     async def _unpaywall(self, doi: str) -> OpenAccessCopy | None:
-        """§6.5 step 1. `best_oa_location` is Unpaywall's own ranking; taking it
-        rather than re-ranking `oa_locations` keeps one opinion in one place."""
+        """§6.5 step 1.
+
+        `best_oa_location` is Unpaywall's own ranking; taking it rather than re-ranking
+        `oa_locations` keeps one opinion in one place.
+        """
         if not self._settings.contact_email:
             raise _ProviderSkipped("MERIDIAN_CONTACT_EMAIL is not set")
 
@@ -403,8 +407,10 @@ class DoiResolver:
         return None
 
     async def _core(self, doi: str) -> OpenAccessCopy | None:
-        """§6.5 step 3 — institutional repositories, which is where the accepted
-        manuscript usually is when the published version is closed."""
+        """§6.5 step 3: institutional repositories.
+
+        That is where the accepted manuscript usually is when the published version is closed.
+        """
         if not self._settings.core_api_key:
             raise _ProviderSkipped("CORE_API_KEY is not set")
 
@@ -427,10 +433,11 @@ class DoiResolver:
         return OpenAccessCopy(url=url, provider="core", version="acceptedVersion")
 
     async def _europepmc(self, doi: str) -> OpenAccessCopy | None:
-        """Beyond §6.5's list. Europe PMC mirrors full text rather than pointing
-        at it, so a copy here is one hop rather than two — and it holds work the
-        general aggregators miss whenever a paper touches health, environment or
-        transport epidemiology.
+        """Beyond §6.5's list.
+
+        Europe PMC mirrors full text rather than pointing at it, so a copy here is one hop rather
+        than two — and it holds work the general aggregators miss whenever a paper touches health,
+        environment or transport epidemiology.
 
         The DOI goes into a quoted field query, so the quote characters are the
         thing to be careful about; `normalise_doi` has already refused anything
@@ -578,8 +585,10 @@ class _ProviderUnreachable(RuntimeError):
 
 
 def _retry_after(raw: str | None) -> float | None:
-    """Seconds from a Retry-After header, when it gives seconds. The HTTP-date
-    form is rare from these APIs and falls back to the doubling cooldown."""
+    """Seconds from a Retry-After header, when it gives seconds.
+
+    The HTTP-date form is rare from these APIs and falls back to the doubling cooldown.
+    """
     try:
         return float(raw) if raw is not None else None
     except ValueError:
@@ -587,8 +596,9 @@ def _retry_after(raw: str | None) -> float | None:
 
 
 class _ProviderRateLimited(_ProviderUnreachable):
-    """This provider refused *because we asked too fast*, which is not the same
-    as it having no copy — and the difference decides whether the paper is lost.
+    """This provider refused *because we asked too fast*.
+
+    That is not the same as having no copy, and the difference decides whether the paper is lost.
 
     Measured, not assumed: resolving 75 real DOIs back to back found nothing at
     Semantic Scholar, while the same DOIs asked one per second returned an

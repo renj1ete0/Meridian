@@ -272,8 +272,11 @@ SAMPLE_STRIDE = 16
 
 
 def in_sample(chunk=None):
-    """Whether a passage is in its source's sample. Needs no count of the source's
-    passages, so it costs the tier query nothing but arithmetic on the row."""
+    """Whether a passage is in its source's sample.
+
+    Needs no count of the source's passages, so it costs the tier query nothing but arithmetic on
+    the row.
+    """
     chunk = Chunk if chunk is None else chunk
     return or_(chunk.chunk_index < SAMPLE_HEAD, chunk.chunk_index % SAMPLE_STRIDE == 0)
 

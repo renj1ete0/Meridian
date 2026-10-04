@@ -19,7 +19,11 @@ def page(title: str, links: list[tuple[str, str]], **extra) -> dict:
     return {
         "query": {
             "pages": {
-                "1": {"title": title, "langlinks": [{"lang": l, "*": t} for l, t in links], **extra}
+                "1": {
+                    "title": title,
+                    "langlinks": [{"lang": lang, "*": t} for lang, t in links],
+                    **extra,
+                }
             }
         }
     }
@@ -76,12 +80,8 @@ def test_every_run_leads_with_a_non_english_query_when_one_exists() -> None:
 
 def test_the_migration_and_the_config_list_the_same_languages() -> None:
     config = yaml.safe_load((REPO / "config" / "fetch_policy.yaml").read_text())
-    path = next(
-        (REPO / "migrations" / "versions").glob(
-            "*_92cba253bcb9_*.py"
-        )
-    )
+    path = next((REPO / "migrations" / "versions").glob("*_92cba253bcb9_*.py"))
     spec = importlib.util.spec_from_file_location("mig", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.SEARCH_LANGUAGES == config["search_languages"]
+    assert config["search_languages"] == module.SEARCH_LANGUAGES

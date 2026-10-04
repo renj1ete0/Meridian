@@ -1581,6 +1581,20 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [ ] `D-01` **Move narrative comments into the docs** — the convention since 2026-10-04
+      (AGENTS.md "Code and comment standards"): docstrings and comments stay short, and the
+      rationale, history and measurements move to `docs/features/`. About 30% of the Python is
+      comments and docstrings, so this is done per feature, as each one gets its doc, and
+      whenever a file is touched. Tick a feature here once its modules are trimmed
+- [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
+      --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
+      no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [x] `B-141` **Python standards enforced** — `v0.156.15`. PEP 8 and PEP 257 through ruff
+      (`E`, `W`, `N`, `D2`–`D4`, convention `pep257`; `D401`, `D400` and `N818` off, with the
+      reasons in `pyproject.toml`), and `make test` now runs `make lint` first. `ruff check .`
+      had 33 failures nobody saw, because nothing ran it; 26 files were also unformatted.
+      Docstring summaries were reshaped to one line followed by a blank line; tests and
+      migrations are exempt from the docstring rules
 - [ ] `B-136` ⚑ **Vector index at half precision** — proposal, not built. The HNSW index is
       5.8 GB on 868k passages (1024-dim float32) and grows with the corpus; it is most of what a
       semantic search reads. pgvector's `halfvec` expression index (`embedding::halfvec(1024)`)

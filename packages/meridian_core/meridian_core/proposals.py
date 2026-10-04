@@ -1,5 +1,6 @@
-"""The prompt each reasoning stage sends, and the parse that survives the
-answer (task `P4-16`, §6.3, §11.8, §2.4).
+"""The prompt each reasoning stage sends, and the parse that survives the answer.
+
+Task `P4-16`; spec §6.3, §11.8, §2.4.
 
 `P4-07` chose the agent, `P4-15` called it and `P4-04` holds the four writes.
 This is the middle nobody had written: what `extract` and `tag` actually ask,
@@ -113,8 +114,11 @@ class Prompt:
 
     @property
     def characters(self) -> int:
-        """For the journal. Tokens are the provider's business; characters are
-        what this side can state without guessing."""
+        """For the journal.
+
+        Tokens are the provider's business; characters are what this side can state without
+        guessing.
+        """
         return len(self.system) + len(self.user)
 
 

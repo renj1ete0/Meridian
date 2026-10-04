@@ -149,7 +149,9 @@ async def test_a_page_about_two_topics_gets_both_best_first(world) -> None:
     sess, topics, emb, labeller = world
     a, b = sorted(topics)[:2]
     # b slightly stronger, inside the margin: both, b first.
-    sid = await a_source(sess, blend((emb.axes[topic_name(a)], 1.0), (emb.axes[topic_name(b)], 1.02)))
+    sid = await a_source(
+        sess, blend((emb.axes[topic_name(a)], 1.0), (emb.axes[topic_name(b)], 1.02))
+    )
 
     await labeller().run(apply=True)
 
@@ -160,7 +162,9 @@ async def test_a_second_topic_outside_the_margin_is_not_a_label(world) -> None:
     sess, topics, emb, labeller = world
     a, b = sorted(topics)[:2]
     # cos to b ≈ 0.6, to a ≈ 0.8: both above the floor, 0.2 apart.
-    sid = await a_source(sess, blend((emb.axes[topic_name(a)], 0.8), (emb.axes[topic_name(b)], 0.6)))
+    sid = await a_source(
+        sess, blend((emb.axes[topic_name(a)], 0.8), (emb.axes[topic_name(b)], 0.6))
+    )
 
     await labeller().run(apply=True)
 
@@ -253,7 +257,10 @@ async def test_a_recrawl_makes_a_source_stale(world) -> None:
     await sess.execute(
         update(Chunk)
         .where(Chunk.source_id == sid, Chunk.superseded_at.is_(None))
-        .values(embedding=axis(emb.axes[topic_name(b)]), created_at=func.clock_timestamp() + dt.timedelta(hours=1))
+        .values(
+            embedding=axis(emb.axes[topic_name(b)]),
+            created_at=func.clock_timestamp() + dt.timedelta(hours=1),
+        )
     )
     await labeller().run(apply=True)
 
@@ -273,7 +280,9 @@ async def test_a_changed_basis_reexamines_everything(world) -> None:
     assert (await labels_of(sess, sid)).topic_basis not in (None, before)
 
 
-async def test_no_topics_is_refused_rather_than_labelling_everything_empty(world, monkeypatch) -> None:
+async def test_no_topics_is_refused_rather_than_labelling_everything_empty(
+    world, monkeypatch
+) -> None:
     sess, _, _, labeller = world
     sid = await a_source(sess, axis(ELSEWHERE))
 
@@ -321,7 +330,10 @@ async def test_demotion_with_both_gates_marks_only_offtopic_sources_junk(world) 
     assert (await labels_of(sess, on)).retention_tier != "junk"
     assert stats.demoted >= 1
     # Nothing was deleted: the tier is the decision, the sweep the deletion.
-    assert await sess.scalar(select(func.count()).select_from(Chunk).where(Chunk.source_id == off)) == 1
+    assert (
+        await sess.scalar(select(func.count()).select_from(Chunk).where(Chunk.source_id == off))
+        == 1
+    )
 
 
 @pytest.mark.parametrize("floor", [LABEL_FLOOR, LABEL_FLOOR + 0.1, -0.1])
@@ -333,7 +345,6 @@ async def test_an_offtopic_floor_outside_its_range_is_refused(world, floor) -> N
 
 def test_the_offtopic_floor_sits_below_the_label_floor() -> None:
     assert 0 < OFFTOPIC_FLOOR < LABEL_FLOOR
-
 
 
 # --------------------------------------------------------------------------

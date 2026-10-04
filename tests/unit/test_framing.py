@@ -12,8 +12,6 @@ the model before the payload does.
 
 from __future__ import annotations
 
-import pytest
-
 from meridian_core.framing import PREAMBLE, frame, frame_passages, new_delimiter
 
 

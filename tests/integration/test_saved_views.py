@@ -64,9 +64,7 @@ async def clean(session_for, name: str):
 async def stored(session_for, view_id: int) -> SavedView | None:
     sess = await session_for("rw")
     await sess.rollback()
-    return (
-        await sess.scalars(select(SavedView).where(SavedView.view_id == view_id))
-    ).one_or_none()
+    return (await sess.scalars(select(SavedView).where(SavedView.view_id == view_id))).one_or_none()
 
 
 async def save(client, name: str, **body) -> dict:
@@ -79,9 +77,7 @@ async def save(client, name: str, **body) -> dict:
 
 
 async def test_a_view_keeps_its_query_and_its_filters(client, open_admin, clean, name) -> None:
-    body = await save(
-        client, name, query="walkability", filters={"source_tiers": ["government"]}
-    )
+    body = await save(client, name, query="walkability", filters={"source_tiers": ["government"]})
 
     assert body["query"] == "walkability"
     assert body["filters"] == {"source_tiers": ["government"]}
@@ -136,9 +132,7 @@ async def test_an_unknown_field_is_refused(client, open_admin, clean, name) -> N
 # --------------------------------------------------------------------------
 
 
-async def test_views_are_readable_from_the_explore_surface(
-    client, open_admin, clean, name
-) -> None:
+async def test_views_are_readable_from_the_explore_surface(client, open_admin, clean, name) -> None:
     # A guest on a shared instance can open the owner's views. That is the whole
     # reason reads and writes sit on different prefixes here.
     await save(client, name)

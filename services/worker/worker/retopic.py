@@ -114,9 +114,11 @@ class Embeds(Protocol):
 
 
 class NoTopics(RuntimeError):
-    """Nothing to label against. Refused rather than recorded as ``{}`` for every
-    source — that would claim the whole corpus was examined and found off-topic
-    by a question nobody asked."""
+    """Nothing to label against.
+
+    Refused rather than recorded as ``{}`` for every source — that would claim the whole corpus was
+    examined and found off-topic by a question nobody asked.
+    """
 
 
 @dataclasses.dataclass
@@ -279,9 +281,11 @@ class Labeller:
         offtopic_floor: float = OFFTOPIC_FLOOR,
         passages: bool = True,
     ) -> LabelStats:
-        """One pass over the queue. Writes only with ``apply``; demotes only with
-        both ``apply`` and ``demote_offtopic``. Then, unless ``passages`` is
-        false, one pass over the passage queue under the same basis."""
+        """One pass over the queue.
+
+        Writes only with ``apply``; demotes only with both ``apply`` and ``demote_offtopic``. Then,
+        unless ``passages`` is false, one pass over the passage queue under the same basis.
+        """
         if not 0.0 <= offtopic_floor < LABEL_FLOOR:
             # A floor at or above the labelling floor would demote sources that
             # carry a label — about a topic, and junked for it.
@@ -484,8 +488,10 @@ class Labeller:
 
 
 def _reservoir(sample: list, item, seen: int, rng: random.Random) -> None:
-    """Keep a fair draw of :data:`EXAMPLES` from a stream; ``seen`` counts the
-    items before this one."""
+    """Keep a fair draw of :data:`EXAMPLES` from a stream.
+
+    ``seen`` counts the items before this one.
+    """
     if len(sample) < EXAMPLES:
         sample.append(item)
         return

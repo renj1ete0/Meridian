@@ -132,11 +132,10 @@ class JsonFormatter(logging.Formatter):
 def bind_run_id(run_id: str) -> Iterator[None]:
     """Attach ``run_id`` to every log record emitted within this context.
 
-    A synthesis run (§13.4) crosses many function calls and, in the
-    orchestrator and API, concurrent asyncio tasks. Binding once here and
-    reading it in JsonFormatter beats passing run_id as an argument through
-    every intermediate call — and beats a module-level global, which would
-    leak across concurrently-running tasks instead of following just this one.
+    A synthesis run (§13.4) crosses many function calls and, in the orchestrator and API, concurrent
+    asyncio tasks. Binding once here and reading it in JsonFormatter beats passing run_id as an
+    argument through every intermediate call — and beats a module-level global, which would leak
+    across concurrently-running tasks instead of following just this one.
     """
     token = _run_id.set(run_id)
     try:
@@ -163,10 +162,9 @@ _CONFIGURED_MARKER: Final[str] = "_meridian_json_configured"
 def configure_logging(service: str, level: str | None = None) -> None:
     """Install JSON stdout logging for this process. Call once at startup.
 
-    Every service (worker, orchestrator, API) calls this before doing
-    anything else, per AGENTS.md's "structured logging; every run logs
-    run_id." Idempotent: safe to call again (e.g. from a test fixture, or a
-    module imported twice) without doubling handlers.
+    Every service (worker, orchestrator, API) calls this before doing anything else, per AGENTS.md's
+    "structured logging; every run logs run_id." Idempotent: safe to call again (e.g. from a test
+    fixture, or a module imported twice) without doubling handlers.
     """
     _service.set(service)
     root = logging.getLogger()
@@ -188,6 +186,8 @@ def configure_logging(service: str, level: str | None = None) -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a standard logger; records pass through the JSON formatter
-    installed by :func:`configure_logging`."""
+    """Return a standard logger.
+
+    Records pass through the JSON formatter installed by :func:`configure_logging`.
+    """
     return logging.getLogger(name)

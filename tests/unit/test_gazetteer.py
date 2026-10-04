@@ -81,9 +81,7 @@ def test_the_label_is_meridians_ontology_not_spacys() -> None:
     assert "ORG" not in {pattern["label"] for pattern in compiled.patterns}
 
 
-@pytest.mark.parametrize(
-    "entity_type", ["agency", "scheme", "infrastructure", "metric", "concept"]
-)
+@pytest.mark.parametrize("entity_type", ["agency", "scheme", "infrastructure", "metric", "concept"])
 def test_every_type_in_the_schema_has_a_label(entity_type: str) -> None:
     # Drift: `gazetteer_entity_type` is a CHECK constraint, and a type added
     # there with no label here loads as an empty string nothing downstream reads.

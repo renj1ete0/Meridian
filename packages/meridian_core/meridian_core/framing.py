@@ -68,9 +68,11 @@ _DELIMITER_BYTES = 8
 
 
 class Passage(Protocol):
-    """The shape `frame_passages` needs. Deliberately structural rather than a
-    concrete type: `SearchHit` satisfies it, and so will whatever the
-    orchestrator passes without this module importing either."""
+    """The shape `frame_passages` needs.
+
+    Deliberately structural rather than a concrete type: `SearchHit` satisfies it, and so will
+    whatever the orchestrator passes without this module importing either.
+    """
 
     text: str
     url: str
@@ -142,12 +144,8 @@ def frame_passages(
             f"[{index}] source: {passage.url} (tier: {passage.source_tier})\n{passage.text}"
         )
 
-    if not blocks:
-        # An empty result is worth saying out loud. A model handed an empty
-        # fence infers that retrieval failed, or invents something to fill it;
-        # "nothing matched" is a finding and should read as one.
-        body = "(no passages matched)"
-    else:
-        body = "\n\n".join(blocks)
+    # An empty result is said out loud: handed an empty fence, a model infers
+    # that retrieval failed or invents something to fill it.
+    body = "\n\n".join(blocks) or "(no passages matched)"
 
     return frame(body, delimiter=fence)

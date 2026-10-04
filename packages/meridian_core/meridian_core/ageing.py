@@ -1,5 +1,4 @@
-"""How fast a document's relevance decays, by what kind of document it is
-(task `P2-20`, §9).
+"""How fast a document's relevance decays, by what kind of document it is (task `P2-20`, §9).
 
 §9 already says ageing is topic-dependent — "a 2014 finding on AV public
 acceptance is near-worthless, while a 2014 finding on pedestrian thermal

@@ -22,9 +22,9 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from meridian_core.alerts import (
-    check_embedding_backlog,
     MIN_ATTEMPTS_TO_JUDGE,
     Alert,
+    check_embedding_backlog,
     check_fetch_success,
     check_no_recent_success,
     check_queue_drained,

@@ -678,10 +678,12 @@ async def _pending_one(sess: AsyncSession, proposal_id: int) -> SteeringProposal
 async def accept(
     sess: AsyncSession, proposal_id: int, *, actor: str, now: dt.datetime
 ) -> SteeringProposal:
-    """Apply now. The operator's acceptance is the decision, so the only basis
-    checked is the one `steering` itself enforces — plus that the topic still
-    draws, because a boost on a paused topic changes nothing and says it did.
-    Flushes; the caller commits, and rolls back on a raise."""
+    """Apply now.
+
+    The operator's acceptance is the decision, so the only basis checked is the one `steering`
+    itself enforces — plus that the topic still draws, because a boost on a paused topic changes
+    nothing and says it did. Flushes; the caller commits, and rolls back on a raise.
+    """
     proposal = await _pending_one(sess, proposal_id)
     row = await sess.get(TopicConfig, proposal.topic)
     if row is None:
@@ -708,8 +710,11 @@ LOG_FIELD = "proposal"
 async def reject(
     sess: AsyncSession, proposal_id: int, *, actor: str, note: str | None, now: dt.datetime
 ) -> SteeringProposal:
-    """Never applies. Logged, which also keeps the topic quiet for
-    ``QUIET_HOURS`` — a rejected proposal is not re-proposed the next hour."""
+    """Never applies.
+
+    Logged, which also keeps the topic quiet for ``QUIET_HOURS`` — a rejected proposal is not
+    re-proposed the next hour.
+    """
     proposal = await _pending_one(sess, proposal_id)
     cleaned = " ".join((note or "").split()) or None
     proposal.status = "rejected"

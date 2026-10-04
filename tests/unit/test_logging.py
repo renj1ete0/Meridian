@@ -7,10 +7,12 @@ be quietly wrong while still appearing to work.
 
 from __future__ import annotations
 
+import ast as _ast
 import asyncio
 import io
 import json
 import logging
+import pathlib as _pathlib
 
 import pytest
 
@@ -141,8 +143,6 @@ def test_invalid_level_fails_loudly() -> None:
 # set up, which is exactly when it is least convenient, so this greps the
 # source instead of waiting for a code path to be exercised.
 
-import ast as _ast
-import pathlib as _pathlib
 
 #: Every attribute `logging.LogRecord.__init__` sets. Derived from a real
 #: record rather than typed out, so a new attribute in a future Python is

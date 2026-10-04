@@ -1,5 +1,4 @@
-"""One synthesis cycle, and a way to run it without letting it write
-(task `P4-09`, §11.10, §6.3).
+"""One synthesis cycle, and a way to run it without letting it write (task `P4-09`, §11.10, §6.3).
 
 `P4-08` moves a run through its stages. This is the thing that calls it, and
 the two flags §11.10 asks for: `--dry-run`, which applies nothing, and `--once`,
@@ -264,8 +263,11 @@ class Batch:
 
 
 async def _topics(sess: AsyncSession) -> list[str]:
-    """The active topics, for the prompt. Steering is a weight vector (§10),
-    and the weights are not the model's business — which topics exist is."""
+    """The active topics, for the prompt.
+
+    Steering is a weight vector (§10), and the weights are not the model's business — which topics
+    exist is.
+    """
     rows = await sess.scalars(
         select(TopicConfig.topic).where(TopicConfig.status == "active").order_by(TopicConfig.topic)
     )
@@ -683,10 +685,9 @@ async def step(
 ) -> str:
     """Do the current stage, then move to the next. Returns the new stage.
 
-    The window is where a stage goes. Inside it, writes happen and
-    `progress.reached(chunk_id)` records how far they got; on the way out the
-    mark moves once, after them (§6.3, `P4-11`). A stage that lands here
-    inherits that ordering without restating it — and one that raises leaves
+    The window is where a stage goes. Inside it, writes happen and `progress.reached(chunk_id)`
+    records how far they got; on the way out the mark moves once, after them (§6.3, `P4-11`). A
+    stage that lands here inherits that ordering without restating it — and one that raises leaves
     the mark exactly where it was.
     """
     stage = run.stage or STAGES[0]

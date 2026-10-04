@@ -644,9 +644,7 @@ async def hydrate_chunks(sess: AsyncSession, chunk_ids: Iterable[int]) -> dict[i
     }
 
 
-def _side(
-    edge: Edge, names: dict[int, str], hits: dict[int, SearchHitRead]
-) -> ContestedSideRead:
+def _side(edge: Edge, names: dict[int, str], hits: dict[int, SearchHitRead]) -> ContestedSideRead:
     """One edge of a contested pair, with its first passage hydrated."""
     first = edge.supporting_chunk_ids[0] if edge.supporting_chunk_ids else None
     return ContestedSideRead(
@@ -662,7 +660,9 @@ def _side(
     )
 
 
-async def contested_pairs(sess: AsyncSession, *, limit: int = DEFAULT_CONTESTED) -> ContestedListRead:
+async def contested_pairs(
+    sess: AsyncSession, *, limit: int = DEFAULT_CONTESTED
+) -> ContestedListRead:
     """Every disagreement §9 marked, across the graph (task P6-10, §12.5).
 
     The third entry point beside search and coverage. **Each pair once**: §9
@@ -689,7 +689,10 @@ async def contested_pairs(sess: AsyncSession, *, limit: int = DEFAULT_CONTESTED)
     named = sorted({c for edge in edges for c in edge.contested_with or ()} - by_id.keys())
     if named:
         by_id.update(
-            {e.edge_id: e for e in (await sess.scalars(select(Edge).where(Edge.edge_id.in_(named))))}
+            {
+                e.edge_id: e
+                for e in (await sess.scalars(select(Edge).where(Edge.edge_id.in_(named))))
+            }
         )
 
     found: list[tuple[Edge, Edge]] = []

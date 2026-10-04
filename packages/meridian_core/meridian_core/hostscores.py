@@ -47,7 +47,6 @@ from collections.abc import Mapping
 
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from tld import get_fld
 
 from .boilerplate import host_key
@@ -208,10 +207,9 @@ def follows_links(score: Score) -> bool:
 async def recompute(sess: AsyncSession) -> int:
     """Rebuild `host_scores` from labels and the queue. Returns hosts written.
 
-    Does not commit. In Python rather than SQL because the host is
-    `boilerplate.host_key` of the final URL — the same function everything
-    else uses — and a second definition in SQL is how two passes come to
-    disagree about what a host is.
+    Does not commit. In Python rather than SQL because the host is `boilerplate.host_key` of the
+    final URL — the same function everything else uses — and a second definition in SQL is how two
+    passes come to disagree about what a host is.
     """
     examined: Counter[str] = Counter()
     on_topic: Counter[str] = Counter()

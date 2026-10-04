@@ -269,10 +269,9 @@ async def explore_stats(
 ) -> CorpusStatsRead:
     """What the corpus holds.
 
-    Behind the Explore landing state's counts. `searchable_chunks` is
-    deliberately separate from `chunks`: §12.5 turns on a reader being able to
-    tell "we never collected this" from "we collected it and filtered it", and
-    one number for both erases exactly that.
+    Behind the Explore landing state's counts. `searchable_chunks` is deliberately separate from
+    `chunks`: §12.5 turns on a reader being able to tell "we never collected this" from "we
+    collected it and filtered it", and one number for both erases exactly that.
     """
     return CorpusStatsRead.model_validate(await corpus_stats(sess, since=since))
 
@@ -329,9 +328,11 @@ async def explore_area(area_id: int, sess: ReadSession) -> AreaDetailRead:
 
 @router.get("/areas/{area_id}/steering", response_model=AreaSteeringRead)
 async def explore_area_steering(area_id: int, sess: ReadSession) -> AreaSteeringRead:
-    """Which topic steering this area would move (`P6-35`), read before acting,
-    so the map's menu can say what "more" and "less" will do — or why "less"
-    cannot do anything for an area about no topic."""
+    """Which topic steering this area would move (`P6-35`), read before acting.
+
+    Lets the map's menu say what "more" and "less" will do, or why "less" cannot do anything
+    for an area about no topic.
+    """
     try:
         return await area_steering(sess, area_id)
     except AreaNotFound as exc:
@@ -340,8 +341,11 @@ async def explore_area_steering(area_id: int, sess: ReadSession) -> AreaSteering
 
 @router.get("/bridges/{area_a}/{area_b}", response_model=BridgeRead)
 async def explore_bridge(area_a: int, area_b: int, sess: ReadSession) -> BridgeRead:
-    """What connects two areas (`P6-31`): cited claims, similar passages and
-    shared terms, as three separate lists. Nothing recorded is an empty answer."""
+    """What connects two areas (`P6-31`).
+
+    Cited claims, similar passages and shared terms, as three separate lists. Nothing recorded
+    is an empty answer.
+    """
     try:
         return await bridge(sess, area_a, area_b)
     except AreaNotFound as exc:
@@ -877,14 +881,12 @@ async def explore_progress(sess: ReadSession) -> CrawlProgressRead:
 async def explore_crawl_health(sess: ReadSession) -> CrawlHealthRead:
     """A day of fetching and a verdict on whether it has stopped (task `P6-25`).
 
-    Behind Admin's crawl-health panel, and here rather than under
-    `/api/admin/*` on purpose. Everything it does is read, and the scaffold
-    rule is that `/api/admin/*` exists for the routes that write — a read
-    placed there takes the writable role for no reason, and inherits the
-    admin gate, which is closed exactly on the deployments nobody has finished
-    configuring. The person watching an unattended crawl on one of those needs
-    this most. It is `/progress`'s sibling, over the same tables, on the same
-    read-only role.
+    Behind Admin's crawl-health panel, and here rather than under `/api/admin/*` on purpose.
+    Everything it does is read, and the scaffold rule is that `/api/admin/*` exists for the routes
+    that write — a read placed there takes the writable role for no reason, and inherits the admin
+    gate, which is closed exactly on the deployments nobody has finished configuring. The person
+    watching an unattended crawl on one of those needs this most. It is `/progress`'s sibling, over
+    the same tables, on the same read-only role.
     """
     return CrawlHealthRead.model_validate(await crawl_health(sess))
 

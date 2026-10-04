@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.156.15] — 2026-10-04
+
+### Changed
+
+- `B-141`: Python code follows PEP 8 and PEP 257 as enforced by ruff (`E`, `W`, `N`, `D2`–`D4`),
+  and `make test` runs `make lint` first. `ruff check .` had been failing unnoticed. No
+  behaviour changes.
+
 ## [0.156.14] — 2026-10-04
 
 ### Fixed

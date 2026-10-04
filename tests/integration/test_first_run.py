@@ -16,10 +16,10 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import delete, select
 
 from api.routes.admin import add_seed, drop_seed, read_first_run
-from fastapi import HTTPException
 from meridian_core.models import QueueTask, Source, SteeringLog
 from meridian_core.schemas.admin import SeedCreate
 

@@ -272,8 +272,10 @@ class SearxClient:
 
 
 def _strings(entries: Iterable[object]) -> list[str]:
-    """SearXNG reports unresponsive engines as `[name, reason]` pairs in some
-    versions and as bare strings in others. Both are just labels for a log."""
+    """Engine names from SearXNG's ``unresponsive_engines``.
+
+    Some versions report `[name, reason]` pairs and others bare strings; both are labels for a log.
+    """
     out: list[str] = []
     for entry in entries:
         if isinstance(entry, str):

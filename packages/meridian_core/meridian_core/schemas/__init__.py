@@ -1,6 +1,7 @@
-"""Pydantic v2 DTOs for every service boundary (AGENTS.md: "pydantic for all
-boundaries"; spec §2.6, §11.8: "All writes validate server-side. Never trust
-model output for structure").
+"""Pydantic v2 DTOs for every service boundary.
+
+AGENTS.md: "pydantic for all boundaries"; spec §2.6, §11.8: "All writes validate
+server-side. Never trust model output for structure".
 
 Every SQLAlchemy table in ``meridian_core.models`` gets the DTO variants that
 are actually useful at its boundary — usually a ``*Create`` (what a caller may

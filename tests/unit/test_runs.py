@@ -100,7 +100,7 @@ def test_a_deferred_run_is_always_available_however_recently_it_beat() -> None:
 def test_the_window_is_long_enough_to_survive_a_slow_stage() -> None:
     # Not an arbitrary number: it has to exceed the slowest legitimate step, and
     # a frontier model over a large batch is minutes rather than seconds.
-    assert STALE_AFTER >= dt.timedelta(minutes=15)
+    assert dt.timedelta(minutes=15) <= STALE_AFTER
 
 
 @pytest.mark.parametrize("status", ["done", "failed"])

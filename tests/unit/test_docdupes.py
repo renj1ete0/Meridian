@@ -32,7 +32,7 @@ def test_sharing_less_than_the_exact_share_is_not_a_copy() -> None:
     shared = [f"shared passage {i}" for i in range(8)]
     own = [f"own passage {i}" for i in range(3)]
     assert exact_pairs({1: shared, 2: shared + own}) == []
-    assert 8 / 11 < EXACT_SHARE
+    assert EXACT_SHARE > 8 / 11
 
 
 def test_a_passage_every_page_carries_does_not_make_pages_copies() -> None:

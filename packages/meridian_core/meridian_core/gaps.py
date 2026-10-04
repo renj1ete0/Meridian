@@ -458,7 +458,9 @@ def place_gaps(
                 f"({place}), of {topic_sources} labelled {topic} in all; fewer than "
                 f"{PLACE_THIN} leaves this place out of any comparison."
             ),
-            severity=round(PLACE_SEVERITY_FLOOR + PLACE_SEVERITY_SPAN * (1 - sources / PLACE_THIN), 3),
+            severity=round(
+                PLACE_SEVERITY_FLOOR + PLACE_SEVERITY_SPAN * (1 - sources / PLACE_THIN), 3
+            ),
             evidence=evidence,
             actions=(
                 Action("seed_query", "Seed a search", topic=topic, query=words),
@@ -996,8 +998,10 @@ class Anchor:
 
 @dataclasses.dataclass(frozen=True)
 class RouteCheck:
-    """What the route search said about one pair: the claims-only answer and,
-    when that found nothing, the mixed one."""
+    """What the route search said about one pair.
+
+    The claims-only answer and, when that found nothing, the mixed one.
+    """
 
     cited: bool
     found: bool
@@ -1201,9 +1205,9 @@ async def seed_query(
 ) -> QueueTask:
     """Queue a search for ``topic`` and log why. Flushes; the caller commits.
 
-    Undo: the task can be removed in Admin while it is still pending
-    (`DELETE /api/admin/seeds/{id}`); once it has run, its pages are ordinary
-    crawl results and nothing is deleted (§2.5).
+    Undo: the task can be removed in Admin while it is still pending (`DELETE
+    /api/admin/seeds/{id}`); once it has run, its pages are ordinary crawl results and nothing is
+    deleted (§2.5).
     """
     from .queueing import enqueue
 

@@ -159,8 +159,10 @@ SIDECAR_POLL_S = 5.0
 
 
 def remote_only_from_env() -> bool:
-    """``MERIDIAN_EMBED_REMOTE_ONLY`` (`P3-12`): the model is on another machine
-    and must never be loaded in this one."""
+    """Whether ``MERIDIAN_EMBED_REMOTE_ONLY`` is set (`P3-12`).
+
+    The model is on another machine and must never be loaded in this one.
+    """
     return os.environ.get("MERIDIAN_EMBED_REMOTE_ONLY", "").strip().lower() in {"1", "true", "yes"}
 
 

@@ -13,7 +13,7 @@ export
 
 .PHONY: promote dev-up dev-down up down logs migrate seed quickstart preflight \
         local-up local-down local-logs \
-        snapshot-corpus restore-corpus backup test bench-search build-push build-worker
+        snapshot-corpus restore-corpus backup lint test bench-search build-push build-worker
 
 # --- Running it, rather than developing it (tasks B-05, B-06, B-08) ---------
 #
@@ -77,7 +77,13 @@ restore-corpus:
 backup:
 	./scripts/backup.sh
 
-test:
+# PEP 8 / PEP 257 via ruff, and the formatter, before the suite: AGENTS.md
+# "Code and comment standards".
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
+
+test: lint
 	uv run pytest
 
 # --- Measurement (P2-04) ------------------------------------------------------

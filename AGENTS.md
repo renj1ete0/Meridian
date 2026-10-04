@@ -34,6 +34,47 @@ below (§n) point to the architecture spec unless marked "(scaffold)".
 - Structured logging; every run logs `run_id`.
 - No `platform:` keys in compose; images are multi-arch (scaffold §5).
 
+## Code and comment standards
+
+Code follows the recognised standard for its language. `make lint` enforces what a linter
+can, and runs as the first step of `make test`.
+
+**Python**
+
+- **PEP 8** for layout and naming (ruff `E`, `W`, `N`; `ruff format`), with a line length
+  of 100.
+- **PEP 257** for docstrings (ruff `D2xx`–`D4xx`, convention `pep257`). The summary is one
+  line, ends in `.` or `?`, and is followed by a blank line before any detail. A summary may
+  be a noun phrase ("Whether a passage is in its sample.") or a command (`D401` is off for
+  that reason).
+- **PEP 484 / 604 / 695** type hints on every public function, `X | None` rather than
+  `Optional`, and type parameters (`class Kept[T]:`) rather than `Generic[T]`.
+- Exceptions are named for what happened (`NotConfigured`, `QueryRefused`), with no
+  required `Error` suffix (`N818` is off).
+- Tests and migrations are exempt from the docstring rules: test docstrings explain a
+  scenario, and Alembic writes its own.
+
+**TypeScript**
+
+- `strict` TypeScript (`tsc -b`), React function components, no `any` without a comment
+  saying why.
+- **TSDoc** (`/** … */`) on exported components, hooks and functions: one summary
+  sentence, then `@param` / `@returns` where they add something the types do not.
+
+**Comments and docstrings: documentation lives in `docs/`**
+
+- A docstring says what a thing is or does, and anything a caller must know: units, side
+  effects, what it refuses. A few lines, not an essay.
+- A comment says *why* a line is written the way it is, when the code cannot say it
+  itself. One to three lines.
+- The rationale, the history, the measurements and the traps belong in the feature's doc
+  (`docs/features/`), the decision record (`docs/adr/`), or the handover. The code links to
+  them: `# See docs/features/embedding.md#tiers.`
+- Task IDs (`B-127`) in a comment are fine as pointers; the story behind them goes in the
+  docs.
+- When you change a file that still carries essay comments, move the narrative into its
+  feature doc in the same commit (`D-01` tracks what is left).
+
 ## Testing
 
 **Every new function ships with a test, frontend and backend.** Not as ceremony —
@@ -86,7 +127,26 @@ compiles (see [TASKS.md](TASKS.md)).
 - Tasks marked **⚑ human** need a judgment call — don't complete them autonomously.
 - Add new tasks freely; never renumber existing ones.
 
-[docs/handover.md](docs/handover.md) is its companion, and answers a different
+## Documentation
+
+Everything a person needs to understand, run or change the system lives in `docs/`. The
+map is [docs/README.md](docs/README.md). It follows the Diátaxis split (tutorials, how-to
+guides, reference, explanation) plus decision records:
+
+| Folder | Answers | Write one when |
+|---|---|---|
+| `docs/features/` | What a feature does, how it works, how to configure, operate and debug it | You build or change a feature. **Every feature has one.** |
+| `docs/guides/` | How to do a task, step by step (set up, deploy, connect an assistant) | A task has more than two steps that someone will repeat |
+| `docs/reference/` | Exact facts: environment variables, commands, scheduled jobs, MCP tools, API | You add a variable, command, job, tool or route |
+| `docs/adr/` | What was decided, why, and at what cost | The operator makes a decision. Rephrase it; never quote them |
+| `docs/spec/` | The architecture as designed | The design itself changes |
+| `docs/design/` | What the interface looks like (mocks) | A new reader surface is proposed, before it is built |
+
+A feature doc uses the template in `docs/features/README.md`. Update it in the same commit
+as the code it describes. Documentation-only commits need no version bump (see
+[Versioning](#versioning)).
+
+[docs/handover.md](docs/handover.md) is the companion to `TASKS.md`, and answers a different
 question: not what to build, but how the built parts fit together, which traps have
 already cost someone a session, and what has been verified against the real web
 rather than only against tests. Read it too at the start of a session, and add to it

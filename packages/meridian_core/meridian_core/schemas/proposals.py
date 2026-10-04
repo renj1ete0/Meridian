@@ -1,5 +1,6 @@
-"""What a model may propose, and the shape it has to propose it in
-(task `P4-16`, §11.6, §11.8, §2.6).
+"""What a model may propose, and the shape it has to propose it in.
+
+Task `P4-16`; spec §11.6, §11.8, §2.6.
 
 Every other DTO in this package describes a boundary between parts of this
 system. These describe the one boundary where the input was *generated* rather

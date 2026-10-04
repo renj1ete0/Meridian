@@ -549,8 +549,9 @@ def clean_text(text: str, *, boilerplate: Collection[int] = ()) -> Cleaning:
 
 
 def clean_pages(pages: Sequence[Page], *, boilerplate: Collection[int] = ()) -> dict[int, Cleaning]:
-    """Every rule over a paginated document, per page, with the guard applied
-    to the document as a whole.
+    """Every rule over a paginated document, per page.
+
+    The guard is applied to the document as a whole.
 
     One guard for the document rather than one per page: a PDF's cover page is
     often nothing but a running head and a number, and keeping that page whole

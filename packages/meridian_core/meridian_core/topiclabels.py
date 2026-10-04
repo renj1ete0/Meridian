@@ -194,10 +194,9 @@ def topic_name(topic: str) -> str:
 def prototype_text(topic: str, description: str | None, phrases: Iterable[str]) -> str:
     """The text a topic is embedded as.
 
-    ``name: description; phrase; phrase``. Deterministic — phrases are
-    de-duplicated case-insensitively and sorted — because the text is part of
-    the basis fingerprint, and an order that varied between runs would re-label
-    the corpus for nothing.
+    ``name: description; phrase; phrase``. Deterministic — phrases are de-duplicated
+    case-insensitively and sorted — because the text is part of the basis fingerprint, and an order
+    that varied between runs would re-label the corpus for nothing.
     """
     seen: dict[str, str] = {}
     for phrase in phrases:
@@ -404,8 +403,10 @@ def awaiting_labels(fingerprint: str):
 
 
 async def still_pending(sess: AsyncSession, source_ids: Sequence[int]) -> set[int]:
-    """Which of these sources have live chunks without a vector — whose labels,
-    if read now, are read from their sample (`B-89`)."""
+    """Which of these sources have live chunks without a vector.
+
+    Labels read from such a source now are read from its sample (`B-89`).
+    """
     if not source_ids:
         return set()
     rows = await sess.scalars(
@@ -419,8 +420,10 @@ async def still_pending(sess: AsyncSession, source_ids: Sequence[int]) -> set[in
 async def sources_awaiting(
     sess: AsyncSession, fingerprint: str, *, limit: int, after: int = 0
 ) -> list[int]:
-    """The next ``limit`` source ids needing labels, past ``after``. A cursor, so a
-    report-only pass that writes nothing still moves forward."""
+    """The next ``limit`` source ids needing labels, past ``after``.
+
+    A cursor, so a report-only pass that writes nothing still moves forward.
+    """
     rows = await sess.scalars(
         select(Source.source_id)
         .where(Source.source_id > after, awaiting_labels(fingerprint))

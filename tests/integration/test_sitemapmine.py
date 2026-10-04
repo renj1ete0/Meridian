@@ -17,8 +17,8 @@ from sqlalchemy import select
 
 from meridian_core.hostscores import MIN_EXAMINED, PROVEN_BOOST, recompute
 from meridian_core.models import QueueTask
-from meridian_core.queueing import claim_next
 from meridian_core.models.robots import RobotsCacheEntry
+from meridian_core.queueing import claim_next
 from meridian_core.sources import upsert_source
 from worker.sitemapmine import CONVENTIONAL, run_pass, sitemaps_for
 
@@ -92,7 +92,9 @@ def test_a_host_naming_none_gets_the_conventional_one() -> None:
 async def test_a_proven_hosts_sitemaps_are_queued_boosted(sess) -> None:
     h = host()
     await labelled(sess, h, MIN_EXAMINED, on=MIN_EXAMINED)
-    await robots(sess, h, f"User-agent: *\nSitemap: https://{h}/a.xml\nSitemap: https://{h}/b.xml\n")
+    await robots(
+        sess, h, f"User-agent: *\nSitemap: https://{h}/a.xml\nSitemap: https://{h}/b.xml\n"
+    )
     await recompute(sess)
 
     await run_pass(apply=True, session_factory=factory(sess))
@@ -151,9 +153,7 @@ async def test_a_mined_sitemap_is_claimable_by_its_hosts_topic(sess) -> None:
 
     [row] = await sitemap_rows(sess, h)
     assert row.topic == "walkability"
-    claimed = await claim_next(
-        sess, worker_id="t", topics=["walkability"], task_types=["sitemap"]
-    )
+    claimed = await claim_next(sess, worker_id="t", topics=["walkability"], task_types=["sitemap"])
     # Other tests' rows may rank higher; ours must at least be eligible.
     assert claimed is not None
 

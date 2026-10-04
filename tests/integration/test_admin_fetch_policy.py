@@ -86,9 +86,7 @@ async def fetch_row(client, domain: str) -> dict:
 async def stored(session_for, domain: str) -> FetchPolicy:
     sess = await session_for("rw")
     await sess.rollback()
-    return (
-        await sess.scalars(select(FetchPolicy).where(FetchPolicy.domain == domain))
-    ).one()
+    return (await sess.scalars(select(FetchPolicy).where(FetchPolicy.domain == domain))).one()
 
 
 # --------------------------------------------------------------------------
@@ -195,9 +193,7 @@ async def test_settings_merge_rather_than_replace(
     # delay somebody tuned disappears without anybody touching it.
     await client.patch(f"/api/admin/fetch-policy/{domain}", json={"settings": {"timeout_s": 45}})
 
-    await client.patch(
-        f"/api/admin/fetch-policy/{domain}", json={"settings": {"max_retries": 4}}
-    )
+    await client.patch(f"/api/admin/fetch-policy/{domain}", json={"settings": {"max_retries": 4}})
     settings = (await stored(session_for, domain)).settings
 
     assert settings == {"timeout_s": 45, "max_retries": 4}

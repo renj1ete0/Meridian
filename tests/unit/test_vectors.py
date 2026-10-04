@@ -374,10 +374,10 @@ async def test_the_real_client_still_refuses_an_oversized_request() -> None:
 
 
 def test_the_client_and_server_caps_agree() -> None:
-    from meridian_core.embedder import MAX_TEXTS as client
-    from worker.embedserver import MAX_TEXTS as server
+    from meridian_core.embedder import MAX_TEXTS as CLIENT_CAP
+    from worker.embedserver import MAX_TEXTS as SERVER_CAP
 
-    assert client == server
+    assert CLIENT_CAP == SERVER_CAP
 
 
 async def test_a_failure_part_way_through_a_split_batch_fails_the_whole_batch() -> None:

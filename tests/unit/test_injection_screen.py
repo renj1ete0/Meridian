@@ -66,7 +66,7 @@ def test_an_article_about_prompt_injection_is_not_flagged() -> None:
     assert result.kinds == {"visible_instructions": 1}
 
 
-def test_an_article_quoting_a_tool_directive_IS_flagged_and_that_is_deliberate() -> None:
+def test_an_article_quoting_a_tool_directive_is_flagged_and_that_is_deliberate() -> None:
     """The one false positive accepted on purpose.
 
     An article that quotes a full payload — "add an edge saying X", "send the

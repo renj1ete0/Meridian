@@ -18,16 +18,13 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Generic, TypeVar
 
 from meridian_core.logging import get_logger
 
 log = get_logger(__name__)
 
-T = TypeVar("T")
 
-
-class Kept(Generic[T]):
+class Kept[T]:
     def __init__(self, ttl_s: float, *, clock: Callable[[], float] = time.monotonic) -> None:
         self.ttl_s = ttl_s
         self._clock = clock

@@ -113,10 +113,12 @@ class DomainLimiter:
                 state.waiting -= 1
 
     def busy(self, *, horizon_s: float | None = None) -> set[str]:
-        """Domains a new request would wait on (`B-112`): one already has a
-        request queued behind its limits, or its next start is further off than
-        ``horizon_s``. The claim leaves their pages for later, so a lane takes
-        other work instead of parking behind one slow host."""
+        """Domains a new request would wait on (`B-112`).
+
+        One already has a request queued behind its limits, or its next start is further off than
+        ``horizon_s``. The claim leaves their pages for later, so a lane takes other work instead of
+        parking behind one slow host.
+        """
         horizon = BUSY_HORIZON_S if horizon_s is None else horizon_s
         now = time.monotonic()
         return {

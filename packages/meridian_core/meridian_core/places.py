@@ -343,8 +343,10 @@ def domain_country(url: str, source_tier: str | None = None) -> tuple[str, str] 
 
 
 def entity_codes(name: str, aliases: Sequence[str] | None, jurisdiction: str | None) -> str | None:
-    """The code a ``place`` entity stands for: a city, else a country, else its
-    jurisdiction. None when none of those is a place this scheme knows."""
+    """The code a ``place`` entity stands for: a city, else a country, else its jurisdiction.
+
+    None when none of those is a place this scheme knows.
+    """
     names = [name, *(aliases or ())]
     for table in (CITIES, COUNTRIES):
         for candidate in names:
@@ -657,8 +659,10 @@ def awaiting_places(fingerprint: str):
 async def sources_awaiting(
     sess: AsyncSession, fingerprint: str, *, limit: int, after: int = 0
 ) -> list[int]:
-    """The next ``limit`` source ids needing places, past ``after`` — a cursor,
-    so a report-only pass that writes nothing still moves forward."""
+    """The next ``limit`` source ids needing places, past ``after``.
+
+    A cursor, so a report-only pass that writes nothing still moves forward.
+    """
     rows = await sess.scalars(
         select(Source.source_id)
         .where(Source.source_id > after, awaiting_places(fingerprint))
@@ -671,11 +675,9 @@ async def sources_awaiting(
 async def source_texts(sess: AsyncSession, source_ids: Sequence[int]) -> dict[int, str]:
     """Each source's live text, in document order.
 
-    Non-duplicate chunks where a source has any, for the reason
-    `topiclabels.source_vectors` gives: a chunk the novelty gate marked a
-    duplicate is mostly navigation and footer repeated across a site, and a
-    footer naming the publisher's city on every page would otherwise vote on
-    every page.
+    Non-duplicate chunks where a source has any, for the reason `topiclabels.source_vectors` gives:
+    a chunk the novelty gate marked a duplicate is mostly navigation and footer repeated across a
+    site, and a footer naming the publisher's city on every page would otherwise vote on every page.
     """
     if not source_ids:
         return {}
@@ -752,8 +754,10 @@ def examine(
 async def record_places(
     sess: AsyncSession, examined: Examined, *, fingerprint: str, now: dt.datetime
 ) -> None:
-    """Write one source's places, evidence and basis. Replaces, never accumulates:
-    a tag is a claim about the text as it is now."""
+    """Write one source's places, evidence and basis.
+
+    Replaces, never accumulates: a tag is a claim about the text as it is now.
+    """
     await sess.execute(
         update(Source)
         .where(Source.source_id == examined.source_id)

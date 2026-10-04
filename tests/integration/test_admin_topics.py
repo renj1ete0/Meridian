@@ -231,9 +231,7 @@ async def test_maintenance_also_leaves_the_pool(client, open_admin, restored) ->
 # --------------------------------------------------------------------------
 
 
-async def test_a_boost_raises_the_share_and_leaves_the_weight(
-    client, open_admin, restored
-) -> None:
+async def test_a_boost_raises_the_share_and_leaves_the_weight(client, open_admin, restored) -> None:
     # The stored weight is the baseline the boost returns to. Writing the boost
     # into it is how "steer back later" quietly becomes permanent.
     topic = await an_active_topic(client)

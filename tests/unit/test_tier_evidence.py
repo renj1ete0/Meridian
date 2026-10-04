@@ -87,4 +87,4 @@ def test_the_migration_and_the_config_list_the_same_patterns() -> None:
     spec = importlib.util.spec_from_file_location("mig", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.EVIDENCE_PATTERNS == CONFIG["needs_scholarly_evidence"]
+    assert CONFIG["needs_scholarly_evidence"] == module.EVIDENCE_PATTERNS

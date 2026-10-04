@@ -21,10 +21,10 @@ import uuid
 import pytest
 from sqlalchemy import delete, select, text
 
+from meridian_core import search as search_module
 from meridian_core.chunks import ChunkWrite, replace_chunks, store_embeddings
 from meridian_core.models import Chunk, Source
 from meridian_core.models.source import EMBEDDING_DIM
-from meridian_core import search as search_module
 from meridian_core.search import SearchFilters, search
 from meridian_core.sources import upsert_source
 
@@ -338,9 +338,7 @@ async def test_limit_bounds_the_result_not_the_candidate_pool(
 # can follow" cannot afford.
 
 
-async def test_a_superseded_chunk_is_not_found_lexically(
-    session_for, scope, term, cleanup
-) -> None:
+async def test_a_superseded_chunk_is_not_found_lexically(session_for, scope, term, cleanup) -> None:
     sess = await session_for("rw")
     source = await a_source(sess, scope, [f"The {term} programme was reviewed."], [at(0.2, 5)])
     await replace_chunks(
@@ -380,9 +378,7 @@ async def test_the_replacement_is_found_in_its_place(session_for, scope, term, c
     assert [h.text for h in result.hits] == [f"The {term} programme."]
 
 
-async def test_a_caller_cannot_ask_for_superseded_chunks(
-    session_for, scope, term, cleanup
-) -> None:
+async def test_a_caller_cannot_ask_for_superseded_chunks(session_for, scope, term, cleanup) -> None:
     # Not a filter a caller may turn off. `include_duplicates` exists because a
     # near-duplicate is a *verdict* worth re-examining; a superseded chunk is
     # not a verdict, it is text the page no longer has.

@@ -86,8 +86,12 @@ async def test_one_answer_of_any_other_kind_spares_it(session_for, domain, clean
     assert await mine(sess, domain) == []
 
 
-@pytest.mark.parametrize(("outcome", "status"), [("http_error", 404), ("http_error", 503), ("timeout", None)])
-async def test_only_refusals_count_as_refusals(session_for, domain, cleanup, outcome, status) -> None:
+@pytest.mark.parametrize(
+    ("outcome", "status"), [("http_error", 404), ("http_error", 503), ("timeout", None)]
+)
+async def test_only_refusals_count_as_refusals(
+    session_for, domain, cleanup, outcome, status
+) -> None:
     sess = await session_for("rw")
     await attempts(sess, domain, REFUSAL_MIN_ATTEMPTS - 1)
     await attempts(sess, domain, 1, outcome=outcome, status=status)
@@ -116,7 +120,9 @@ async def test_refusals_outside_the_window_are_forgotten(session_for, domain, cl
     assert await mine(sess, domain) == []
 
 
-async def test_a_domain_a_person_unblocked_gets_a_fresh_window(session_for, domain, cleanup) -> None:
+async def test_a_domain_a_person_unblocked_gets_a_fresh_window(
+    session_for, domain, cleanup
+) -> None:
     """Otherwise Admin's unblock would be undone at the next hourly pass."""
     sess = await session_for("rw")
     await attempts(sess, domain, REFUSAL_MIN_ATTEMPTS * 2, ago=5)
@@ -137,7 +143,9 @@ async def test_a_domain_a_person_unblocked_gets_a_fresh_window(session_for, doma
 
 
 @pytest.mark.parametrize("status", ["paused", "blocked"])
-async def test_a_domain_already_stopped_is_left_as_it_is(session_for, domain, cleanup, status) -> None:
+async def test_a_domain_already_stopped_is_left_as_it_is(
+    session_for, domain, cleanup, status
+) -> None:
     """A person's pause is not overwritten with this rule's block."""
     sess = await session_for("rw")
     await attempts(sess, domain, REFUSAL_MIN_ATTEMPTS)

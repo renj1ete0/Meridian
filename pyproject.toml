@@ -1,6 +1,6 @@
 [project]
 name = "meridian"
-version = "0.156.14"
+version = "0.156.15"
 description = "Self-hosted autonomous research system"
 requires-python = ">=3.12"
 readme = "README.md"
@@ -39,7 +39,24 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+# PEP 8 (E, W, N), PEP 257 docstring layout (D2xx-D4xx), plus the bug and
+# modernisation rules. Conventions and the exceptions below: AGENTS.md "Code and
+# comment standards".
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "N", "D2", "D3", "D4"]
+ignore = [
+    "D401",  # Summaries may be noun phrases ("Whether ...", "The ...") as well as commands.
+    "D400",  # D415 instead: a summary may end in "?" as well as ".".
+    "N818",  # Exceptions are named for what happened (NotConfigured), not suffixed "Error".
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+# Test docstrings describe a scenario and its reason, often in two sentences.
+"tests/**" = ["D"]
+# Alembic writes the revision docstring in its own layout.
+"migrations/**" = ["D"]
 
 # The workspace packages. Without this ruff sorts them with third-party
 # imports, which disagrees with how every module in the repo is written and

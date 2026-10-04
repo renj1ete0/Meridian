@@ -357,8 +357,10 @@ _BEFORE_COMMA = re.compile(r"\s+,")
 
 
 def join_tokens(tokens: list[str]) -> str:
-    """Tokens back into the text a document wrote: hyphens and slashes glued,
-    no space before a comma."""
+    """Tokens back into the text a document wrote.
+
+    Hyphens and slashes glued, no space before a comma.
+    """
     return _BEFORE_COMMA.sub(",", _GLUED.sub(r"\1", " ".join(tokens)))
 
 

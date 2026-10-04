@@ -23,8 +23,8 @@ from sqlalchemy import delete, func, select
 
 from meridian_core.models import QueueTask
 from meridian_core.queueing import (
-    DIRECTED_FLOOR,
     DEFAULT_LEASE_SECONDS,
+    DIRECTED_FLOOR,
     abandon,
     advance,
     claim_next,

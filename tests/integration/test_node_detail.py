@@ -233,9 +233,7 @@ async def test_the_supporting_chunks_come_back_with_their_source(client, graph) 
     assert supporting[0]["url"].startswith("https://")
 
 
-async def test_a_superseded_chunk_is_still_followable_from_a_tag(
-    client, graph, marker
-) -> None:
+async def test_a_superseded_chunk_is_still_followable_from_a_tag(client, graph, marker) -> None:
     # The one place in the read surface where a superseded chunk is shown, and
     # the reason: this is the text the attribute was derived from. §2.4
     # re-derives from source chunks, so a tag whose chunk was replaced by a

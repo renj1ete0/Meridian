@@ -106,7 +106,7 @@ def test_a_model_of_the_wrong_width_is_refused(patched) -> None:
 
 
 def _services(path: pathlib.Path) -> dict:
-    return (yaml.safe_load(path.read_text()).get("services") or {})
+    return yaml.safe_load(path.read_text()).get("services") or {}
 
 
 def _command_of(service: dict) -> str:

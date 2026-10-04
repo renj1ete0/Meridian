@@ -76,7 +76,9 @@ async def approved_terms(sess: AsyncSession) -> list[GazetteerTerm]:
     themselves.
     """
     rows = await sess.scalars(
-        select(GazetteerTerm).where(GazetteerTerm.approved.is_(True)).order_by(GazetteerTerm.term_id)
+        select(GazetteerTerm)
+        .where(GazetteerTerm.approved.is_(True))
+        .order_by(GazetteerTerm.term_id)
     )
     return list(rows)
 

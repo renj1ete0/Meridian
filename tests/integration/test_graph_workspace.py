@@ -721,9 +721,7 @@ async def test_a_pair_marked_from_one_side_is_still_listed(client, world, sessio
     assert mine(world, await contested(client)) == [(min(fc, fd), max(fc, fd))]
 
 
-async def test_a_mark_naming_a_missing_edge_is_not_half_a_pair(
-    client, world, session_for
-) -> None:
+async def test_a_mark_naming_a_missing_edge_is_not_half_a_pair(client, world, session_for) -> None:
     sess = await session_for("rw")
     await sess.execute(
         Edge.__table__.update()

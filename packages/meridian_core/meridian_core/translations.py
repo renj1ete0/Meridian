@@ -140,9 +140,7 @@ async def translations_for(
     )
     out: dict[str, list[tuple[str, str]]] = {}
     for row in rows:
-        found = [
-            (lang, row.translations[lang]) for lang in languages if row.translations.get(lang)
-        ]
+        found = [(lang, row.translations[lang]) for lang in languages if row.translations.get(lang)]
         if found:
             out[keys[row.phrase]] = found
     return out

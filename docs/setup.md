@@ -574,17 +574,23 @@ from meridian_core.db import session
 from meridian_core.tokens import issue_token
 import asyncio, datetime as dt
 
+
 async def mint():
     async with session("rw") as s:
         secret, row = await issue_token(
             s,
             agent_id="my-phone",
-            allowed_tools=["search_chunks", "get_source_metadata",
-                           "list_new_since", "corpus_overview"],
+            allowed_tools=[
+                "search_chunks",
+                "get_source_metadata",
+                "list_new_since",
+                "corpus_overview",
+            ],
             expires_at=dt.datetime.now(dt.UTC) + dt.timedelta(days=90),
         )
         await s.commit()
         print("secret (shown once):", secret)
+
 
 asyncio.run(mint())
 ```

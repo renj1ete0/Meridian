@@ -133,7 +133,7 @@ _NAME_SEPARATORS = re.compile(r"[·•;]|\s&\s")
 
 
 def _author_line(line: str) -> bool:
-    """ "A. Smith · B. Jones", "Ann Smith, Bo Jones": names, not a title."""
+    """Whether a line is a list of names ("A. Smith · B. Jones"), not a title."""
     if _NAME_SEPARATORS.search(line):
         return True
     words = [w for w in re.split(r"[\s,]+", line) if w]

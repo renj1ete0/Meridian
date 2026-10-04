@@ -34,9 +34,11 @@ def watched_since(view: SavedView) -> dt.datetime:
 
 
 async def new_for_view(sess: AsyncSession, view: SavedView) -> int | None:
-    """Sources new since the view was last opened that match it, capped at
-    :data:`COUNT_CAP`. None when the view asks nothing a count can answer —
-    no words and no topic (a view of one node's neighbourhood, say)."""
+    """Sources new since the view was last opened that match it, capped at :data:`COUNT_CAP`.
+
+    None when the view asks nothing a count can answer — no words and no topic (a view of one node's
+    neighbourhood, say).
+    """
     query = (view.query or "").strip()
     topics = [t for t in (view.filters or {}).get("topic") or [] if t]
     if not query and not topics:

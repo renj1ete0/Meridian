@@ -102,13 +102,14 @@ def test_a_proven_host_ranks_above_every_unjudged_link(monkeypatch) -> None:
 def test_the_boost_is_larger_than_any_tier_priority() -> None:
     """Drift: read the tier map rather than hardcoding it, so a tier raised
     past the boost fails here instead of quietly re-ordering the queue."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     tiers = yaml.safe_load(
         (Path(__file__).parents[2] / "config" / "source_tiers.yaml").read_text()
     )["priority_by_tier"]
-    assert PROVEN_BOOST > max(tiers.values())
+    assert max(tiers.values()) < PROVEN_BOOST
 
 
 def test_a_proven_host_is_still_capped() -> None:

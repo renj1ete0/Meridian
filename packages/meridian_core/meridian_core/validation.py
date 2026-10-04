@@ -255,9 +255,7 @@ async def check_seed_allowed(
     # looked yet" lead to different actions.
     if require_seed_allowed and row is not None and row.seed_allowed is not True:
         if row.seed_allowed is False:
-            raise ValidationError(
-                "domain_allowed", f"{domain} is not allowed for seeding."
-            )
+            raise ValidationError("domain_allowed", f"{domain} is not allowed for seeding.")
         if row.first_seen_via not in FRONTIER_DISCOVERY:
             raise ValidationError(
                 "domain_allowed",

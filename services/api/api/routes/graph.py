@@ -34,8 +34,10 @@ async def graph_contested(
     sess: ReadSession,
     limit: Annotated[int, Query(ge=1, le=graphview.MAX_CONTESTED)] = graphview.DEFAULT_CONTESTED,
 ) -> ContestedListRead:
-    """The contested list (§12.5's third entry point): each disagreement once,
-    newest first, both sides with their first passage."""
+    """The contested list (§12.5's third entry point).
+
+    Each disagreement once, newest first, both sides with their first passage.
+    """
     return await graphview.contested_pairs(sess, limit=limit)
 
 

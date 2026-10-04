@@ -97,9 +97,7 @@ def test_the_service_exists(doc: str, service: str, command: str) -> None:
     documented_runs(),
     ids=lambda v: str(v).replace(" ", "-")[:60],
 )
-def test_the_image_carries_what_the_command_needs(
-    doc: str, service: str, command: str
-) -> None:
+def test_the_image_carries_what_the_command_needs(doc: str, service: str, command: str) -> None:
     """`alembic` has to be installed; `scripts/foo.py` has to be copied in.
 
     Both are readable off the Dockerfile, and both were the thing that was
@@ -127,7 +125,7 @@ def test_the_image_carries_what_the_command_needs(
     module = re.match(r"python\s+-m\s+([a-z_]+)\.", command)
     if module:
         assert re.search(rf"^COPY .*\b{module.group(1)}\b", text, re.MULTILINE) or re.search(
-            rf"^COPY .*services/", text, re.MULTILINE
+            r"^COPY .*services/", text, re.MULTILINE
         ), (
             f"{doc}: `docker compose run {service} {command}` — "
             f"{dockerfile.relative_to(REPO)} never copies {module.group(1)}"

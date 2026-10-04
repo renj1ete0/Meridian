@@ -1,5 +1,6 @@
-"""DTOs for run state, enrichment jobs, reports, and notifications (mirrors
-``meridian_core.models.runs``, §11.10, §6.6, §11.13).
+"""DTOs for run state, enrichment jobs, reports, and notifications.
+
+Mirrors ``meridian_core.models.runs`` (§11.10, §6.6, §11.13).
 """
 
 from __future__ import annotations
@@ -13,10 +14,12 @@ from .enums import EnrichmentType, JobStatus, NotificationType, RunStage, RunSta
 
 
 class RunCreate(CreateBase):
-    """Deliberately minimal. A run is resumable orchestrator state (models/
-    runs.py module docstring, §6.3) advanced stage-by-stage by the
-    orchestrator itself — stage, counters, and completion are not caller
-    input at creation time."""
+    """Deliberately minimal.
+
+    A run is resumable orchestrator state (models/ runs.py module docstring, §6.3) advanced
+    stage-by-stage by the orchestrator itself — stage, counters, and completion are not caller input
+    at creation time.
+    """
 
     started_at: dt.datetime | None = None
     agent_id: str | None = None
@@ -67,8 +70,10 @@ class EnrichmentItemRead(BaseModel):
 
 
 class ReportCreate(CreateBase):
-    """``coverage_snapshot`` is captured by the server at submit time (models/
-    runs.py module docstring, §11.13), not supplied by the caller."""
+    """A report request as submitted by a caller.
+
+    ``coverage_snapshot`` is captured by the server at submit time (§11.13), not supplied here.
+    """
 
     scope: dict | None = None
     question: str | None = None

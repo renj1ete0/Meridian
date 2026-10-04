@@ -746,8 +746,10 @@ class Worker:
         directed: bool = False,
         lookups: bool | None = None,
     ) -> Claim | None:
-        """One claim. ``lookups`` True claims only lookup tasks, False only page
-        work, None either (`B-68`)."""
+        """One claim.
+
+        ``lookups`` True claims only lookup tasks, False only page work, None either (`B-68`).
+        """
         task_types = self._claimable_task_types()
         if lookups is not None:
             task_types = [t for t in task_types if (t in LOOKUP_TASK_TYPES) == lookups]
@@ -776,8 +778,10 @@ class Worker:
         )
 
     def _busy_domains(self) -> set[str]:
-        """Hosts to leave for later (`B-112`). An optimisation, so it can never
-        stop a claim: anything wrong here means no host is skipped."""
+        """Hosts to leave for later (`B-112`).
+
+        An optimisation, so it can never stop a claim: anything wrong here means no host is skipped.
+        """
         busy = getattr(getattr(self._crawler, "limiter", None), "busy", None)
         if not callable(busy):
             return set()
