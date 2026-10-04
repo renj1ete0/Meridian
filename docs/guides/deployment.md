@@ -10,7 +10,7 @@ the two runs that close phase 1: the bounded **smoke run** (does the stack come
 up and talk to itself) and `P1-16`, the **48h unattended run** whose output
 becomes the dev corpus.
 
-Read [handover §2](handover.md) first if you have only ever run this from a
+Read [handover §2](../handover.md) first if you have only ever run this from a
 checkout. The traps there are about the dev machine; the ones here are about the
 server.
 

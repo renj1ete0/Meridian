@@ -7,11 +7,11 @@ answer is conditional.
 non-commercial research terms and model-weight restrictions all look identical
 to `uv add`, and the place they surface is a conversation nobody wants to be
 having later. This is the audit, and
-[`tests/unit/test_licences.py`](../tests/unit/test_licences.py) is the gate that
+[`tests/unit/test_licences.py`](../../tests/unit/test_licences.py) is the gate that
 keeps it from going stale — a dependency arriving with a licence not on the
 allowlist fails the suite.
 
-Meridian itself is **MIT** ([`LICENSE`](../LICENSE)), and as of `B-11` the three
+Meridian itself is **MIT** ([`LICENSE`](../../LICENSE)), and as of `B-11` the three
 workspace packages declare it rather than inheriting nothing.
 
 ## Method
@@ -53,7 +53,7 @@ questions that needed a human.
 ## Python dependencies
 
 96 distributions in the default install, counted the way
-[`tests/unit/test_licences.py`](../tests/unit/test_licences.py) counts them.
+[`tests/unit/test_licences.py`](../../tests/unit/test_licences.py) counts them.
 Every one resolves to a permissive licence: MIT, BSD (2- and 3-clause),
 Apache-2.0, ISC, PSF, MPL, or a combination of those.
 
@@ -120,7 +120,7 @@ What Meridian does:
 - runs SearXNG **unmodified**, as a stock upstream image, in its own container;
 - talks to it over HTTP from the worker, as a separate process;
 - does not expose it to anyone — it sits on the `egress` network with no
-  published port, and `docs/setup.md` never opens one.
+  published port, and `docs/guides/setup.md` never opens one.
 
 That is aggregation, not derivative work, and it triggers no obligation. The
 boundary matters and is worth stating plainly:

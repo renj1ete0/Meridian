@@ -6,7 +6,7 @@
 # right: the API and the worker have no business carrying migration tooling.
 #
 # Neither stack can assume a host with `uv`. For `make quickstart` not needing
-# one is the entire premise; on the server, docs/setup.md §2 never installs it,
+# one is the entire premise; on the server, docs/guides/setup.md §2 never installs it,
 # and the database URLs name `postgres`, which only resolves inside the compose
 # network. So the tooling gets an image of its own rather than being smuggled
 # into a service image that does not want it.

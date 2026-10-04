@@ -70,7 +70,7 @@ While any item is `reviewed: false` every run carries a DRAFT banner.
 
 `MERIDIAN_EVAL_RUNS_DIR`, when set, replaces `eval/runs/` for both the runner and
 Gaps (`P6-37`). A deployment has no checkout, so there it names a mounted
-directory the runner writes and the API reads (docs/deployment.md §7).
+directory the runner writes and the API reads (docs/guides/deployment.md §7).
 
 ## The go/no-go (P2-09) — a proposal for the operator
 

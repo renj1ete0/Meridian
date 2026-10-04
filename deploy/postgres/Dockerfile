@@ -16,7 +16,7 @@
 # major is the mistake this comment exists to prevent.
 #
 # Licence: Apache-2.0, read from the `LICENSE` inside the source tarball rather
-# than recalled (`B-11`, docs/licences.md).
+# than recalled (`B-11`, docs/reference/licences.md).
 
 ARG PG_MAJOR=17
 ARG AGE_VERSION=1.7.0
@@ -78,7 +78,7 @@ COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/extension/age* \
 # milliseconds. RUM keeps the positions in the index and returns matches in
 # rank order. A packaged build from the PGDG repository the base image already
 # trusts, so nothing is compiled; PostgreSQL licence, read from the package's
-# `copyright` file (`docs/licences.md`).
+# `copyright` file (`docs/reference/licences.md`).
 RUN apt-get update \
     && apt-get install --no-install-recommends -y "postgresql-${PG_MAJOR}-rum" \
     && rm -rf /var/lib/apt/lists/*

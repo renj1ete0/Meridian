@@ -1087,7 +1087,7 @@ into a guess that is only found to be wrong while rolling back. Use
 
 `orchestrator` and `web` have no Dockerfile yet, so the script skips them and
 says so. `docker compose build` on the server remains the way round all of this
-for a first deploy, and [deployment.md](deployment.md) §6 has both paths.
+for a first deploy, and [deployment.md](guides/deployment.md) §6 has both paths.
 
 ### A value used in code but absent from the enum fails at the insert, not at import
 
@@ -1536,7 +1536,7 @@ that happened to be wrong.
 
 ### The first two commands in the deploy runbook could not work
 
-`docs/setup.md` and `docs/deployment.md` both said
+`docs/guides/setup.md` and `docs/guides/deployment.md` both said
 
 ```bash
 docker compose run --rm worker alembic upgrade head
@@ -1570,8 +1570,8 @@ crawl fetched a handful of real pages, hundreds of kilobytes each, and could not
 which is *true* — the fetch succeeded. The traceback is there at ERROR, one per
 page, in among a stream that otherwise reads like a healthy crawl.
 
-It would have done the same on the server. `docs/setup.md` and
-`docs/deployment.md` chown `/srv/meridian/app` because that is the checkout, and
+It would have done the same on the server. `docs/guides/setup.md` and
+`docs/guides/deployment.md` chown `/srv/meridian/app` because that is the checkout, and
 neither says anything about `raw`, `figures` or `models`. `B-16` added a `chown`
 one-shot to both compose files, run by `make quickstart` and belonging in the
 runbook before `up`.

@@ -29,7 +29,7 @@ dependencies = [
     "numpy>=2.0",
     # `hostscores.site_of` reads the public-suffix list (`B-113`). It rode in on
     # the worker's closure through `courlan`; declared here because this package
-    # imports it. MPL-1.1 of its three licences (docs/licences.md).
+    # imports it. MPL-1.1 of its three licences (docs/reference/licences.md).
     "tld>=0.13",
 ]
 

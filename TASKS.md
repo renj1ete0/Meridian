@@ -463,7 +463,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       rule against a stale subnet matches nothing, protects nothing and looks
       exactly like one that works. `tests/unit/test_compose_topology.py` fails
       if the pinning is removed or a network moves outside the supernet the
-      rules cover, and `docs/deployment.md` §4b has the four verification
+      rules cover, and `docs/guides/deployment.md` §4b has the four verification
       commands that have to behave as stated.
       **Stays `[~]`**: the task names an egress proxy as the alternative, and it
       is not a drop-in one. A forward proxy resolves the hostname itself, taking
@@ -871,12 +871,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       (label opt-in, `autoupdate` profile) on both boards; `migrate` runs on a promoted tools
       image; embedder on board 2 behind a shared token, reached over `lan` through one nft
       exception, and `embed` remote-only so board 1 never loads the model. Guide:
-      `docs/deploy-sbc.md`
+      `docs/guides/deploy-sbc.md`
 - [~] `P3-05` Cloudflare Tunnel + Access in front of the API — the code side
       is done and the rest is **your Cloudflare account**. `cloudflared` is in
       compose, `P3-08` verifies assertions, `P3-03` enforces scopes, and
       transport security defaults to loopback so a tunnel is refused until the
-      real hostname is named. `docs/setup.md` §8a–8e is the runbook: tunnel,
+      real hostname is named. `docs/guides/setup.md` §8a–8e is the runbook: tunnel,
       Access application, the four environment values, and the verification
       that must be done before trusting any of it
 - [x] `P3-07` **`meridian_guest` role** — `v0.36.0`. SELECT on the corpus and
@@ -1581,11 +1581,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `D-02` **A documentation structure, and a document per feature** — docs only. The
+      operator asked that every feature have a document and that documentation live in
+      `docs/`, not in code. `docs/README.md` maps the folders (Diátaxis: guides, reference,
+      explanation, plus ADRs); `docs/features/` holds twenty feature documents distilled from
+      the module docstrings and the handover; `docs/reference/` gains environment variables,
+      scheduled jobs and commands; the how-to guides moved to `docs/guides/` and the licence
+      audit to `docs/reference/`. Writing them found: the MCP grant profiles name three tools
+      the server lacks and miss two it has (`B-138`); `search_service.py` still said the vector
+      arm was unbuilt, two years of features after it was (fixed under `D-01`); and the `B-127`
+      reasoning about the translation rule was wrong (corrected)
 - [ ] `D-01` **Move narrative comments into the docs** — the convention since 2026-10-04
       (AGENTS.md "Code and comment standards"): docstrings and comments stay short, and the
       rationale, history and measurements move to `docs/features/`. About 30% of the Python is
       comments and docstrings, so this is done per feature, as each one gets its doc, and
-      whenever a file is touched. Tick a feature here once its modules are trimmed
+      whenever a file is touched. Tick a feature here once its modules are trimmed.
+      Done: search (`search.py`, `search_service.py`)
 - [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
       --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
       no unused vars, TSDoc syntax check) and wire them into `make lint`
@@ -1641,7 +1652,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       `deploy/gpu/gpu-embedder.yml`: the sidecar reserves one NVIDIA device with
       `MERIDIAN_EMBED_DEVICE=cuda`, 8G RAM; the backfill draws 1024 a batch with
       `MERIDIAN_EMBED_REMOTE_ONLY`. Held by `tests/unit/test_gpu_override.py`; documented in
-      `docs/deployment.md` §3b. **Open until run on a real card:** confirm `memory_of: device`,
+      `docs/guides/deployment.md` §3b. **Open until run on a real card:** confirm `memory_of: device`,
       measure passages/s, then decide `MAX_AUTO_BATCH`, bfloat16 on the card, and whether the
       backlog ceiling (20k) should rise
 - [x] `B-130` **A bigger embedding batch moved the model off the sidecar** — `v0.156.14`.
@@ -1666,8 +1677,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       embedded in full and counted in the backlog that pauses the crawl, though search, the map,
       Gaps and synthesis all leave it out. Found 2026-10-04: about a fifth of the waiting
       passages, and about a tenth of everything ever embedded, belonged to copies. A copy now
-      waits in the last tier (not none: the mark is re-judged daily and the near and translation
-      rules compare mean vectors)
+      waits in the last tier (not none: the mark is re-judged daily, and the near rule compares
+      mean vectors)
 - [x] `B-126` **A zero drawn in the attention colour** — `v0.156.11`. The landing's contested
       count was brass with the dagger at 0, drawing the eye to nothing. Brass and dagger now appear
       together only above zero; unknown and zero are neutral
@@ -2236,7 +2247,7 @@ Things worth doing that don't belong to a phase yet.
       `USING` — autogenerate's version would have failed on the server and passed
       here, since `figures` is empty locally. Caught by migrating rows put there
       on purpose, and the downgrade round-trips
-- [x] `B-11` **Licence audit** — `docs/licences.md` and a gate, `v0.83.0`.
+- [x] `B-11` **Licence audit** — `docs/reference/licences.md` and a gate, `v0.83.0`.
       Every verdict read off the installed artefact rather than recalled:
       distribution metadata, image labels, the model card on disk. **Nothing
       blocks commercial use.** All 116 Python distributions are permissive — no
@@ -2302,7 +2313,7 @@ Things worth doing that don't belong to a phase yet.
       different mistake. The uid is now tied to the Dockerfiles by a drift test,
       since three copies of 1001 is three chances to move one
 - [x] `B-17` Fix: the documented way to create the database could never have
-      worked — `v0.76.7`. `docs/setup.md` and `docs/deployment.md` both said
+      worked — `v0.76.7`. `docs/guides/setup.md` and `docs/guides/deployment.md` both said
       `docker compose run --rm worker alembic upgrade head`, and the worker
       image has no `alembic` — it is in the root project's `dev` group and every
       application image syncs `--no-dev` — and never copies `scripts/`, so the
@@ -2311,7 +2322,7 @@ Things worth doing that don't belong to a phase yet.
       (written for `B-05`) is promoted to production compose, profile-gated, and
       the docs name it: the thing worth preventing was a stack that migrates
       *itself* on boot, and the profile is what prevents that, not the image's
-      absence. `make migrate` is not the answer on the server — docs/setup.md §2
+      absence. `make migrate` is not the answer on the server — docs/guides/setup.md §2
       never installs `uv`, and `postgres` resolves only inside the compose
       network. New test walks every `docker compose run` in the deploy docs and
       checks the named service's Dockerfile actually carries what is invoked

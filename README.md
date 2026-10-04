@@ -36,7 +36,7 @@ not just what it knows, but where the evidence is thin, stale, or contradictory.
 > model client — but the stages that reason over documents still lack their prompt and
 > parse, so today this reads documents rather than the relationships between them.
 >
-> See [docs/setup.md](docs/setup.md) to run it, the [roadmap](docs/roadmap.md)
+> See [docs/guides/setup.md](docs/guides/setup.md) to run it, the [roadmap](docs/roadmap.md)
 > for where it is going, and [TASKS.md](TASKS.md) for what is next.
 
 ## Why it exists
@@ -245,9 +245,9 @@ because nothing has had a key or a reason to make one yet.
 | [Roadmap](docs/roadmap.md) | Build phases and their acceptance checkpoints. |
 | [TASKS.md](TASKS.md) | The live build list — what's done, what's next, broken into single-sitting tasks. |
 | [Handover](docs/handover.md) | How the built parts fit together, the traps already discovered, and what is verified live rather than only tested. |
-| [Setup](docs/setup.md) | Every step from a bare server to a running, exposed stack, in order. Start here to deploy. |
-| [Deployment](docs/deployment.md) | The container and network topology, the database roles, and what each service may reach. |
-| [Connectors](docs/connectors.md) | Adding a data source, and the consignment pipeline for what the crawler cannot fetch itself. |
+| [Setup](docs/guides/setup.md) | Every step from a bare server to a running, exposed stack, in order. Start here to deploy. |
+| [Deployment](docs/guides/deployment.md) | The container and network topology, the database roles, and what each service may reach. |
+| [Connectors](docs/guides/connectors.md) | Adding a data source, and the consignment pipeline for what the crawler cannot fetch itself. |
 | [Shared read access](docs/spec/shared-read-access.md) | MCP over Cloudflare, and how to give somebody else read-only access to the corpus. |
 | [External acquisition](docs/spec/external-acquisition.md) | The spec for handing failed fetches to something outside Meridian and taking the result back. |
 | [Design system](docs/design/design-system.md) | Mark geometry, colour tokens, typography, voice, interaction rules. |

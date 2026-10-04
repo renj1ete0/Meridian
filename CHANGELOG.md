@@ -15,9 +15,9 @@ design-only changes do not require a version bump, but may be listed under Unrel
   `random_page_cost` 1.1 (was 4)
 - Deploy: `deploy/gpu/gpu-embedder.yml` (`B-131`) gives the embedding sidecar an NVIDIA GPU,
   sends the backfill's bigger batches to it, and keeps the backfill from loading the model on
-  its own CPU; `docs/deployment.md` §3b. Validated with `docker compose config`, not yet run on
+  its own CPU; `docs/guides/deployment.md` §3b. Validated with `docker compose config`, not yet run on
   a card
-- Docs: `docs/deployment.md` audited before the first real deploy. New §1b lists
+- Docs: `docs/guides/deployment.md` audited before the first real deploy. New §1b lists
   every key and what each unlocks — **none are needed to crawl and search**.
   §0's service inventory was three services and one phase out of date, §3 did
   not say that Postgres is *built* (AGE is compiled onto pgvector), and §6 still
@@ -37,16 +37,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   them; AGE is derived and rebuildable), with the reasoning, in both `TASKS.md`
   and the handover
 
-- Docs: `docs/setup.md` — one document from a bare machine to a queryable
+- Docs: `docs/guides/setup.md` — one document from a bare machine to a queryable
   corpus, with a status column per section. Some of the path works and some is
   not built, and instructions for something that does not exist are worse than
   no instructions, so the split is stated rather than implied
 
-- Docs: `docs/deployment.md` — the runbook for putting the stack on the server,
+- Docs: `docs/guides/deployment.md` — the runbook for putting the stack on the server,
   the bounded smoke run, and `P1-16`. Names four Makefile targets that call
   scripts which do not exist, one of which (`make snapshot-corpus`) is `P1-16`'s
   stated deliverable. New tasks `P1-36`, `P1-37`
-- Docs: `docs/connectors.md` — four levels of adding a source, cheapest first,
+- Docs: `docs/guides/connectors.md` — four levels of adding a source, cheapest first,
   ending at the sidecar-container pattern that `crawl4ai` and `searxng` already
   are. Records which of the compose topology rules are enforced generically and
   which are asserted for `crawl4ai` by name, because a new sidecar inherits only
@@ -279,7 +279,7 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ### Added
 
-- `P3-12`: deploying on two arm64 boards with automatic updates (`docs/deploy-sbc.md`).
+- `P3-12`: deploying on two arm64 boards with automatic updates (`docs/guides/deploy-sbc.md`).
   Services built from this repo name their registry image at a channel tag
   (`${MERIDIAN_TAG:-stable}`); `make promote SHA=…` points `stable` at a pushed commit, and
   Watchtower (opt-in label, `autoupdate` profile) pulls and restarts what changed. A
@@ -2085,7 +2085,7 @@ design-only changes do not require a version bump, but may be listed under Unrel
 - `tests/unit/test_timetable_ownership.py`: an enabled job and a service must
   not run the same module. Two owners both claim batches and both load
   weights, and neither is wrong from where it is standing
-- `docs/deployment.md` now says to watch the unembedded count, not only the
+- `docs/guides/deployment.md` now says to watch the unembedded count, not only the
   queue: the crawl produces about 2.1 chunks/second and the pass embeds about
   2.2, which is matched with nothing to spare on CPU-only hardware
 
@@ -2556,7 +2556,7 @@ new capability bumps MINOR.
 
 - Apache AGE is **Apache-2.0**, read from the `LICENSE` in the source tarball
   and shipped in the image so it can be re-checked from the container.
-  `docs/licences.md` no longer lists it as unverified
+  `docs/reference/licences.md` no longer lists it as unverified
 
 ## [0.90.0] — 2026-09-20
 
@@ -2775,7 +2775,7 @@ new capability bumps MINOR.
 
 ### Added
 
-- `B-11` `docs/licences.md` — every runtime dependency, its licence, and a
+- `B-11` `docs/reference/licences.md` — every runtime dependency, its licence, and a
   verdict. Read off the installed artefact rather than recalled: distribution
   metadata, image labels, the model card on disk
 - `tests/unit/test_licences.py`, an allowlist gate. A new licence fails until
@@ -3016,7 +3016,7 @@ new capability bumps MINOR.
 ### Fixed
 
 - `B-17` The first two commands in the deploy runbook could not work. Both
-  `docs/setup.md` and `docs/deployment.md` said
+  `docs/guides/setup.md` and `docs/guides/deployment.md` said
   `docker compose run --rm worker alembic upgrade head`, and the worker image
   has no `alembic` — it is in the root project's `dev` group and every
   application image syncs `--no-dev` — and never copies `scripts/`, so the seed
@@ -3030,7 +3030,7 @@ new capability bumps MINOR.
   and the docs name it. The thing worth preventing was a stack that migrates
   *itself* on boot with nobody watching, and the profile is what prevents that
   — not the image being absent
-- `make migrate` is not the answer on the server: docs/setup.md §2 never
+- `make migrate` is not the answer on the server: docs/guides/setup.md §2 never
   installs `uv`, and the database URLs name `postgres`, which resolves only
   inside the compose network
 - The release script builds the tools image too, because the server does not
@@ -4489,7 +4489,7 @@ new capability bumps MINOR.
 
 ### Docs
 
-- `docs/setup.md` §8 is now a runbook rather than a list of blockers: point a
+- `docs/guides/setup.md` §8 is now a runbook rather than a list of blockers: point a
   tunnel at the API, put Access in front, tell Meridian, **verify before
   trusting it**, connect the assistant. The verification step includes sending a
   forged `Cf-Access-Authenticated-User-Email` and confirming it is not believed
@@ -5003,7 +5003,7 @@ new capability bumps MINOR.
   reallocates them when networks are recreated, so a firewall rule written
   against last week's subnet matches nothing, protects nothing, and is
   indistinguishable from one that works
-- `docs/deployment.md` §4b: install, persist, and four verification commands
+- `docs/guides/deployment.md` §4b: install, persist, and four verification commands
   that must each behave as stated — LAN blocked, metadata endpoint blocked, open
   web reachable, Postgres reachable. Three passing and one wrong is the
   configuration that looks fine and is not

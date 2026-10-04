@@ -1,7 +1,7 @@
 """Documented `docker compose run` commands name an image that can run them
 (task `B-17`).
 
-`docs/setup.md` and `docs/deployment.md` both told an operator to migrate with
+`docs/guides/setup.md` and `docs/guides/deployment.md` both told an operator to migrate with
 
     docker compose run --rm worker alembic upgrade head
     docker compose run --rm worker python scripts/seed.py
@@ -20,7 +20,7 @@ stops copying something fails here rather than on somebody's server.
 
 What it cannot check is whether the command *succeeds* — only that the thing
 being invoked is present. That is the difference between this and the smoke run
-in `docs/deployment.md` §4, and it is worth being honest about.
+in `docs/guides/deployment.md` §4, and it is worth being honest about.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ yaml = pytest.importorskip("yaml")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE = REPO / "docker-compose.yml"
-DOCS = [REPO / "docs/setup.md", REPO / "docs/deployment.md"]
+DOCS = [REPO / "docs/guides/setup.md", REPO / "docs/guides/deployment.md"]
 
 #: `docker compose run [--rm] [-e FOO=bar ...] <service> [command...]`
 #:

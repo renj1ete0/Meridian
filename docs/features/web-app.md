@@ -1,0 +1,56 @@
+# The web app
+
+A React and TypeScript single-page app, built with Vite and served by nginx in production. It
+is the reader's way into the corpus (Explore, sources, nodes, the Map, Gaps, contested pairs,
+the Ask panel) and the operator's control surface (Admin). Every screen is judged against its
+mock in `docs/design/*.dc.html` and the design system in `docs/design/design-system.md`.
+
+- **Code:** `web/src/` (`App.tsx`, `explore/`, `admin/`, `about/`, `ui/`, `lib/`, `styles/`)
+- **Tests:** `web/tests/` (Vitest and Testing Library); `npm test`, `npm run typecheck`
+- **Tasks:** phase 6 (`P6-*`) and the site reviews (`B-94`–`B-102`, `B-119`–`B-126`)
+
+## Surfaces
+
+| Path | Page | Shows | Design |
+|---|---|---|---|
+| `/` | `ExplorePage` | Find (hybrid search), the answer view, entry points, corpus counts, what is new since the last visit | `ExploreLanding.dc.html`, `Explore.dc.html` |
+| `/sources/:id` | `SourcePage` | One source: metadata, passages in reading order, figures | `Explore.dc.html` |
+| `/nodes/:id` | `NodePage` | A node's neighbourhood (graph, table or matrix view), its evidence, notes | `Main.dc.html` |
+| `/map` | `MapPage` | Areas and topics as nested circles, zoom by level, bridges, steering | `Main.dc.html` |
+| `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
+| `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
+| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health | `AdminLight.dc.html` |
+| `/about` | `AboutPage` | What the project is | `About.dc.html` |
+
+The **Ask panel** (`explore/AskPanel.tsx`) is a toggle on every reading surface except Admin.
+See [ask-the-graph.md](ask-the-graph.md).
+
+## How it is organised
+
+- `lib/api.ts` holds every wire type and fetch helper. `web/tests/api.test.ts` compares its
+  field lists with the API's Pydantic schemas, so a field added on the server and forgotten
+  here fails a test.
+- `lib/route.ts` parses the path into a typed `Route`; there is no router library.
+- `ui/` holds shared pieces (top bar, icons, the tier chip, the contested mark).
+  `styles/tokens.css` holds the design tokens; a test checks that colours are used only
+  through tokens, in tests too.
+- The node graph uses graphology and sigma; the 3D corpus map uses three.js.
+
+## Conventions
+
+- TSDoc on exported components, hooks and functions (AGENTS.md, "Code and comment
+  standards").
+- Pages own their width (`P6-27`); `main` does not force a column.
+- Before calling a UI change done, screenshot it and compare it with the mock.
+
+## Failure modes and traps
+
+- **Run the web suite before committing a schema change.** The API drift test lives in
+  `web/tests/api.test.ts`, not in the Python suite.
+- **A Playwright handle to Find's input goes stale after a search**, because the field
+  re-renders. Query it again after each submit.
+
+## Tests
+
+`web/tests/*.test.ts(x)`: one file per surface (`explore`, `map-*`, `graph-*`, `gaps`,
+`admin-*`, `ask-panel`, `contested-page` …) plus the API drift test.

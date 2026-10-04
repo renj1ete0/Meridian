@@ -180,7 +180,7 @@ services:
   # image, which has neither: `alembic` is in the root project's `dev` group
   # and every application image syncs `--no-dev`, and the worker image never
   # copies `scripts/`. Both commands failed on a server nobody had tried them
-  # on. `make migrate` is not the answer here — §2 of docs/setup.md never
+  # on. `make migrate` is not the answer here — §2 of docs/guides/setup.md never
   # installs `uv`, and `postgres` only resolves inside the compose network.
   tools:
     build: { context: ., dockerfile: deploy/tools/Dockerfile }

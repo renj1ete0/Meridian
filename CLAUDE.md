@@ -13,3 +13,6 @@ Also read, at the start of a session:
 - [TASKS.md](TASKS.md) — what to build next. Update it at the end of a session.
 - [docs/handover.md](docs/handover.md) — how the built parts fit together, and
   which traps have already cost someone a session.
+- [docs/README.md](docs/README.md) — the map of the documentation. Before changing a
+  feature, read its document in `docs/features/`, and update it in the same commit.
+  Decisions the operator makes are recorded in `docs/adr/`.

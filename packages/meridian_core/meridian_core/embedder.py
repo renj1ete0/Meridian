@@ -12,7 +12,7 @@ refusal.
 
 So the vector has to be produced by the same model the corpus was embedded
 with, on this side of the boundary. That is a sidecar, and it is the pattern
-`docs/connectors.md` §4 already describes: a container with no credentials, a
+`docs/guides/connectors.md` §4 already describes: a container with no credentials, a
 client that returns None when it is absent, and a word on the health line.
 
 **This module holds only the client.** The model runs in the worker's image —

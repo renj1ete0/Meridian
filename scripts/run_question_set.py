@@ -17,7 +17,7 @@ Usage:
     uv run python scripts/run_question_set.py --stdout   # prints instead
 
 On a deployment, run it in the `tools` container, which mounts the directory the
-API reads and sets `MERIDIAN_EVAL_RUNS_DIR` to it (docs/deployment.md):
+API reads and sets `MERIDIAN_EVAL_RUNS_DIR` to it (docs/guides/deployment.md):
 
     docker compose run --rm tools python scripts/run_question_set.py
 """

@@ -1,6 +1,6 @@
 """Every dependency's licence is one somebody has already agreed to (task `B-11`).
 
-`docs/licences.md` is the audit. This is the gate that stops it becoming a
+`docs/reference/licences.md` is the audit. This is the gate that stops it becoming a
 document that was true once. A dependency added next year arrives with whatever
 licence it has, and `uv add` says nothing — AGPL, a non-commercial research
 term and MIT all install identically.
@@ -16,7 +16,7 @@ environment rather than what the lockfile implies. The one thing that costs:
 optional extras are not installed, so `sentence-transformers` and `spacy` are
 checked only when something has pulled them in. The audit names both.
 
-The image and model-weight findings in `docs/licences.md` are not asserted here.
+The image and model-weight findings in `docs/reference/licences.md` are not asserted here.
 They were read off artefacts that a unit test has no business starting, and a
 test that shelled out to Docker would be skipped everywhere it mattered.
 """
@@ -30,7 +30,7 @@ import pytest
 
 #: Licence identifiers that are fine for this project, commercially and
 #: otherwise. Every entry is permissive or file-level copyleft; see
-#: `docs/licences.md` for the reasoning on the ones that are not a bare MIT.
+#: `docs/reference/licences.md` for the reasoning on the ones that are not a bare MIT.
 ALLOWED = {
     "0bsd",
     "apache-2.0",
@@ -88,7 +88,7 @@ UNINFORMATIVE = {"dual license", "other/proprietary license", ""}
 #:
 #: `tld` is tri-licensed. MPL-1.1 carries file-level copyleft on modifications
 #: to `tld` itself and no obligation on anything importing it, and we do not
-#: modify it. See `docs/licences.md`.
+#: modify it. See `docs/reference/licences.md`.
 CHOICES = {"tld": "mpl-1.1"}
 
 #: Expressions are split on these before each part is checked, so a combination
@@ -180,7 +180,7 @@ def test_no_dependency_carries_a_forbidden_term(name: str) -> None:
     hit = [term for term in NEVER if term in expression]
     assert not hit, (
         f"{name} is licensed {licence_of(name)!r}, which contains {hit}. "
-        f"See docs/licences.md — this needs a decision, not an allowlist entry"
+        f"See docs/reference/licences.md — this needs a decision, not an allowlist entry"
     )
 
 
@@ -193,7 +193,7 @@ def test_every_licence_is_one_already_agreed_to(name: str) -> None:
 
     assert not unknown, (
         f"{name} is licensed {expression!r}; {unknown} is not in the allowlist. "
-        f"Read it, decide, then add it to ALLOWED and to docs/licences.md"
+        f"Read it, decide, then add it to ALLOWED and to docs/reference/licences.md"
     )
 
 

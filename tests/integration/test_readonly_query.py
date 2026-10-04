@@ -24,7 +24,7 @@ from meridian_core.readonly_query import (
 
 pytestmark = [
     pytest.mark.usefixtures("require_db"),
-    pytest.mark.skipif(not guest_configured(), reason="no PG_GUEST_URL — see docs/setup.md"),
+    pytest.mark.skipif(not guest_configured(), reason="no PG_GUEST_URL — see docs/guides/setup.md"),
 ]
 
 
