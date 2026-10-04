@@ -18,8 +18,7 @@ import {
 } from '../../lib/api'
 import type { SourceTier } from '../../ui/Tier'
 
-type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -323,38 +322,18 @@ export interface GraphPath {
   edges: GraphEdge[]
 }
 
-export const GRAPH_PATH_FIELDS = [
-  'source',
-  'target',
-  'max_depth',
-  'found',
-  'hops',
-  'nodes',
-  'edges',
-] as const
+export const GRAPH_PATH_FIELDS = ['source', 'target', 'max_depth', 'found', 'hops', 'nodes', 'edges'] as const
 
 export type AssertGraphNode = Expect<Equal<keyof GraphNode, (typeof GRAPH_NODE_FIELDS)[number]>>
 export type AssertGraphEdge = Expect<Equal<keyof GraphEdge, (typeof GRAPH_EDGE_FIELDS)[number]>>
-export type AssertGraphFilters = Expect<
-  Equal<keyof GraphFiltersRead, (typeof GRAPH_FILTERS_FIELDS)[number]>
->
+export type AssertGraphFilters = Expect<Equal<keyof GraphFiltersRead, (typeof GRAPH_FILTERS_FIELDS)[number]>>
 export type AssertFacetCount = Expect<Equal<keyof FacetCount, (typeof FACET_COUNT_FIELDS)[number]>>
-export type AssertGraphFacets = Expect<
-  Equal<keyof GraphFacets, (typeof GRAPH_FACETS_FIELDS)[number]>
->
-export type AssertNeighbourhood = Expect<
-  Equal<keyof Neighbourhood, (typeof NEIGHBOURHOOD_FIELDS)[number]>
->
+export type AssertGraphFacets = Expect<Equal<keyof GraphFacets, (typeof GRAPH_FACETS_FIELDS)[number]>>
+export type AssertNeighbourhood = Expect<Equal<keyof Neighbourhood, (typeof NEIGHBOURHOOD_FIELDS)[number]>>
 export type AssertEvidence = Expect<Equal<keyof Evidence, (typeof EVIDENCE_FIELDS)[number]>>
-export type AssertContestedSide = Expect<
-  Equal<keyof ContestedSide, (typeof CONTESTED_SIDE_FIELDS)[number]>
->
-export type AssertContestedPair = Expect<
-  Equal<keyof ContestedPair, (typeof CONTESTED_PAIR_FIELDS)[number]>
->
-export type AssertGraphNodeDetail = Expect<
-  Equal<keyof GraphNodeDetail, (typeof GRAPH_NODE_DETAIL_FIELDS)[number]>
->
+export type AssertContestedSide = Expect<Equal<keyof ContestedSide, (typeof CONTESTED_SIDE_FIELDS)[number]>>
+export type AssertContestedPair = Expect<Equal<keyof ContestedPair, (typeof CONTESTED_PAIR_FIELDS)[number]>>
+export type AssertGraphNodeDetail = Expect<Equal<keyof GraphNodeDetail, (typeof GRAPH_NODE_DETAIL_FIELDS)[number]>>
 export type AssertNodeMatch = Expect<Equal<keyof NodeMatch, (typeof NODE_MATCH_FIELDS)[number]>>
 export type AssertNodeSearch = Expect<Equal<keyof NodeSearch, (typeof NODE_SEARCH_FIELDS)[number]>>
 export type AssertGraphPath = Expect<Equal<keyof GraphPath, (typeof GRAPH_PATH_FIELDS)[number]>>
@@ -406,10 +385,7 @@ export function getNeighbourhood(
   init?: RequestInit,
 ): Promise<Neighbourhood> {
   const query = neighbourhoodQuery(filters, limit)
-  return request<Neighbourhood>(
-    `/api/explore/graph/nodes/${entityId}/neighbourhood${query ? `?${query}` : ''}`,
-    init,
-  )
+  return request<Neighbourhood>(`/api/explore/graph/nodes/${entityId}/neighbourhood${query ? `?${query}` : ''}`, init)
 }
 
 export function getGraphNode(entityId: number, init?: RequestInit): Promise<GraphNodeDetail> {
@@ -426,12 +402,7 @@ export function searchNodes(q: string, limit = 8, init?: RequestInit): Promise<N
   return request<NodeSearch>(`/api/explore/graph/search?${query}`, init)
 }
 
-export function getPath(
-  source: number,
-  target: number,
-  maxDepth?: number,
-  init?: RequestInit,
-): Promise<GraphPath> {
+export function getPath(source: number, target: number, maxDepth?: number, init?: RequestInit): Promise<GraphPath> {
   const query = new URLSearchParams({ source: String(source), target: String(target) })
   if (maxDepth !== undefined) query.set('max_depth', String(maxDepth))
   return request<GraphPath>(`/api/explore/graph/path?${query}`, init)

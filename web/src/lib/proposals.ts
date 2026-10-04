@@ -9,8 +9,7 @@
 import { ApiError, describeDetail } from './api'
 import { stampOf, zoneLabel } from './time'
 
-type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
 
 /** `PROPOSAL_KIND` and `PROPOSAL_STATUS` in `models/config.py`. */

@@ -34,9 +34,7 @@ const DEFAULT_SAMPLE = 3000
 
 type View = '3d' | '2d'
 type Load =
-  | { status: 'loading'; map?: CorpusMap }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; map: CorpusMap }
+  { status: 'loading'; map?: CorpusMap } | { status: 'error'; message: string } | { status: 'ready'; map: CorpusMap }
 
 type Mode = 'areas' | 'points' | 'topics'
 
@@ -159,14 +157,7 @@ export function PointsPage() {
       </Inner>
     )
   }
-  return (
-    <MapView
-      map={state.map}
-      sample={sample}
-      onSample={setSample}
-      projecting={state.status === 'loading'}
-    />
-  )
+  return <MapView map={state.map} sample={sample} onSample={setSample} projecting={state.status === 'loading'} />
 }
 
 /** Full width and full height under the top bar; the shell supplies the bar. */
@@ -287,9 +278,7 @@ export function MapView({
           )}
         </div>
 
-        {empty ? null : (
-          <Legend swatches={swatches} counts={counts} hidden={hidden} onToggle={toggle} />
-        )}
+        {empty ? null : <Legend swatches={swatches} counts={counts} hidden={hidden} onToggle={toggle} />}
 
         {empty ? null : (
           <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -319,9 +308,7 @@ export function MapView({
 
       {empty ? (
         <div className="flex-1 p-6">
-          <p className="text-text">
-            Nothing to draw yet. Passages appear here once they are embedded, and none are.
-          </p>
+          <p className="text-text">Nothing to draw yet. Passages appear here once they are embedded, and none are.</p>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -499,9 +486,7 @@ function Legend({
               }`}
               onClick={() => onToggle(topic)}
               className={`flex h-7 items-center gap-2 rounded-[var(--radius-chip)] border px-2.5 text-[12px] ${
-                off
-                  ? 'border-line text-text-faint line-through'
-                  : 'border-line bg-surface-raised text-text'
+                off ? 'border-line text-text-faint line-through' : 'border-line bg-surface-raised text-text'
               }`}
             >
               <span data-theme="dark" className={off ? 'opacity-30' : undefined}>
@@ -576,22 +561,26 @@ function TablePanel({
                     {topicLabel(topic)}
                   </span>
                 </td>
-                <td className="py-1.5 text-right font-mono text-[10.5px] text-text-muted">{count.toLocaleString('en')}</td>
+                <td className="py-1.5 text-right font-mono text-[10.5px] text-text-muted">
+                  {count.toLocaleString('en')}
+                </td>
                 <td
                   className="w-14 py-1.5 text-right font-mono text-[10.5px] text-text-faint"
                   title="Passages carrying this topic in any position"
                 >
                   {carrying > count ? `+${(carrying - count).toLocaleString('en')}` : ''}
                 </td>
-                <td className="w-14 py-1.5 text-right font-mono text-[10.5px] text-text-faint">{percent(count / total)}</td>
+                <td className="w-14 py-1.5 text-right font-mono text-[10.5px] text-text-faint">
+                  {percent(count / total)}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {multi > 0 ? (
           <p className="font-mono text-[10.5px] leading-[1.5] text-text-faint" data-testid="multi-topic-note">
-            {multi.toLocaleString('en')} {multi === 1 ? 'passage is' : 'passages are'} about more than one
-            topic, each drawn in its first; +n counts them under the others.
+            {multi.toLocaleString('en')} {multi === 1 ? 'passage is' : 'passages are'} about more than one topic, each
+            drawn in its first; +n counts them under the others.
           </p>
         ) : null}
       </section>
@@ -615,8 +604,8 @@ function TablePanel({
         </ul>
         <p className="text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
           {drawn.length === 3 ? 'Three' : 'Two'} axes carry {percent(together)} of how the passages differ. The rest
-          lies along directions this picture cannot show, so two dots that look close may not be, and a
-          gap is more trustworthy than a cluster.
+          lies along directions this picture cannot show, so two dots that look close may not be, and a gap is more
+          trustworthy than a cluster.
         </p>
       </section>
 
@@ -632,9 +621,9 @@ function TablePanel({
             onChange={(value) => onSample(Number(value))}
           />
           <p className="text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
-            Passages are chosen by a fixed hash of their id, so the same corpus gives the same
-            picture and a larger sample contains every passage of a smaller one. The axes are
-            recomputed from whichever sample is drawn, so its dots shift a little between sizes.
+            Passages are chosen by a fixed hash of their id, so the same corpus gives the same picture and a larger
+            sample contains every passage of a smaller one. The axes are recomputed from whichever sample is drawn, so
+            its dots shift a little between sizes.
           </p>
         </section>
       ) : null}

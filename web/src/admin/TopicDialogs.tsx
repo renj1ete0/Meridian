@@ -39,9 +39,7 @@ function usePreview(key: string | null, preview: Preview) {
         .then(setAfter)
         .catch((cause: unknown) => {
           if (cause instanceof DOMException && cause.name === 'AbortError') return
-          setRefusal(
-            cause instanceof ApiError ? cause.message : 'The preview could not be worked out.',
-          )
+          setRefusal(cause instanceof ApiError ? cause.message : 'The preview could not be worked out.')
         })
     }, PREVIEW_DEBOUNCE_MS)
     return () => {
@@ -86,9 +84,7 @@ export function AddTopicDialog({
   const upper = bound(ceiling)
   const body: TopicAddBody | null =
     topic && lower !== null && upper !== null ? { topic, floor: lower, ceiling: upper } : null
-  const { after, refusal } = usePreview(body ? JSON.stringify(body) : null, (signal) =>
-    preview(body!, signal),
-  )
+  const { after, refusal } = usePreview(body ? JSON.stringify(body) : null, (signal) => preview(body!, signal))
   const starts = after?.rows.find((r) => r.topic.topic === topic)?.topic.weight
 
   return (
@@ -165,8 +161,8 @@ export function AddTopicDialog({
       )}
 
       <p className="text-[12.5px] leading-[1.6] text-text-muted">
-        Every active topic gives up weight in proportion, down to its floor. Existing nodes keep the
-        topic labels they already carry — only what gets acquired next changes.
+        Every active topic gives up weight in proportion, down to its floor. Existing nodes keep the topic labels they
+        already carry — only what gets acquired next changes.
       </p>
     </Dialog>
   )

@@ -26,10 +26,7 @@ import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
  */
 export function sectionOf(route: Route): Section | null {
   if (route.name === 'about') return null
-  return route.name === 'admin' ||
-    route.name === 'map' ||
-    route.name === 'gaps' ||
-    route.name === 'growth'
+  return route.name === 'admin' || route.name === 'map' || route.name === 'gaps' || route.name === 'growth'
     ? route.name
     : 'explore'
 }
@@ -98,34 +95,34 @@ export function App() {
   return (
     <TopBarSlotProvider value={slot}>
       <AskContextProvider>
-      <div className="flex min-h-screen flex-col bg-ground text-text">
-        <TopBar
-          section={section}
-          translucent={section !== 'admin'}
-          theme={theme}
-          onTheme={choose}
-          slotRef={setSlot}
-        />
+        <div className="flex min-h-screen flex-col bg-ground text-text">
+          <TopBar
+            section={section}
+            translucent={section !== 'admin'}
+            theme={theme}
+            onTheme={choose}
+            slotRef={setSlot}
+          />
 
-        {/* Real URLs for every screen. A source page that could not be linked
+          {/* Real URLs for every screen. A source page that could not be linked
             would be a corpus insisting everything be checkable while making its
             own documents unaddressable. */}
-        {/* Room at the foot of every reading page for the question toggle, so
+          {/* Room at the foot of every reading page for the question toggle, so
             the last content can scroll clear of it (`B-125`). Admin has none. */}
-        <main data-zone={zone} className={`relative flex-1 ${section !== 'admin' ? 'pb-20' : ''}`}>
-          {route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
-          {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
-          {route.name === 'admin' ? <AdminPage /> : null}
-          {route.name === 'map' ? <MapPage /> : null}
-          {route.name === 'gaps' ? <GapsPage /> : null}
-          {route.name === 'growth' ? <GrowthPage /> : null}
-          {route.name === 'about' ? <AboutPage /> : null}
-          {route.name === 'contested' ? <ContestedPage /> : null}
-          {route.name === 'explore' ? <ExplorePage /> : null}
-        </main>
-        {/* On the reader's screens only: Admin is for configuring, not asking. */}
-        {section !== 'admin' ? <AskPanel /> : null}
-      </div>
+          <main data-zone={zone} className={`relative flex-1 ${section !== 'admin' ? 'pb-20' : ''}`}>
+            {route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
+            {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
+            {route.name === 'admin' ? <AdminPage /> : null}
+            {route.name === 'map' ? <MapPage /> : null}
+            {route.name === 'gaps' ? <GapsPage /> : null}
+            {route.name === 'growth' ? <GrowthPage /> : null}
+            {route.name === 'about' ? <AboutPage /> : null}
+            {route.name === 'contested' ? <ContestedPage /> : null}
+            {route.name === 'explore' ? <ExplorePage /> : null}
+          </main>
+          {/* On the reader's screens only: Admin is for configuring, not asking. */}
+          {section !== 'admin' ? <AskPanel /> : null}
+        </div>
       </AskContextProvider>
     </TopBarSlotProvider>
   )

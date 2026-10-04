@@ -59,7 +59,7 @@ function gap(over: Partial<Gap> = {}): Gap {
     evidence: { sources: 0, strong_sources: 0, passages: 0, newest: null, crawl_share: 0.15, corpus_share: 0 },
     actions: [
       { kind: 'seed_query', label: 'Seed a search', topic: 'robotics', query: 'robotics', factor: null, days: null },
-      { kind: 'boost_topic', label: 'Boost ×2 for 7 days', topic: 'robotics', factor: 2, days: 7 , query: null },
+      { kind: 'boost_topic', label: 'Boost ×2 for 7 days', topic: 'robotics', factor: 2, days: 7, query: null },
     ],
     ...over,
   }
@@ -79,7 +79,9 @@ function body(gaps: Gap[], over: Partial<Gaps> = {}): Gaps {
 }
 
 function respond(value: unknown, status = 200) {
-  return Promise.resolve(new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } }))
+  return Promise.resolve(
+    new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } }),
+  )
 }
 
 async function renderWith(fetchImpl: (url: string, init?: RequestInit) => Promise<Response>) {
@@ -127,12 +129,8 @@ describe('helpers', () => {
 
   it('names documents holding on-topic passages only when there are some', () => {
     // `P2-24`: passages about a topic inside documents filed under another.
-    expect(evidenceLine({ ...gap().evidence, passage_sources: 4 })).toContain(
-      'in other documents 4',
-    )
-    expect(evidenceLine({ ...gap().evidence, passage_sources: 0 }).join(' ')).not.toContain(
-      'other documents',
-    )
+    expect(evidenceLine({ ...gap().evidence, passage_sources: 4 })).toContain('in other documents 4')
+    expect(evidenceLine({ ...gap().evidence, passage_sources: 0 }).join(' ')).not.toContain('other documents')
   })
 
   it('prints every evidence key the server emits', () => {
@@ -150,10 +148,7 @@ describe('helpers', () => {
     // gap's two ends are named in its title (P6-36 routes).
     const shownElsewhere = new Set(['kind', 'queries', 'from_node', 'to_node'])
     const missing = [...keys].filter(
-      (k) =>
-        !shownElsewhere.has(k) &&
-        !client.includes(`has('${k}')`) &&
-        !client.includes(`evidence.${k}`),
+      (k) => !shownElsewhere.has(k) && !client.includes(`has('${k}')`) && !client.includes(`evidence.${k}`),
     )
     expect(missing).toEqual([])
   })
@@ -236,7 +231,13 @@ describe('the page', () => {
   })
 
   it('ranks as served and flags the severe ones with the dagger', async () => {
-    const mild = gap({ id: 'topic-stale:x', subject: 'x', kind: 'stale', title: 'x: newest 2012', severity: FLAG_AT - 0.1 })
+    const mild = gap({
+      id: 'topic-stale:x',
+      subject: 'x',
+      kind: 'stale',
+      title: 'x: newest 2012',
+      severity: FLAG_AT - 0.1,
+    })
     await renderWith(() => respond(body([gap(), mild])))
     const rows = within(screen.getByRole('list', { name: /most severe first/ })).getAllByRole('listitem')
     expect(rows[0]!.textContent).toContain('01')
@@ -247,7 +248,17 @@ describe('the page', () => {
   it('seeds with the words the reader edited, for the gap it came from', async () => {
     const fetchMock = await renderWith((url) =>
       url.startsWith('/api/admin/gaps/seed')
-        ? respond({ kind: 'seed_query', topic: 'robotics', detail: 'queued as a search seed · task 7', undo: 'remove it in Admin', task_id: 7, expires_at: null }, 201)
+        ? respond(
+            {
+              kind: 'seed_query',
+              topic: 'robotics',
+              detail: 'queued as a search seed · task 7',
+              undo: 'remove it in Admin',
+              task_id: 7,
+              expires_at: null,
+            },
+            201,
+          )
         : respond(body([gap()])),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Seed a search' }))
@@ -283,7 +294,16 @@ describe('the page', () => {
       source: 'question-set',
       kind: 'question_low',
       subject: 'Q07',
-      actions: [{ kind: 'open_search', label: 'Search it in Find', query: 'the question', topic: null, factor: null, days: null }],
+      actions: [
+        {
+          kind: 'open_search',
+          label: 'Search it in Find',
+          query: 'the question',
+          topic: null,
+          factor: null,
+          days: null,
+        },
+      ],
     })
     await renderWith(() => respond(body([q])))
     expect(screen.queryByRole('button', { name: /Seed|Boost/ })).toBeNull()

@@ -59,8 +59,7 @@ export const INTERFACE_ICONS = {
     detail: 'M14.2 7.1L17 9.9',
   },
   report: {
-    silhouette:
-      'M7 2.6h10a2 2 0 0 1 2 2v14.8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4.6a2 2 0 0 1 2-2Z',
+    silhouette: 'M7 2.6h10a2 2 0 0 1 2 2v14.8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4.6a2 2 0 0 1 2-2Z',
     detail: 'M8.6 8.2H15.4M8.6 12.2H15.4M8.6 16.2H13',
   },
   notifications: {
@@ -84,9 +83,7 @@ export const INTERFACE_ICONS = {
   pathMode: {
     silhouette: 'M6.4 16.8A13 13 0 0 1 17.6 7.2',
     detail: 'M10.6 8.9a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z',
-    solid:
-      'M4.6 16a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z' +
-      'M19.4 2.8a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z',
+    solid: 'M4.6 16a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z' + 'M19.4 2.8a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z',
   },
 } as const satisfies Record<string, IconGeometry>
 
@@ -100,8 +97,7 @@ export const INTERFACE_ICONS = {
 export const NODE_GLYPHS = {
   concept: { silhouette: 'M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z' },
   place: {
-    silhouette:
-      'M12 20.6C12 20.6 5.6 14.4 5.6 10.6A6.4 6.4 0 1 1 18.4 10.6C18.4 14.4 12 20.6 12 20.6Z',
+    silhouette: 'M12 20.6C12 20.6 5.6 14.4 5.6 10.6A6.4 6.4 0 1 1 18.4 10.6C18.4 14.4 12 20.6 12 20.6Z',
     detail: 'M12 8.1a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6Z',
   },
   organisation: {

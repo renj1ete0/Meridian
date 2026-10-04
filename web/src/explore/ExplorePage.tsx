@@ -172,8 +172,7 @@ export function ExplorePage() {
     return () => controller.abort()
   }, [asked, picked])
 
-  const showHood =
-    hood !== null && (hood.phase === 'failed' || (hood.phase === 'done' && hasNeighbourhood(hood.data)))
+  const showHood = hood !== null && (hood.phase === 'failed' || (hood.phase === 'done' && hasNeighbourhood(hood.data)))
 
   // Read once, and the stamp advances immediately. Writing it later — on
   // unmount, or after the fetch — is how the delta ends up always zero: the
@@ -246,44 +245,44 @@ export function ExplorePage() {
       match: TopicMatch = 'any',
       history: 'push' | 'keep' = 'push',
     ) => {
-    const trimmed = text.trim()
-    if (!trimmed) return
+      const trimmed = text.trim()
+      if (!trimmed) return
 
-    // The search in the URL (`B-95`), so it can be shared and Back returns to
-    // it. A new question is a new entry; the same one re-filtered replaces it,
-    // or every topic toggled would be a step of Back.
-    if (history === 'push') {
-      const href = findHref(trimmed, within, match)
-      const current = `${window.location.pathname}${window.location.search}`
-      if (href !== current) {
-        const same = findParams(window.location.search).q === trimmed
-        window.history[same ? 'replaceState' : 'pushState']({}, '', href)
+      // The search in the URL (`B-95`), so it can be shared and Back returns to
+      // it. A new question is a new entry; the same one re-filtered replaces it,
+      // or every topic toggled would be a step of Back.
+      if (history === 'push') {
+        const href = findHref(trimmed, within, match)
+        const current = `${window.location.pathname}${window.location.search}`
+        if (href !== current) {
+          const same = findParams(window.location.search).q === trimmed
+          window.history[same ? 'replaceState' : 'pushState']({}, '', href)
+        }
       }
-    }
 
-    inFlight.current?.abort()
-    const controller = new AbortController()
-    inFlight.current = controller
+      inFlight.current?.abort()
+      const controller = new AbortController()
+      inFlight.current = controller
 
-    setPhase('searching')
-    setMode(initialMode(trimmed))
-    setAsked(trimmed)
-    setPicked(null)
-    setError(null)
+      setPhase('searching')
+      setMode(initialMode(trimmed))
+      setAsked(trimmed)
+      setPicked(null)
+      setError(null)
 
-    searchCorpus(
-      { q: trimmed, topic: within, place: where, topic_match: within.length > 0 ? match : undefined },
-      { signal: controller.signal },
-    )
-      .then((response) => {
-        setResults(response)
-        setPhase('done')
-      })
-      .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === 'AbortError') return
-        setError(cause instanceof ApiError ? cause.message : 'The search could not be completed.')
-        setPhase('failed')
-      })
+      searchCorpus(
+        { q: trimmed, topic: within, place: where, topic_match: within.length > 0 ? match : undefined },
+        { signal: controller.signal },
+      )
+        .then((response) => {
+          setResults(response)
+          setPhase('done')
+        })
+        .catch((cause: unknown) => {
+          if (cause instanceof DOMException && cause.name === 'AbortError') return
+          setError(cause instanceof ApiError ? cause.message : 'The search could not be completed.')
+          setPhase('failed')
+        })
     },
     [],
   )
@@ -470,20 +469,12 @@ export function ExplorePage() {
             ) : null}
           </section>
           {showHood && hood ? (
-            <NeighbourhoodPanel
-              state={hood}
-              shownChunkIds={shown}
-              onPick={(term) => setPicked(term.entity_id)}
-            />
+            <NeighbourhoodPanel state={hood} shownChunkIds={shown} onPick={(term) => setPicked(term.entity_id)} />
           ) : null}
         </div>
 
         <p className="mt-8">
-          <button
-            type="button"
-            onClick={clear}
-            className="font-mono text-[10.5px] text-accent-graph hover:underline"
-          >
+          <button type="button" onClick={clear} className="font-mono text-[10.5px] text-accent-graph hover:underline">
             ← back to the overview
           </button>
         </p>
@@ -506,9 +497,7 @@ export function ExplorePage() {
 
         <div className="flex flex-col gap-3">
           <CorpusCounts counts={stats ? figuresFrom(stats) : null} />
-          {statsError ? (
-            <p className="font-mono text-[10.5px] text-text-muted">{statsError}</p>
-          ) : null}
+          {statsError ? <p className="font-mono text-[10.5px] text-text-muted">{statsError}</p> : null}
         </div>
 
         {empty ? (
@@ -533,9 +522,7 @@ export function ExplorePage() {
 
         <WhereYouWere
           delta={
-            stats ? (
-              <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} since={since} />
-            ) : null
+            stats ? <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} since={since} /> : null
           }
           savedViews={views.slice(0, VIEWS_ON_LANDING).map((view) => ({
             id: String(view.view_id),
@@ -624,9 +611,7 @@ export function ModeSwitch({ mode, onChange }: { mode: ResultMode; onChange: (mo
           aria-selected={mode === value}
           onClick={() => onChange(value)}
           className={`px-3 py-[5px] font-mono text-[11px] ${
-            mode === value
-              ? 'bg-accent-graph/10 text-accent-graph'
-              : 'text-text-faint hover:text-text-muted'
+            mode === value ? 'bg-accent-graph/10 text-accent-graph' : 'text-text-faint hover:text-text-muted'
           }`}
         >
           {label}
@@ -653,8 +638,7 @@ export function summaryLine(results: SearchResponse): string {
   const parts = [`${shown} ${shown === 1 ? 'passage' : 'passages'} shown`]
   if (results.arms.includes('lexical'))
     parts.push(`${results.lexical_candidates.toLocaleString('en')} matched the words`)
-  if (results.arms.includes('vector'))
-    parts.push(`${results.vector_candidates.toLocaleString('en')} near in meaning`)
+  if (results.arms.includes('vector')) parts.push(`${results.vector_candidates.toLocaleString('en')} near in meaning`)
   return parts.join(' · ')
 }
 
@@ -713,8 +697,8 @@ export function RetrievalNotice({ reason, empty }: { reason: string; empty: bool
       <p>{reason}</p>
       {empty ? (
         <p className="mt-2 text-text-muted">
-          Passages about this topic that use different wording were not searched. An empty result
-          here is not evidence that the corpus lacks the subject.
+          Passages about this topic that use different wording were not searched. An empty result here is not evidence
+          that the corpus lacks the subject.
         </p>
       ) : null}
     </div>

@@ -130,12 +130,8 @@ export function Plot2D({
       />
       {size.width > 0 ? (
         <>
-          <AxisLabel at={[right + 10, middle - 7]}>
-            PC1 · {percent(shares[0] ?? 0)}
-          </AxisLabel>
-          <AxisLabel at={[centre + 8, top - 20]}>
-            PC2 · {percent(shares[1] ?? 0)}
-          </AxisLabel>
+          <AxisLabel at={[right + 10, middle - 7]}>PC1 · {percent(shares[0] ?? 0)}</AxisLabel>
+          <AxisLabel at={[centre + 8, top - 20]}>PC2 · {percent(shares[1] ?? 0)}</AxisLabel>
         </>
       ) : null}
       {hover ? (

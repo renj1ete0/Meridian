@@ -150,16 +150,21 @@ describe('naming a topic from terms', () => {
   })
 })
 
-
 describe('this is noise (P6-42)', () => {
   it('says how many sources it would mark, and is disabled when there are none', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(steering({ noise_sources: 0 })), { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(steering({ noise_sources: 0 })), { status: 200 })),
+    )
     render(<AreaSteerItems area={area({ area_id: 1 })} close={vi.fn()} />)
     const none = (await screen.findByText('This is noise')).closest('button')!
     expect(none.hasAttribute('disabled')).toBe(true)
     cleanup()
 
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(steering({ noise_sources: 12 })), { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(steering({ noise_sources: 12 })), { status: 200 })),
+    )
     render(<AreaSteerItems area={area({ area_id: 1 })} close={vi.fn()} />)
     const some = (await screen.findByText('This is noise')).closest('button')!
     expect(some.hasAttribute('disabled')).toBe(false)
@@ -172,9 +177,14 @@ describe('this is noise (P6-42)', () => {
       'fetch',
       vi.fn(async (url: string) => {
         calls.push(String(url))
-        if (String(url).includes('/steering')) return new Response(JSON.stringify(steering({ noise_sources: 3 })), { status: 200 })
-        if (String(url).includes('/restore')) return new Response(JSON.stringify({ mark: 'm1', restored: 3 }), { status: 200 })
-        return new Response(JSON.stringify({ ...done, action: 'noise', noise_mark: 'm1', message: '3 marked', undo: 'Undo restores' }), { status: 200 })
+        if (String(url).includes('/steering'))
+          return new Response(JSON.stringify(steering({ noise_sources: 3 })), { status: 200 })
+        if (String(url).includes('/restore'))
+          return new Response(JSON.stringify({ mark: 'm1', restored: 3 }), { status: 200 })
+        return new Response(
+          JSON.stringify({ ...done, action: 'noise', noise_mark: 'm1', message: '3 marked', undo: 'Undo restores' }),
+          { status: 200 },
+        )
       }),
     )
     render(<AreaSteerItems area={area({ area_id: 1 })} close={vi.fn()} />)

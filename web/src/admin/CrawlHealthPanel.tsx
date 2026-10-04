@@ -53,8 +53,7 @@ export const STATE_LABELS: Record<LivenessState, string> = {
 
 /** The verdict as one sentence, with the numbers that make it actionable. */
 export function verdict(live: Liveness, stallAfterSeconds: number): string {
-  const since =
-    live.quiet_seconds === null ? null : `the last fetch was ${duration(live.quiet_seconds)} ago`
+  const since = live.quiet_seconds === null ? null : `the last fetch was ${duration(live.quiet_seconds)} ago`
 
   switch (live.state) {
     case 'crawling':
@@ -131,13 +130,7 @@ export function HourlyChart({ hours }: { hours: readonly HourBucket[] }) {
                 {`${bucketLabel(i, hours.length)}: ${bucket.succeeded.toLocaleString()} succeeded, ${bucket.failed.toLocaleString()} failed`}
               </title>
               {/* A full-height hit target, so an empty hour still answers on hover. */}
-              <rect
-                x={i * BAR_STEP}
-                y={0}
-                width={BAR_STEP}
-                height={CHART_HEIGHT}
-                fill="transparent"
-              />
+              <rect x={i * BAR_STEP} y={0} width={BAR_STEP} height={CHART_HEIGHT} fill="transparent" />
               {ok > 0 ? (
                 <rect
                   data-part="succeeded"
@@ -192,8 +185,7 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Crawl health">
-        As of {clockOf(health.as_of)} {zoneLabel(health.as_of)}. Refreshes every 30 seconds while
-        this is open.
+        As of {clockOf(health.as_of)} {zoneLabel(health.as_of)}. Refreshes every 30 seconds while this is open.
       </PageHeader>
 
       <div
@@ -207,17 +199,13 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
         >
           {STATE_LABELS[liveness.state]}
         </p>
-        <p className="mt-1 text-[14px] text-text">
-          {verdict(liveness, health.stall_after_seconds)}
-        </p>
+        <p className="mt-1 text-[14px] text-text">{verdict(liveness, health.stall_after_seconds)}</p>
       </div>
 
       <Card className="px-[18px] py-3.5">
         <h2 className={LABEL}>Fetches per hour, last 24 h</h2>
         {attempted === 0 ? (
-          <p className="mt-2 text-[12.5px] text-text-muted">
-            No fetch attempts in the last 24 hours.
-          </p>
+          <p className="mt-2 text-[12.5px] text-text-muted">No fetch attempts in the last 24 hours.</p>
         ) : null}
         <HourlyChart hours={health.hours} />
       </Card>
@@ -245,15 +233,10 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
                     {/* Share of the day, drawn. One hue: the outcome is named
                         beside it, so colour carries no verdict. */}
                     <div className="mt-1 h-1 w-full bg-surface-raised">
-                      <div
-                        className="h-full bg-accent-graph"
-                        style={{ width: `${(row.count / attempted) * 100}%` }}
-                      />
+                      <div className="h-full bg-accent-graph" style={{ width: `${(row.count / attempted) * 100}%` }} />
                     </div>
                   </td>
-                  <td className={`${TDM} text-right text-text-muted`}>
-                    {row.count.toLocaleString()}
-                  </td>
+                  <td className={`${TDM} text-right text-text-muted`}>{row.count.toLocaleString()}</td>
                 </tr>
               ))
             )}
@@ -278,9 +261,7 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
                 while none of what it fetches becomes searchable. */}
             <tr className="border-t border-line">
               <td className={TDM}>awaiting embedding</td>
-              <td className={`${TDM} text-right text-text-muted`}>
-                {health.embedding_backlog.toLocaleString()}
-              </td>
+              <td className={`${TDM} text-right text-text-muted`}>{health.embedding_backlog.toLocaleString()}</td>
             </tr>
           </tbody>
         </TableCard>

@@ -288,7 +288,15 @@ describe('the panel is honest when there is little to show', () => {
 })
 
 describe('whether there is a neighbourhood to show', () => {
-  const empty = data({ anchor: null, candidates: [], cited: [], cited_total: 0, similar: [], similar_total: 0, passages: [] })
+  const empty = data({
+    anchor: null,
+    candidates: [],
+    cited: [],
+    cited_total: 0,
+    similar: [],
+    similar_total: 0,
+    passages: [],
+  })
 
   it('is nothing when no ring, name or passage holds anything', () => {
     expect(hasNeighbourhood(empty)).toBe(false)
@@ -321,7 +329,6 @@ describe('the client', () => {
     expect(String(fetched.mock.calls[0]![0])).toBe('/api/explore/neighbourhood?q=walkway')
   })
 })
-
 
 describe('names in the ring diagram (B-100)', () => {
   it('keeps a short name whole on one line', () => {

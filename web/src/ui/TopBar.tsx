@@ -176,7 +176,9 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
             the compact mark and a 15px wordmark read as one signature, and a
             rule between them would sit beside the divider that follows. */}
         <Mark size={22} />
-        <span className="hidden font-sans text-[15px] font-medium sm:inline leading-none tracking-[-0.004em]">{WORDMARK}</span>
+        <span className="hidden font-sans text-[15px] font-medium sm:inline leading-none tracking-[-0.004em]">
+          {WORDMARK}
+        </span>
       </a>
 
       <span aria-hidden="true" className="h-[22px] w-px shrink-0 bg-line" />
@@ -294,9 +296,7 @@ export function Bell({ notifications }: { notifications: Notifications | null })
   }
 
   const label =
-    count === 0
-      ? 'Notifications, nothing new'
-      : `Notifications, ${count} new${alert ? ', including an alert' : ''}`
+    count === 0 ? 'Notifications, nothing new' : `Notifications, ${count} new${alert ? ', including an alert' : ''}`
 
   return (
     <div ref={ref} className="relative">

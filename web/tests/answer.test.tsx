@@ -54,7 +54,17 @@ function group(over: Partial<AnswerGroup> = {}): AnswerGroup {
     tier_mix: { government: 1, press: 3 },
     newest: '2025-04-02',
     coverage: 'strong',
-    items: [item(), item({ source_id: 12, chunk_id: 102, source_tier: 'press', title: 'News report', publisher: 'news.example', passages: 1 })],
+    items: [
+      item(),
+      item({
+        source_id: 12,
+        chunk_id: 102,
+        source_tier: 'press',
+        title: 'News report',
+        publisher: 'news.example',
+        passages: 1,
+      }),
+    ],
     unexamined: 0,
     ...over,
   }
@@ -301,7 +311,10 @@ describe('answer or passages', () => {
 
   it('remembers the last choice over the guess, and survives storage that throws', () => {
     const store = new Map<string, string>()
-    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) }
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    }
     rememberMode('passages', storage)
     expect(initialMode(QUESTION, storage)).toBe('passages')
     rememberMode('answer', storage)

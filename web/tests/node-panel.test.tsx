@@ -89,7 +89,10 @@ describe('the panel', () => {
     render(
       <NodePanel
         detail={detail({
-          attributes: [attribute({ value_id: 1, confidence: 0.81 }), attribute({ value_id: 2, name: 'shade', confidence: 0.29 })],
+          attributes: [
+            attribute({ value_id: 1, confidence: 0.81 }),
+            attribute({ value_id: 2, name: 'shade', confidence: 0.29 }),
+          ],
         })}
       />,
     )
@@ -166,7 +169,9 @@ describe('the panel', () => {
     })
     render(
       <NodePanel
-        detail={detail({ annotations: [note('Latest', '2026-08-31T10:00:00Z'), note('Older', '2026-08-01T10:00:00Z')] })}
+        detail={detail({
+          annotations: [note('Latest', '2026-08-31T10:00:00Z'), note('Older', '2026-08-01T10:00:00Z')],
+        })}
       />,
     )
     expect(screen.getByText('Latest')).toBeTruthy()

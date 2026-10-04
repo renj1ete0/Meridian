@@ -102,9 +102,7 @@ export type AssertRelation = Expect<Equal<keyof Relation, (typeof RELATION_FIELD
 export type AssertCited = Expect<Equal<keyof CitedTerm, (typeof CITED_TERM_FIELDS)[number]>>
 export type AssertSimilar = Expect<Equal<keyof SimilarTerm, (typeof SIMILAR_TERM_FIELDS)[number]>>
 export type AssertPassage = Expect<Equal<keyof SimilarPassage, (typeof SIMILAR_PASSAGE_FIELDS)[number]>>
-export type AssertNeighbourhood = Expect<
-  Equal<keyof TermNeighbourhood, (typeof TERM_NEIGHBOURHOOD_FIELDS)[number]>
->
+export type AssertNeighbourhood = Expect<Equal<keyof TermNeighbourhood, (typeof TERM_NEIGHBOURHOOD_FIELDS)[number]>>
 
 /** The query string for a term, or for a node the reader picked. */
 export function neighbourhoodQuery(target: { q?: string; entityId?: number }): string {

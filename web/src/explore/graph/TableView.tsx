@@ -113,7 +113,10 @@ export function TableView({ hood }: { hood: Neighbourhood }) {
                 </button>
               </th>
             ))}
-            <th scope="col" className="py-2 font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint">
+            <th
+              scope="col"
+              className="py-2 font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint"
+            >
               Relation
             </th>
           </tr>
@@ -143,9 +146,13 @@ export function TableView({ hood }: { hood: Neighbourhood }) {
               <td className="py-2 pr-4 font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-faint">
                 {node.node_type.replaceAll('_', ' ')}
               </td>
-              <td className="py-2 pr-4 text-right font-mono text-[12px] tabular-nums text-text-muted">{node.support}</td>
+              <td className="py-2 pr-4 text-right font-mono text-[12px] tabular-nums text-text-muted">
+                {node.support}
+              </td>
               <td className="py-2 pr-4 text-right font-mono text-[12px] tabular-nums text-text-muted">{node.degree}</td>
-              <td className="py-2 pr-4 text-right font-mono text-[12px] tabular-nums text-text-muted">{node.sources}</td>
+              <td className="py-2 pr-4 text-right font-mono text-[12px] tabular-nums text-text-muted">
+                {node.sources}
+              </td>
               <td className="whitespace-nowrap py-2 pr-4 font-mono text-[12px] text-text-muted">
                 {node.newest?.slice(0, 7) ?? '—'}
               </td>

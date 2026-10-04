@@ -109,10 +109,7 @@ export function topicCounts(points: readonly MapPoint[]): TopicCount[] {
   for (const topic of carrying.keys()) if (!counts.has(topic)) counts.set(topic, 0)
   return [...counts]
     .map(([topic, count]) => ({ topic, count, carrying: carrying.get(topic) ?? count }))
-    .sort(
-      (a, b) =>
-        b.count - a.count || b.carrying - a.carrying || String(a.topic).localeCompare(String(b.topic)),
-    )
+    .sort((a, b) => b.count - a.count || b.carrying - a.carrying || String(a.topic).localeCompare(String(b.topic)))
 }
 
 /** Points about more than one topic — each drawn in its first, so the table says so. */

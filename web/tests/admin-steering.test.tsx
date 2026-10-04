@@ -15,13 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BoostsTable, boostExpired, factorOf } from '../src/admin/BoostsTable'
 import { AddTopicDialog, PREVIEW_DEBOUNCE_MS, TAKES_EFFECT, bound } from '../src/admin/TopicDialogs'
 import { TopicPanel, caption } from '../src/admin/TopicPanel'
-import {
-  ApiError,
-  type SteeringEntry,
-  type TopicAddBody,
-  type TopicConfig,
-  type TopicRow,
-} from '../src/lib/api'
+import { ApiError, type SteeringEntry, type TopicAddBody, type TopicConfig, type TopicRow } from '../src/lib/api'
 import { startOfDayIso } from '../src/lib/time'
 
 function text(markup: string): string {
@@ -122,21 +116,12 @@ describe('topic weights, driven', () => {
       ],
       sums_to: 1,
     }
-    render(
-      <TopicPanel
-        rows={rows}
-        sumsTo={1}
-        draft={{ topic: 'walkability', weight: 0.3 }}
-        preview={preview}
-      />,
-    )
+    render(<TopicPanel rows={rows} sumsTo={1} draft={{ topic: 'walkability', weight: 0.3 }} preview={preview} />)
 
     const robotics = document.querySelector('[data-topic="robotics"]')!
     expect(robotics.textContent).toContain('was 0.35')
     expect(robotics.textContent).toContain('0.45')
-    expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    )
+    expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('shows the server’s refusal of a draft as written', () => {
@@ -235,9 +220,7 @@ describe('the add-topic dialog', () => {
       sums_to: 1,
     }))
     const onAdd = vi.fn()
-    render(
-      <AddTopicDialog rows={rows} sumsTo={1} preview={preview} onAdd={onAdd} onClose={() => {}} />,
-    )
+    render(<AddTopicDialog rows={rows} sumsTo={1} preview={preview} onAdd={onAdd} onClose={() => {}} />)
 
     const add = screen.getByRole('button', { name: 'Add topic' }) as HTMLButtonElement
     expect(add.disabled).toBe(true)
@@ -247,10 +230,7 @@ describe('the add-topic dialog', () => {
 
     // The server's defaults, so an untouched dialog previews exactly what an
     // API call with no bounds would do.
-    expect(preview).toHaveBeenCalledWith(
-      { topic: 'kerbside', floor: 0.05, ceiling: 0.6 },
-      expect.anything(),
-    )
+    expect(preview).toHaveBeenCalledWith({ topic: 'kerbside', floor: 0.05, ceiling: 0.6 }, expect.anything())
     expect(document.querySelector('[data-topic="kerbside"]')!.textContent).toContain('new')
     expect(add.disabled).toBe(false)
 
@@ -263,38 +243,20 @@ describe('the add-topic dialog', () => {
     const preview = vi.fn(async () => {
       throw new ApiError(422, 'floors sum to 1.050; at most 1.0 can be guaranteed.')
     })
-    render(
-      <AddTopicDialog
-        rows={rows}
-        sumsTo={1}
-        preview={preview}
-        onAdd={() => {}}
-        onClose={() => {}}
-      />,
-    )
+    render(<AddTopicDialog rows={rows} sumsTo={1} preview={preview} onAdd={() => {}} onClose={() => {}} />)
 
     fireEvent.change(screen.getByLabelText('Topic label'), { target: { value: 'kerbside' } })
     fireEvent.change(screen.getByLabelText('Floor'), { target: { value: '0.95' } })
     await act(() => vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS))
 
     expect(screen.getByRole('alert').textContent).toContain('floors sum to')
-    expect((screen.getByRole('button', { name: 'Add topic' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    )
+    expect((screen.getByRole('button', { name: 'Add topic' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('does not ask about a bound that is not a share', async () => {
     vi.useFakeTimers()
     const preview = vi.fn()
-    render(
-      <AddTopicDialog
-        rows={rows}
-        sumsTo={1}
-        preview={preview}
-        onAdd={() => {}}
-        onClose={() => {}}
-      />,
-    )
+    render(<AddTopicDialog rows={rows} sumsTo={1} preview={preview} onAdd={() => {}} onClose={() => {}} />)
 
     fireEvent.change(screen.getByLabelText('Topic label'), { target: { value: 'kerbside' } })
     fireEvent.change(screen.getByLabelText('Ceiling'), { target: { value: '1.4' } })

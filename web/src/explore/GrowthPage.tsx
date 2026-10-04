@@ -52,17 +52,15 @@ export function GrowthPage() {
   }, [range, topics])
 
   function toggle(topic: string) {
-    setTopics((now) =>
-      now.includes(topic) ? now.filter((t) => t !== topic) : [...now, topic].sort(),
-    )
+    setTopics((now) => (now.includes(topic) ? now.filter((t) => t !== topic) : [...now, topic].sort()))
   }
 
   return (
     <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-5 px-4 pb-24 pt-8 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <PageHeader title="How the corpus grew">
-          What the crawl read and kept, day by day. Counts come from what the database holds; a
-          day the crawl did not run is drawn empty, not as zero.
+          What the crawl read and kept, day by day. Counts come from what the database holds; a day the crawl did not
+          run is drawn empty, not as zero.
         </PageHeader>
         <div className="flex items-center gap-3">
           {load.status === 'ready' ? (
@@ -193,17 +191,7 @@ function TopicFilter({
   )
 }
 
-function Tile({
-  label,
-  count,
-  note,
-  unit,
-}: {
-  label: string
-  count: GrowthCount
-  note: string
-  unit?: string
-}) {
+function Tile({ label, count, note, unit }: { label: string; count: GrowthCount; note: string; unit?: string }) {
   return (
     <div className="flex flex-col gap-2 border border-line bg-surface px-[18px] py-4">
       <span className={LABEL}>{label}</span>
@@ -211,9 +199,7 @@ function Tile({
         {n(count.total)}
         {unit ? <span className="ml-2 text-[15px] text-text-muted">{unit}</span> : null}
       </span>
-      <span className="font-mono text-[10.5px] text-text-muted">
-        {unit ? note : `+${n(count.in_window)} ${note}`}
-      </span>
+      <span className="font-mono text-[10.5px] text-text-muted">{unit ? note : `+${n(count.in_window)} ${note}`}</span>
     </div>
   )
 }
@@ -233,7 +219,10 @@ export function DailyChart({ days, topics }: { days: readonly GrowthDay[]; topic
   const labelEvery = Math.max(1, Math.ceil(days.length / 5))
 
   return (
-    <section aria-label="Pages kept on a topic, per day" className="flex min-w-0 flex-col gap-3 border border-line bg-surface px-5 py-4">
+    <section
+      aria-label="Pages kept on a topic, per day"
+      className="flex min-w-0 flex-col gap-3 border border-line bg-surface px-5 py-4"
+    >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[14px] font-semibold text-text">Pages kept on a topic, per day</h2>
         <button type="button" onClick={() => setTable((t) => !t)} className="font-mono text-[10.5px] text-accent-graph">
@@ -255,7 +244,14 @@ export function DailyChart({ days, topics }: { days: readonly GrowthDay[]; topic
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={0} x2={W} y1={y(t)} y2={y(t)} stroke="var(--line)" strokeWidth={1} />
-                <text x={-8} y={y(t) + 3} textAnchor="end" fontSize={9.5} fill="var(--text-faint)" className="font-mono">
+                <text
+                  x={-8}
+                  y={y(t) + 3}
+                  textAnchor="end"
+                  fontSize={9.5}
+                  fill="var(--text-faint)"
+                  className="font-mono"
+                >
                   {t}
                 </text>
               </g>
@@ -264,7 +260,15 @@ export function DailyChart({ days, topics }: { days: readonly GrowthDay[]; topic
               const x = i * step + (step - bar) / 2
               if (!d.crawled) {
                 return (
-                  <line key={d.day} x1={x} x2={x + bar} y1={H - 0.5} y2={H - 0.5} stroke="var(--line-strong)" strokeDasharray="2 2" />
+                  <line
+                    key={d.day}
+                    x1={x}
+                    x2={x + bar}
+                    y1={H - 0.5}
+                    y2={H - 0.5}
+                    stroke="var(--line-strong)"
+                    strokeDasharray="2 2"
+                  />
                 )
               }
               const segments = [
@@ -303,17 +307,38 @@ export function DailyChart({ days, topics }: { days: readonly GrowthDay[]; topic
               )
             })}
             {hover !== null ? (
-              <line x1={hover * step + step / 2} x2={hover * step + step / 2} y1={0} y2={H} stroke="var(--line-strong)" />
+              <line
+                x1={hover * step + step / 2}
+                x2={hover * step + step / 2}
+                y1={0}
+                y2={H}
+                stroke="var(--line-strong)"
+              />
             ) : null}
             {days.map((d, i) =>
               i % labelEvery === 0 && i < days.length - Math.ceil(labelEvery / 2) ? (
-                <text key={d.day} x={i * step + step / 2} y={H + 16} textAnchor="middle" fontSize={9.5} fill="var(--text-faint)" className="font-mono">
+                <text
+                  key={d.day}
+                  x={i * step + step / 2}
+                  y={H + 16}
+                  textAnchor="middle"
+                  fontSize={9.5}
+                  fill="var(--text-faint)"
+                  className="font-mono"
+                >
                   {shortDateOf(d.day)}
                 </text>
               ) : null,
             )}
             {days.length ? (
-              <text x={(days.length - 1) * step + step / 2} y={H + 16} textAnchor="middle" fontSize={9.5} fill="var(--text-muted)" className="font-mono">
+              <text
+                x={(days.length - 1) * step + step / 2}
+                y={H + 16}
+                textAnchor="middle"
+                fontSize={9.5}
+                fill="var(--text-muted)"
+                className="font-mono"
+              >
                 today
               </text>
             ) : null}
@@ -344,7 +369,17 @@ function Legend({ topics }: { topics: readonly TopicGrowth[] }) {
   )
 }
 
-function DayTip({ day, total, topics, left }: { day: GrowthDay; total: number; topics: readonly TopicGrowth[]; left: number }) {
+function DayTip({
+  day,
+  total,
+  topics,
+  left,
+}: {
+  day: GrowthDay
+  total: number
+  topics: readonly TopicGrowth[]
+  left: number
+}) {
   return (
     <div
       role="status"
@@ -378,7 +413,9 @@ function DailyTable({ days, topics }: { days: readonly GrowthDay[]; topics: read
           <tr>
             <th className={`${LABEL} pb-2 text-left`}>Day</th>
             {topics.map((t) => (
-              <th key={t.topic} className={`${LABEL} pb-2 text-right`}>{t.topic}</th>
+              <th key={t.topic} className={`${LABEL} pb-2 text-right`}>
+                {t.topic}
+              </th>
             ))}
             <th className={`${LABEL} pb-2 text-right`}>Two or more</th>
             <th className={`${LABEL} pb-2 text-right`}>New sites</th>
@@ -387,9 +424,14 @@ function DailyTable({ days, topics }: { days: readonly GrowthDay[]; topics: read
         <tbody>
           {days.map((d) => (
             <tr key={d.day} className="border-t border-line text-text">
-              <td className="py-1.5">{d.day}{d.crawled ? '' : ' · not crawled'}</td>
+              <td className="py-1.5">
+                {d.day}
+                {d.crawled ? '' : ' · not crawled'}
+              </td>
               {topics.map((t) => (
-                <td key={t.topic} className="text-right">{d.crawled ? n(d.by_topic[t.topic] ?? 0) : '—'}</td>
+                <td key={t.topic} className="text-right">
+                  {d.crawled ? n(d.by_topic[t.topic] ?? 0) : '—'}
+                </td>
               ))}
               <td className="text-right">{d.crawled ? n(d.multi) : '—'}</td>
               <td className="text-right">{n(d.new_sites)}</td>
@@ -414,7 +456,14 @@ function Sparkline({ values, colour }: { values: readonly number[]; colour: stri
     .join(' ')
   return (
     <svg width={W} height={H} aria-hidden className="block overflow-visible">
-      <polyline points={points} fill="none" stroke={colour} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={colour}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -437,20 +486,28 @@ function ByTopic({ topics, span }: { topics: readonly TopicGrowth[]; span: strin
             <tr key={t.topic}>
               <td className="py-2">
                 <span className="flex items-center gap-2 text-[12.5px] text-text">
-                  <span aria-hidden className="block h-2 w-2 rounded-[2px]" style={{ background: seriesColour(t.series) }} />
+                  <span
+                    aria-hidden
+                    className="block h-2 w-2 rounded-[2px]"
+                    style={{ background: seriesColour(t.series) }}
+                  />
                   {t.topic}
                 </span>
               </td>
               <td className="text-right font-mono text-[11.5px] text-text tabular-nums">{n(t.passages.total)}</td>
-              <td className="text-right font-mono text-[11.5px] text-text-muted tabular-nums">+{n(t.passages.in_window)}</td>
-              <td className="pl-4"><Sparkline values={t.daily} colour={seriesColour(t.series)} /></td>
+              <td className="text-right font-mono text-[11.5px] text-text-muted tabular-nums">
+                +{n(t.passages.in_window)}
+              </td>
+              <td className="pl-4">
+                <Sparkline values={t.daily} colour={seriesColour(t.series)} />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="text-[11.5px] leading-normal text-text-faint">
-        New passages {span}. A passage inside a document about another topic counts for its own
-        topic; a page about two topics counts once in the chart, under &ldquo;two or more&rdquo;.
+        New passages {span}. A passage inside a document about another topic counts for its own topic; a page about two
+        topics counts once in the chart, under &ldquo;two or more&rdquo;.
       </p>
     </section>
   )
@@ -462,16 +519,33 @@ function NewSites({ days }: { days: readonly GrowthDay[] }) {
   const H = 40
   const step = days.length ? W / days.length : W
   return (
-    <section aria-label="New sites per day" className="flex min-w-0 flex-col gap-3 border border-line bg-surface px-5 py-4">
+    <section
+      aria-label="New sites per day"
+      className="flex min-w-0 flex-col gap-3 border border-line bg-surface px-5 py-4"
+    >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[14px] font-semibold text-text">New sites per day</h2>
         <span className="font-mono text-[10.5px] text-text-faint">first page kept from a host</span>
       </div>
-      <svg role="img" aria-label="New sites per day" viewBox={`0 0 ${W} ${H + 2}`} className="block h-[42px] w-full" preserveAspectRatio="none">
+      <svg
+        role="img"
+        aria-label="New sites per day"
+        viewBox={`0 0 ${W} ${H + 2}`}
+        className="block h-[42px] w-full"
+        preserveAspectRatio="none"
+      >
         {days.map((d, i) => {
           const h = (d.new_sites / peak) * H
           return (
-            <rect key={d.day} x={i * step + step * 0.1} y={H - h} width={step * 0.8} height={Math.max(h, 0.5)} rx={1.5} fill="var(--accent-graph)">
+            <rect
+              key={d.day}
+              x={i * step + step * 0.1}
+              y={H - h}
+              width={step * 0.8}
+              height={Math.max(h, 0.5)}
+              rx={1.5}
+              fill="var(--accent-graph)"
+            >
               <title>{`${d.day}: ${d.new_sites} new`}</title>
             </rect>
           )
@@ -488,7 +562,9 @@ function MapPanel({ growth }: { growth: Growth }) {
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[14px] font-semibold text-text">The map</h2>
         {growth.map_history_from ? (
-          <span className="font-mono text-[10.5px] text-text-faint">history from {shortDayOf(growth.map_history_from)}</span>
+          <span className="font-mono text-[10.5px] text-text-faint">
+            history from {shortDayOf(growth.map_history_from)}
+          </span>
         ) : null}
       </div>
       {now ? (
@@ -515,4 +591,3 @@ function Mini({ value, label, extra }: { value: number; label: string; extra?: s
     </div>
   )
 }
-

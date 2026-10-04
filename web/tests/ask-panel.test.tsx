@@ -40,7 +40,14 @@ function message(over: Partial<ChatMessage>): ChatMessage {
   }
 }
 
-const citation = { n: 1, chunk_id: 101, source_id: 11, url: 'https://a.test/doc', title: 'A study', source_tier: 'peer_reviewed' }
+const citation = {
+  n: 1,
+  chunk_id: 101,
+  source_id: 11,
+  url: 'https://a.test/doc',
+  title: 'A study',
+  source_tier: 'peer_reviewed',
+}
 
 function exchange(answer: Partial<ChatMessage>, threadId = 7): ChatExchange {
   return {
@@ -56,7 +63,9 @@ function api(routes: Record<string, unknown>) {
     calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined })
     const key = Object.keys(routes).find((k) => String(url).includes(k))
     const value = key ? routes[key] : { threads: [], total: 0 }
-    return new Response(JSON.stringify(typeof value === 'function' ? (value as () => unknown)() : value), { status: 200 })
+    return new Response(JSON.stringify(typeof value === 'function' ? (value as () => unknown)() : value), {
+      status: 200,
+    })
   })
   vi.stubGlobal('fetch', fetchMock)
   return calls
@@ -87,12 +96,16 @@ describe('answer text and its citations', () => {
   it('links only the citations the server kept', () => {
     const parts = answerParts('It cut speeds [1] and [2].', [citation])
     expect(parts.filter((p) => p.kind === 'cite')).toHaveLength(1)
-    expect(parts.map((p) => (p.kind === 'text' ? p.text : `<${p.citation.n}>`)).join('')).toBe('It cut speeds<1> and [2].')
+    expect(parts.map((p) => (p.kind === 'text' ? p.text : `<${p.citation.n}>`)).join('')).toBe(
+      'It cut speeds<1> and [2].',
+    )
   })
 
   it('attaches a marker to the word before it, so a line never starts with one', () => {
     const parts = answerParts('Speeds fell  [1], then rose [1].', [citation])
-    expect(parts.map((p) => (p.kind === 'text' ? p.text : `<${p.citation.n}>`)).join('')).toBe('Speeds fell<1>, then rose<1>.')
+    expect(parts.map((p) => (p.kind === 'text' ? p.text : `<${p.citation.n}>`)).join('')).toBe(
+      'Speeds fell<1>, then rose<1>.',
+    )
   })
 
   it('is plain text with nothing cited', () => {
@@ -136,21 +149,33 @@ describe('the panel', () => {
     await ask('First?')
     await screen.findAllByText('Answer.')
     await ask('And then?')
-    const asks = calls.filter((c) => c.url.endsWith('/chat/ask')).map((c) => (c.body as { thread_id: number | null }).thread_id)
+    const asks = calls
+      .filter((c) => c.url.endsWith('/chat/ask'))
+      .map((c) => (c.body as { thread_id: number | null }).thread_id)
     expect(asks).toEqual([null, 42])
   })
 
   it('does not send a context chip the reader removed', async () => {
     const calls = api({ '/chat/ask': exchange({ text: 'ok' }) })
-    renderPanel([{ entityId: 501, name: 'Silver Zone' }, { entityId: 9, name: 'Kerb extension' }])
+    renderPanel([
+      { entityId: 501, name: 'Silver Zone' },
+      { entityId: 9, name: 'Kerb extension' },
+    ])
     fireEvent.click(screen.getByRole('button', { name: 'Ask the graph' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove Silver Zone from the context' }))
     await ask('Why?')
-    expect((calls.find((c) => c.url.endsWith('/chat/ask'))!.body as { context_entity_ids: number[] }).context_entity_ids).toEqual([9])
+    expect(
+      (calls.find((c) => c.url.endsWith('/chat/ask'))!.body as { context_entity_ids: number[] }).context_entity_ids,
+    ).toEqual([9])
   })
 
   it('shows why a model did not answer, where the answer would be', async () => {
-    api({ '/chat/ask': exchange({ text: '', error: 'No model is set up to answer questions. Enable an agent for `chat` in Admin → Agents.' }) })
+    api({
+      '/chat/ask': exchange({
+        text: '',
+        error: 'No model is set up to answer questions. Enable an agent for `chat` in Admin → Agents.',
+      }),
+    })
     renderPanel()
     fireEvent.click(screen.getByRole('button', { name: 'Ask the graph' }))
     await ask('Anything?')
@@ -165,7 +190,13 @@ describe('the panel', () => {
       updated_at: T,
     }))
     api({
-      '/chat/threads/100': { thread: threads[0], messages: [message({ role: 'user', text: 'Question 0', message_id: 1 }), message({ text: 'Earlier answer.', message_id: 2 })] },
+      '/chat/threads/100': {
+        thread: threads[0],
+        messages: [
+          message({ role: 'user', text: 'Question 0', message_id: 1 }),
+          message({ text: 'Earlier answer.', message_id: 2 }),
+        ],
+      },
       '/chat/threads?': { threads, total: threads.length },
     })
     renderPanel()

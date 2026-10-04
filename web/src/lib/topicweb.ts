@@ -99,9 +99,7 @@ export function combinationsContaining(
 
 /** Toggle one topic in a selection, keeping the result sorted. */
 export function toggleTopic(selection: readonly string[], topic: string): string[] {
-  return selection.includes(topic)
-    ? selection.filter((t) => t !== topic)
-    : [...selection, topic].sort()
+  return selection.includes(topic) ? selection.filter((t) => t !== topic) : [...selection, topic].sort()
 }
 
 /** Clicking a link means "these two": the selection becomes exactly its ends. */
@@ -138,7 +136,14 @@ export function findHref(query: string, topics: readonly string[], match: TopicM
 /** What Find reads back out of its URL: `q`, repeated `topic`, `topic_match`. */
 export function findParams(search: string): { q: string; topics: string[]; match: TopicMatch } {
   const params = new URLSearchParams(search)
-  const topics = [...new Set(params.getAll('topic').map((t) => t.trim()).filter(Boolean))]
+  const topics = [
+    ...new Set(
+      params
+        .getAll('topic')
+        .map((t) => t.trim())
+        .filter(Boolean),
+    ),
+  ]
   return {
     q: params.get('q')?.trim() ?? '',
     topics,

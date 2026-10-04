@@ -15,12 +15,7 @@ export const SEARCH_INPUT_ID = 'explore-search'
 /** ⌘K on a Mac, Ctrl+K elsewhere — either is accepted, since which one a
  * reader presses is a fact about their keyboard, not their operating system. */
 export function isCommandK(event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>): boolean {
-  return (
-    (event.metaKey || event.ctrlKey) &&
-    !event.altKey &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === 'k'
-  )
+  return (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k'
 }
 
 /**

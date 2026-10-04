@@ -73,9 +73,7 @@ function row(over: Partial<GazetteerRow> = {}): GazetteerRow {
 const COUNTS = { pending: 7, approved: 64, rejected: 2 }
 
 function render(rows: GazetteerRow[], over: Partial<Parameters<typeof GazetteerQueue>[0]> = {}) {
-  return renderToStaticMarkup(
-    <GazetteerQueue rows={rows} state="pending" counts={COUNTS} {...over} />,
-  )
+  return renderToStaticMarkup(<GazetteerQueue rows={rows} state="pending" counts={COUNTS} {...over} />)
 }
 
 // --------------------------------------------------------------------------
@@ -90,9 +88,7 @@ describe('every row says what the matcher will do with it', () => {
   it('names the other rows in a collision', () => {
     // A curator cannot fix a collision without being told what it collided with.
     // "This term is not used" alone is a dead end.
-    const sentence = verdictOf(
-      row({ will_load: false, withheld_reason: 'collision', collides_with: [4, 9] }),
-    )
+    const sentence = verdictOf(row({ will_load: false, withheld_reason: 'collision', collides_with: [4, 9] }))
 
     expect(sentence).toContain('4, 9')
     expect(sentence.toLowerCase()).toContain('change one')
@@ -121,10 +117,7 @@ describe('every row says what the matcher will do with it', () => {
     // Drift: a reason added in `meridian_core/gazetteer.py` and not here falls
     // through to a generic line, which is the one case where the screen stops
     // being worth reading.
-    const source = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/gazetteer.py'),
-      'utf8',
-    )
+    const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/gazetteer.py'), 'utf8')
     const reasons = [...source.matchAll(/reason: str\s*=|"(ambiguous|collision|no_patterns)"/g)]
       .map((m) => m[1])
       .filter((r): r is string => Boolean(r))
@@ -169,9 +162,7 @@ describe('the queue', () => {
   it('offers to put a turned-down term back, and not to approve it outright', () => {
     // The second look should start from "undecided" rather than from the answer
     // being reconsidered.
-    const rendered = text(
-      render([row({ term: term({ rejected_at: '2026-09-15T00:00:00Z' }) })]),
-    )
+    const rendered = text(render([row({ term: term({ rejected_at: '2026-09-15T00:00:00Z' }) })]))
 
     expect(rendered).toContain('Put back')
     expect(rendered).not.toContain('Approve')
@@ -226,10 +217,7 @@ describe('the type list matches the database', () => {
     // A type added in Postgres and not here cannot be chosen, so terms of that
     // type can only be filed wrongly; one removed there and left here is a
     // dropdown whose value the database refuses after the curator picks it.
-    const source = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/models/gazetteer.py'),
-      'utf8',
-    )
+    const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/gazetteer.py'), 'utf8')
     const call = /GAZETTEER_ENTITY_TYPE = constrained\(([\s\S]*?)\)/.exec(source)
     expect(call, 'GAZETTEER_ENTITY_TYPE is no longer written the way this test reads it').toBeTruthy()
 

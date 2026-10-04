@@ -99,20 +99,13 @@ export function shareNote(row: TopicRow): string | null {
 }
 
 /** The date the log last saw this topic reach `status`, as `12 Aug`. */
-export function statusSince(
-  entries: readonly SteeringEntry[],
-  topic: string,
-  status: TopicStatus,
-): string | null {
-  const entry = entries.find(
-    (e) => e.topic === topic && e.field === 'status' && e.new_value === status,
-  )
+export function statusSince(entries: readonly SteeringEntry[], topic: string, status: TopicStatus): string | null {
+  const entry = entries.find((e) => e.topic === topic && e.field === 'status' && e.new_value === status)
   if (!entry) return null
   // In the display zone (ADR 0009); `shortDayOf` writes the month out itself, because ICU
   // versions disagree on "Sep" and "Sept".
   return shortDayOf(entry.changed_at)
 }
-
 
 /** The middle caption under a slider: what the row draws, or why it draws nothing. */
 export function caption(row: TopicRow, entries: readonly SteeringEntry[]): string {
@@ -155,12 +148,7 @@ export function WeightSlider({
   disabled: boolean
   onChange?: (value: number) => void
 }) {
-  const fill =
-    tone === 'attention'
-      ? 'bg-accent-attention'
-      : tone === 'muted'
-        ? 'bg-text-faint'
-        : 'bg-accent-graph'
+  const fill = tone === 'attention' ? 'bg-accent-attention' : tone === 'muted' ? 'bg-text-faint' : 'bg-accent-graph'
   const at = (v: number) => `${Math.min(Math.max(v, 0), 1) * 100}%`
 
   return (
@@ -448,8 +436,8 @@ export function TopicPanel({
           </>
         }
       >
-        Weights set each topic’s share of what the crawl acquires. Nothing here deletes: lowering,
-        pausing or archiving a topic changes what gets acquired next, and nothing else.
+        Weights set each topic’s share of what the crawl acquires. Nothing here deletes: lowering, pausing or archiving
+        a topic changes what gets acquired next, and nothing else.
       </PageHeader>
 
       <Card className="flex flex-col gap-[18px] px-6 pb-[22px] pt-5">
@@ -474,15 +462,10 @@ export function TopicPanel({
           const { topic, status, pinned, floor, ceiling } = stored.topic
           const staged = draft?.topic === topic
           const value = staged ? draft.weight : row.topic.weight
-          const moved =
-            preview !== null && !staged && Math.abs(row.topic.weight - stored.topic.weight) >= 0.005
+          const moved = preview !== null && !staged && Math.abs(row.topic.weight - stored.topic.weight) >= 0.005
           const drawingNow = status === 'active'
           return (
-            <div
-              key={topic}
-              data-topic={topic}
-              className={`flex flex-col gap-2.5 ${drawingNow ? '' : 'opacity-60'}`}
-            >
+            <div key={topic} data-topic={topic} className={`flex flex-col gap-2.5 ${drawingNow ? '' : 'opacity-60'}`}>
               <div className="flex items-baseline justify-between gap-2.5">
                 <span className="flex items-baseline gap-[9px]">
                   <span className="text-[14px] font-semibold text-text">{topic}</span>
@@ -493,9 +476,7 @@ export function TopicPanel({
                 </span>
                 <span className="flex items-center gap-3">
                   {moved ? (
-                    <span className="font-mono text-[11px] text-text-faint">
-                      was {weight(stored.topic.weight)}
-                    </span>
+                    <span className="font-mono text-[11px] text-text-faint">was {weight(stored.topic.weight)}</span>
                   ) : null}
                   <span
                     className={`font-mono text-[13px] tabular-nums ${staged || moved ? 'text-accent-graph' : 'text-text'}`}
@@ -550,15 +531,14 @@ export function TopicPanel({
           </p>
         ) : draft ? (
           <p className="text-[12px] leading-[1.55] text-text-muted">
-            Previewing {draft.topic} at {weight(draft.weight)}. The others move to make room, down
-            to their floors; nothing is applied until Apply.
+            Previewing {draft.topic} at {weight(draft.weight)}. The others move to make room, down to their floors;
+            nothing is applied until Apply.
           </p>
         ) : null}
 
         <p className="text-[12px] leading-[1.55] text-text-faint">
-          A paused topic keeps its stored weight, so resuming it costs nothing; while it is out, its
-          share is drawn by the others. Archiving releases the weight the same way and moves the
-          topic to the list below.
+          A paused topic keeps its stored weight, so resuming it costs nothing; while it is out, its share is drawn by
+          the others. Archiving releases the weight the same way and moves the topic to the list below.
         </p>
       </Card>
 
@@ -577,23 +557,14 @@ export function TopicPanel({
             aria-hidden="true"
             className={`shrink-0 stroke-text-faint transition-transform ${archivedOpen ? '' : '-rotate-90'}`}
           >
-            <path
-              d="M2.5 4 L6 8 L9.5 4"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <path d="M2.5 4 L6 8 L9.5 4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span className={LABEL}>Archived · {archived.length}</span>
-          <span className="ml-auto font-mono text-[10px] text-text-faint">
-            not seeded · nothing deleted
-          </span>
+          <span className="ml-auto font-mono text-[10px] text-text-faint">not seeded · nothing deleted</span>
         </button>
         {archivedOpen ? (
           archived.length === 0 ? (
-            <p className="border-t border-line/60 pt-2.5 text-[12.5px] text-text-muted">
-              Nothing archived.
-            </p>
+            <p className="border-t border-line/60 pt-2.5 text-[12.5px] text-text-muted">Nothing archived.</p>
           ) : (
             archived.map((row) => {
               const since = statusSince(entries, row.topic.topic, 'archived')
@@ -605,8 +576,8 @@ export function TopicPanel({
                 >
                   <span className="w-44 shrink-0 text-[12.5px] text-text">{row.topic.topic}</span>
                   <span className="min-w-0 flex-1 font-mono text-[11.5px] text-text-faint">
-                    {since ? `archived ${since} · ` : ''}weight {weight(row.topic.weight)} kept ·
-                    nodes kept · still searchable
+                    {since ? `archived ${since} · ` : ''}weight {weight(row.topic.weight)} kept · nodes kept · still
+                    searchable
                   </span>
                   <button
                     type="button"

@@ -53,9 +53,7 @@ const META = 'font-mono text-[10px] text-text-faint'
  * passage's order. Empty when the passage is unexamined (null) or about
  * nothing beyond its document.
  */
-export function passageOnlyTopics(
-  hit: Pick<SearchHit, 'topic_labels' | 'passage_topics'>,
-): string[] {
+export function passageOnlyTopics(hit: Pick<SearchHit, 'topic_labels' | 'passage_topics'>): string[] {
   const onSource = new Set(hit.topic_labels ?? [])
   return (hit.passage_topics ?? []).filter((topic) => !onSource.has(topic))
 }

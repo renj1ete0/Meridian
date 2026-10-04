@@ -7,8 +7,7 @@
  */
 import { request } from './api'
 
-type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
 
 /** Mirrors `ChatCitationRead`: a passage the answer cites as `[n]`, checked by the server. */
@@ -100,9 +99,7 @@ export type AssertChatNode = Expect<Equal<keyof ChatNode, (typeof CHAT_NODE_FIEL
 export type AssertChatMessage = Expect<Equal<keyof ChatMessage, (typeof CHAT_MESSAGE_FIELDS)[number]>>
 export type AssertChatThread = Expect<Equal<keyof ChatThread, (typeof CHAT_THREAD_FIELDS)[number]>>
 export type AssertChatThreads = Expect<Equal<keyof ChatThreads, (typeof CHAT_THREADS_FIELDS)[number]>>
-export type AssertChatThreadDetail = Expect<
-  Equal<keyof ChatThreadDetail, (typeof CHAT_THREAD_DETAIL_FIELDS)[number]>
->
+export type AssertChatThreadDetail = Expect<Equal<keyof ChatThreadDetail, (typeof CHAT_THREAD_DETAIL_FIELDS)[number]>>
 export type AssertChatExchange = Expect<Equal<keyof ChatExchange, (typeof CHAT_EXCHANGE_FIELDS)[number]>>
 
 export function askGraph(

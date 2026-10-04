@@ -79,7 +79,14 @@ export function NodeSearchBox({
   return (
     <div className="relative">
       <div className="flex items-center gap-2 border border-line-strong bg-ground px-2.5 py-[7px] focus-within:border-accent-graph">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-text-faint">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+          className="shrink-0 text-text-faint"
+        >
           <circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.4" />
           <path d="M10.4 10.4 L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
         </svg>

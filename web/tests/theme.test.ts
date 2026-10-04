@@ -9,15 +9,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  DEFAULT_THEME,
-  THEMES,
-  applyTheme,
-  nextTheme,
-  readTheme,
-  writeTheme,
-  type Theme,
-} from '../src/lib/theme'
+import { DEFAULT_THEME, THEMES, applyTheme, nextTheme, readTheme, writeTheme, type Theme } from '../src/lib/theme'
 
 beforeEach(() => {
   window.localStorage.clear()

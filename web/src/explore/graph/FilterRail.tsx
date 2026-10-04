@@ -124,10 +124,7 @@ function YearRange({
     <div className="flex flex-col gap-3">
       <div className="relative h-[11px]">
         <div className="absolute inset-x-0 top-1 h-[3px] bg-surface-raised" />
-        <div
-          className="absolute top-1 h-[3px] bg-accent-graph-deep"
-          style={{ left: `${left}%`, right: `${right}%` }}
-        />
+        <div className="absolute top-1 h-[3px] bg-accent-graph-deep" style={{ left: `${left}%`, right: `${right}%` }} />
         {min === max ? null : (
           <>
             <input
@@ -198,9 +195,7 @@ export function FilterRail({
 
       <Section title="Topic">
         {topics.length === 0 ? (
-          <p className="text-[12px] text-text-faint">
-            No topic labels on this neighbourhood's sources.
-          </p>
+          <p className="text-[12px] text-text-faint">No topic labels on this neighbourhood's sources.</p>
         ) : (
           topics.map((f) => (
             <Row
@@ -288,7 +283,11 @@ export function FilterRail({
               type="button"
               onClick={() => onOpenView(view)}
               className="truncate text-left text-[12.5px] text-text-muted hover:text-text"
-              title={view.focus_entity_id ? 'Opens its focus node with its filters' : 'A search view: opens on the search page'}
+              title={
+                view.focus_entity_id
+                  ? 'Opens its focus node with its filters'
+                  : 'A search view: opens on the search page'
+              }
             >
               {view.name}
             </button>

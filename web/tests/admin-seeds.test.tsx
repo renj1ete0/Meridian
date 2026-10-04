@@ -57,9 +57,7 @@ describe('what a seed is', () => {
   it('names a search as a search', () => {
     // A query is not an address, and showing it as one would have somebody
     // wondering why "pedestrian comfort" did not resolve.
-    expect(describeSeed(seed({ task_type: 'query', url_or_query: 'kerb ramps' }))).toContain(
-      'search:',
-    )
+    expect(describeSeed(seed({ task_type: 'query', url_or_query: 'kerb ramps' }))).toContain('search:')
   })
 
   it('shows a URL as itself', () => {
@@ -79,9 +77,7 @@ describe('a fresh install', () => {
     // An empty queue on a fresh install is not a tidy state, it is a crawl
     // with nowhere to go — and the screen that shows it is the only place
     // anybody would find out.
-    const body = text(
-      renderToStaticMarkup(<FirstRunPanel run={run({ pending_seeds: [] })} />),
-    )
+    const body = text(renderToStaticMarkup(<FirstRunPanel run={run({ pending_seeds: [] })} />))
 
     expect(body).toContain('nowhere to start')
   })
@@ -89,11 +85,7 @@ describe('a fresh install', () => {
 
 describe('once the crawl has moved', () => {
   it('reports progress rather than pretending it has not started', () => {
-    const body = text(
-      renderToStaticMarkup(
-        <FirstRunPanel run={run({ is_first_run: false, sources: 1234 })} />,
-      ),
-    )
+    const body = text(renderToStaticMarkup(<FirstRunPanel run={run({ is_first_run: false, sources: 1234 })} />))
 
     expect(body).toContain('1,234 documents')
     expect(body).not.toContain('Nothing has been crawled yet')
@@ -103,9 +95,7 @@ describe('once the crawl has moved', () => {
     // The distinction this screen exists to keep: a reached seed has produced
     // fetch attempts, and dropping the queue row would leave them unexplained.
     // Saying only "cannot be removed" would read as a bug.
-    const body = text(
-      renderToStaticMarkup(<FirstRunPanel run={run({ seeds_in_flight: 3 })} />),
-    )
+    const body = text(renderToStaticMarkup(<FirstRunPanel run={run({ seeds_in_flight: 3 })} />))
 
     expect(body).toContain('3 already reached')
     expect(body).toContain('evidence')
@@ -134,9 +124,7 @@ describe('the list', () => {
 
   it('shows a seed topic when it has one', () => {
     const body = text(
-      renderToStaticMarkup(
-        <FirstRunPanel run={run({ pending_seeds: [seed({ topic: 'walkability' })] })} />,
-      ),
+      renderToStaticMarkup(<FirstRunPanel run={run({ pending_seeds: [seed({ topic: 'walkability' })] })} />),
     )
 
     expect(body).toContain('walkability')
@@ -145,11 +133,7 @@ describe('the list', () => {
   it('surfaces a refusal from the server as written', () => {
     // The API's own sentence: a 409 explains *which* of the two refusals it
     // was, and replacing it with a generic line throws that away.
-    const body = text(
-      renderToStaticMarkup(
-        <FirstRunPanel run={run()} error="That seed is being fetched right now." />,
-      ),
-    )
+    const body = text(renderToStaticMarkup(<FirstRunPanel run={run()} error="That seed is being fetched right now." />))
 
     expect(body).toContain('being fetched right now')
   })

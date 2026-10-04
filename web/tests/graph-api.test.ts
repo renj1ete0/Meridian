@@ -102,10 +102,7 @@ describe('the neighbourhood query', () => {
 
   it('sends only the filters that are on', () => {
     const query = new URLSearchParams(
-      neighbourhoodQuery(
-        { ...NO_FILTERS, publishedFrom: '2020-01-01', contestedOnly: true, attribute: 'density' },
-        60,
-      ),
+      neighbourhoodQuery({ ...NO_FILTERS, publishedFrom: '2020-01-01', contestedOnly: true, attribute: 'density' }, 60),
     )
     expect(Object.fromEntries(query)).toEqual({
       published_from: '2020-01-01',

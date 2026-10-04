@@ -41,10 +41,7 @@ async function renderWith(fetchImpl: (url: string) => Promise<Response>) {
 
 describe('the client mirrors the DTO', () => {
   it('ContestedListRead', () => {
-    const source = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/schemas/graphview.py'),
-      'utf8',
-    )
+    const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/schemas/graphview.py'), 'utf8')
     const start = source.indexOf('class ContestedListRead(')
     expect(start).toBeGreaterThan(-1)
     const rest = source.slice(start)

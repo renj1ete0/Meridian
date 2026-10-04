@@ -44,9 +44,7 @@ describe('the suggested name', () => {
   it('carries the topics that narrowed it', () => {
     // Two views of the same words are otherwise indistinguishable in the list,
     // which is the one thing a name has to prevent.
-    expect(suggestedName('funding', { topic: ['walkability', 'robotics'] })).toBe(
-      'funding · walkability, robotics',
-    )
+    expect(suggestedName('funding', { topic: ['walkability', 'robotics'] })).toBe('funding · walkability, robotics')
   })
 
   it('ignores a filter shape it does not recognise', () => {
@@ -93,9 +91,7 @@ describe('saving', () => {
     // On an instance without Cloudflare Access this is a 503 naming the two
     // variables that would allow it (`P6-13`), which is the only actionable
     // thing in the response — replacing it with "could not save" throws it away.
-    render(
-      <SaveView query="funding" filters={{}} error="Admin is closed: set CF_ACCESS_AUD." />,
-    )
+    render(<SaveView query="funding" filters={{}} error="Admin is closed: set CF_ACCESS_AUD." />)
     fireEvent.click(screen.getByRole('button', { name: /save this view/i }))
 
     expect(screen.getByText(/CF_ACCESS_AUD/)).toBeTruthy()
@@ -135,11 +131,7 @@ describe('a saved view carries filters the server can apply', () => {
   it('names every key as SearchFilters does', () => {
     const fields = searchFilterFields()
     expect(fields).toContain('topics')
-    for (const filters of [
-      viewFilters(['a'], 'any'),
-      viewFilters(['a', 'b'], 'all'),
-      viewFilters(['a', 'b'], 'any'),
-    ]) {
+    for (const filters of [viewFilters(['a'], 'any'), viewFilters(['a', 'b'], 'all'), viewFilters(['a', 'b'], 'any')]) {
       for (const key of Object.keys(filters)) expect(fields).toContain(key)
     }
   })

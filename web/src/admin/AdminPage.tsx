@@ -11,14 +11,7 @@ import { GazetteerQueue, PAGE_SIZE } from './GazetteerQueue'
 import { PinsPanel } from './PinsPanel'
 import { ProposalsPanel } from './ProposalsPanel'
 import { RunsPanel } from './RunsPanel'
-import {
-  DEFAULT_SECTION,
-  SECTIONS,
-  hrefForSection,
-  useAdminTheme,
-  usePathSection,
-  type Section,
-} from './sections'
+import { DEFAULT_SECTION, SECTIONS, hrefForSection, useAdminTheme, usePathSection, type Section } from './sections'
 import { SteeringRail } from './SteeringRail'
 import { AddTopicDialog, ArchiveDialog, PREVIEW_DEBOUNCE_MS } from './TopicDialogs'
 import { TopicPanel, type Draft } from './TopicPanel'
@@ -58,12 +51,7 @@ import {
   type TopicStatus,
   type Topics,
 } from '../lib/api'
-import {
-  acceptProposal,
-  getProposals,
-  rejectProposal,
-  type Proposals,
-} from '../lib/proposals'
+import { acceptProposal, getProposals, rejectProposal, type Proposals } from '../lib/proposals'
 import { onInternalClick } from '../lib/route'
 
 /**
@@ -186,23 +174,20 @@ export function AdminPage() {
       .catch(() => undefined)
   }, [])
 
-  const loadPolicy = useCallback(
-    (next: DomainStatus | null, q: string, from: number, signal?: AbortSignal) => {
-      return getFetchPolicy(
-        { status: next ?? undefined, q: q || undefined, limit: DOMAIN_PAGE, offset: from },
-        { signal },
-      )
-        .then((page) => {
-          setPolicy(page)
-          setError(null)
-        })
-        .catch((cause: unknown) => {
-          const text = message(cause, 'Domain policy could not be loaded.')
-          if (text) setError(text)
-        })
-    },
-    [],
-  )
+  const loadPolicy = useCallback((next: DomainStatus | null, q: string, from: number, signal?: AbortSignal) => {
+    return getFetchPolicy(
+      { status: next ?? undefined, q: q || undefined, limit: DOMAIN_PAGE, offset: from },
+      { signal },
+    )
+      .then((page) => {
+        setPolicy(page)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        const text = message(cause, 'Domain policy could not be loaded.')
+        if (text) setError(text)
+      })
+  }, [])
 
   const loadAgents = useCallback((signal?: AbortSignal) => {
     return getAgents({ signal })
@@ -317,8 +302,7 @@ export function AdminPage() {
     else if (section === 'agents') void loadAgents(signal)
     else if (section === 'runs') void loadRuns(signal)
     else if (section === 'health') void loadHealth(signal)
-    else if (section === 'domains')
-      void loadPolicy(domainStatus, domainSearch, domainOffset, signal)
+    else if (section === 'domains') void loadPolicy(domainStatus, domainSearch, domainOffset, signal)
     return () => controller.abort()
   }, [
     domainOffset,
@@ -402,8 +386,7 @@ export function AdminPage() {
     setNotice(null)
     try {
       const { rows } = await decideGazetteerTerms(termIds, decision)
-      const verb =
-        decision === 'approve' ? 'Approved' : decision === 'reject' ? 'Turned down' : 'Put back'
+      const verb = decision === 'approve' ? 'Approved' : decision === 'reject' ? 'Turned down' : 'Put back'
       // Collisions are reported here as well as on the rows, because in the
       // waiting view the approved rows leave the page — and the collision
       // with them.
@@ -470,14 +453,11 @@ export function AdminPage() {
     })
   }
 
-  const onStatus = (topic: string, status: TopicStatus) =>
-    steerTopic(topic, () => editTopic(topic, { status }))
-  const onPinned = (topic: string, pinned: boolean) =>
-    steerTopic(topic, () => editTopic(topic, { pinned }))
+  const onStatus = (topic: string, status: TopicStatus) => steerTopic(topic, () => editTopic(topic, { status }))
+  const onPinned = (topic: string, pinned: boolean) => steerTopic(topic, () => editTopic(topic, { pinned }))
   const onDescribe = (topic: string, description: string | null) =>
     steerTopic(topic, () => editTopic(topic, { description }))
-  const onBoost = (topic: string, change: BoostChange) =>
-    steerTopic(topic, () => editTopic(topic, change))
+  const onBoost = (topic: string, change: BoostChange) => steerTopic(topic, () => editTopic(topic, change))
 
   const steeringPage = WITH_RAIL.includes(section)
 
@@ -492,13 +472,8 @@ export function AdminPage() {
         className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 lg:w-[196px] lg:flex-col lg:gap-[3px] lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-[18px]"
       >
         {(['steering', 'system'] as const).map((group) => (
-          <div
-            key={group}
-            className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch lg:gap-[3px]"
-          >
-            <div
-              className={`${LABEL} hidden px-3.5 pb-2.5 lg:block ${group === 'system' ? 'lg:pt-5' : ''}`}
-            >
+          <div key={group} className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch lg:gap-[3px]">
+            <div className={`${LABEL} hidden px-3.5 pb-2.5 lg:block ${group === 'system' ? 'lg:pt-5' : ''}`}>
               {group}
             </div>
             {SECTIONS.filter((s) => s.group === group).map((def) => {
@@ -540,10 +515,7 @@ export function AdminPage() {
           </p>
         ) : null}
         {notice ? (
-          <p
-            role="status"
-            className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text"
-          >
+          <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
             {notice}
           </p>
         ) : null}
@@ -594,13 +566,9 @@ export function AdminPage() {
             <ProposalsPanel
               proposals={proposals}
               busy={proposalBusy}
-              onAccept={(proposalId) =>
-                void decide(proposalId, 'Applied now.', () => acceptProposal(proposalId))
-              }
+              onAccept={(proposalId) => void decide(proposalId, 'Applied now.', () => acceptProposal(proposalId))}
               onReject={(proposalId, reason) =>
-                void decide(proposalId, 'Rejected; it will not apply.', () =>
-                  rejectProposal(proposalId, reason),
-                )
+                void decide(proposalId, 'Rejected; it will not apply.', () => rejectProposal(proposalId, reason))
               }
             />
           ) : error ? null : (
@@ -636,9 +604,7 @@ export function AdminPage() {
                     await removeSeed(taskId)
                     setRun(await getFirstRun())
                   } catch (cause) {
-                    setError(
-                      cause instanceof ApiError ? cause.message : 'That seed was not removed.',
-                    )
+                    setError(cause instanceof ApiError ? cause.message : 'That seed was not removed.')
                   } finally {
                     setSeedBusy(null)
                   }
@@ -713,13 +679,7 @@ export function AdminPage() {
         {section === 'access' ? <AssistantAccessPanel /> : null}
         {section === 'display' ? <DisplayPanel /> : null}
 
-        {section === 'health' ? (
-          health ? (
-            <CrawlHealthPanel health={health} />
-          ) : (
-            <Loading what="crawl health" />
-          )
-        ) : null}
+        {section === 'health' ? health ? <CrawlHealthPanel health={health} /> : <Loading what="crawl health" /> : null}
 
         {section === 'runs' ? (
           runs ? (
@@ -732,9 +692,8 @@ export function AdminPage() {
         {section === 'enrichment' ? (
           <PageHeader title="Enrichment queue">
             Not built yet. The table this screen will read exists, but nothing fills it until{' '}
-            <span className="font-mono">P7-07</span>: figure descriptions, OCR at a higher quality
-            tier and chart reading, each started by a person rather than on a schedule. There is
-            nothing queued to show.
+            <span className="font-mono">P7-07</span>: figure descriptions, OCR at a higher quality tier and chart
+            reading, each started by a person rather than on a schedule. There is nothing queued to show.
           </PageHeader>
         ) : null}
 
@@ -757,9 +716,7 @@ export function AdminPage() {
                 setOffset(0)
               }}
               onPage={setOffset}
-              onDecide={(termId, decision) =>
-                void act(termId, () => decideGazetteerTerm(termId, decision))
-              }
+              onDecide={(termId, decision) => void act(termId, () => decideGazetteerTerm(termId, decision))}
               onEdit={(termId, entityType: GazetteerEntityType) =>
                 void act(termId, () => editGazetteerTerm(termId, { entity_type: entityType }))
               }

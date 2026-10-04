@@ -66,7 +66,8 @@ export function AreaSteerItems({ area, close }: { area: Area; close: () => void 
   if (outcome) return <OutcomeNote outcome={outcome} close={close} />
   if (naming) return <MakeTopic area={area} close={close} onDone={setOutcome} />
   if (readError) return <p className="px-3 py-2 text-[12px] text-text-muted">{readError}</p>
-  if (!steering) return <p className="px-3 py-2 font-mono text-[11px] text-text-faint">Reading what this would steer.</p>
+  if (!steering)
+    return <p className="px-3 py-2 font-mono text-[11px] text-text-faint">Reading what this would steer.</p>
 
   const topic = steering.topic
   return (
@@ -150,15 +151,7 @@ function OutcomeNote({ outcome, close }: { outcome: NonNullable<Outcome>; close:
   )
 }
 
-function MakeTopic({
-  area,
-  close,
-  onDone,
-}: {
-  area: Area
-  close: () => void
-  onDone: (outcome: Outcome) => void
-}) {
+function MakeTopic({ area, close, onDone }: { area: Area; close: () => void; onDone: (outcome: Outcome) => void }) {
   const [name, setName] = useState(topicNameFrom(area.terms))
   const [description, setDescription] = useState(area.terms.slice(0, 8).join(', '))
   const [busy, setBusy] = useState(false)
@@ -166,7 +159,11 @@ function MakeTopic({
   function submit(event: React.FormEvent) {
     event.preventDefault()
     setBusy(true)
-    addTopic({ topic: name.trim(), description: description.trim() || null, reason: `from the map: field “${area.name}”` })
+    addTopic({
+      topic: name.trim(),
+      description: description.trim() || null,
+      reason: `from the map: field “${area.name}”`,
+    })
       .then(() =>
         onDone({
           kind: 'done',

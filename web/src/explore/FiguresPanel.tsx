@@ -28,8 +28,8 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
     // extracted from it" are different facts a reader may need to act on.
     return (
       <p className="text-[12.5px] leading-[1.55] text-text-muted">
-        No figures were extracted from this source. Captions are taken at ingestion; a document
-        whose figures carry no caption or alt text yields none.
+        No figures were extracted from this source. Captions are taken at ingestion; a document whose figures carry no
+        caption or alt text yields none.
       </p>
     )
   }
@@ -72,9 +72,7 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
             </div>
 
             {figure.caption !== null && figure.alt_text !== null ? (
-              <p className="mt-1 font-mono text-[length:var(--text-data)] text-text-faint">
-                alt: {figure.alt_text}
-              </p>
+              <p className="mt-1 font-mono text-[length:var(--text-data)] text-text-faint">alt: {figure.alt_text}</p>
             ) : null}
           </li>
         ))}

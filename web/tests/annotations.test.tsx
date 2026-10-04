@@ -23,12 +23,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  NoteComposer,
-  NoteList,
-  NotesPanel,
-  describeAttachment,
-} from '../src/explore/Annotations'
+import { NoteComposer, NoteList, NotesPanel, describeAttachment } from '../src/explore/Annotations'
 import type { Annotation, AnnotationTarget } from '../src/lib/api'
 
 afterEach(cleanup)
@@ -77,9 +72,7 @@ describe('the composer is reachable', () => {
     open()
     write('A thought with no home yet')
 
-    expect(onWrite).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'A thought with no home yet', about: [] }),
-    )
+    expect(onWrite).toHaveBeenCalledWith(expect.objectContaining({ title: 'A thought with no home yet', about: [] }))
   })
 
   it('can be backed out of', () => {
@@ -113,9 +106,7 @@ describe('what the note carries', () => {
     open()
     write('These two disagree')
 
-    expect(onWrite).toHaveBeenCalledWith(
-      expect.objectContaining({ supporting_chunk_ids: [12, 13] }),
-    )
+    expect(onWrite).toHaveBeenCalledWith(expect.objectContaining({ supporting_chunk_ids: [12, 13] }))
   })
 
   it('sends the ids of what it is about, from the targets it was given', () => {

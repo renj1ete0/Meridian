@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import {
-  BUTTON_PRIMARY,
-  BUTTON_SECONDARY,
-  Card,
-  FIELD,
-  Filters,
-  LABEL,
-  Loading,
-  PageHeader,
-  ROW,
-} from '../admin/ui'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, Card, FIELD, Filters, LABEL, Loading, PageHeader, ROW } from '../admin/ui'
 import { ApiError } from '../lib/api'
 import {
   boostFromGap,
@@ -80,9 +70,8 @@ export function GapsPage() {
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-6 px-4 pb-24 pt-8 sm:px-6">
       <PageHeader title="Gaps">
-        What the corpus cannot yet answer, most severe first. Every action goes through the
-        crawl queue or the steering vector, takes effect at the crawl&rsquo;s next claim, and is
-        reversible in Admin.
+        What the corpus cannot yet answer, most severe first. Every action goes through the crawl queue or the steering
+        vector, takes effect at the crawl&rsquo;s next claim, and is reversible in Admin.
       </PageHeader>
 
       {load.status === 'loading' ? <Loading what="the gaps" /> : null}
@@ -186,7 +175,9 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
   }
 
   return (
-    <li className={`grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 px-[18px] py-4 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto] ${first ? '' : ROW}`}>
+    <li
+      className={`grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 px-[18px] py-4 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto] ${first ? '' : ROW}`}
+    >
       <span className="pt-[1px] font-mono text-[11px] tabular-nums text-text-faint">
         {String(rank).padStart(2, '0')}
       </span>
@@ -204,7 +195,12 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
         <p className="font-mono text-[11px] text-text-faint">{evidenceLine(gap.evidence).join(' · ')}</p>
 
         {seeding && seed ? (
-          <SeedForm action={seed} busy={busy} onCancel={() => setSeeding(false)} onSubmit={(q) => act(() => seedFromGap(gap.id, seed.topic ?? gap.subject, q))} />
+          <SeedForm
+            action={seed}
+            busy={busy}
+            onCancel={() => setSeeding(false)}
+            onSubmit={(q) => act(() => seedFromGap(gap.id, seed.topic ?? gap.subject, q))}
+          />
         ) : null}
         {done ? <Outcome done={done} /> : null}
       </div>
@@ -220,7 +216,9 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
             type="button"
             className={BUTTON_SECONDARY}
             disabled={busy}
-            onClick={() => act(() => boostFromGap(gap.id, boost.topic ?? gap.subject, boost.factor ?? 2, boost.days ?? 7))}
+            onClick={() =>
+              act(() => boostFromGap(gap.id, boost.topic ?? gap.subject, boost.factor ?? 2, boost.days ?? 7))
+            }
           >
             {boost.label}
           </button>

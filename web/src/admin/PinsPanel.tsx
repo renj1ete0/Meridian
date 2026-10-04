@@ -29,9 +29,8 @@ export function PinsPanel({
   return (
     <section className="flex flex-col gap-6">
       <PageHeader title="Pins & boosts">
-        A pinned topic is one the orchestrator may not re-weight on its own; you still can. A boost
-        multiplies a topic’s weight until it expires, then stops counting — nothing has to remember
-        to undo it.
+        A pinned topic is one the orchestrator may not re-weight on its own; you still can. A boost multiplies a topic’s
+        weight until it expires, then stops counting — nothing has to remember to undo it.
       </PageHeader>
 
       <div className="flex flex-col gap-3">

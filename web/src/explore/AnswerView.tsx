@@ -42,9 +42,7 @@ function plural(n: number, word: string, many = `${word}s`): string {
 
 /** `2 government · 1 press`, primary tiers first. */
 export function mixLine(mix: Readonly<Record<string, number>>): string {
-  const known = TIER_ORDER.filter((tier) => (mix[tier] ?? 0) > 0).map(
-    (tier) => `${mix[tier]} ${TIER_WORDS[tier]}`,
-  )
+  const known = TIER_ORDER.filter((tier) => (mix[tier] ?? 0) > 0).map((tier) => `${mix[tier]} ${TIER_WORDS[tier]}`)
   const other = Object.entries(mix)
     .filter(([tier, n]) => !(TIER_ORDER as readonly string[]).includes(tier) && n > 0)
     .map(([tier, n]) => `${n} ${tier}`)
@@ -61,7 +59,10 @@ export function countLine(group: AnswerGroup): string {
 }
 
 /** Why a thin group is thin, naming each part of the rule it misses. */
-export function thinReason(group: AnswerGroup, answer: Pick<Answer, 'strong_min_publishers' | 'strong_needs_tiers'>): string {
+export function thinReason(
+  group: AnswerGroup,
+  answer: Pick<Answer, 'strong_min_publishers' | 'strong_needs_tiers'>,
+): string {
   const missing: string[] = []
   if (group.publishers < answer.strong_min_publishers) {
     missing.push(
@@ -90,10 +91,7 @@ export interface AnswerViewProps {
   places: readonly string[]
 }
 
-type State =
-  | { phase: 'loading' }
-  | { phase: 'done'; answer: Answer }
-  | { phase: 'failed'; message: string }
+type State = { phase: 'loading' } | { phase: 'done'; answer: Answer } | { phase: 'failed'; message: string }
 
 export function AnswerView({ question, topics, match, places }: AnswerViewProps) {
   const [state, setState] = useState<State>({ phase: 'loading' })
@@ -184,9 +182,8 @@ export function CoverageStrip({ answer }: { answer: Answer }) {
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className={LABEL}>Where the evidence is</p>
         <p className="font-mono text-[10.5px] text-text-faint">
-          {plural(answer.groups.length, 'country', 'countries')}{' '}
-          · {strong} strong · {answer.groups.length - strong} thin · from{' '}
-          {plural(answer.sources_considered, 'source')}
+          {plural(answer.groups.length, 'country', 'countries')} · {strong} strong · {answer.groups.length - strong}{' '}
+          thin · from {plural(answer.sources_considered, 'source')}
         </p>
       </div>
       <ul className="flex flex-wrap gap-1.5">
@@ -316,7 +313,11 @@ function ItemRow({ item }: { item: AnswerItem }) {
 // Find more
 // --------------------------------------------------------------------------
 
-type Sent = { phase: 'idle' } | { phase: 'sending' } | { phase: 'queued'; already: boolean } | { phase: 'failed'; message: string }
+type Sent =
+  | { phase: 'idle' }
+  | { phase: 'sending' }
+  | { phase: 'queued'; already: boolean }
+  | { phase: 'failed'; message: string }
 
 function useFindMore(question: string, topic: string | null) {
   const [sent, setSent] = useState<Sent>({ phase: 'idle' })
@@ -327,7 +328,11 @@ function useFindMore(question: string, topic: string | null) {
       .catch((cause: unknown) => {
         // 409: the same search is already waiting — the reader's intent is met.
         if (cause instanceof ApiError && cause.status === 409) setSent({ phase: 'queued', already: true })
-        else setSent({ phase: 'failed', message: cause instanceof ApiError ? cause.message : 'The search was not queued.' })
+        else
+          setSent({
+            phase: 'failed',
+            message: cause instanceof ApiError ? cause.message : 'The search was not queued.',
+          })
       })
   }
   return { sent, send }

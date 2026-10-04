@@ -12,11 +12,7 @@ export function topicLabel(topic: string | null): string {
 export function SwatchChip({ swatch, size = 8 }: { swatch: Swatch | undefined; size?: number }) {
   const colour = swatch ? `var(${swatchVar(swatch)})` : 'var(--text-faint)'
   return (
-    <span
-      aria-hidden
-      className="inline-block shrink-0"
-      style={{ background: colour, width: size, height: size }}
-    />
+    <span aria-hidden className="inline-block shrink-0" style={{ background: colour, width: size, height: size }} />
   )
 }
 
@@ -62,9 +58,7 @@ export function HoverCard({
       className="pointer-events-none absolute z-10 flex flex-col gap-1.5 border border-text/16 bg-surface/90 px-[13px] py-[11px] backdrop-blur-[10px]"
       style={{ left, top, width: CARD_WIDTH }}
     >
-      <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-text">
-        {point.title ?? host}
-      </span>
+      <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-text">{point.title ?? host}</span>
       <span className="flex items-center gap-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-faint">
         <SwatchChip swatch={swatch} size={7} />
         {/* Every topic, primary first: the dot is drawn in one colour and the

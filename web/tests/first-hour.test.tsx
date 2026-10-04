@@ -65,9 +65,7 @@ describe('a crawl that is working', () => {
     // A name somebody recognises says more about whether this is working than
     // any count does.
     const body = text(
-      renderToStaticMarkup(
-        <FirstHour progress={progress({ recent_domains: ['lta.example', 'ura.example'] })} />,
-      ),
+      renderToStaticMarkup(<FirstHour progress={progress({ recent_domains: ['lta.example', 'ura.example'] })} />),
     )
 
     expect(body).toContain('lta.example')
@@ -76,9 +74,7 @@ describe('a crawl that is working', () => {
 
   it('reports both halves of the fetch rate', () => {
     const body = text(
-      renderToStaticMarkup(
-        <FirstHour progress={progress({ attempts_last_hour: 20, successes_last_hour: 18 })} />,
-      ),
+      renderToStaticMarkup(<FirstHour progress={progress({ attempts_last_hour: 20, successes_last_hour: 18 })} />),
     )
 
     expect(body).toContain('18 of 20 fetches succeeded')
@@ -87,11 +83,7 @@ describe('a crawl that is working', () => {
 
 describe('the two ways it is not working', () => {
   it('says so when there is nothing queued and nothing attempted', () => {
-    const body = text(
-      renderToStaticMarkup(
-        <FirstHour progress={progress({ queue: {}, attempts_last_hour: 0 })} />,
-      ),
-    )
+    const body = text(renderToStaticMarkup(<FirstHour progress={progress({ queue: {}, attempts_last_hour: 0 })} />))
 
     expect(body).toContain('nowhere to begin')
     expect(body).not.toContain('within the hour')
@@ -101,9 +93,7 @@ describe('the two ways it is not working', () => {
     // Twenty attempts and no successes is not progress, and a screen showing
     // only the attempt count would read as though it were.
     const body = text(
-      renderToStaticMarkup(
-        <FirstHour progress={progress({ attempts_last_hour: 20, successes_last_hour: 0 })} />,
-      ),
+      renderToStaticMarkup(<FirstHour progress={progress({ attempts_last_hour: 20, successes_last_hour: 0 })} />),
     )
 
     expect(body).toContain('Every one failed')
@@ -112,9 +102,7 @@ describe('the two ways it is not working', () => {
 
   it('does not cry failure when some fetches worked', () => {
     const body = text(
-      renderToStaticMarkup(
-        <FirstHour progress={progress({ attempts_last_hour: 20, successes_last_hour: 1 })} />,
-      ),
+      renderToStaticMarkup(<FirstHour progress={progress({ attempts_last_hour: 20, successes_last_hour: 1 })} />),
     )
 
     expect(body).not.toContain('Every one failed')
@@ -125,20 +113,14 @@ describe('the queue breakdown', () => {
   it('lists statuses rather than summing them', () => {
     // §12.5's argument: 4,000 pending and 4,000 failed are the same depth and
     // opposite situations.
-    const body = text(
-      renderToStaticMarkup(
-        <FirstHour progress={progress({ queue: { pending: 10, failed: 4 } })} />,
-      ),
-    )
+    const body = text(renderToStaticMarkup(<FirstHour progress={progress({ queue: { pending: 10, failed: 4 } })} />))
 
     expect(body).toContain('pending')
     expect(body).toContain('failed')
   })
 
   it('omits statuses with nothing in them', () => {
-    const body = text(
-      renderToStaticMarkup(<FirstHour progress={progress({ queue: { pending: 10 } })} />),
-    )
+    const body = text(renderToStaticMarkup(<FirstHour progress={progress({ queue: { pending: 10 } })} />))
 
     expect(body).not.toContain('embedded')
   })

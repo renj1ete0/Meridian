@@ -420,4 +420,3 @@ function readPaletteSafe() {
     return { graticule: 'transparent', meridian: 'transparent' } as ReturnType<typeof readPalette>
   }
 }
-

@@ -36,9 +36,7 @@ describe('DescriptionLine', () => {
   it('says what a missing description costs', () => {
     render(<DescriptionLine topic="walkability" description={null} onDescribe={() => {}} />)
     expect(screen.getByText(/matched on the name and vocabulary alone/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Describe walkability' }).textContent).toBe(
-      'Describe',
-    )
+    expect(screen.getByRole('button', { name: 'Describe walkability' }).textContent).toBe('Describe')
   })
 
   it('saves the trimmed text', () => {

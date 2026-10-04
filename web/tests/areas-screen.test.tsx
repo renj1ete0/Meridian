@@ -121,7 +121,16 @@ describe('areas on the canvas', () => {
       respond({
         area: area({ area_id: 9, level: 3, children: 0, name: 'leaf · terms' }),
         path: [],
-        passages: [{ chunk_id: 1, source_id: 4, title: 'A page', url: 'https://x.test', source_tier: 'press', snippet: 'a passage' }],
+        passages: [
+          {
+            chunk_id: 1,
+            source_id: 4,
+            title: 'A page',
+            url: 'https://x.test',
+            source_tier: 'press',
+            snippet: 'a passage',
+          },
+        ],
       }),
     )
     const onLevel = vi.fn()
@@ -137,7 +146,10 @@ describe('areas on the canvas', () => {
 
   it('draws cited links solid and similar-only links dashed', () => {
     const similar: AreaLink = { ...cited, area_a: 1, area_b: 3, cited_claims: 0, cited_sources: 0 }
-    const three = level({ areas: [...level().areas, area({ area_id: 3, passages: 50, x: -0.5 })], links: [cited, similar] })
+    const three = level({
+      areas: [...level().areas, area({ area_id: 3, passages: 50, x: -0.5 })],
+      links: [cited, similar],
+    })
     const { container } = render(<AreasView level={three} onLevel={() => {}} />)
     const solid = container.querySelector('[aria-label*="2 cited claims"]')!
     const dashed = container.querySelector('[aria-label*="similar passages, no cited claim"]')!
@@ -311,7 +323,10 @@ describe('jumping to an area or a term', () => {
 
     // The level arrives: the sub-area opens rather than being closed by it.
     rerender(
-      <AreasView level={level({ level: 3, parent: area({ area_id: 7, level: 2 }), areas: [leaf] })} onLevel={onLevel} />,
+      <AreasView
+        level={level({ level: 3, parent: area({ area_id: 7, level: 2 }), areas: [leaf] })}
+        onLevel={onLevel}
+      />,
     )
     expect(await screen.findByRole('complementary', { name: 'Field' })).toBeTruthy()
   })
@@ -327,13 +342,26 @@ describe('the URL', () => {
   })
 })
 
-
 describe('the map as a map (B-93)', () => {
   function withChildren() {
     const root = level()
     const byParent = new Map([
-      [1, level({ level: 2, parent: root.areas[0]!, areas: [area({ area_id: 11, passages: 300 }), area({ area_id: 12, passages: 300 })] })],
-      [2, level({ level: 2, parent: root.areas[1]!, areas: [area({ area_id: 21, passages: 150 }), area({ area_id: 22, passages: 150 })] })],
+      [
+        1,
+        level({
+          level: 2,
+          parent: root.areas[0]!,
+          areas: [area({ area_id: 11, passages: 300 }), area({ area_id: 12, passages: 300 })],
+        }),
+      ],
+      [
+        2,
+        level({
+          level: 2,
+          parent: root.areas[1]!,
+          areas: [area({ area_id: 21, passages: 150 }), area({ area_id: 22, passages: 150 })],
+        }),
+      ],
     ])
     return { root, byParent }
   }
@@ -400,7 +428,6 @@ describe('the map as a map (B-93)', () => {
   })
 })
 
-
 describe('the size key on a phone (B-101)', () => {
   it('is one short row below the compact width, and the full key above it', () => {
     const wide = render(<AreasView level={level()} onLevel={vi.fn()} />)
@@ -408,7 +435,15 @@ describe('the size key on a phone (B-101)', () => {
     cleanup()
 
     const box = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      width: 390, height: 700, top: 0, left: 0, right: 390, bottom: 700, x: 0, y: 0, toJSON: () => ({}),
+      width: 390,
+      height: 700,
+      top: 0,
+      left: 0,
+      right: 390,
+      bottom: 700,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
     } as DOMRect)
     const narrow = render(<AreasView level={level()} onLevel={vi.fn()} />)
     const key = within(narrow.container).getByLabelText('Size key')
@@ -417,7 +452,6 @@ describe('the size key on a phone (B-101)', () => {
     box.mockRestore()
   })
 })
-
 
 describe('route mode (P6-39)', () => {
   it('routes from a right-clicked field to the next one clicked, and says when none joins them', () => {
@@ -452,7 +486,6 @@ describe('route mode (P6-39)', () => {
     expect(onLevel).toHaveBeenCalledWith(2)
   })
 })
-
 
 describe('the fill control (P6-42)', () => {
   it('fills by topic share by default and by research share when asked', () => {

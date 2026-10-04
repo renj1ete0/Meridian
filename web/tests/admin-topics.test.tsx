@@ -21,13 +21,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { delta, reweightLines } from '../src/admin/Reweight'
-import {
-  SteeringRail,
-  auditGroups,
-  auditLine,
-  runCost,
-  runOutcome,
-} from '../src/admin/SteeringRail'
+import { SteeringRail, auditGroups, auditLine, runCost, runOutcome } from '../src/admin/SteeringRail'
 import { STATUSES, TopicPanel, percent, shareNote } from '../src/admin/TopicPanel'
 import type { RunRow, SteeringEntry, TopicConfig, TopicRow } from '../src/lib/api'
 
@@ -77,9 +71,7 @@ describe('a row says what it draws and what it stores', () => {
     // The stored weight on the row, the share drawn beneath it. They differ
     // exactly when something interesting is happening.
     const rendered = text(
-      renderToStaticMarkup(
-        <TopicPanel rows={[row({ share: 0.339, topic: config({ weight: 0.4 }) })]} sumsTo={1} />,
-      ),
+      renderToStaticMarkup(<TopicPanel rows={[row({ share: 0.339, topic: config({ weight: 0.4 }) })]} sumsTo={1} />),
     )
 
     expect(rendered).toContain('walkability 0.40')
@@ -201,9 +193,7 @@ describe('the steering audit explains weights nobody touched', () => {
   it('keeps a third decimal when two would make a change look like none', () => {
     // 0.401 → 0.404 printed at two places is "0.40 → 0.40": a log line that
     // says nothing moved, about a row that exists because something did.
-    expect(auditLine(entry({ old_value: '0.401', new_value: '0.404' }))).toBe(
-      'robotics 0.401 → 0.404',
-    )
+    expect(auditLine(entry({ old_value: '0.401', new_value: '0.404' }))).toBe('robotics 0.401 → 0.404')
   })
 
   it('groups the rows one change wrote, and keeps separate changes apart', () => {
@@ -248,9 +238,7 @@ describe('the steering audit explains weights nobody touched', () => {
   })
 
   it('names the other writer when it was not a person', () => {
-    const rendered = text(
-      renderToStaticMarkup(<SteeringRail entries={[entry({ actor: 'orchestrator' })]} runs={[]} />),
-    )
+    const rendered = text(renderToStaticMarkup(<SteeringRail entries={[entry({ actor: 'orchestrator' })]} runs={[]} />))
 
     expect(rendered).toContain('orchestrator')
   })
@@ -258,10 +246,7 @@ describe('the steering audit explains weights nobody touched', () => {
   it('has a line for every field the steering layer logs', () => {
     // Drift: a field `steering.py` records and this file has no case for
     // falls through to a generic line, which is the one that reads worst.
-    const source = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/steering.py'),
-      'utf8',
-    )
+    const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/steering.py'), 'utf8')
     const fields = new Set([
       ...[...source.matchAll(/field="([a-z_]+)"/g)].map((m) => m[1]!),
       ...[...source.matchAll(/\("(boost_[a-z_]+)", /g)].map((m) => m[1]!),
@@ -317,14 +302,10 @@ describe('the last runs, beside the steering', () => {
   })
 
   it('carries the newest stop reason in full as the note', () => {
-    const reason =
-      "every agent for 'tag_attributes' refused: waiting for an answer in the relay directory"
+    const reason = "every agent for 'tag_attributes' refused: waiting for an answer in the relay directory"
     const rendered = text(
       renderToStaticMarkup(
-        <SteeringRail
-          entries={[]}
-          runs={[runRow({ run_id: 44, status: 'deferred', stage: 'tag', error: reason })]}
-        />,
+        <SteeringRail entries={[]} runs={[runRow({ run_id: 44, status: 'deferred', stage: 'tag', error: reason })]} />,
       ),
     )
 
@@ -422,10 +403,7 @@ describe('the status list matches the database', () => {
   it('offers exactly the four statuses the CHECK constraint allows', () => {
     // A status added in Postgres and not here cannot be selected; one removed
     // there and left here is an option the database refuses after the click.
-    const source = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/models/config.py'),
-      'utf8',
-    )
+    const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/config.py'), 'utf8')
     const call = /TOPIC_STATUS = constrained\(([\s\S]*?)\)/.exec(source)
     expect(call, 'TOPIC_STATUS is no longer written the way this test reads it').toBeTruthy()
 

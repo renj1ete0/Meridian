@@ -261,7 +261,9 @@ describe('3D geometry, without WebGL', () => {
     const visible = visibilityOf(points, new Set(['shown']))
     expect([...visible]).toEqual([0, 1])
     expect(pick(positionsOf(points), visible, IDENTITY, 200, 200, [150, 100], 7)).toBe(1)
-    expect(pick(positionsOf(points), visibilityOf(points, new Set(['shown', 'hidden'])), IDENTITY, 200, 200, [150, 100], 7)).toBe(-1)
+    expect(
+      pick(positionsOf(points), visibilityOf(points, new Set(['shown', 'hidden'])), IDENTITY, 200, 200, [150, 100], 7),
+    ).toBe(-1)
   })
 
   it('prefers the dot in front when two sit on the same spot', () => {

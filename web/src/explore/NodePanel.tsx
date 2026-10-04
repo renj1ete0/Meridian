@@ -30,8 +30,7 @@ import { dayOf } from '../lib/time'
  *   sample prose is sample data, not a template to pad with.
  */
 
-export const LBL =
-  'font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint'
+export const LBL = 'font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint'
 
 /** How many passages the panel opens with; the rest are one click away. */
 export const EVIDENCE_VISIBLE = 4
@@ -100,9 +99,7 @@ function Chip({ attribute }: { attribute: NodeAttribute }) {
     >
       {attribute.name.replaceAll('_', ' ')}
       {value ? <span className="text-text"> {value}</span> : null}{' '}
-      <span className={strong ? 'text-accent-graph' : 'text-text-faint'}>
-        {formatConfidence(attribute.confidence)}
-      </span>
+      <span className={strong ? 'text-accent-graph' : 'text-text-faint'}>{formatConfidence(attribute.confidence)}</span>
       {attribute.supporting_chunk_ids.length === 0 ? (
         <span className="text-accent-attention"> · no evidence</span>
       ) : null}
@@ -184,7 +181,8 @@ function ContestedBlock({ pair, here }: { pair: ContestedPair; here: number }) {
       <div className="flex items-center gap-2">
         {theirs ? (
           <span className="font-mono text-[10px] text-text-faint">
-            {domainOf(theirs.url)} · {(TIER_LABEL[theirs.source_tier as SourceTier] ?? theirs.source_tier).toLowerCase()}
+            {domainOf(theirs.url)} ·{' '}
+            {(TIER_LABEL[theirs.source_tier as SourceTier] ?? theirs.source_tier).toLowerCase()}
             {theirs.publication_date ? ` · ${monthOf(theirs.publication_date)}` : ''}
           </span>
         ) : null}
@@ -297,13 +295,9 @@ export function NodePanel({
             >
               {entity.canonical_name}
             </h1>
-            <p className="font-mono text-[9.5px] uppercase tracking-[0.15em] text-text-faint">
-              {metaLine(detail)}
-            </p>
+            <p className="font-mono text-[9.5px] uppercase tracking-[0.15em] text-text-faint">{metaLine(detail)}</p>
             {entity.aliases && entity.aliases.length > 0 ? (
-              <p className="font-mono text-[10.5px] text-text-faint">
-                also {entity.aliases.join(' · ')}
-              </p>
+              <p className="font-mono text-[10.5px] text-text-faint">also {entity.aliases.join(' · ')}</p>
             ) : null}
           </div>
           {entity.description ? (
@@ -315,8 +309,7 @@ export function NodePanel({
           <h2 className={LBL}>Properties</h2>
           {detail.attributes.length === 0 ? (
             <p className="text-[12.5px] text-text-faint">
-              None recorded yet. Properties are read from sources over time, so a concept can
-              have none.
+              None recorded yet. Properties are read from sources over time, so a concept can have none.
             </p>
           ) : (
             <ul className="flex flex-wrap gap-1.5">
@@ -334,8 +327,7 @@ export function NodePanel({
           </div>
           {detail.evidence.length === 0 ? (
             <p className="text-[12.5px] text-text-faint">
-              No passage cites this concept yet, and it has no links or properties to carry
-              evidence either.
+              No passage cites this concept yet, and it has no links or properties to carry evidence either.
             </p>
           ) : (
             <>
@@ -367,11 +359,7 @@ export function NodePanel({
           <section className="flex flex-col gap-2.5 border-b border-line bg-accent-attention-deep/15 px-5 py-4">
             <h2 className={`${LBL} !text-accent-attention`}>Contested with</h2>
             {detail.contested_with.map((pair) => (
-              <ContestedBlock
-                key={`${pair.ours.edge_id}:${pair.theirs.edge_id}`}
-                pair={pair}
-                here={entity.entity_id}
-              />
+              <ContestedBlock key={`${pair.ours.edge_id}:${pair.theirs.edge_id}`} pair={pair} here={entity.entity_id} />
             ))}
           </section>
         ) : null}

@@ -771,7 +771,7 @@ export function routeBetween(links: readonly AreaLink[], from: number, to: numbe
   }
   if (!best.has(to)) return null
   const path: AreaLink[] = []
-  for (let at = to; at !== from; ) {
+  for (let at = to; at !== from;) {
     const via = best.get(at)!.via!
     path.unshift(via)
     at = via.area_a

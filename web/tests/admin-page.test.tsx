@@ -11,13 +11,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminPage } from '../src/admin/AdminPage'
-import {
-  DEFAULT_SECTION,
-  SECTIONS,
-  adminTheme,
-  hrefForSection,
-  sectionFromPath,
-} from '../src/admin/sections'
+import { DEFAULT_SECTION, SECTIONS, adminTheme, hrefForSection, sectionFromPath } from '../src/admin/sections'
 import { PREVIEW_DEBOUNCE_MS } from '../src/admin/TopicDialogs'
 import type { GazetteerRow, TopicRow } from '../src/lib/api'
 
@@ -179,9 +173,7 @@ describe('every section is a URL', () => {
     await settle()
 
     expect(screen.getByRole('heading', { name: 'Topics' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Topic weights' }).getAttribute('aria-current')).toBe(
-      'page',
-    )
+    expect(screen.getByRole('link', { name: 'Topic weights' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('moves between sections through the address bar', async () => {

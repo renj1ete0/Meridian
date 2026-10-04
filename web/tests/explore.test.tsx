@@ -51,9 +51,7 @@ describe('the search field', () => {
     // between "twenty government sources" and "whatever survived filtering the
     // top twenty", and a reader who assumes the second mistrusts a correct
     // result set.
-    expect(text(renderToStaticMarkup(<SearchField value="" onChange={noop} />))).toContain(
-      FILTER_NOTE,
-    )
+    expect(text(renderToStaticMarkup(<SearchField value="" onChange={noop} />))).toContain(FILTER_NOTE)
   })
 
   it('lets the note be replaced, so a degraded mode can say so', () => {
@@ -118,9 +116,7 @@ describe('the corpus counts', () => {
     // reader who cannot distinguish brass would otherwise lose which figure is
     // which.
     // Above zero, where it is marked at all (`B-126`).
-    const markup = renderToStaticMarkup(
-      <CorpusCounts counts={{ documents: 5, nodes: 4, edges: 3, contested: 2 }} />,
-    )
+    const markup = renderToStaticMarkup(<CorpusCounts counts={{ documents: 5, nodes: 4, edges: 3, contested: 2 }} />)
     const withoutColour = markup.replace(/class="[^"]*"/g, '')
 
     expect(withoutColour).toContain(DAGGER)
@@ -159,10 +155,7 @@ describe('the entry points', () => {
     // A disabled card that says nothing tells the reader nothing about why it
     // will not open, and §4 asks an error to name the cause.
     const markup = renderToStaticMarkup(
-      <EntryPoints
-        actions={{ search: noop, coverage: noop }}
-        unavailable={{ coverage: 'Gaps could not be read.' }}
-      />,
+      <EntryPoints actions={{ search: noop, coverage: noop }} unavailable={{ coverage: 'Gaps could not be read.' }} />,
     )
 
     expect(text(markup)).toContain('Gaps could not be read.')
@@ -225,9 +218,7 @@ describe('where you were', () => {
 
   it('says which half is empty when only one is', () => {
     const markup = text(
-      renderToStaticMarkup(
-        <WhereYouWere savedViews={[{ id: 'v1', name: 'Kerbside pilots' }]} recentNodes={[]} />,
-      ),
+      renderToStaticMarkup(<WhereYouWere savedViews={[{ id: 'v1', name: 'Kerbside pilots' }]} recentNodes={[]} />),
     )
 
     expect(markup).toContain('No node opened yet.')
@@ -251,9 +242,7 @@ describe('where you were', () => {
 
   it('carries the since-last-visit line at its head', () => {
     // §5: one mono line of deltas, set with the list, not a separate widget.
-    const markup = renderToStaticMarkup(
-      <WhereYouWere savedViews={[]} recentNodes={[]} delta={<p>DELTA</p>} />,
-    )
+    const markup = renderToStaticMarkup(<WhereYouWere savedViews={[]} recentNodes={[]} delta={<p>DELTA</p>} />)
     expect(markup.indexOf('DELTA')).toBeGreaterThan(markup.indexOf('Where you were'))
     expect(markup.indexOf('DELTA')).toBeLessThan(markup.indexOf('No saved views'))
   })
@@ -323,7 +312,6 @@ describe('the copy holds the voice guide', () => {
   })
 })
 
-
 describe('watched questions (P6-43)', () => {
   function row(fresh: number | null | undefined) {
     return text(
@@ -372,4 +360,3 @@ describe('the contested count is marked only when something is contested (B-126)
     expect(markup).not.toContain('text-accent-attention')
   })
 })
-

@@ -133,13 +133,16 @@ describe('the workspace', () => {
     for (const view of UNBUILT) expect(screen.queryByRole('tab', { name: view })).toBeNull()
   })
 
-  it.each(VIEWS.filter((v) => !BUILT_VIEWS.has(v)))('an old link to %s says it is not built rather than faking it', async (view) => {
-    window.history.replaceState({}, '', `/nodes/1?view=${view}`)
-    serve(() => undefined)
-    render(<NodePage entityId={1} />)
-    expect(await screen.findByText(`${VIEW_LABEL[view]} is not built yet.`)).toBeTruthy()
-    expect(screen.queryByTestId('canvas')).toBeNull()
-  })
+  it.each(VIEWS.filter((v) => !BUILT_VIEWS.has(v)))(
+    'an old link to %s says it is not built rather than faking it',
+    async (view) => {
+      window.history.replaceState({}, '', `/nodes/1?view=${view}`)
+      serve(() => undefined)
+      render(<NodePage entityId={1} />)
+      expect(await screen.findByText(`${VIEW_LABEL[view]} is not built yet.`)).toBeTruthy()
+      expect(screen.queryByTestId('canvas')).toBeNull()
+    },
+  )
 
   it('refocuses by navigating, keeping the filters', async () => {
     window.history.replaceState({}, '', '/nodes/1?tier=press')

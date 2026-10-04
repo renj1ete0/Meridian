@@ -152,7 +152,11 @@ export function MatrixView({ hood, onPick, hrefFor }: MatrixViewProps) {
         }}
         title={node.canonical_name}
         className={`block truncate text-[12px] leading-none ${
-          isFocus ? 'font-semibold text-accent-graph' : contested ? 'text-accent-attention' : 'text-text-muted hover:text-text'
+          isFocus
+            ? 'font-semibold text-accent-graph'
+            : contested
+              ? 'text-accent-attention'
+              : 'text-text-muted hover:text-text'
         } ${vertical ? 'max-h-[150px]' : 'max-w-[200px]'}`}
       >
         {node.canonical_name}

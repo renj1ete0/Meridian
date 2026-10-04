@@ -230,10 +230,7 @@ export function path(over: Partial<GraphPath> = {}): GraphPath {
     found: true,
     hops: 2,
     nodes,
-    edges: [
-      gedge({ edge_id: 1, from_node: 1, to_node: 7 }),
-      gedge({ edge_id: 2, from_node: 9, to_node: 7 }),
-    ],
+    edges: [gedge({ edge_id: 1, from_node: 1, to_node: 7 }), gedge({ edge_id: 2, from_node: 9, to_node: 7 })],
     ...over,
   }
 }

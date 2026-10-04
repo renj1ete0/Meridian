@@ -9,7 +9,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sectionOf } from '../src/App'
 import { DailyChart, GrowthBody } from '../src/explore/GrowthPage'
 import { parseRoute } from '../src/lib/route'
-import { growthQuery, readGrowthQuery, seriesColour, type Growth, type GrowthDay, type TopicGrowth } from '../src/lib/growth'
+import {
+  growthQuery,
+  readGrowthQuery,
+  seriesColour,
+  type Growth,
+  type GrowthDay,
+  type TopicGrowth,
+} from '../src/lib/growth'
 import { shortDateOf } from '../src/lib/time'
 
 afterEach(cleanup)

@@ -118,9 +118,7 @@ describe('the theme states remap a consistent set of roles', () => {
     // If they diverge, a reader who never touches the toggle and a reader who
     // explicitly picks light see different colours — and only one of them is
     // ever tested by whoever built it.
-    expect([...remapped("[data-theme='light']")].sort()).toEqual(
-      [...remapped(systemLight)].sort(),
-    )
+    expect([...remapped("[data-theme='light']")].sort()).toEqual([...remapped(systemLight)].sort())
   })
 
   it('explicit dark can undo everything light remapped', () => {
@@ -151,9 +149,7 @@ describe('the theme states remap a consistent set of roles', () => {
   it('every role is available as a Tailwind utility', () => {
     // Completeness: a role added to tokens.css and not to `@theme` exists but
     // cannot be used, and the component that wants it reaches for a literal.
-    const missing = [...remapped(':root')].filter(
-      (role) => !appCss.includes(`--color-${role}: var(--${role});`),
-    )
+    const missing = [...remapped(':root')].filter((role) => !appCss.includes(`--color-${role}: var(--${role});`))
 
     expect(missing).toEqual([])
   })
@@ -193,8 +189,21 @@ describe('every colour utility names a role that exists', () => {
   // `collapse` and `separate` are table layout (`border-collapse`), not colours;
   // `dashed` and the rest are border styles.
   const SIDES_AND_KEYWORDS = new Set([
-    't', 'b', 'l', 'r', 'x', 'y', 'transparent', 'none', 'offset', 'collapse', 'separate',
-    'dashed', 'dotted', 'solid', 'double',
+    't',
+    'b',
+    'l',
+    'r',
+    'x',
+    'y',
+    'transparent',
+    'none',
+    'offset',
+    'collapse',
+    'separate',
+    'dashed',
+    'dotted',
+    'solid',
+    'double',
   ])
 
   function sources(dir: string): string[] {
@@ -206,9 +215,7 @@ describe('every colour utility names a role that exists', () => {
   }
 
   it('across every component', () => {
-    const roles = new Set(
-      [...appCss.matchAll(/--color-([a-z-]+):/g)].map((match) => match[1]!),
-    )
+    const roles = new Set([...appCss.matchAll(/--color-([a-z-]+):/g)].map((match) => match[1]!))
     expect(roles.size).toBeGreaterThan(5) // the parse must not silently yield nothing
 
     const unknown: string[] = []

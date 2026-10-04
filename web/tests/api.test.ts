@@ -234,10 +234,7 @@ describe('the document kinds match the database (B-59)', () => {
     // Read from the model, where `constrained()` also generates the CHECK. A
     // kind added there and not here would type as impossible in the client
     // while the API served it.
-    const model = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/models/source.py'),
-      'utf8',
-    )
+    const model = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/source.py'), 'utf8')
     const declaration = /DOC_KIND = constrained\(([\s\S]*?)name="doc_kind"/.exec(model)
     expect(declaration, 'DOC_KIND is no longer declared the way this test reads it').toBeTruthy()
     const inDatabase = [...declaration![1]!.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
@@ -303,9 +300,7 @@ describe('the query string', () => {
     // `include_duplicates=false` is the default, but a caller that set it
     // deliberately has said something. Dropping falsey values is the bug where
     // an explicit "no" becomes "unspecified".
-    expect(searchQuery({ q: 'x', include_duplicates: false })).toContain(
-      'include_duplicates=false',
-    )
+    expect(searchQuery({ q: 'x', include_duplicates: false })).toContain('include_duplicates=false')
   })
 
   it('encodes a query that would otherwise break the URL', () => {
@@ -325,10 +320,7 @@ describe('errors name their cause', () => {
     // per-field objects for a validation failure. Rendering the second directly
     // gives "[object Object]", which §4 would call an error naming neither its
     // cause nor its remedy.
-    const message = describeDetail(
-      [{ loc: ['query', 'source_tier', 0], msg: "Input should be 'government'" }],
-      422,
-    )
+    const message = describeDetail([{ loc: ['query', 'source_tier', 0], msg: "Input should be 'government'" }], 422)
 
     expect(message).not.toContain('[object Object]')
     expect(message).toContain('source_tier')
@@ -386,10 +378,7 @@ describe('errors name their cause', () => {
   it('lets an abort through rather than reporting it as unreachable', async () => {
     // A superseded search is not a failure, and showing "the API is
     // unreachable" because the reader typed another character would be a lie.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
-    )
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')))
 
     await expect(corpusStats()).rejects.toThrow(DOMException)
   })
@@ -420,9 +409,7 @@ describe('dates', () => {
 
 describe('the bulk gazetteer decision matches the server (P6-28)', () => {
   it('mirrors GazetteerBulkRead', () => {
-    expect([...GAZETTEER_BULK_FIELDS].sort()).toEqual(
-      pydanticFields('admin.py', 'GazetteerBulkRead').sort(),
-    )
+    expect([...GAZETTEER_BULK_FIELDS].sort()).toEqual(pydanticFields('admin.py', 'GazetteerBulkRead').sort())
   })
 
   it('caps a bulk decision where the server does', () => {

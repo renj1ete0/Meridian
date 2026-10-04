@@ -19,10 +19,7 @@ import { excerpt, LBL, SourceLine } from './NodePanel'
  * The brass tint always travels with the dagger (design-system §6).
  */
 
-type Load =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; body: ContestedList }
+type Load = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; body: ContestedList }
 
 export function claimOf(side: ContestedSide): string {
   const relation = side.relation_type.replaceAll('_', ' ')
@@ -67,8 +64,8 @@ export function ContestedPage() {
 
       {load.status === 'ready' && load.body.pairs.length === 0 ? (
         <p className="text-[13px] text-text-muted">
-          No two sources disagree yet. A disagreement appears here once two stated links about the
-          same claim are marked as contradicting each other.
+          No two sources disagree yet. A disagreement appears here once two stated links about the same claim are marked
+          as contradicting each other.
         </p>
       ) : null}
 

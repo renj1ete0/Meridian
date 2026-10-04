@@ -94,9 +94,7 @@ describe('the registry', () => {
 
   it('reports why a row cannot be routed to, rather than that it is enabled', () => {
     // The case that costs an afternoon: enabled, plausible, unreachable.
-    const state = rowState(
-      agent({ enabled: true, blocked_by: ['ANTHROPIC_API_KEY is unset here'] }),
-    )
+    const state = rowState(agent({ enabled: true, blocked_by: ['ANTHROPIC_API_KEY is unset here'] }))
 
     expect(state.label).toContain('unset here')
     expect(state.tone).toBe('blocked')
@@ -107,9 +105,7 @@ describe('the registry', () => {
   })
 
   it('never renders a key, only whether the variable is set', () => {
-    const markup = renderToStaticMarkup(
-      <AgentsPanel rows={[agent({ key_present: false })]} unserved={[]} />,
-    )
+    const markup = renderToStaticMarkup(<AgentsPanel rows={[agent({ key_present: false })]} unserved={[]} />)
 
     expect(text(markup)).toContain('ANTHROPIC_API_KEY')
     expect(text(markup)).toContain('not set here')
@@ -127,18 +123,14 @@ describe('the registry', () => {
   })
 
   it('says when a row declares no task types at all', () => {
-    const markup = renderToStaticMarkup(
-      <AgentsPanel rows={[agent({ task_types: [] })]} unserved={[]} />,
-    )
+    const markup = renderToStaticMarkup(<AgentsPanel rows={[agent({ task_types: [] })]} unserved={[]} />)
 
     expect(text(markup)).toContain('declares nothing')
   })
 
   it('offers the one write, labelled by what it will do', () => {
     const enabled = renderToStaticMarkup(<AgentsPanel rows={[agent()]} unserved={[]} />)
-    const disabled = renderToStaticMarkup(
-      <AgentsPanel rows={[agent({ enabled: false })]} unserved={[]} />,
-    )
+    const disabled = renderToStaticMarkup(<AgentsPanel rows={[agent({ enabled: false })]} unserved={[]} />)
 
     expect(text(enabled)).toContain('Disable')
     expect(text(disabled)).toContain('Enable')
@@ -160,11 +152,7 @@ describe('the registry', () => {
 describe('run history', () => {
   it('answers "is something running" before anything else', () => {
     const markup = renderToStaticMarkup(
-      <RunsPanel
-        rows={[run()]}
-        total={3}
-        active={run({ run_id: 9, status: 'running', stage: 'extract' })}
-      />,
+      <RunsPanel rows={[run()]} total={3} active={run({ run_id: 9, status: 'running', stage: 'extract' })} />,
     )
 
     expect(text(markup)).toContain('Run 9 is running at extract')

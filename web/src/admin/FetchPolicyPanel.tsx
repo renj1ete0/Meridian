@@ -47,12 +47,7 @@ const FILTERS: { key: DomainStatus | null; label: string }[] = [
 ]
 
 /** The settings worth showing at a glance; the rest are behind the resolved blob. */
-export const SUMMARY_KEYS = [
-  'delay_per_domain_ms',
-  'concurrency_per_domain',
-  'timeout_s',
-  'render_js',
-] as const
+export const SUMMARY_KEYS = ['delay_per_domain_ms', 'concurrency_per_domain', 'timeout_s', 'render_js'] as const
 
 export function isLearnedRender(row: FetchPolicyRow): boolean {
   // Resolved says `always` and nothing on this row says so: the crawl worked it
@@ -90,9 +85,9 @@ export function FetchPolicyPanel({
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Fetch policy">
-        How the crawler behaves towards each site: how long it waits between requests, how many it
-        makes at once, and whether it needs a browser. Robots handling, the address guards and the
-        crawler's identity are set in the deployment and cannot be changed from here.
+        How the crawler behaves towards each site: how long it waits between requests, how many it makes at once, and
+        whether it needs a browser. Robots handling, the address guards and the crawler's identity are set in the
+        deployment and cannot be changed from here.
       </PageHeader>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -125,12 +120,7 @@ export function FetchPolicyPanel({
           >
             Previous
           </button>
-          <button
-            type="button"
-            className={PAGER}
-            disabled={!hasMore}
-            onClick={() => onPage?.(offset + pageSize)}
-          >
+          <button type="button" className={PAGER} disabled={!hasMore} onClick={() => onPage?.(offset + pageSize)}>
             Next
           </button>
         </div>
@@ -138,8 +128,7 @@ export function FetchPolicyPanel({
 
       {rows.length === 0 ? (
         <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
-          No domains here. A row appears once the crawler has fetched from a site, or when somebody
-          sets policy for one.
+          No domains here. A row appears once the crawler has fetched from a site, or when somebody sets policy for one.
         </p>
       ) : (
         <TableCard>
@@ -178,22 +167,15 @@ export function FetchPolicyPanel({
                     ) : null}
                     {learned ? (
                       <div className="font-sans text-[12px] text-text-muted">
-                        The crawler worked out that this site needs a browser, after{' '}
-                        {row.policy.render_js_escalations} pages in a row. It re-checks on its own
-                        after a week.
+                        The crawler worked out that this site needs a browser, after {row.policy.render_js_escalations}{' '}
+                        pages in a row. It re-checks on its own after a week.
                       </div>
                     ) : null}
                     {row.policy.updated_by ? (
-                      <div className="text-[10.5px] text-text-faint">
-                        changed by {row.policy.updated_by}
-                      </div>
+                      <div className="text-[10.5px] text-text-faint">changed by {row.policy.updated_by}</div>
                     ) : null}
                   </td>
-                  <td
-                    className={`${TDM} whitespace-nowrap ${
-                      blocked ? 'text-accent-attention' : 'text-text-muted'
-                    }`}
-                  >
+                  <td className={`${TDM} whitespace-nowrap ${blocked ? 'text-accent-attention' : 'text-text-muted'}`}>
                     {row.policy.status}
                   </td>
                   {SUMMARY_KEYS.map((key) => (

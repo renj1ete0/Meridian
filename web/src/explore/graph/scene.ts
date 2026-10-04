@@ -10,14 +10,7 @@
 
 import type { GraphEdge, GraphNode, GraphPath, Neighbourhood } from './api'
 import { pathLayout, radialLayout } from './layout'
-import {
-  collapseEdges,
-  edgeLook,
-  nodeLook,
-  type CanvasPalette,
-  type EdgeLook,
-  type NodeLook,
-} from './style'
+import { collapseEdges, edgeLook, nodeLook, type CanvasPalette, type EdgeLook, type NodeLook } from './style'
 
 export interface SceneNode {
   id: number

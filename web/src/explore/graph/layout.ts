@@ -41,10 +41,7 @@ const START = -Math.PI / 2 + 0.35
  *
  * `nodes` is taken in the order the API returns it, which is rank order.
  */
-export function radialLayout(
-  nodes: readonly GraphNode[],
-  edges: readonly GraphEdge[],
-): Map<number, Point> {
+export function radialLayout(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): Map<number, Point> {
   const out = new Map<number, Point>()
   const focus = nodes.find((n) => n.role === 'focus')
   if (!focus) return out

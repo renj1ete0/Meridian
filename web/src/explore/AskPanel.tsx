@@ -1,14 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ApiError } from '../lib/api'
-import {
-  answerParts,
-  askGraph,
-  getChatThread,
-  getChatThreads,
-  type ChatMessage,
-  type ChatThread,
-} from '../lib/chat'
+import { answerParts, askGraph, getChatThread, getChatThreads, type ChatMessage, type ChatThread } from '../lib/chat'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
 import { clockOf, dayOf, shortDayOf } from '../lib/time'
 
@@ -258,7 +251,9 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
             holds, and cite them.
           </p>
         ) : null}
-        {messages.map((m) => (m.role === 'user' ? <Question key={m.message_id} message={m} /> : <Answer key={m.message_id} message={m} />))}
+        {messages.map((m) =>
+          m.role === 'user' ? <Question key={m.message_id} message={m} /> : <Answer key={m.message_id} message={m} />,
+        )}
         {asking ? (
           <p role="status" className="font-mono text-[11px] text-text-faint">
             Reading the corpus…
@@ -315,7 +310,9 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
             className="w-full resize-none bg-transparent text-[13px] text-text placeholder:text-text-faint focus:outline-none"
           />
           <div className="mt-1 flex items-center justify-between gap-3">
-            <span className="font-mono text-[10px] text-text-faint">answers from retrieved passages · citations checked</span>
+            <span className="font-mono text-[10px] text-text-faint">
+              answers from retrieved passages · citations checked
+            </span>
             <button
               type="submit"
               disabled={asking || draft.trim().length === 0}

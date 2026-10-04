@@ -141,7 +141,8 @@ describe('circles and links', () => {
     ] as const) {
       for (const p of layoutTopics(totals, width, height)) {
         const w = labelWidth(p.topic)
-        const left = p.label.anchor === 'start' ? p.label.x : p.label.anchor === 'end' ? p.label.x - w : p.label.x - w / 2
+        const left =
+          p.label.anchor === 'start' ? p.label.x : p.label.anchor === 'end' ? p.label.x - w : p.label.x - w / 2
         expect(left, `${p.topic} at ${width}`).toBeGreaterThanOrEqual(0)
         expect(left + w, `${p.topic} at ${width}`).toBeLessThanOrEqual(width)
         expect(p.label.y + 14).toBeLessThanOrEqual(height)
@@ -201,8 +202,8 @@ describe('the view', () => {
 
   it('selects both ends when a link is clicked', () => {
     const { container } = render(<TopicsView data={DATA} initial={['d']} />)
-    const link = [...container.querySelectorAll('[data-link]')].find(
-      (el) => el.getAttribute('aria-label')?.startsWith('b and c'),
+    const link = [...container.querySelectorAll('[data-link]')].find((el) =>
+      el.getAttribute('aria-label')?.startsWith('b and c'),
     )!
     fireEvent.click(link)
     expect(readout()).toBe('3 sources carry all of: b, c')
@@ -263,7 +264,9 @@ describe('Find carries topic and topic_match', () => {
     const all = new URLSearchParams(searchQuery({ q: 'x', topic: ['a', 'b'], topic_match: 'all' }))
     expect(all.getAll('topic')).toEqual(['a', 'b'])
     expect(all.get('topic_match')).toBe('all')
-    expect(new URLSearchParams(searchQuery({ q: 'x', topic: ['a'], topic_match: 'any' })).has('topic_match')).toBe(false)
+    expect(new URLSearchParams(searchQuery({ q: 'x', topic: ['a'], topic_match: 'any' })).has('topic_match')).toBe(
+      false,
+    )
   })
 
   function stubbed() {

@@ -25,10 +25,7 @@ export const TAGLINE = 'A line to measure everything else against.'
 /** What the web bundle was built at. */
 export const BUILD_VERSION: string = packageJson.version
 
-type StatsState =
-  | { kind: 'loading' }
-  | { kind: 'read'; stats: CorpusStats }
-  | { kind: 'unreadable'; reason: string }
+type StatsState = { kind: 'loading' } | { kind: 'read'; stats: CorpusStats } | { kind: 'unreadable'; reason: string }
 
 /** `walkability`, `on-demand-bus` → "walkability and on demand bus", as the rail labels them. */
 export function topicsProse(topics: readonly string[]): string | null {
@@ -69,9 +66,7 @@ export function AboutPage() {
   const topics = state.kind === 'read' ? state.stats.topics : []
   const prose = topicsProse(topics)
 
-  const unread = (
-    <span className="text-text-faint">{state.kind === 'loading' ? 'reading…' : 'unavailable'}</span>
-  )
+  const unread = <span className="text-text-faint">{state.kind === 'loading' ? 'reading…' : 'unavailable'}</span>
 
   return (
     <div
@@ -105,9 +100,9 @@ export function AboutPage() {
           <div aria-hidden="true" className="h-px bg-line" />
 
           <p className="max-w-[60ch] text-[length:var(--text-body)] leading-[1.66] text-text/85 [text-wrap:pretty]">
-            Meridian crawls public sources{prose ? ` on ${prose}` : ''}, and relates what it finds into one graph.
-            Every claim keeps the chunk it came from. Where two sources disagree, both are kept and the pair is
-            marked — the system does not resolve the conflict on your behalf.
+            Meridian crawls public sources{prose ? ` on ${prose}` : ''}, and relates what it finds into one graph. Every
+            claim keeps the chunk it came from. Where two sources disagree, both are kept and the pair is marked — the
+            system does not resolve the conflict on your behalf.
           </p>
 
           <dl className="m-0 flex flex-col gap-[9px]">

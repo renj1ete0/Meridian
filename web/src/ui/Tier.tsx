@@ -28,13 +28,7 @@
  * added to Postgres and not to this list renders as an unstyled fallback, which
  * is the kind of thing nobody notices until it is in front of someone.
  */
-export const SOURCE_TIERS = [
-  'peer_reviewed',
-  'government',
-  'institutional',
-  'press',
-  'informal',
-] as const
+export const SOURCE_TIERS = ['peer_reviewed', 'government', 'institutional', 'press', 'informal'] as const
 
 export type SourceTier = (typeof SOURCE_TIERS)[number]
 
@@ -73,8 +67,7 @@ export function TierChip({ tier }: { tier: SourceTier }) {
  * `chunk 412`), and capitals would turn a value into a heading.
  */
 const DATA_CHIP =
-  'inline-flex items-center border border-line px-1.5 py-px font-mono text-[10px] ' +
-  'leading-[1.5] text-text-faint'
+  'inline-flex items-center border border-line px-1.5 py-px font-mono text-[10px] ' + 'leading-[1.5] text-text-faint'
 
 export function DataChip({ children }: { children: React.ReactNode }) {
   return <span className={DATA_CHIP}>{children}</span>

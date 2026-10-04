@@ -37,7 +37,15 @@ const W = 1000
 const H = 600
 
 function link(a: number, b: number, cited = 0): AreaLink {
-  return { area_a: a, area_b: b, cited_claims: cited, cited_sources: cited, similar_pairs: 1, similarity: 0.9, shared_terms: [] }
+  return {
+    area_a: a,
+    area_b: b,
+    cited_claims: cited,
+    cited_sources: cited,
+    similar_pairs: 1,
+    similarity: 0.9,
+    shared_terms: [],
+  }
 }
 
 function level(over: Partial<AreasLevel>): AreasLevel {
@@ -181,7 +189,6 @@ describe('names inside a circle', () => {
   })
 })
 
-
 describe('a route between fields (P6-39)', () => {
   const L = (a: number, b: number, cited = 0, sources = cited) => ({ ...link(a, b, cited), cited_sources: sources })
 
@@ -217,7 +224,6 @@ describe('a route between fields (P6-39)', () => {
     expect(routeBetween([], 7, 7)).toEqual([])
   })
 })
-
 
 describe('fill by research share (P6-42)', () => {
   it('is the peer-reviewed share of counted passages, government not included', () => {

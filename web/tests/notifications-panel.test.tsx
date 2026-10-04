@@ -51,10 +51,7 @@ describe('the kinds match what the database records', () => {
     // A type added to Postgres and not here would fall into no filter — the one
     // way a notification can be recorded, delivered to Telegram, and never
     // shown in the app. Read from the model, not retyped.
-    const model = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/models/runs.py'),
-      'utf8',
-    )
+    const model = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/runs.py'), 'utf8')
     const declaration = /NOTIFICATION_TYPE = constrained\(([\s\S]*?)name="notification_type"/.exec(model)
     expect(declaration, 'NOTIFICATION_TYPE is no longer declared the way this test reads it').toBeTruthy()
 
@@ -81,9 +78,7 @@ describe('what it shows', () => {
     // §12.5's reasoning, carried through: a rate says something is wrong and
     // never what, so the body is the part that decides who gets called.
     const rendered = text(
-      renderToStaticMarkup(
-        <NotificationsPanel notifications={[item()]} countsByType={{ alert: 1 }} now={NOW} />,
-      ),
+      renderToStaticMarkup(<NotificationsPanel notifications={[item()]} countsByType={{ alert: 1 }} now={NOW} />),
     )
 
     expect(rendered).toContain('Fetch success 12% over 1h')
@@ -112,7 +107,10 @@ describe('what it shows', () => {
     const rendered = text(
       renderToStaticMarkup(
         <NotificationsPanel
-          notifications={[item(), item({ notification_id: 2, notification_type: 'seed_proposal', title: 'Six seeds proposed' })]}
+          notifications={[
+            item(),
+            item({ notification_id: 2, notification_type: 'seed_proposal', title: 'Six seeds proposed' }),
+          ]}
           countsByType={{ alert: 1, seed_proposal: 1 }}
           active="approvals"
           now={NOW}
@@ -170,9 +168,7 @@ describe('absence', () => {
   it('says nothing is recorded rather than rendering an empty list', () => {
     // And says *why* an empty panel is meaningful: alerts fire on sustained
     // conditions, so silence is a claim rather than an absence of data.
-    const rendered = text(
-      renderToStaticMarkup(<NotificationsPanel notifications={[]} countsByType={{}} />),
-    )
+    const rendered = text(renderToStaticMarkup(<NotificationsPanel notifications={[]} countsByType={{}} />))
 
     expect(rendered).toContain('Nothing recorded')
     expect(rendered).toContain('nothing to report')

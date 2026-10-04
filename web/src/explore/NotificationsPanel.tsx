@@ -1,12 +1,5 @@
 import { onInternalClick } from '../lib/route'
-import {
-  NOTIFICATION_KINDS,
-  clock,
-  countsByKind,
-  dayHeading,
-  kindOf,
-  type NotificationKind,
-} from '../lib/status'
+import { NOTIFICATION_KINDS, clock, countsByKind, dayHeading, kindOf, type NotificationKind } from '../lib/status'
 import { DAGGER } from '../ui/Contested'
 import type { Notification } from '../lib/api'
 
@@ -73,8 +66,7 @@ const TYPE_LABEL: Record<string, string> = {
 function actionFor(item: Notification): { label: string; href: string } | null {
   const kind = kindOf(item.notification_type)
   // `P6-38`: straight to the list where it can be accepted or rejected.
-  if (item.notification_type === 'steering_proposal')
-    return { label: 'Review', href: '/admin/proposals' }
+  if (item.notification_type === 'steering_proposal') return { label: 'Review', href: '/admin/proposals' }
   if (kind === 'approvals') return { label: 'Review', href: '/admin' }
   if (kind === 'alerts') return { label: 'Admin', href: '/admin' }
   if (item.notification_type === 'run_summary') return { label: 'Run log', href: '/admin' }
@@ -90,9 +82,8 @@ export function NotificationsPanel({
 }: NotificationsPanelProps) {
   const totals = countsByKind(countsByType)
   const all = totals.jobs + totals.approvals + totals.alerts
-  const shown = active === null
-    ? notifications
-    : notifications.filter((item) => kindOf(item.notification_type) === active)
+  const shown =
+    active === null ? notifications : notifications.filter((item) => kindOf(item.notification_type) === active)
 
   // Grouped by local day, in the order the API returns them (newest first).
   const days: Array<{ heading: string; items: Notification[] }> = []
@@ -106,10 +97,7 @@ export function NotificationsPanel({
   return (
     <section aria-labelledby="notifications-heading" className="flex flex-col">
       <header className="flex items-center gap-3 border-b border-line px-[18px] py-3.5">
-        <h2
-          id="notifications-heading"
-          className="font-sans text-[14.5px] font-semibold leading-tight text-text"
-        >
+        <h2 id="notifications-heading" className="font-sans text-[14.5px] font-semibold leading-tight text-text">
           Notifications
         </h2>
       </header>
@@ -181,7 +169,11 @@ function FilterButton({
       aria-pressed={on}
       onClick={onClick}
       className={`border-r border-line px-[11px] py-1.5 font-sans text-[11.5px] last:border-r-0 ${
-        on ? 'bg-surface-raised text-text' : attention ? 'text-accent-attention' : 'text-text-faint hover:text-text-muted'
+        on
+          ? 'bg-surface-raised text-text'
+          : attention
+            ? 'text-accent-attention'
+            : 'text-text-faint hover:text-text-muted'
       }`}
     >
       {children}

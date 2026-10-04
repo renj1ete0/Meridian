@@ -39,49 +39,49 @@
 
 :root {
   /* --- the dark palette, flagship (design-system.md §2) ----------------- */
-  --dark-ground-deep: #070B14;
-  --dark-ground: #0D1424;
-  --dark-surface: #151E33;
-  --dark-surface-raised: #1E2942;
-  --dark-line: #2A3654;
-  --dark-line-strong: #3E4D71;
-  --dark-text: #E6EBF5;
-  --dark-text-muted: #9BA8C4;
-  --dark-text-faint: #7C8AAB;
-  --dark-accent-graph: #49D0DA;
-  --dark-accent-graph-deep: #0C646A;
-  --dark-accent-attention: #E6B061;
+  --dark-ground-deep: #070b14;
+  --dark-ground: #0d1424;
+  --dark-surface: #151e33;
+  --dark-surface-raised: #1e2942;
+  --dark-line: #2a3654;
+  --dark-line-strong: #3e4d71;
+  --dark-text: #e6ebf5;
+  --dark-text-muted: #9ba8c4;
+  --dark-text-faint: #7c8aab;
+  --dark-accent-graph: #49d0da;
+  --dark-accent-graph-deep: #0c646a;
+  --dark-accent-attention: #e6b061;
   --dark-accent-attention-deep: #654617;
-  --dark-series-1: #3987E5;
-  --dark-series-2: #D95926;
-  --dark-series-3: #199E70;
-  --dark-series-4: #C98500;
-  --dark-series-5: #D55181;
+  --dark-series-1: #3987e5;
+  --dark-series-2: #d95926;
+  --dark-series-3: #199e70;
+  --dark-series-4: #c98500;
+  --dark-series-5: #d55181;
   --dark-series-6: #008300;
-  --dark-series-7: #9085E9;
-  --dark-series-8: #E66767;
+  --dark-series-7: #9085e9;
+  --dark-series-8: #e66767;
 
   /* --- the light palette (design-system.md §2) --------------------------
    * Nine published tokens against dark's thirteen. The design system names
    * light's ground `paper` where dark names it `ground`; they are one role
    * under two names, and the role mapping below is where they meet.
    */
-  --light-paper: #F1F3F7;
-  --light-surface: #FFFFFF;
-  --light-line: #DBE0EA;
-  --light-line-strong: #A9B4C6;
-  --light-text: #101A2E;
-  --light-text-muted: #4E5A73;
-  --light-text-faint: #5C6A85;
-  --light-accent-graph: #0D6F7C;
-  --light-accent-attention: #805A28;
-  --light-series-1: #2A78D6;
-  --light-series-2: #EB6834;
-  --light-series-3: #1BAF7A;
-  --light-series-4: #EDA100;
-  --light-series-5: #E87BA4;
-  --light-series-7: #4A3AA7;
-  --light-series-8: #E34948;
+  --light-paper: #f1f3f7;
+  --light-surface: #ffffff;
+  --light-line: #dbe0ea;
+  --light-line-strong: #a9b4c6;
+  --light-text: #101a2e;
+  --light-text-muted: #4e5a73;
+  --light-text-faint: #5c6a85;
+  --light-accent-graph: #0d6f7c;
+  --light-accent-attention: #805a28;
+  --light-series-1: #2a78d6;
+  --light-series-2: #eb6834;
+  --light-series-3: #1baf7a;
+  --light-series-4: #eda100;
+  --light-series-5: #e87ba4;
+  --light-series-7: #4a3aa7;
+  --light-series-8: #e34948;
 
   /* --- the graph canvas (design-system.md §2, "Canvas tokens"; P6-01) ----
    * Dark only, in both themes: the canvas is a dark ground whatever the
@@ -89,15 +89,15 @@
    * renderer through getComputedStyle, since WebGL takes colour strings rather
    * than CSS, so they are palette entries and not Tailwind roles.
    */
-  --dark-canvas-graticule: #16233D;
+  --dark-canvas-graticule: #16233d;
   --dark-canvas-meridian: #132038;
-  --dark-canvas-neighbour: #8FA0C0;
-  --dark-canvas-hint: #3B4C6E;
-  --dark-canvas-edge: #2E93A0;
-  --dark-canvas-edge-contested: #B98737;
-  --dark-canvas-edge-hint: #1B2C4A;
-  --dark-canvas-label: #C9D3E6;
-  --dark-canvas-caption: #6E7C9C;
+  --dark-canvas-neighbour: #8fa0c0;
+  --dark-canvas-hint: #3b4c6e;
+  --dark-canvas-edge: #2e93a0;
+  --dark-canvas-edge-contested: #b98737;
+  --dark-canvas-edge-hint: #1b2c4a;
+  --dark-canvas-label: #c9d3e6;
+  --dark-canvas-caption: #6e7c9c;
 
   /* --- roles: dark, the flagship default -------------------------------- */
   --ground-deep: var(--dark-ground-deep);

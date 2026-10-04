@@ -101,9 +101,7 @@ export function statusLine(hood: Neighbourhood): string {
 
 export function expandBlocked(hood: Neighbourhood, limit: number): string | null {
   if (hood.shown >= hood.total) {
-    return hood.total === 0
-      ? 'Nothing to expand: no neighbour is shown.'
-      : `All ${hood.total} neighbours are shown.`
+    return hood.total === 0 ? 'Nothing to expand: no neighbour is shown.' : `All ${hood.total} neighbours are shown.`
   }
   if (limit >= CEILING) return `The canvas stops at ${CEILING} neighbours. Filter to narrow it.`
   return null
@@ -130,7 +128,11 @@ export function NodePage({ entityId }: { entityId: number }) {
   const [detail, setDetail] = useState<GraphNodeDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [views, setViews] = useState<SavedViewRecord[] | null>(null)
-  const [saveState, setSaveState] = useState({ busy: false, error: null as string | null, saved: null as string | null })
+  const [saveState, setSaveState] = useState({
+    busy: false,
+    error: null as string | null,
+    saved: null as string | null,
+  })
   const [trail, setTrail] = useState<Crumb[]>(readTrail)
   const [hover, setHover] = useState<HoverTarget | null>(null)
   const [path, setPath] = useState<PathState>({ phase: 'off' })
@@ -263,9 +265,7 @@ export function NodePage({ entityId }: { entityId: number }) {
     setWriteError(null)
     writeAnnotation(draft)
       .then(() => setWritten((n) => n + 1))
-      .catch((cause: unknown) =>
-        setWriteError(cause instanceof ApiError ? cause.message : 'That note was not saved.'),
-      )
+      .catch((cause: unknown) => setWriteError(cause instanceof ApiError ? cause.message : 'That note was not saved.'))
       .finally(() => setWriting(false))
   }
 
@@ -359,9 +359,7 @@ export function NodePage({ entityId }: { entityId: number }) {
         ) : !BUILT_VIEWS.has(view) ? (
           <Centre>
             <p className="text-[13px] text-text-muted">{VIEW_LABEL[view]} is not built yet.</p>
-            <p className="mt-1 text-[12.5px] text-text-faint">
-              Node-link, Table and Matrix show this neighbourhood.
-            </p>
+            <p className="mt-1 text-[12.5px] text-text-faint">Node-link, Table and Matrix show this neighbourhood.</p>
           </Centre>
         ) : view === 'table' || view === 'matrix' ? (
           hood.shown === 0 ? (
@@ -389,12 +387,12 @@ export function NodePage({ entityId }: { entityId: number }) {
 
         {/* Breadcrumb, top left; view switcher, top right. */}
         <div className="pointer-events-none absolute inset-x-[18px] top-4 flex items-start justify-between gap-4">
-          <Breadcrumb
-            trail={trail}
-            topic={hood?.focus.home_topics[0] ?? null}
-            onPick={(id) => refocus(id)}
-          />
-          <div role="tablist" aria-label="View" className="pointer-events-auto flex shrink-0 border border-line bg-ground-deep">
+          <Breadcrumb trail={trail} topic={hood?.focus.home_topics[0] ?? null} onPick={(id) => refocus(id)} />
+          <div
+            role="tablist"
+            aria-label="View"
+            className="pointer-events-auto flex shrink-0 border border-line bg-ground-deep"
+          >
             {/* Only the views that exist are offered: a tab whose whole content
                 is "not built yet" is a dead end (`P6-44`). An old link naming
                 one still opens, and says so. */}
@@ -490,11 +488,7 @@ export function NodePage({ entityId }: { entityId: number }) {
 }
 
 function Centre({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
-      {children}
-    </div>
-  )
+  return <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">{children}</div>
 }
 
 function EmptyHood({ hood, onClear }: { hood: Neighbourhood; onClear: () => void }) {
@@ -532,7 +526,10 @@ function Breadcrumb({
 }) {
   const visible = trail.slice(-4)
   return (
-    <nav aria-label="Trail" className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2 font-mono text-[10.5px]">
+    <nav
+      aria-label="Trail"
+      className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2 font-mono text-[10.5px]"
+    >
       {topic ? <span className="text-text-faint">{topic.replaceAll('-', ' ')}</span> : null}
       {trail.length > visible.length ? <span className="text-text-faint">…</span> : null}
       {visible.map((crumb, i) => {
@@ -549,7 +546,11 @@ function Breadcrumb({
                 {crumb.name}
               </span>
             ) : (
-              <button type="button" onClick={() => onPick(crumb.id)} className="truncate text-text-faint hover:text-text-muted">
+              <button
+                type="button"
+                onClick={() => onPick(crumb.id)}
+                className="truncate text-text-faint hover:text-text-muted"
+              >
                 {crumb.name}
               </button>
             )}

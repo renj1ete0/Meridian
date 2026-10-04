@@ -14,9 +14,9 @@ describe('readable', () => {
   })
 
   it('turns a footnote link into a plain marker', () => {
-    expect(
-      readable('car-free zones in Vienna [[31](https://link.springer.com#ref-CR31)], Amsterdam'),
-    ).toBe('car-free zones in Vienna [31], Amsterdam')
+    expect(readable('car-free zones in Vienna [[31](https://link.springer.com#ref-CR31)], Amsterdam')).toBe(
+      'car-free zones in Vienna [31], Amsterdam',
+    )
   })
 
   it('handles an address with brackets in it', () => {
@@ -28,7 +28,9 @@ describe('readable', () => {
   })
 
   it('unwraps an autolink and bold, and removes heading marks', () => {
-    expect(readable('## Findings\n**Fares** fell, see <https://x.org/r>')).toBe('Findings\nFares fell, see https://x.org/r')
+    expect(readable('## Findings\n**Fares** fell, see <https://x.org/r>')).toBe(
+      'Findings\nFares fell, see https://x.org/r',
+    )
   })
 
   it('leaves plain text, brackets and arithmetic alone', () => {
@@ -51,7 +53,6 @@ describe('readable', () => {
     }
   })
 })
-
 
 describe('a page’s own prompts at the start of a passage (B-98)', () => {
   it('drops a short leading line that ends in an ellipsis', () => {
@@ -92,7 +93,8 @@ describe('text a PDF layout broke into lines', () => {
   })
 
   it('joins a line that ends on a word no sentence ends with, even before a capital', () => {
-    const text = 'The Suite of\nTools, developed by researchers at\nArgonne National Laboratory for the\nU.S. Department of Energy (DOE)\nClean Cities Network'
+    const text =
+      'The Suite of\nTools, developed by researchers at\nArgonne National Laboratory for the\nU.S. Department of Energy (DOE)\nClean Cities Network'
     expect(readable(text)).toBe(
       'The Suite of Tools, developed by researchers at Argonne National Laboratory for the U.S. Department of Energy (DOE)\nClean Cities Network',
     )
@@ -101,7 +103,8 @@ describe('text a PDF layout broke into lines', () => {
   it('does not run a heading or a label into the sentence below it', () => {
     // A navigation page's lines: most breaks mid-sentence, but each next line
     // is capitalised — a new item, not a continuation.
-    const menu = 'Request Data\nRequest Mediation of Disputes\nIf a request is rejected, you may\nsubmit an application\nNews'
+    const menu =
+      'Request Data\nRequest Mediation of Disputes\nIf a request is rejected, you may\nsubmit an application\nNews'
     expect(readable(menu)).toBe(
       'Request Data\nRequest Mediation of Disputes\nIf a request is rejected, you may submit an application\nNews',
     )
@@ -120,7 +123,8 @@ describe('text a PDF layout broke into lines', () => {
   })
 
   it('keeps list items and blank-line paragraphs on their own lines', () => {
-    const text = 'Three measures were\nintroduced in the plan\nwhich covered\n- lower speed limits\n- kerb extensions\n\nThe next part'
+    const text =
+      'Three measures were\nintroduced in the plan\nwhich covered\n- lower speed limits\n- kerb extensions\n\nThe next part'
     expect(readable(text)).toBe(
       'Three measures were introduced in the plan which covered\n- lower speed limits\n- kerb extensions\n\nThe next part',
     )
@@ -139,8 +143,11 @@ describe('Markdown tables in a passage', () => {
   })
 
   it('keeps each row on its own line inside a wrapped passage, and drops a bare pipe line', () => {
-    const text = '|\n| 2008 | Age | Included |\n| 2008 | Age | Excluded |\nwhich the survey\nreported and\nthe office kept'
-    expect(readable(text)).toBe('2008 · Age · Included\n2008 · Age · Excluded\nwhich the survey reported and the office kept')
+    const text =
+      '|\n| 2008 | Age | Included |\n| 2008 | Age | Excluded |\nwhich the survey\nreported and\nthe office kept'
+    expect(readable(text)).toBe(
+      '2008 · Age · Included\n2008 · Age · Excluded\nwhich the survey reported and the office kept',
+    )
   })
 
   it('handles aligned separators and leaves a lone pipe in prose alone', () => {

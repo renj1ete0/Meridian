@@ -48,14 +48,7 @@ const COUNTS = { pending: 3028, approved: 501, rejected: 4 }
 describe('deciding a page at once', () => {
   it('selects the page and sends one decision for it', () => {
     const onBulk = vi.fn()
-    render(
-      <GazetteerQueue
-        rows={[row(1), row(2), row(3)]}
-        state="pending"
-        counts={COUNTS}
-        onBulk={onBulk}
-      />,
-    )
+    render(<GazetteerQueue rows={[row(1), row(2), row(3)]} state="pending" counts={COUNTS} onBulk={onBulk} />)
 
     fireEvent.click(screen.getByLabelText('Select every term on this page'))
     expect(screen.getByText('3 selected')).toBeTruthy()
@@ -106,9 +99,7 @@ describe('deciding a page at once', () => {
     )
     fireEvent.click(screen.getByLabelText('Select every term on this page'))
 
-    rerender(
-      <GazetteerQueue rows={[row(2), row(3)]} state="pending" counts={COUNTS} onBulk={onBulk} />,
-    )
+    rerender(<GazetteerQueue rows={[row(2), row(3)]} state="pending" counts={COUNTS} onBulk={onBulk} />)
     fireEvent.click(screen.getByRole('button', { name: 'Approve selected' }))
 
     expect(onBulk).toHaveBeenCalledWith([2], 'approve')
@@ -121,14 +112,7 @@ describe('deciding a page at once', () => {
   it('says where in the queue the page is, against the unfiltered count', () => {
     const onPage = vi.fn()
     render(
-      <GazetteerQueue
-        rows={[row(1), row(2)]}
-        state="pending"
-        counts={COUNTS}
-        offset={100}
-        hasMore
-        onPage={onPage}
-      />,
+      <GazetteerQueue rows={[row(1), row(2)]} state="pending" counts={COUNTS} offset={100} hasMore onPage={onPage} />,
     )
 
     expect(screen.getByText('101–102 of 3,028')).toBeTruthy()
@@ -141,14 +125,7 @@ describe('deciding a page at once', () => {
 describe('the keys', () => {
   it('decide the row under the cursor', () => {
     const onDecide = vi.fn()
-    render(
-      <GazetteerQueue
-        rows={[row(1), row(2)]}
-        state="pending"
-        counts={COUNTS}
-        onDecide={onDecide}
-      />,
-    )
+    render(<GazetteerQueue rows={[row(1), row(2)]} state="pending" counts={COUNTS} onDecide={onDecide} />)
     const rows = document.querySelectorAll<HTMLTableRowElement>('tr[data-term]')
 
     rows[0]!.focus()
@@ -160,9 +137,7 @@ describe('the keys', () => {
 
   it('select with x, and the selection is what a bulk decision sends', () => {
     const onBulk = vi.fn()
-    render(
-      <GazetteerQueue rows={[row(1), row(2)]} state="pending" counts={COUNTS} onBulk={onBulk} />,
-    )
+    render(<GazetteerQueue rows={[row(1), row(2)]} state="pending" counts={COUNTS} onBulk={onBulk} />)
     const first = document.querySelector<HTMLTableRowElement>('tr[data-term]')!
 
     first.focus()

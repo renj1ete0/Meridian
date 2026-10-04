@@ -137,26 +137,22 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel }: AgentsP
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Agent registry">
-        Which model serves each stage. Routing picks an agent by task type, so what matters is
-        whether every type has one it can actually reach.
+        Which model serves each stage. Routing picks an agent by task type, so what matters is whether every type has
+        one it can actually reach.
       </PageHeader>
 
       {unserved.length > 0 ? (
         <p className="border border-accent-attention bg-surface px-[18px] py-3.5 text-[12.5px] text-accent-attention">
-          Nothing serves {unserved.join(', ')}. A run reaching{' '}
-          {unserved.length > 1 ? 'those' : 'that'} stage will defer rather than fail, and the
-          registry below will look fine while it does.
+          Nothing serves {unserved.join(', ')}. A run reaching {unserved.length > 1 ? 'those' : 'that'} stage will defer
+          rather than fail, and the registry below will look fine while it does.
         </p>
       ) : (
-        <p className="text-[12.5px] text-text-muted">
-          Every task type has an agent that can serve it.
-        </p>
+        <p className="text-[12.5px] text-text-muted">Every task type has an agent that can serve it.</p>
       )}
 
       {rows.length === 0 ? (
         <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
-          No agents are registered. They are seeded from <code>config/agents.yaml</code> at first
-          boot.
+          No agents are registered. They are seeded from <code>config/agents.yaml</code> at first boot.
         </p>
       ) : (
         <TableCard>

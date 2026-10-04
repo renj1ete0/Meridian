@@ -117,11 +117,7 @@ export function wheelFactor(deltaY: number, deltaMode: number, ctrlKey: boolean)
  * circle, and a circle's click opens it. So a drag past {@link DRAG_SLOP}
  * swallows the click that ends it.
  */
-export function useZoomGestures(
-  ref: React.RefObject<HTMLElement | null>,
-  handlers: ZoomHandlers,
-  active = true,
-): void {
+export function useZoomGestures(ref: React.RefObject<HTMLElement | null>, handlers: ZoomHandlers, active = true): void {
   const current = useRef(handlers)
   current.current = handlers
 

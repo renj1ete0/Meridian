@@ -13,13 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminPage, HEALTH_REFRESH_MS } from '../src/admin/AdminPage'
-import {
-  CrawlHealthPanel,
-  HourlyChart,
-  bucketLabel,
-  duration,
-  verdict,
-} from '../src/admin/CrawlHealthPanel'
+import { CrawlHealthPanel, HourlyChart, bucketLabel, duration, verdict } from '../src/admin/CrawlHealthPanel'
 import type { CrawlHealth, HourBucket, Liveness } from '../src/lib/api'
 
 function text(markup: string): string {
@@ -103,10 +97,7 @@ describe('the verdict, in words', () => {
   })
 
   it('names a stall that never started as one, not as a quiet crawl', () => {
-    const line = verdict(
-      liveness({ state: 'stalled', quiet_seconds: null, last_attempt_at: null, ready: 1 }),
-      900,
-    )
+    const line = verdict(liveness({ state: 'stalled', quiet_seconds: null, last_attempt_at: null, ready: 1 }), 900)
 
     expect(line).toContain('nothing has ever been fetched')
     expect(line).toContain('1 page ready')
@@ -117,10 +108,7 @@ describe('the verdict, in words', () => {
   it('does not call a queue that is only backing off a stall', () => {
     // The distinction the fourth state exists for: somebody told "stalled"
     // restarts a worker that has nothing it is allowed to claim.
-    const line = verdict(
-      liveness({ state: 'waiting', quiet_seconds: 3600, ready: 0, pending: 5 }),
-      900,
-    )
+    const line = verdict(liveness({ state: 'waiting', quiet_seconds: 3600, ready: 0, pending: 5 }), 900)
 
     expect(line).toMatch(/^Waiting/)
     expect(line).toContain('backing off')
@@ -128,10 +116,7 @@ describe('the verdict, in words', () => {
   })
 
   it('says an idle crawl has run out of work, and what to do', () => {
-    const line = verdict(
-      liveness({ state: 'idle', quiet_seconds: 7200, ready: 0, pending: 0 }),
-      900,
-    )
+    const line = verdict(liveness({ state: 'idle', quiet_seconds: 7200, ready: 0, pending: 0 }), 900)
 
     expect(line).toMatch(/^Idle — the queue is empty/)
     expect(line).toContain('2 h ago')

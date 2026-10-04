@@ -104,7 +104,11 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
     return (
       <div className={`${PAGE} flex flex-col gap-3`}>
         <p className="text-[14.5px] text-text">{source.message}</p>
-        <a href="/" onClick={onInternalClick('/')} className="font-mono text-[10.5px] text-accent-graph hover:underline">
+        <a
+          href="/"
+          onClick={onInternalClick('/')}
+          className="font-mono text-[10.5px] text-accent-graph hover:underline"
+        >
           ← Back to search
         </a>
       </div>
@@ -144,7 +148,11 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
           ))}
         </div>
 
-        <a href={it.url} rel="noreferrer" className="break-all font-mono text-[10.5px] text-accent-graph hover:underline">
+        <a
+          href={it.url}
+          rel="noreferrer"
+          className="break-all font-mono text-[10.5px] text-accent-graph hover:underline"
+        >
           {it.url}
         </a>
       </header>
@@ -170,9 +178,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
               citing={citing}
               onCite={(chunkId) =>
                 setCiting((current) =>
-                  current.includes(chunkId)
-                    ? current.filter((id) => id !== chunkId)
-                    : [...current, chunkId],
+                  current.includes(chunkId) ? current.filter((id) => id !== chunkId) : [...current, chunkId],
                 )
               }
             />
@@ -191,8 +197,8 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
                   wants the habit formed before the graph exists. The passages
                   are the thread back, and they are the part that would be
                   unrecoverable if this screen did not offer it. */}
-              Tick the passages it comes from. A note needs no node to attach to — that is the
-              point of having it before the graph exists.
+              Tick the passages it comes from. A note needs no node to attach to — that is the point of having it before
+              the graph exists.
             </p>
             <NoteComposer citing={citing} busy={writing} error={writeError} onWrite={onWrite} />
             {kept ? (
@@ -217,8 +223,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
  * and the rail beside them are read together. */
 const PAGE = 'mx-auto w-full max-w-[1200px] px-4 pb-24 pt-6 sm:px-6'
 
-const LABEL =
-  'font-mono text-[9px] font-medium uppercase leading-none tracking-[var(--tracking-label)] text-text-faint'
+const LABEL = 'font-mono text-[9px] font-medium uppercase leading-none tracking-[var(--tracking-label)] text-text-faint'
 
 const META = 'font-mono text-[10.5px] text-text-faint'
 
@@ -236,8 +241,7 @@ function Passages({
     // rather than an error — a scanned PDF or a paywall, not a broken fetch.
     return (
       <p className="border border-line bg-surface p-5 text-[13.5px] leading-[1.6] text-text-muted">
-        No text was extracted from this source. It is still citable, and still counts toward
-        coverage.
+        No text was extracted from this source. It is still citable, and still counts toward coverage.
       </p>
     )
   }
@@ -247,13 +251,12 @@ function Passages({
       {chunks.map((chunk) => {
         const on = citing.includes(chunk.chunk_id)
         return (
-          <li
-            key={chunk.chunk_id}
-            className={`flex flex-col gap-2.5 px-5 py-4 ${on ? 'bg-accent-graph/5' : ''}`}
-          >
+          <li key={chunk.chunk_id} className={`flex flex-col gap-2.5 px-5 py-4 ${on ? 'bg-accent-graph/5' : ''}`}>
             <p className="whitespace-pre-wrap text-[14.5px] leading-[1.62] text-text/90">{readable(chunk.text)}</p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-[10px] text-text-faint">
-              <label className={`flex cursor-pointer items-center gap-1.5 ${on ? 'text-accent-graph' : 'hover:text-text-muted'}`}>
+              <label
+                className={`flex cursor-pointer items-center gap-1.5 ${on ? 'text-accent-graph' : 'hover:text-text-muted'}`}
+              >
                 <input
                   type="checkbox"
                   checked={on}

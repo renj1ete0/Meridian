@@ -48,11 +48,7 @@ export interface ReweightLine {
  * beside a number that moved would be the dialog lying on the one row somebody
  * pinned in order to protect.
  */
-export function reweightLines(
-  before: readonly TopicRow[],
-  after: Topics,
-  focus: string,
-): ReweightLine[] {
+export function reweightLines(before: readonly TopicRow[], after: Topics, focus: string): ReweightLine[] {
   const drawing = (rows: readonly TopicRow[]) =>
     new Map(rows.filter((r) => r.topic.status === 'active').map((r) => [r.topic.topic, r]))
   const now = drawing(before)
@@ -124,9 +120,7 @@ export function ReweightTable({
                   className={`border-t border-line/60 ${line.focus ? 'bg-accent-graph/5' : ''}`}
                 >
                   <td
-                    className={`px-3.5 py-[9px] text-[12.5px] ${
-                      line.focus ? 'font-semibold text-text' : 'text-text'
-                    }`}
+                    className={`px-3.5 py-[9px] text-[12.5px] ${line.focus ? 'font-semibold text-text' : 'text-text'}`}
                   >
                     {line.topic}
                   </td>
@@ -217,19 +211,14 @@ export function Dialog({
         className="flex max-h-full w-full max-w-[668px] flex-col overflow-y-auto border border-line-strong bg-surface"
       >
         <div className="flex flex-col gap-1.5 border-b border-line px-6 pb-4 pt-5">
-          <h2
-            id={id}
-            className="text-[19px] font-semibold tracking-[var(--tracking-heading)] text-text"
-          >
+          <h2 id={id} className="text-[19px] font-semibold tracking-[var(--tracking-heading)] text-text">
             {title}
           </h2>
           <div className="text-[12.5px] leading-[1.55] text-text-muted">{lede}</div>
         </div>
         <div className="flex flex-col gap-[18px] px-6 py-5">{children}</div>
         <div className="flex flex-wrap items-center gap-2.5 border-t border-line bg-surface-raised px-6 py-3.5">
-          {footnote ? (
-            <span className="font-mono text-[10.5px] text-text-faint">{footnote}</span>
-          ) : null}
+          {footnote ? <span className="font-mono text-[10.5px] text-text-faint">{footnote}</span> : null}
           <span className="ml-auto flex gap-2">
             <button type="button" className={BUTTON_SECONDARY} onClick={onClose}>
               Cancel

@@ -37,9 +37,7 @@ function text(markup: string): string {
 
 describe('the caption is the content', () => {
   it('shows it', () => {
-    const rendered = text(
-      renderToStaticMarkup(<FiguresPanel figures={[figure()]} rawAvailable />),
-    )
+    const rendered = text(renderToStaticMarkup(<FiguresPanel figures={[figure()]} rawAvailable />))
     expect(rendered).toContain('Figure 1: modal share by corridor')
   })
 
@@ -56,9 +54,7 @@ describe('the caption is the content', () => {
     // They are different evidence: the caption is what the author wrote about
     // the figure, the alt text is what they wrote for someone who cannot see it.
     const rendered = text(
-      renderToStaticMarkup(
-        <FiguresPanel figures={[figure({ alt_text: 'A bar chart' })]} rawAvailable />,
-      ),
+      renderToStaticMarkup(<FiguresPanel figures={[figure({ alt_text: 'A bar chart' })]} rawAvailable />),
     )
     expect(rendered).toContain('modal share by corridor')
     expect(rendered).toContain('A bar chart')
@@ -85,9 +81,7 @@ describe('the two links are not the same link', () => {
   it('shows no stored link when this deployment serves no raw files', () => {
     // A caption with a dead link is worse than a caption alone: the reader
     // spends a click finding out. Absent, with a line saying why.
-    const markup = renderToStaticMarkup(
-      <FiguresPanel figures={[figure({ raw_url: null })]} rawAvailable={false} />,
-    )
+    const markup = renderToStaticMarkup(<FiguresPanel figures={[figure({ raw_url: null })]} rawAvailable={false} />)
 
     expect(markup).not.toContain('/raw#page=')
     expect(text(markup)).toContain('does not serve stored files')
@@ -99,10 +93,7 @@ describe('the two links are not the same link', () => {
     // the evidence.
     const rendered = text(
       renderToStaticMarkup(
-        <FiguresPanel
-          figures={[figure({ image_url: null, raw_url: null })]}
-          rawAvailable={false}
-        />,
+        <FiguresPanel figures={[figure({ image_url: null, raw_url: null })]} rawAvailable={false} />,
       ),
     )
 
@@ -122,9 +113,7 @@ describe('absence is stated', () => {
 
   it('counts what it is showing', () => {
     const rendered = text(
-      renderToStaticMarkup(
-        <FiguresPanel figures={[figure(), figure({ figure_id: 2 })]} rawAvailable />,
-      ),
+      renderToStaticMarkup(<FiguresPanel figures={[figure(), figure({ figure_id: 2 })]} rawAvailable />),
     )
     expect(rendered).toContain('Figures (2)')
   })

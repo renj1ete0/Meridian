@@ -69,10 +69,7 @@ describe('source tiers', () => {
     // raw enum value — `peer_reviewed`, underscore and all — which nobody
     // notices until it is in front of someone. The Python model is the source
     // of truth; this list mirrors it.
-    const model = readFileSync(
-      join(REPO, 'packages/meridian_core/meridian_core/models/source.py'),
-      'utf8',
-    )
+    const model = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/source.py'), 'utf8')
     const declaration = /SOURCE_TIER = constrained\(([\s\S]*?)name="source_tier"/.exec(model)
     expect(declaration, 'SOURCE_TIER is no longer declared the way this test reads it').toBeTruthy()
 

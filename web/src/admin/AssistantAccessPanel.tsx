@@ -114,9 +114,8 @@ export function AssistantAccessPanel({
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Assistant access">
-        Let an assistant (Claude, Gemini, any MCP client) answer from the corpus with citations,
-        on its own model. A token can read; it can never write. Issue one per device, so one can
-        be revoked without the others.
+        Let an assistant (Claude, Gemini, any MCP client) answer from the corpus with citations, on its own model. A
+        token can read; it can never write. Issue one per device, so one can be revoked without the others.
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_516px]">
@@ -151,7 +150,12 @@ export function AssistantAccessPanel({
               </label>
               <label className="flex flex-col gap-1">
                 <span className={LABEL}>Profile</span>
-                <select id="token-profile" className={`${FIELD} font-mono text-[12px]`} value={profile} onChange={(e) => setProfile(e.target.value)}>
+                <select
+                  id="token-profile"
+                  className={`${FIELD} font-mono text-[12px]`}
+                  value={profile}
+                  onChange={(e) => setProfile(e.target.value)}
+                >
                   {Object.keys(tokens?.profiles ?? { reader: [] }).map((p) => (
                     <option key={p} value={p}>
                       {p}
@@ -187,7 +191,11 @@ export function AssistantAccessPanel({
         </Card>
       </div>
 
-      {message ? <p role="status" className="text-[12.5px] text-text-muted">{message}</p> : null}
+      {message ? (
+        <p role="status" className="text-[12.5px] text-text-muted">
+          {message}
+        </p>
+      ) : null}
 
       {issued ? (
         <div className="flex flex-col gap-3 border border-accent-graph bg-surface px-[22px] py-[18px]">
@@ -200,7 +208,10 @@ export function AssistantAccessPanel({
             </span>
           </div>
           <div className="flex items-center gap-2.5">
-            <code data-testid="secret" className="min-w-0 grow overflow-x-auto border border-line bg-ground px-3 py-2 font-mono text-[13px] text-text">
+            <code
+              data-testid="secret"
+              className="min-w-0 grow overflow-x-auto border border-line bg-ground px-3 py-2 font-mono text-[13px] text-text"
+            >
               {issued.secret}
             </code>
             <button type="button" className={BUTTON_SECONDARY} onClick={() => void copy(issued.secret)}>
@@ -239,7 +250,11 @@ export function AssistantAccessPanel({
         <div className="flex flex-col gap-2.5">
           <div className="flex items-baseline justify-between">
             <span className={LABEL}>Tokens · {active} active</span>
-            <button type="button" className="font-mono text-[11px] text-accent-graph" onClick={() => setShowRevoked((s) => !s)}>
+            <button
+              type="button"
+              className="font-mono text-[11px] text-accent-graph"
+              onClick={() => setShowRevoked((s) => !s)}
+            >
               {showRevoked ? 'Hide revoked' : 'Show revoked'}
             </button>
           </div>
@@ -253,13 +268,18 @@ export function AssistantAccessPanel({
                 <thead>
                   <tr className="border-b border-line">
                     {['ID', 'Held by', 'Profile', 'Expires', 'State', ''].map((h) => (
-                      <th key={h} className={`${LABEL} pb-2 pr-3`}>{h}</th>
+                      <th key={h} className={`${LABEL} pb-2 pr-3`}>
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {tokens.rows.map((row) => (
-                    <tr key={row.token_id} className={`border-b border-line ${row.state === 'active' ? '' : 'opacity-55'}`}>
+                    <tr
+                      key={row.token_id}
+                      className={`border-b border-line ${row.state === 'active' ? '' : 'opacity-55'}`}
+                    >
                       <td className="py-2.5 pr-3 font-mono text-[11.5px] text-text tabular-nums">{row.token_id}</td>
                       <td className="pr-3 text-[12.5px] text-text">{row.held_by}</td>
                       <td className="pr-3 font-mono text-[11.5px] text-text">{row.profile}</td>
@@ -274,7 +294,11 @@ export function AssistantAccessPanel({
                       </td>
                       <td className="text-right">
                         {row.state === 'active' ? (
-                          <button type="button" className={BUTTON_SECONDARY} onClick={() => void onRevoke(row.token_id)}>
+                          <button
+                            type="button"
+                            className={BUTTON_SECONDARY}
+                            onClick={() => void onRevoke(row.token_id)}
+                          >
                             Revoke
                           </button>
                         ) : null}

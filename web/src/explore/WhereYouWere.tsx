@@ -64,14 +64,7 @@ const ROW = 'flex w-full items-baseline gap-3.5 py-[9px] text-left'
 const KIND = 'font-mono text-[10px] uppercase tracking-[0.1em] text-text-faint'
 const WHEN = 'w-[76px] shrink-0 text-right font-mono text-[10.5px] text-text-faint'
 
-export function WhereYouWere({
-  savedViews,
-  recentNodes,
-  onOpenView,
-  onOpenNode,
-  delta,
-  now,
-}: WhereYouWereProps) {
+export function WhereYouWere({ savedViews, recentNodes, onOpenView, onOpenNode, delta, now }: WhereYouWereProps) {
   const empty = savedViews.length === 0 && recentNodes.length === 0
 
   return (
@@ -89,9 +82,7 @@ export function WhereYouWere({
           {savedViews.map((view) => (
             <li key={`v${view.id}`}>
               <button type="button" onClick={() => onOpenView?.(view.id)} className={`${ROW} group`}>
-                <span className="grow text-[13.5px] text-text/85 group-hover:text-accent-graph">
-                  {view.name}
-                </span>
+                <span className="grow text-[13.5px] text-text/85 group-hover:text-accent-graph">{view.name}</span>
                 {view.fresh ? (
                   <span
                     className="shrink-0 font-mono text-[10.5px] tabular-nums text-accent-graph"

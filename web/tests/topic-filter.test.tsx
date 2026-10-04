@@ -47,9 +47,7 @@ describe('the control', () => {
   })
 
   it('marks the active topics as pressed', () => {
-    const markup = renderToStaticMarkup(
-      <TopicFilter topics={TOPICS} active={['walkability']} />,
-    )
+    const markup = renderToStaticMarkup(<TopicFilter topics={TOPICS} active={['walkability']} />)
 
     expect(markup).toContain('aria-pressed="true"')
   })
@@ -66,9 +64,7 @@ describe('the control', () => {
 
 describe('the caveat about unexamined sources', () => {
   it('appears while narrowing, when there are any', () => {
-    const rendered = text(
-      renderToStaticMarkup(<TopicFilter topics={TOPICS} active={['robotics']} unexamined />),
-    )
+    const rendered = text(renderToStaticMarkup(<TopicFilter topics={TOPICS} active={['robotics']} unexamined />))
 
     expect(rendered).toContain('before topics were recorded')
     expect(rendered).toContain('can hide material')
@@ -76,9 +72,7 @@ describe('the caveat about unexamined sources', () => {
 
   it('stays away when nothing is narrowed', () => {
     // Nothing is being hidden, so saying so would train the reader to skip it.
-    const rendered = text(
-      renderToStaticMarkup(<TopicFilter topics={TOPICS} active={[]} unexamined />),
-    )
+    const rendered = text(renderToStaticMarkup(<TopicFilter topics={TOPICS} active={[]} unexamined />))
 
     expect(rendered).not.toContain('before topics were recorded')
   })
@@ -86,9 +80,7 @@ describe('the caveat about unexamined sources', () => {
   it('stays away when every source has been examined', () => {
     // The converse, and what makes the first test mean something: the caveat is
     // a fact about the corpus, not decoration on the filter.
-    const rendered = text(
-      renderToStaticMarkup(<TopicFilter topics={TOPICS} active={['robotics']} />),
-    )
+    const rendered = text(renderToStaticMarkup(<TopicFilter topics={TOPICS} active={['robotics']} />))
 
     expect(rendered).not.toContain('before topics were recorded')
   })
@@ -146,9 +138,7 @@ describe('the same control over places (P2-23)', () => {
   })
 
   it('falls back to the value when a name is missing', () => {
-    const markup = renderToStaticMarkup(
-      <TopicFilter topics={['KR']} names={{}} active={[]} label="Place" />,
-    )
+    const markup = renderToStaticMarkup(<TopicFilter topics={['KR']} names={{}} active={[]} label="Place" />)
     expect(text(markup)).toContain('KR')
   })
 })

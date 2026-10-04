@@ -67,11 +67,7 @@ export function TopicFilter({
 
   return (
     <div>
-      <div
-        className="flex flex-wrap items-center gap-1.5"
-        role="group"
-        aria-label={`Narrow by ${label.toLowerCase()}`}
-      >
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`Narrow by ${label.toLowerCase()}`}>
         <span className="mr-2 font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint">
           {label}
         </span>

@@ -95,10 +95,7 @@ type Panel =
   | { kind: 'bridge'; a: number; b: number; bridge?: Bridge; error?: string }
   | { kind: 'route'; from: Area; to: Area; hops: AreaLink[] | null }
 
-type Menu =
-  | { kind: 'area'; area: Area; x: number; y: number }
-  | { kind: 'empty'; x: number; y: number }
-  | null
+type Menu = { kind: 'area'; area: Area; x: number; y: number } | { kind: 'empty'; x: number; y: number } | null
 
 function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof ApiError ? cause.message : fallback
@@ -293,7 +290,9 @@ export function AreasView({
     (target: number) => {
       const d = Math.max(level.level, Math.min(level.levels, target))
       const v = viewRef.current
-      setView(zoomAbout(v, zoomForDepth(d, level.level) / v.k, frame.width / 2, drawHeight / 2, frame.width, drawHeight))
+      setView(
+        zoomAbout(v, zoomForDepth(d, level.level) / v.k, frame.width / 2, drawHeight / 2, frame.width, drawHeight),
+      )
       onDepth?.(d)
     },
     [level.level, level.levels, onDepth, frame.width, drawHeight],
@@ -301,8 +300,7 @@ export function AreasView({
   useZoomGestures(
     canvasFrame,
     {
-      onZoom: (factor, x, y) =>
-        follow(zoomAbout(viewRef.current, factor, x, y - drawTop, frame.width, drawHeight)),
+      onZoom: (factor, x, y) => follow(zoomAbout(viewRef.current, factor, x, y - drawTop, frame.width, drawHeight)),
       onPan: (dx, dy) => follow(panBy(viewRef.current, dx, dy, frame.width, drawHeight)),
       onStep: (direction) => zoomToDepth(wanted + direction),
       onReset: () => follow(HOME),
@@ -315,7 +313,9 @@ export function AreasView({
   useEffect(() => {
     const v = viewRef.current
     if (depthForZoom(v.k, level.level, level.levels) === wanted) return
-    setView(zoomAbout(v, zoomForDepth(wanted, level.level) / v.k, frame.width / 2, drawHeight / 2, frame.width, drawHeight))
+    setView(
+      zoomAbout(v, zoomForDepth(wanted, level.level) / v.k, frame.width / 2, drawHeight / 2, frame.width, drawHeight),
+    )
     // Only when the level asked for moves, not when the frame does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted, level.level, level.levels])
@@ -385,7 +385,12 @@ export function AreasView({
       setMenu(null)
       if (routeFrom) {
         if (area.area_id === routeFrom.area_id) return
-        setPanel({ kind: 'route', from: routeFrom, to: area, hops: routeBetween(routeLinks, routeFrom.area_id, area.area_id) })
+        setPanel({
+          kind: 'route',
+          from: routeFrom,
+          to: area,
+          hops: routeBetween(routeLinks, routeFrom.area_id, area.area_id),
+        })
         setRouteFrom(null)
         return
       }
@@ -405,8 +410,8 @@ export function AreasView({
           <h2 className="text-[length:var(--text-subhead)] font-semibold text-text">No fields yet</h2>
           <p className="mt-2 text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
             Fields are built once a day by <span className="font-mono">worker.areas</span> from every searchable,
-            embedded passage — at least {level.passages_needed.toLocaleString('en')} of them. Nothing has been
-            built on this corpus yet. The passages themselves can be seen now, under Passages in 3D.
+            embedded passage — at least {level.passages_needed.toLocaleString('en')} of them. Nothing has been built on
+            this corpus yet. The passages themselves can be seen now, under Passages in 3D.
           </p>
         </div>
       </div>
@@ -444,7 +449,9 @@ export function AreasView({
           highlight={highlight}
           selectedLink={panel.kind === 'bridge' ? [panel.a, panel.b] : null}
           routeLinks={panel.kind === 'route' ? (panel.hops ?? []) : []}
-          routeEnds={panel.kind === 'route' ? [panel.from.area_id, panel.to.area_id] : routeFrom ? [routeFrom.area_id] : []}
+          routeEnds={
+            panel.kind === 'route' ? [panel.from.area_id, panel.to.area_id] : routeFrom ? [routeFrom.area_id] : []
+          }
           shade={shade}
           onHover={setHover}
           onOpen={openArea}
@@ -481,10 +488,11 @@ export function AreasView({
 
         <SizeKey areas={rows} scale={scale} compact={frame.width < COMPACT_KEY_BELOW} />
         <p className="pointer-events-none absolute bottom-4 left-5 right-5 hidden truncate font-mono text-[11px] text-text-faint sm:block">
-          size = passages · fill = {shade === 'research' ? 'share peer-reviewed, fullest = most on this map' : 'share on your topics'} ·{' '}
-          solid = cited claim · dashed = similar passages
-          {shown === level.level ? '' : ` (hover a circle) · outline = its ${levelNoun(level.level)}`} · scroll to
-          zoom, drag to move, 0 for all · right-click for more
+          size = passages · fill ={' '}
+          {shade === 'research' ? 'share peer-reviewed, fullest = most on this map' : 'share on your topics'} · solid =
+          cited claim · dashed = similar passages
+          {shown === level.level ? '' : ` (hover a circle) · outline = its ${levelNoun(level.level)}`} · scroll to zoom,
+          drag to move, 0 for all · right-click for more
         </p>
 
         {hover !== null && byId.get(hover) ? <AreaTip area={byId.get(hover)!} /> : null}
@@ -511,11 +519,7 @@ export function AreasView({
           className="absolute inset-y-0 right-0 z-30 flex w-full max-w-[380px] shrink-0 flex-col gap-3.5 overflow-y-auto border-l border-line bg-surface p-5 md:static md:w-[380px]"
         >
           {panel.kind === 'bridge' ? (
-            <BridgePanel
-              panel={panel}
-              areas={byId}
-              onClose={() => setPanel({ kind: 'none' })}
-            />
+            <BridgePanel panel={panel} areas={byId} onClose={() => setPanel({ kind: 'none' })} />
           ) : panel.kind === 'route' ? (
             <RoutePanel
               route={panel}
@@ -684,10 +688,7 @@ function Canvas({
   // The layout as the view shows it: every circle, for lines and outlines,
   // and those on screen, for drawing and naming.
   const placedAll = useMemo(() => layout.placed.map((p) => viewed(p, view)), [layout, view])
-  const placed = useMemo(
-    () => placedAll.filter((p) => onScreen(p, width, drawHeight)),
-    [placedAll, width, drawHeight],
-  )
+  const placed = useMemo(() => placedAll.filter((p) => onScreen(p, width, drawHeight)), [placedAll, width, drawHeight])
 
   // Every area loaded, for walking a finer one up to its ancestor.
   const everyArea = useMemo(() => {
@@ -723,7 +724,8 @@ function Canvas({
     for (const o of drawn) {
       const { box } = o
       if (box.x < 0 || box.x + box.w > width) continue
-      if (taken.some((t) => t.x < box.x + box.w && box.x < t.x + t.w && t.y < box.y + box.h && box.y < t.y + t.h)) continue
+      if (taken.some((t) => t.x < box.x + box.w && box.x < t.x + t.w && t.y < box.y + box.h && box.y < t.y + t.h))
+        continue
       o.named = true
       taken.push(box)
     }
@@ -773,11 +775,14 @@ function Canvas({
     setMorph({
       items: splitMorph(coarsePlaced, finePlaced, (id) => ancestorAt(id, lo, everyArea)),
       coarse: coarsePlaced,
-      coarseLabels: fitLabels(coarsePlaced.filter((p) => onScreen(p, width, drawHeight)), {
-        width,
-        captions: false,
-        reserved: [keyBox],
-      }),
+      coarseLabels: fitLabels(
+        coarsePlaced.filter((p) => onScreen(p, width, drawHeight)),
+        {
+          width,
+          captions: false,
+          reserved: [keyBox],
+        },
+      ),
       split: layout.level > previous.shown,
     })
     // The view at the moment the level changed; a pan during the split does not restart it.
@@ -808,7 +813,8 @@ function Canvas({
   )
   const fieldLinks: AreaLink[] = []
   if (layout.level > level.level) {
-    for (const o of outlines) ends.set(o.id, { x: o.hull.x, y: o.hull.y, r: o.hull.r, name: everyArea.get(o.id)?.name ?? '' })
+    for (const o of outlines)
+      ends.set(o.id, { x: o.hull.x, y: o.hull.y, r: o.hull.r, name: everyArea.get(o.id)?.name ?? '' })
     if (outlines.length > 0) fieldLinks.push(...level.links)
   }
 
@@ -855,7 +861,10 @@ function Canvas({
               line crossed the names and captions of every circle on its way. */}
           {morph
             ? null
-            : [...fieldLinks.map((link) => ({ link, between: 'fields' })), ...links.map((link) => ({ link, between: '' }))].map(({ link, between }) => {
+            : [
+                ...fieldLinks.map((link) => ({ link, between: 'fields' })),
+                ...links.map((link) => ({ link, between: '' })),
+              ].map(({ link, between }) => {
                 const a = ends.get(link.area_a)
                 const b = ends.get(link.area_b)
                 if (!a || !b) return null
@@ -875,7 +884,11 @@ function Canvas({
                     : 'similar passages, no cited claim'
                 }`
                 return (
-                  <g key={`${link.area_a}-${link.area_b}`} data-link={between || 'siblings'} opacity={between ? 0.55 : 1}>
+                  <g
+                    key={`${link.area_a}-${link.area_b}`}
+                    data-link={between || 'siblings'}
+                    opacity={between ? 0.55 : 1}
+                  >
                     <line
                       x1={x1}
                       y1={y1}
@@ -967,7 +980,7 @@ function Canvas({
                   />
                 ) : null
               })}
-                            {/* Over the circles, so the halo keeps a name legible where
+              {/* Over the circles, so the halo keeps a name legible where
                   another field's circles pass under it. */}
               <g aria-hidden className="pointer-events-none">
                 {outlines
@@ -1043,9 +1056,7 @@ const AreaCircle = memo(function AreaCircle({
       tabIndex={0}
       aria-label={`${area.name}: ${area.passages.toLocaleString('en')} passages from ${area.sources.toLocaleString('en')} sources${
         shareText(area) ? `, ${shareText(area)}` : ''
-      }${
-        flagged ? ` — ${area.reasons.join('; ')}` : ''
-      }${area.children > 0 ? '. Open to zoom in.' : ''}`}
+      }${flagged ? ` — ${area.reasons.join('; ')}` : ''}${area.children > 0 ? '. Open to zoom in.' : ''}`}
       className="cursor-pointer focus:outline-none"
       onMouseEnter={() => onHover(area.area_id)}
       onMouseLeave={() => onHover(null)}
@@ -1143,8 +1154,22 @@ function SizeKey({ areas, scale, compact = false }: { areas: readonly Area[]; sc
         <svg width={cursor} height={height} aria-hidden>
           {placed.map(({ value, r, x }) => (
             <g key={value}>
-              <circle cx={x} cy={height - 2 - r} r={r} fill="var(--accent-graph-deep)" fillOpacity={0.35} stroke="var(--accent-graph)" />
-              <text x={x} y={10} textAnchor="middle" fontFamily="var(--font-mono)" fontSize={9.5} fill="var(--text-muted)">
+              <circle
+                cx={x}
+                cy={height - 2 - r}
+                r={r}
+                fill="var(--accent-graph-deep)"
+                fillOpacity={0.35}
+                stroke="var(--accent-graph)"
+              />
+              <text
+                x={x}
+                y={10}
+                textAnchor="middle"
+                fontFamily="var(--font-mono)"
+                fontSize={9.5}
+                fill="var(--text-muted)"
+              >
                 {value.toLocaleString('en')}
               </text>
             </g>
@@ -1224,7 +1249,9 @@ function TopicShare({ area }: { area: Area }) {
   const topics = topicShares(area)
   return (
     <span className="flex flex-col gap-0.5" data-testid="topic-share">
-      <span className={`text-[12px] ${(onTopicShare(area) ?? 0) < OFF_TOPIC_BELOW ? 'text-accent-attention' : 'text-text'}`}>
+      <span
+        className={`text-[12px] ${(onTopicShare(area) ?? 0) < OFF_TOPIC_BELOW ? 'text-accent-attention' : 'text-text'}`}
+      >
         {text}
         {(onTopicShare(area) ?? 0) < OFF_TOPIC_BELOW ? ' — mostly material outside your topics' : ''}
       </span>
@@ -1319,7 +1346,13 @@ function LevelAside({
               onClick={() => onPick(area)}
               className="flex w-full items-baseline justify-between gap-3 py-2 text-left text-[13px] text-text hover:text-accent-graph"
             >
-              <span className={area.weak || area.stale ? 'underline decoration-accent-attention decoration-dashed underline-offset-4' : undefined}>
+              <span
+                className={
+                  area.weak || area.stale
+                    ? 'underline decoration-accent-attention decoration-dashed underline-offset-4'
+                    : undefined
+                }
+              >
                 {area.name}
               </span>
               <span className="font-mono text-[11.5px] text-text-faint">{area.passages.toLocaleString('en')}</span>
@@ -1356,9 +1389,12 @@ function LevelAside({
           fainter — less of it on your topics
         </li>
         <li className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full border border-accent-attention" style={{ borderStyle: 'dashed' }} aria-hidden />
-          amber outline — fewer than {level.weak_below_sources} sources, or nothing new in {level.stale_after_days}{' '}
-          days
+          <span
+            className="h-3.5 w-3.5 rounded-full border border-accent-attention"
+            style={{ borderStyle: 'dashed' }}
+            aria-hidden
+          />
+          amber outline — fewer than {level.weak_below_sources} sources, or nothing new in {level.stale_after_days} days
         </li>
       </ul>
 
@@ -1404,7 +1440,11 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
         aria-label="Jump to a field or a term"
         className="h-9 w-[340px] max-w-full border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-faint"
       />
-      {error ? <p className="absolute left-0 top-10 w-[340px] border border-line bg-surface p-2 text-[12px] text-text">{error}</p> : null}
+      {error ? (
+        <p className="absolute left-0 top-10 w-[340px] border border-line bg-surface p-2 text-[12px] text-text">
+          {error}
+        </p>
+      ) : null}
       {hits ? (
         <ul
           aria-label="Fields found"
@@ -1584,7 +1624,9 @@ function PanelHead({ label, title, onClose }: { label: string; title: string; on
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[9.5px] uppercase tracking-[var(--tracking-label)] text-text-faint">{label}</span>
+        <span className="font-mono text-[9.5px] uppercase tracking-[var(--tracking-label)] text-text-faint">
+          {label}
+        </span>
         <button type="button" onClick={onClose} aria-label="Close" className="px-1 text-text-faint hover:text-text">
           ×
         </button>
@@ -1621,7 +1663,11 @@ function ShadeControl({ value, onChange }: { value: Shade; onChange: (shade: Sha
     { shade: 'research', label: 'Research', title: 'Fill by the share of passages from peer-reviewed sources' },
   ]
   return (
-    <div role="group" aria-label="Fill shows" className="flex shrink-0 items-stretch border border-line-strong bg-surface">
+    <div
+      role="group"
+      aria-label="Fill shows"
+      className="flex shrink-0 items-stretch border border-line-strong bg-surface"
+    >
       {options.map((o) => (
         <button
           key={o.shade}
@@ -1660,12 +1706,10 @@ function RoutePanel({
     return (
       <>
         <PanelHead label="Route" title={title} onClose={onClose} />
-        <p className="text-[13px] leading-[1.55] text-text">
-          No chain of lines joins these two {noun}s on this map.
-        </p>
+        <p className="text-[13px] leading-[1.55] text-text">No chain of lines joins these two {noun}s on this map.</p>
         <p className="text-[12.5px] leading-[1.55] text-text-muted">
-          That is a finding, not a failure: nothing the corpus holds connects them at this level, cited or
-          by resemblance. It is a gap worth a search from either side.
+          That is a finding, not a failure: nothing the corpus holds connects them at this level, cited or by
+          resemblance. It is a gap worth a search from either side.
         </p>
       </>
     )
@@ -1736,12 +1780,23 @@ function BridgePanel({
           {bridge.claims.length ? (
             <ul className="flex flex-col gap-2.5">
               {bridge.claims.map((claim) => (
-                <li key={claim.edge_id} className="border border-line bg-surface-raised p-3 text-[13px] leading-[1.5] text-text">
-                  <a href={`/nodes/${claim.from_node}`} onClick={onInternalClick(`/nodes/${claim.from_node}`)} className="font-semibold text-text no-underline hover:underline">
+                <li
+                  key={claim.edge_id}
+                  className="border border-line bg-surface-raised p-3 text-[13px] leading-[1.5] text-text"
+                >
+                  <a
+                    href={`/nodes/${claim.from_node}`}
+                    onClick={onInternalClick(`/nodes/${claim.from_node}`)}
+                    className="font-semibold text-text no-underline hover:underline"
+                  >
                     {claim.from_name}
                   </a>{' '}
                   <span className="text-accent-graph">{claim.relation_type.replaceAll('_', ' ')}</span>{' '}
-                  <a href={`/nodes/${claim.to_node}`} onClick={onInternalClick(`/nodes/${claim.to_node}`)} className="font-semibold text-text no-underline hover:underline">
+                  <a
+                    href={`/nodes/${claim.to_node}`}
+                    onClick={onInternalClick(`/nodes/${claim.to_node}`)}
+                    className="font-semibold text-text no-underline hover:underline"
+                  >
                     {claim.to_name}
                   </a>
                   <div className="mt-1.5 font-mono text-[10.5px] text-text-faint">
@@ -1753,8 +1808,8 @@ function BridgePanel({
             </ul>
           ) : (
             <p className="text-[12.5px] leading-[1.55] text-text-muted">
-              No claim in the graph has evidence in both. What follows is similarity only: passages that read
-              alike, which is not a source saying the two connect.
+              No claim in the graph has evidence in both. What follows is similarity only: passages that read alike,
+              which is not a source saying the two connect.
             </p>
           )}
 
@@ -1773,7 +1828,10 @@ function BridgePanel({
           {bridge.similar.length ? (
             <ul className="flex flex-col gap-3">
               {bridge.similar.map((pair) => (
-                <li key={`${pair.a.chunk_id}-${pair.b.chunk_id}`} className="flex flex-col gap-1.5 border-t border-line pt-2">
+                <li
+                  key={`${pair.a.chunk_id}-${pair.b.chunk_id}`}
+                  className="flex flex-col gap-1.5 border-t border-line pt-2"
+                >
                   <span className="font-mono text-[10.5px] text-text-faint">cosine {pair.score.toFixed(2)}</span>
                   {[pair.a, pair.b].map((p) => (
                     <a
@@ -1804,7 +1862,11 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
   const detail = panel.detail
   return (
     <>
-      <PanelHead label={detail ? capitalised(levelNoun(detail.area.level)) : 'Field'} title={detail?.area.name ?? '…'} onClose={onClose} />
+      <PanelHead
+        label={detail ? capitalised(levelNoun(detail.area.level)) : 'Field'}
+        title={detail?.area.name ?? '…'}
+        onClose={onClose}
+      />
       {panel.error ? <p className="text-[13px] text-text">{panel.error}</p> : null}
       {detail ? (
         <>

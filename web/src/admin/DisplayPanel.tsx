@@ -53,8 +53,8 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Display">
-        The time zone every time is shown in. Times are stored in UTC and do not change; only how
-        they read does. Budget months and the daily question cap still reset at UTC midnight.
+        The time zone every time is shown in. Times are stored in UTC and do not change; only how they read does. Budget
+        months and the daily question cap still reset at UTC midnight.
       </PageHeader>
       <Card>
         <form className="flex flex-wrap items-end gap-4" onSubmit={submit}>
@@ -73,11 +73,7 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
               ))}
             </select>
           </label>
-          <button
-            type="submit"
-            className={BUTTON_PRIMARY}
-            disabled={!choice || choice === settings?.display_timezone}
-          >
+          <button type="submit" className={BUTTON_PRIMARY} disabled={!choice || choice === settings?.display_timezone}>
             Save
           </button>
           {settings ? (

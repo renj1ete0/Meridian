@@ -221,9 +221,7 @@ describe('the lockup', () => {
   it('carries the mono descriptor only when stacked', () => {
     // §1 puts the descriptor under the stacked lockup alone. On the horizontal
     // one it would compete with the wordmark it is meant to qualify.
-    expect(renderToStaticMarkup(<Lockup orientation="stacked" />)).toContain(
-      'AUTONOMOUS RESEARCH SYSTEM',
-    )
+    expect(renderToStaticMarkup(<Lockup orientation="stacked" />)).toContain('AUTONOMOUS RESEARCH SYSTEM')
     expect(renderToStaticMarkup(<Lockup />)).not.toContain('AUTONOMOUS RESEARCH SYSTEM')
   })
 })

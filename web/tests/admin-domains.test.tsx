@@ -119,11 +119,7 @@ describe('what the crawl learned is not a setting', () => {
   it('does not call a configured render mode learned', () => {
     // The distinction the whole panel turns on. An operator who set `always`
     // themselves must not be told the crawler worked it out.
-    expect(
-      isLearnedRender(
-        row({ resolved: { render_js: 'always' }, overridden: ['render_js'] }),
-      ),
-    ).toBe(false)
+    expect(isLearnedRender(row({ resolved: { render_js: 'always' }, overridden: ['render_js'] }))).toBe(false)
   })
 
   it('explains it in words, with the count behind it', () => {
@@ -166,9 +162,7 @@ describe('a blocked domain says so in words', () => {
     // §6.4 auto-blocks after consecutive failures, so this appears without
     // anybody choosing it — and a blocked domain produces no sources and no
     // errors, which is exactly why it cannot be left to a status chip.
-    const rendered = text(
-      render([row({ policy: policy({ status: 'blocked', consecutive_failures: 7 }) })]),
-    )
+    const rendered = text(render([row({ policy: policy({ status: 'blocked', consecutive_failures: 7 }) })]))
 
     expect(rendered).toContain('Not being crawled')
     expect(rendered).toContain('7 failures')

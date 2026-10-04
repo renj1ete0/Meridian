@@ -1,18 +1,7 @@
 import { useState } from 'react'
 
 import type { TopicRow } from '../lib/api'
-import {
-  BUTTON_PRIMARY,
-  BUTTON_ROW,
-  FIELD,
-  LINK_ACTION,
-  ROW,
-  SubHeading,
-  TD,
-  TDM,
-  TH,
-  TableCard,
-} from './ui'
+import { BUTTON_PRIMARY, BUTTON_ROW, FIELD, LINK_ACTION, ROW, SubHeading, TD, TDM, TH, TableCard } from './ui'
 import { dayOf, startOfDayIso } from '../lib/time'
 
 /**
@@ -157,8 +146,8 @@ export function BoostsTable({
             Add boost
           </button>
           <span className="basis-full text-[12px] text-text-faint">
-            Multiplies the topic’s weight until the date, then stops counting on its own. The stored
-            weight is untouched.
+            Multiplies the topic’s weight until the date, then stops counting on its own. The stored weight is
+            untouched.
           </span>
         </form>
       ) : null}
@@ -186,9 +175,7 @@ export function BoostsTable({
               <tr key={row.topic.topic} className={ROW} data-topic={row.topic.topic}>
                 <td className={TDM}>{row.topic.topic}</td>
                 <td className={`${TDM} whitespace-nowrap`}>{row.topic.boost_factor}×</td>
-                <td
-                  className={`${TDM} whitespace-nowrap ${row.boost_active ? '' : 'text-text-faint'}`}
-                >
+                <td className={`${TDM} whitespace-nowrap ${row.boost_active ? '' : 'text-text-faint'}`}>
                   {row.boost_active ? '' : 'expired '}
                   {row.topic.boost_expires_at ? dayOf(row.topic.boost_expires_at) : null}
                 </td>
@@ -198,9 +185,7 @@ export function BoostsTable({
                       type="button"
                       className={BUTTON_ROW}
                       disabled={busy === row.topic.topic}
-                      onClick={() =>
-                        onBoost?.(row.topic.topic, { boost_factor: null, boost_expires_at: null })
-                      }
+                      onClick={() => onBoost?.(row.topic.topic, { boost_factor: null, boost_expires_at: null })}
                     >
                       End now
                     </button>

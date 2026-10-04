@@ -37,14 +37,7 @@ export function describeSeed(task: QueueTask): string {
   return task.task_type === 'query' ? `search: ${task.url_or_query}` : task.url_or_query
 }
 
-export function FirstRunPanel({
-  run,
-  busy = null,
-  adding = false,
-  error = null,
-  onAdd,
-  onRemove,
-}: FirstRunPanelProps) {
+export function FirstRunPanel({ run, busy = null, adding = false, error = null, onAdd, onRemove }: FirstRunPanelProps) {
   const [draft, setDraft] = useState('')
   const [type, setType] = useState<'url' | 'query'>('url')
   const [topic, setTopic] = useState('')
@@ -138,9 +131,7 @@ export function FirstRunPanel({
         <TableCard>
           <thead>
             <tr>
-              <th className={`${TH} w-full`}>
-                Waiting · {run.pending_seeds.length.toLocaleString()}
-              </th>
+              <th className={`${TH} w-full`}>Waiting · {run.pending_seeds.length.toLocaleString()}</th>
               <th className={TH}>Topic</th>
               <th className={TH}>Queued</th>
               <th className={TH}>
@@ -153,9 +144,7 @@ export function FirstRunPanel({
               <tr key={seed.task_id} className={ROW} data-seed={seed.task_id}>
                 <td className={`${TDM} break-all`}>{describeSeed(seed)}</td>
                 <td className={`${TDM} whitespace-nowrap text-text-muted`}>{seed.topic ?? '—'}</td>
-                <td className={`${TDM} whitespace-nowrap text-text-muted`}>
-                  {stamp(seed.created_at)}
-                </td>
+                <td className={`${TDM} whitespace-nowrap text-text-muted`}>{stamp(seed.created_at)}</td>
                 <td className={`${TD} text-right`}>
                   <button
                     type="button"
@@ -175,10 +164,9 @@ export function FirstRunPanel({
 
       {run.seeds_in_flight > 0 ? (
         <p className="max-w-[74ch] text-[12.5px] leading-[1.55] text-text-muted">
-          {run.seeds_in_flight.toLocaleString()} already reached. Those cannot be removed — they
-          have produced fetch attempts, and dropping the queue row would leave that evidence with
-          nothing explaining where it came from. Block the domain in Fetch policy to stop it going
-          further.
+          {run.seeds_in_flight.toLocaleString()} already reached. Those cannot be removed — they have produced fetch
+          attempts, and dropping the queue row would leave that evidence with nothing explaining where it came from.
+          Block the domain in Fetch policy to stop it going further.
         </p>
       ) : null}
     </section>

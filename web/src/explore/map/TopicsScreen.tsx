@@ -98,8 +98,8 @@ export function TopicsView({
       <div className="grid grid-cols-1 lg:min-h-full lg:grid-cols-[minmax(0,1fr)_380px]">
         <section aria-label="Topic web" className="min-w-0 bg-ground px-4 py-4 sm:px-6">
           <p className="max-w-[70ch] text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
-            Circle area is the sources carrying a topic; a line joins topics that sources carry together, thicker
-            for more. Choose circles, or a line, to see what lies in all of them.
+            Circle area is the sources carrying a topic; a line joins topics that sources carry together, thicker for
+            more. Choose circles, or a line, to see what lies in all of them.
           </p>
           <Web
             totals={totals}
@@ -241,12 +241,7 @@ export function Web({
                   }
                 />
                 {/* The hit area: a line two pixels wide is not something a finger can press. */}
-                <line
-                  {...ends}
-                  strokeWidth={Math.max(16, w + 10)}
-                  stroke="transparent"
-                  strokeLinecap="round"
-                />
+                <line {...ends} strokeWidth={Math.max(16, w + 10)} stroke="transparent" strokeLinecap="round" />
               </g>
             )
           })}
@@ -369,8 +364,7 @@ function Readout({
       ) : null}
 
       <p data-role="readout" className="flex flex-wrap items-baseline gap-x-2">
-        <span className="font-mono text-[29px] leading-[1.15] text-text">{fmt(count)}</span>
-        {' '}
+        <span className="font-mono text-[29px] leading-[1.15] text-text">{fmt(count)}</span>{' '}
         <span className="text-[length:var(--text-body)] text-text">{readoutLine(count, selection)}</span>
       </p>
 
@@ -380,8 +374,8 @@ function Readout({
         </p>
       ) : none ? (
         <p className="text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
-          No source is labelled with all of these. A passage can still carry a topic its document does not, so a
-          search here may find some.
+          No source is labelled with all of these. A passage can still carry a topic its document does not, so a search
+          here may find some.
         </p>
       ) : (
         <p className="text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
@@ -416,8 +410,8 @@ function Readout({
           Search where these meet
         </button>
         <p className="font-mono text-[10px] leading-[1.5] text-text-faint">
-          Opens Find narrowed to every chosen topic at once. Counts here are document labels; the search also
-          matches a passage by its own labels.
+          Opens Find narrowed to every chosen topic at once. Counts here are document labels; the search also matches a
+          passage by its own labels.
         </p>
       </form>
     </section>

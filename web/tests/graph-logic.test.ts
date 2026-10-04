@@ -14,13 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { NO_FILTERS } from '../src/explore/graph/api'
 import { filtersFromRecord, parseSearch, toSearch, toggle, VIEWS } from '../src/explore/graph/filters'
-import {
-  HINT_RADIUS,
-  RING_INNER,
-  RING_OUTER,
-  pathLayout,
-  radialLayout,
-} from '../src/explore/graph/layout'
+import { HINT_RADIUS, RING_INNER, RING_OUTER, pathLayout, radialLayout } from '../src/explore/graph/layout'
 import { MAX_RECENT, readRecentNodes, recordRecentNode } from '../src/explore/graph/recent'
 import { neighbourhoodScene, pathScene } from '../src/explore/graph/scene'
 import {
@@ -116,9 +110,7 @@ describe('the radial layout', () => {
     const h = hood(20)
     const at = radialLayout(h.nodes, h.edges)
     const radii = h.nodes.slice(1).map((n) => dist(at.get(n.entity_id)!))
-    expect(new Set(radii.map((r) => r.toFixed(2)))).toEqual(
-      new Set([RING_OUTER.toFixed(2), RING_INNER.toFixed(2)]),
-    )
+    expect(new Set(radii.map((r) => r.toFixed(2)))).toEqual(new Set([RING_OUTER.toFixed(2), RING_INNER.toFixed(2)]))
   })
 
   it('never stacks two neighbours on one spot, even at the cap', () => {

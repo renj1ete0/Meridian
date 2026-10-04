@@ -104,12 +104,7 @@ export function seedFromGap(gapId: string, topic: string, query: string): Promis
   return post('/api/admin/gaps/seed', { gap_id: gapId, topic, query })
 }
 
-export function boostFromGap(
-  gapId: string,
-  topic: string,
-  factor: number,
-  days: number,
-): Promise<GapActionResult> {
+export function boostFromGap(gapId: string, topic: string, factor: number, days: number): Promise<GapActionResult> {
   return post('/api/admin/gaps/boost', { gap_id: gapId, topic, factor, days })
 }
 
@@ -128,8 +123,7 @@ export function evidenceLine(evidence: Gap['evidence']): string[] {
   if (has('strong_sources')) out.push(`gov/peer-reviewed ${evidence.strong_sources}`)
   if (has('passages')) out.push(`passages ${evidence.passages}`)
   if (has('strong_passages')) out.push(`gov/peer-reviewed passages ${evidence.strong_passages}`)
-  if (has('passage_sources') && evidence.passage_sources)
-    out.push(`in other documents ${evidence.passage_sources}`)
+  if (has('passage_sources') && evidence.passage_sources) out.push(`in other documents ${evidence.passage_sources}`)
   if (has('topic_sources')) out.push(`in the topic ${evidence.topic_sources}`)
   if (has('newest')) out.push(`newest ${evidence.newest ?? '—'}`)
   if (has('crawl_share')) out.push(`crawl share ${pct(evidence.crawl_share)}`)

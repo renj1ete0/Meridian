@@ -70,12 +70,7 @@ export interface EntryPointsProps {
   details?: Partial<Record<EntryPointName, string>>
 }
 
-export function EntryPoints({
-  actions = {},
-  unavailable = {},
-  descriptions = {},
-  details = {},
-}: EntryPointsProps) {
+export function EntryPoints({ actions = {}, unavailable = {}, descriptions = {}, details = {} }: EntryPointsProps) {
   return (
     <ul className="grid gap-5 sm:grid-cols-3">
       {ENTRY_POINTS.map((entry) => {

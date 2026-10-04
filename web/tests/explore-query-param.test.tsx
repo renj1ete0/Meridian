@@ -41,7 +41,6 @@ describe('a query in the URL', () => {
   })
 })
 
-
 describe('a search written back to the URL (B-95)', () => {
   function searchesOf(fetchMock: ReturnType<typeof pending>): string[] {
     return fetchMock.mock.calls

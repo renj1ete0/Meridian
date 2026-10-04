@@ -47,9 +47,7 @@ export function auditLine(entry: SteeringEntry): string {
     case 'boost_factor':
       return next === null ? `${topic} boost ended` : `${topic} boost ${next}×`
     case 'boost_expires_at':
-      return next === null
-        ? `${topic} boost expiry cleared`
-        : `${topic} boost until ${dayOf(next)}`
+      return next === null ? `${topic} boost expiry cleared` : `${topic} boost until ${dayOf(next)}`
     case 'watch':
       // `P6-35`: a saved view of an area's terms, from the map.
       return next === null ? `${topic} stopped watching: ${old ?? '—'}` : `${topic} watching: ${next}`
@@ -102,9 +100,7 @@ export function runOutcome(run: RunRow): string {
 export function runCost(run: RunRow): string {
   if (run.cost_usd !== null) return `$${run.cost_usd.toFixed(2)}`
   if (run.tokens_used === 0) return '—'
-  return run.tokens_used >= 1000
-    ? `${(run.tokens_used / 1000).toFixed(1)}k tok`
-    : `${run.tokens_used} tok`
+  return run.tokens_used >= 1000 ? `${(run.tokens_used / 1000).toFixed(1)}k tok` : `${run.tokens_used} tok`
 }
 
 export function SteeringRail({
@@ -170,9 +166,7 @@ export function SteeringRail({
                 className="flex justify-between gap-2.5 font-mono text-[11.5px] tabular-nums"
               >
                 <span className="text-text">{stamp(run.started_at).slice(5)}</span>
-                <span
-                  className={run.status === 'failed' ? 'text-accent-attention' : 'text-text-faint'}
-                >
+                <span className={run.status === 'failed' ? 'text-accent-attention' : 'text-text-faint'}>
                   {runOutcome(run)}
                 </span>
                 <span className="text-text">{runCost(run)}</span>

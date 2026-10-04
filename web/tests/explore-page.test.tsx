@@ -105,9 +105,7 @@ describe('every result carries its citation', () => {
     // A source that published undated and one whose date was never extracted
     // look identical from an empty space, and §9 makes staleness a first-class
     // signal — a reader weighing evidence needs to tell those apart.
-    const rendered = text(
-      renderToStaticMarkup(<ResultList hits={[hit({ publication_date: null })]} />),
-    )
+    const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ publication_date: null })]} />))
     expect(rendered).toContain('no date')
   })
 
@@ -150,9 +148,7 @@ describe('every result carries its citation', () => {
     // in the filtered list. A topic the source already shows is not repeated.
     const rendered = text(
       renderToStaticMarkup(
-        <ResultList
-          hits={[hit({ topic_labels: ['walkability'], passage_topics: ['transit', 'walkability'] })]}
-        />,
+        <ResultList hits={[hit({ topic_labels: ['walkability'], passage_topics: ['transit', 'walkability'] })]} />,
       ),
     )
     expect(rendered).toContain('passage · transit')
@@ -167,9 +163,7 @@ describe('every result carries its citation', () => {
   })
 
   it('keeps the passage order and drops the source topics', () => {
-    expect(
-      passageOnlyTopics({ topic_labels: null, passage_topics: ['b', 'a'] }),
-    ).toEqual(['b', 'a'])
+    expect(passageOnlyTopics({ topic_labels: null, passage_topics: ['b', 'a'] })).toEqual(['b', 'a'])
     expect(passageOnlyTopics({ topic_labels: ['a'], passage_topics: ['b', 'a'] })).toEqual(['b'])
     expect(passageOnlyTopics({ topic_labels: ['a'], passage_topics: null })).toEqual([])
   })
@@ -204,9 +198,7 @@ describe('a degraded search says what it did not do', () => {
   it('states the consequence when it found nothing', () => {
     // The case that matters. Silence here is a claim about the corpus that the
     // search is not entitled to make.
-    const rendered = text(
-      renderToStaticMarkup(<SearchOutcome asked="walkability" results={response({ hits: [] })} />),
-    )
+    const rendered = text(renderToStaticMarkup(<SearchOutcome asked="walkability" results={response({ hits: [] })} />))
 
     expect(rendered).toContain('different wording were not searched')
     expect(rendered).toContain('not evidence that the corpus lacks the subject')
@@ -242,16 +234,12 @@ describe('a degraded search says what it did not do', () => {
     // contested, stale or flagged. A search that ran one arm is none of those,
     // and a brass box would read as a verdict on the corpus.
     for (const empty of [true, false]) {
-      expect(renderToStaticMarkup(<RetrievalNotice reason="r" empty={empty} />)).not.toContain(
-        'accent-attention',
-      )
+      expect(renderToStaticMarkup(<RetrievalNotice reason="r" empty={empty} />)).not.toContain('accent-attention')
     }
   })
 
   it('names the query it found nothing for', () => {
-    const rendered = text(
-      renderToStaticMarkup(<SearchOutcome asked="walkability" results={response({ hits: [] })} />),
-    )
+    const rendered = text(renderToStaticMarkup(<SearchOutcome asked="walkability" results={response({ hits: [] })} />))
     expect(rendered).toContain('walkability')
   })
 })
@@ -311,9 +299,7 @@ describe('the page number is labelled, not hedged', () => {
 
   it('says "offset" for one that is not', () => {
     const rendered = text(
-      renderToStaticMarkup(
-        <ResultList hits={[hit({ page_unit: 'offset', media_type: 'text/html' })]} />,
-      ),
+      renderToStaticMarkup(<ResultList hits={[hit({ page_unit: 'offset', media_type: 'text/html' })]} />),
     )
     expect(rendered).toContain('offset 1')
   })
@@ -322,9 +308,7 @@ describe('the page number is labelled, not hedged', () => {
     // The fallback has to stay, and has to stay rare. Picking one name for an
     // unknown source mislabels a citation someone will open; hedging on every
     // source teaches readers the label carries no information.
-    const rendered = text(
-      renderToStaticMarkup(<ResultList hits={[hit({ page_unit: null, media_type: null })]} />),
-    )
+    const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ page_unit: null, media_type: null })]} />))
     expect(rendered).toContain('page/offset 1')
   })
 })
@@ -335,9 +319,7 @@ describe('the page number is labelled, not hedged', () => {
 
 describe('the results summary', () => {
   it('counts per arm, so a vector-only result does not read "20 of 0"', () => {
-    const line = summaryLine(
-      response({ arms: ['lexical', 'vector'], lexical_candidates: 0, vector_candidates: 100 }),
-    )
+    const line = summaryLine(response({ arms: ['lexical', 'vector'], lexical_candidates: 0, vector_candidates: 100 }))
     expect(line).toBe('1 passage shown · 0 matched the words · 100 near in meaning')
   })
 

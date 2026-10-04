@@ -42,8 +42,7 @@ import type { SourceTier } from '../ui/Tier'
 // --------------------------------------------------------------------------
 
 /** True only when A and B are the same type, invariantly. */
-type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 
 /** Fails to compile unless its argument is exactly `true`. */
 type Expect<T extends true> = T
@@ -382,28 +381,16 @@ export interface SourceChunks {
   has_more: boolean
 }
 
-export const SOURCE_CHUNKS_FIELDS = [
-  'source_id',
-  'chunks',
-  'limit',
-  'offset',
-  'has_more',
-] as const
+export const SOURCE_CHUNKS_FIELDS = ['source_id', 'chunks', 'limit', 'offset', 'has_more'] as const
 
 // Link 1: each interface must have exactly the keys its runtime list names.
 // Exported so `noUnusedLocals` does not delete the enforcement.
 export type AssertSearchHit = Expect<Equal<keyof SearchHit, (typeof SEARCH_HIT_FIELDS)[number]>>
-export type AssertSearchResponse = Expect<
-  Equal<keyof SearchResponse, (typeof SEARCH_RESPONSE_FIELDS)[number]>
->
-export type AssertCorpusStats = Expect<
-  Equal<keyof CorpusStats, (typeof CORPUS_STATS_FIELDS)[number]>
->
+export type AssertSearchResponse = Expect<Equal<keyof SearchResponse, (typeof SEARCH_RESPONSE_FIELDS)[number]>>
+export type AssertCorpusStats = Expect<Equal<keyof CorpusStats, (typeof CORPUS_STATS_FIELDS)[number]>>
 export type AssertChunk = Expect<Equal<keyof Chunk, (typeof CHUNK_FIELDS)[number]>>
 export type AssertSource = Expect<Equal<keyof Source, (typeof SOURCE_FIELDS)[number]>>
-export type AssertSourceChunks = Expect<
-  Equal<keyof SourceChunks, (typeof SOURCE_CHUNKS_FIELDS)[number]>
->
+export type AssertSourceChunks = Expect<Equal<keyof SourceChunks, (typeof SOURCE_CHUNKS_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
 // Errors
@@ -545,10 +532,7 @@ export function searchCorpus(params: SearchParams, init?: RequestInit): Promise<
   return request<SearchResponse>(`/api/explore/search?${searchQuery(params)}`, init)
 }
 
-export function corpusStats(
-  params: { since?: string | null } = {},
-  init?: RequestInit,
-): Promise<CorpusStats> {
+export function corpusStats(params: { since?: string | null } = {}, init?: RequestInit): Promise<CorpusStats> {
   // Omitted entirely when absent, rather than sent empty: the API distinguishes
   // "nobody asked" from "nothing arrived", and `?since=` would collapse them.
   const suffix = params.since ? `?since=${encodeURIComponent(params.since)}` : ''
@@ -565,9 +549,7 @@ export interface DisplaySettings {
 
 export const DISPLAY_SETTINGS_FIELDS = ['display_timezone', 'label'] as const
 
-export type AssertDisplaySettings = Expect<
-  Equal<keyof DisplaySettings, (typeof DISPLAY_SETTINGS_FIELDS)[number]>
->
+export type AssertDisplaySettings = Expect<Equal<keyof DisplaySettings, (typeof DISPLAY_SETTINGS_FIELDS)[number]>>
 
 export function displaySettings(init?: RequestInit): Promise<DisplaySettings> {
   return request<DisplaySettings>('/api/explore/settings', init)
@@ -693,7 +675,6 @@ export function getChunk(chunkId: number, init?: RequestInit): Promise<Chunk> {
   return request<Chunk>(`/api/explore/chunks/${chunkId}`, init)
 }
 
-
 /** Mirrors `FigureRefRead`. */
 export interface FigureRef {
   figure_id: number
@@ -737,7 +718,6 @@ export const SOURCE_FIGURES_FIELDS = ['source_id', 'figures', 'raw_available'] a
 export async function getSourceFigures(id: number, init?: RequestInit): Promise<SourceFigures> {
   return request<SourceFigures>(`/api/explore/sources/${id}/figures`, init)
 }
-
 
 /** Mirrors `NotificationRead`. */
 export interface Notification {
@@ -837,12 +817,7 @@ export interface GazetteerRow {
   collides_with: number[]
 }
 
-export const GAZETTEER_ROW_FIELDS = [
-  'term',
-  'will_load',
-  'withheld_reason',
-  'collides_with',
-] as const
+export const GAZETTEER_ROW_FIELDS = ['term', 'will_load', 'withheld_reason', 'collides_with'] as const
 
 /** Mirrors `GazetteerQueueRead`. */
 export interface GazetteerQueue {
@@ -900,11 +875,7 @@ export function decideGazetteerTerm(
   })
 }
 
-export function editGazetteerTerm(
-  termId: number,
-  edit: GazetteerTermEdit,
-  init?: RequestInit,
-): Promise<GazetteerRow> {
+export function editGazetteerTerm(termId: number, edit: GazetteerTermEdit, init?: RequestInit): Promise<GazetteerRow> {
   return request<GazetteerRow>(`/api/admin/gazetteer/${termId}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
@@ -913,15 +884,9 @@ export function editGazetteerTerm(
   })
 }
 
-export type AssertGazetteerTerm = Expect<
-  Equal<keyof GazetteerTerm, (typeof GAZETTEER_TERM_FIELDS)[number]>
->
-export type AssertGazetteerRow = Expect<
-  Equal<keyof GazetteerRow, (typeof GAZETTEER_ROW_FIELDS)[number]>
->
-export type AssertGazetteerQueue = Expect<
-  Equal<keyof GazetteerQueue, (typeof GAZETTEER_QUEUE_FIELDS)[number]>
->
+export type AssertGazetteerTerm = Expect<Equal<keyof GazetteerTerm, (typeof GAZETTEER_TERM_FIELDS)[number]>>
+export type AssertGazetteerRow = Expect<Equal<keyof GazetteerRow, (typeof GAZETTEER_ROW_FIELDS)[number]>>
+export type AssertGazetteerQueue = Expect<Equal<keyof GazetteerQueue, (typeof GAZETTEER_QUEUE_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
 // Steering (task P6-12, spec §10)
@@ -1033,10 +998,7 @@ export function editTopic(topic: string, edit: TopicEdit, init?: RequestInit): P
   })
 }
 
-export function addTopic(
-  body: TopicAddBody,
-  init?: RequestInit,
-): Promise<Topics> {
+export function addTopic(body: TopicAddBody, init?: RequestInit): Promise<Topics> {
   return request<Topics>('/api/admin/topics', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1056,17 +1018,11 @@ export function getSteeringLog(
   return request<SteeringLog>(`/api/admin/steering-log${suffix ? `?${suffix}` : ''}`, init)
 }
 
-export type AssertTopicConfig = Expect<
-  Equal<keyof TopicConfig, (typeof TOPIC_CONFIG_FIELDS)[number]>
->
+export type AssertTopicConfig = Expect<Equal<keyof TopicConfig, (typeof TOPIC_CONFIG_FIELDS)[number]>>
 export type AssertTopicRow = Expect<Equal<keyof TopicRow, (typeof TOPIC_ROW_FIELDS)[number]>>
 export type AssertTopics = Expect<Equal<keyof Topics, (typeof TOPICS_FIELDS)[number]>>
-export type AssertSteeringEntry = Expect<
-  Equal<keyof SteeringEntry, (typeof STEERING_ENTRY_FIELDS)[number]>
->
-export type AssertSteeringLog = Expect<
-  Equal<keyof SteeringLog, (typeof STEERING_LOG_FIELDS)[number]>
->
+export type AssertSteeringEntry = Expect<Equal<keyof SteeringEntry, (typeof STEERING_ENTRY_FIELDS)[number]>>
+export type AssertSteeringLog = Expect<Equal<keyof SteeringLog, (typeof STEERING_LOG_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
 // Fetch policy (task P6-22, spec §6.4)
@@ -1076,15 +1032,7 @@ export type AssertSteeringLog = Expect<
 export type TrustState = 'unscreened' | 'cleared' | 'quarantined' | 'rejected'
 
 /** `SEED_SOURCE` in `models/queue.py`. */
-export type SeedSource =
-  | 'frontier'
-  | 'sitemap'
-  | 'search'
-  | 'citation'
-  | 'doi'
-  | 'model'
-  | 'user'
-  | 'diversity'
+export type SeedSource = 'frontier' | 'sitemap' | 'search' | 'citation' | 'doi' | 'model' | 'user' | 'diversity'
 
 /** `DOMAIN_STATUS` in `models/config.py`. */
 export type DomainStatus = 'active' | 'blocked' | 'paused'
@@ -1150,15 +1098,7 @@ export interface FetchPolicyPage {
   blocked: number
 }
 
-export const FETCH_POLICY_PAGE_FIELDS = [
-  'rows',
-  'limit',
-  'offset',
-  'has_more',
-  'active',
-  'paused',
-  'blocked',
-] as const
+export const FETCH_POLICY_PAGE_FIELDS = ['rows', 'limit', 'offset', 'has_more', 'active', 'paused', 'blocked'] as const
 
 export function getFetchPolicy(
   params: { status?: DomainStatus; q?: string; limit?: number; offset?: number } = {},
@@ -1192,21 +1132,15 @@ export function actOnFetchPolicy(
   action: 'unblock' | 'forget-render',
   init?: RequestInit,
 ): Promise<FetchPolicyRow> {
-  return request<FetchPolicyRow>(
-    `/api/admin/fetch-policy/${encodeURIComponent(domain)}/${action}`,
-    { method: 'POST', ...init },
-  )
+  return request<FetchPolicyRow>(`/api/admin/fetch-policy/${encodeURIComponent(domain)}/${action}`, {
+    method: 'POST',
+    ...init,
+  })
 }
 
-export type AssertFetchPolicy = Expect<
-  Equal<keyof FetchPolicy, (typeof FETCH_POLICY_FIELDS)[number]>
->
-export type AssertFetchPolicyRow = Expect<
-  Equal<keyof FetchPolicyRow, (typeof FETCH_POLICY_ROW_FIELDS)[number]>
->
-export type AssertFetchPolicyPage = Expect<
-  Equal<keyof FetchPolicyPage, (typeof FETCH_POLICY_PAGE_FIELDS)[number]>
->
+export type AssertFetchPolicy = Expect<Equal<keyof FetchPolicy, (typeof FETCH_POLICY_FIELDS)[number]>>
+export type AssertFetchPolicyRow = Expect<Equal<keyof FetchPolicyRow, (typeof FETCH_POLICY_ROW_FIELDS)[number]>>
+export type AssertFetchPolicyPage = Expect<Equal<keyof FetchPolicyPage, (typeof FETCH_POLICY_PAGE_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
 // Annotations (task P6-05, spec §12.5)
@@ -1274,10 +1208,7 @@ export interface AnnotationParams {
   offset?: number
 }
 
-export function getAnnotations(
-  params: AnnotationParams = {},
-  init?: RequestInit,
-): Promise<Annotations> {
+export function getAnnotations(params: AnnotationParams = {}, init?: RequestInit): Promise<Annotations> {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) search.set(key, String(value))
@@ -1323,13 +1254,9 @@ export function rewriteAnnotation(
   })
 }
 
-export type AssertAnnotationTarget = Expect<
-  Equal<keyof AnnotationTarget, (typeof ANNOTATION_TARGET_FIELDS)[number]>
->
+export type AssertAnnotationTarget = Expect<Equal<keyof AnnotationTarget, (typeof ANNOTATION_TARGET_FIELDS)[number]>>
 export type AssertAnnotation = Expect<Equal<keyof Annotation, (typeof ANNOTATION_FIELDS)[number]>>
-export type AssertAnnotations = Expect<
-  Equal<keyof Annotations, (typeof ANNOTATIONS_FIELDS)[number]>
->
+export type AssertAnnotations = Expect<Equal<keyof Annotations, (typeof ANNOTATIONS_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
 // The node detail panel (task P6-04, spec §12.5)
@@ -1414,25 +1341,15 @@ export interface NodeDetail {
   annotations: Annotation[]
 }
 
-export const NODE_DETAIL_FIELDS = [
-  'entity',
-  'attributes',
-  'supporting',
-  'contested_edges',
-  'annotations',
-] as const
+export const NODE_DETAIL_FIELDS = ['entity', 'attributes', 'supporting', 'contested_edges', 'annotations'] as const
 
 export function getNode(entityId: number, init?: RequestInit): Promise<NodeDetail> {
   return request<NodeDetail>(`/api/explore/nodes/${entityId}`, init)
 }
 
-export type AssertNodeAttribute = Expect<
-  Equal<keyof NodeAttribute, (typeof NODE_ATTRIBUTE_FIELDS)[number]>
->
+export type AssertNodeAttribute = Expect<Equal<keyof NodeAttribute, (typeof NODE_ATTRIBUTE_FIELDS)[number]>>
 export type AssertEntity = Expect<Equal<keyof Entity, (typeof ENTITY_FIELDS)[number]>>
-export type AssertNodeDetail = Expect<
-  Equal<keyof NodeDetail, (typeof NODE_DETAIL_FIELDS)[number]>
->
+export type AssertNodeDetail = Expect<Equal<keyof NodeDetail, (typeof NODE_DETAIL_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
 // Saved views (task P6-09, spec §12.5)
@@ -1500,9 +1417,7 @@ export function markViewOpened(viewId: number, init?: RequestInit): Promise<Save
   })
 }
 
-export type AssertSavedView = Expect<
-  Equal<keyof SavedViewRecord, (typeof SAVED_VIEW_FIELDS)[number]>
->
+export type AssertSavedView = Expect<Equal<keyof SavedViewRecord, (typeof SAVED_VIEW_FIELDS)[number]>>
 export type AssertSavedViews = Expect<Equal<keyof SavedViews, (typeof SAVED_VIEWS_FIELDS)[number]>>
 
 // --------------------------------------------------------------------------
@@ -1644,13 +1559,7 @@ export interface DomainCount {
   succeeded: number
 }
 
-export const LIVENESS_FIELDS = [
-  'state',
-  'last_attempt_at',
-  'quiet_seconds',
-  'ready',
-  'pending',
-] as const
+export const LIVENESS_FIELDS = ['state', 'last_attempt_at', 'quiet_seconds', 'ready', 'pending'] as const
 
 /** Mirrors `LivenessRead`. */
 export interface Liveness {
@@ -1685,16 +1594,10 @@ export interface CrawlHealth {
 }
 
 export type AssertHourBucket = Expect<Equal<keyof HourBucket, (typeof HOUR_BUCKET_FIELDS)[number]>>
-export type AssertOutcomeCount = Expect<
-  Equal<keyof OutcomeCount, (typeof OUTCOME_COUNT_FIELDS)[number]>
->
-export type AssertDomainCount = Expect<
-  Equal<keyof DomainCount, (typeof DOMAIN_COUNT_FIELDS)[number]>
->
+export type AssertOutcomeCount = Expect<Equal<keyof OutcomeCount, (typeof OUTCOME_COUNT_FIELDS)[number]>>
+export type AssertDomainCount = Expect<Equal<keyof DomainCount, (typeof DOMAIN_COUNT_FIELDS)[number]>>
 export type AssertLiveness = Expect<Equal<keyof Liveness, (typeof LIVENESS_FIELDS)[number]>>
-export type AssertCrawlHealth = Expect<
-  Equal<keyof CrawlHealth, (typeof CRAWL_HEALTH_FIELDS)[number]>
->
+export type AssertCrawlHealth = Expect<Equal<keyof CrawlHealth, (typeof CRAWL_HEALTH_FIELDS)[number]>>
 
 /** Read-only, and under `/api/explore` for that reason — see the route. */
 export function getCrawlHealth(init?: RequestInit): Promise<CrawlHealth> {
@@ -1847,11 +1750,7 @@ export function previewAddTopic(body: TopicAddBody, init?: RequestInit): Promise
 }
 
 /** What this steering change would leave the vector as, committed nowhere. */
-export function previewEditTopic(
-  topic: string,
-  edit: TopicEdit,
-  init?: RequestInit,
-): Promise<Topics> {
+export function previewEditTopic(topic: string, edit: TopicEdit, init?: RequestInit): Promise<Topics> {
   return request<Topics>(`/api/admin/topics/${encodeURIComponent(topic)}/preview`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1870,9 +1769,7 @@ export interface GazetteerBulk {
 
 export const GAZETTEER_BULK_FIELDS = ['rows'] as const
 
-export type AssertGazetteerBulk = Expect<
-  Equal<keyof GazetteerBulk, (typeof GAZETTEER_BULK_FIELDS)[number]>
->
+export type AssertGazetteerBulk = Expect<Equal<keyof GazetteerBulk, (typeof GAZETTEER_BULK_FIELDS)[number]>>
 
 /** One verdict for up to a page of terms, all or none (404 names unknown ids). */
 export function decideGazetteerTerms(

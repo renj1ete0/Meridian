@@ -33,20 +33,22 @@ const TABLE_ROW = /^[ \t]*\|(.*\|.*)\|[ \t]*$/
  * excerpt, so a grid would be cut mid-table anyway; the pipes were noise.
  */
 export function flattenTables(text: string): string {
-  return text
-    .split('\n')
-    // The rule row, and a line of nothing but pipes left where a table began.
-    .filter((line) => !TABLE_RULE.test(line) && !/^[ \t]*\|[ \t|]*$/.test(line))
-    .map((line) => {
-      const row = TABLE_ROW.exec(line)
-      if (!row) return line
-      return row[1]!
-        .split('|')
-        .map((cell) => cell.trim())
-        .filter(Boolean)
-        .join(' · ')
-    })
-    .join('\n')
+  return (
+    text
+      .split('\n')
+      // The rule row, and a line of nothing but pipes left where a table began.
+      .filter((line) => !TABLE_RULE.test(line) && !/^[ \t]*\|[ \t|]*$/.test(line))
+      .map((line) => {
+        const row = TABLE_ROW.exec(line)
+        if (!row) return line
+        return row[1]!
+          .split('|')
+          .map((cell) => cell.trim())
+          .filter(Boolean)
+          .join(' · ')
+      })
+      .join('\n')
+  )
 }
 
 // A line ending on a word that cannot end a sentence: what follows continues

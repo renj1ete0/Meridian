@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
-import {
-  GAZETTEER_BULK_MAX,
-  type GazetteerEntityType,
-  type GazetteerRow,
-  type GazetteerState,
-} from '../lib/api'
+import { GAZETTEER_BULK_MAX, type GazetteerEntityType, type GazetteerRow, type GazetteerState } from '../lib/api'
 import { BUTTON_ROW, Filters, PAGER, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
@@ -72,13 +67,7 @@ const BULK_DECISION =
   'inline-flex h-[30px] items-center whitespace-nowrap border border-line-strong bg-surface px-3 ' +
   'text-[12.5px] text-text disabled:cursor-not-allowed disabled:opacity-45'
 
-export const ENTITY_TYPES: GazetteerEntityType[] = [
-  'agency',
-  'scheme',
-  'infrastructure',
-  'metric',
-  'concept',
-]
+export const ENTITY_TYPES: GazetteerEntityType[] = ['agency', 'scheme', 'infrastructure', 'metric', 'concept']
 
 /** The keys the table answers to, as the hint line prints them. */
 export const KEYS: { key: string; does: string }[] = [
@@ -126,10 +115,7 @@ export function documents(count: number): string {
 }
 
 /** The decision a key asks for on a row, or null when that row cannot take it. */
-export function keyDecision(
-  key: string,
-  row: GazetteerRow,
-): 'approve' | 'reject' | 'restore' | null {
+export function keyDecision(key: string, row: GazetteerRow): 'approve' | 'reject' | 'restore' | null {
   const rejected = row.term.rejected_at !== null
   if (key === 'a' && !rejected && !row.term.approved) return 'approve'
   if (key === 'd' && !rejected) return 'reject'
@@ -194,9 +180,7 @@ export function GazetteerQueue({
 
   const bulk = (decision: 'approve' | 'reject' | 'restore') => {
     const ids = chosen
-      .filter((r) =>
-        decision === 'restore' ? r.term.rejected_at !== null : r.term.rejected_at === null,
-      )
+      .filter((r) => (decision === 'restore' ? r.term.rejected_at !== null : r.term.rejected_at === null))
       .map((r) => r.term.term_id)
     if (ids.length) onBulk?.(ids, decision)
   }
@@ -236,8 +220,8 @@ export function GazetteerQueue({
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Gazetteer approvals">
-        Terms the crawl proposed by reading acronym definitions out of documents. An approved term
-        takes precedence over the statistical model wherever it matches, so it is worth being sure.
+        Terms the crawl proposed by reading acronym definitions out of documents. An approved term takes precedence over
+        the statistical model wherever it matches, so it is worth being sure.
       </PageHeader>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -275,8 +259,8 @@ export function GazetteerQueue({
 
       {rows.length === 0 ? (
         <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
-          Nothing here. The harvest files terms as it reads documents, so an empty queue means every
-          definition found so far has been decided.
+          Nothing here. The harvest files terms as it reads documents, so an empty queue means every definition found so
+          far has been decided.
         </p>
       ) : (
         <>
@@ -332,9 +316,7 @@ export function GazetteerQueue({
                     aria-label="Select every term on this page"
                     checked={allChosen}
                     disabled={bulkBusy}
-                    onChange={() =>
-                      setSelected(allChosen ? new Set() : new Set(rows.map((r) => r.term.term_id)))
-                    }
+                    onChange={() => setSelected(allChosen ? new Set() : new Set(rows.map((r) => r.term.term_id)))}
                   />
                 </th>
                 <th className={TH}>Term</th>
@@ -389,9 +371,7 @@ export function GazetteerQueue({
                         <select
                           value={row.term.entity_type}
                           disabled={rowBusy}
-                          onChange={(event) =>
-                            onEdit?.(id, event.target.value as GazetteerEntityType)
-                          }
+                          onChange={(event) => onEdit?.(id, event.target.value as GazetteerEntityType)}
                           className="h-[24px] border border-line-strong bg-surface px-1.5 font-mono text-[11px] text-text"
                         >
                           {ENTITY_TYPES.map((type) => (

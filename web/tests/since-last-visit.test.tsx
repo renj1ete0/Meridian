@@ -14,7 +14,10 @@ import { SinceLastVisit } from '../src/explore/SinceLastVisit'
 import { markVisited, openSession, readLastVisit } from '../src/lib/lastVisit'
 
 function text(markup: string): string {
-  return markup.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  return markup
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 describe('three states, not two', () => {
@@ -26,16 +29,12 @@ describe('three states, not two', () => {
 
   it('says so explicitly when nothing arrived', () => {
     // A silent panel here reads as a page that failed to load its delta.
-    const rendered = text(
-      renderToStaticMarkup(<SinceLastVisit newSources={0} newChunks={0} />),
-    )
+    const rendered = text(renderToStaticMarkup(<SinceLastVisit newSources={0} newChunks={0} />))
     expect(rendered).toBe('Nothing new since you were last here.')
   })
 
   it('reports the delta when there is one', () => {
-    const rendered = text(
-      renderToStaticMarkup(<SinceLastVisit newSources={12} newChunks={340} />),
-    )
+    const rendered = text(renderToStaticMarkup(<SinceLastVisit newSources={12} newChunks={340} />))
     expect(rendered).toContain('12 sources and 340 passages')
   })
 

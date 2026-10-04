@@ -85,17 +85,13 @@ export function RunsPanel({ rows, total, active }: RunsPanelProps) {
               <Fragment key={row.run_id}>
                 <tr className={ROW} data-run={row.run_id}>
                   <td className={TDM}>{row.run_id}</td>
-                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>
-                    {stamp(row.started_at)}
-                  </td>
+                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>{stamp(row.started_at)}</td>
                   <td className={TD}>
                     <span className="font-mono text-[11.5px] text-text">
                       {row.status}
                       {row.stage ? ` · ${row.stage}` : ''}
                     </span>
-                    <div className="text-[11.5px] text-text-faint">
-                      {STATUS_NOTES[row.status] ?? ''}
-                    </div>
+                    <div className="text-[11.5px] text-text-faint">{STATUS_NOTES[row.status] ?? ''}</div>
                   </td>
                   <td className={`${TDM} whitespace-nowrap`}>{written(row)}</td>
                   <td className={`${TDM} whitespace-nowrap text-text-muted`}>{spent(row)}</td>

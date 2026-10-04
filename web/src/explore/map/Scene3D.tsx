@@ -131,7 +131,16 @@ export function Scene3D({
   const [size, setSize] = useState({ width: 0, height: 0 })
 
   // What the render loop reads without re-subscribing on every render.
-  const state = useRef({ positions, visible, points, onOpen, hovered: -1, cursor: null as [number, number] | null, dirty: true, dragging: false })
+  const state = useRef({
+    positions,
+    visible,
+    points,
+    onOpen,
+    hovered: -1,
+    cursor: null as [number, number] | null,
+    dirty: true,
+    dragging: false,
+  })
   state.current.positions = positions
   state.current.visible = visible
   state.current.points = points

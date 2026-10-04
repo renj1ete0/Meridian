@@ -50,29 +50,22 @@ export interface ProposalsPanelProps {
   onReject?: (proposalId: number, reason: string | null) => void
 }
 
-export function ProposalsPanel({
-  proposals,
-  busy = null,
-  now = new Date(),
-  onAccept,
-  onReject,
-}: ProposalsPanelProps) {
+export function ProposalsPanel({ proposals, busy = null, now = new Date(), onAccept, onReject }: ProposalsPanelProps) {
   const { pending, recent, window_hours: windowHours } = proposals
   return (
     <section className="flex flex-col gap-6">
       <PageHeader title="Proposals">
-        Changes the crawl proposes to its own steering, from a day of new sources and fetches
-        against each topic’s weight. Each applies by itself {windowHours} hours after it is
-        proposed unless you reject it; Accept applies it now. Pinned topics, and topics changed in
-        the last day, are never proposed for.
+        Changes the crawl proposes to its own steering, from a day of new sources and fetches against each topic’s
+        weight. Each applies by itself {windowHours} hours after it is proposed unless you reject it; Accept applies it
+        now. Pinned topics, and topics changed in the last day, are never proposed for.
       </PageHeader>
 
       <div className="flex flex-col gap-3">
         <SubHeading>Waiting ({pending.length})</SubHeading>
         {pending.length === 0 ? (
           <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
-            Nothing is waiting. The pass runs hourly; a proposal appears here when a topic’s share
-            of new sources falls well under its weight, or runs well over it.
+            Nothing is waiting. The pass runs hourly; a proposal appears here when a topic’s share of new sources falls
+            well under its weight, or runs well over it.
           </p>
         ) : (
           pending.map((p) => (
@@ -107,9 +100,7 @@ export function ProposalsPanel({
             <tbody>
               {recent.map((p) => (
                 <tr key={p.proposal_id} className={ROW} data-proposal={p.proposal_id}>
-                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>
-                    {stamp(p.decided_at ?? p.created_at)}
-                  </td>
+                  <td className={`${TDM} whitespace-nowrap text-text-muted`}>{stamp(p.decided_at ?? p.created_at)}</td>
                   <td className={`${TD} whitespace-nowrap`}>{p.topic}</td>
                   <td className={`${TDM} whitespace-nowrap`}>{changeLine(p)}</td>
                   {/* A floor on its width: in a narrow window the table scrolls
@@ -158,9 +149,7 @@ function PendingCard({
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
           <h3 className="flex items-baseline gap-2.5 text-[14px] font-semibold text-text">
             {p.topic}
-            <span className="font-mono text-[12px] font-normal text-accent-graph">
-              {changeLine(p)}
-            </span>
+            <span className="font-mono text-[12px] font-normal text-accent-graph">{changeLine(p)}</span>
           </h3>
           <p className="font-mono text-[11px] text-text-muted">
             Applies automatically at <span className="text-text">{zoned(p.apply_after)}</span> ·{' '}
@@ -218,20 +207,10 @@ function PendingCard({
           </form>
         ) : (
           <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
-            <button
-              type="button"
-              className={BUTTON_PRIMARY}
-              disabled={busy}
-              onClick={() => onAccept?.(p.proposal_id)}
-            >
+            <button type="button" className={BUTTON_PRIMARY} disabled={busy} onClick={() => onAccept?.(p.proposal_id)}>
               Accept now
             </button>
-            <button
-              type="button"
-              className={BUTTON_SECONDARY}
-              disabled={busy}
-              onClick={() => setRejecting(true)}
-            >
+            <button type="button" className={BUTTON_SECONDARY} disabled={busy} onClick={() => setRejecting(true)}>
               Reject…
             </button>
             <span className="ml-auto font-mono text-[10.5px] text-text-faint">

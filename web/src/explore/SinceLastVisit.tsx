@@ -48,10 +48,8 @@ export function SinceLastVisit({ newSources, newChunks, since = null, now }: Sin
 
   return (
     <p className="font-mono text-[11.5px] leading-[1.5] text-text-muted tabular-nums">
-      Since you were last here{when} —{' '}
-      <span className="text-text">{newSources.toLocaleString('en')}</span>{' '}
-      {newSources === 1 ? 'source' : 'sources'} and{' '}
-      <span className="text-text">{newChunks.toLocaleString('en')}</span>{' '}
+      Since you were last here{when} — <span className="text-text">{newSources.toLocaleString('en')}</span>{' '}
+      {newSources === 1 ? 'source' : 'sources'} and <span className="text-text">{newChunks.toLocaleString('en')}</span>{' '}
       {newChunks === 1 ? 'passage' : 'passages'}.
     </p>
   )

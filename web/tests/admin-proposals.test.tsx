@@ -140,9 +140,9 @@ describe('the client matches the server', () => {
 describe('what a proposal says', () => {
   it('names the change in one line', () => {
     expect(changeLine(proposal())).toBe('boost ×1.5 for 24 h')
-    expect(
-      changeLine(proposal({ kind: 'weight', current_value: 0.3333, proposed_value: 0.2833, evidence: {} })),
-    ).toBe('weight 0.33 → 0.28')
+    expect(changeLine(proposal({ kind: 'weight', current_value: 0.3333, proposed_value: 0.2833, evidence: {} }))).toBe(
+      'weight 0.33 → 0.28',
+    )
   })
 
   it('prints the evidence it knows, in order, and nothing it does not', () => {
@@ -171,14 +171,10 @@ describe('what a proposal says', () => {
   })
 
   it('tells an auto-applied proposal from an accepted one', () => {
-    expect(outcomeLine(proposal({ status: 'applied', decided_by: 'proposal' }))).toBe(
-      'Applied with no objection',
-    )
+    expect(outcomeLine(proposal({ status: 'applied', decided_by: 'proposal' }))).toBe('Applied with no objection')
     expect(outcomeLine(proposal({ status: 'applied', decided_by: 'user' }))).toBe('Accepted by user')
     expect(outcomeLine(proposal({ status: 'rejected', note: 'not now' }))).toBe('Rejected: not now')
-    expect(outcomeLine(proposal({ status: 'superseded', note: 'robotics is paused now' }))).toContain(
-      'paused',
-    )
+    expect(outcomeLine(proposal({ status: 'superseded', note: 'robotics is paused now' }))).toContain('paused')
   })
 
   it('shows a rejection in the audit rail as a rejection, not an arrow', () => {
@@ -255,9 +251,7 @@ describe('the panel', () => {
 
   it('disables the buttons of the proposal being decided', () => {
     render(<ProposalsPanel proposals={list()} now={NOW} busy={7} />)
-    expect((screen.getByRole('button', { name: 'Accept now' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    )
+    expect((screen.getByRole('button', { name: 'Accept now' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('lists recent decisions with their outcome in words and in form', () => {
@@ -265,9 +259,7 @@ describe('the panel', () => {
       <ProposalsPanel
         proposals={list({
           pending: [],
-          recent: [
-            proposal({ status: 'failed', note: 'outside bounds', decided_at: '2026-09-24T10:00:00Z' }),
-          ],
+          recent: [proposal({ status: 'failed', note: 'outside bounds', decided_at: '2026-09-24T10:00:00Z' })],
         })}
         now={NOW}
       />,
@@ -311,9 +303,7 @@ function stubApi(refuse = false) {
       }
       if (url.includes('/api/admin/proposals'))
         return json(
-          decided
-            ? list({ pending: [], recent: [proposal({ status: 'applied', decided_by: 'user' })] })
-            : list(),
+          decided ? list({ pending: [], recent: [proposal({ status: 'applied', decided_by: 'user' })] }) : list(),
         )
       return json({})
     }),

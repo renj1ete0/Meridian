@@ -76,7 +76,10 @@ export function CorpusCounts({ counts }: CorpusCountsProps) {
             >
               {figure(counts?.[key])}
               {contested ? (
-                <sup className="relative -top-[7px] ml-px align-baseline text-[17px] leading-none" aria-label="contested">
+                <sup
+                  className="relative -top-[7px] ml-px align-baseline text-[17px] leading-none"
+                  aria-label="contested"
+                >
                   {DAGGER}
                 </sup>
               ) : null}

@@ -14,14 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, sectionOf } from '../src/App'
 import { focusSearch, isCommandK, SEARCH_INPUT_ID } from '../src/lib/hotkeys'
 import { parseRoute } from '../src/lib/route'
-import {
-  bellState,
-  readSeenAt,
-  runHealth,
-  statusDetail,
-  statusLine,
-  type RunHistory,
-} from '../src/lib/status'
+import { bellState, readSeenAt, runHealth, statusDetail, statusLine, type RunHistory } from '../src/lib/status'
 import { NAV, TopBar, type ClusterData } from '../src/ui/TopBar'
 import type { CrawlProgress, Notification, RunRow } from '../src/lib/api'
 
@@ -343,7 +336,10 @@ describe('the shell, assembled', () => {
   beforeEach(() => {
     // Every read stays pending: these tests are about the shell, and a page
     // that never finishes loading is the most neutral thing to sit inside it.
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    )
   })
 
   it('works from any page: ⌘K on Admin lands in the Explore search field', async () => {

@@ -62,15 +62,10 @@ export function Icon({ name, size = LIVE_INTERFACE, title, className }: IconProp
       focusable="false"
     >
       {title ? <title>{title}</title> : null}
-      {geometry.tint ? (
-        <path d={geometry.tint} fill="currentColor" stroke="none" opacity={TINT_OPACITY} />
-      ) : null}
+      {geometry.tint ? <path d={geometry.tint} fill="currentColor" stroke="none" opacity={TINT_OPACITY} /> : null}
       {/* §7: node-type glyphs are drawn at the secondary weight throughout —
           they sit beside text at node scale and must not outweigh it. */}
-      <path
-        d={geometry.silhouette}
-        strokeWidth={isNodeGlyph(String(name)) ? STROKE_DETAIL : STROKE_SILHOUETTE}
-      />
+      <path d={geometry.silhouette} strokeWidth={isNodeGlyph(String(name)) ? STROKE_DETAIL : STROKE_SILHOUETTE} />
       {showDetail ? <path d={geometry.detail} strokeWidth={STROKE_DETAIL} /> : null}
       {geometry.solid ? <path d={geometry.solid} fill="currentColor" stroke="none" /> : null}
     </svg>

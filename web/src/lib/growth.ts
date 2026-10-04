@@ -5,8 +5,7 @@
 import { request } from './api'
 
 /** True only when A and B are the same type, invariantly. */
-type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 
 /** Fails to compile unless its argument is exactly `true`. */
 type Expect<T extends true> = T
@@ -96,11 +95,7 @@ export const GROWTH_FIELDS = [
 export type AssertGrowth = Expect<Equal<keyof Growth, (typeof GROWTH_FIELDS)[number]>>
 
 /** Fetch one window, narrowed to `topics` when any are given. */
-export function fetchGrowth(
-  range: GrowthRange,
-  topics: readonly string[],
-  init?: RequestInit,
-): Promise<Growth> {
+export function fetchGrowth(range: GrowthRange, topics: readonly string[], init?: RequestInit): Promise<Growth> {
   const params = new URLSearchParams({ range })
   for (const topic of topics) params.append('topic', topic)
   return request<Growth>(`/api/explore/growth?${params}`, init)

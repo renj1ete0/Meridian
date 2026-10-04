@@ -52,28 +52,15 @@ export interface NoteComposerProps {
 }
 
 /** What the note will carry, as a sentence rather than a count of ids. */
-export function describeAttachment(
-  about: readonly AnnotationTarget[],
-  citing: readonly number[],
-): string {
+export function describeAttachment(about: readonly AnnotationTarget[], citing: readonly number[]): string {
   const targets =
-    about.length === 0
-      ? 'Attached to nothing yet'
-      : `About ${about.map((t) => t.canonical_name).join(', ')}`
+    about.length === 0 ? 'Attached to nothing yet' : `About ${about.map((t) => t.canonical_name).join(', ')}`
   const cited =
-    citing.length === 0
-      ? 'citing no passage'
-      : `citing ${citing.length} passage${citing.length === 1 ? '' : 's'}`
+    citing.length === 0 ? 'citing no passage' : `citing ${citing.length} passage${citing.length === 1 ? '' : 's'}`
   return `${targets}, ${cited}.`
 }
 
-export function NoteComposer({
-  about = [],
-  citing = [],
-  busy = false,
-  error = null,
-  onWrite,
-}: NoteComposerProps) {
+export function NoteComposer({ about = [], citing = [], busy = false, error = null, onWrite }: NoteComposerProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -129,9 +116,7 @@ export function NoteComposer({
         />
       </label>
 
-      <p className="font-mono text-[10.5px] text-text-faint">
-        {describeAttachment(about, citing)}
-      </p>
+      <p className="font-mono text-[10.5px] text-text-faint">{describeAttachment(about, citing)}</p>
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={busy || !title.trim()} className={CONTROL}>
@@ -166,8 +151,7 @@ export function NoteList({ notes, inContextOf }: NoteListProps) {
   if (notes.length === 0) {
     return (
       <p className="mt-2 text-[length:var(--text-small)] text-text-muted">
-        Nothing written here yet. Notes are the one layer in this corpus that cannot be re-derived
-        by crawling again.
+        Nothing written here yet. Notes are the one layer in this corpus that cannot be re-derived by crawling again.
       </p>
     )
   }
@@ -188,7 +172,7 @@ export function NoteList({ notes, inContextOf }: NoteListProps) {
               {/* Written, not created. A note rewritten this morning is a note
                   the reader touched this morning, whatever month the row
                   appeared in. */}
-              <DataChip>written {dayOf((note.produced_at ?? note.created_at))}</DataChip>
+              <DataChip>written {dayOf(note.produced_at ?? note.created_at)}</DataChip>
               {note.supporting_chunk_ids.length > 0 ? (
                 <DataChip>
                   {note.supporting_chunk_ids.length} passage
@@ -253,9 +237,7 @@ export function NotesPanel({ notes, total }: NotesPanelProps) {
       <p className="font-mono text-[11.5px] leading-[1.5] text-text-muted">
         {total === 0
           ? 'Nothing yet. A note is the only thing here that cannot be recovered by crawling again.'
-          : `${total} note${total === 1 ? '' : 's'}${
-              notes.length < total ? `, ${notes.length} shown` : ''
-            }.`}
+          : `${total} note${total === 1 ? '' : 's'}${notes.length < total ? `, ${notes.length} shown` : ''}.`}
       </p>
 
       {notes.length > 0 ? <NoteList notes={notes} /> : null}

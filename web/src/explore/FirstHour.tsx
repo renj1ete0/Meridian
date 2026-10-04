@@ -48,25 +48,20 @@ export function FirstHour({ progress }: FirstHourProps) {
   const started = hasStarted(progress)
 
   return (
-    <section
-      className="flex flex-col gap-3 border border-line bg-surface p-5"
-      aria-labelledby="first-hour-heading"
-    >
+    <section className="flex flex-col gap-3 border border-line bg-surface p-5" aria-labelledby="first-hour-heading">
       <h2 id="first-hour-heading" className="font-sans text-[16px] font-semibold text-text">
         Nothing to search yet
       </h2>
 
       {started ? (
         <p className="text-[12.5px] leading-[1.55] text-text-muted">
-          The crawl is working through {pending.toLocaleString()} queued{' '}
-          {pending === 1 ? 'page' : 'pages'}. Documents become searchable as they
-          are fetched, extracted and chunked — the first ones usually within the
-          hour.
+          The crawl is working through {pending.toLocaleString()} queued {pending === 1 ? 'page' : 'pages'}. Documents
+          become searchable as they are fetched, extracted and chunked — the first ones usually within the hour.
         </p>
       ) : (
         <p className="text-[12.5px] leading-[1.55] text-text-muted">
-          The queue is empty and nothing has been attempted. Add a cold-start
-          seed in Admin, or the crawl has nowhere to begin.
+          The queue is empty and nothing has been attempted. Add a cold-start seed in Admin, or the crawl has nowhere to
+          begin.
         </p>
       )}
 
@@ -85,12 +80,9 @@ export function FirstHour({ progress }: FirstHourProps) {
 
       {progress.attempts_last_hour > 0 ? (
         <p className="font-mono text-[10.5px] leading-[1.5] text-text-faint">
-          {progress.successes_last_hour.toLocaleString()} of{' '}
-          {progress.attempts_last_hour.toLocaleString()} fetches succeeded in the
-          last hour.
-          {progress.successes_last_hour === 0
-            ? ' Every one failed — check Domains for what is being refused.'
-            : ''}
+          {progress.successes_last_hour.toLocaleString()} of {progress.attempts_last_hour.toLocaleString()} fetches
+          succeeded in the last hour.
+          {progress.successes_last_hour === 0 ? ' Every one failed — check Domains for what is being refused.' : ''}
         </p>
       ) : null}
 

@@ -24,8 +24,7 @@ import type { CitedTerm, Relation, SimilarBasis, SimilarTerm, Term, TermNeighbou
  */
 
 export interface NeighbourhoodPanelProps {
-  state:
-    { phase: 'loading' } | { phase: 'failed'; message: string } | { phase: 'done'; data: TermNeighbourhood }
+  state: { phase: 'loading' } | { phase: 'failed'; message: string } | { phase: 'done'; data: TermNeighbourhood }
   /** Chunk ids already on screen in the result list, so they are not repeated. */
   shownChunkIds?: ReadonlySet<number>
   /** The reader picked a node for a term that named none. */
@@ -74,10 +73,7 @@ export function arcPositions(
 }
 
 /** Where a node's label goes: outward from the centre, so labels do not cross spokes. */
-export function labelAt(
-  point: RingPoint,
-  gap = 9,
-): { x: number; y: number; anchor: 'start' | 'middle' | 'end' } {
+export function labelAt(point: RingPoint, gap = 9): { x: number; y: number; anchor: 'start' | 'middle' | 'end' } {
   const side = Math.sin((point.angle * Math.PI) / 180)
   if (side > 0.25) return { x: point.x + gap, y: point.y + 4, anchor: 'start' }
   if (side < -0.25) return { x: point.x - gap, y: point.y + 4, anchor: 'end' }
@@ -282,11 +278,7 @@ function RingDiagram({ data }: { data: TermNeighbourhood }) {
 
 function NodeLink({ term, className }: { term: Term; className: string }) {
   return (
-    <a
-      href={hrefForNode(term.entity_id)}
-      onClick={onInternalClick(hrefForNode(term.entity_id))}
-      className={className}
-    >
+    <a href={hrefForNode(term.entity_id)} onClick={onInternalClick(hrefForNode(term.entity_id))} className={className}>
       {term.canonical_name}
     </a>
   )
@@ -341,10 +333,7 @@ function SimilarList({ similar, total }: { similar: SimilarTerm[]; total: number
           className="flex items-baseline justify-between gap-3 border-t border-line py-1.5"
           style={DASHED}
         >
-          <NodeLink
-            term={term}
-            className="min-w-0 text-[13px] leading-snug text-text-muted hover:text-accent-graph"
-          />
+          <NodeLink term={term} className="min-w-0 text-[13px] leading-snug text-text-muted hover:text-accent-graph" />
           <span className={`${META} shrink-0 tabular-nums`}>{term.similarity.toFixed(2)}</span>
         </li>
       ))}
@@ -366,12 +355,8 @@ export function NeighbourhoodPanel({ state, shownChunkIds, onPick }: Neighbourho
     >
       <span className={LABEL}>Neighbourhood</span>
       {state.phase === 'loading' ? <p className={META}>Reading the neighbourhood.</p> : null}
-      {state.phase === 'failed' ? (
-        <p className="text-[13px] leading-[1.55] text-text-muted">{state.message}</p>
-      ) : null}
-      {state.phase === 'done' ? (
-        <Body data={state.data} shownChunkIds={shownChunkIds} onPick={onPick} />
-      ) : null}
+      {state.phase === 'failed' ? <p className="text-[13px] leading-[1.55] text-text-muted">{state.message}</p> : null}
+      {state.phase === 'done' ? <Body data={state.data} shownChunkIds={shownChunkIds} onPick={onPick} /> : null}
     </aside>
   )
 }
@@ -453,9 +438,7 @@ function Body({
           Near in meaning, no stated link
           {data.similar_total > 0 ? ` · ${data.similar_total}` : ''}
         </h3>
-        {measured && data.similar.length > 0 ? (
-          <SimilarList similar={data.similar} total={data.similar_total} />
-        ) : null}
+        {measured && data.similar.length > 0 ? <SimilarList similar={data.similar} total={data.similar_total} /> : null}
         {measured && data.similar.length === 0 ? (
           <p className="text-[13px] leading-[1.55] text-text-muted">
             No node reads alike above {data.similar_floor.toFixed(2)}.
@@ -469,11 +452,7 @@ function Body({
           <h3 className={LABEL}>Passages near in meaning, not in the results</h3>
           <ul className="flex flex-col">
             {passages.map(({ hit, similarity }) => (
-              <li
-                key={hit.chunk_id}
-                className="flex flex-col gap-1.5 border-t border-line py-2.5"
-                style={DASHED}
-              >
+              <li key={hit.chunk_id} className="flex flex-col gap-1.5 border-t border-line py-2.5" style={DASHED}>
                 <p className="line-clamp-3 text-[12.5px] italic leading-[1.55] text-text/85">{hit.text}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <TierChip tier={hit.source_tier} />

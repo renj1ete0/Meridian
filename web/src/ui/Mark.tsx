@@ -119,13 +119,7 @@ export function Mark({ size = 76, monochrome = false, title, className }: MarkPr
       {/* Strokes in `currentColor` so the mark inherits the theme's ink rather
           than carrying a colour of its own. §1's "single ink" rule is only true
           if there is one ink to begin with. */}
-      <circle
-        cx={g.globe.cx}
-        cy={g.globe.cy}
-        r={g.globe.r}
-        stroke="currentColor"
-        strokeWidth={g.globe.strokeWidth}
-      />
+      <circle cx={g.globe.cx} cy={g.globe.cy} r={g.globe.r} stroke="currentColor" strokeWidth={g.globe.strokeWidth} />
       <ellipse
         cx={g.meridian.cx}
         cy={g.meridian.cy}
@@ -135,12 +129,7 @@ export function Mark({ size = 76, monochrome = false, title, className }: MarkPr
         strokeWidth={g.meridian.strokeWidth}
       />
       {g.bearing ? (
-        <path
-          d={g.bearing.d}
-          stroke="currentColor"
-          strokeWidth={g.bearing.strokeWidth}
-          strokeLinecap="round"
-        />
+        <path d={g.bearing.d} stroke="currentColor" strokeWidth={g.bearing.strokeWidth} strokeLinecap="round" />
       ) : null}
       {g.bearingNode ? (
         <circle cx={g.bearingNode.cx} cy={g.bearingNode.cy} r={g.bearingNode.r} fill="currentColor" />
@@ -214,15 +203,10 @@ export function Lockup({
         aria-label={WORDMARK}
       >
         {mark}
-        <span
-          className="font-sans font-medium tracking-[-0.006em]"
-          style={{ fontSize: wordmark }}
-        >
+        <span className="font-sans font-medium tracking-[-0.006em]" style={{ fontSize: wordmark }}>
           {WORDMARK}
         </span>
-        <span className="font-mono text-[8.5px] uppercase tracking-[0.19em] text-text-muted">
-          {DESCRIPTOR}
-        </span>
+        <span className="font-mono text-[8.5px] uppercase tracking-[0.19em] text-text-muted">{DESCRIPTOR}</span>
       </span>
     )
   }
@@ -251,10 +235,7 @@ export function Lockup({
         data-role="hairline"
       />
       <span className="inline-block" style={{ width: gap }} />
-      <span
-        className="font-sans font-medium leading-none tracking-[-0.006em]"
-        style={{ fontSize: wordmark }}
-      >
+      <span className="font-sans font-medium leading-none tracking-[-0.006em]" style={{ fontSize: wordmark }}>
         {WORDMARK}
       </span>
     </span>

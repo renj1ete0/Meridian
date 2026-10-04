@@ -17,8 +17,7 @@ import { stampOf } from '../lib/time'
  */
 
 /** Mono label: 9–10px, 0.15em, uppercase — §3's only use of caps. */
-export const LABEL =
-  'font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint'
+export const LABEL = 'font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint'
 
 /** Table head cell. A step smaller than a label, as the mock sets it. */
 export const TH =
@@ -26,13 +25,11 @@ export const TH =
   'tracking-[var(--tracking-label)] text-text-faint first:pl-[18px] last:pr-[18px]'
 
 /** Table body cell, reader's text. */
-export const TD =
-  'px-3 py-2.5 align-baseline text-[12.5px] text-text first:pl-[18px] last:pr-[18px]'
+export const TD = 'px-3 py-2.5 align-baseline text-[12.5px] text-text first:pl-[18px] last:pr-[18px]'
 
 /** Table body cell, measured data. */
 export const TDM =
-  'px-3 py-2.5 align-baseline font-mono text-[11.5px] tabular-nums text-text ' +
-  'first:pl-[18px] last:pr-[18px]'
+  'px-3 py-2.5 align-baseline font-mono text-[11.5px] tabular-nums text-text ' + 'first:pl-[18px] last:pr-[18px]'
 
 /** A row rule inside a card: lighter than the card's own edge, as in the mock. */
 export const ROW = 'border-t border-line/60'
@@ -66,24 +63,14 @@ export const FIELD =
   'h-[34px] border border-line-strong bg-surface px-[11px] text-[13px] text-text ' +
   'placeholder:text-text-faint disabled:opacity-60'
 
-export function PageHeader({
-  title,
-  children,
-  actions,
-}: {
-  title: string
-  children?: ReactNode
-  actions?: ReactNode
-}) {
+export function PageHeader({ title, children, actions }: { title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-6">
       <div className="flex min-w-0 flex-col gap-1.5">
         <h1 className="text-[25px] font-semibold leading-[1.15] tracking-[var(--tracking-display)] text-text">
           {title}
         </h1>
-        {children ? (
-          <div className="max-w-[74ch] text-[13px] leading-[1.55] text-text-muted">{children}</div>
-        ) : null}
+        {children ? <div className="max-w-[74ch] text-[13px] leading-[1.55] text-text-muted">{children}</div> : null}
       </div>
       {actions ? <div className="flex shrink-0 gap-2">{actions}</div> : null}
     </header>
@@ -118,13 +105,7 @@ export function SubHeading({ children, action }: { children: ReactNode; action?:
  * A state badge. Bordered mono caps, because §5 puts state in form and not only
  * in colour — a Paused row must read as paused with the colour stripped.
  */
-export function Badge({
-  children,
-  tone = 'plain',
-}: {
-  children: ReactNode
-  tone?: 'plain' | 'attention'
-}) {
+export function Badge({ children, tone = 'plain' }: { children: ReactNode; tone?: 'plain' | 'attention' }) {
   const colour =
     tone === 'attention'
       ? 'border-accent-attention/50 bg-accent-attention/10 text-accent-attention'
