@@ -1,36 +1,8 @@
-"""Hybrid retrieval (task P2-06, spec §12.5).
+"""Hybrid retrieval: lexical and vector arms fused by reciprocal rank (task P2-06, §12.5).
 
-§12.5 asks for one sentence's worth of behaviour — "hybrid search (pgvector +
-``tsvector``, fused by reciprocal rank), with filters applied *before* the
-vector search" — and three decisions hide in it.
-
-**Filters go inside both arms, not after them.** The anti-pattern is to take the
-top 50 by vector distance, drop the ones that fail the filter, and return the
-eleven that survive. That is not a filtered search, it is an unfiltered search
-with holes in it, and the holes are invisible: asking for twenty government
-sources and receiving four reads as a thin corpus rather than as a bug. So the
-filter is a predicate in both arm queries, and :func:`_conditions` is the single
-place it is expressed — two copies would eventually disagree, and the arm that
-drifted would quietly widen the result set.
-
-**Reciprocal rank, not score fusion.** The two arms produce numbers that are not
-comparable: ``ts_rank_cd`` is unbounded and depends on document length, cosine
-distance is 0..2. Normalising either into the other's range requires knowing the
-distribution, which changes as the corpus grows. RRF needs only the ordering,
-which is the part both arms agree is meaningful.
-
-**A missing arm is reported, not hidden.** Retrieval with no query vector is
-lexical-only — a legitimate degraded mode, since the embedder is a separate
-pass (`P2-01`) and a chunk can exist for hours before it has a vector. But a
-caller that believes it ran a hybrid search and actually ran half of one will
-conclude the wrong thing about the corpus, so :class:`SearchResult` says which
-arms ran and why one did not.
-
-**Near-duplicates are excluded by default and counted anyway.** That is what the
-novelty gate's verdict is *for* (`P2-03`). ``duplicate_of`` rides on every hit
-so a surface can say why something is missing — §12.5's point that a filtered
-near-duplicate and a never-crawled page are indistinguishable otherwise, and
-only one of them is worth investigating.
+Filters are one predicate (`_conditions`) applied inside both arms. A missing arm is
+reported on the result, and near-duplicates are excluded by default but counted. See
+docs/features/search.md for the design and its reasons.
 """
 
 from __future__ import annotations

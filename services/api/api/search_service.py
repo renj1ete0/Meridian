@@ -1,45 +1,8 @@
-"""Paging and honesty over `meridian_core.search` (task P2-07, spec §12.5).
+"""Paging and degraded-mode reporting over `meridian_core.search` (task P2-07, §12.5).
 
-Two things the library deliberately does not do, because they are boundary
-concerns rather than retrieval ones.
-
-## The vector arm does not run, and the response says so
-
-`meridian_core.search` takes its query vector from the caller so that importing
-it does not drag 2.3GB of model weights into every process that wants to read
-the corpus. That leaves the API with a decision, and this module is where it is
-made: **this service has no embedder, so search here is lexical-only.**
-
-Three options were on the table.
-
-*Depend on `sentence-transformers`.* Rejected. It makes the API image
-gigabytes, adds tens of seconds to cold start, and puts a model in the request
-path of a service whose job is answering HTTP in milliseconds. `P2-01` already
-established that embedding is a separate pass for exactly these reasons.
-
-*Accept a client-supplied vector.* Rejected, and not only on taste. A 1024-float
-array is unwieldy on a GET, and accepting one on an unauthenticated read
-endpoint means accepting arbitrary attacker-chosen vectors into a pgvector
-distance operator. Nothing needs it: the frontend has no embedder either.
-
-*Call an embedding sidecar over HTTP.* This is the right answer and it is not
-built. It is the pattern `crawl4ai` and `searxng` already follow — a service on
-`egress`, a client that returns None when its URL is unset, and a word on the
-health line. When that exists, :func:`embed_query` is the seam it plugs into
-and nothing else in this module changes.
-
-Until then every response carries ``degraded: true`` and a reason. §12.5 asks
-for hybrid search; a response that quietly delivered half of one and said
-nothing would make the corpus look thinner than it is, and the reader would
-conclude something false about the corpus rather than about the API.
-
-## Paging a fused ranking is not paging a table
-
-RRF can only order what the two arms handed it. A hit beyond the candidate pool
-was never a candidate, so an offset past the pool is not "later results", it is
-a different question nobody asked. :func:`paged_search` therefore refuses a
-window that reaches past the pool rather than returning an empty page that looks
-like the end of the results.
+The query vector comes from the embedding service (`P2-17`); without one, search is
+lexical-only and every response says so. A page past the candidate pool is refused rather
+than returned empty. See docs/features/search.md.
 """
 
 from __future__ import annotations

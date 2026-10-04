@@ -1589,7 +1589,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       scheduled jobs and commands; the how-to guides moved to `docs/guides/` and the licence
       audit to `docs/reference/`. Writing them found: the MCP grant profiles name three tools
       the server lacks and miss two it has (`B-138`); `search_service.py` still said the vector
-      arm was unbuilt, two years of features after it was (fixed under `D-01`); and the `B-127`
+      arm was unbuilt, long after `P2-17` built it (fixed under `D-01`); and the `B-127`
       reasoning about the translation rule was wrong (corrected)
 - [ ] `D-01` **Move narrative comments into the docs** — the convention since 2026-10-04
       (AGENTS.md "Code and comment standards"): docstrings and comments stay short, and the

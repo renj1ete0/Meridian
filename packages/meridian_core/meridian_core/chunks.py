@@ -337,8 +337,8 @@ def _a_copy():
     Search, the map, Gaps and synthesis all leave a copy out, so a vector for
     the rest of one is spent on nothing a reader sees (`B-127`). Last rather
     than no tier: the mark is re-judged daily and cleared when it no longer
-    holds, and the near and translation rules compare mean vectors, so a copy
-    is never kept from the embedder for good.
+    holds, and the near rule compares mean vectors. See
+    docs/features/duplicates.md.
     """
     return Source.duplicate_of.is_not(None)
 
