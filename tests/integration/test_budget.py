@@ -319,14 +319,18 @@ async def test_the_screen_and_the_refusal_agree(clean) -> None:
     would eventually show a green light for a run the server refuses."""
     from api.routes.admin import _budget_read
 
+    # The screen reads the real clock, so the run is placed now and the refusal
+    # asked at the same instant. At the file's fixed NOW this went red on the
+    # first day of the next month, with nothing changed (the `P5-09` trap).
+    now = dt.datetime.now(dt.UTC)
     await a_budget(clean, ceiling=10.0)
-    await a_run(clean, cost=10.0, status="done")
+    await a_run(clean, cost=10.0, status="done", started_at=now)
 
     view = await _budget_read(clean)
 
     assert view.ready is False
     with pytest.raises(BudgetError):
-        await check_can_start_run(clean, now=NOW)
+        await check_can_start_run(clean, now=now)
 
 
 async def test_a_complete_budget_with_room_is_ready(clean) -> None:

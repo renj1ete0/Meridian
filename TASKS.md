@@ -1572,6 +1572,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       denied". Only news engines answer. `B-107`/`B-108` stop us making it worse; recovery is
       the providers' timetable (SearXNG suspends a CAPTCHA'd engine for a day). Lasting fix is
       the operator's: a search API key (e.g. Brave Search API) as the §6.4 fallback path
+- [x] `B-128` **A budget test expired at the month's end** — test only. `_budget_read` (the
+      Admin screen) reads the real clock while the test placed its run at the file's fixed
+      `NOW` in mid-September, so on 1 October the run fell outside "this month" and the screen
+      said ready. The `P5-09` trap again; the test now places the run now and asks the refusal
+      at the same instant
 - [x] `B-127` **Copies were embedded like originals** — `v0.156.12`. The embedding tiers never
       read `sources.duplicate_of`, so a source `worker.docdupes` had marked as a copy was
       embedded in full and counted in the backlog that pauses the crawl, though search, the map,
