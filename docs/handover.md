@@ -13,6 +13,15 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-04 (night) — `v0.159.0`–`v0.162.0`.** Traps:
+> - **The `/mcp` route needs nginx, a published port and default auth URLs together**
+>   (`B-138`); missing any one gives a web page or a refused tool rather than an error.
+> - **Token setup is written for the address the browser is on** (`B-146`): open Admin on the
+>   address the assistant will use. The server cannot know its LAN or tunnel address.
+> - **Growth days are calendar dates, not instants**: format them with `shortDateOf`, never a
+>   converting formatter, or every label shifts a day west of the display zone.
+> - **The local DB lags the dev DB by migration `b140a0b1c2d3`**; upgrade before `make local-up`.
+
 > **2026-10-04 (late) — `v0.157.0`–`v0.158.0`.** Traps:
 > - **Passage vector queries must order by `vectorindex.indexed_distance`.** The index is on
 >   `embedding::halfvec(1024)`; ordering by the plain column silently becomes a full scan. A
