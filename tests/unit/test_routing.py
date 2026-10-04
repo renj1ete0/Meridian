@@ -311,3 +311,86 @@ def test_an_unrecorded_context_window_is_fine_when_nothing_asked() -> None:
     # agents on a column nobody filled in.
     assert eligible(agent("a", max_context=None), "drafting")
     assert len(resolve_chain([agent("a", max_context=None)], "drafting")) == 1
+
+
+# --------------------------------------------------------------------------
+# An explicit order (`B-137`, ADR 0002)
+# --------------------------------------------------------------------------
+
+
+def test_an_explicit_order_beats_quality() -> None:
+    """Local first, though the hosted row is stronger: cost order is the operator's choice."""
+    chain = resolve_chain(
+        [
+            agent("frontier", quality_tier=4, route_order=30),
+            agent("local", quality_tier=2, route_order=10),
+        ],
+        "drafting",
+    )
+    assert [a.agent_id for a in chain] == ["local", "frontier"]
+
+
+def test_rows_without_an_order_follow_every_row_with_one() -> None:
+    chain = resolve_chain(
+        [
+            agent("unordered", quality_tier=4),
+            agent("ordered", quality_tier=1, route_order=50),
+        ],
+        "drafting",
+    )
+    assert [a.agent_id for a in chain] == ["ordered", "unordered"]
+
+
+def test_with_an_order_a_fallback_pointer_does_not_reorder_the_list() -> None:
+    chain = resolve_chain(
+        [
+            agent("local", route_order=10, fallback_agent_id="last"),
+            agent("middle", route_order=20),
+            agent("last", route_order=30),
+        ],
+        "drafting",
+    )
+    assert [a.agent_id for a in chain] == ["local", "middle", "last"]
+
+
+def test_an_ordered_row_that_cannot_run_is_skipped_not_a_dead_end() -> None:
+    chain = resolve_chain(
+        [
+            agent("off", route_order=10, enabled=False),
+            agent("elsewhere", route_order=15, task_types=["chat"]),
+            agent("next", route_order=20),
+        ],
+        "drafting",
+    )
+    assert [a.agent_id for a in chain] == ["next"]
+
+
+def _seeded(enable_all: bool = True) -> list[Agent]:
+    rows = yaml.safe_load(REGISTRY.read_text())["agents"]
+    out = []
+    for row in rows:
+        fields = {k: v for k, v in row.items() if k in Agent.__table__.columns}
+        if enable_all:
+            fields["enabled"] = True
+        out.append(Agent(**fields))
+    return out
+
+
+def test_every_seeded_row_has_an_order() -> None:
+    """A seeded row without one would route by quality and jump the operator's order."""
+    assert all(a.route_order is not None for a in _seeded())
+
+
+def test_synthesis_tries_local_then_hosted_api_then_claude_then_the_relay() -> None:
+    providers = [a.provider for a in resolve_chain(_seeded(), "relation_extraction")]
+    assert providers[0] == "openai_compatible", "a local model first"
+    assert providers.index("anthropic") > 0
+    assert providers[-1] == "relay", "an attended session is the last resort"
+    by_id = [a.agent_id for a in resolve_chain(_seeded(), "relation_extraction")]
+    assert by_id.index("local-llamacpp") < by_id.index("hosted-compatible")
+
+
+def test_the_ask_panel_never_waits_on_the_relay() -> None:
+    chain = resolve_chain(_seeded(), "chat")
+    assert [a.agent_id for a in chain] == ["local-chat", "hosted-compatible"]
+    assert all(a.provider != "relay" for a in chain)

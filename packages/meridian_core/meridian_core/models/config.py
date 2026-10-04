@@ -355,6 +355,9 @@ class Agent(Base, TimestampMixin):
         default=False, server_default=text("false"), nullable=False
     )
     fallback_agent_id: Mapped[str | None] = mapped_column(Text)
+    #: Explicit place in the routing order, lowest first (`B-137`, ADR 0002). Rows without
+    #: one are ordered by quality tier after every row that has one.
+    route_order: Mapped[int | None] = mapped_column(Integer)
 
     endpoint: Mapped[str | None] = mapped_column(Text)
     health_url: Mapped[str | None] = mapped_column(Text)

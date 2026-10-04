@@ -30,6 +30,7 @@ function agent(over: Partial<AgentRow> = {}): AgentRow {
     availability: 'opportunistic',
     enabled: false,
     fallback_agent_id: null,
+    route_order: null,
     endpoint: '${LOCAL_CHAT_LLM_URL}',
     api_key_env_var: null,
     key_present: false,

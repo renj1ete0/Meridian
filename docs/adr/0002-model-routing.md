@@ -29,6 +29,11 @@ will be available, or only some of them.
 
 ## Consequences
 
+- Built in `B-137` (`v0.157.0`): `agents.route_order`, a seeded `hosted-compatible` row, and
+  the local row declaring relation extraction. The hosted Claude rows sit between the hosted
+  API and the relay (order 30), so a configured Claude key is used before an attended
+  session.
+
 - With no model configured, the stack still crawls, searches and maps. Synthesis waits,
   and the Ask panel says no model is available.
 - Every stage writes the same provenance (agent, model, quality tier), so the graph records

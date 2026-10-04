@@ -130,8 +130,11 @@ def eligible(agent: Agent, task_type: str, *, min_context: int | None = None) ->
     return min_context is None or (agent.max_context or 0) >= min_context
 
 
-def _preference(agent: Agent, task_type: str) -> tuple[int, int, str]:
-    """Sort key: closest to the task's target tier, then stronger, then by name.
+def _preference(agent: Agent, task_type: str) -> tuple[bool, int, int, int, str]:
+    """Sort key: explicit route order first, then closest to the task's target tier.
+
+    Rows with a ``route_order`` come first, lowest first (`B-137`, ADR 0002); the rest follow
+    by tier, as below.
 
     Distance rather than maximum, because §11.3 aims most tasks at a tier
     rather than at the top of the scale. Ties go to the *stronger* agent: both
@@ -145,7 +148,14 @@ def _preference(agent: Agent, task_type: str) -> tuple[int, int, str]:
     route that varied would make a disagreement between runs unattributable.
     """
     tier = agent.quality_tier or 0
-    return (abs(tier - TARGET_TIER[task_type]), -tier, agent.agent_id)
+    ordered = agent.route_order is not None
+    return (
+        not ordered,
+        agent.route_order if ordered else 0,
+        abs(tier - TARGET_TIER[task_type]),
+        -tier,
+        agent.agent_id,
+    )
 
 
 def resolve_chain(
@@ -173,6 +183,11 @@ def resolve_chain(
     )
     if not usable:
         return []
+
+    # An explicit order is the whole statement (ADR 0002): following a fallback pointer
+    # from the head would let one row's preference reorder the operator's list.
+    if usable[0].route_order is not None:
+        return usable
 
     chain = [usable[0]]
     in_chain = {usable[0].agent_id}

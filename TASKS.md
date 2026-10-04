@@ -1609,6 +1609,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       had 33 failures nobody saw, because nothing ran it; 26 files were also unformatted.
       Docstring summaries were reshaped to one line followed by a blank line; tests and
       migrations are exempt from the docstring rules
+- [x] `B-137` **Models tried in the operator's order** — `v0.157.0`,
+      [ADR 0002](docs/adr/0002-model-routing.md). `agents.route_order` (migration
+      `b137a11ce0de`): ordered rows first, lowest first, skipping what is disabled or does not
+      declare the task; unordered rows follow by the old tier rule, so a registry without
+      orders routes as before. Seeded order: local (10) → `hosted-compatible` (20, new,
+      `HOSTED_LLM_*`) → hosted Claude (30) → relay (40). The local row now declares relation
+      extraction. Tests read the seed and assert the ADR's order for synthesis and that the Ask
+      panel never reaches the relay. Two integration tests that encoded §11.3's quality-first
+      rule were rewritten to the decision
 - [ ] `B-136` ⚑ **Vector index at half precision** — proposal, not built. The HNSW index is
       5.8 GB on 868k passages (1024-dim float32) and grows with the corpus; it is most of what a
       semantic search reads. pgvector's `halfvec` expression index (`embedding::halfvec(1024)`)
@@ -1616,7 +1625,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       cast, so measure recall@k and latency against the current index with
       `make bench-search` before deciding. Worth it if the server cannot hold the index in
       `shared_buffers` (`B-132`)
-- [ ] `B-135` ⚑ **A model on the server, live or scheduled** — proposal. Two model paths exist
+- [ ] `B-135` **A model on the server, live or scheduled** — decided (ADR 0002); the order is
+      built (`B-137`). Remaining: run synthesis unattended once a stage is configured. Two model paths exist
       and neither has run. (a) **Live:** the Ask panel (`P6-06`/`P6-07`) calls `local-chat`
       (`${LOCAL_CHAT_LLM_URL}`), but in production the API has no route out, so the model
       server must be on `lan` with an nft rule. On one GPU server a model server (vLLM or

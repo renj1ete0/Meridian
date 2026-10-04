@@ -189,6 +189,7 @@ async def seed_agents(sess) -> tuple[int, int]:
                 max_context=row.get("max_context"),
                 enabled=row.get("enabled", False),
                 fallback_agent_id=row.get("fallback_agent_id"),
+                route_order=row.get("route_order"),
                 # Endpoints in the YAML are ${ENV_VAR} references. They are
                 # stored verbatim and resolved at call time — the registry holds
                 # the name of the variable, never a secret value (§11.11).

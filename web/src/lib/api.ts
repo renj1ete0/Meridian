@@ -1690,6 +1690,8 @@ export interface AgentRow {
   availability: string | null
   enabled: boolean
   fallback_agent_id: string | null
+  /** Explicit place in the routing order, lowest first; null routes by quality (`B-137`). */
+  route_order: number | null
   endpoint: string | null
   api_key_env_var: string | null
   key_present: boolean
@@ -1706,6 +1708,7 @@ export const AGENT_ROW_FIELDS = [
   'availability',
   'enabled',
   'fallback_agent_id',
+  'route_order',
   'endpoint',
   'api_key_env_var',
   'key_present',

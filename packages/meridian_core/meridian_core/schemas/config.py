@@ -152,6 +152,7 @@ class AgentCreate(CreateBase):
     max_context: int | None = None
     enabled: bool = False
     fallback_agent_id: str | None = None
+    route_order: int | None = Field(default=None, ge=0)
     endpoint: str | None = None
     health_url: str | None = None
     availability: AgentAvailability = "on_demand"
@@ -172,6 +173,7 @@ class AgentRead(BaseModel):
     max_context: int | None
     enabled: bool
     fallback_agent_id: str | None
+    route_order: int | None
     endpoint: str | None
     health_url: str | None
     availability: AgentAvailability

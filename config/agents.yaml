@@ -6,6 +6,10 @@
 # (§11.11): the database is snapshotted off-device, and a credential stored
 # here would travel with every snapshot.
 #
+# `route_order` is the order models are tried in, lowest first (ADR 0002): a local model,
+# then a hosted OpenAI-compatible API, then the hosted Claude rows, then the relay. A stage
+# that is disabled or not configured is skipped; when none answers, the run defers.
+#
 # Rows ship disabled. Set `enabled: true` once the key is in the environment —
 # and note that `local-llamacpp` still needs its model string filled in,
 # because which model a local server exposes is nobody else's business.
@@ -22,6 +26,7 @@ agents:
     max_context: 200000
     enabled: false
     fallback_agent_id: null
+    route_order: 30
     endpoint: null
     health_url: null
     availability: on_demand
@@ -38,6 +43,7 @@ agents:
     max_context: 200000
     enabled: false
     fallback_agent_id: hosted-frontier
+    route_order: 30
     endpoint: null
     health_url: null
     availability: on_demand
@@ -59,6 +65,7 @@ agents:
     max_context: 200000
     enabled: false
     fallback_agent_id: null
+    route_order: 40
     endpoint: null
     health_url: null
     availability: on_demand
@@ -67,13 +74,14 @@ agents:
   - agent_id: local-llamacpp
     provider: openai_compatible
     model: "<fill in — dedicated Meridian process, not the interactive one>"
-    task_types: [tag_attributes, translation, triage, extraction_fallback]
+    task_types: [relation_extraction, tag_attributes, translation, triage, extraction_fallback]
     token_scope: read_write
     cost_tier: free
     quality_tier: 2
     max_context: null
     enabled: false
     fallback_agent_id: hosted-mid
+    route_order: 10
     endpoint: "${LOCAL_LLM_URL}"
     health_url: "${LOCAL_LLM_HEALTH_URL}"
     availability: opportunistic
@@ -95,7 +103,28 @@ agents:
     max_context: null
     enabled: false
     fallback_agent_id: null
+    route_order: 10
     endpoint: "${LOCAL_CHAT_LLM_URL}"
     health_url: null
     availability: opportunistic
+    wake_mac: null
+
+  # A hosted OpenAI-compatible API (DeepSeek, OpenRouter, Together, …), named entirely by the
+  # environment so choosing a provider is an .env edit: HOSTED_LLM_URL (…/v1), HOSTED_LLM_MODEL,
+  # and HOSTED_LLM_API_KEY. Second in the order (ADR 0002), for synthesis and the Ask panel.
+  - agent_id: hosted-compatible
+    provider: openai_compatible
+    model: "${HOSTED_LLM_MODEL}"
+    api_key_env_var: HOSTED_LLM_API_KEY
+    task_types: [relation_extraction, tag_attributes, gap_analysis, analogical_expansion, drafting, chat]
+    token_scope: read_write
+    cost_tier: medium
+    quality_tier: 3
+    max_context: null
+    enabled: false
+    fallback_agent_id: null
+    route_order: 20
+    endpoint: "${HOSTED_LLM_URL}"
+    health_url: null
+    availability: on_demand
     wake_mac: null

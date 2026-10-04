@@ -48,6 +48,7 @@ function agent(over: Partial<AgentRow> = {}): AgentRow {
     availability: 'always',
     enabled: true,
     fallback_agent_id: null,
+    route_order: null,
     endpoint: null,
     api_key_env_var: 'ANTHROPIC_API_KEY',
     key_present: true,
@@ -211,5 +212,19 @@ describe('run history', () => {
     const markup = renderToStaticMarkup(<RunsPanel rows={[]} total={0} active={null} />)
 
     expect(text(markup)).toContain('daily after that')
+  })
+})
+
+describe('routing order (B-137)', () => {
+  it('shows a row its place in the order', () => {
+    const markup = renderToStaticMarkup(
+      <AgentsPanel rows={[agent({ agent_id: 'local-llamacpp', route_order: 10 })]} unserved={[]} />,
+    )
+    expect(text(markup)).toContain('tried 10')
+  })
+
+  it('says nothing about order for a row without one', () => {
+    const markup = renderToStaticMarkup(<AgentsPanel rows={[agent()]} unserved={[]} />)
+    expect(text(markup)).not.toContain('tried')
   })
 })

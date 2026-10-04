@@ -378,6 +378,7 @@ class AgentRowRead(BaseModel):
     availability: str | None
     enabled: bool
     fallback_agent_id: str | None
+    route_order: int | None
     endpoint: str | None
     api_key_env_var: str | None
     #: Whether the variable this row names is set where the API runs. Not

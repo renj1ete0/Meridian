@@ -23,7 +23,7 @@ from meridian_core import provider as provider_module
 from meridian_core.budget import BudgetError
 from meridian_core.models import Agent, Run
 from meridian_core.provider import ProviderError, complete
-from meridian_core.routing import NoAgentAvailable
+from meridian_core.routing import NoAgentAvailable, chain_for
 from meridian_core.runs import begin_or_resume, unfinished
 
 pytestmark = pytest.mark.usefixtures("require_db")
@@ -110,8 +110,9 @@ async def test_a_completion_carries_what_a_derived_write_must_record(registry, a
     )
 
     # §2.3 and §11.12: every derived write names the agent and the exact model.
-    assert result.agent_id == "hosted-frontier"
-    assert result.model == (await sess.get(Agent, "hosted-frontier")).model
+    first = (await chain_for(sess, "drafting"))[0]
+    assert result.agent_id == first.agent_id
+    assert result.model == first.model
     assert result.text == "an answer"
     assert result.total_tokens == 150
 
@@ -123,7 +124,7 @@ async def test_the_run_records_which_agent_answered(registry, answers) -> None:
 
     await complete(sess, run, "drafting", prompt="x", token_cap=100_000, now=NOW)
 
-    assert run.agent_id == "hosted-frontier"
+    assert run.agent_id == (await chain_for(sess, "drafting"))[0].agent_id
 
 
 # --------------------------------------------------------------------------
@@ -197,12 +198,14 @@ async def test_an_agent_that_will_not_answer_hands_on_to_the_next(registry, answ
     anyway; the next one is tried instead.
     """
     sess, run = registry
-    asked = answers(**{"hosted-mid": ProviderError("503"), "*": ("ok", 1, 1)})
+    first = (await chain_for(sess, "tag_attributes"))[0].agent_id
+    asked = answers(**{first: ProviderError("503"), "*": ("ok", 1, 1)})
 
     result = await complete(sess, run, "tag_attributes", prompt="x", token_cap=100_000, now=NOW)
 
-    assert asked[0] == "hosted-mid", "§11.3 aims attribute tagging at the mid tier"
-    assert result.agent_id != "hosted-mid"
+    assert asked[0] == first, "the head of the chain is asked first"
+    assert result.agent_id != first
+    assert len(asked) == 2, "the next agent answered; nothing was retried"
 
 
 async def test_every_agent_refusing_is_one_error_naming_all_of_them(registry, answers) -> None:

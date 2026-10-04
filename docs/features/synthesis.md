@@ -34,11 +34,23 @@ and does not call the model; `--daemon` stays up and runs on a schedule (daily b
 
 <a id="routing"></a>**Routing** (`routing.py`). Models are rows in the agent registry
 (**Admin → Agent registry**), each with a provider, a model string, the task types it declares,
-a quality tier, a cost tier and an optional `fallback_agent_id`. Today the head of the chain
-is the enabled agent closest to the task's target tier, with ties going to the stronger one;
-then its fallbacks are walked, skipping rows that are disabled or do not declare the task,
-and stopping on a cycle. ADR 0002 replaces the head choice with an explicit order (local,
-then hosted OpenAI-compatible, then relay), built in `B-137`.
+a quality tier, a cost tier, an optional `route_order` and an optional `fallback_agent_id`.
+
+Rows with a `route_order` are tried first, lowest first, skipping any that are disabled or do
+not declare the task (`B-137`, ADR 0002). The seeded order is:
+
+| Order | Row | Provider | Declares |
+|---|---|---|---|
+| 10 | `local-llamacpp` | openai_compatible (`LOCAL_LLM_URL`) | extraction, tagging, translation, triage |
+| 10 | `local-chat` | openai_compatible (`LOCAL_CHAT_LLM_URL`) | chat |
+| 20 | `hosted-compatible` | openai_compatible (`HOSTED_LLM_URL`, `HOSTED_LLM_MODEL`, `HOSTED_LLM_API_KEY`) | synthesis tasks and chat |
+| 30 | `hosted-frontier`, `hosted-mid` | anthropic | reasoning tasks; tagging |
+| 40 | `claude-code-session` | relay | extraction, tagging |
+
+The relay declares no `chat`, so the Ask panel never waits on an attended session. Rows
+without an order follow every ordered row, by the older rule: closest to the task's target
+tier, ties to the stronger, then the row's `fallback_agent_id` chain. When every stage fails
+or is unconfigured, the run defers and tries again on its next wake.
 
 **Providers** (`provider.py`):
 

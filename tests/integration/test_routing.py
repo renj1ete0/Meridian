@@ -131,13 +131,11 @@ async def test_the_registry_in_the_database_names_only_task_types_that_route(reg
 # --------------------------------------------------------------------------
 
 
-async def test_attribute_tagging_goes_to_the_mid_tier_and_degrades_downward(registry) -> None:
-    """§11.3's table says mid-tier for attribute tagging, and the seed obeys it.
+async def test_attribute_tagging_follows_the_operators_order(registry) -> None:
+    """ADR 0002 replaced §11.3's quality-first routing with an explicit order.
 
-    The interesting part is what follows. `hosted-mid` points its fallback at
-    `hosted-frontier`, which does not declare this task — so the *stated* chain
-    is one agent long, and following it alone would leave attribute tagging
-    with no fallback at all while the local agent that declares it sits unused.
+    Local first, then the hosted rows. `hosted-frontier` does not declare the task, however
+    strong it is, so it is not in the chain at all.
     """
     for agent_id in ("hosted-frontier", "hosted-mid", "local-llamacpp"):
         row = await registry.get(Agent, agent_id)
@@ -146,19 +144,22 @@ async def test_attribute_tagging_goes_to_the_mid_tier_and_degrades_downward(regi
 
     chain = [a.agent_id for a in await chain_for(registry, "tag_attributes")]
 
-    assert chain == ["hosted-mid", "local-llamacpp"]
-    assert "hosted-frontier" not in chain, "it does not declare the task, however strong it is"
+    assert chain == ["local-llamacpp", "hosted-mid"]
+    assert "hosted-frontier" not in chain
 
 
-async def test_the_hard_reasoning_goes_to_the_frontier_row(registry) -> None:
+async def test_the_hard_reasoning_tries_local_before_the_frontier_row(registry) -> None:
+    """The cheaper stage first (ADR 0002); the frontier row is next when local cannot answer."""
     for agent_id in ("hosted-frontier", "hosted-mid", "local-llamacpp"):
         row = await registry.get(Agent, agent_id)
         row.enabled = True
     await registry.flush()
 
-    for task in ("relation_extraction", "gap_analysis", "analogical_expansion", "drafting"):
-        chain = await chain_for(registry, task)
-        assert chain[0].agent_id == "hosted-frontier", task
+    chain = [a.agent_id for a in await chain_for(registry, "relation_extraction")]
+    assert chain[:2] == ["local-llamacpp", "hosted-frontier"]
+    for task in ("gap_analysis", "analogical_expansion", "drafting"):
+        # The local row does not declare these, so the frontier row leads.
+        assert (await chain_for(registry, task))[0].agent_id == "hosted-frontier", task
 
 
 async def test_a_chain_never_repeats_an_agent(registry) -> None:

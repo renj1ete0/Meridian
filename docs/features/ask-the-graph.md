@@ -47,6 +47,8 @@ session.
 - Local: set `LOCAL_CHAT_LLM_URL` (e.g. `http://host.docker.internal:<port>/v1` locally) and
   `LOCAL_CHAT_MODEL`, recreate the API (`up -d --no-deps api`), then enable `local-chat` in
   **Admin → Agent registry**.
+- Hosted fallback: set `HOSTED_LLM_URL`, `HOSTED_LLM_MODEL` and `HOSTED_LLM_API_KEY`, then
+  enable `hosted-compatible`.
 - In production the API has no route out. The model server must be reachable on the `lan`
   network with an nft `lan_allow` entry, or run as a compose service on `internal`
   (`B-135`).

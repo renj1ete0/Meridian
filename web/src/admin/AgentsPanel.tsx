@@ -187,6 +187,7 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel }: AgentsP
                   <td className={`${TDM} whitespace-nowrap text-text-muted`}>
                     {row.provider} · {tierLabel(row.quality_tier)}
                     {row.cost_tier ? ` · ${row.cost_tier}` : ''}
+                    {row.route_order != null ? ` · tried ${row.route_order}` : ''}
                   </td>
                   <td className={`${TD} text-[12px] text-text-muted`}>
                     {row.api_key_env_var ? (

@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.157.0] — 2026-10-04
+
+### Added
+
+- `B-137`: models are tried in an explicit order (`agents.route_order`): a local model, then a
+  hosted OpenAI-compatible API (new seeded row `hosted-compatible`, configured by
+  `HOSTED_LLM_URL`, `HOSTED_LLM_MODEL`, `HOSTED_LLM_API_KEY`), then the hosted Claude rows, then
+  the relay. Unconfigured stages are skipped; a run with no stage able to answer defers. The
+  Ask panel never uses the relay. Admin shows each row's place. ADR 0002.
+
 ## [0.156.17] — 2026-10-04
 
 ### Changed
