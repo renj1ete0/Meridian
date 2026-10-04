@@ -21,6 +21,10 @@ add it here.
 > - **Growth days are calendar dates, not instants**: format them with `shortDateOf`, never a
 >   converting formatter, or every label shifts a day west of the display zone.
 > - **The local DB lags the dev DB by migration `b140a0b1c2d3`**; upgrade before `make local-up`.
+> - **`make lint` lints the web package too** (`B-142`), so it needs `web/node_modules`. Run
+>   `npm run format` in `web/` before committing web changes; Prettier's check fails otherwise.
+> - **Blame skips the Prettier commit** through `.git-blame-ignore-revs`; set it once per clone
+>   with `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 > **2026-10-04 (late) — `v0.157.0`–`v0.158.0`.** Traps:
 > - **Passage vector queries must order by `vectorindex.indexed_distance`.** The index is on

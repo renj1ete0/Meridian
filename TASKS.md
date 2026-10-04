@@ -16,19 +16,21 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.162.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 4872 backend tests
-against a real Postgres, 1047 frontend.
+**`v0.162.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4872 backend tests
+against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-04 (night) — `v0.162.0`, pushed to GitHub (GHCR held), all stacks stopped.**
+> **2026-10-04 (night) — `v0.162.1`, pushed to GitHub (GHCR held), all stacks stopped.**
+> Last: `B-142` web lint and format in `make lint` (oxlint + Prettier, ADR 0012); `make lint`
+> now needs `web/node_modules` (`cd web && npm ci`).
 > Built since `v0.158.0`: assistants connect over MCP (`B-138`, ADR 0003), the site's views as
 > MCP tools with hybrid search (`B-139`), the Growth page (`B-140`, ADRs 0005 and 0010), Admin →
 > Assistant access for tokens, which may be set never to expire, flagged (`B-146`, ADR 0011).
 > **Before `make local-up`:** the local DB needs migration `b140a0b1c2d3`
 > (`docker compose -f docker-compose.local.yml run --rm --build tools alembic upgrade head`).
-> **Next, approved:** `D-01` move comment narrative into the feature docs, `B-142`
-> ESLint/Prettier. **On the server:** `B-131` GPU override, `B-135` unattended synthesis once a
+> **Next, approved:** `D-01` move comment narrative into the feature docs (search done; go
+> feature by feature, ticking each). **On the server:** `B-131` GPU override, `B-135` unattended synthesis once a
 > model stage is set up.
 
 > **2026-10-04 (late) — `v0.158.0`, all stacks stopped, local DB migrated to head.** Production
