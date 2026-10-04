@@ -361,12 +361,14 @@ describe('boosts', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Add boost' }))
     fireEvent.change(screen.getByLabelText('Boost topic'), { target: { value: 'biology' } })
     fireEvent.change(screen.getByLabelText('Boost multiplier'), { target: { value: '1.6' } })
-    fireEvent.change(screen.getByLabelText('Boost expires'), { target: { value: '2026-10-01' } })
+    // Relative to today: a fixed date expired on its own and the form rightly refused it (B-143).
+    const day = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+    fireEvent.change(screen.getByLabelText('Boost expires'), { target: { value: day } })
     fireEvent.click(screen.getByRole('button', { name: 'Add boost' }))
 
     expect(onBoost).toHaveBeenCalledWith('biology', {
       boost_factor: 1.6,
-      boost_expires_at: '2026-10-01T00:00:00Z',
+      boost_expires_at: `${day}T00:00:00Z`,
     })
   })
 

@@ -1600,6 +1600,9 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-142` **ESLint and Prettier for the web package** — the TypeScript side has `tsc
       --strict` and no linter or formatter. Add both with a small rule set (React hooks rules,
       no unused vars, TSDoc syntax check) and wire them into `make lint`
+- [x] `B-143` **A web test expired with the calendar** — test only. The boost form refuses an
+      expiry in the past, and the test typed 2026-10-01, which became the past. The same trap
+      as `P5-09` and `B-128`; the date is now 30 days from the test's own clock
 - [x] `B-141` **Python standards enforced** — `v0.156.15`. PEP 8 and PEP 257 through ruff
       (`E`, `W`, `N`, `D2`–`D4`, convention `pep257`; `D401`, `D400` and `N818` off, with the
       reasons in `pyproject.toml`), and `make test` now runs `make lint` first. `ruff check .`
