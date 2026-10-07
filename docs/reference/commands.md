@@ -93,6 +93,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.furniture` | `--apply` | Demotes site furniture to junk |
 | `worker.retier` | `--apply` | Re-tiers pages whose scholarly tier came only from their domain |
 | `worker.retitle` | `--apply` | Cleans stored titles |
+| `worker.relanguage` | `--apply` | Reads the language of stored sources that declared none; sends those in another language back for topic labels (`B-153`) |
 | `worker.harvest` | always | Acronym harvest |
 | `worker.translate` | always | Other-language vocabulary |
 | `worker.seedsearch` | always (`--report` dry) | Search seeds |

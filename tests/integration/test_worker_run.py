@@ -1101,6 +1101,41 @@ async def test_changed_content_replaces_the_chunks(
     await sess.refresh(task2)
 
 
+@pytest.mark.parametrize(
+    ("opening", "language", "read_from_text"),
+    [("<html>", "en", True), ('<html lang="de">', "de", False)],
+)
+async def test_an_undeclared_language_is_read_from_the_text(
+    session_for,
+    resolve,
+    raw_store,
+    run_domain,
+    run_topic,
+    cleanup,
+    opening,
+    language,
+    read_from_text,
+) -> None:
+    """`B-153`: a page with no `lang` is not left unknown, which `B-53` scores as English; a
+    declared language is kept as declared, whatever the text says."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    body = (
+        f"<!doctype html>{opening}<head><title>Report</title></head>"
+        f"<body><article><p>{ARTICLE}</p></article></body></html>"
+    ).encode()
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = build_worker(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    source = await sess.scalar(select(Source).where(Source.url == f"https://{run_domain}/a"))
+    assert source.language == language
+    assert ((source.extra or {}).get("language_from") == "text") is read_from_text
+
+
 async def test_a_page_with_no_text_writes_no_chunks(
     session_for, resolve, raw_store, run_domain, run_topic, cleanup
 ) -> None:

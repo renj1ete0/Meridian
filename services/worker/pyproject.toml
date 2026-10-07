@@ -1,6 +1,6 @@
 [project]
 name = "meridian-worker"
-version = "0.163.1"
+version = "0.163.2"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
 requires-python = ">=3.12"
 license = "MIT"
@@ -19,6 +19,7 @@ dependencies = [
     "lxml>=5.0",
     "markitdown[docx,outlook,pptx,xlsx]>=0.1.7",
     "onnxruntime>=1.29",
+    "py3langid>=0.3",
 ]
 
 [project.optional-dependencies]

@@ -79,6 +79,7 @@ from .extract.document import extract_document
 from .extract.document import supports as supports_document
 from .extract.errorpage import error_page_reason
 from .extract.injection import Screening, screen
+from .extract.language import detect_language
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .liveness import beat
@@ -1956,12 +1957,16 @@ def _bibliography(
         extra["title_from"] = "text"
     if document.title and title != document.title:
         extra["declared_title"] = document.title
+    # `B-153`: an undeclared language is read from the text, and marked as such.
+    language = document.language
+    if language is None and (language := detect_language(document.text)) is not None:
+        extra["language_from"] = "text"
     fields: dict[str, object] = {
         "title": title,
         "author": document.author,
         "publisher": document.publisher,
         "publication_date": document.publication_date,
-        "language": document.language,
+        "language": language,
         "doi": document.doi,
         # Which tool read this, including the failure names (`P1-44`), so
         # `pdftotext-failed` is distinguishable from a document with no text.

@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.163.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.163.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1652,6 +1652,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-153` **Pages with no declared language** — `v0.163.2`. Run 17: 24% of new pages
+      (mostly PDFs) had no language, and unknown is scored as English, so `B-53`'s correction
+      missed non-English ones. py3langid reads it from the text (≥ 200 letters, p ≥ 0.9; 98.5%
+      agreement with declared languages on 2,000 stored pages); `worker.relanguage` backfills
+      and re-labels those found in another language
 - [x] `B-151` **The novelty gate missed copies of much-copied passages** — `v0.163.1`. Found
       when a leak-check run failed a novelty test: HNSW offers its nearest candidates and the
       filters (earlier, not a duplicate, not retired) run after, so when the nearest to a new

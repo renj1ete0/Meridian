@@ -77,6 +77,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.2] — 2026-10-07
+
+### Fixed
+
+- `B-153`: a page that declares no language has it read from its text (py3langid), marked
+  `extra['language_from'] = 'text'`. A quarter of one crawl hour's new pages, mostly PDFs,
+  declared none, and an unknown language is scored as English, so a page in another language
+  missed `B-53`'s correction. Only at least 200 letters and a probability of 0.9 or more; a
+  declared language is never overridden. `worker.relanguage` applies it to stored sources and
+  sends those found in another language back for topic labels.
+
 ## [0.163.1] — 2026-10-07
 
 ### Fixed

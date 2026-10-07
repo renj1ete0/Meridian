@@ -387,6 +387,20 @@ A wrong title is worse than none, which shows the address instead. `retitle` app
 stored sources, keeping a replaced title in `extra['declared_title']` and marking a guessed one in
 `extra['title_from']`.
 
+### Language
+
+A page's language is what it declares (`<html lang>`, the PDF or Office metadata), trimmed to
+the primary subtag. A quarter of the pages one crawl hour stored declared none, mostly PDFs, and
+a page with no language is scored as English by the topic labeller (`B-53`), so a page in
+another language without a declaration missed that correction. Since `B-153` an undeclared
+language is read from the text with py3langid and marked `extra['language_from'] = 'text'`: only
+from at least 200 letters of the opening, and only at a normalised probability of 0.9 or more,
+so a table or a heading stays unknown rather than guessed. On 2,000 stored pages that did declare
+a language it agreed with the declaration 98.5% of the time and decided on 97% (some of the
+disagreements were declarations that were themselves wrong). A declared language is never
+overridden. `relanguage` does the same for stored sources, from their first passages; one found
+to be in another language has its own and its passages' topic labels marked for relabelling.
+
 ### The source row
 
 One row per URL, created on first fetch and updated on every fetch.
