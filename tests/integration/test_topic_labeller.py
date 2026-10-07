@@ -24,7 +24,7 @@ import pytest
 from sqlalchemy import func, select, update
 
 from meridian_core.chunks import SAMPLE_HEAD, SAMPLE_STRIDE, ChunkWrite, in_sample, replace_chunks
-from meridian_core.models import Chunk, Source
+from meridian_core.models import Chunk, ChunkTopics, Source
 from meridian_core.models.source import EMBEDDING_DIM
 from meridian_core.sources import upsert_source
 from meridian_core.topiclabels import (
@@ -32,6 +32,7 @@ from meridian_core.topiclabels import (
     OFFTOPIC_FLOOR,
     REFERENCE_TEXTS,
     TRIAGE_FLOOR,
+    comparable,
     load_prototypes,
     topic_name,
 )
@@ -105,9 +106,14 @@ async def world(session_for):
     await sess.rollback()
 
 
-async def a_source(sess, vector: list[float] | None, *, chunks: int = 1) -> int:
+async def a_source(
+    sess, vector: list[float] | None, *, chunks: int = 1, language: str | None = None
+) -> int:
     source, _ = await upsert_source(
-        sess, f"https://t{uuid.uuid4().hex[:12]}.test/p", checksum=f"sha256:{uuid.uuid4().hex}"
+        sess,
+        f"https://t{uuid.uuid4().hex[:12]}.test/p",
+        checksum=f"sha256:{uuid.uuid4().hex}",
+        language=language,
     )
     await replace_chunks(
         sess,
@@ -454,3 +460,64 @@ def test_the_triage_line_sits_between_the_two_floors() -> None:
     """Under the label floor, so a sample's error does not hold back labelled
     documents; over the off-topic floor, or it would hold back almost nothing."""
     assert OFFTOPIC_FLOOR < TRIAGE_FLOOR < LABEL_FLOOR
+
+
+# --------------------------------------------------------------------------
+# Other languages (`B-53`, ADR 0014)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("language", "labelled"),
+    [("en", False), ("en-GB", False), (None, False), ("de", True), ("pt-BR", True)],
+)
+async def test_a_translated_page_is_scored_as_its_english_version_would_be(
+    world, language: str | None, labelled: bool
+) -> None:
+    """A page whose raw score sits where a translation of a labelled English page lands
+    is labelled when it is not English, and left alone when it is English or unknown."""
+    sess, topics, emb, labeller = world
+    a = sorted(topics)[0]
+    raw = 0.47
+    vector = blend((emb.axes[topic_name(a)], raw), (ELSEWHERE, math.sqrt(1 - raw**2)))
+    sid = await a_source(sess, vector, language=language)
+
+    await labeller().run(apply=True)
+
+    row = await labels_of(sess, sid)
+    assert (row.topic_labels == [a]) is labelled
+    expected = comparable({a: raw}, language)[a]
+    assert row.topic_scores[a] == pytest.approx(expected, abs=1e-3)
+
+
+async def test_a_translated_page_about_nothing_stays_off_topic(world) -> None:
+    sess, _, _, labeller = world
+    sid = await a_source(sess, axis(ELSEWHERE), language="de")
+
+    stats = await labeller().run(apply=True)
+
+    assert (await labels_of(sess, sid)).topic_labels == []
+    assert sid in {s for s, _ in stats.offtopic}
+
+
+async def test_a_translated_pages_passages_are_scored_in_its_language(world) -> None:
+    """A passage carries no language of its own; it is scored in its source's."""
+    sess, topics, emb, labeller = world
+    a = sorted(topics)[0]
+    raw = 0.47
+    vector = blend((emb.axes[topic_name(a)], raw), (ELSEWHERE, math.sqrt(1 - raw**2)))
+    english = await a_source(sess, vector, language="en")
+    other = await a_source(sess, vector, language="de")
+
+    await labeller().run(apply=True)
+
+    async def passage_labels(source_id: int) -> list[list[str]]:
+        rows = await sess.scalars(
+            select(ChunkTopics.topic_labels)
+            .join(Chunk, Chunk.chunk_id == ChunkTopics.chunk_id)
+            .where(Chunk.source_id == source_id)
+        )
+        return [list(labels) for labels in rows]
+
+    assert await passage_labels(english) == [[]]
+    assert await passage_labels(other) == [[a]]

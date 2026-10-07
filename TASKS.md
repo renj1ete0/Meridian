@@ -2047,7 +2047,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       and backpressure will duty-cycle it. Labels are written after embedding, so no
       per-page signal exists sooner; the rate is the next lever (`P2-19` sidecar, a
       smaller model, or embedding fewer passages per page)
-- [ ] `B-53` **Non-English pages label lower** — the same paragraph scored several
+- [x] `B-53` **Non-English pages label lower** — `v0.162.4`, ADR 0014. Rescale chosen: a
+      non-English page's scores are stretched from a pivot (0.20, ×1.20, a least-squares fit over
+      918 paired topic scores) as they are computed and stored, so every floor sees one scale;
+      the lost labels come back, one pair gains one. Revisit with per-language prototypes once
+      `B-52` writes translations. Originally: — the same paragraph scored several
       hundredths lower in translation than in English against the topic prototypes
       (another paragraph showed no gap). Near the 0.45 floor that turns
       a relevant non-English page into "off-topic", which then feeds the host gate.

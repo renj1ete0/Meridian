@@ -292,7 +292,7 @@ class Labeller:
                     if source_id not in vectors:
                         continue
                     source = rows[source_id]
-                    scores = basis.scores(vectors[source_id])
+                    scores = basis.scores(vectors[source_id], language=source.language)
                     labels = decide(scores)
                     before = list(source.topic_labels) if source.topic_labels is not None else None
                     crawled = list(source.crawled_for or ())
@@ -376,19 +376,21 @@ class Labeller:
                 if not batch:
                     break
                 sources = {
-                    sid: (title, labels)
-                    for sid, title, labels in await sess.execute(
-                        select(Source.source_id, Source.title, Source.topic_labels).where(
-                            Source.source_id.in_(sorted({p.source_id for p in batch}))
-                        )
+                    sid: (title, labels, language)
+                    for sid, title, labels, language in await sess.execute(
+                        select(
+                            Source.source_id, Source.title, Source.topic_labels, Source.language
+                        ).where(Source.source_id.in_(sorted({p.source_id for p in batch})))
                     )
                 }
                 decided = []
                 for passage in batch:
-                    scores = basis.scores(passage.vector)
+                    title, source_labels, language = sources.get(
+                        passage.source_id, (None, None, None)
+                    )
+                    scores = basis.scores(passage.vector, language=language)
                     labels = decide_passage(scores, passage.text)
                     decided.append((passage, scores, labels))
-                    title, source_labels = sources.get(passage.source_id, (None, None))
                     self._tally_passage(stats, passage, scores, labels, title, source_labels, seen)
                     seen += 1
                 if apply:

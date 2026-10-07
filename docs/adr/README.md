@@ -24,6 +24,7 @@ chosen.
 | [0011](0011-tokens-may-be-set-not-to-expire.md) | Tokens may be set not to expire, and say so | 2026-10-04 | Accepted |
 | [0012](0012-web-linting-with-oxlint-and-prettier.md) | The web package is linted by oxlint and formatted by Prettier | 2026-10-04 | Accepted |
 | [0013](0013-find-says-what-search-does-in-plain-words.md) | Find says what search does in plain words | 2026-10-07 | Accepted |
+| [0014](0014-other-languages-scored-as-their-english-versions.md) | Pages in other languages are scored as their English versions would be | 2026-10-07 | Accepted |
 
 ## Template
 

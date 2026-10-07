@@ -77,6 +77,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.162.4] — 2026-10-07
+
+### Changed
+
+- `B-53`: topic scores of pages in other languages are read as their English versions' would
+  be (ADR 0014). Translation pulls scores toward a point while keeping their order, so a
+  non-English page's scores are stretched back out (`0.20 + 1.20 × (s − 0.20)`) as they are
+  computed and stored; English and unknown languages are unchanged, and passages take their
+  source's language. The constants are in the labelling basis, so every source is relabelled
+  once.
+
 ## [0.162.3] — 2026-10-07
 
 ### Changed

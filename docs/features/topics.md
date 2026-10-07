@@ -8,8 +8,9 @@ arithmetic, never by a model.
 
 - **Code:** `packages/meridian_core/meridian_core/topiclabels.py`, `passagetopics.py`,
   `topicoverlaps.py`; `services/worker/worker/retopic.py`
-- **Tasks:** `P2-14`, `P2-21`, `P2-24`, `B-72`, `B-83`, `B-89`
-- **Decisions:** [ADR 0006](../adr/0006-stricter-triage-for-very-long-documents.md)
+- **Tasks:** `P2-14`, `P2-21`, `P2-24`, `B-72`, `B-83`, `B-89`, `B-53`
+- **Decisions:** [ADR 0006](../adr/0006-stricter-triage-for-very-long-documents.md),
+  [ADR 0014](../adr/0014-other-languages-scored-as-their-english-versions.md)
 
 ## How it works
 
@@ -145,6 +146,29 @@ given up removes nearly four false ones; at 0.52 the trade is about even, so the
 
 Re-measure before moving any of these; `python -m worker.retopic` prints the distribution it saw.
 
+### Other languages
+
+The prototypes are English, and a page in another language scores lower against them than its
+English version does (`B-53`, ADR 0014). Pairing pages with their English versions by URL showed
+a proportional gap, not a constant one: off-topic pages lose nothing, the middle band a few
+hundredths, and an on-topic page enough to drop under the label floor in every translation.
+Per-topic scores still correlate 0.95–0.99 between versions, so only the height changes, not
+the order.
+
+So a non-English page's scores are stretched away from a pivot, `s' = 0.20 + 1.20 × (s − 0.20)`
+(`LANGUAGE_PIVOT`, `LANGUAGE_STRETCH`), capped at 1, as they are computed. English and unknown
+languages (`sources.language` NULL) are unchanged; a passage is scored in its source's language.
+The **stored** scores are the stretched ones, so the label, off-topic and triage floors, the
+margin, and every reader of `topic_scores` work on one scale. The raw score is the inverse:
+`0.20 + (s' − 0.20) / 1.20`.
+
+The constants are a least-squares fit over every topic of every paired page (918 pairs from a
+few dozen languages). After stretching, the mean gap is within 0.005 of zero in every band, the
+three labels lost in translation come back, and one pair gains a label its English page lacks.
+The top band rests on one on-topic page; re-measure once `B-52` has written translations
+(the pairing queries are in the calibration notes for `B-53`), and consider per-language
+prototypes then.
+
 ### The labelling pass
 
 `retopic` is a pass, not a fetch-time step, for the reason the novelty gate is: vectors arrive
@@ -198,6 +222,9 @@ labels, since a count of documents is what a person weighing "is there anything 
 - **Generic pages near the floor.** Official landing pages and event pages can score just
   above the floor. Better descriptions or a higher floor are the levers. Measure with the
   report before moving the floor.
+- **Scores of non-English pages are stretched** (ADR 0014), so comparing a stored score with
+  an English page's is fair, and comparing it with a raw cosine is not. `Basis.scores` takes
+  the language as a required keyword, and a unit test fails if a call omits it.
 - **The colour-token test scans tests too.** Use palette names, not hex values, for fake
   topic colours.
 
@@ -205,4 +232,4 @@ labels, since a count of documents is what a person weighing "is there anything 
 
 `tests/integration/test_topic_labeller.py`, `test_passage_topics.py`,
 `test_topics_on_sources.py`, `test_topic_draw.py`, `test_admin_topics.py`;
-`tests/unit/test_passagetopics.py`.
+`tests/unit/test_passagetopics.py`, `test_topic_language.py`.

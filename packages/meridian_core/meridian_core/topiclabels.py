@@ -83,6 +83,13 @@ REFERENCE_TEXTS: tuple[str, ...] = (
     "careers job vacancies",
 )
 
+#: Translation pulls a page's scores toward this point, and :data:`LANGUAGE_STRETCH` pushes
+#: a non-English page's back out from it, so its scores read as its English version's would
+#: (`B-53`, ADR 0014). Fitted on pages paired with their English versions; see
+#: docs/features/topics.md#other-languages.
+LANGUAGE_PIVOT = 0.20
+LANGUAGE_STRETCH = 1.20
+
 #: Bumped when the method changes in a way the constants above do not capture.
 LABELLER_VERSION = 1
 
@@ -187,6 +194,7 @@ def basis_fingerprint(prototypes: Sequence[Prototype], model: str | None) -> str
         "floor": LABEL_FLOOR,
         "margin": LABEL_MARGIN,
         "reference": list(REFERENCE_TEXTS),
+        "language": [LANGUAGE_PIVOT, LANGUAGE_STRETCH],
         "topics": [[p.topic, p.text] for p in sorted(prototypes, key=lambda p: p.topic)],
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
@@ -239,13 +247,41 @@ class Basis:
         )
         return cls(topics=topics, matrix=matrix, reference=reference, fingerprint=fingerprint)
 
-    def scores(self, source_vector: Sequence[float]) -> dict[str, float]:
-        """Each topic's similarity to a source, measured from the reference."""
+    def scores(self, source_vector: Sequence[float], *, language: str | None) -> dict[str, float]:
+        """Each topic's similarity to a text, measured from the reference.
+
+        Comparable across languages: ``language`` is the text's (a passage's is its
+        source's), and a known non-English one is rescaled by :func:`comparable`. Required,
+        so no caller can compare an unscaled score with a floor.
+        """
         centred = _unit(_unit(np.asarray(source_vector, dtype=np.float64)) - self.reference)
-        return {
-            topic: round(float(score), 4)
+        raw = {
+            topic: float(score)
             for topic, score in zip(self.topics, self.matrix @ centred, strict=True)
         }
+        return {topic: round(score, 4) for topic, score in comparable(raw, language).items()}
+
+
+def is_english(language: str | None) -> bool | None:
+    """Whether a language code is English; ``None`` when it is not known."""
+    if not language or not language.strip():
+        return None
+    return re.split(r"[-_]", language.strip().lower(), maxsplit=1)[0] == "en"
+
+
+def comparable(scores: Mapping[str, float], language: str | None) -> dict[str, float]:
+    """Scores as an English version of the same text would earn them (`B-53`).
+
+    English and unknown languages are unchanged. Any other is stretched away from
+    :data:`LANGUAGE_PIVOT` by :data:`LANGUAGE_STRETCH`: monotone, so the order of topics
+    holds, and capped at 1.
+    """
+    if is_english(language) is not False:
+        return dict(scores)
+    return {
+        topic: min(1.0, LANGUAGE_PIVOT + LANGUAGE_STRETCH * (score - LANGUAGE_PIVOT))
+        for topic, score in scores.items()
+    }
 
 
 def decide(
