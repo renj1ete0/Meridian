@@ -367,3 +367,147 @@ tool calls.
   coverage cell, the contested list, or a node pair) plus a question; the snapshot records what
   the evidence looked like at submit time, so a draft written over thin coverage stays auditable
   rather than reading as confident prose.
+
+## Boundary schemas
+
+The Pydantic DTOs in `meridian_core/schemas/` describe every service boundary (AGENTS.md:
+"pydantic for all boundaries"; §2.6, §11.8: "never trust model output for structure"). They live
+in `meridian_core`, not in `services/api`: services import schemas and never define them, so the
+API, the orchestrator and the MCP tools share one shape that cannot drift.
+
+- **Read and create variants.** A table gets the variants useful at its boundary, usually a
+  `*Create` (what a caller may submit) and a `*Read` (built from an ORM row with
+  `from_attributes`). Where the shapes coincide, the module says so rather than generating a
+  second class (`P0-10`). `AgentToken` has no DTO: it is never a boundary object, only read and
+  written by the auth layer against the ORM row.
+- **Enum literals come from the models.** `schemas/enums.py` builds each `Literal` from the
+  constraint's own `.enums` tuple instead of retyping the value set, so a status added to a model
+  is valid in the API too; an API accepting a status the database rejects is the boundary bug
+  this package exists to prevent (`P0-10`). Values with no column, such as the retrieval arm, are
+  still Literals so the set crosses into the web package's types: a frontend inventing its own
+  union is the one type a cross-language drift test cannot protect.
+- **No embedding vectors in any `*Read`.** A 1024-float array per row has no place in an API
+  payload.
+- **Unknown fields are an error on create** (`CreateBase`). Pydantic ignores unknown keys by
+  default, which is wrong where model-generated tool calls arrive (§11.6): an agent inventing a
+  field, or trying to set a column the worker owns such as `queue.status`, must fail loudly.
+  Silently discarding input is not validation (§11.8).
+- **Shared rules live once** in `schemas/common.py` (confidence is a probability, quality tier a
+  small ordinal, provenance mandatory). `ProvenanceFields` is required on write so quality tier
+  can only move up automatically: a lower tier must never silently overwrite a higher one
+  (§11.12), which is checkable only because every row records the tier that produced it.
+
+### Admin DTOs
+
+- **Server-computed verdicts.** `BudgetRead.ready` ("every cap set, and the month not at its
+  ceiling"), `FirstRunRead.is_first_run`, `AgentRowRead.key_present` and an agent row's
+  unroutable reasons are computed by the server, never derived by the client. A screen that
+  recomputes a rule eventually disagrees with the server that enforces it; the worst case is a
+  green light for a run that cannot start, or a setup wizard reappearing after a week.
+  `key_present` is read from the environment the API sees, because a screen that cannot tell a
+  configured agent from an unconfigured one is how somebody enables an agent and waits a day to
+  learn it never answered.
+- **First run is "no sources yet", not "no seeds yet"**: `make seed` queues seeds at first boot,
+  so a fresh install always has them. The setup screen lists the cold-start seeds still pending,
+  since §16 calls cold-start seed quality worth an evening, and shows how many are already
+  claimed or attempted rather than implying they can still be removed.
+- **Edits: omitted versus null.** In every `*Edit`, an omitted key leaves the field alone. Where
+  clearing must be possible it is a distinct edit: `GazetteerTermEdit` clears by sending the
+  column's empty value, and `BudgetEdit` clears a cap with `null`, which un-configures it and
+  stops runs, told apart from omission by `exclude_unset`. `BudgetEdit` duplicates the table's
+  bounds so a bad value is a 422 naming the field rather than a 500 from the CHECK, which still
+  makes it true.
+- **A reason is optional on a topic edit and never in the log**: the server writes a factual one.
+  §10.1 requires a reason on every change, and making a person type one to move a slider fills
+  the column with "update".
+- **A topic row shows `weight` and `share`.** `weight` is stored; `share` is what a draw uses
+  after the boost, floors and ceilings, and 0 for anything not active. They differ exactly when
+  something interesting is happening, and showing only the weight would make a paused topic
+  look like it still competes.
+- **A domain row shows three layers**: what was set here (`settings`), what a fetch actually gets
+  after the global row and file defaults are merged under it (`resolved`), and what the crawl
+  learned or screening concluded. Only the first can be changed on that screen, so the operator
+  needs to see which layer sent a domain through the browser or into quarantine; `trust_reason`
+  is the sentence the screen justifies itself with. `seed_allowed` NULL ("nobody has looked") is
+  shown apart from refused, since they lead to different actions.
+- **Gazetteer rows wrap the term rather than widening it.** Whether a term *loads* is not a
+  column: a surface form two approved rows share is withheld from the matcher whichever row you
+  look at. Flattening it into the term DTO would put a derived field beside stored ones and
+  weaken the drift test that checks every DTO field has a column. The surface exists because an
+  approved term that silently never matches is the failure it prevents. `withheld_reason` is
+  named, not boolean, because the reasons have different fixes: a collision needs one of the two
+  rows changed, ambiguity leaves the mention to the resolver, and unapproved or rejected terms are
+  just the queue.
+- **Enabling an agent and choosing its model are Admin's; endpoints and task types are not.**
+  Those are deployment configuration in `config/agents.yaml` and its migrations, where a change
+  is reviewable. Enabling is the switch that starts spending, and the model a local server runs
+  is the operator's frequent choice (`P6-06`); a `${VARIABLE}` is read from `.env`.
+- **Bulk gazetteer decisions** carry the same three verdicts as the per-term routes: a queue of
+  thousands of harvested terms is not a weekly task one click at a time.
+- `P6-23` (the agent and run screens) was held open while both tables were empty, since an empty
+  screen teaches nothing about the full one; both now have rows.
+
+### Model proposals
+
+`schemas/proposals.py` describes the one boundary where input is *generated* (`P4-16`, §11.6,
+§11.8, §2.6). These are the strictest schemas, and deliberately not the last word: the write
+tools re-check everything through `validation.py`, because a DTO is a shape and the guards are
+the rules.
+
+- **A proposal cites passage numbers, never chunk ids.** Passages are shown to the model as
+  `[1]`, `[2]`, … by `framing.frame_passages`, the only handle it gets. An id it supplied could be
+  invented, and an invented one that exists attaches a fabricated claim to a real chunk. The
+  caller, which holds the batch, maps numbers back to chunks. At least one is required: an
+  uncited claim is not assertable (§2 principle 3), and a missing citation is the commonest
+  malformed answer, so the type refuses it.
+- **A mention is a name and a type, not an id.** Resolution happens at write time against the
+  graph (§5.5), so the model cannot point an edge at an arbitrary row. `Mention` is not a
+  `CreateBase`: it is read out of an answer, and refusing unknown keys would discard a good edge
+  because a model added a field. It is the only schema where ignoring extras is the right trade.
+- **`stance` and `certainty` are optional** (§8): observable properties, not verdicts. A model
+  that must guess one will, and an invented stance is worse than none, since the graph reads a
+  missing value as unknown and a wrong one as fact.
+- **A tag names an attribute the prompt listed as active**, which `tag_entity` checks; it is not
+  a proposal of new schema. `P7-01` is the only route to a new attribute.
+- **`comparable_to` states its limits three times**: a CHECK constraint, `add_edge`, and this
+  schema. The constraint cannot be bypassed; the schema names the rule while the batch is parsed,
+  so one comparison that forgot its disanalogy does not lose the whole batch.
+
+### Graph and notes DTOs
+
+- **Shaped for the neighbourhood, not a view** (§12.3). The node-link canvas and the table read
+  the same `NeighbourhoodRead`; a view wanting another shape would be a second query that can
+  disagree. Everything is derived from the relational tables, and a quantity with no column is
+  named for what it counts (`support`, in passages), so the interface cannot present an invented
+  number as measured. A `hint` node is a second-hop dot (design-system.md §2) that says "there is
+  more past here" without rendering depth 2, which §12.2 rules out.
+- **Graph filters act on evidence, not labels** (`P6-02`). An edge survives when one passage
+  behind it satisfies every evidence filter at once; passing an edge on a 2020 press item plus a
+  2012 journal article would answer a question nobody asked.
+- **Evidence carries stance and certainty only from a citing edge** (§8). A chunk cited only by
+  an attribute carries neither, rather than a default that would read as a measurement.
+- **The node panel is one request**, not four: every part is about the same node, and four
+  requests are four chances for a partly rendered panel that looks like a node with no
+  attributes. Its notes are newest first and capped, and default to empty, so a missing notes
+  query is an empty section rather than a 500.
+- **Notes have their own DTOs** (`P6-05`), though a note is an `entities` row. This is a reading
+  surface, and a notes API speaking in `canonical_name` and `is_annotation` would push the graph
+  schema through to the reader. **No provenance on the way in**: a person wrote it, the server
+  sets that, and `extra="forbid"` refuses a request that tries, because otherwise anything could
+  claim to be the reader's own thinking. A note may be about no node yet (a thought that has not
+  found its node is worth keeping) and about at most a few: two or three is the interesting case,
+  fifty is a tag, and the cap stops one request writing fifty edges.
+- **Routes label every hop** as `cited` (a passage states the link) or `similar` (the ends only
+  read alike), count them apart, and carry the claims-only answer beside the mixed one, so "no
+  cited route within N hops" is a value Gaps (`P6-36`) can read rather than infer (`P6-32`).
+- **Map areas and bridges** report measurements, not verdicts: an area's name is its three most
+  distinctive terms, and `weak` and `stale` carry their thresholds in `reasons`. A bridge's
+  `cited_claims` (the only kind that says two areas connect) and `similar_pairs` are counted
+  apart and never added together.
+
+### Crawl health
+
+The `waiting` verdict (`P6-25`) is computed from `fetch_attempts` and `queue` at read time in
+`crawlhealth.judge`, not stored. It is the one easy to mistake for `stalled`: work is pending and
+nothing is fetching, but every pending row is inside its backoff. That is the backoff working,
+and calling it a stall would send someone to restart a worker that has nothing it may do.

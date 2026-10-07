@@ -1,31 +1,8 @@
-"""Pydantic v2 DTOs for every service boundary.
+"""Pydantic v2 DTOs for every service boundary (spec §2.6, §11.8).
 
-AGENTS.md: "pydantic for all boundaries"; spec §2.6, §11.8: "All writes validate
-server-side. Never trust model output for structure".
-
-Every SQLAlchemy table in ``meridian_core.models`` gets the DTO variants that
-are actually useful at its boundary — usually a ``*Create`` (what a caller may
-submit) and a ``*Read`` (what an API returns, built from an ORM instance via
-``model_validate`` with ``model_config = ConfigDict(from_attributes=True)``).
-Where a table's write and read shapes coincide closely enough that a second
-class would just retype the first, we said so in that module rather than
-generating one anyway (task P0-10 requirement 2).
-
-Two structural rules keep this package from drifting away from the tables it
-describes:
-
-- Enum-valued columns are ``constrained(...)`` CHECK constraints, not native
-  Postgres enums (see ``models/mixins.py``). ``schemas/enums.py`` builds a
-  ``Literal`` from each constraint's own ``.enums`` tuple instead of retyping
-  the value set, so a status added on the model side is valid here too without
-  anyone remembering to update a second list.
-- Embedding vectors (``Chunk.embedding``, ``Entity.embedding``) never appear in
-  a ``*Read`` model. A 1024-float bge-m3 array per row has no business riding
-  along in an API response payload; a caller that needs it goes through a
-  dedicated similarity-search endpoint instead.
-
-Services import DTOs from here; they never define their own models (AGENTS.md
-layout rule).
+Usually a ``*Create`` and a ``*Read`` per table. Enum literals come from the models'
+CHECK constraints, and no ``*Read`` carries an embedding vector. Services import DTOs
+from here and never define their own. See docs/reference/data-model.md#boundary-schemas.
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
 """DTOs for the graph workspace's read path (tasks P6-01, P6-02, P6-03, §12.2).
 
-§12.3 asks for one normalised subgraph that several renderers consume, so these
-are shaped for *the neighbourhood*, not for any one view: the node-link canvas
-and the table both read the same `NeighbourhoodRead`, and a view that wanted a
-different shape would be a second query that can disagree with the first.
-
-Everything here is derived from the relational tables — `entities`, `edges`,
-`attribute_values`, `chunks`, `sources` — which are the graph's source of
-truth (see `models/graph.py`). Nothing is computed that the tables do not hold:
-where a quantity has no column (an edge has no stored *weight*), the value
-returned is named for what it actually counts (`support`, passages), so the
-interface cannot present an invented number as a measured one.
+Shaped for the neighbourhood, which every view reads, and derived only from the
+relational tables. See docs/reference/data-model.md#graph-and-notes-dtos.
 """
 
 from __future__ import annotations
@@ -25,10 +16,8 @@ from .enums import Certainty, NodeType, SourceTier, Stance
 from .graph import EntityRead
 from .search import NodeAttributeRead, SearchHitRead
 
-#: Where a node sits relative to the focus. `hint` is a second-hop node drawn
-#: only as a faint dot (design-system.md §2, "Edge, second hop (hint)") — it
-#: says "there is more past here" without rendering depth 2, which §12.2 rules
-#: out.
+#: Where a node sits relative to the focus. `hint` is a second-hop node drawn only as
+#: a faint dot (design-system.md §2), since §12.2 rules out rendering depth 2.
 NodeRole = Literal["focus", "neighbour", "hint"]
 
 #: How an edge relates to the focus, which is what decides how it is drawn.
@@ -38,11 +27,7 @@ EdgeKind = Literal["focus", "between", "hint"]
 class GraphFilters(BaseModel):
     """§12.2's live filters, applied on the server (task P6-02).
 
-    **Filters act on evidence, not on labels.** An edge survives when at least
-    one passage behind it satisfies every evidence filter at once — a tier *and*
-    a date *and* a topic — because "peer-reviewed evidence from 2020 onwards" is
-    a claim about one passage, and letting an edge pass on a 2020 press item
-    plus a 2012 journal article would answer a question nobody asked.
+    An edge survives when one passage behind it satisfies every evidence filter at once.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -168,10 +153,8 @@ class NeighbourhoodRead(BaseModel):
 class EvidenceRead(BaseModel):
     """A passage behind this node, with what it was cited for.
 
-    A search hit's shape plus the claim it supports. `certainty` and `stance`
-    belong to the *edge* that cites the chunk (§8: observable properties, not
-    verdicts), so a chunk cited only by an attribute carries neither — and says
-    nothing rather than a default that would read as a measurement.
+    `certainty` and `stance` come from a citing edge (§8); a chunk cited only by an
+    attribute carries neither.
     """
 
     hit: SearchHitRead

@@ -110,23 +110,16 @@ class FetchPolicyRead(BaseModel):
     status: DomainStatus
     note: str | None
     consecutive_failures: int
-    #: What the crawl learned about this domain (`P1-27`), as distinct from what
-    #: was configured for it. Exposed so an admin screen can show *why* a domain
-    #: is going straight to the browser — a learned value that looked like a
-    #: setting would be one somebody tried to change and could not find.
+    #: What the crawl learned about this domain (`P1-27`), as distinct from what was
+    #: configured for it.
     render_js_escalations: int = 0
     render_js_learned_at: dt.datetime | None = None
-    #: What screening concluded about this domain (`P4-14`). Exposed for the
-    #: same reason the learned render state is: a quarantine an operator cannot
-    #: see is one they cannot lift, and `trust_reason` is the sentence the
-    #: screen has to be able to justify itself with.
-    #: Whether new URLs on this domain may be *queued* (`P4-12`). A third
-    #: question beside `status` and `trust_state`, and NULL is undecided rather
-    #: than refused — the admin screen has to tell "nobody has looked" from
-    #: "somebody declined", because they lead to different actions.
+    #: Whether new URLs on this domain may be *queued* (`P4-12`). NULL is undecided,
+    #: not refused.
     seed_allowed: bool | None = None
     first_seen_via: SeedSource | None = None
     novel_fetches: int = 0
+    #: What screening concluded about this domain (`P4-14`), with `trust_reason`.
     trust_state: TrustState = "unscreened"
     clean_fetches: int = 0
     trust_decided_at: dt.datetime | None = None

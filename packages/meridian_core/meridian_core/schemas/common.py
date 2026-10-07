@@ -1,9 +1,6 @@
 """Shared field types and mixins reused across every DTO in this package.
 
-A validation rule fixed in one place — confidence is a probability, quality
-tier is a small ordinal, provenance is mandatory — must not drift between the
-dozen schemas that reuse it, so those rules live here once rather than being
-retyped per module (AGENTS.md: "pydantic for all boundaries").
+Validation rules that must not drift between schemas live here once.
 """
 
 from __future__ import annotations
@@ -33,27 +30,16 @@ SupportingChunkIds = Annotated[list[int], Field(min_length=1)]
 
 
 class CreateBase(BaseModel):
-    """Base for every ``*Create`` DTO: unknown fields are an error.
+    """Base for every ``*Create`` DTO: unknown fields are an error (§11.6, §11.8).
 
-    Pydantic ignores unrecognised keys by default, which is the wrong default at
-    this boundary. These schemas receive model-generated tool calls (§11.6), and
-    an agent inventing a field — or trying to set a state-machine column the
-    worker owns, like ``queue.status`` — must fail loudly rather than have its
-    intent silently dropped. Server-side validation is the control that makes
-    autonomous writes safe (§11.8); silently discarding input is not validation.
+    See docs/reference/data-model.md#boundary-schemas.
     """
 
     model_config = ConfigDict(extra="forbid")
 
 
 class ProvenanceFields(CreateBase):
-    """Mirrors ``meridian_core.models.mixins.ProvenanceMixin``.
-
-    Every table carrying that mixin requires this on write so quality tier can
-    only move up automatically — a lower tier must never silently overwrite a
-    higher one (§11.12), which is only checkable because every row records the
-    tier that produced it.
-    """
+    """Mirrors ``meridian_core.models.mixins.ProvenanceMixin``; required on write (§11.12)."""
 
     produced_by: str | None = None
     model: str | None = None

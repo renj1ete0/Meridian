@@ -1,15 +1,7 @@
 """DTOs for the retrieval boundary (task P2-07; mirrors ``meridian_core.search``).
 
-`search.py` returns frozen dataclasses because it is a library and its callers
-are Python. These are the same shapes at an HTTP boundary, and they live here
-rather than in `services/api` for the reason every other DTO does: services
-import schemas, they do not define them (AGENTS.md layout). The orchestrator and
-the MCP read tools (`P3-02`) will want the same shape, and two definitions of it
-would drift.
-
-``tests/unit/test_api_schemas.py`` compares these against the dataclasses field
-by field, so a field added to a ``SearchHit`` and forgotten here fails rather
-than being silently dropped on the way out.
+``tests/unit/test_api_schemas.py`` compares these against the dataclasses field by
+field. See docs/features/search.md#response-shapes.
 """
 
 from __future__ import annotations
@@ -26,13 +18,9 @@ from .source import ChunkRead
 
 
 class SearchHitRead(BaseModel):
-    """One chunk, with the provenance that makes it citable.
+    """One chunk, with the provenance that makes it citable (§2 principle 3).
 
-    Mirrors ``meridian_core.search.SearchHit``. The source fields ride along
-    rather than being an id the caller must resolve: §2 principle 3 is that
-    nothing is assertable without a citation you can follow back to a file, and
-    a hit that returned text plus a foreign key would make the citation
-    optional in practice.
+    Mirrors ``meridian_core.search.SearchHit``.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -52,21 +40,16 @@ class SearchHitRead(BaseModel):
     #: can show why a document is in a filtered set — a hit whose topic a reader
     #: cannot see is a filter they have to trust rather than check.
     topic_labels: list[str] | None = None
-    #: Which topics this passage itself is about (`P2-24`), best first. None
-    #: when no pass has examined the passage; `[]` when one has and found none.
-    #: A topic filter matches on either list, so a hit whose document is about
-    #: something else shows here why it matched.
+    #: Which topics this passage itself is about (`P2-24`), best first. None when no
+    #: pass has examined the passage; `[]` when one has and found none.
     passage_topics: list[str] | None = None
     #: Which places the source is about (`P2-23`): ISO 3166-1 alpha-2 codes for
     #: countries, UN/LOCODE without its space for cities. None means never
     #: examined, `[]` examined and about no place it could name.
     places: list[str] | None = None
 
-    #: What `page_or_offset` counts, and what it was derived from. §5.3's rule
-    #: is "page for paginated documents, offset otherwise", and before `P2-18`
-    #: a hit carried nothing that said which — so a consumer either re-derived
-    #: it from a media type it did not have, or labelled every citation
-    #: "page/offset". None means the media type was never recorded.
+    #: What `page_or_offset` counts (`P2-18`, §5.3), and what it was derived from.
+    #: None means the media type was never recorded.
     page_unit: PageUnit | None = None
     media_type: str | None = None
 
@@ -82,31 +65,17 @@ class SearchHitRead(BaseModel):
     lexical_rank: int | None
     vector_rank: int | None
 
-    #: How old the document is, and what that did to its score (`P2-20`).
-    #:
-    #: Published rather than applied silently. A result quietly demoted is one
-    #: the reader cannot audit, which is the opposite of what this corpus is
-    #: for — so the hit carries its age and its factor the way it already
-    #: carries its tier and its per-arm ranks.
-    #:
-    #: `age_days` is None for an undated document and `decay` is then 1.0: not
-    #: a guess in either direction, because around a third of crawled pages
-    #: have no extractable date and whichever default you pick is wrong for
-    #: the other kind.
+    #: How old the document is, and what that did to its score (`P2-20`). `age_days`
+    #: is None for an undated document, and `decay` is then 1.0.
     age_days: int | None = None
     decay: float = 1.0
     score_before_decay: float = 0.0
 
 
 class SearchResponse(BaseModel):
-    """A page of hits, and an honest account of how they were found.
+    """A page of hits, and an account of how they were found.
 
-    ``arms`` and ``degraded`` are not diagnostics bolted on — they are the
-    contract. Retrieval with no query vector is lexical-only, which is a
-    legitimate mode, but a caller that believes it ran a hybrid search and ran
-    half of one will draw the wrong conclusion about the corpus. §12.5 asks for
-    hybrid search; a response that cannot say whether it delivered one is not
-    answering the question.
+    ``arms`` and ``degraded`` are part of the contract: a lexical-only search says so.
     """
 
     hits: list[SearchHitRead]
@@ -121,16 +90,11 @@ class SearchResponse(BaseModel):
 
     limit: int
     offset: int
-    #: Whether another page exists. Determined by fetching one more hit than
-    #: asked for, not by a second COUNT — the fused ranking has no cheap total,
-    #: and a total computed a different way than the page would eventually
-    #: disagree with it.
+    #: Whether another page exists, from fetching one more hit than asked for.
     has_more: bool
 
-    #: How deep each arm went before fusion. Paging past this is not meaningful:
-    #: RRF can only order what the arms handed it, so a hit beyond the pool was
-    #: never a candidate. Exposed so a caller can tell "no more results" from
-    #: "no more results *within the pool*".
+    #: How deep each arm went before fusion; a page past it is refused. See
+    #: docs/features/search.md#paging.
     candidate_pool: int
     lexical_candidates: int
     vector_candidates: int
@@ -177,10 +141,8 @@ class CorpusStatsRead(BaseModel):
     #: filter tell a reader that narrowing may be hiding unexamined material.
     sources_without_topics: int = 0
 
-    #: The comparison set's places, for a place filter to offer (`P2-23`) —
-    #: derived from configuration, not from a scan of the corpus, for the
-    #: reason `topics` is: a place with no sources yet filters to nothing,
-    #: which is the true answer.
+    #: The comparison set's places, for a place filter to offer (`P2-23`), from
+    #: configuration rather than a scan of the corpus.
     places: list[PlaceRead] = Field(default_factory=list)
 
     #: Sources nothing has examined for places (`P2-23`) — excluded by a place
@@ -189,13 +151,7 @@ class CorpusStatsRead(BaseModel):
 
 
 class SourceChunksRead(BaseModel):
-    """A page of one source's chunks, in document order.
-
-    The endpoint behind a search hit: having found a passage, a reader needs
-    what surrounds it. ``chunk_index`` is document order, so paging here is a
-    genuine offset rather than a ranking position — unlike search, where the
-    ordering is a fused rank and an offset into it means something weaker.
-    """
+    """A page of one source's chunks, in document order (``chunk_index``)."""
 
     source_id: int
     chunks: list[ChunkRead]
@@ -207,10 +163,7 @@ class SourceChunksRead(BaseModel):
 class FigureRefRead(BaseModel):
     """One figure, with what makes it openable (task P6-14, spec §6.6, §12.5).
 
-    `raw_url` is None unless this deployment serves raw files. §12.5 asks for
-    "page-accurate links to raw files", and a link is only page-accurate if
-    there is a file to point at — a caption with a dead link is worse than a
-    caption alone, because a reader spends a click finding out.
+    `raw_url` is None unless this deployment serves raw files.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -284,13 +237,7 @@ class NodeAttributeRead(BaseModel):
 
 
 class NodeDetailRead(BaseModel):
-    """Everything §12.5 asks the node panel to show, in one request.
-
-    One request rather than four, because every part of this panel is about the
-    same node and a reader opening it wants all of it — and because four
-    requests is four chances for a partly-rendered panel that looks like a node
-    with no attributes.
-    """
+    """Everything §12.5 asks the node panel to show, in one request."""
 
     entity: EntityRead
 
@@ -309,33 +256,15 @@ class NodeDetailRead(BaseModel):
     #: that is the canvas's job (`P6-02`).
     contested_edges: int
 
-    #: §12.5's node panel ends with "own annotations", and this is the only part
-    #: of the panel a person wrote themselves. Most recently written first, and
-    #: capped — the panel shows the recent few, the notes list shows the rest.
-    #:
-    #: Defaulted rather than required, because a panel assembled before `P6-05`
-    #: existed is still a valid panel, and making it required would turn a
-    #: missing notes query into a 500 rather than an empty section.
+    #: The reader's own annotations (§12.5), newest first and capped. Defaulted, so a
+    #: missing notes query is an empty section rather than a 500.
     annotations: list[AnnotationRead] = Field(default_factory=list)
 
 
 class CrawlProgressRead(BaseModel):
     """What the crawl is doing, for a corpus too small to search (task `B-09`).
 
-    Production starts empty by design (scaffold §1.7), so a fresh install has
-    nothing to look at for the first hour. The choice §12.3 implies and this
-    takes: **make the first hour legible rather than shipping a demo corpus.**
-
-    Shipping one was the alternative and it is worse on two counts. A snapshot
-    of a real crawl is third-party content, and redistributing it is the
-    question §14.2 keeps separate from everything else (`B-11` reaches the same
-    conclusion about `MERIDIAN_SERVE_RAW`). Synthetic fixtures are worse still
-    — the task rules them out directly, because they do not resemble real
-    extraction output and the first impression would be of a system that works
-    better than it does.
-
-    So: the numbers that are true right now. A queue draining is a system
-    working, and it is the only honest thing an empty corpus has to show.
+    Shown instead of a demo corpus; see docs/features/search.md#response-shapes.
     """
 
     model_config = ConfigDict(from_attributes=True)

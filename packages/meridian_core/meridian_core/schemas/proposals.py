@@ -1,35 +1,8 @@
-"""What a model may propose, and the shape it has to propose it in.
+"""What a model may propose, and the shape it has to propose it in (`P4-16`, §11.6, §2.6).
 
-Task `P4-16`; spec §11.6, §11.8, §2.6.
-
-Every other DTO in this package describes a boundary between parts of this
-system. These describe the one boundary where the input was *generated* rather
-than typed — and §2.6 is unambiguous about it: "never trust model output for
-structure". So these are the strictest schemas here, and they are deliberately
-not the last word: the write tools re-check everything through `validation.py`,
-because a DTO is a shape and the guards are the rules.
-
-Three decisions worth stating, because each is a way this goes wrong:
-
-**A proposal cites passage numbers, never chunk ids.** The passages a model
-sees are numbered `[1]`, `[2]`, … by `framing.frame_passages`, and that is the
-only handle it is given. An id it supplied would be an id it could invent —
-and an invented one that happens to exist attaches a fabricated claim to a
-real chunk, which is the failure that makes every citation in the corpus worth
-less. The mapping from number back to `chunk_id` belongs to the caller, which
-holds the batch it just sent.
-
-**A mention is a name and a type, not an id.** Resolution happens at write
-time against the graph (§5.5), so the model says what it saw; the server says
-which node that is. This also means the model cannot point an edge at an
-arbitrary row by number.
-
-**`comparable_to` states its limits here as well as in the database.** §7.2's
-rule is enforced by a CHECK constraint, by `add_edge`, and by this model —
-three times, on purpose. The constraint is the one that cannot be bypassed;
-this one exists so the refusal names the rule while the batch is still being
-parsed, and so a whole batch is not lost to one comparison that forgot its
-disanalogy.
+The strictest schemas here, re-checked by `validation.py` on write. Proposals cite
+passage numbers, never chunk ids, and name mentions rather than ids. See
+docs/reference/data-model.md#model-proposals.
 """
 
 from __future__ import annotations
@@ -55,10 +28,7 @@ __all__ = [
     "TagProposal",
 ]
 
-#: At least one passage number. An uncited claim is not assertable (§2
-#: principle 3), and "the model did not say where it read this" is the most
-#: common malformed answer there is — so it is refused by the type rather than
-#: checked for later.
+#: At least one passage number: an uncited claim is not assertable (§2 principle 3).
 Citations = Annotated[list[Annotated[int, Field(ge=1)]], Field(min_length=1)]
 
 #: An identifier, not prose. The same shape `validation.check_relation_type`
@@ -69,12 +39,8 @@ RELATION_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]*$"
 class Mention(BaseModel):
     """One thing the model says it saw, before the graph has an opinion.
 
-    Not a `CreateBase`: a mention is read out of an answer rather than
-    submitted, and the extra strictness that makes sense for a tool call —
-    refusing unknown keys — would here discard an otherwise good edge because
-    a model added a field nobody asked for. The fields that matter are typed;
-    the rest is ignored deliberately, and this is the only schema in this
-    package where that is the right trade.
+    Not a `CreateBase`: unknown keys are ignored, deliberately, so an extra field does
+    not discard a good edge.
     """
 
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
@@ -92,11 +58,8 @@ class Mention(BaseModel):
 class EdgeProposal(CreateBase):
     """One relation the model claims a passage supports (§5.4, §8).
 
-    `stance` and `certainty` are §8's observable properties rather than a
-    verdict: what position the passage argues and how hedged it is, never
-    whether the source is biased or true. Both are optional because a model
-    that has to guess one will, and an invented stance is worse than an absent
-    one — the graph reads a missing value as unknown and a wrong one as fact.
+    `stance` and `certainty` are observable properties, not verdicts, and optional so a
+    model need not guess them.
     """
 
     subject: Mention
@@ -139,10 +102,8 @@ class EdgeProposal(CreateBase):
 class TagProposal(CreateBase):
     """One attribute value the model claims a passage supports (§7.3).
 
-    The attribute must already exist and be active — this schema cannot check
-    that, `tag_entity` does — so the name here is a claim about the *active
-    set the prompt listed*, not a proposal of new schema. `P7-01` is the only
-    route by which a new attribute comes into being.
+    The attribute must already be active, which `tag_entity` checks; new attributes come
+    only through `P7-01`.
     """
 
     entity: Mention

@@ -244,6 +244,35 @@ be two queries that can disagree.
   correctly and invisibly, and this count lets the filter say how many documents nobody has
   looked at. It is a plain COUNT with no index; if `sources` reaches millions it is the landing
   number that will be felt first.
+- **Places for the filter come from configuration** (`P2-23`), the comparison set, not a scan of
+  the corpus, for the same reason as topics: a place with no sources filters to nothing, which
+  is the true answer.
+
+### Response shapes
+
+`schemas/search.py` mirrors `search.py`'s dataclasses at the HTTP boundary, and
+`tests/unit/test_api_schemas.py` compares them field by field, so a field added to `SearchHit`
+and forgotten in the DTO fails rather than being dropped on the way out.
+
+- **`arms` and `degraded` are the contract**, not diagnostics: §12.5 asks for hybrid search, and
+  a response that cannot say whether it delivered one is not answering the question.
+- **`candidates` is exposed** so a caller can tell "no more results" from "no more results
+  within the pool".
+- **Age is published with its factor.** `age_days` is None for an undated document and `decay`
+  is then 1.0, a guess in neither direction: around a third of crawled pages have no extractable
+  date, and either default is wrong for the other kind.
+- **A source's chunks page by `chunk_index`**, a genuine offset in document order, unlike search,
+  where an offset into a fused ranking means something weaker. It is how a reader sees what
+  surrounds a hit.
+- **A figure's `raw_url` is None unless the deployment serves raw files** (`P6-14`). §12.5 asks
+  for page-accurate links to raw files, and a caption with a dead link is worse than a caption
+  alone.
+- **An empty corpus shows the crawl's progress, not a demo corpus** (`B-09`). Production starts
+  empty by design (scaffold §1.7). A snapshot of a real crawl is third-party content whose
+  redistribution §14.2 keeps separate (`B-11` reaches the same conclusion about
+  `MERIDIAN_SERVE_RAW`), and synthetic fixtures do not resemble real extraction output, so the
+  first impression would be of a system better than it is. A queue draining is the honest thing
+  an empty corpus has to show.
 
 ## Configuration
 

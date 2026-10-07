@@ -1,20 +1,7 @@
 """DTOs for `/api/admin/*` (task P6-13, spec §12.6, §5.6).
 
-Here rather than in `services/api` for the reason every other DTO is: services
-import schemas, they do not define them (AGENTS.md layout).
-
-The shape worth explaining is :class:`GazetteerRowRead`, which wraps the row
-rather than widening it. Whether a term will actually *load* is not a column —
-it depends on every other approved row, because a surface form two rows share is
-withheld from the matcher whichever row you are looking at. Flattening it into
-:class:`GazetteerTermRead` would put a derived field beside stored ones with no
-way to tell them apart, and the drift test that checks every DTO field has a
-column behind it would have to be weakened to allow it.
-
-It is here at all because approving a term that then silently never matches is
-the failure this whole surface exists to prevent. A curator who approves "BCA"
-and never sees it in an extraction has no way to discover that a second row
-claims the same string.
+:class:`GazetteerRowRead` wraps a term rather than widening it, because whether it loads
+is not a column. See docs/reference/data-model.md#admin-dtos.
 """
 
 from __future__ import annotations
@@ -35,16 +22,12 @@ class GazetteerRowRead(BaseModel):
 
     term: GazetteerTermRead
 
-    #: Whether this term currently contributes patterns to the `EntityRuler`.
-    #: False for everything unapproved, and also for approved terms that are
-    #: withheld — which is the case worth surfacing, because nothing else shows
-    #: it and the symptom is a curated term that never matches anything.
+    #: Whether this term currently contributes patterns to the `EntityRuler`. False for
+    #: everything unapproved, and for approved terms that are withheld.
     will_load: bool
 
-    #: `ambiguous`, `collision`, `unapproved`, `rejected` — or None when the term
-    #: loads. Named rather than boolean because the four have different fixes: a
-    #: collision needs one of the two rows changed, ambiguity is a decision to
-    #: leave the mention to the resolver, and the other two are just the queue.
+    #: `ambiguous`, `collision`, `unapproved`, `rejected`, or None when the term loads.
+    #: Named because each has a different fix.
     withheld_reason: str | None = None
 
     #: The other rows claiming a surface form this one claims. Empty unless
@@ -74,11 +57,8 @@ class GazetteerQueueRead(BaseModel):
 class GazetteerTermEdit(BaseModel):
     """Corrections a curator makes before deciding.
 
-    Every field optional, and `None` means "leave it" rather than "clear it".
-    The two are different edits and a PATCH that cannot express the difference
-    would make clearing a jurisdiction impossible or make every edit clear it —
-    so clearing is done by sending the empty value the column takes, and
-    omitting the key is what leaves it alone.
+    Every field optional, and `None` means "leave it". Clear a field by sending the empty
+    value its column takes.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -98,10 +78,8 @@ class GazetteerTermEdit(BaseModel):
 class TopicRowRead(BaseModel):
     """One topic, plus the two numbers that are not columns.
 
-    ``weight`` is what is stored. ``share`` is what a draw actually uses once a
-    boost and the floors and ceilings have been applied, and the two differ
-    exactly when something interesting is happening — which is why both are
-    shown rather than one being computed away.
+    ``weight`` is what is stored; ``share`` is what a draw uses after the boost, floors
+    and ceilings.
     """
 
     topic: TopicConfigRead
@@ -110,10 +88,7 @@ class TopicRowRead(BaseModel):
     #: The input to normalisation, not the output.
     effective_weight: float
 
-    #: The fraction of seeds this topic draws. 0 for anything not `active`,
-    #: which is the honest answer rather than an absent field: a paused topic
-    #: keeps a weight and draws nothing, and showing only the weight would read
-    #: as it still competing.
+    #: The fraction of seeds this topic draws; 0 for anything not `active`.
     share: float
 
     #: Whether a boost is running *now*. Derived from the expiry rather than
@@ -134,10 +109,8 @@ class TopicsRead(BaseModel):
 class TopicEdit(BaseModel):
     """A steering change. Every field optional; omitted means "leave it".
 
-    ``reason`` is optional here and never optional in the log — the server
-    writes a factual description when none is given. §10.1 requires a reason on
-    every change, and requiring a person to type one before moving a slider
-    produces a column full of the word "update".
+    Without a ``reason`` the server writes a factual one, since the log always has one
+    (§10.1).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -184,12 +157,8 @@ class SteeringLogPage(BaseModel):
 class FetchPolicyRowRead(BaseModel):
     """One domain's row, what it resolves to, and what the crawl learned.
 
-    Three layers shown separately on purpose. `settings` is what somebody set
-    *here*; `resolved` is what a fetch actually gets after the global row and the
-    file defaults are merged under it; and the learned fields are neither — they
-    are observations. An operator looking at a domain going through a browser
-    needs to know which of the three put it there, because only one of them is
-    something they can change on this screen.
+    `settings` is what was set here; `resolved` is what a fetch gets after the global row
+    and file defaults are merged under it; the learned fields are observations.
     """
 
     policy: FetchPolicyRead
@@ -246,11 +215,8 @@ class FetchPolicyEdit(BaseModel):
 class BudgetRead(BaseModel):
     """The caps, what the month has spent, and whether a run may start.
 
-    `ready` is published rather than left to the client to derive. The rule is
-    "every cap set, and the month not already at its ceiling", and a screen that
-    recomputed it would eventually disagree with the server that actually
-    refuses the run — which is the worst version of this, because the UI would
-    show a green light for a run that cannot start.
+    `ready` (every cap set, and the month not at its ceiling) is the server's verdict; a
+    client never derives it. See docs/reference/data-model.md#admin-dtos.
     """
 
     max_tokens_per_run: int | None = None
@@ -275,15 +241,8 @@ class BudgetRead(BaseModel):
 class BudgetEdit(BaseModel):
     """Set or change the caps. Every field optional; omitted means "leave it".
 
-    **Null is a meaningful value here and is not the same as omitted.** Sending
-    `null` clears a cap, which un-configures it and stops runs starting — so it
-    has to be possible (a cap set by mistake must be removable) and it has to be
-    distinguishable from "I did not mention this field". `exclude_unset` on the
-    caller's side is what tells the two apart.
-
-    The bounds are duplicated from the table's CHECKs on purpose: a 422 naming
-    the field is a better answer than a 500 carrying an `IntegrityError`, and
-    the CHECK is still what makes it true.
+    `null` is not omitted: it clears a cap, which stops runs starting. The caller tells
+    them apart with `exclude_unset`. Bounds mirror the table's CHECKs, for a 422.
     """
 
     max_tokens_per_run: int | None = Field(default=None, gt=0)
@@ -299,14 +258,8 @@ class BudgetEdit(BaseModel):
 class FirstRunRead(BaseModel):
     """Whether this install has started, and what it would start with.
 
-    `is_first_run` is computed here rather than left to the client, for the
-    reason `BudgetRead.ready` is: a screen deriving "has anything been crawled"
-    from a count it also displays will eventually disagree with the server, and
-    the disagreement shows up as a setup wizard reappearing after a week.
-
-    **"No sources yet" is the test, not "no seeds yet".** Seeds are queued by
-    `make seed` at first boot, so a fresh install always has them; what makes a
-    run *first* is that nothing has come back yet.
+    `is_first_run` means no sources yet (not no seeds: `make seed` queues those at first
+    boot), computed by the server. See docs/reference/data-model.md#admin-dtos.
     """
 
     is_first_run: bool
@@ -314,16 +267,10 @@ class FirstRunRead(BaseModel):
     #: Documents in the corpus. Zero is the condition above.
     sources: int
 
-    #: Cold-start seeds still waiting to be fetched. These are what a person can
-    #: still change their mind about — §16 calls cold-start seed quality
-    #: "real, worth spending an evening on", and until now the only way to spend
-    #: that evening was editing YAML before the first boot.
+    #: Cold-start seeds still waiting to be fetched, which a person can still change.
     pending_seeds: list[QueueTaskRead] = Field(default_factory=list)
 
-    #: How many pending seeds are already claimed or attempted, and therefore
-    #: past changing. Shown rather than hidden: a crawl that has started is a
-    #: fact, and a screen implying otherwise would be inviting somebody to
-    #: remove a seed that has already been fetched.
+    #: How many pending seeds are already claimed or attempted, and so past changing.
     seeds_in_flight: int = 0
 
 
@@ -348,23 +295,13 @@ class SeedCreate(BaseModel):
 # ---------------------------------------------------------------------------
 # The agent registry and run history (task `P6-23`, §11.3, §11.10, §11.12)
 # ---------------------------------------------------------------------------
-#
-# `P6-23` was held open on its own argument — both tables are empty until phase
-# 4 runs something, and "an empty screen teaches nothing about what the full one
-# should look like". Both now have rows: `runs` carries real stages, statuses,
-# heartbeats and counters, and `agents` is where somebody turns on the agent
-# that produces the first edge.
 
 
 class AgentRowRead(BaseModel):
     """One registry row, as Admin shows it.
 
-    **No key, and no place to put one.** §11.11 keeps credentials out of the
-    database because it is snapshotted off-device, so the row names the
-    *variable* and the value is read at call time. `key_present` is computed
-    server-side from the environment the API can see, because the alternative —
-    a screen that cannot tell a configured agent from an unconfigured one — is
-    how somebody enables an agent and waits a day to find out it never answered.
+    No key, only the variable that holds it (§11.11). `key_present` is read from the
+    environment the API can see.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -385,10 +322,8 @@ class AgentRowRead(BaseModel):
     #: whether the key *works* — that costs a request, and a screen that made
     #: one per row on every load would be a bill for looking.
     key_present: bool = False
-    #: Why this row cannot be routed to, in the words routing would use.
-    #: Empty means it can. Published rather than derived on the client for the
-    #: same reason `BudgetRead.ready` is: a UI computing its own answer will
-    #: eventually disagree with the router that actually refuses.
+    #: Why this row cannot be routed to, in the words routing would use. Empty means
+    #: it can.
     blocked_by: list[str] = Field(default_factory=list)
 
 
@@ -401,13 +336,10 @@ class AgentsRead(BaseModel):
 
 
 class AgentEdit(BaseModel):
-    """What Admin may change on an agent: whether it runs, and which model.
+    """What Admin may change on an agent: whether it runs, and which model (`P6-06`).
 
-    Endpoints and task types are deployment configuration and belong in
-    `config/agents.yaml` and its migrations, where a change is reviewable.
-    Enabling is different in kind: it is the switch that starts spending. The
-    model is too (`P6-06`): which model a local server runs is the operator's
-    choice, made often, and a `${VARIABLE}` is accepted for one read from .env.
+    A `${VARIABLE}` model is read from .env. Endpoints and task types stay in
+    `config/agents.yaml`.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -463,13 +395,7 @@ GAZETTEER_BULK_MAX = 200
 
 
 class GazetteerBulkDecision(BaseModel):
-    """One verdict for several terms.
-
-    The same three verdicts as the per-term routes, with the same meaning. A
-    queue of thousands of harvested terms is not a two-minute weekly task one
-    click at a time; the per-term routes stay because a single decision is
-    still the common case.
-    """
+    """One verdict for several terms: the per-term routes' three verdicts, same meaning."""
 
     model_config = ConfigDict(extra="forbid")
 

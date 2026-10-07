@@ -1,10 +1,8 @@
 """DTOs for a route across claims and resemblance (task P6-32).
 
-Every hop says which kind of evidence it is. `cited` means a passage states
-the link; `similar` means the two ends only read alike. The totals are counted
-separately, and the answer from claims alone is carried beside the mixed one,
-so "no cited route within N hops" is a value another module can read (the
-Gaps screen, `P6-36`) and not something it has to infer from a missing field.
+Every hop is `cited` (a passage states the link) or `similar` (the ends only read
+alike), counted apart, with the claims-only answer carried beside the mixed one so
+Gaps (`P6-36`) can read it.
 """
 
 from __future__ import annotations

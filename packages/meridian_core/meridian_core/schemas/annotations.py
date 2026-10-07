@@ -1,17 +1,8 @@
 """DTOs for annotation nodes (task P6-05, spec §12.5).
 
-An annotation is an ``entities`` row, so these could have been the graph DTOs
-with a flag. They are not, and the difference is deliberate: this is a *reading*
-surface, and ``canonical_name`` is the graph's word for what a reader calls the
-title of a note. A notes API that speaks in ``canonical_name`` and
-``is_annotation`` has pushed the schema through to the person using it.
-
-**No provenance fields on the way in.** Every other ``*Create`` in this package
-inherits :class:`ProvenanceFields`, because a model that produced an artifact
-has to say which model it was (§11.12). Here the answer is fixed — a person
-wrote it — and accepting it as input would mean anything could claim to be the
-reader's own thinking, which is the one property this layer sells. The server
-sets it; a request that tries is refused by ``extra="forbid"``.
+A reading surface over ``entities`` rows, in a reader's words. No provenance fields on
+the way in: the server records that a person wrote it. See
+docs/reference/data-model.md#graph-and-notes-dtos.
 """
 
 from __future__ import annotations
@@ -20,10 +11,7 @@ import datetime as dt
 
 from pydantic import BaseModel, ConfigDict, Field
 
-#: How many nodes one note may be about. A note spanning two or three nodes is
-#: the interesting case — "these disagree", "same programme, different name" —
-#: and one spanning fifty is a tag. The cap is also what stops a single request
-#: writing fifty edges.
+#: How many nodes one note may be about; more would be a tag, and fifty edges a request.
 MAX_ABOUT = 20
 
 #: How many passages one note may cite. Higher than `MAX_ABOUT` because a note
@@ -75,10 +63,7 @@ class AnnotationCreate(BaseModel):
     title: str = Field(min_length=1, max_length=MAX_TITLE)
     body: str | None = None
 
-    #: Entity ids. Empty is allowed: a thought that has not found its node yet
-    #: is still worth keeping, and requiring a target would make the affordance
-    #: unavailable exactly when somebody is reading something the graph does not
-    #: cover yet — which is when it is most worth having.
+    #: Entity ids. Empty is allowed: a thought that has not found its node is kept.
     about: list[int] = Field(default_factory=list, max_length=MAX_ABOUT)
 
     #: The passages in front of the reader when they wrote it. §12.5 puts

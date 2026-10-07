@@ -1,13 +1,7 @@
-"""Literal aliases mirrored from the models' CHECK-constrained columns.
+"""Literal aliases mirrored from the models' CHECK-constrained columns (task P0-10).
 
-Each ``constrained(...)`` call in ``meridian_core.models`` (see ``mixins.py``)
-builds a SQLAlchemy ``Enum`` whose ``.enums`` tuple is the single source of
-truth for a value set. Importing that tuple into a ``Literal`` here — rather
-than retyping the string literals in every DTO — means a status added to a
-model's value set is automatically valid in the API schema too. Retyping them
-would let the two drift, and an API accepting a status the database rejects
-is exactly the boundary bug this package exists to prevent (task P0-10
-requirement 4).
+Each ``Literal`` is built from the constraint's own ``.enums`` tuple, never retyped. See
+docs/reference/data-model.md#boundary-schemas.
 """
 
 from __future__ import annotations
@@ -115,22 +109,14 @@ NotificationType = Literal[*NOTIFICATION_TYPE.enums]
 #: a run that has already finished, so there is no `queued` or `running`.
 JobRunStatus = Literal["ok", "failed", "timeout"]
 
-#: Which retrieval arm produced a hit (`P2-06`, `P2-18`).
-#:
-#: A Literal rather than `str` so the value set crosses the API boundary the way
-#: `SourceTier` does — a frontend that has to invent its own union is the one
-#: type a cross-language drift test cannot protect.
+#: Which retrieval arm produced a hit (`P2-06`, `P2-18`). A Literal so the value set
+#: crosses into the web package's types.
 SearchArm = Literal["lexical", "vector"]
 
 #: What a hit's `page_or_offset` counts (§5.3, `P2-18`).
 PageUnit = Literal["page", "offset"]
 
-#: Whether the crawl is alive (`P6-25`). Not a column: a verdict computed from
-#: `fetch_attempts` and `queue` at read time, defined in `crawlhealth.judge`.
-#:
-#: ``waiting`` is the one easy to mistake for ``stalled``: there is pending
-#: work and nothing is fetching, but every pending row is inside its backoff.
-#: That is the queue doing what its backoff exists to do, and a screen that
-#: called it a stall would send someone to restart a worker that has nothing it
-#: is allowed to do.
+#: Whether the crawl is alive (`P6-25`), judged at read time by `crawlhealth.judge`.
+#: ``waiting`` (all pending work in backoff) is not ``stalled``; see
+#: docs/reference/data-model.md#crawl-health.
 LivenessState = Literal["crawling", "stalled", "waiting", "idle"]
