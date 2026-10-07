@@ -163,6 +163,10 @@ async def pending_work(sess: AsyncSession, run: Run) -> int:
     return int(await sess.scalar(stmt) or 0)
 
 
+#: Stages that read the batch `pull` chose (`B-162`).
+BATCH_STAGES = frozenset({"extract", "tag"})
+
+
 class Deferred(RuntimeError):
     """The run cannot continue now, and saying so is the answer (§13.4).
 
@@ -533,6 +537,10 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
         sess, run, task_type="tag_attributes", prompt=prompt, journal=journal, stage="tag", now=now
     )
     quality_tier = await _quality_tier(sess, completion.agent_id)
+    if not batch.reasoned:
+        # Resumed at `tag` (`B-162`): extraction answered in an earlier cycle, and a model has
+        # now read this batch, which is what lets the mark move over it.
+        batch.provenance(completion, quality_tier)
 
     parsed = parse_tags(completion.text)
     journal.note("tag", parsed.summary)
@@ -649,9 +657,12 @@ async def cycle(
     waiting = await pending_work(sess, run)
     journal.note("run", f"{waiting:,} chunks past the mark")
 
-    # One batch per cycle, shared by its stages. A run resumed past `pull` has none
-    # and says so, rather than re-reading different passages.
+    # One batch per cycle, shared by its stages. A run resumed at a stage that reads the
+    # batch re-reads it from its mark, which only `tag` moves, so these are the passages it
+    # deferred on (`B-162`). See docs/features/synthesis.md#resuming.
     batch = Batch()
+    if resumed and run.stage in BATCH_STAGES:
+        await _pull(sess, run, batch, journal=journal, now=now)
 
     while run.stage != FINAL_STAGE:
         reached = run.stage

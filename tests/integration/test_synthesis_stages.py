@@ -695,3 +695,64 @@ async def test_on_topic_only_never_passes_a_passage_not_yet_examined(corpus, mon
     _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
 
     assert [p.chunk_id for p in batch.passages] == [ids[0]]
+
+
+# --------------------------------------------------------------------------
+# Resuming a deferred run (B-162)
+
+
+class DefersOnce(FakeModel):
+    """Refuses its first call for one task, as an unanswered relay does, then answers."""
+
+    def __init__(self, defer: str, **answers):
+        super().__init__(**answers)
+        self.defer = defer
+
+    async def __call__(self, sess, run, task_type, **kwargs):
+        self.calls.append(task_type)
+        if task_type == self.defer and self.calls.count(task_type) == 1:
+            raise ProviderError("waiting for an answer")
+        return Completion(
+            text=self.answers[task_type],
+            agent_id=AGENT,
+            model="test-model-1",
+            input_tokens=100,
+            output_tokens=50,
+        )
+
+
+async def started_at_our_chunks(sess, ids):
+    run, _ = await begin_or_resume(sess, agent_id=AGENT, now=NOW)
+    run.last_chunk_id = ids[0] - 1
+    await sess.flush()
+    return run
+
+
+@pytest.mark.parametrize("defer", ["relation_extraction", "tag_attributes"])
+async def test_a_run_resumed_after_a_deferral_finishes_its_own_batch(
+    corpus, monkeypatch, defer
+) -> None:
+    """A run deferred at `extract` or `tag` used to resume with no batch, finish having
+    reasoned over nothing, and leave the next run to ask the model again for a stage that had
+    already been answered: twice the spend for every deferral."""
+    from worker.orchestrate import cycle
+
+    sess, ids, marker = corpus
+    model = DefersOnce(defer, extract=answer(relation(f"{marker} Agency", f"{marker} Scheme")))
+    monkeypatch.setattr(orchestrate, "complete", model)
+    run = await started_at_our_chunks(sess, ids)
+
+    # Each wake comes after the last one's heartbeat has gone stale, as the scheduler's would.
+    from meridian_core.runs import STALE_AFTER
+
+    later = NOW + STALE_AFTER * 2
+    first = await cycle(sess, journal=Journal(), now=later, agent_id=AGENT)
+    assert first.status != "done" and first.last_chunk_id == ids[0] - 1
+
+    second = await cycle(sess, journal=Journal(), now=later + STALE_AFTER * 2, agent_id=AGENT)
+
+    assert second.run_id == run.run_id, "the deferred run finishes, not a new one"
+    assert second.status == "done"
+    assert second.last_chunk_id == max(ids), "the resumed run reasons over its batch"
+    assert model.calls.count("relation_extraction") == (2 if defer == "relation_extraction" else 1)
+    assert model.calls.count("tag_attributes") == (2 if defer == "tag_attributes" else 1)

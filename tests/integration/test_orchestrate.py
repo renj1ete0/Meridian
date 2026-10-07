@@ -226,7 +226,9 @@ async def test_stopping_after_a_stage_leaves_the_run_resumable(clean, answerable
     assert waiting.status == "running"
 
 
-async def test_a_second_invocation_continues_rather_than_starting_over(clean) -> None:
+async def test_a_second_invocation_continues_rather_than_starting_over(clean, answerable) -> None:
+    """With a model that answers; without one the run defers at the same stage each time,
+    which is what it should do rather than finishing (`B-162`)."""
     await run_orchestrator(stop_after="extract", now=NOW)
     await clean.rollback()
     waiting = await unfinished(clean)

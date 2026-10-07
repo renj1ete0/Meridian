@@ -154,6 +154,21 @@ a run starts early once `DEFAULT_EARLY_AT` (500) chunks wait past the mark; belo
 spends a frontier model on a handful of passages. The daily run still happens on a quiet
 corpus, because the run that finds little is the one that reports the corpus is quiet.
 
+### Resuming
+
+A run that defers (no model answered) stays unfinished at that stage, and the next wake resumes
+it. The batch `pull` chose lives only in memory, so a run resumed at `extract` or `tag` re-reads
+it from the run's mark (`B-162`). Only `tag` moves the mark, so these are the passages it deferred
+on, and a relay answer filed under that prompt is found. A model reached by `tag` counts as having
+read the batch, so a run resumed there moves the mark.
+
+Until `B-162` a resumed run had no batch: it noted "no batch", finished having reasoned over
+nothing, and left the next run to pull the same passages and ask the model again for the stages
+already answered. Through the relay that cost only time; with a paid model, every deferral would
+have bought its extraction twice. Found in the first attended relay session after the stack moved
+to a server target (2026-10-07: 11 relations and 2 attribute values from 40 passages, each citing
+its passage, with the relay's model as provenance).
+
 ### Run state
 
 `runs.py` (`P4-08`, §11.10) moves one row through the stages and does none of the work, so the

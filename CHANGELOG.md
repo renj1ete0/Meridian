@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.7] — 2026-10-07
+
+### Fixed
+
+- `B-162`: a synthesis run resumed after a deferral had no batch. It finished having reasoned
+  over nothing, and the next run asked the model again for the stages already answered: with a
+  paid model, every deferral would have bought its extraction twice. A run resumed at `extract`
+  or `tag` now re-reads its batch from its unmoved mark, and a model reached by `tag` lets the
+  mark move. Found in an attended relay session.
+
 ## [0.164.6] — 2026-10-07
 
 ### Fixed
