@@ -1964,7 +1964,9 @@ async def test_a_proven_hosts_sitemap_pages_carry_its_boost(
         resolver=resolve,
         max_tasks=1,
     )
-    worker._hosts = HostPolicy({run_domain: Score(40, 40)})
+    worker._hosts = HostPolicy(
+        {run_domain: Score(40, 40, followed_examined=40, followed_on_topic=40)}
+    )
     worker._topics = TopicVocabulary.from_terms([], topics=["walkability"])
 
     await worker.run()

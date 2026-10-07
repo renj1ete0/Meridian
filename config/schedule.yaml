@@ -189,8 +189,10 @@ jobs:
     # `B-110`: applies today's host verdicts (`hostscore`) to links already
     # queued — the loop asks at enqueue time, but a host judged off-topic later
     # keeps every link queued before. Run by hand twice (`B-48`, and on
-    # 2026-09-27 when it held ~79k of a 233k backlog); daily now. Reorders only.
-    interval_seconds: 86400
+    # 2026-09-27 when it held ~79k of a 233k backlog). Hourly since `B-155`: a host's
+    # standing changes as its followed pages are read, and the pass takes seconds.
+    # Reorders only.
+    interval_seconds: 3600
     enabled: true
 
   - name: requeue_links

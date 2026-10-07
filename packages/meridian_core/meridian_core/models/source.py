@@ -461,6 +461,14 @@ class HostScore(Base):
     pending: Mapped[int] = mapped_column(Integer, nullable=False)
     #: Other hosts with an on-topic page linking here (`B-150`).
     vouched: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    #: The examined and on-topic counts over pages reached by following a link or a sitemap
+    #: (`B-155`): what predicts the next followed page, unlike pages a search picked.
+    followed_examined: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    followed_on_topic: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     computed_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

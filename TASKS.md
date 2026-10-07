@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.163.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.164.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1652,6 +1652,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-155` **Proven by following** — `v0.164.0`, ADR 0016. Run 17 spent ~900 of 2,300
+      fetches on five hosts (~4% on a topic) proven by `B-115` on pages search had picked.
+      Backtested on runs 15–17; hosts are now proven or thin on their followed record, and
+      *promising* until they have one. `requeue` hourly. Found: `requeue` dropped every score
+      field but the counts, so vouches were lost on each run since `v0.163.0`; fixed. Left: drift
+      within a host (a recency window), if loop runs keep showing it
+- [ ] `B-157` **Map field circles overlap; some field names look off-corpus** — from the site
+      review (2026-10-07): layout spacing and the naming of regions need their own look
 - [x] `B-154` **Empty pages counted as worker errors** — `v0.163.4`. All 40 errors in run 17
       were trafilatura reporting empty or unparseable pages at ERROR, which the extractor already
       records; it is held at CRITICAL now

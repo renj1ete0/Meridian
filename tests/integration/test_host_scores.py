@@ -36,12 +36,18 @@ def host() -> str:
     return f"h{uuid.uuid4().hex[:10]}.test"
 
 
-async def labelled(sess, h: str, n: int, on: int) -> None:
+async def labelled(sess, h: str, n: int, on: int, *, reached_by: str | None = None) -> None:
+    """``n`` examined pages, ``on`` of them on a topic; ``reached_by`` records how each came."""
     for i in range(n):
-        source, _ = await upsert_source(
-            sess, f"https://www.{h}/p{i}", checksum=f"sha256:{uuid.uuid4().hex}"
-        )
+        url = f"https://www.{h}/p{i}"
+        source, _ = await upsert_source(sess, url, checksum=f"sha256:{uuid.uuid4().hex}")
         source.topic_labels = ["walkability"] if i < on else []
+        if reached_by is not None:
+            sess.add(
+                QueueTask(
+                    url_or_query=url, seed_source=reached_by, status="fetched", topic="walkability"
+                )
+            )
     await sess.flush()
 
 
@@ -68,6 +74,22 @@ async def test_scores_count_examined_and_on_topic_by_host_with_www_folded(sess) 
 
     assert (score.examined, score.on_topic, score.pending) == (MIN_EXAMINED, 3, 4)
     assert score.standing is Standing.ON_TOPIC
+
+
+async def test_pages_reached_by_following_are_counted_apart_from_searched_ones(sess) -> None:
+    """`B-155`: a host proven on what a search picked says little about its own links."""
+    h = host()
+    await labelled(sess, h, MIN_EXAMINED, on=MIN_EXAMINED, reached_by="search")
+    await recompute(sess)
+    searched = (await load(sess))[h]
+    assert (searched.examined, searched.followed_examined) == (MIN_EXAMINED, 0)
+    assert not searched.has_followed_record
+
+    other = host()
+    await labelled(sess, other, MIN_EXAMINED, on=5, reached_by="frontier")
+    await recompute(sess)
+    followed = (await load(sess))[other]
+    assert (followed.followed_examined, followed.followed_on_topic) == (MIN_EXAMINED, 5)
 
 
 async def test_an_unlabelled_source_does_not_count_as_examined(sess) -> None:
@@ -162,7 +184,7 @@ async def test_requeue_brings_a_kept_link_to_its_current_tier_priority(sess) -> 
     from meridian_core.tiering import priority_with_urgency
 
     on = host()
-    await labelled(sess, on, 20, on=20)
+    await labelled(sess, on, 20, on=20, reached_by="frontier")
     await queued(sess, on, 1, priority=97)
     await recompute(sess)
 
@@ -183,7 +205,7 @@ async def test_requeue_brings_a_kept_link_to_its_current_tier_priority(sess) -> 
 async def test_requeue_lifts_a_proven_hosts_waiting_links_above_an_unjudged_hosts(sess) -> None:
     """`B-115`, applied to the backlog: queued before the host was proven, fetched first after."""
     proven, unjudged = host(), host()
-    await labelled(sess, proven, 20, on=20)
+    await labelled(sess, proven, 20, on=20, reached_by="frontier")
     await queued(sess, proven, 1, priority=1)
     await queued(sess, unjudged, 1, priority=60)
     await recompute(sess)
@@ -202,3 +224,39 @@ async def test_requeue_lifts_a_proven_hosts_waiting_links_above_an_unjudged_host
     )
     by_host = {u.split("/")[2]: p for u, p in rows.items()}
     assert by_host[proven] > by_host[unjudged]
+
+
+async def test_requeue_reads_the_whole_score_not_just_the_counts(sess) -> None:
+    """It rebuilt each score from its examined and on-topic counts only, so a vouched-for host
+    (`B-150`) and a host proven by following (`B-155`) both lost their standing whenever it ran.
+    """
+    vouched, unjudged = host(), host()
+    for h in (vouched, unjudged):
+        await queued(sess, h, 1, priority=13)
+    await recompute(sess)
+    # One on-topic page elsewhere links to it.
+    page, _ = await upsert_source(
+        sess, f"https://{host()}/x", checksum=f"sha256:{uuid.uuid4().hex}"
+    )
+    page.topic_labels = ["walkability"]
+    await sess.flush()
+    from meridian_core.hostscores import record_vouches
+
+    await record_vouches(sess, page.source_id, page.url, [f"https://{vouched}/"])
+    await recompute(sess)
+    assert (await load(sess))[vouched].is_vouched
+
+    await run_pass(apply=True, session_factory=factory(sess))
+
+    rows = dict(
+        (
+            await sess.execute(
+                select(QueueTask.url_or_query, QueueTask.priority).where(
+                    QueueTask.url_or_query.like(f"https://{vouched}/%")
+                    | QueueTask.url_or_query.like(f"https://{unjudged}/%")
+                )
+            )
+        ).all()
+    )
+    by_host = {u.split("/")[2]: p for u, p in rows.items()}
+    assert by_host[vouched] > by_host[unjudged]

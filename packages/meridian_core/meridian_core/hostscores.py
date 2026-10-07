@@ -3,8 +3,9 @@
 From the share of a host's examined pages that are on a topic: off-topic hosts get no
 links followed (government hosts are down-ranked instead), unknown hosts are explored a
 few links at a time, unknown subdomains of an off-topic site go last (`B-113`), unknown
-hosts that on-topic pages elsewhere link to are explored first (`B-150`), and no host holds
-more than :data:`MAX_PENDING` queued links. Nothing deletes or calls a model. See
+hosts that on-topic pages elsewhere link to are explored first (`B-150`), a host is proven
+for following only on the pages that following reached (`B-155`), and no host holds more
+than :data:`MAX_PENDING` queued links. Nothing deletes or calls a model. See
 docs/features/discovery.md#host-scores and docs/features/discovery.md#vouched-hosts.
 """
 
@@ -65,6 +66,15 @@ VOUCHED_BOOST = 30
 #: Queued links allowed to a vouched-for host nobody has judged yet.
 VOUCHED_PENDING = 25
 
+#: Followed pages examined before a host's followed share decides its links (`B-155`). Below
+#: it, a host on-topic only by pages a search picked is *promising*, not proven: its search
+#: results say little about what its own links lead to. See
+#: docs/features/discovery.md#proven-by-following.
+MIN_FOLLOWED = MIN_EXAMINED
+
+#: Queue seed sources that mean a page was reached by following, not chosen.
+FOLLOWED_SEEDS = ("frontier", "sitemap")
+
 #: Distinct linked hosts recorded per page; a link farm is not more evidence.
 MAX_VOUCHES_PER_PAGE = 200
 
@@ -81,6 +91,8 @@ class Score:
     on_topic: int = 0
     pending: int = 0
     vouched: int = 0
+    followed_examined: int = 0
+    followed_on_topic: int = 0
 
     @property
     def share(self) -> float:
@@ -91,6 +103,15 @@ class Score:
         if self.examined < MIN_EXAMINED:
             return Standing.UNKNOWN
         return Standing.OFF_TOPIC if self.share < OFFTOPIC_SHARE else Standing.ON_TOPIC
+
+    @property
+    def followed_share(self) -> float:
+        return self.followed_on_topic / self.followed_examined if self.followed_examined else 0.0
+
+    @property
+    def has_followed_record(self) -> bool:
+        """Enough followed pages examined for their share to decide (`B-155`)."""
+        return self.followed_examined >= MIN_FOLLOWED
 
     @property
     def is_vouched(self) -> bool:
@@ -138,9 +159,16 @@ def decide(score: Score, *, government: bool, pending: int) -> Decision:
     cap = EXPLORE_PENDING if standing is Standing.UNKNOWN else MAX_PENDING
     if pending >= cap:
         return Decision(False, reason=f"{standing.value}_capped")
-    if standing is Standing.ON_TOPIC and score.share < FULL_SHARE:
-        return Decision(True, reason="on_topic_thin", weight=score.share / FULL_SHARE)
     if standing is Standing.ON_TOPIC:
+        # What following this host's links has found, once there is enough of it; until then,
+        # what every examined page shows (`B-155`).
+        share = score.followed_share if score.has_followed_record else score.share
+        if share < FULL_SHARE:
+            return Decision(True, reason="on_topic_thin", weight=share / FULL_SHARE)
+        if not score.has_followed_record:
+            if pending >= VOUCHED_PENDING:
+                return Decision(False, reason="promising_capped")
+            return Decision(True, reason="promising", boost=VOUCHED_BOOST)
         return Decision(True, reason="proven", boost=PROVEN_BOOST)
     return Decision(True, reason=standing.value)
 
@@ -193,18 +221,34 @@ async def recompute(sess: AsyncSession) -> int:
     """
     examined: Counter[str] = Counter()
     on_topic: Counter[str] = Counter()
+    followed_examined: Counter[str] = Counter()
+    followed_on_topic: Counter[str] = Counter()
+    # Reached by following a link or a sitemap, rather than picked by a search or a person.
+    followed = (
+        select(QueueTask.task_id)
+        .where(
+            QueueTask.url_or_query == Source.url,
+            QueueTask.task_type == "url",
+            QueueTask.seed_source.in_(FOLLOWED_SEEDS),
+        )
+        .exists()
+    )
     rows = await sess.execute(
-        select(Source.url, Source.extra["final_url"].astext, Source.topic_labels).where(
+        select(Source.url, Source.extra["final_url"].astext, Source.topic_labels, followed).where(
             Source.topic_labels.is_not(None)
         )
     )
-    for url, final_url, labels in rows:
+    for url, final_url, labels, was_followed in rows:
         host = host_key(final_url or url)
         if not host:
             continue
         examined[host] += 1
         if labels:
             on_topic[host] += 1
+        if was_followed:
+            followed_examined[host] += 1
+            if labels:
+                followed_on_topic[host] += 1
 
     pending: Counter[str] = Counter()
     queued = await sess.scalars(
@@ -231,6 +275,8 @@ async def recompute(sess: AsyncSession) -> int:
                     "on_topic": on_topic[h],
                     "pending": pending[h],
                     "vouched": vouched.get(h, 0),
+                    "followed_examined": followed_examined[h],
+                    "followed_on_topic": followed_on_topic[h],
                 }
                 for h in sorted(hosts)
             ],
@@ -241,7 +287,12 @@ async def recompute(sess: AsyncSession) -> int:
 
 async def load(sess: AsyncSession) -> dict[str, Score]:
     rows = await sess.scalars(select(HostScore))
-    return {r.host: Score(r.examined, r.on_topic, r.pending, r.vouched) for r in rows}
+    return {
+        r.host: Score(
+            r.examined, r.on_topic, r.pending, r.vouched, r.followed_examined, r.followed_on_topic
+        )
+        for r in rows
+    }
 
 
 async def vouches_by_host(sess: AsyncSession) -> dict[str, int]:

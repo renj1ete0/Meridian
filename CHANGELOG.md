@@ -77,6 +77,24 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.0] — 2026-10-07
+
+### Changed
+
+- `B-155`: a host is proven for following by what following found (ADR 0016, amends `B-115`).
+  `host_scores` keeps a record over pages reached by a followed link or sitemap; with enough
+  of them, that share alone makes a host proven or thin. A host on a topic overall but without
+  that record is *promising*: explored like a vouched-for host until its followed pages are
+  read. Loop run 17 spent about 900 of 2,300 fetches on five hosts proven only on pages a
+  search had picked, at about 4% on a topic. `requeue` runs hourly instead of daily (migration
+  `b155f011ed00` moves it only from the old default).
+
+### Fixed
+
+- `requeue` rebuilt each host's score from its examined and on-topic counts alone, so since
+  `v0.163.0` a vouched-for host lost its standing whenever the pass ran. It now keeps the whole
+  score; a test holds every score field to a stored column.
+
 ## [0.163.6] — 2026-10-07
 
 ### Changed

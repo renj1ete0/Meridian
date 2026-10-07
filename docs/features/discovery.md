@@ -345,6 +345,34 @@ Three changes follow from it:
 The migration seeds `link_vouches` from the first parent of every queued link, the evidence
 that already existed.
 
+### Proven by following
+
+`B-155`, [ADR 0016](../adr/0016-proven-by-following.md). Loop run 17 spent about 900 of its
+2,300 fetches on five hosts that yielded about 4%. Each had been *proven* (`B-115`) on its first
+twenty-odd examined pages, and those pages had come from search results or links from on-topic
+pages, which is to say they were picked for being on a topic. The host's own links are not
+picked: a news site, a repository or a publisher whose search hits are on a topic mostly links
+to everything else.
+
+Backtested over runs 15–17, for every host with ten or more followed fetches in a run: of five
+hosts proven only on pages a search picked, four yielded 1–5% on their followed links (one
+specialist site yielded 97%); where a host had a record on pages reached by following, that
+share tracked the next followed page better than its share over every page. Two hosts drifted
+in a way neither predicts (a repository at 60% on followed pages yielded 1% the next run).
+
+So `host_scores` keeps a second record, `followed_examined` and `followed_on_topic`: pages
+reached by a `frontier` or `sitemap` row. A host whose followed record has `MIN_FOLLOWED`
+pages is judged by it: proven at `FULL_SHARE`, thin below it. A host on a topic by every
+examined page but without that record is *promising*, explored like a vouched-for host
+(`VOUCHED_BOOST`, up to `VOUCHED_PENDING` waiting) until following has shown what its links
+lead to. The off-topic gate still reads every examined page. On the local corpus the 32 hosts
+proven under the old rule became 20 proven, 9 promising and 3 thin.
+
+`requeue`, which applies host verdicts to links already queued, runs hourly rather than daily
+(the migration moves it only from the old default), so a host's change of standing reaches its
+waiting links within the hour; it takes seconds. A promising host loses nothing for good: its
+links wait at a lower rank until its first followed pages are read.
+
 ### Sitemaps
 
 A sitemap is the cheapest frontier expansion there is: the site's own list of every URL, in one

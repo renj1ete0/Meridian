@@ -21,6 +21,11 @@ from meridian_core.hostscores import (
 )
 
 
+def proven(examined: int, on_topic: int) -> Score:
+    """A host with the same record on the pages following reached (`B-155`)."""
+    return Score(examined, on_topic, followed_examined=examined, followed_on_topic=on_topic)
+
+
 def test_a_host_is_unknown_until_enough_pages_are_examined() -> None:
     assert Score(MIN_EXAMINED - 1, 0).standing is Standing.UNKNOWN
     assert Score(MIN_EXAMINED, 0).standing is Standing.OFF_TOPIC
@@ -47,7 +52,7 @@ def test_an_offtopic_government_host_is_downranked_then_capped() -> None:
 
 @pytest.mark.parametrize(
     ("score", "cap"),
-    [(Score(0, 0), EXPLORE_PENDING), (Score(MIN_EXAMINED, MIN_EXAMINED), MAX_PENDING)],
+    [(Score(0, 0), EXPLORE_PENDING), (proven(MIN_EXAMINED, MIN_EXAMINED), MAX_PENDING)],
 )
 def test_every_host_has_a_cap(score: Score, cap: int) -> None:
     assert decide(score, government=False, pending=cap - 1).queue is True
@@ -91,12 +96,14 @@ def test_a_proven_host_ranks_above_every_unjudged_link(monkeypatch) -> None:
     """`B-115`: proven by yield, not by tier. The lowest tier's proven link must
     outrank the highest tier's unjudged one, or a proven news site still waits
     behind every government page nobody has judged."""
-    full = Score(100, int(FULL_SHARE * 100))
-    proven = decide(full, government=False, pending=0)
+    full = proven(100, int(FULL_SHARE * 100))
+    verdict = decide(full, government=False, pending=0)
     unjudged = decide(Score(), government=False, pending=0)
     tiers = [5, 10, 30, 50, 60]
-    assert proven.reason == "proven"
-    assert min(proven.applied_to(t) for t in tiers) > max(unjudged.applied_to(t + 5) for t in tiers)
+    assert verdict.reason == "proven"
+    assert min(verdict.applied_to(t) for t in tiers) > max(
+        unjudged.applied_to(t + 5) for t in tiers
+    )
 
 
 def test_the_boost_is_larger_than_any_tier_priority() -> None:
@@ -113,7 +120,7 @@ def test_the_boost_is_larger_than_any_tier_priority() -> None:
 
 
 def test_a_proven_host_is_still_capped() -> None:
-    full = Score(100, int(FULL_SHARE * 100))
+    full = proven(100, int(FULL_SHARE * 100))
     assert decide(full, government=False, pending=MAX_PENDING).queue is False
 
 

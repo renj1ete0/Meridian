@@ -27,7 +27,7 @@ from sqlalchemy import select, update
 from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.boilerplate import host_key
 from meridian_core.db import dispose_engines, session
-from meridian_core.hostscores import HostPolicy, Score, load
+from meridian_core.hostscores import HostPolicy, load
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask
 from meridian_core.policy import source_tier_map
@@ -59,7 +59,7 @@ async def run_pass(*, apply: bool, session_factory=session) -> RequeueStats:
         scores = await load(sess)
         # Pending counts start from zero: this pass *is* the recount, in the
         # order the queue would be claimed, so each host keeps its best links.
-        policy = HostPolicy({h: Score(s.examined, s.on_topic, 0) for h, s in scores.items()})
+        policy = HostPolicy({h: dataclasses.replace(s, pending=0) for h, s in scores.items()})
         tiers = await source_tier_map(sess)
         rows = await sess.execute(
             select(QueueTask.task_id, QueueTask.url_or_query, QueueTask.priority)
