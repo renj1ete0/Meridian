@@ -1,41 +1,9 @@
 """What the crawl is willing to hand a model (task `P4-14`, §2.5, §11.8).
 
-`P1-23` built the injection pre-screen and deliberately stopped at flagging:
-its own text says "flags only; §2.5 keeps the page stored, extracted and
-chunked". That was right — a screen that quarantines before anyone has seen its
-false-positive rate quarantines the corpus. It has since run clean across every
-real page crawled, so this is the half that acts on it.
-
-**Screening is paid once per domain.** The verdict is cached on `fetch_policy`,
-not recomputed per page. A site with four thousand pages must not be judged four
-thousand times, and a domain cleared on Monday must not have page 3,001
-quarantined on Friday because that page happened to quote an instruction.
-
-**Quarantined content is stored, never deleted.** §2.5 is explicit. The page
-keeps its raw file, its extraction and its chunks; what it loses is eligibility
-for the set the slow loop reads. That is reversible, and deletion is not — and
-the thing being screened for is a false positive away from ordinary writing
-about security.
-
-**`unscreened` is not `cleared`.** The filter admits `cleared` explicitly rather
-than excluding `quarantined`, so a page nothing has examined does not reach a
-model by default. "Not known to be bad" and "checked" are different claims and
-the difference is the whole point of screening.
-
-**Two ways a domain clears itself, both cheap.** A domain in the seeded tier map
-is cleared on sight — somebody curated that list, which is exactly the human
-judgement this would otherwise be asking a model for. Otherwise a domain clears
-after `CLEAN_FETCHES_TO_CLEAR` consecutive unflagged fetches, and the counter
-resets on any flag, the same shape as `consecutive_failures` and
-`render_js_escalations`: a domain that starts serving hostile pages stops being
-treated as though it had not.
-
-What is *not* here is the part that needs a model: an unknown domain that trips
-the screen is quarantined and left that way for a frontier model to judge
-(`P4-07`). Queueing that judgement is phase 4. Until then a quarantine is
-cleared by a person, which is a worse experience and the correct failure — the
-alternative is admitting unscreened content because nothing was available to
-screen it.
+A domain's screening verdict is cached on `fetch_policy` and paid once per domain.
+Quarantined content is stored, never deleted, and only `cleared` reaches a model
+(`unscreened` does not). A curated domain clears on sight; any other clears after
+`CLEAN_FETCHES_TO_CLEAR` clean fetches in a row. See docs/features/source-quality.md#trust.
 """
 
 from __future__ import annotations
@@ -52,12 +20,7 @@ from .models import Chunk, FetchPolicy, Source
 log = get_logger(__name__)
 
 #: Consecutive unflagged fetches before an unknown domain clears itself.
-#:
-#: Five rather than one, because a single clean page proves nothing about a
-#: domain — the pages that carry an injection are rarely the first one linked.
-#: Five rather than fifty, because until a domain clears, everything it serves
-#: is held back from the slow loop, and a threshold nobody reaches is a corpus
-#: nobody can read.
+#: See docs/features/source-quality.md#trust.
 CLEAN_FETCHES_TO_CLEAR = 5
 
 #: The states whose content the slow loop may read.
@@ -91,15 +54,9 @@ __all__ = [
 def page_state(domain_state: str, *, flagged: bool) -> str:
     """The state a page is stored under, given its domain's verdict.
 
-    The page is not simply given the domain's state. A flagged page on an
-    unscreened domain is `quarantined` on its own account, because the domain
-    having no verdict is not a reason to admit a page that tripped the screen.
-
-    A flagged page on a *cleared* domain stays cleared, and that is the
-    deliberate half: clearing a domain is a statement that its content is
-    trusted, and re-quarantining individual pages afterwards would make the
-    clearing meaningless while producing exactly the drip of false positives
-    `P1-23` was careful to avoid.
+    A flagged page on an unscreened domain is `quarantined` on its own account; a
+    flagged page on a *cleared* domain stays cleared. See
+    docs/features/source-quality.md#trust.
     """
     if domain_state == "rejected":
         return "rejected"
@@ -121,15 +78,9 @@ async def record_screening(
 ) -> str:
     """Fold one fetch's screening result into the domain's verdict.
 
-    Returns the domain's state *after* this fetch, which is what the caller
-    stores on the page. Called once per fetch, so it is deliberately cheap: one
-    row, no history table — `trust_decided_at` and `trust_decided_by` carry
-    enough to explain the current verdict, and the crawl's own logs carry the
-    rest.
-
-    A `rejected` domain is left alone. Rejection is a decision somebody made,
-    and a crawl that un-rejected a domain by fetching five clean pages from it
-    would be overruling them.
+    Returns the domain's state *after* this fetch, which the caller stores on the
+    page. One row, no history table. A `rejected` domain is left alone: rejection is
+    a person's decision.
     """
     moment = now or dt.datetime.now(dt.UTC)
     row = await sess.get(FetchPolicy, domain, with_for_update=True)
@@ -142,10 +93,8 @@ async def record_screening(
         return "rejected"
 
     if flagged:
-        # The counter resets whatever the current state is. A cleared domain
-        # stays cleared — see `page_state` — but it starts earning its clearing
-        # again, so a domain that has turned hostile does not keep a stale
-        # streak behind it.
+        # The counter resets whatever the state: a cleared domain stays cleared but
+        # starts earning its clearing again.
         row.clean_fetches = 0
         if row.trust_state == "unscreened":
             row.trust_state = "quarantined"
@@ -188,16 +137,8 @@ async def record_screening(
 def only_readable(stmt: Select, *, states: Sequence[str] = READABLE_STATES) -> Select:
     """Narrow a chunk query to what the slow loop may read.
 
-    Applied to the *chunk* query rather than at the source, because that is
-    where every reader already starts and a filter one caller can forget to join
-    is a filter that will be forgotten. Expressed as `IN (cleared)` rather than
-    `!= quarantined` for the reason the module docstring gives: an unexamined
-    page is not a cleared one.
-
-    Deliberately **not** applied to the operator's own search. §2.5 keeps
-    quarantined content stored and visible; what it withholds is content going
-    to a model. Somebody reading their own corpus should see what was
-    quarantined — that is how a false positive gets noticed.
+    Applied to the chunk query, as `IN (cleared)`. Deliberately **not** applied to
+    the operator's own search. See docs/features/source-quality.md#trust.
     """
     return stmt.where(Source.trust_state.in_(tuple(states)))
 
@@ -215,10 +156,8 @@ def readable_chunk_ids(states: Sequence[str] = READABLE_STATES) -> Select:
 # ---------------------------------------------------------------------------
 # Whether a domain may be seeded at all (task `P4-12`, §11.4)
 # ---------------------------------------------------------------------------
-#
-# A third question beside "may we fetch this" (`status`) and "may a model read
-# what came back" (`trust_state`). §11.4 caps what a model may seed; this is
-# about *which domains* the cap applies within.
+# A third question beside `status` and `trust_state`: *which domains* §11.4's cap on
+# model seeding applies within. See docs/features/source-quality.md#seeding-a-domain.
 
 #: Novel documents a frontier-discovered domain must return before it may be
 #: seeded freely. Novel, not fetched: a site serving one page under a thousand
@@ -238,14 +177,8 @@ OPERATOR_CHOSEN = ("user",)
 async def record_discovery(sess: AsyncSession, domain: str, *, seed_source: str) -> FetchPolicy:
     """Note how a domain first became known, without overwriting the answer.
 
-    Called wherever a URL is queued. The first `seed_source` sticks: a domain
-    found by following a link and later proposed by a model was still found by
-    following a link, and letting the later event win would erase the
-    provenance that decides whether it may auto-approve.
-
-    An operator's own seed is allowed immediately — typing a URL is consent,
-    and making somebody wait three fetches for a domain they chose would be
-    the system disbelieving them.
+    Called wherever a URL is queued. The first `seed_source` sticks. An operator's own
+    seed is allowed immediately. See docs/features/source-quality.md#seeding-a-domain.
     """
     row = await sess.get(FetchPolicy, domain, with_for_update=True)
     if row is None:
@@ -266,12 +199,9 @@ async def record_novel_fetch(
 ) -> bool | None:
     """Count a novel document from ``domain``, and approve it if it has earned it.
 
-    Returns the domain's `seed_allowed` after the count. A domain whose first
-    sighting was a model's proposal is **not** approved by this: it accrues the
-    same evidence and still waits for a person, because the failure being
-    avoided is a model talking the crawl into a domain by describing it
-    confidently, and evidence gathered after the proposal is evidence the
-    proposal caused.
+    Returns the domain's `seed_allowed` after the count. A domain first sighted in a
+    model's proposal is **not** approved by this and waits for a person; see
+    docs/features/source-quality.md#seeding-a-domain.
     """
     row = await sess.get(FetchPolicy, domain, with_for_update=True)
     if row is None:

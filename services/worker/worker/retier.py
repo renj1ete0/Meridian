@@ -1,14 +1,8 @@
 """Re-tier sources whose scholarly tier came only from their domain (task `B-50`).
 
-The fetch path now asks for document evidence — the page's own DOI — before
-it lets an academic institution's domain make a page `peer_reviewed`. This pass
-applies the same rule to what is already stored: a source tiered
-`peer_reviewed`, on a domain the tier map lists under
-`needs_scholarly_evidence`, with no DOI of its own, becomes `institutional`.
-
-Tier only. Retention is untouched (a raw file kept is not deleted by this), and
-so is every edge and claim: a tier is how a source is weighed, and re-weighing
-it deletes nothing. Report by default; ``--apply`` writes.
+A `peer_reviewed` source on a domain listed under `needs_scholarly_evidence`, with no
+DOI of its own, becomes `institutional`. Tier only: retention, edges and claims are
+untouched. Report by default; ``--apply`` writes.
 """
 
 from __future__ import annotations

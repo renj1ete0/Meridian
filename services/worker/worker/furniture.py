@@ -2,27 +2,9 @@
 
 ``python -m worker.furniture`` — reports by default, writes only with ``--apply``.
 
-`B-23` and `B-42` stop the frontier queueing pages that are about a website
-rather than about anything: privacy policies, terms of use, contact pages,
-accessibility statements, a search engine's result pages. Pages crawled before
-the rule was wide enough are still in the corpus, and they cost twice: they
-answer searches and they take whole synthesis batches with nothing to extract.
-
-**Demoted, not deleted.** Each matching source moves to the `junk` retention
-tier, which search, the corpus map and synthesis already leave out and which a
-later retention sweep is the one thing allowed to drop. A misjudged page is one
-`UPDATE` away from coming back, and its raw file and chunks are untouched until
-then.
-
-**Evidence outranks the address.** The rule reads a page's URL, never its
-text, so an article with a "privacy policy" link in its footer is untouched.
-The opposite case — real content published at a furniture-shaped address — is
-why a source any graph edge or entity cites is never demoted: once a passage is
-evidence for something, how its URL looks no longer decides anything.
-
-**Judged by the same function the frontier uses** (`prefilter.is_site_furniture`),
-on the URL the source was stored under and on the one it was served from, so a
-page cannot be furniture at the door and a document once inside.
+Moves matching sources to the `junk` retention tier, judged by the frontier's own
+`prefilter.is_site_furniture` on the stored and the served URL. A source any edge or
+entity cites is never demoted. See docs/features/source-quality.md#site-furniture.
 """
 
 from __future__ import annotations

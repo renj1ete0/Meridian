@@ -2,17 +2,9 @@
 
 ``python -m worker.sweep`` — reports by default, deletes only with ``--apply``.
 
-A fourth pass beside `main`, `embed` and `novelty`, and the only one that
-destroys anything. That is why it is a separate process rather than housekeeping
-inside the fetch loop: a sweep that ran automatically every hour would eventually
-run at the same moment as the mistake that made something droppable, and the
-window between "wrongly demoted" and "file gone" would be an hour rather than
-however long it takes someone to read a report.
-
-It also cannot be resumed the way the other passes can. Their queues are
-predicates over a column, so a half-finished pass is indistinguishable from one
-that has not started; a half-finished sweep has deleted some files and not
-others, and the plan it was working from is stale.
+The only pass that destroys anything, so it is a separate, manual process and is not
+resumable: a half-finished sweep's plan is stale. See
+docs/features/source-quality.md#the-retention-sweep.
 """
 
 from __future__ import annotations
@@ -36,11 +28,8 @@ log = get_logger(__name__)
 def render_chunks(superseded: int, apply: bool) -> None:
     """The other thing a re-crawl leaves behind (`P1-32`).
 
-    Reported here rather than reclaimed by the crawl, for the same reason raw
-    files are: a superseded chunk is the text an edge *would* have been derived
-    from, and the crawl is the process least able to judge whether anything
-    needs it. It reads a page, sees the content changed, and has no idea what
-    the graph has been built on.
+    Reported here rather than reclaimed by the crawl, which cannot know whether the
+    graph was built on them.
     """
     if not superseded:
         return
@@ -65,11 +54,8 @@ def render(plan: RetentionPlan, root: str) -> None:
         print(f"    - {candidate.path}  ({candidate.reason})")
 
     if plan.dangling:
-        # The arm that found something on the first real corpus, and the reason
-        # this pass is worth running even when there is nothing to reclaim. A
-        # source claiming a file it does not have is a citation that will not
-        # open, and nothing else in the system notices: the row is complete, the
-        # chunks are real, and only the disk disagrees.
+        # A source claiming a file it does not have is a citation that will not open,
+        # and nothing else notices.
         print("\n  DANGLING — these sources claim a raw file that is not there:")
         for row in plan.dangling[:20]:
             print(f"    ! source {row.source_id}  {row.path}")

@@ -1,34 +1,8 @@
 """Screening fetched pages for prompt injection (task P1-23, spec §2.1, §11.8).
 
-The threat is specific and it is the reason this module exists at all. The slow
-loop hands a frontier model chunks pulled straight out of pages this crawler
-found by following links off other pages, and that model holds write tools —
-`add_edge`, `tag_entity`, `enqueue_seed`. A page that can talk to it can write to
-the graph. Since `P1-06` the frontier follows links at volume, so the pages
-reaching extraction are no longer a curated seed list and this stopped being
-theoretical.
-
-**Mechanical only, no model.** §2.1's fast-loop invariant is that ingestion keeps
-working with every reasoning model offline, and screening for injection with a
-model would put the guard behind the thing it guards. Regex and DOM work, which
-is also what makes it cheap enough to run on every page.
-
-**Hidden is the signal; imperative is not.** This is the distinction the whole
-module turns on. A research corpus about AI will legitimately contain the
-sentence "ignore all previous instructions" — in an article *about* prompt
-injection, which is exactly the sort of source this system should be reading.
-Flagging that is a false positive that trains someone to ignore the flag. But
-text that is *hidden from a human reader* and still reaches extraction has no
-honest purpose: nobody writes instructions in white-on-white 0px text for a
-reader's benefit. So visible imperative phrasing is weak evidence and hidden
-imperative phrasing is strong, and the two are recorded separately.
-
-**Flag, do not delete.** §2.5's rule that steering adjusts rather than destroys
-applies here too: the page is stored, extracted and chunked as normal, and what
-this adds is a record on the source of what was found. Excluding quarantined
-content from the batch the slow loop pulls is `P4-06`, and it needs the frontier
-model that judges the domain to exist first. Until then this is the tripwire,
-and its value is that somebody can query for what tripped it.
+Mechanical only, no model. Hidden imperative text is strong evidence; visible imperative
+phrasing is weak, because articles about injection quote it. The page is flagged, never
+deleted. See docs/features/source-quality.md#injection-screening.
 """
 
 from __future__ import annotations
@@ -44,10 +18,8 @@ from meridian_core.logging import get_logger
 
 log = get_logger(__name__)
 
-#: How much text a hidden element must hold before it is worth reporting.
-#: `display:none` is the ordinary machinery of every dropdown, modal and tab
-#: strip on the web, so a low threshold flags every page ever written and the
-#: flag stops meaning anything.
+#: How much text a hidden element must hold before it is worth reporting:
+#: `display:none` is the ordinary machinery of every dropdown and modal.
 HIDDEN_TEXT_FLOOR = 80
 
 #: Longest evidence snippet kept per finding. Enough to recognise what tripped
@@ -58,12 +30,8 @@ EVIDENCE_CHARS = 200
 MAX_FINDINGS = 50
 
 # --- What "addressed to a model" looks like ---------------------------------
-#
-# Two families, kept apart because they carry different weight. The first is
-# phrasing that only makes sense aimed at an assistant; the second is phrasing
-# that names the machinery of one. Neither is proof — an article about prompt
-# injection quotes both — which is why hiddenness is what promotes a finding
-# from noise to signal.
+# Two families, kept apart: phrasing aimed at an assistant, and phrasing that names an
+# assistant's machinery. Neither is proof; hiddenness is what promotes a finding.
 _INSTRUCTION_PATTERNS = (
     r"ignore\s+(?:all\s+|any\s+)?(?:the\s+)?(?:previous|prior|above|preceding|earlier)\s+"
     r"(?:instructions?|prompts?|directions?|rules?)",
@@ -134,10 +102,8 @@ _WHITE_BACKGROUND = re.compile(
 class Finding:
     """One thing the screen noticed, and enough of it to recognise.
 
-    ``kind`` is what tripped, ``evidence`` is the snippet, and ``detail`` says
-    how it was hidden when that is the point — "an element with
-    `display:none`" and "white text on a white background" want different
-    responses from whoever reads this.
+    ``kind`` is what tripped, ``evidence`` is the snippet, and ``detail`` says how
+    it was hidden, when it was.
     """
 
     kind: str
@@ -149,11 +115,8 @@ class Finding:
 class Screening:
     """What one page's screen found.
 
-    ``suspicious`` is the summary judgement and it is deliberately narrow: it
-    means *hidden* instructions or tool-directed imperatives were found, not
-    that the page mentioned an AI. A flag that fires on every article about
-    prompt injection is a flag people learn to ignore, and then it protects
-    nothing.
+    ``suspicious`` is deliberately narrow: *hidden* instructions or tool-directed
+    imperatives were found, not merely that the page mentioned an AI.
     """
 
     findings: tuple[Finding, ...] = ()
@@ -248,10 +211,7 @@ def _hidden_findings(html_text: str) -> list[Finding]:
 def _hidden_reason(element: object) -> str | None:
     """Why this element is invisible to a reader, or None if it is not.
 
-    Inline styles and attributes only. Resolving a stylesheet would mean
-    fetching and cascading CSS for every page, which is a browser's job and a
-    lot of work for an attack that overwhelmingly uses inline styles precisely
-    because they need no second request.
+    Inline styles and attributes only; stylesheets are not resolved.
     """
     attrib = element.attrib  # type: ignore[attr-defined]
     if "hidden" in attrib:
@@ -298,10 +258,8 @@ def _inherits_white(element: object) -> bool:
 def _comment_findings(html_text: str) -> list[Finding]:
     """Instructions in HTML comments.
 
-    A comment is invisible by construction and reaches no reader, so an
-    imperative inside one has no honest audience. It also survives naive
-    extractors, which is why it is worth checking the raw source rather than
-    trusting that extraction dropped it.
+    Checked in the raw source: a comment has no honest audience, and survives naive
+    extractors.
     """
     findings: list[Finding] = []
     for match in re.finditer(r"<!--(.*?)-->", html_text, re.DOTALL):
@@ -314,19 +272,8 @@ def _comment_findings(html_text: str) -> list[Finding]:
 def _text_findings(extracted_text: str) -> list[Finding]:
     """Imperative phrasing in the text that actually reaches a model.
 
-    `visible_instructions` is *not* suspicious on its own, deliberately. An
-    article about prompt injection quotes these phrases, and it is exactly the
-    kind of source this corpus should be reading. It is recorded because it is
-    context for a page that also tripped something else, not because it is
-    evidence by itself.
-
-    A tool directive is different, and is suspicious even when plainly visible:
-    a page instructing an agent to add an edge or send the contents somewhere is
-    addressed at something with tools, and visible injection works perfectly
-    well. The accepted cost is that an article *quoting* a full payload also
-    trips it — which is the right side to err on, because this flag blocks
-    nothing (`P4-06` is quarantine) and the other error is a model reading an
-    instruction as prose while holding `add_edge`.
+    `visible_instructions` is *not* suspicious on its own; a tool directive is, even
+    when plainly visible. See docs/features/source-quality.md#injection-screening.
     """
     if not extracted_text:
         return []

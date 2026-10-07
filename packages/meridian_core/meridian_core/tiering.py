@@ -1,16 +1,8 @@
 """Source tiering, queue priority, and fetch delay (spec §5.2, §6.4).
 
-Pure functions over a mapping, deliberately: tier assignment is mechanical and
-must never be a model judgement (§5.2), so it needs to be trivially testable and
-give the same answer every time for the same domain.
-
-Tier does three jobs:
-
-- it is the first tiebreaker when sources conflict;
-- it sets queue priority, so a search result from a government domain is fetched
-  before a blog without anyone curating a seed list;
-- it drives tier-imbalance counter-seeding (§7.4), where a node evidenced
-  entirely by one tier gets seeds aimed at the missing ones.
+Pure functions over a mapping: tier assignment is mechanical, never a model's judgement.
+Tier breaks ties between conflicting sources, sets queue priority and drives
+counter-seeding (§7.4). See docs/features/source-quality.md#tiers.
 """
 
 from __future__ import annotations
@@ -34,10 +26,8 @@ def registrable_domain(host: str) -> str:
 def resolve_tier(domain: str, mapping: dict[str, Any]) -> str:
     """Return the source tier for ``domain``.
 
-    Resolution order is exact match, then the **longest** matching suffix
-    pattern, then the default. Longest-wins matters: ``*.gov.sg`` and ``*.sg``
-    can both match, and the specific one has to win or every domain under the
-    broader suffix collapses into one tier.
+    Resolution order is exact match, then the **longest** matching suffix pattern
+    (``*.gov.sg`` beats ``*.sg``), then the default.
     """
     host = registrable_domain(domain)
 
@@ -68,12 +58,8 @@ def _matches(host: str, pattern: str) -> bool:
 def needs_evidence(domain: str, mapping: dict[str, Any]) -> bool:
     """Whether ``domain``'s scholarly tier is a guess that a document must confirm (`B-50`).
 
-    An academic *institution's* domain serves its journals and its theses, and
-    also its admissions pages, its hospital's condition pages, its law school's
-    statute library and its HR policies. The suffix says who runs the site, not
-    whether a page was peer reviewed. `needs_scholarly_evidence` in the tier map
-    lists those suffixes; a publisher's domain is not in it, and neither is a
-    domain named exactly, since naming it is somebody's judgement about it.
+    True for suffixes listed under `needs_scholarly_evidence`; never for a domain named
+    exactly. See docs/features/source-quality.md#scholarly-evidence.
     """
     if resolve_tier(domain, mapping) != "peer_reviewed":
         return False
@@ -104,16 +90,9 @@ def document_tier(domain: str, mapping: dict[str, Any], *, scholarly: bool) -> s
 def is_tier_mapped(domain: str, mapping: dict[str, Any]) -> bool:
     """Whether the curated map actually names this domain (task `P4-14`).
 
-    Distinct from `resolve_tier` returning something, because that always
-    returns something — an unmapped domain gets `default_tier`. The difference
-    matters to screening: being in the map is somebody's curation and clears a
-    domain on sight, whereas falling through to the default is precisely the
-    "unknown domain" case that has to earn its clearing.
-
-    The same matching rules as `resolve_tier`, deliberately duplicated in shape
-    rather than shared through a flag: a predicate that also returned a tier, or
-    a tier function that also reported how it decided, would be used for the
-    wrong one of the two by somebody in a hurry.
+    Not the same as `resolve_tier`, which always answers (an unmapped domain gets
+    `default_tier`). Same matching rules, kept as a separate function on purpose; see
+    docs/features/source-quality.md#trust.
     """
     host = registrable_domain(domain)
 
@@ -149,32 +128,17 @@ def priority_for_domain(domain: str, mapping: dict[str, Any]) -> int:
     return priority_for_tier(link_tier(domain, mapping), mapping)
 
 
-#: How much a short half-life lifts a seed's place in the queue (`P2-20`).
-#:
-#: Small, because tier priority already carries most of the ordering and this
-#: is a second opinion on it rather than a replacement. Large enough that a
-#: news page outranks a paper of the same tier, which is the whole point.
+#: How much a short half-life lifts a seed's place in the queue (`P2-20`). Small:
+#: a second opinion on tier priority. See docs/features/source-quality.md#urgency.
 URGENCY_WEIGHT = 8
 
 
 def urgency_for_tier(tier: str, half_lives: dict[str, int | None]) -> int:
     """How much sooner this kind of document should be fetched (`P2-20`, §9).
 
-    The second half of age-aware ranking, and it reads the *same* table the
-    ranking does — `P2-20` is explicit that `P7-06` should do likewise rather
-    than inventing a second set of half-lives, and the way two sets diverge is
-    that nobody notices they exist.
-
-    **Two separate reasons a fast-rotting source is worth fetching sooner**,
-    and they point the same way. Its claim stops being current, so the value of
-    having it decays; and the page itself is likelier to be gone — news sites
-    reorganise, press releases move, and a paper is still there in five years.
-    Neither reason applies to `peer_reviewed`, which is why it gets nothing.
-
-    Returns an addition to the tier's priority, never a replacement. Tier still
-    decides the broad order (§5.2); this separates documents *within* a tier
-    that age at different speeds, and cannot promote an informal page above a
-    government one on urgency alone.
+    Reads the same half-life table as ranking. Returns an addition to the tier's
+    priority, never a replacement, and nothing for `peer_reviewed`. See
+    docs/features/source-quality.md#urgency.
     """
     half_life = half_lives.get(tier)
     if half_life is None or half_life <= 0:
@@ -192,10 +156,8 @@ def priority_with_urgency(
 ) -> int:
     """Queue priority for a domain, adjusted for how fast its kind rots.
 
-    The one callers should use when queueing a fetch. Kept beside
-    `priority_for_domain` rather than replacing it, because the plain version
-    is what a test or an admin screen wants when asking "what does the tier map
-    say" without the ageing opinion mixed in.
+    The one callers should use when queueing a fetch; `priority_for_domain` is the
+    tier map's answer alone.
     """
     tier = link_tier(domain, mapping)
     return priority_for_tier(tier, mapping) + urgency_for_tier(tier, half_lives)
