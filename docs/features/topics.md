@@ -71,6 +71,115 @@ all selected topics (`topic_match=all`).
   sweep, so it is a decision a person makes. Sources labelled only from a sample are never
   demoted.
 
+### Content, not provenance
+
+`P2-14` gave sources a topic from the queue topic that caused the fetch plus whatever the URL
+path matched. That is provenance, and it is wrong about content exactly where it matters: a
+crawl pursuing one topic follows a site's navigation into pages about something else, and every
+one was stamped with the topic pursued. Since `P2-21`, provenance is `crawled_for` (which
+accumulates) and `topic_labels` answers *which topics is this text about*; `retopic` is the only
+writer, and each examination replaces the previous labels rather than adding to them. A page
+comparing two topics is about both. A source with no embedded text stays NULL: calling it
+off-topic would be a claim about text nobody has read. Labels are ordered best first, ties by
+name, because a consumer that shows one (a map colours a point once) should show the one the
+text is most about.
+
+**Why a reference point.** Raw cosine between these embeddings is compressed into a narrow
+band: every page shares a large common component ("this is a web page"), so an unrelated page and
+an on-topic one differ by a few hundredths. The reference is the mean embedding of a fixed list of
+generic phrases (navigation, boilerplate, the vocabulary of being a document) and depends on
+nothing but the model. Changing the list changes the basis and re-examines every source, the
+right cost for moving the origin everything is measured from.
+
+**Prototypes** use approved, unrejected gazetteer terms carrying the topic: canonical forms
+always, aliases only when the term is unambiguous and the alias is long enough (shorter ones are
+mostly acronyms, which an embedder reads as noise or as another expansion; the same floor as the
+URL matcher's). An unapproved term is a proposal awaiting a person (§5.6) and does not get to
+move labels.
+
+**Duplicate chunks are left out of a source's mean** where it has any others: what the novelty
+gate marked duplicate is mostly navigation and footer repeated on every page, the part that says
+nothing about the subject. A source made *only* of duplicates falls back to them rather than going
+unlabelled; such sources separate far worse (AUC ~0.75) and are also the ones search hides.
+
+### Calibration
+
+The first calibration used a real crawled corpus of a few thousand sources, all embedded and
+scored against prototypes built as now. A title-and-URL heuristic gave a silver set: pages naming
+a topic outright as positives, and pages plainly about nothing the corpus covers (clinical
+condition pages, court rules, privacy and contact pages, unrelated academic listings) as
+negatives.
+
+- Area under the ROC curve ~0.985 with the reference point, ~0.97 without.
+- At the floor ~80% of positives keep their topic and under 1% of negatives gain one. The band
+  just below (0.42–0.45) was, read side by side, mostly institutional landing pages, publication
+  listings and legal indexes mentioning a topic among many, so the floor sits above them rather
+  than at the best-balanced-accuracy point near 0.40, which let about one negative in twenty
+  through.
+
+Re-measured on the live corpus (`B-83`), which the silver set did not resemble: it held no
+generic government pages, and a crawl of government sites is mostly those. Judged by reading,
+sources whose best score sat in 0.45–0.48 were right about one time in six, 0.48–0.50 one in
+three, 0.50–0.52 about half, and 0.55 and over every time sampled. Agency "about" pages, speeches,
+tax and careers pages share a topic's vocabulary without being about it. At 0.50 each true label
+given up removes nearly four false ones; at 0.52 the trade is about even, so the floor stops at
+0.50.
+
+- **Margin.** Adjacent topics in one field score close together on a page about either; inside
+  the margin the page was, when read, usually about both, and past it the second score was the
+  field's shared vocabulary. A wider margin admitted third labels on generic pages.
+- **`OFFTOPIC_FLOOR`**, the only threshold `--demote-offtopic` reads (and overridable there), is
+  clearly under the label floor, because labelling is re-derived every pass while a demotion
+  hands a source to the retention sweep. On the calibration corpus every sampled source under it
+  was off-topic by content; the few silver positives under it were search-result, bot-wall or
+  error pages whose *titles* named a topic. Candidates are only sources labelled under the
+  current basis (an old score says nothing about now), not already junk, and not labelled from a
+  sample: junk is never embedded, so demoting on part of a text would stop the rest from ever
+  being read.
+- **`TRIAGE_FLOOR`** (`B-89`) sits under the label floor because a sample misreads the whole by a
+  few hundredths: on a live corpus, holding at the label floor would have held back about one
+  on-topic long document in ten, and at this line about one in fifty (none over 300 passages),
+  while still holding back most off-topic ones. Holding orders embedding and deletes nothing, so a
+  miss costs a delay. It is not part of the basis: it decides what is embedded next, never a
+  label.
+
+Re-measure before moving any of these; `python -m worker.retopic` prints the distribution it saw.
+
+### The labelling pass
+
+`retopic` is a pass, not a fetch-time step, for the reason the novelty gate is: vectors arrive
+after the fetch. A source is examined once its *sample* is embedded (`B-89`); before that, waiting
+for every chunk made a long document's labels, and so whether it was worth embedding, cost the
+whole document. The sample spans the text rather than being whichever half embedded first, which
+is what waiting had guarded against. Its labels are provisional and are read again once the whole
+text is embedded. The queue is a predicate (unexamined, a different basis, rewritten since, or
+sampled and now whole), so a killed pass keeps what it committed; a topic change re-queues every
+source at the cost of one aggregate query per batch and a matrix product.
+
+<a id="passages"></a>**Passages** (`P2-24`). A source's labels come from the mean of its chunks:
+right for a web page, coarse for a report or a book, where a chapter on another topic is invisible
+to a topic filter and to Gaps. So each live embedded chunk is scored on its own vector, against the
+same prototypes and reference, leaving source labels untouched. A passage is noisier than a
+document mean (averaging cancels each chunk's incidental vocabulary): measured on a real crawl,
+passage scores sit lower and spread wider, and the 0.40–0.45 band in documents *not* about a topic
+was mostly noise, while above it were mostly passages genuinely about the topic inside a document
+about a neighbouring one, which is what this exists to find. So passages use the source floor and
+margin. A passage mostly of link labels (a directory of regulations, a publication list) is a
+listing labelled `{}`: its vector is the average of what it links to, and it scored topics none of
+its entries is about; this structural rule removed most false positives the floor did not.
+
+A passage row records the passage basis (the source basis plus the passage thresholds, so moving
+one of those re-labels passages without touching sources) and the embedding view the vector came
+from, so a re-embed re-queues it. A re-crawl's new chunks have no row until they have a vector;
+superseded chunks keep theirs harmlessly and lose it with the chunk. Passages run second in the
+same hourly pass: a sibling job would embed the prototypes twice and could label under two bases
+in the minute a topic changed. `topic_match=all` asks that the passage's labels and its source's
+together carry every topic: a chapter on one topic inside a document labelled with the other is
+where two topics genuinely meet.
+
+**Overlaps** count searchable sources (no junk, no copies, examined and on a topic) by source
+labels, since a count of documents is what a person weighing "is there anything here" reads.
+
 ## Configuration
 
 - Topics, descriptions, vocabulary and status (active, paused, maintenance, archived):

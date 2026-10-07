@@ -1,40 +1,10 @@
 """Topics per passage: the source labeller's method, applied to each chunk (task P2-24).
 
-A source carries one set of labels, decided from the mean of its chunk vectors
-(:mod:`meridian_core.topiclabels`). That is the right unit for a web page and a
-coarse one for a long report or a book: a document mostly about one topic with
-a chapter on another is labelled with the first, and the chapter is invisible
-to a topic filter and to Gaps. So each live, embedded chunk is scored too —
-against the same prototypes, from the same reference point, under the same
-:class:`~meridian_core.topiclabels.Basis` — and keeps the labels its own vector
-earns. Source labels are untouched: this adds a finer answer beside them.
-
-**Thresholds of their own.** A single passage is noisier than a document mean:
-averaging many chunks cancels the incidental vocabulary each one carries, and
-one chunk has nobody to cancel it. Measured on a real crawl, passage scores sit
-lower and spread wider than source scores, and the band just under the source
-floor was mostly listings and abstracts in adjacent fields. So:
-
-- :data:`PASSAGE_FLOOR` is the source floor, not lower. Read side by side, the
-  0.40–0.45 band in documents *not* about the topic was mostly noise; above it,
-  mostly passages genuinely about the topic inside a document about a
-  neighbouring one — which is exactly what this exists to find.
-- :data:`PASSAGE_MARGIN` is the source margin.
-- :data:`LISTING_SHARE`: a passage whose visible text is mostly link labels is
-  a listing (a directory of regulations, a publication list), and it is
-  examined and labelled ``{}``. Its vector is the average of what it links to,
-  and it scored topics that none of its entries is about. This is structure,
-  not a model, and it removed most of the false positives the floor did not.
-
-**Stale when the basis moves or the vector does.** Each row records the passage
-basis — the source basis fingerprint plus these thresholds — and the embedding
-view the scored vector came from. A topic added or re-described changes the
-first; a re-embed under a new view changes the second. A re-crawl writes new
-chunks, which have no row until they have a vector. Superseded chunks keep
-their row (harmless: nothing that serves the corpus reads a superseded chunk)
-and lose it with the chunk.
-
-Nothing here calls a language model (§2.1).
+Each live embedded chunk is scored on its own vector against the same prototypes and
+reference, beside the source's labels. Passage floor and margin equal the source's; a
+passage mostly of link labels (:data:`LISTING_SHARE`) is labelled ``{}``. Rows go
+stale with the passage basis or the embedding view. No language model (§2.1). See
+docs/features/topics.md#passages.
 """
 
 from __future__ import annotations
@@ -78,10 +48,8 @@ BATCH = 2000
 def passage_fingerprint(source_fingerprint: str) -> str:
     """The basis a passage label is decided under.
 
-    Built on the source basis, so everything that re-labels sources — a topic
-    added, archived or re-described, a different model, a moved reference —
-    re-labels passages too; plus the passage thresholds, so moving one of
-    those re-labels passages without touching sources.
+    The source basis plus the passage thresholds, so anything that re-labels sources
+    re-labels passages, and a passage threshold re-labels passages alone.
     """
     payload = {
         "source": source_fingerprint,
@@ -117,10 +85,8 @@ def awaiting_passage_labels(fingerprint: str):
     has now. ``IS NOT DISTINCT FROM`` on the view because NULL is a real view
     (vectors computed before views existed) and NULL = NULL is not true.
     """
-    # An alias, so the EXISTS stays its own scan when the outer query also
-    # joins `chunk_topics` (the queue reads the previous labels that way);
-    # without it SQLAlchemy correlates both tables away and the subquery has
-    # no FROM at all.
+    # An alias, so the EXISTS stays its own scan when the outer query also joins
+    # `chunk_topics`; otherwise SQLAlchemy correlates both away and leaves no FROM.
     row = aliased(ChunkTopics)
     current = exists().where(
         row.chunk_id == Chunk.chunk_id,
@@ -245,10 +211,8 @@ def on_topic_passage(topics: Sequence[str]):
 def carries_all_topics(topics: Sequence[str]):
     """A predicate over ``Chunk`` joined to ``Source`` carrying every one of ``topics``.
 
-    Between them, the passage's own labels and its source's must carry each topic (`B-72`).
-
-    Together rather than each alone: a chapter on one topic inside a document
-    labelled with the other is where two topics genuinely meet.
+    The passage's own labels and its source's must between them carry each topic
+    (`B-72`).
     """
     wanted = list(topics)
     row = aliased(ChunkTopics)

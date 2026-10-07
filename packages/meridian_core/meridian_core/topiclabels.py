@@ -1,45 +1,11 @@
 """Topics from what a page says, not from why it was crawled (task P2-21, §12.5).
 
-`P2-14` gave sources a topic by recording the queue topic that caused the fetch,
-plus whatever the URL path matched. That is provenance — the reason the crawler
-went there — and it is wrong about content in exactly the cases that matter: a
-crawl pursuing one topic follows a site's navigation into pages about something
-else entirely, and every one of them was stamped with the topic being pursued.
-Provenance now lives in ``sources.crawled_for``; ``topic_labels`` is this
-module's answer to a different question: *which topics is this text about?*
-
-**The method.** A source is the normalised mean of its live chunk vectors. A
-topic is the embedding of a short text built from what the database says about
-it — its name, its description, and its approved vocabulary. Both are measured
-from a fixed reference point (below), and a source carries every topic whose
-similarity clears an absolute floor *and* sits within a margin of its best
-topic. Zero, one or several — a page comparing two topics is about both, and a
-page about neither is labelled ``{}``.
-
-**Why a reference point.** Raw cosine between these embeddings is compressed
-into a narrow band: every page shares a large common component with every other
-("this is a web page"), so an unrelated page and an on-topic one differ by a
-few hundredths. Subtracting that shared component first widens the gap. The
-obvious reference is the corpus mean, and it was measured and rejected: it
-makes a source's labels depend on what *else* is in the corpus, so a crawl that
-spends a month on one topic would quietly move every other source's labels. The
-reference here is the mean embedding of a fixed list of generic, topic-free
-phrases, embedded by the same model — it depends on nothing but the model.
-
-**NULL and ``{}`` stay different.** NULL is "no pass has read this content";
-``{}`` is "read, and about none of the topics". A source with no embedded text
-stays NULL, because nothing has been examined — calling it off-topic would be a
-claim about text nobody has.
-
-**Labels go stale, and the queue knows when.** Every labelled source records the
-*basis* it was labelled under — a fingerprint of the model, the thresholds, the
-reference, and every topic's prototype text — and when it was examined. A topic
-added, archived or re-described changes the basis, so every source is
-re-examined; a re-crawl that wrote new chunks makes that one source stale. There
-is no other state, and no stored vectors to invalidate.
-
-Nothing here calls a language model (§2.1): it needs an embedding model, the one
-the corpus was built with, and arithmetic.
+A source is the normalised mean of its live chunk vectors; a topic is the embedding of
+its name, description and approved vocabulary. Both are measured from a fixed reference
+point, and a source carries every topic over an absolute floor and within a margin of
+its best. NULL is unread, ``{}`` read and about none. Labels record the basis they were
+decided under and go stale when it changes. No language model (§2.1). See
+docs/features/topics.md#content-not-provenance.
 """
 
 from __future__ import annotations
@@ -66,66 +32,24 @@ log = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # The numbers, and where they came from
 # ---------------------------------------------------------------------------
-#
-# Calibrated against a real crawled corpus of a few thousand sources, every one
-# embedded, scored against prototypes built exactly as below. A title-and-URL
-# heuristic gave a silver set: pages that name a topic outright as positives,
-# and pages plainly about nothing the corpus covers (clinical condition pages,
-# court rules, privacy and contact pages, unrelated academic listings) as
-# negatives.
-#
-#   - Area under the ROC curve ~0.985 with the reference point, ~0.97 without.
-#   - At LABEL_FLOOR ~80% of positives keep their topic and under 1% of
-#     negatives gain one. Read side by side, the band just below it (0.42–0.45)
-#     was mostly institutional landing pages, publication listings and legal
-#     indexes that mention a topic among many — so the floor sits above them
-#     rather than at the "best balanced accuracy" point near 0.40, which let
-#     roughly one negative in twenty through.
-#   - Sources made *only* of duplicate chunks separate far worse (AUC ~0.75):
-#     their text is mostly the navigation they share with the page they
-#     duplicate. They are still labelled — see `source_vectors` — and are also
-#     the sources search already hides.
-#
-# Re-measured on the live corpus (`B-83`), which the silver set did not
-# resemble: it held no generic government pages, and a crawl of government
-# sites is mostly those. Judged by reading, sources whose best score sat in
-# 0.45–0.48 were right about one time in six, 0.48–0.50 one in three, 0.50–0.52
-# about half, and 0.55 and over every time sampled. Agency "about" pages,
-# budget speeches, tax and careers pages share a topic's vocabulary without
-# being about it. At 0.50, each true label given up removes nearly four false
-# ones; at 0.52 the trade is about even, so the floor stops at 0.50.
-#
-# Re-measure before moving any of these; `python -m worker.retopic` prints the
-# distribution it saw, which is where the next calibration starts.
+# Calibrated on a silver set, then re-measured on the live corpus (`B-83`). Re-measure
+# before moving any; see docs/features/topics.md#calibration.
 
 #: The absolute floor. A topic below it is not a label however it ranks. Was
 #: 0.45 (the silver set's line) until `B-83`.
 LABEL_FLOOR = 0.50
 
-#: How far below the best topic another may sit and still be a label. Adjacent
-#: topics in one field score close together on a page about either; inside this
-#: margin the page was, when read, usually about both (a study of one topic's
-#: vehicles inside another's service model), and past it the second score was
-#: the field's shared vocabulary. Wider admitted third labels on generic pages.
+#: How far below the best topic another may sit and still be a label.
 LABEL_MARGIN = 0.04
 
-#: Below this best-topic score a source is about nothing the corpus covers —
-#: the only threshold `--demote-offtopic` reads, and overridable there. Clearly
-#: under LABEL_FLOOR on purpose: labelling is re-derived every pass, while a
-#: demotion hands a source to the retention sweep. On the calibration corpus
-#: every sampled source under it was off-topic by content, and the handful of
-#: silver positives under it were search-result pages and bot-wall or error
-#: pages whose *titles* named a topic and whose text did not.
+#: Below this best-topic score a source is about nothing the corpus covers: the only
+#: threshold `--demote-offtopic` reads. Clearly under LABEL_FLOOR, because a demotion
+#: hands a source to the retention sweep.
 OFFTOPIC_FLOOR = 0.30
 
-#: Below this, a sample's best score holds back the rest of its document
-#: (`B-89`; `chunks.SAMPLE_HEAD`). Under the floor rather than at it because a
-#: sample misreads the whole text by a few hundredths: on a live corpus, holding
-#: at LABEL_FLOOR would have held back about one on-topic long document in ten,
-#: and at this line about one in fifty — none of those over 300 passages —
-#: while still holding back most of the off-topic ones. Holding orders the
-#: embedding and deletes nothing, so a miss costs a delay, not a document. Not
-#: part of the basis: it decides what is embedded next, never a label.
+#: Below this, a sample's best score holds back the rest of its document (`B-89`;
+#: `chunks.SAMPLE_HEAD`). Under the floor because a sample misreads the whole by a few
+#: hundredths. Not part of the basis: it orders embedding, never a label.
 TRIAGE_FLOOR = LABEL_FLOOR - 0.04
 
 #: A document at least this long needs :data:`LONG_TRIAGE_FLOOR` instead (`B-133`, ADR 0006):
@@ -134,11 +58,8 @@ TRIAGE_FLOOR = LABEL_FLOOR - 0.04
 LONG_DOCUMENT = 1000
 LONG_TRIAGE_FLOOR = LABEL_FLOOR - 0.02
 
-#: Generic, topic-free phrases whose mean embedding is the reference point.
-#: What every page shares — navigation, boilerplate, the vocabulary of being a
-#: document at all. Changing the list changes the basis, so every source is
-#: re-examined; that is the right cost for moving the origin everything is
-#: measured from.
+#: Generic, topic-free phrases whose mean embedding is the reference point. Changing
+#: the list changes the basis, so every source is re-examined.
 REFERENCE_TEXTS: tuple[str, ...] = (
     "a",
     "the",
@@ -165,10 +86,8 @@ REFERENCE_TEXTS: tuple[str, ...] = (
 #: Bumped when the method changes in a way the constants above do not capture.
 LABELLER_VERSION = 1
 
-#: Aliases shorter than this are left out of a prototype. They are mostly
-#: acronyms, which an embedder reads as noise at best and as a different
-#: expansion at worst — the same reasoning, and the same number, as the URL
-#: matcher's floor.
+#: Aliases shorter than this are left out of a prototype: mostly acronyms, noise to
+#: an embedder. The same floor as the URL matcher's.
 MIN_ALIAS_LENGTH = 5
 
 #: Topic statuses that do *not* label. Labels describe content, so pausing a
@@ -221,10 +140,8 @@ def prototype_text(topic: str, description: str | None, phrases: Iterable[str]) 
 async def load_prototypes(sess: AsyncSession) -> list[Prototype]:
     """Every labelling topic's prototype, from the database. Sorted by topic.
 
-    Vocabulary is the approved, unrejected gazetteer terms carrying the topic —
-    canonical forms always, aliases only when the term is unambiguous and the
-    alias is long enough to mean something. An unapproved term is a proposal
-    awaiting a person (§5.6) and does not get to move labels.
+    Vocabulary is the approved, unrejected gazetteer terms carrying the topic: canonical
+    forms always, aliases only for unambiguous terms and when long enough.
     """
     rows = (
         await sess.execute(
@@ -336,10 +253,8 @@ def decide(
 ) -> list[str]:
     """The labels a set of scores earns, best first.
 
-    Every topic at or above ``floor`` and within ``margin`` of the best. Best
-    first because consumers that can show only one — a map colours a point once
-    — should show the one the text is most about. Ties break by name so the
-    order is stable.
+    Every topic at or above ``floor`` and within ``margin`` of the best; ties break by
+    name so the order is stable.
     """
     if not scores:
         return []
@@ -370,17 +285,9 @@ def _live(chunk=Chunk):
 def awaiting_labels(fingerprint: str):
     """The predicate for "this source needs (re-)labelling".
 
-    Has at least one live embedded chunk, has no chunk of its *sample* still
-    waiting for a vector, and is either unexamined, examined under a different
-    basis, or has live chunks newer than its examination (a re-crawl rewrote
-    it). Or: was labelled from its sample and is now embedded whole.
-
-    The sample and not every chunk (`B-89`). Waiting for all of them made a
-    long document's labels, and so whether it was worth embedding, cost the
-    whole document; the sample (`chunks.in_sample`) spans the text rather than
-    being whichever half embedded first, which is what waiting guarded
-    against. A label read from it is provisional — ``topic_sample_best``
-    records it — and is read again from the whole text once that is embedded.
+    Has a live embedded chunk, no chunk of its *sample* still waiting for a vector, and
+    is unexamined, examined under another basis, or rewritten since. Or: was labelled
+    from its sample (`B-89`) and is now embedded whole.
     """
     embedded = exists().where(
         Chunk.source_id == Source.source_id, _live(), Chunk.embedding.is_not(None)
@@ -472,12 +379,8 @@ async def count_awaiting(sess: AsyncSession, fingerprint: str) -> int:
 async def source_vectors(sess: AsyncSession, source_ids: Sequence[int]) -> dict[int, np.ndarray]:
     """Each source's mean live chunk vector.
 
-    Non-duplicate chunks where a source has any: a chunk the novelty gate
-    marked a duplicate is text the corpus already holds elsewhere, and on a
-    real site that is mostly the navigation and footer repeated on every page
-    — exactly the part of a page that says nothing about its subject. A source
-    made *only* of duplicates falls back to them rather than going unlabelled,
-    because its text is still its text.
+    Non-duplicate chunks where a source has any; a source made only of duplicates falls
+    back to them.
     """
     if not source_ids:
         return {}
@@ -508,13 +411,8 @@ async def record_labels(
 ) -> list[str]:
     """Write one source's labels, scores and basis. Returns the labels written.
 
-    Replaces, never accumulates — unlike ``crawled_for``. A label is a claim
-    about the text as it is now, under the topics as they are now, and the
-    previous answer is exactly what a re-examination exists to supersede.
-
-    ``sampled`` says the scores came from part of the text (`B-89`); the best
-    of them is kept as ``topic_sample_best``, which decides whether the rest is
-    embedded and marks the labels for reading again. Whole text clears it.
+    Replaces, never accumulates. ``sampled`` says the scores came from part of the text
+    (`B-89`); the best is kept as ``topic_sample_best``, which the whole text clears.
     """
     labels = decide(scores)
     await sess.execute(
@@ -541,12 +439,8 @@ async def offtopic_candidates(
 ) -> list[tuple[int, float]]:
     """Sources labelled under ``fingerprint`` whose best score is under ``floor``.
 
-    Only under the current basis: a score computed against topics that have
-    since changed says nothing about whether the page is off-topic *now*.
-    Already-junk sources are left out, so the count is what a demotion would
-    change. So are sources labelled from a sample (`B-89`): junk is never
-    embedded, so demoting on part of a text would stop the rest from ever
-    being read — the one outcome holding back was designed not to have.
+    Current basis only; already-junk sources and sources labelled from a sample are
+    left out.
     """
     rows = await sess.execute(
         select(Source.source_id, Source.topic_scores).where(

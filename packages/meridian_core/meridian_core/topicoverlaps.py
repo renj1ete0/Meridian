@@ -1,14 +1,7 @@
 """Where topics meet (task B-72).
 
-A source carries every topic its content is about (`P2-21`), so the corpus
-is a web rather than a partition: some sources sit in two or three topics at
-once. This counts them by exact combination, which is what a view of
-overlapping topics needs — pick circles, see how many sources lie in all of
-them, then search there (``topic_match=all``).
-
-Searchable sources only: no junk, no duplicates, examined and on at least one
-topic. Source labels, not passage labels — a count of documents is what a
-person weighing "is there anything here" reads.
+Counts searchable sources by their exact combination of topic labels (source labels,
+not passage labels). See docs/features/topics.md#passages.
 """
 
 from __future__ import annotations

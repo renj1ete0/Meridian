@@ -1,42 +1,12 @@
 """Which topics each source is about, and each passage (tasks P2-14, P2-21, P2-24, §12.5).
 
-``python -m worker.retopic`` — reports by default, writes only with ``--apply``.
-
-`P2-14` wrote this as a URL-path backfill for sources crawled before topics
-existed. `P2-21` made it the only thing that writes ``sources.topic_labels``:
-the fetch path records why a page was crawled (``crawled_for``), and this pass
-reads what the page says. The method, the thresholds and their calibration live
-in :mod:`meridian_core.topiclabels`; this is the loop around them.
-
-**A pass, not a fetch-time step**, for the reason `novelty` is one: the vectors
-arrive after the fetch, from the `embed` service, so at the moment a page is
-written there is nothing to compare. A source is only examined once every live
-chunk it has is embedded — labelling half a document would label whichever half
-embedded first.
-
-**Resumable, and cheap to re-run.** The queue is a predicate — unexamined, or
-examined under a different basis, or rewritten since — so a pass killed halfway
-keeps what it committed and the next starts where it stopped. A topic added or
-archived changes the basis and puts every source back in the queue; the cost of
-that is one aggregate query per batch and a matrix product, no model calls
-beyond embedding the prototypes once.
-
-**Passages second** (`P2-24`). After the sources, the same basis scores every
-live embedded chunk on its own vector (:mod:`meridian_core.passagetopics`), so
-a chapter about one topic inside a book about another is findable by that
-topic. The same queue shape — a predicate over the basis and the embedding
-view — makes it resumable and stale-aware the same way, and the hourly
-``topics`` row runs it with no timetable entry of its own. A sibling pass was
-considered and rejected: it would embed the prototypes a second time, and two
-jobs could label under two different bases in the minute a topic changed.
-``--no-passages`` skips the stage.
-
-**`--demote-offtopic` is off unless asked for**, and does nothing without
-``--apply``. It marks sources whose best topic scores under
-:data:`~meridian_core.topiclabels.OFFTOPIC_FLOOR` as ``junk`` — which search,
-the map and synthesis already leave out, and which the retention sweep will
-drop the raw file of when *it* is run with ``--apply``. The scheduled run never
-passes it.
+``python -m worker.retopic`` — reports by default, writes only with ``--apply``. The
+only writer of ``sources.topic_labels``; the method lives in
+:mod:`meridian_core.topiclabels`. A source is examined once its sample is embedded
+(`B-89`). Passages are labelled second, in the same pass (``--no-passages`` skips
+them). ``--demote-offtopic`` marks sources under
+:data:`~meridian_core.topiclabels.OFFTOPIC_FLOOR` as ``junk`` and is never scheduled.
+See docs/features/topics.md#the-labelling-pass.
 """
 
 from __future__ import annotations
