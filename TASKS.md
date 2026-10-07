@@ -26,8 +26,8 @@ against a real Postgres, 1053 frontend.
 > `B-153` languages from text, `B-154`, `B-155` proven by following (ADR 0016), `B-156` the site
 > review's reader fixes, `B-152` filtered searches no longer come back empty. Loop run 17
 > (v0.163.1): 589 on-topic pages in the hour against 356 / 310 for runs 15–16; ~40% of fetches
-> wasted on five search-proven hosts → `B-155`. Run 18 (v0.164.0) measures `B-155`
-> (`meridian-calibration/loop/run18`). Local DB at `b155f011ed00`. **Next:** write up run 18;
+> wasted on five search-proven hosts → `B-155`. Run 18 (v0.164.0, `B-155`): 590+ on-topic
+> pages with no search in the window; followed links 35% on a topic (run 17: 30%). Local DB at `b155f011ed00`. **Next:** write up run 18;
 > `B-157` map fields; on the server `B-131`, `B-135`. **By hand:** the dev-database cleanup SQL
 > in handover §0 (approved, but refused by the session's permission check).
 
