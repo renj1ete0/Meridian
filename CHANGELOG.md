@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.4] — 2026-10-07
+
+### Fixed
+
+- `B-158`: a page whose extracted text carried a NUL character was fetched and lost: Postgres
+  stores none in `text` or `jsonb`, so the whole write failed. NULs are removed where a source's
+  fields and its passages are written. Found in loop run 18.
+
 ## [0.164.3] — 2026-10-07
 
 ### Fixed

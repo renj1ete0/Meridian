@@ -20,6 +20,7 @@ from sqlalchemy.orm import aliased
 
 from .logging import get_logger
 from .models import Chunk, Source
+from .storable import storable
 
 log = get_logger(__name__)
 
@@ -57,7 +58,7 @@ async def replace_chunks(
         sess.add(
             Chunk(
                 source_id=source_id,
-                text=chunk.text,
+                text=storable(chunk.text),
                 chunk_index=chunk.chunk_index,
                 page_or_offset=chunk.page_or_offset,
             )

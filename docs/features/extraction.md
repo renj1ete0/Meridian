@@ -446,6 +446,10 @@ One row per URL, created on first fetch and updated on every fetch.
 
 ## Failure modes and traps
 
+- **A NUL character cannot be stored** (`B-158`). Postgres keeps none in `text` or `jsonb`, and a
+  PDF whose text layer carried one failed the page's whole write. `meridian_core.storable`
+  removes them where a source's fields and its passages are written.
+
 - `readable()` in the API joins wrapped lines for display only, conservatively. Loosen it
   only after re-running the passage sample described in the handover.
 - A URL served first as HTML and later as a PDF gets a second raw path. The retention sweep

@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.164.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.164.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1651,6 +1651,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-158` **A NUL in extracted text lost the page** — `v0.164.4`. Run 18's one worker error:
+      a PDF text layer with 0x00, which Postgres refuses in text and JSONB; removed at the write
 - [x] `B-155` **Proven by following** — `v0.164.0`, ADR 0016. Run 17 spent ~900 of 2,300
       fetches on five hosts (~4% on a topic) proven by `B-115` on pages search had picked.
       Backtested on runs 15–17; hosts are now proven or thin on their followed record, and

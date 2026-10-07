@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
 from .models import Source
+from .storable import storable
 
 log = get_logger(__name__)
 
@@ -73,6 +74,9 @@ async def upsert_source(
     re-extraction. Every keyword is optional, and ``None`` means "nothing new", never
     "clear it".
     """
+    # `B-158`: one NUL in extracted text would fail the whole write.
+    title, author, publisher, doi = (storable(v) for v in (title, author, publisher, doi))
+    extra = storable(extra)
     row = await get_source(sess, url)
     created = row is None
     if row is None:
