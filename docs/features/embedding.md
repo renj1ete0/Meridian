@@ -36,10 +36,17 @@ the tiers are re-checked every batch:
 
 | Tier | What is in it | Order |
 |---|---|---|
-| `first` | Directed pages (search results, seeds, cited papers) and pages on proven hosts | Newest first, so labels and host scores react to the latest crawl |
-| `then` | Everything else that is not junk | Oldest first |
+| `first` | Directed pages (search results, seeds, cited papers), pages on hosts judged on a topic, and the sample of any page on a host not judged off-topic (`B-160`) | Newest first, so labels and host scores react to the latest crawl |
+| `then` | Everything else that is not junk: in practice, the released rest of long documents | Oldest first |
 | `last` | Off-topic hosts; the rest of a long document whose sample did not earn it (`B-89`, with a higher bar from 1,000 passages, `B-133`); copies of earlier sources (`B-127`) | Oldest first |
 | none | Junk | Never embedded |
+
+**An unjudged host's pages are how it gets judged** (`B-160`). Followed links into hosts nobody
+has judged used to sit in `then`, oldest first, behind every page the crawl had just queued in
+`first`; during a crawl that is roughly all of the embedding capacity, so after loop run 18 a
+thousand such pages waited with no passage embedded, and the hosts `B-150` and `B-155` explore
+(vouched-for, promising, unknown) could not be judged until the crawl stopped. Their samples now
+go first. Exploration is capped per host, so this adds tens of passages per host, not a backlog.
 
 <a id="sampling"></a>**Long documents are sampled first** (`B-89`). The first 16 passages and every 16th after them
 are embedded and labelled. The rest waits in `last` unless the sample's best topic score

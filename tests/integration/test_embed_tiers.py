@@ -26,9 +26,11 @@ from meridian_core.chunks import (
     embedding_backlog,
     in_sample,
     replace_chunks,
+    store_embeddings,
 )
 from meridian_core.hostscores import MIN_EXAMINED, OFFTOPIC_SHARE
 from meridian_core.models import Chunk, HostScore, QueueTask, Source
+from meridian_core.models.source import EMBEDDING_DIM
 from meridian_core.queueing import FOLLOWED_SOURCES
 from meridian_core.sources import upsert_source
 from meridian_core.topiclabels import TRIAGE_FLOOR
@@ -124,10 +126,13 @@ async def test_a_search_result_is_first(sess) -> None:
 @pytest.mark.parametrize("seed", FOLLOWED_SOURCES)
 async def test_a_followed_link_is_not_directed(sess, seed) -> None:
     """The directed claim's definition, not a second list that could drift from it."""
-    url = f"https://{host()}/a"
+    # On an off-topic host, where only being directed would put a page first.
+    h = host()
+    await judge(sess, h, on_topic_share=0.0)
+    url = f"https://{h}/a"
     await queued(sess, url, seed)
     (chunk,) = await page(sess, url)
-    assert await tier_of(sess, chunk) == {"then"}
+    assert await tier_of(sess, chunk) == {"last"}
 
 
 async def test_a_page_of_an_on_topic_host_is_first(sess) -> None:
@@ -150,7 +155,23 @@ async def test_a_host_judged_on_too_few_pages_is_not_judged(sess) -> None:
     sess.add(HostScore(host=h, examined=MIN_EXAMINED - 1, on_topic=0, pending=0))
     await sess.flush()
     (chunk,) = await page(sess, f"https://{h}/a")
-    assert await tier_of(sess, chunk) == {"then"}
+    assert await tier_of(sess, chunk) == {"first"}, "not judged off-topic, so its sample is first"
+
+
+async def test_an_unjudged_hosts_sample_is_first_and_the_rest_waits(sess) -> None:
+    """`B-160`: the sample is what lets the host be judged; past it, the page waits as before
+    (held until the sample is labelled, `B-89`)."""
+    h = host()
+    chunks = await page(sess, f"https://{h}/a", chunks=SAMPLE_HEAD + 2)
+    assert await tier_of(sess, chunks[0]) == {"first"}
+    assert await tier_of(sess, chunks[SAMPLE_HEAD + 1]) == {"last"}
+
+
+async def test_an_off_topic_hosts_sample_still_waits_last(sess) -> None:
+    h = host()
+    await judge(sess, h, on_topic_share=0.0)
+    (chunk,) = await page(sess, f"https://{h}/a")
+    assert await tier_of(sess, chunk) == {"last"}
 
 
 async def test_the_off_topic_line_is_the_host_policys(sess) -> None:
@@ -320,8 +341,24 @@ async def test_the_first_tier_is_served_newest_first(sess) -> None:
 
 
 async def test_the_other_tiers_stay_oldest_first(sess) -> None:
-    (older,) = await page(sess, f"https://{host()}/a")
-    (newer,) = await page(sess, f"https://{host()}/b")
+    """The middle tier, now the released rest of a long document (`B-160` put unjudged hosts'
+    samples first): its oldest passage goes before a newer one."""
+    docs = []
+    for name in ("a", "b"):
+        chunks = await page(sess, f"https://{host()}/{name}", chunks=LONG)
+        await label(sess, chunks, sample_best=0.9)
+        sample = await sampled_ids(sess, chunks)
+        await store_embeddings(
+            sess,
+            {
+                c.chunk_id: [1.0] + [0.0] * (EMBEDDING_DIM - 1)
+                for c in chunks
+                if c.chunk_id in sample
+            },
+        )
+        docs.append(next(c for c in chunks if c.chunk_id not in sample))
+    older, newer = docs
+    assert await tier_of(sess, older) == {"then"}
 
     await backfill(sess, older, batch_size=1, max_batches=1).run_once()
     await sess.refresh(older)
@@ -403,7 +440,7 @@ async def test_the_rest_of_an_unread_document_waits_in_the_last_tier(sess, seed)
         await queued(sess, url, seed)
     chunks = await page(sess, url, chunks=LONG)
     sample = await sampled_ids(sess, chunks)
-    usual = "first" if seed else "then"
+    usual = "first"  # directed, or (`B-160`) the sample of a page on an unjudged host
 
     for chunk in chunks:
         assert await tier_of(sess, chunk) == ({usual} if chunk.chunk_id in sample else {"last"})
@@ -486,7 +523,7 @@ async def test_a_copy_is_last_however_it_was_found(sess, seed, reason) -> None:
 
     for chunk in copy:
         assert await tier_of(sess, chunk) == {"last"}
-    assert await tier_of(sess, canonical[0]) == {"then"}, "the original is not held with it"
+    assert "last" not in await tier_of(sess, canonical[0]), "the original is not held with it"
 
 
 async def test_a_copy_on_an_on_topic_host_is_still_last(sess) -> None:

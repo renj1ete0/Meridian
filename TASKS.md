@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.164.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.164.5`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1651,6 +1651,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-160` **Exploration pages waited out the crawl to be embedded** — `v0.164.5`. After
+      run 18, 1,179 window pages on unjudged hosts had no passage embedded: the `then` tier is
+      oldest first, behind a `first` tier the crawl refills as fast as it is embedded. Their
+      samples are first-tier now, so vouched-for and promising hosts get judged within the hour
 - [ ] `B-159` **Near-tied Map names** — after `B-157`, an area of statute text still reads "Small
       Animals": its centred similarities to the subfields are nearly tied (0.213 / 0.209 / 0.207 /
       0.194 across Small Animals, Equine, History, Classics), so the winner is noise that clears

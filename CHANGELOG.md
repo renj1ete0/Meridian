@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.5] — 2026-10-07
+
+### Fixed
+
+- `B-160`: pages on hosts nobody has judged waited behind the whole crawl for their passages to
+  be embedded, so the hosts `B-150` and `B-155` set out to explore could not be judged until the
+  crawl stopped (after loop run 18, a thousand such pages had no passage embedded). The sample
+  of a page on a host not judged off-topic is now in the first embedding tier.
+
 ## [0.164.4] — 2026-10-07
 
 ### Fixed

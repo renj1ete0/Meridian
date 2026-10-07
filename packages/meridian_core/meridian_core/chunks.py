@@ -294,7 +294,13 @@ def _a_copy():
 def embed_tier(tier: str):
     """The predicate for one embedding tier, over ``Chunk`` joined to ``Source``."""
     not_junk = Source.retention_tier != "junk"
-    first = or_(_directed(), _host_standing(off_topic=False))
+    # `B-160`: a page's sample on a host not judged off-topic is how an unjudged host gets
+    # judged; served oldest first behind the crawl's own, it waited out every crawl.
+    first = or_(
+        _directed(),
+        _host_standing(off_topic=False),
+        and_(in_sample(), ~_host_standing(off_topic=True)),
+    )
     waits = or_(_held(), _a_copy())
     if tier == "first":
         return and_(not_junk, first, ~waits)
