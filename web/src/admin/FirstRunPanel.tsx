@@ -4,23 +4,9 @@ import type { FirstRun, QueueTask } from '../lib/api'
 import { BUTTON_PRIMARY, BUTTON_ROW, FIELD, ROW, TD, TDM, TH, TableCard, stamp } from './ui'
 
 /**
- * The first run (task B-07, scaffold §1.7, spec §15 phase 0, §16).
- *
- * §16 lists cold-start seed quality as a real risk — "worth spending an evening
- * on" — and until now that evening had to be spent editing
- * `config/seed_sources.yaml` *before* the first boot, because the file is read
- * once and never again (§13.1). Somebody installing Meridian to find out what
- * it does has no idea yet what belongs in it.
- *
- * **This is not a wizard, and it does not gate anything.** By the time anyone
- * opens it the crawl has started — `make quickstart` brings the worker up with
- * everything else. A screen that implied otherwise would invite someone to
- * remove a seed that has already been fetched and then wonder why the document
- * is still there. What it offers instead is the window between a seed being
- * queued and being reached, which per-domain rate limiting makes generous.
- *
- * So both halves are shown: what is still changeable, and what is already
- * underway. The second is not an error state and is not styled as one.
+ * The first run (task B-07, scaffold §1.7, spec §15 phase 0, §16): the seeds still
+ * changeable and those already underway. Not a wizard; it gates nothing.
+ * See docs/features/web-app.md#the-first-run.
  */
 
 export interface FirstRunPanelProps {

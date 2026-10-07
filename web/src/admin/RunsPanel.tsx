@@ -4,24 +4,8 @@ import type { RunRow } from '../lib/api'
 import { PageHeader, ROW, TD, TDM, TH, TableCard, stamp } from './ui'
 
 /**
- * Synthesis run history (task P6-23, spec §11.9, §11.10, §13.4).
- *
- * §11.10 keeps the orchestrator's state in a plain table so a crash resumes
- * rather than restarts. This screen reads that table, and the reason it was
- * held open until now is that it could not have been designed against an empty
- * one: what a run row needs to show is decided by what runs actually do, and
- * until `P4-16` they did nothing.
- *
- * What they do turns out to be mostly **stop for reasons**, so that is what
- * leads. §13.4 makes deferral ordinary — a provider that is down, a budget that
- * is unset, a registry with nothing enabled — and a deferred run is not a
- * failure, it is a run waiting for a condition that is usually one line to fix.
- * The reason is shown in full, because it names the condition.
- *
- * **Counters, not a verdict.** §11.9 compares cost and volume per run week on
- * week. A column that said "successful" would hide the run that finished
- * having written nothing, which is the common case while stages are unbuilt
- * and the interesting case once they are not.
+ * Synthesis run history (task P6-23, spec §11.9, §11.10, §13.4): why each run stopped,
+ * in full, and counters rather than a verdict. See docs/features/web-app.md#run-history.
  */
 
 export interface RunsPanelProps {
@@ -30,11 +14,9 @@ export interface RunsPanelProps {
   active: RunRow | null
 }
 
-/** A run's status in the words the state machine uses, plus what it means.
- *
- * `deferred` is the one worth explaining: it reads like an error and is a
- * scheduled retry, and somebody who assumes the first will go looking for an
- * outage that is not there.
+/**
+ * A run's status in the words the state machine uses, plus what it means. `deferred` reads
+ * like an error and is a scheduled retry.
  */
 export const STATUS_NOTES: Record<string, string> = {
   running: 'In flight.',

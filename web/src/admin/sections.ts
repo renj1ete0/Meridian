@@ -1,20 +1,8 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Admin's sections and their URLs (task P6-28).
- *
- * The `AdminLight` mock groups the left nav as STEERING and SYSTEM. Its labels
- * are mapped onto what exists: "Seed log" is the cold-start seed list, "Fetch
- * policy" is the per-domain table, and Crawl health (`P6-25`) joins SYSTEM
- * because it is read alongside fetch policy. The mock's "Enrichment queue" is
- * listed and marked unbuilt rather than dropped: the table exists (`P0-09`)
- * and the task that fills it is `P7-07`, and a nav that silently omitted it
- * would read as the design having been forgotten.
- *
- * **Every section is a URL** (`/admin/<path>`), so a section can be linked and
- * the back button works. `route.ts` already treats everything under `/admin/`
- * as Admin; which section is read here, from the path, so the router does not
- * need to know Admin has sections at all.
+ * Admin's sections and their URLs (task P6-28), grouped as the `AdminLight` mock's
+ * STEERING and SYSTEM. Every section is a URL, `/admin/<path>`. See docs/features/web-app.md#admin.
  */
 
 export type Section =
@@ -73,12 +61,8 @@ export const SECTIONS: readonly SectionDef[] = [
 ]
 
 /**
- * Where bare `/admin` lands: Topics, as the `AdminLight` artboard draws it
- * (`B-122`). It was the gazetteer queue, as the weekly task (§5.6), until the
- * queue grew to tens of thousands of harvested terms — a landing page that
- * opens on a backlog nobody will clear reads as the system being behind,
- * while Topics is what steers the crawl. The queue is one click away. A fresh
- * install is sent to Seeds instead, by `AdminPage`.
+ * Where bare `/admin` lands: Topics (`B-122`). A fresh install is sent to Seeds instead,
+ * by `AdminPage`. See docs/features/web-app.md#admin.
  */
 export const DEFAULT_SECTION: Section = 'topics'
 
@@ -88,10 +72,8 @@ export function hrefForSection(section: Section): string {
 }
 
 /**
- * The section a path names, or null for bare `/admin` and anything unknown.
- *
- * Null rather than the default, so the caller can tell "nobody chose" (where a
- * fresh install may be redirected to Seeds) from "somebody linked Gazetteer".
+ * The section a path names, or null for bare `/admin` and anything unknown, so a caller
+ * can tell "nobody chose" from a linked section.
  */
 export function sectionFromPath(pathname: string): Section | null {
   const match = /^\/admin\/([^/]+)\/?$/.exec(pathname)
@@ -111,13 +93,8 @@ export function usePathSection(): Section | null {
 }
 
 /**
- * Admin's ground (design-system §2: "Light exists for docs, Admin and print").
- *
- * Admin is paper unless somebody has explicitly chosen dark. "No choice" means
- * the designed look, which for Admin is paper whatever the machine prefers —
- * the flagship dark belongs to the canvas, and Admin is a document. An explicit
- * dark choice still wins, because overriding a preference somebody set is the
- * one thing a theme control must never do.
+ * Admin's ground (design-system §2): paper unless somebody explicitly chose dark.
+ * See docs/features/web-app.md#admin.
  */
 export function adminTheme(rootTheme: string | null): 'light' | 'dark' {
   return rootTheme === 'dark' ? 'dark' : 'light'

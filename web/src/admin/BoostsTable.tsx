@@ -5,18 +5,8 @@ import { BUTTON_PRIMARY, BUTTON_ROW, FIELD, LINK_ACTION, ROW, SubHeading, TD, TD
 import { dayOf, startOfDayIso } from '../lib/time'
 
 /**
- * Boosts (task P6-28, spec §10; `AdminLight`'s "Active boosts").
- *
- * **A boost here belongs to a topic.** The mock's table has a Term column —
- * "covered walkway 1.8×" — and this system has no term boosts: §10's boost is a
- * multiplier on one topic's weight with an expiry, stored on the topic row. The
- * column is left out rather than filled with the topic name twice, which would
- * suggest a finer control than exists.
- *
- * **Both a factor and an expiry, or neither.** §10 makes decay the mechanism
- * that removes a boost ("steer back later without needing to remember"), so the
- * form cannot submit a factor without a date, and the server refuses one
- * anyway. Ending a boost early clears both.
+ * Boosts (task P6-28, spec §10; `AdminLight`'s "Active boosts"): one per topic, with no
+ * Term column, and a factor only together with an expiry. See docs/features/web-app.md#pins-and-boosts.
  */
 
 export interface BoostChange {

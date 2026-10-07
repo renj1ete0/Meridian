@@ -2,24 +2,9 @@ import type { DomainStatus, FetchPolicyRow } from '../lib/api'
 import { BUTTON_ROW, FIELD, Filters, PAGER, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
- * Per-domain fetch policy (task P6-22, spec §6.4, §13.2).
- *
- * The one admin screen whose changes reach somebody else's server, and the copy
- * is written on that basis: these are decisions about how a machine behaves
- * towards a stranger's infrastructure, not preferences.
- *
- * **Three layers, kept visibly separate.** What is set *here*, what the domain
- * *resolves* to once the global row and the file defaults merge under it, and
- * what the crawl *learned* by watching. An operator looking at a domain going
- * through a browser needs to know which of those put it there, because only one
- * of them is something they can change on this screen — and the learned one has
- * its own button, because clearing an observation and setting a policy are
- * different acts.
- *
- * **The safety guards are not here at all**, and their absence is stated rather
- * than left to be noticed. `block_private_addresses`, `respect_robots` and the
- * rest are deployment settings; a form that could switch one off would be one
- * click away from controls about politeness.
+ * Per-domain fetch policy (task P6-22, spec §6.4, §13.2): what is set here, what the
+ * domain resolves to, and what the crawl learned, kept apart. The safety guards are not
+ * editable here. See docs/features/web-app.md#fetch-policy.
  */
 
 export interface FetchPolicyPanelProps {

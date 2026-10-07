@@ -4,23 +4,9 @@ import { GAZETTEER_BULK_MAX, type GazetteerEntityType, type GazetteerRow, type G
 import { BUTTON_ROW, Filters, PAGER, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
- * The gazetteer approval queue (tasks P6-13, P6-28; spec §5.6).
- *
- * §5.6 ends with "approve in the UI — a two-minute weekly task". The harvest
- * turned out to file terms by the thousand, so the two minutes are now the
- * hard constraint: this is a dense table, a page at a time, with a selection
- * that can be decided in one request and keys for the rows one at a time.
- *
- * **Every row says whether the matcher will actually load it.** An approved
- * term whose surface form another row already claims is withheld, so it can
- * read approved and never match anything in any document. Nothing else in the
- * system reports that. The server computes the verdict against the whole
- * approved set and it is rendered beside the decision that caused it — which
- * matters more in bulk, because approving forty at once is exactly how two of
- * them come to claim the same wording.
- *
- * **Approve and turn down are not coloured.** §2 of the design system: the
- * palette has no green and no red, and colour must not imply a verdict.
+ * The gazetteer approval queue (tasks P6-13, P6-28; spec §5.6): a dense, paged table
+ * with bulk decisions, each row saying whether the matcher will load it. Approve and turn
+ * down are not coloured. See docs/features/web-app.md#gazetteer-approvals.
  */
 
 export interface GazetteerQueueProps {
@@ -79,12 +65,8 @@ export const KEYS: { key: string; does: string }[] = [
 ]
 
 /**
- * What the matcher does with this row, in a sentence.
- *
- * Each reason gets a different fix, which is why the reason is named rather
- * than reduced to a boolean: a collision needs one of the two rows changed,
- * ambiguity is a decision to leave the mention to the resolver, and the other
- * two are just where the row is in the queue.
+ * What the matcher does with this row, in a sentence. The reason is named rather than a
+ * boolean, because each reason has a different fix.
  */
 export function verdictOf(row: GazetteerRow): string {
   if (row.will_load && !row.withheld_reason) return 'Matches documents.'

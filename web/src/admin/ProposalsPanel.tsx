@@ -27,18 +27,8 @@ import {
 } from './ui'
 
 /**
- * Steering proposals (task P6-38, spec §10.1, §10.2).
- *
- * The operator's rule: the system proposes what to steer, and if nobody
- * objects it is steered that way. So the page leads with **when each one
- * applies by itself**, because that is the thing a reader is deciding against —
- * a proposal left alone is a decision, and the screen says so rather than
- * reading like a queue waiting for approval.
- *
- * Each proposal carries its reason in words and the numbers under it, in that
- * order: the sentence is what a person reads, the numbers are what they check
- * it against. Accept applies it now; Reject means it never applies, with an
- * optional reason that goes into the steering audit beside the rail.
+ * Steering proposals (task P6-38, spec §10.1, §10.2), led by when each applies by itself;
+ * each carries its reason in words, then its numbers. See docs/features/web-app.md#proposals.
  */
 
 export interface ProposalsPanelProps {

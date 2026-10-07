@@ -4,15 +4,9 @@ import type { TopicRow, Topics } from '../lib/api'
 import { BUTTON_SECONDARY, LABEL } from './ui'
 
 /**
- * The re-normalisation, shown before it is committed (design-system §8, spec
- * §10.2; `AdminAddTopic` mock).
- *
- * "The dialog shows the arithmetic before you commit." The arithmetic is the
- * server's: `after` comes from a preview route that runs the real write and
- * rolls it back, so nothing on this table is computed here except the
- * subtraction in the Change column. A client-side copy of clamp-and-redistribute
- * would be right until the day the server's changed, and then it would be a
- * dialog confidently showing numbers the button does not produce.
+ * The re-normalisation, shown before it is committed (design-system §8, spec §10.2;
+ * `AdminAddTopic` mock). `after` comes from the server's preview route; only the Change
+ * column is computed here. See docs/features/web-app.md#topic-weights.
  */
 
 /** Two decimals, as the mock prints a weight. */
@@ -38,15 +32,9 @@ export interface ReweightLine {
 }
 
 /**
- * One line per topic that draws before or after, in a stable order.
- *
- * Only drawing topics appear. A paused topic is outside the pool on both sides
- * of every change, and listing it at "— → —" would be a row that says nothing.
- * Pinned is reported as what happened to it rather than what the word
- * promises: the server's re-normalisation redistributes over every active
- * topic, pinned ones included, and a Change column reading "pinned, held"
- * beside a number that moved would be the dialog lying on the one row somebody
- * pinned in order to protect.
+ * One line per topic that draws before or after, in a stable order. Paused topics are
+ * left out; a pinned topic is reported as what happened to it, since re-normalisation
+ * moves pinned topics too. See docs/features/web-app.md#topic-weights.
  */
 export function reweightLines(before: readonly TopicRow[], after: Topics, focus: string): ReweightLine[] {
   const drawing = (rows: readonly TopicRow[]) =>

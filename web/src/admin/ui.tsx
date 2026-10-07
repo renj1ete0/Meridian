@@ -2,18 +2,8 @@ import type { ReactNode } from 'react'
 import { stampOf } from '../lib/time'
 
 /**
- * Admin's visual vocabulary (task P6-28, design-system §5, `AdminLight` mock).
- *
- * §5: "Admin is generated CRUD and should stay plain." Plain is not the same as
- * unstyled, and the failure the operator named was every section inventing its
- * own card. So there is one of each thing here — a page header, a card, a
- * table, two buttons, a badge — and every section is built out of them. A
- * section that needs something these do not offer is a question for the
- * design, not a new class string.
- *
- * Every colour is a role from tokens.css, so the same markup reads on paper
- * (Admin's designed ground) and on the dark palette when somebody has asked
- * for it explicitly.
+ * Admin's visual vocabulary (task P6-28, design-system §5, `AdminLight` mock): one page
+ * header, card, table, two buttons and a badge, in token roles. See docs/features/web-app.md#admin.
  */
 
 /** Mono label: 9–10px, 0.15em, uppercase — §3's only use of caps. */

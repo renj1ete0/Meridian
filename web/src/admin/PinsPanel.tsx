@@ -4,14 +4,8 @@ import { weight } from './Reweight'
 import { BUTTON_ROW, Badge, PageHeader, ROW, SubHeading, TD, TDM, TH, TableCard } from './ui'
 
 /**
- * Pins & boosts (task P6-28, spec §10, §10.1).
- *
- * The two steering controls that are not a weight. A pin is about *who* may
- * move a weight — §10.1's autonomous adjustment may not touch a pinned topic —
- * and a boost is about *how long*: a multiplier with an expiry that removes
- * itself. Both are on Topic weights too; here they are the whole page, with the
- * boosts that have expired kept in view, because an expired boost left on the
- * row is the record of what was boosted and until when.
+ * Pins & boosts (task P6-28, spec §10, §10.1): the two steering controls that are not a
+ * weight, with expired boosts kept in view. See docs/features/web-app.md#pins-and-boosts.
  */
 
 export function PinsPanel({

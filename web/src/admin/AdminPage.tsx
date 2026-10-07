@@ -55,30 +55,9 @@ import { acceptProposal, getProposals, rejectProposal, type Proposals } from '..
 import { onInternalClick } from '../lib/route'
 
 /**
- * Admin (tasks P6-13, P6-28; spec §12.6; `AdminLight` mock).
- *
- * §12.6 splits the interface in two: Explore is where reading happens and Admin
- * is where configuration changes. Most of Admin is CRUD over tables that already
- * exist — "generated forms are fine; effort belongs in Explore" — so the design
- * is one plain, dense language used everywhere: a left section nav, a page
- * header, bordered tables with mono heads, and on the steering pages a right
- * rail with the audit and the last runs.
- *
- * **Paper by default.** Design-system §2: light "exists for docs, Admin and
- * print". Admin renders on paper unless somebody has explicitly chosen dark,
- * and then it follows them — see `adminTheme`.
- *
- * **A closed Admin is explained, not hidden.** These are the only routes that
- * write anything, and the API refuses them outright unless callers are
- * identified or somebody has said this instance is not exposed. That returns
- * 503, and the message the API sends is shown as written, because it names the
- * two environment variables that fix it.
- *
- * **Lists are refetched after each change, not patched in place.** One row's
- * state is computed from all the others — a gazetteer verdict depends on every
- * other approved term, a topic's share on every other active topic — so
- * updating only the row that was clicked would leave the screen stating
- * something that stopped being true the moment it was clicked.
+ * Admin (tasks P6-13, P6-28; spec §12.6; `AdminLight` mock): one plain, dense language
+ * across sections, on paper by default. A closed Admin shows the API's message as written,
+ * and lists are refetched after each change. See docs/features/web-app.md#admin.
  */
 
 /** How often the crawl-health panel refetches while it is open (`P6-25`).

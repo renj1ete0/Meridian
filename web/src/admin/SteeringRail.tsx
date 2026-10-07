@@ -3,15 +3,9 @@ import { LABEL, stamp } from './ui'
 import { dayOf } from '../lib/time'
 
 /**
- * The right rail on the steering pages (task P6-28, spec §10.1, §11.10;
- * `AdminLight`).
- *
- * Two answers kept beside the controls that produce them. **Steering audit**
- * is §10.1's log: with two writers, the alternative is opening this screen in a
- * month with no idea what moved anything — and most of what moved a weight is
- * a change somebody made to a *different* topic, so those lines are shown too.
- * **Last runs** is what the weights were steering, in counters rather than a
- * verdict.
+ * The right rail on the steering pages (task P6-28, spec §10.1, §11.10; `AdminLight`):
+ * the steering audit, including changes made to other topics, and the last runs.
+ * See docs/features/web-app.md#admin.
  */
 
 const AUTO_REASON = /^(changed|added) through admin/

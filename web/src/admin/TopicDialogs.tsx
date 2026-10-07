@@ -5,12 +5,8 @@ import { Dialog, ReweightTable } from './Reweight'
 import { BUTTON_PRIMARY, FIELD, LABEL } from './ui'
 
 /**
- * Add topic and Archive topic (design-system §8, spec §10.2; `AdminAddTopic`).
- *
- * Both are changes whose cost lands on *other* rows — a new topic takes its
- * share from the rest, and an archived one hands its share back — so both show
- * the re-normalisation before they commit. Pause is not here: it is reversible
- * in one click and the audit rail shows what it moved.
+ * Add topic and Archive topic (design-system §8, spec §10.2; `AdminAddTopic`): both show
+ * the re-normalisation before they commit. See docs/features/web-app.md#topic-weights.
  */
 
 /** How long typing settles before the preview is asked for. */

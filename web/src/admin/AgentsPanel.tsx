@@ -4,35 +4,9 @@ import type { AgentRow } from '../lib/api'
 import { BUTTON_ROW, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
- * The agent registry (task P6-23, spec §11.3, §11.11, §11.12).
- *
- * §11.3's argument for a registry is that swapping models should be a config
- * row rather than a code change. This screen is where somebody reads that row
- * and turns one on — which is the last step before the graph has an edge, and
- * the first step that spends money.
- *
- * **The failure this screen exists to end is between the rows, not in one.**
- * Routing picks an agent by task type, so a type no enabled and usable row
- * declares is a stage that defers every run — and every individual row looks
- * perfectly fine, because nothing is wrong with any of them. `unserved` is
- * therefore the first thing on the screen rather than a detail under the
- * table.
- *
- * **A row says why it cannot be used, in routing's words.** An enabled agent
- * whose key variable is unset looks exactly like a working one until a run
- * defers hours later. The server computes those reasons, because a client that
- * derived its own would eventually disagree with the router that actually
- * refuses — and it would disagree in the bad direction, showing a green light
- * for an agent nothing can reach.
- *
- * **No key, anywhere.** §11.11 keeps credentials out of the database because it
- * is snapshotted off-device. The row names the variable; the screen reports
- * only whether it is set where the API runs.
- *
- * **The model is the one string worth changing here.** A local server names its
- * models however it was started, so the row that points at it has to follow —
- * and that is an edit, not a release. A `${VAR}` value is read from the
- * environment where the call is made, as the endpoint is.
+ * The agent registry (task P6-23, spec §11.3, §11.11, §11.12): unserved task types first,
+ * each row's unusable reason in routing's words (computed by the server), no key ever
+ * shown, and the model editable. See docs/features/web-app.md#agent-registry.
  */
 
 export interface AgentsPanelProps {

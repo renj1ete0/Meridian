@@ -3,24 +3,8 @@ import { Card, LABEL, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 import { clockOf, zoneLabel } from '../lib/time'
 
 /**
- * Crawl health (task P6-25, spec §12.5, §13.4).
- *
- * The first hour has `FirstHour`: one line saying the queue is draining. A run
- * left alone for days needs something else — not "is it doing anything" but
- * **when did it stop, and why**. So this screen leads with a verdict in words,
- * and everything under it is the evidence for that verdict.
- *
- * **The verdict is the server's.** `crawlhealth.judge` decides the state from
- * the last attempt and the queue; this file only puts it into a sentence. A
- * client that re-derived "stalled" from the numbers would one day disagree with
- * the alert that fired about the same crawl, and then neither would be trusted.
- *
- * **A day, not an hour, and empty hours drawn.** The thing being looked for is
- * a gap — the hour the fetching stopped — and a chart that skipped empty hours
- * would close exactly that gap up.
- *
- * **No chart library.** Twenty-four stacked bars are a few rectangles, and the
- * package has deliberately kept its dependencies to React.
+ * Crawl health (task P6-25, spec §12.5, §13.4): the server's verdict in words, then the
+ * evidence, over a day with empty hours drawn. See docs/features/web-app.md#crawl-health.
  */
 
 export interface CrawlHealthPanelProps {

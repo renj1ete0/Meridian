@@ -7,28 +7,9 @@ import { BUTTON_PRIMARY, BUTTON_SECONDARY, Badge, Card, LABEL, LINK_ACTION, Page
 import { shortDayOf } from '../lib/time'
 
 /**
- * Topic weights (tasks P6-12, P6-28; spec §10, §10.1, §10.2; `AdminLight`).
- *
- * §10's model in one line: attention is a weight vector over topics, and seeds
- * are drawn proportionally. This screen is where a person changes it, and the
- * design problem is that **the number you set is not always the number that
- * applies**. A floor lifts a starved topic, a ceiling caps a dominant one, a
- * boost multiplies until it expires, and pausing a topic removes it from the
- * pool. So the stored weight is the number on the row and the slider, and the
- * share actually drawn is on the line beneath it — with a note saying which
- * mechanism made them differ, only when one did.
- *
- * **A slider stages; Apply commits.** Moving one topic re-normalises every
- * other, and a slider that wrote on release made that a side effect of
- * dragging. Now a drag is a draft: the server previews it (the write, rolled
- * back), every row shows where it would land, and Revert or Apply decides. One
- * topic is staged at a time, because the server holds exactly one topic at the
- * value asked for and redistributes the rest — two staged topics would be
- * applied as two writes, and the second would move the first.
- *
- * **Archive is not delete, and the copy says so.** §10.2: nodes, edges and tags
- * stay untouched and coming back is a status change. Archived topics move to a
- * collapsed list with Restore beside each, rather than vanishing.
+ * Topic weights (tasks P6-12, P6-28; spec §10, §10.1, §10.2; `AdminLight`): the stored
+ * weight on the slider, the share drawn beneath it. A slider stages one topic; Apply
+ * commits. Archive is not delete. See docs/features/web-app.md#topic-weights.
  */
 
 export interface Draft {
@@ -79,10 +60,8 @@ export function percent(value: number): string {
 }
 
 /**
- * Why this topic's share is not simply its weight.
- *
- * Returns null when the two agree, which is the ordinary case — a note on every
- * row would be noise, and then the rows that need one would not stand out.
+ * Why this topic's share is not simply its weight, or null when they agree, so the rows
+ * that need a note stand out.
  */
 export function shareNote(row: TopicRow): string | null {
   if (row.topic.status !== 'active') {
@@ -124,12 +103,9 @@ export function caption(row: TopicRow, entries: readonly SteeringEntry[]): strin
 // --------------------------------------------------------------------------
 
 /**
- * A weight on a 0–1 axis, with the floor and ceiling marked.
- *
- * Drawn rather than a styled native range, because the design needs marks the
- * native control cannot carry. A real `<input type="range">` sits transparently
- * over the floor-to-ceiling span, so dragging, clicking and the arrow keys all
- * work, and the slider cannot be moved to a value the server would refuse.
+ * A weight on a 0–1 axis, with the floor and ceiling marked. A transparent native range
+ * input over the floor-to-ceiling span keeps drag, click and arrow keys, and refuses
+ * values the server would.
  */
 export function WeightSlider({
   topic,
@@ -301,12 +277,8 @@ function RowMenu({
 // --------------------------------------------------------------------------
 
 /**
- * One line under a topic: its description, or a note that it has none, and an
- * inline editor. The description matters more than it looks — pages are
- * labelled by how close they sit to the topic's name, description and
- * vocabulary, so a topic described in a sentence is found more reliably than
- * one known only by its slug. Changing it re-labels the corpus, and the line
- * says so before the change is made.
+ * One line under a topic: its description, or a note that it has none, and an inline
+ * editor. Changing it re-labels the corpus, and the line says so. See docs/features/web-app.md#topic-weights.
  */
 export function DescriptionLine({
   topic,

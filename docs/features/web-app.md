@@ -489,6 +489,201 @@ source, and only those the server checked, since it drops every reference to som
 was not given. There is no unread badge: an answer only arrives because the reader asked. See
 [ask-the-graph.md](ask-the-graph.md).
 
+## Admin in detail
+
+### Admin
+
+§12.6 splits the interface in two: Explore is where reading happens, Admin where configuration
+changes (`P6-13`, `P6-28`). Most of Admin is CRUD over existing tables ("generated forms are
+fine; effort belongs in Explore"), so it uses one plain, dense language everywhere: a left
+section nav, a page header, bordered tables with mono heads, and on the steering pages a right
+rail with the audit and the last runs. §5 says "Admin is generated CRUD and should stay plain";
+plain is not unstyled, and the failure the operator named was every section inventing its own
+card. So `admin/ui.tsx` has one page header, one card, one table, two buttons and a badge, and a
+section needing something else is a question for the design, not a new class string. Every
+colour is a token role, so the same markup reads on paper and on the dark palette.
+
+- **Paper by default.** Design-system §2: light "exists for docs, Admin and print". With no
+  explicit choice Admin is paper whatever the machine prefers, because the dark palette belongs
+  to the canvas and Admin is a document; an explicit dark choice still wins, since overriding a
+  preference somebody set is the one thing a theme control must never do.
+- **A closed Admin is explained, not hidden.** These are the only routes that write, and the
+  API refuses them (503) unless callers are identified or the instance is declared unexposed.
+  The API's message is shown as written, because it names the environment variables that fix it.
+- **Lists are refetched after each change, not patched in place.** One row's state is computed
+  from all the others (a gazetteer verdict from every other approved term, a topic's share from
+  every other active topic), so updating only the clicked row would show something that stopped
+  being true the moment it was clicked.
+- **Every section is a URL** (`/admin/<path>`), so it can be linked and the back button works.
+  `route.ts` treats everything under `/admin/` as Admin, and the section is read from the path in
+  `sections.ts`, so the router need not know Admin has sections.
+- **The nav follows the mock's STEERING and SYSTEM groups**, mapped onto what exists. Crawl
+  health sits beside Fetch policy because they are read together: an outcome mix full of
+  refusals is answered by that domain's policy row. The mock's "Enrichment queue" is listed
+  and marked unbuilt (`P7-07`; the table exists from `P0-09`) rather than dropped, because a nav
+  that silently omitted it would read as the design having been forgotten.
+- **Bare `/admin` opens on Topics** (`B-122`), as the artboard draws it. It used to open on the
+  gazetteer queue, the weekly task (§5.6), until the queue grew to tens of thousands of
+  harvested terms: a landing that opens on a backlog nobody will clear reads as the system being
+  behind, while Topics is what steers the crawl. A fresh install, with nothing crawled, opens on
+  Seeds instead. `sectionFromPath` returns null for bare `/admin`, so the page can tell "nobody
+  chose" from a linked section.
+- **The steering rail** keeps two answers beside the controls that produce them. The steering
+  audit is §10.1's log: with two writers, the alternative is opening the screen in a month with
+  no idea what moved anything, and most of what moved a weight is a change to a *different*
+  topic, so those lines are shown too. Last runs show what the weights were steering, in
+  counters rather than a verdict.
+
+### Topic weights
+
+§10's model in one line: attention is a weight vector over topics, and seeds are drawn in
+proportion. The design problem is that **the number set is not always the number that
+applies**: a floor lifts a starved topic, a ceiling caps a dominant one, a boost multiplies until
+it expires, and pausing removes a topic from the pool. So the stored weight is on the row and
+the slider, the share drawn is on the line beneath, with a note saying which mechanism made them
+differ, only when one did (a note on every row would be noise).
+
+**A slider stages; Apply commits.** Moving one topic re-normalises every other, and a slider
+that wrote on release made that a side effect of dragging. A drag is a draft: the server
+previews it (the write, rolled back), every row shows where it would land, and Revert or Apply
+decides. One topic is staged at a time, because the server holds exactly one topic at the value
+asked for and redistributes the rest; two staged topics would be two writes, and the second
+would move the first. The slider is drawn rather than a styled native range, because the design
+needs floor and ceiling marks a native control cannot carry; a real `<input type="range">` sits
+transparently over the floor-to-ceiling span, so dragging, clicking and the arrow keys work and
+it cannot reach a value the server would refuse.
+
+**The re-normalisation is shown before it is committed** (design-system §8, "the dialog shows
+the arithmetic before you commit"), for staged weights and for Add and Archive, whose cost lands
+on *other* rows: a new topic takes its share from the rest, an archived one hands its share
+back. The arithmetic is the server's: `after` comes from a preview route that runs the real
+write and rolls it back, and only the Change column's subtraction is computed in the browser. A
+client-side copy of clamp-and-redistribute would be right until the day the server's changed,
+and then the dialog would confidently show numbers the button does not produce. Only drawing
+topics appear: a paused topic is outside the pool on both sides, and "— → —" says nothing. A
+pinned topic is reported as what happened to it rather than what the word promises, because the
+server's re-normalisation redistributes over every active topic, pinned ones included; "pinned,
+held" beside a number that moved would be the dialog lying on the one row somebody pinned to
+protect. Pause is not a dialog: it is reversible in one click and the audit shows what it moved.
+
+**Archive is not delete**, and the copy says so: §10.2 leaves nodes, edges and tags untouched,
+and coming back is a status change. Archived topics move to a collapsed list with Restore.
+
+A topic's description matters more than it looks: pages are labelled by how close they sit to
+the topic's name, description and vocabulary, so a topic described in a sentence is found more
+reliably than one known only by its slug. Changing it re-labels the corpus, and the line says so
+before the change is made.
+
+### Pins and boosts
+
+The two steering controls that are not a weight. A pin is about *who* may move a weight (§10.1's
+autonomous adjustment may not touch a pinned topic); a boost is about *how long*, a multiplier
+with an expiry that removes itself. Both are on Topic weights too; here they are the whole page,
+with expired boosts kept in view, since an expired boost on the row is the record of what was
+boosted and until when.
+
+**A boost belongs to a topic.** The mock's table has a Term column ("covered walkway 1.8×"),
+and this system has no term boosts: §10's boost is a multiplier on one topic's weight with an
+expiry, stored on the topic row. The column is left out rather than filled with the topic name
+twice, which would suggest a finer control than exists. **A factor and an expiry, or neither**:
+§10 makes decay what removes a boost ("steer back later without needing to remember"), so the
+form cannot submit a factor without a date, and the server refuses one anyway. Ending a boost
+early clears both.
+
+### Proposals
+
+The operator's rule (`P6-38`): the system proposes what to steer, and if nobody objects it is
+steered that way. So the page leads with **when each proposal applies by itself**, because that
+is what a reader is deciding against: a proposal left alone is a decision, and the screen says
+so rather than reading like a queue awaiting approval. Each carries its reason in words, then
+the numbers under it: the sentence is what a person reads, the numbers what they check it
+against. Accept applies it now; Reject means it never applies, with an optional reason in the
+steering audit. Proposals sit beside the controls they propose changes to.
+
+### Agent registry
+
+§11.3's case for a registry is that swapping models should be a config row, not a code change
+(`P6-23`). This screen is where somebody reads that row and turns one on: the last step before
+the graph has an edge, and the first that spends money. It sits beside Run history in spirit: a
+run that deferred and the row that made it defer are one question asked twice.
+
+- **The failure it exists to end is between the rows.** Routing picks an agent by task type, so
+  a type no enabled, usable row declares is a stage that defers every run, while every row
+  looks fine. `unserved` is therefore first on the screen, not a detail under the table.
+- **A row says why it cannot be used, in routing's words.** An enabled agent whose key variable
+  is unset looks like a working one until a run defers hours later. The server computes the
+  reasons, because a client deriving its own would eventually disagree with the router that
+  actually refuses, and in the bad direction: a green light for an agent nothing can reach.
+- **No key, anywhere.** §11.11 keeps credentials out of the database because it is snapshotted
+  off-device. The row names the variable; the screen reports only whether it is set where the
+  API runs.
+- **The model is the one string worth changing here.** A local server names its models however
+  it was started, so the row pointing at it has to follow, and that is an edit, not a release.
+  A `${VAR}` value is read from the environment where the call is made, as the endpoint is.
+
+### Run history
+
+§11.10 keeps the orchestrator's state in a plain table so a crash resumes rather than restarts;
+this screen reads it. It was held back until runs did something (`P4-16`), because what a run
+row needs to show is decided by what runs do, and that turned out to be mostly **stop for
+reasons**, so the reason leads, in full, since it names the condition. §13.4 makes deferral
+ordinary (a provider down, a budget unset, nothing enabled): `deferred` reads like an error and
+is a scheduled retry, and someone assuming the first goes looking for an outage that is not
+there. **Counters, not a verdict**: §11.9 compares cost and volume run on run, and a
+"successful" column would hide the run that finished having written nothing, the common case
+while stages are unbuilt and the interesting one once they are not. Zero written is shown as a
+real answer.
+
+### Gazetteer approvals
+
+§5.6 ends "approve in the UI — a two-minute weekly task". The harvest files terms by the
+thousand, so the two minutes are now the hard constraint: a dense table, a page at a time, a
+selection decided in one request, and keys for single rows. **Every row says whether the matcher
+will load it.** An approved term whose surface form another row already claims is withheld, so
+it can read approved and never match anything, and nothing else in the system reports that. The
+server computes the verdict against the whole approved set, and it is shown beside the decision
+that caused it, which matters most in bulk, since approving forty at once is how two come to
+claim the same wording. The reason is named rather than reduced to a boolean because each has a
+different fix: a collision needs one of the two rows changed, ambiguity leaves the mention to the
+resolver, and the other two are just where the row is in the queue. Approve and turn down are
+not coloured: the palette has no green or red, and colour must not imply a verdict.
+
+### Fetch policy
+
+The one Admin screen whose changes reach somebody else's server (`P6-22`), and the copy is
+written on that basis: these are decisions about how a machine behaves towards a stranger's
+infrastructure, not preferences. **Three layers are kept visibly separate**: what is set here,
+what the domain resolves to once the global row and file defaults merge under it, and what the
+crawl learned by watching. Only the first can be changed on this screen, and the learned layer
+has its own button, because clearing an observation and setting a policy are different acts.
+**The safety guards are not here at all**, and their absence is stated: `block_private_addresses`,
+`respect_robots` and the rest are deployment settings, and a form able to switch one off would
+put it one click from the routine politeness controls.
+
+### Crawl health
+
+`FirstHour` covers the first hour; a run left alone for days needs something else (`P6-25`):
+not "is it doing anything" but **when did it stop, and why**. So the screen leads with a verdict
+in words, and everything under it is evidence. **The verdict is the server's**:
+`crawlhealth.judge` decides it from the last attempt and the queue, and the page only phrases
+it. A client that re-derived "stalled" would one day disagree with the alert that fired about
+the same crawl, and then neither would be trusted. **A day, not an hour, with empty hours
+drawn**: what is looked for is a gap, the hour fetching stopped, and a chart skipping empty
+hours would close exactly that gap. No chart library: twenty-four stacked bars are a few
+rectangles, and the package keeps its dependencies to React.
+
+### The first run
+
+§16 lists cold-start seed quality as a real risk, "worth spending an evening on", and that
+evening had to be spent editing `config/seed_sources.yaml` before first boot, because the file is
+read once (§13.1), by someone who does not yet know what belongs in it (`B-07`). **This is not a
+wizard and gates nothing**: by the time anyone opens it the crawl has started (`make quickstart`
+brings the worker up with everything else), and a screen implying otherwise would invite
+removing a seed already fetched. What it offers is the window between a seed being queued and
+reached, which per-domain rate limiting makes generous. So both halves are shown, what is still
+changeable and what is underway, and the second is not styled as an error. Seeds is last in its
+nav group, as the one section that stops mattering, and is where a fresh install opens.
+
 ## Failure modes and traps
 
 - **Run the web suite before committing a schema change.** The API drift test lives in
