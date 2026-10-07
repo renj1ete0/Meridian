@@ -1,23 +1,9 @@
 import { ago } from '../lib/status'
 
 /**
- * What arrived while you were away (tasks P6-11, P6-27; spec §12.5,
- * design-system.md §5).
- *
- * §5: "a single mono line of deltas since their last visit, set with the other
- * counts, not as a separate widget." So this is one line of `data` type at the
- * head of "where you were", and the figures in it are brighter than the words
- * around them — they are what a returning reader's eye is looking for.
- *
- * **Three states, not two.** `null` means this reader has never been here, so
- * there is no "since" to speak of and claiming one would be inventing history.
- * `0` means they have, and nothing arrived — which is a finding worth stating,
- * because a silent line reads as a page that failed to load its delta. Any
- * other number is the delta itself.
- *
- * The artboard's line also carries edges and newly-contested pairs. The API's
- * delta covers sources and passages only (`P6-11`), so those two are absent
- * rather than shown as zeros.
+ * What arrived while you were away (tasks P6-11, P6-27; spec §12.5, design-system.md §5):
+ * one mono line. `null` is a first visit, `0` is nothing new, and edges and contested
+ * pairs are absent. See docs/features/web-app.md#since-last-visit.
  */
 
 export interface SinceLastVisitProps {

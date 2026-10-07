@@ -8,20 +8,9 @@ import { hrefForSource, onInternalClick } from '../lib/route'
 import { TierChip, type SourceTier } from '../ui/Tier'
 
 /**
- * A question answered as evidence grouped by country.
- *
- * Nothing on this page is written by a model. Each item is a source's own best
- * passage, and each country's heading is a count: how many sources, from how
- * many publishers, of which kinds, and how recent. Coverage is a count against
- * a stated rule, shown in words beside the verdicts — not a judgement of any
- * source (design-system.md §4: report structure, not verdicts).
- *
- * **Thin is marked by form as well as colour.** A thin country's chip is
- * dashed and says "thin"; the brass is the same flag the Map uses for a weak
- * area, and the word survives without it (§5: state in form, not only colour).
- *
- * **A country with no evidence is absent, and the page says so** — the rule's
- * last sentence — with a way to ask for any country by name.
+ * A question answered as evidence grouped by country: each source's own best passage, and
+ * each country's heading a count. Nothing is written by a model.
+ * See docs/features/web-app.md#the-answer-view.
  */
 
 /** Plain words for tiers, in running text. */

@@ -9,25 +9,9 @@ import { TIER_LABEL, type SourceTier } from '../ui/Tier'
 import { dayOf } from '../lib/time'
 
 /**
- * The node panel beside the canvas (tasks P6-04, P6-01; spec §12.5; design
- * `Explore`).
- *
- * §12.5 asks for "description, attribute tags with confidence, supporting
- * chunks with source and tier, contested edges, own annotations", and the
- * artboard gives each its block, in that order, over one opaque surface —
- * opaque because this is what a reader reads (design-system.md §5): citations,
- * provenance and confidence values do not go on glass over a live graph.
- *
- * Three rules from the older panel survive the redesign because they are about
- * honesty rather than layout:
- *
- * - **Confidence is on the chip**, as a number. §7 makes it first-class, and a
- *   confidence a reader has to hover for is a claim rendered as a fact.
- * - **A tag with no evidence says so.** §2 principle 3: nothing is assertable
- *   without a citation, so an empty citation list is a data problem to show.
- * - **Nothing is invented to fill a block.** No description, no annotation, no
- *   contested pair: the block is absent or states the absence. The artboard's
- *   sample prose is sample data, not a template to pad with.
+ * The node panel beside the canvas (tasks P6-04, P6-01; spec §12.5; design `Explore`):
+ * confidence on the chip, a tag without evidence says so, and nothing is invented to fill
+ * a block. See docs/features/web-app.md#the-node-panel.
  */
 
 export const LBL = 'font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint'

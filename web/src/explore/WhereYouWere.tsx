@@ -4,21 +4,9 @@ import { Icon } from '../ui/Icon'
 import type { NodeGlyphName } from '../ui/icons'
 
 /**
- * §8's "where you were" list — saved views and recent nodes, as one list
- * (`ExploreLanding.dc.html`): name, kind, when, a hairline between rows. The
- * delta since the last visit sits at its head, because §5 wants that line "set
- * with the other counts, not as a separate widget".
- *
- * Short by design. §12.5 asks the interface to optimise for legibility over
- * volume because the bottleneck is reading time, and a landing screen that
- * listed everything you had ever opened would spend that bottleneck on
- * navigation.
- *
- * **Empty is a first-class state and says so plainly.** A returning reader with
- * nothing here has not used the system yet; a reader who saved three views last
- * week and sees an empty list has a bug. Rendering nothing at all makes those
- * two indistinguishable, so the empty state names the condition instead — and
- * when only one half is empty, it says which.
+ * §8's "where you were" list — saved views and recent nodes as one short list
+ * (`ExploreLanding.dc.html`), with the since-last-visit line at its head and an empty
+ * state that says which half is empty. See docs/features/web-app.md#where-you-were.
  */
 
 export interface SavedView {

@@ -1,29 +1,9 @@
 import type { CrawlProgress } from '../lib/api'
 
 /**
- * What an empty corpus has to show (task B-09, scaffold §1.7, §12.3).
- *
- * Production starts empty by design, so for the first hour there is nothing to
- * search. The two options the task names were shipping a small real crawl as an
- * opt-in demo corpus, or making the first hour legible. **This takes the
- * second**, for reasons that are not only effort:
- *
- * - A snapshot of a real crawl is third-party content, and whether it may be
- *   redistributed is the question §14.2 keeps separate from everything else.
- *   `MERIDIAN_SERVE_RAW` defaults to off for exactly that reason, and shipping
- *   a corpus in the repository would be answering the same question the other
- *   way without saying so.
- * - Synthetic fixtures are ruled out by the task itself: they do not resemble
- *   real extraction output, so the first impression would be of a system that
- *   works better than it does.
- *
- * So: a queue draining is a system working, and that is the honest thing to
- * show. Every number here is true of this machine right now.
- *
- * **Both halves of the fetch rate, always.** A crawl failing steadily and a
- * crawl succeeding steadily produce the same attempt count and want opposite
- * reactions — §12.5 makes the same argument about queue depth, which is why
- * the statuses are listed rather than summed.
+ * What an empty corpus has to show (task B-09, scaffold §1.7, §12.3): the queue draining,
+ * with both halves of the fetch rate. Every number is live.
+ * See docs/features/web-app.md#the-first-hour.
  */
 
 export interface FirstHourProps {

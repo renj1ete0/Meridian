@@ -1,23 +1,8 @@
 import { DAGGER } from '../ui/Contested'
 
 /**
- * §8's four counts — documents, nodes, edges, contested† — as the landing
- * artboard's stats row: four equal cells between hairlines, mono numerals at
- * 27px, 9px mono labels beneath.
- *
- * **The absent value is a designed state, not a loading spinner.** `counts` is
- * nullable and a null renders an em dash per figure, because the alternative —
- * zeros — is a lie that reads as a true statement about an empty corpus, and a
- * reader cannot tell "nothing has been crawled" from "the API did not answer".
- * §4's first voice rule is to state the absence; showing 0 states the opposite.
- *
- * Mono numerals with tabular figures (§3), so the four sit in a row that scans
- * as a column of numbers rather than as four differently-sized words.
- *
- * `contested` carries the dagger as text beside its brass figure, because §6's
- * rule is that the tint never appears without the mark — and a count is exactly
- * where a reader colour-blind to brass would otherwise lose the distinction.
- * Both only above zero: nothing contested is nothing to mark.
+ * §8's four counts — documents, nodes, edges, contested† — as the landing's stats row. A
+ * null renders an em dash per figure, never zeros. See docs/features/web-app.md#corpus-counts.
  */
 
 export interface CorpusFigures {

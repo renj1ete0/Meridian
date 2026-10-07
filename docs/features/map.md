@@ -252,3 +252,17 @@ something a finger can hit. A ring rather than a force layout: it is stable betw
 with a handful of topics every pair is a visible chord. Labels sit outside the ring where there
 is width, so the chords, which all run inside it, never cross a name; on a narrow screen there
 is no room at the sides, and each name goes under its circle.
+
+### The passage cloud
+
+The passage cloud (`P6-26`, `P6-29`) places every sampled passage by its embedding, in three
+dimensions by default and two on request. It is for seeing the corpus as the vector arm sees
+it: whether topics separate, where one source has piled up, what a crawl wandered into. It is
+not the embedding space itself, so the caption says how much of the space the axes carry, and
+the picture cannot pass for more than a shadow of it. The flat view names two shares, not
+three, because it draws two; quoting the third would claim structure the picture does not
+contain. Points are drawn square, not stretched to the box, since stretching one axis would
+make distances along it look larger. The hover target is larger than a dot, and the last-drawn
+point wins a tie because it is on top. A topic with null labels and one with an empty list look
+the same on the canvas and are opposite answers ("not yet examined" against "no topic"), so the
+hover card says which.

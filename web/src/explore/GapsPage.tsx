@@ -21,17 +21,9 @@ import { onInternalClick } from '../lib/route'
 import { stampOf, zoneLabel } from '../lib/time'
 
 /**
- * Gaps (task P6-36): one ranked list of what the corpus cannot yet answer.
- *
- * The operator's three screens are Find, Map and Gaps; this is the one that
- * says what to do next. Each row is a finding in numbers (design-system §4,
- * "state the absence") and an action through machinery that already exists —
- * a search seed in the queue, a temporary topic boost — so every click is
- * logged in the steering audit and can be undone in Admin.
- *
- * The visual language is the Coverage board's gap aside (brass mono label with
- * the dagger, a plain heading, the reason, "takes effect at the crawl's next
- * claim · reversible in Admin") laid out as a list, on Admin's primitives.
+ * Gaps (task P6-36): one ranked list of what the corpus cannot yet answer, each row a
+ * finding in numbers with a logged, reversible action. See docs/features/web-app.md#gaps
+ * and docs/features/gaps.md.
  */
 
 type Load = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; body: Gaps }

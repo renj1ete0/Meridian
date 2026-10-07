@@ -42,22 +42,9 @@ import {
 import { hrefForNode, navigate } from '../lib/route'
 
 /**
- * The graph workspace at `/nodes/{id}` (tasks P6-01, P6-02, P6-03; spec §12.2,
- * §12.3; design `Explore`).
- *
- * §12.2's focus + expand, laid out as the artboard draws it: filters on the
- * left, the canvas in the middle, the node panel on the right, filling the
- * viewport under the top bar. The URL is the focus and the filters, so any
- * state a reader can see is a state they can link — which is the same reason
- * `P6-04` gave nodes URLs before there was a canvas to put them on.
- *
- * **Refocusing is navigation.** Clicking a neighbour moves to its URL, so the
- * browser's back button is the breadcrumb's back, and a refocused view can be
- * pasted into a note.
- *
- * It also owns the one write on this screen (`P6-05`): a note is re-fetched
- * rather than spliced into the panel, because the server decides what a note
- * ends up being.
+ * The graph workspace at `/nodes/{id}` (tasks P6-01, P6-02, P6-03; spec §12.2, §12.3;
+ * design `Explore`): filters, canvas and node panel. The URL holds the focus and filters,
+ * and refocusing is navigation. See docs/features/web-app.md#the-node-workspace.
  */
 
 /** §12.2: "capped at ~30". Expand shows the next batch, up to the API's ceiling. */

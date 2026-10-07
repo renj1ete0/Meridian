@@ -113,14 +113,9 @@ export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
 }
 
 /**
- * The passage cloud (tasks P6-26, P6-29): every sampled passage placed by its
- * embedding, in three dimensions by default and two on request.
- *
- * What it is for is seeing the corpus as the vector arm sees it — whether
- * topics separate, where one source has piled up, what a crawl wandered into.
- * What it is not is the embedding space itself, and the caption says how much
- * of that space the axes carry, so the picture cannot pass for more than a
- * shadow of it.
+ * The passage cloud (tasks P6-26, P6-29): every sampled passage placed by its embedding,
+ * in three dimensions by default and two on request; the caption says how much of the
+ * space the axes carry. See docs/features/map.md#the-passage-cloud.
  */
 export function PointsPage() {
   const [sample, setSample] = useState<number>(DEFAULT_SAMPLE)

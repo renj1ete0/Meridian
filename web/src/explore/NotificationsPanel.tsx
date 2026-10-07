@@ -4,24 +4,9 @@ import { DAGGER } from '../ui/Contested'
 import type { Notification } from '../lib/api'
 
 /**
- * What happened while nobody was looking (tasks P6-08, P6-27; spec §12.5,
- * §13.3; design-system.md §8, `Notifications.dc.html`).
- *
- * The in-app counterpart to the Telegram digest, reading the same rows: an
- * alert is recorded before it is delivered (`P5-07`), so a deployment with no
- * bot token still has somewhere to see what would have been sent. Opened from
- * the bell in the top bar.
- *
- * **Filterable by type, not by read state.** §8: the question a returning
- * reader asks is "did anything need me?", not "what have I already seen?". A
- * read/unread split turns a panel of findings into an inbox to be cleared, and
- * an inbox gets cleared without being read. That is also why the artboard's
- * "Mark all read" is not here: there is no read state to mark.
- *
- * The six recorded types fold into §8's three kinds — jobs, approvals, alerts —
- * and the counts on the filter come from every type, not the filtered set: a
- * filter reading "Alerts 0" while three proposals wait would be the filter
- * hiding the thing the reader came for.
+ * What happened while nobody was looking (tasks P6-08, P6-27; spec §12.5, §13.3;
+ * design-system.md §8, `Notifications.dc.html`): filterable by kind, never by read state.
+ * See docs/features/web-app.md#notifications.
  */
 
 export interface NotificationsPanelProps {

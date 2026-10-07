@@ -2,24 +2,8 @@ import { DAGGER } from '../ui/Contested'
 import { Icon } from '../ui/Icon'
 
 /**
- * §12.5's three entry points, as §8's parallel cards (`ExploreLanding.dc.html`).
- *
- * Search, Coverage, Contested — and they are parallel on purpose. Search is the
- * one everyone reaches for, and giving it the whole screen would make the other
- * two features you have to know about. §12.3 notes that the coverage grid is the
- * view people skip and then miss, because absence is what gap analysis acts on
- * and node-link diagrams are bad at showing it; §9 makes contested pairs the
- * highest-value nodes in the graph. Neither survives being a menu item.
- *
- * The copy states what each one does, in §4's register: short declaratives,
- * concrete nouns, no promises about what you will find. Each card may carry one
- * mono line beneath — a measured fact about that view, where one exists. Where
- * none exists the line is absent rather than invented: the artboard's
- * "9 thin cells · 3 stale" needs coverage scoring, which is not built.
- *
- * Coverage opens Gaps (`P6-36`, `P6-42`): the one ranked list of what the
- * corpus cannot answer is where absence became visible, and a card that said
- * "not built" beside it was a dead end on the first screen (`P6-44`).
+ * §12.5's three entry points, as §8's parallel cards (`ExploreLanding.dc.html`): Search,
+ * Coverage (opens Gaps), Contested. See docs/features/web-app.md#entry-points.
  */
 
 export type EntryPointName = 'search' | 'coverage' | 'contested'

@@ -2,25 +2,9 @@ import { SEARCH_INPUT_ID } from '../lib/hotkeys'
 import { Icon } from '../ui/Icon'
 
 /**
- * The Explore search field — design-system.md §8, `ExploreLanding.dc.html`.
- *
- * §8 puts three things in this control and two of them are unusual enough to be
- * worth defending.
- *
- * **The `hybrid` marker.** Retrieval is two arms fused by reciprocal rank
- * (`P2-06`), and a search box that hid that would make the results harder to
- * reason about: a lexical-only result set and a fused one fail in different ways
- * and want different follow-ups. Naming the mode is the same instinct as putting
- * the tier on every hit.
- *
- * **"Filters apply before the vector search."** An implementation note on the
- * surface, deliberately. It is the difference between "twenty government
- * sources" and "whatever survived filtering the top twenty", and a reader who
- * assumes the second will mistrust a correct result set. §12.5 states the
- * behaviour; this says it where the query is typed.
- *
- * Takes props and holds no state. The field is controlled by whatever wires it
- * up, because the query belongs to the page rather than to this control.
+ * The Explore search field — design-system.md §8, `ExploreLanding.dc.html` — with the
+ * `hybrid` marker and the "filters apply before the vector search" note. Controlled; holds
+ * no state. See docs/features/web-app.md#the-search-field.
  */
 
 export interface SearchFieldProps {

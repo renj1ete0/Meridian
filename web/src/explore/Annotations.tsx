@@ -6,36 +6,9 @@ import type { Annotation, AnnotationTarget, NoteDraft } from '../lib/api'
 import { dayOf } from '../lib/time'
 
 /**
- * Writing and reading the reader's own notes (task P6-05, spec §12.5, §12.6).
- *
- * §12.5 asks for "my own notes and edges, tagged as mine", and then says the
- * thing that decides this component's shape: **build the affordance early or it
- * won't get used.** §12.6 follows it up — annotation belongs in Explore, not
- * Admin, because it is part of reading and a control surface is somewhere
- * nobody goes mid-thought.
- *
- * So, three decisions.
- *
- * **The composer is offered wherever reading happens, and never hidden.**
- * `SaveView` disappears when there is no query, because an unsaved view of
- * nothing is not a thing. A note is the opposite: the thought that has not
- * found its node yet is the one the corpus cannot re-derive, and the backend
- * accepts a note with no target for exactly that reason. A composer that
- * appeared only once the reader had selected something would refuse the note
- * most worth keeping.
- *
- * **It says what it will carry before it is written.** The reason to annotate
- * inside the reading surface is that the passages are right there — so the
- * composer names, in words, what the note will attach to and how many passages
- * it will cite. A note whose thread back into the corpus was silently dropped
- * still looks like a note, and the reader finds out months later when they
- * click the citation. This is the one failure this layer cannot afford (§2
- * principle 3).
- *
- * **Nothing here claims authorship.** `NoteDraft` has no `produced_by` and the
- * DTO forbids extra keys — the server assigns it. A field here would imply a
- * choice the reader does not have, and the layer is only worth having while
- * nothing else can write it.
+ * Writing and reading the reader's own notes (task P6-05, spec §12.5, §12.6). The composer
+ * is always offered, says what the note will attach to, and never claims authorship.
+ * See docs/features/web-app.md#notes.
  */
 
 export interface NoteComposerProps {
@@ -204,16 +177,8 @@ export interface NotesPanelProps {
 }
 
 /**
- * The reader's own layer, on the landing screen (§12.5).
- *
- * Placed where a session starts rather than behind a menu, for the reason §12.5
- * gives for the affordance itself: over months this becomes the highest-quality
- * layer in the system, and a layer nobody passes is a layer nobody adds to.
- *
- * The export link is a plain `<a>`, not a fetch-and-blob. §12.5 asks for
- * Markdown so material is not trapped in a bespoke store, and a link can be
- * copied, opened in a tab or piped through curl by somebody who would rather
- * not click — which is a better answer to "not trapped" than a download button.
+ * The reader's own layer, on the landing screen (§12.5), with a plain Markdown export
+ * link. See docs/features/web-app.md#notes.
  */
 export function NotesPanel({ notes, total }: NotesPanelProps) {
   return (

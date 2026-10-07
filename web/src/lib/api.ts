@@ -722,7 +722,7 @@ export async function getNotifications(
 
 // --------------------------------------------------------------------------
 // `/api/admin/*` — the control surface (task P6-13). The prefix is the role boundary;
-// a 503 means no admins are configured, not an outage.
+// a 503 means no caller identity is configured, not an outage.
 // See docs/features/web-app.md#explore-and-admin-prefixes.
 // --------------------------------------------------------------------------
 

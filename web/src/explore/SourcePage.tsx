@@ -17,24 +17,8 @@ import { NoteComposer } from './Annotations'
 import { FiguresPanel } from './FiguresPanel'
 
 /**
- * One source, read as a document (tasks P6-14, P6-15).
- *
- * The first screen where the corpus reads like documents rather than results.
- * Everything here already existed as an endpoint and had nowhere to be shown:
- * the chunks in document order, the figures with their captions, and the
- * exports §12.5 asks for.
- *
- * **Provenance is the page, not a footnote on it.** Tier, date, DOI and how the
- * text was extracted are in the header, because "what is this and how do I know"
- * is the question a reader arrives with — and because `extractor` (`P1-44`) is
- * the difference between a document that had no text and one whose extractor
- * fell over.
- *
- * **Annotation lives here** (`P6-05`, §12.5). This is the screen where reading
- * actually happens, and a note written anywhere else has to remember which
- * passage it came from. Ticking passages is how the citation gets onto the
- * note without the reader copying chunk ids by hand — which is the version of
- * this feature that does not get used.
+ * One source, read as a document (tasks P6-14, P6-15): provenance in the header, chunks
+ * in order, figures, exports, and the note composer. See docs/features/web-app.md#source-pages.
  */
 
 type Load<T> = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: T }

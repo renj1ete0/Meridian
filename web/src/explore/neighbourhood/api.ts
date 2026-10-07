@@ -1,13 +1,7 @@
 /**
- * Typed client over `/api/explore/neighbourhood` (task P6-33).
- *
- * The same two-link drift chain as `graph/api.ts`: `tsc` ties each interface to
- * its `*_FIELDS` list through the `Expect<Equal<...>>` lines, and
- * `tests/neighbourhood.test.tsx` ties each list to the pydantic class in
- * `meridian_core/schemas/neighbourhood.py`.
- *
- * Cited and similar arrive as separate lists of separate types, and stay that
- * way here — nothing in this file merges them.
+ * Typed client over `/api/explore/neighbourhood` (task P6-33), with the same two-link
+ * drift chain as `graph/api.ts` (`tests/neighbourhood.test.tsx`). Cited and similar stay
+ * separate lists of separate types.
  */
 
 import { ApiError, describeDetail, type SearchHit } from '../../lib/api'

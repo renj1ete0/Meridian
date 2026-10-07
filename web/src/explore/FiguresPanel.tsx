@@ -2,17 +2,8 @@ import { DataChip } from '../ui/Tier'
 import type { FigureRef } from '../lib/api'
 
 /**
- * Figures for one source (task P6-14, spec §6.6, §12.5).
- *
- * §12.5 asks for "thumbnails linked to the node, with page-accurate links to
- * raw files". There are no thumbnails: nothing downloads figure images
- * (`P1-10`), so `thumbnail_path` is empty and inventing a placeholder grid
- * would be a promise the corpus cannot keep.
- *
- * What there is, is the part §6.6 says carries most of the value — the caption.
- * "Figure captions are text, usually extractable, and often the most
- * information-dense sentence about the figure." So the caption is the content
- * here, and the links are what make it checkable.
+ * Figures for one source (task P6-14, spec §6.6, §12.5): captions with links, no
+ * thumbnails. See docs/features/web-app.md#figures.
  */
 
 export interface FiguresPanelProps {
@@ -48,12 +39,8 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {figure.page !== null ? <DataChip>page {figure.page}</DataChip> : null}
 
-              {/* Two different links, and the difference matters. `image_url`
-                  is the picture where the publisher has it — live, and liable
-                  to move. `raw_url` is this corpus's own copy at the page the
-                  caption belongs to, which is what §5.4 keeps raw files for:
-                  link rot is the binding reason, and a local copy is what keeps
-                  a citation checkable years later. */}
+              {/* `image_url` is the publisher's live copy; `raw_url` is this corpus's own,
+                  at the caption's page. See docs/features/web-app.md#figures. */}
               {figure.raw_url !== null ? (
                 <a href={figure.raw_url} className="font-mono text-[10.5px] text-accent-graph hover:underline">
                   open in the stored copy

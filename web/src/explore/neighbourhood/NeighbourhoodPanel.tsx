@@ -3,24 +3,9 @@ import { TierChip } from '../../ui/Tier'
 import type { CitedTerm, Relation, SimilarBasis, SimilarTerm, Term, TermNeighbourhood } from './api'
 
 /**
- * The neighbourhood panel beside Find's results (task P6-33; design canvas,
- * "Find · Term neighbourhood").
- *
- * **Two rings, drawn and listed apart.** The inner ring is what a passage
- * states a link to — solid cyan spokes, as the canvas draws an edge from the
- * focus. The outer ring is what merely reads alike — dashed, fainter, smaller
- * nodes, and a separate list whose heading says "no stated link". Nothing on
- * this panel puts the two in one list, because resemblance shown beside a
- * citation reads as a second citation.
- *
- * **Sparse is stated, not hidden.** The graph is small and most terms have no
- * stated links yet; the panel says so in words and still shows the outer ring,
- * which is what exists. When no vector was available the outer ring was not
- * measured at all, and the panel says that rather than drawing an empty ring
- * that would read as "nothing is similar".
- *
- * The ring diagram is the canvas's ground and palette in both themes, like the
- * graph workspace: it is a picture of the graph, and the graph is drawn dark.
+ * The neighbourhood panel beside Find's results (task P6-33; design canvas, "Find · Term
+ * neighbourhood"): stated links and look-alikes in two rings and two lists, never merged.
+ * See docs/features/web-app.md#the-neighbourhood-panel.
  */
 
 export interface NeighbourhoodPanelProps {

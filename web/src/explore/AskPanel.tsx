@@ -6,22 +6,9 @@ import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
 import { clockOf, dayOf, shortDayOf } from '../lib/time'
 
 /**
- * "Ask the graph" (tasks P6-06, P6-07) — `SynthesisPanel.dc.html` and
- * `SynthesisToggle.dc.html`.
- *
- * A toggle at the bottom right, and a panel that answers a question from the
- * corpus. **Translucent floats, opaque reads** (design-system §4): the toggle is
- * tinted over a blur; the panel, which carries citations, is solid.
- *
- * **Selection is bound to the panel** (§12.4, canvas → question): a page puts
- * what the reader is looking at into {@link AskContext}, and it travels with
- * the question as context the reader can remove. **Answers cite nodes, then
- * chunks**: nodes as chips, passages as numbered links to their source — and
- * only those the server checked, since it drops every reference to something
- * its model was not given.
- *
- * There is no unread badge on the toggle: an answer only arrives because the
- * reader asked for one.
+ * "Ask the graph" (tasks P6-06, P6-07) — `SynthesisPanel.dc.html`, `SynthesisToggle.dc.html`:
+ * a toggle and an opaque panel; the page's selection travels as removable context, and
+ * answers cite server-checked nodes and passages. See docs/features/web-app.md#the-ask-panel.
  */
 
 // --------------------------------------------------------------------------

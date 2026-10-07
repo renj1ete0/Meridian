@@ -1,18 +1,7 @@
 /**
- * Narrowing a search to a topic (task P6-24, spec §12.5).
- *
- * `P2-14` put the labels on every source and the filter on the API; this is the
- * control. It is chips rather than a dropdown because the set is small — a
- * handful of topics, which is what §10's weight vector is — and because a
- * dropdown hides the count of what is available behind a click.
- *
- * **The caveat is the interesting part.** A source crawled before `P2-14`
- * carries no labels, and a topic filter excludes it: nothing has established
- * that it belongs to the topic, and claiming it would assert something no pass
- * checked. That is correct and it is also invisible — a reader who narrows to a
- * topic and sees three results has no way to know the corpus holds three hundred
- * documents nobody has examined. So the control says so, once, while a filter is
- * active.
+ * Narrowing a search to a topic (task P6-24, spec §12.5): chips, with a caveat while a
+ * filter is active that unexamined sources are excluded.
+ * See docs/features/web-app.md#the-topic-filter.
  */
 
 export interface TopicFilterProps {
@@ -23,10 +12,8 @@ export interface TopicFilterProps {
   onToggle?: (topic: string) => void
   onClear?: () => void
   /**
-   * The same control over another axis (`P2-23`): places are chips too, and a
-   * second component would drift from this one in exactly the caveat that
-   * matters. `names` shows a stored code as a name; the value toggled is
-   * still the code.
+   * The same control over another axis (`P2-23`), such as places. `names` shows a stored
+   * code as a name; the value toggled is still the code.
    */
   label?: string
   every?: string
@@ -133,11 +120,8 @@ export function TopicFilter({
 }
 
 /**
- * Selected chips carry the graph accent and nothing else.
- *
- * §2: the palette has no green and no red, and colour must not imply a verdict.
- * A topic is not better or worse than another one, so the only thing colour says
- * here is "this is on".
+ * Selected chips carry the graph accent and nothing else: colour says "on", never a
+ * verdict (§2).
  */
 function chip(selected: boolean): string {
   return `border px-2 py-[3px] font-mono text-[10.5px] leading-[1.4] ${

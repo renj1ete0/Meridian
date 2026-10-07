@@ -37,27 +37,9 @@ import {
 import { findHref, findParams } from '../lib/topicweb'
 
 /**
- * Explore — the landing and the search results (tasks P2-08, P6-27; spec
- * §12.5; design-system.md §8; `ExploreLanding.dc.html`).
- *
- * **The landing is §8's default state**, not a focus+expand view and never the
- * whole graph: the lockup above a centred, wide search field; four counts; the
- * three entry points as parallel cards; a short "where you were". Behind it,
- * the mark's own circle-and-meridian scaled up and cropped — decoration, and
- * nothing on it is corpus data.
- *
- * **The degraded flag is rendered, not logged.** Without an embedder only the
- * lexical arm runs, and every response says so. A reader who searches a topic,
- * sees nothing, and is not told that meaning-based matching was off will
- * conclude the corpus lacks the topic — which is false, costly, and exactly the
- * confusion §12.5 exists to prevent. So the notice is loudest when there are no
- * hits: a degraded search that returned nothing is a claim about the corpus the
- * search is not entitled to make.
- *
- * **Searching happens on submit.** Not per keystroke: each query is a fused
- * ranking over two arms and a candidate pool, and firing one per character
- * spends the machine's budget on queries nobody finished typing. A superseded
- * request is aborted rather than left to land out of order.
+ * Explore — the landing and the search results (tasks P2-08, P6-27; spec §12.5;
+ * design-system.md §8; `ExploreLanding.dc.html`). The degraded-search notice is rendered,
+ * and searching happens on submit. See docs/features/web-app.md#explore-and-find.
  */
 
 /** §12.5's counts, from what `/stats` actually returns. */
@@ -287,12 +269,8 @@ export function ExplorePage() {
     [],
   )
 
-  // `/?q=…` opens with that search run: Gaps' "Search it in Find" (`P6-36`)
-  // and the Map's "Open in Find" (`P6-34`) both link here, and a search that
-  // can be linked is one that can be shared. `topic=` (repeated) and
-  // `topic_match=` preselect the topic filter — the Map's topic web (`B-72`)
-  // sends its intersections here with `topic_match=all`. Topics without a
-  // query set the filter up and wait for the words.
+  // `/?q=…` opens with that search run; `topic=` (repeated) and `topic_match=` preselect
+  // the topic filter. See docs/features/web-app.md#explore-and-find.
   useEffect(() => {
     const linked = findParams(window.location.search)
     if (linked.topics.length > 0) {
@@ -554,13 +532,8 @@ export function ExplorePage() {
 }
 
 /**
- * The landing's background: the mark's circle-and-meridian, scaled up and
- * cropped (§8). Decoration only — hidden from assistive technology, never
- * interactive, and nothing on it is corpus data. Transcribed from the artboard
- * in its 1440 × 900 frame and sliced to fill whatever the window is.
- *
- * Fixed rather than scrolling with the page, so it also sits under the
- * translucent top bar the way the artboard draws it.
+ * The landing's background: the mark's circle-and-meridian, scaled up, cropped and fixed
+ * (§8). Decoration only: hidden from assistive technology and never corpus data.
  */
 export function Geometry() {
   return (
@@ -622,13 +595,6 @@ export function ModeSwitch({ mode, onChange }: { mode: ResultMode; onChange: (mo
 }
 
 /**
- * What was searched and what each arm found: `20 shown · lexical 0 · vector 100`.
- *
- * Per arm, because the old "20 of N candidates" took N from the lexical arm
- * alone and read "20 of 0" whenever meaning-based matching found everything —
- * a sentence that contradicts itself on a correct result.
- */
-/**
  * What the search found, per arm, in a reader's words (`P6-44`): "lexical" and
  * "vector" are how it was done, not what it means. Counted per arm, so a
  * search that only one arm answered does not read as "20 of 0".
@@ -678,11 +644,8 @@ export function SearchOutcome({
 }
 
 /**
- * What the search did not do.
- *
- * Bordered and at full ink when the result set is empty, because that is the
- * case where silence becomes a false claim about the corpus. With hits on
- * screen it is a caveat and reads as one — a mono line above the list.
+ * What the search did not do: bordered and at full ink when the result set is empty,
+ * a mono caveat line above the hits otherwise.
  */
 export function RetrievalNotice({ reason, empty }: { reason: string; empty: boolean }) {
   return (

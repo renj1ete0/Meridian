@@ -8,15 +8,8 @@ import { getContested, type ContestedList, type ContestedSide } from './graph/ap
 import { excerpt, LBL, SourceLine } from './NodePanel'
 
 /**
- * Contested (task P6-10): §12.5's third entry point, beside search and coverage.
- *
- * Every disagreement §9 marked, each once, newest first, both sides side by
- * side. Neither side is placed first on merit: the list has no node to arrive
- * from, so the order within a pair is the order the edges were written, and the
- * two columns are drawn alike. §9 — "contradictions are signal, not error" —
- * means the page resolves nothing; it shows what each source says and where.
- *
- * The brass tint always travels with the dagger (design-system §6).
+ * Contested (task P6-10): every disagreement once, newest first, both sides drawn alike;
+ * the page resolves nothing. See docs/features/web-app.md#contested.
  */
 
 type Load = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; body: ContestedList }

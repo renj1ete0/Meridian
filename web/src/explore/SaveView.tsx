@@ -1,21 +1,9 @@
 import { useState } from 'react'
 
 /**
- * Saving the current search as a view (task P6-09, spec §12.5).
- *
- * §12.5 asks for "a filter set plus focus node, named and re-openable", and the
- * affordance has one job beyond the obvious: **it has to be offered at the
- * moment the view is worth saving**, which is while looking at results, not from
- * a menu somewhere. A saved-views feature nobody reaches is the same as not
- * having one — the same argument §12.5 makes for annotations.
- *
- * It appears only when there is something to save. An empty search box has no
- * view behind it, and a disabled control that is always on screen teaches the
- * reader to stop seeing it.
- *
- * **Saving is a write**, so on an instance without Cloudflare Access it is
- * refused — the API says so and the message is shown as written. That is
- * deliberate (`P6-13`): views are shared state with no per-viewer scoping.
+ * Saving the current search as a view (task P6-09, spec §12.5), offered only when there is
+ * a search to save. A write, so refused while Admin is closed.
+ * See docs/features/web-app.md#saved-views.
  */
 
 export interface SaveViewProps {

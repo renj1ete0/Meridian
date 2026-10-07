@@ -6,29 +6,9 @@ import { DataChip, TierChip } from '../ui/Tier'
 import type { SearchHit } from '../lib/api'
 
 /**
- * Search results, with the provenance that makes them citable (tasks P2-08,
- * P6-27).
- *
- * No artboard draws this list. Its form is taken from the nearest thing that
- * does — the supporting chunks in the Explore artboard's detail panel: one
- * bordered surface, rows divided by hairlines, the passage first and a single
- * mono line of provenance beneath it (domain in cyan, tier as a bordered mono
- * chip, date, position). Dense, square, and read top to bottom.
- *
- * **Every hit shows where it came from, and that is the feature.** §2 principle
- * 3 is that nothing is assertable without a citation you can follow back to a
- * file, and the README is explicit that this is not a RAG chatbot. A result
- * list that showed text and left the source to a hover or a detail panel would
- * make the citation optional in practice, which is the same as not having one.
- *
- * **The date says "no date" rather than nothing.** A source that published
- * undated and a source whose date was never extracted look identical from a
- * blank space, and §9 makes staleness a first-class signal — a reader weighing
- * evidence needs to know which of those they are looking at.
- *
- * Passages stay in Archivo at reading size rather than the artboard's mono
- * italic quotes: there, a quote is two lines of evidence beside a node; here it
- * is the thing being read, often a paragraph long.
+ * Search results, with the provenance that makes them citable (tasks P2-08, P6-27): the
+ * passage, then one mono line of domain, tier, date ("no date" when there is none) and
+ * position. See docs/features/web-app.md#search-results.
  */
 
 export interface ResultListProps {
@@ -109,11 +89,8 @@ function Provenance({ hit }: { hit: SearchHit }) {
 export const CLAMP_OVER = 600
 
 /**
- * One passage, clamped to eight lines when long. The whole text is always in
- * the page — the clamp is CSS, so find-in-page, copy and a screen reader all
- * get the verbatim chunk — and one click shows it in full. A result list where
- * a single extraction-damaged chunk fills three screens is a list nobody reads
- * past the first hit.
+ * One passage, clamped to eight lines when long. The clamp is CSS, so find-in-page, copy
+ * and screen readers get the whole chunk; one click shows it in full.
  */
 function Passage({ text: raw }: { text: string }) {
   const [open, setOpen] = useState(false)
