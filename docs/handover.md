@@ -20,7 +20,8 @@ add it here.
 >   address the assistant will use. The server cannot know its LAN or tunnel address.
 > - **Growth days are calendar dates, not instants**: format them with `shortDateOf`, never a
 >   converting formatter, or every label shifts a day west of the display zone.
-> - **The local DB lags the dev DB by migration `b140a0b1c2d3`**; upgrade before `make local-up`.
+> - **The local DB is at head** (`b140a0b1c2d3`, migrated 2026-10-07); v0.162.2's API and web
+>   containers were started against it and every read route answered.
 > - **`make lint` lints the web package too** (`B-142`), so it needs `web/node_modules`. Run
 >   `npm run format` in `web/` before committing web changes; Prettier's check fails otherwise.
 > - **Blame skips the Prettier commit** through `.git-blame-ignore-revs`; set it once per clone
