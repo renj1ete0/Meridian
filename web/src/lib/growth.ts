@@ -119,6 +119,11 @@ export function growthQuery(range: GrowthRange, topics: readonly string[]): stri
   return text ? `?${text}` : ''
 }
 
+/** A topic's name as a reader reads it: "on-demand-bus" is "on demand bus", as on Find. */
+export function topicWords(topic: string): string {
+  return topic.replaceAll('-', ' ').replaceAll('_', ' ')
+}
+
 /** The colour of a topic: its series slot, or the neutral "other" past the eighth (§2 series). */
 export function seriesColour(series: number): string {
   return series >= 0 && series < 8 ? `var(--series-${series + 1})` : 'var(--text-faint)'

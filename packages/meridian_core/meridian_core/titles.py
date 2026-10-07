@@ -65,6 +65,15 @@ _GLUED_NUMBER = re.compile(r"^\d+(?:\.\d+)*(?=[A-Z])")
 
 _WS = re.compile(r"\s+")
 
+#: Adobe's private-use small capitals and old-style figures: ASCII plus 0xF700. PDFs set in
+#: such fonts hand text extractors these code points, which no reader can read.
+_SMALL_CAPS = {code: code - 0xF700 for code in range(0xF721, 0xF77F)}
+
+
+def plain_letters(text: str) -> str:
+    """Text with Adobe private-use small capitals and figures turned back into ASCII."""
+    return text.translate(_SMALL_CAPS)
+
 
 def _norm(text: str) -> str:
     return _WS.sub(" ", text).strip()
@@ -88,7 +97,7 @@ def clean_title(
     """The title, or None when what the document declared is not one."""
     if not title:
         return None
-    text = _norm(title)
+    text = _norm(plain_letters(title))
     if len(text) < 3 or _PLACEHOLDER.match(text) or _FILE_NAME.search(text):
         return None
 

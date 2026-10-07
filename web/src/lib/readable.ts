@@ -4,6 +4,16 @@
  * unchanged. See docs/features/web-app.md#readable-passages.
  */
 
+// Adobe's private-use small capitals and figures, ASCII plus 0xF700, as some PDFs hand
+// them to text extractors. `meridian_core.titles.plain_letters` maps them at extraction;
+// this reads passages stored before it.
+const SMALL_CAPS = /[\uF721-\uF77E]/g
+
+/** Text with Adobe private-use small capitals turned back into the letters they draw. */
+export function plainLetters(text: string): string {
+  return text.replace(SMALL_CAPS, (c) => String.fromCharCode(c.charCodeAt(0) - 0xf700))
+}
+
 const IMAGE = /!\[[^\]\n]*\]\([^)\s]*(?:\s+"[^"]*")?\)/g
 // Innermost first, so a footnote `[[30](url)]` becomes `[30]`.
 const LINK = /\[([^[\]\n]*)\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)/g
@@ -96,7 +106,7 @@ export function unwrapLines(text: string): string {
 }
 
 export function readable(text: string): string {
-  let out = text.replace(IMAGE, '')
+  let out = plainLetters(text).replace(IMAGE, '')
   // Links nest one level in footnotes; two passes resolve `[[n](url)]`.
   for (let i = 0; i < 2; i++) out = out.replace(LINK, (_, label: string) => label)
   out = unwrapLines(flattenTables(out))

@@ -114,6 +114,17 @@ describe('the page body', () => {
     fireEvent.click(screen.getByRole('button', { name: /Topic A/ }))
     expect(onToggle).toHaveBeenCalledWith('Topic A')
   })
+
+  it('names topics in words, as Find does, and still filters by the stored name', () => {
+    // Found on a live corpus: Growth read "on-demand-bus" where every other page reads words.
+    const onToggle = vi.fn()
+    const named = growth({ topics: ['on-demand-bus'], all_topics: [topic('on-demand-bus', 0)] })
+    const { container } = render(<GrowthBody growth={named} chosen={[]} onToggle={onToggle} />)
+    expect(container.textContent).toContain('on demand bus')
+    expect(container.textContent).not.toContain('on-demand-bus')
+    fireEvent.click(screen.getByRole('button', { name: /on demand bus/ }))
+    expect(onToggle).toHaveBeenCalledWith('on-demand-bus')
+  })
 })
 
 describe('calendar dates are not converted (ADR 0009)', () => {

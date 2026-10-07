@@ -597,14 +597,15 @@ export function ModeSwitch({ mode, onChange }: { mode: ResultMode; onChange: (mo
 /**
  * What the search found, per arm, in a reader's words (`P6-44`): "lexical" and
  * "vector" are how it was done, not what it means. Counted per arm, so a
- * search that only one arm answered does not read as "20 of 0".
+ * search that only one arm answered does not read as "20 of 0". An arm stops at the
+ * candidate pool, so a count that reached it is "at least", written `100+`.
  */
 export function summaryLine(results: SearchResponse): string {
   const shown = results.hits.length
+  const count = (n: number) => `${n.toLocaleString('en')}${n >= results.candidate_pool ? '+' : ''}`
   const parts = [`${shown} ${shown === 1 ? 'passage' : 'passages'} shown`]
-  if (results.arms.includes('lexical'))
-    parts.push(`${results.lexical_candidates.toLocaleString('en')} matched the words`)
-  if (results.arms.includes('vector')) parts.push(`${results.vector_candidates.toLocaleString('en')} near in meaning`)
+  if (results.arms.includes('lexical')) parts.push(`${count(results.lexical_candidates)} matched the words`)
+  if (results.arms.includes('vector')) parts.push(`${count(results.vector_candidates)} near in meaning`)
   return parts.join(' · ')
 }
 

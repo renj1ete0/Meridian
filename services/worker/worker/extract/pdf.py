@@ -16,6 +16,7 @@ import shutil
 import unicodedata
 
 from meridian_core.logging import get_logger
+from meridian_core.titles import plain_letters
 
 from .base import ExtractedDocument, Page
 from .figures import figures_from_pages
@@ -211,8 +212,11 @@ async def _run_pdftotext(content: bytes, *, timeout_s: int) -> PdfText | None:
     if pieces and not pieces[-1].strip():
         pieces.pop()
 
+    # Small-caps fonts reach the text as private-use code points; read as letters, they are
+    # neither unreadable to a person nor counted as garbled.
     pages = tuple(
-        Page(number=index, text=piece.strip()) for index, piece in enumerate(pieces, start=1)
+        Page(number=index, text=plain_letters(piece).strip())
+        for index, piece in enumerate(pieces, start=1)
     )
     return PdfText(pages=pages, page_count=len(pages))
 

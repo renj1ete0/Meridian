@@ -32,6 +32,10 @@ never reads as "no gaps of that kind".
 
 ## Design choices
 
+- **Written for people.** Titles and reasons name a topic in words ("on demand bus", via
+  `searchseeds.topic_words`) and group digits ("2,168"); ids, subjects and evidence keep the
+  topic's stored name, which actions and links need.
+
 - **The held-out rule shapes the question-set actions.** A question from the evaluation set is
   never used as a seed or a steering reason (`eval/README.md`), so a low-scoring item offers
   "search it in Find" and nothing that steers.

@@ -77,6 +77,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.5] — 2026-10-07
+
+### Fixed
+
+- Every page scrolled sideways on a phone. The top bar's five sections, bell and settings did
+  not fit 390px; below `sm` it now drops its dividers and tightens its gaps. Admin tables that
+  scroll inside their card still widened the page through an `sr-only` header cell, which
+  `TableCard` now contains; the Map's shade and level controls wrap. Measured at 390px on every
+  reader and Admin page: no sideways scroll.
+- Titles and passages from PDFs set in small capitals read as boxes: the fonts hand extractors
+  Adobe's private-use code points (ASCII plus 0xF700), which also counted as garbled text.
+  `titles.plain_letters` maps them back for PDF pages and every cleaned title; the web maps
+  them in passages and result titles stored before. `worker.retitle --apply` fixes stored titles.
+- Find's summary said "100 matched the words" when 100 was the candidate pool, not a count; a
+  count that reached the pool now reads `100+`.
+- Gaps wrote topics by their stored names and counts without separators ("779 of 2168 … about
+  on-demand-bus"), and its kind label replaced only the first underscore ("search off_topic").
+  Growth named topics the same way. Both now read as Find does.
+- The landing's concept count included nodes merged into others and readers' notes, so it
+  disagreed with Growth; both count with `stats.live_entities` now, as does the health line.
+- Admin's agent warning read "a run reaching those stage"; it agrees in number now.
+
 ## [0.163.4] — 2026-10-07
 
 ### Fixed

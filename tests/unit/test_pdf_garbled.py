@@ -74,3 +74,23 @@ async def test_garbled_pages_in_a_readable_pdf_are_blanked_and_numbers_kept(monk
     assert [c.offset for c in chunk_pages(document.pages)] and all(
         c.offset != 2 for c in chunk_pages(document.pages)
     )
+
+
+async def test_small_capitals_are_read_as_letters_not_garbage(monkeypatch) -> None:
+    """Some PDFs set in small capitals hand the extractor Adobe private-use code points,
+    each letter plus 0xF700. Read as they are, a page of them reads as boxes and counts as
+    garbled; read as letters, it is ordinary text (found on a live corpus)."""
+    from worker.extract import pdf
+
+    caps = "".join(chr(0xF700 + ord(c)) if c.isalpha() else c for c in READABLE)
+    assert is_garbled(caps), "the raw extractor output is what used to reach the judgement"
+
+    async def fake_capture(_argv, _stdin, _timeout_s):
+        return caps + "\f"
+
+    monkeypatch.setattr(pdf, "_capture", fake_capture)
+    extracted = await pdf._run_pdftotext(b"%PDF", timeout_s=5)
+
+    assert extracted is not None
+    assert extracted.pages[0].text == READABLE.strip()
+    assert not is_garbled(extracted.pages[0].text)

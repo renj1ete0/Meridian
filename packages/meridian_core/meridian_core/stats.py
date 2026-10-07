@@ -61,6 +61,14 @@ class CorpusStats:
         return self.chunks - self.duplicate_chunks
 
 
+def live_entities() -> tuple:
+    """What counts as a concept: not a note, and not merged into another node.
+
+    The landing, the health line and Growth all count with it, so they agree.
+    """
+    return (Entity.node_type != "annotation", Entity.redirects_to.is_(None))
+
+
 async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) -> CorpusStats:
     """Count what is in the corpus. Reads only.
 
@@ -121,7 +129,7 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
             .select_from(Chunk)
             .where(Chunk.duplicate_of.is_not(None), Chunk.superseded_at.is_(None))
         ),
-        entities=await count(select(func.count()).select_from(Entity)),
+        entities=await count(select(func.count()).select_from(Entity).where(*live_entities())),
         edges=await count(select(func.count()).select_from(Edge)),
         # §9: contradiction is a result, not an error, and contested nodes are
         # the highest-value ones in the graph — which is why this is a headline

@@ -239,3 +239,33 @@ async def test_an_examined_source_is_not_counted_as_unexamined(clean, scope, ter
     await a_source(clean, scope, f"A {term} report.", topic_labels=[])
 
     assert (await corpus_stats(clean)).sources_without_topics == before
+
+
+async def test_a_merged_node_or_a_note_is_not_a_concept(session_for) -> None:
+    """The landing counted every node row, so a node merged into another counted twice and a
+    reader's note counted as a concept; Growth did not, and the two pages disagreed by
+    exactly those rows (found on a live corpus). Both count with `live_entities` now."""
+    import uuid
+
+    from meridian_core.models import Entity
+    from meridian_core.stats import corpus_stats
+
+    sess = await session_for("rw")
+    before = (await corpus_stats(sess)).entities
+
+    def node(**over) -> Entity:
+        return Entity(
+            canonical_name=f"counted {uuid.uuid4().hex[:6]}",
+            node_type=over.pop("node_type", "organisation"),
+            supporting_chunk_ids=[900],
+            **over,
+        )
+
+    kept = node()
+    sess.add(kept)
+    await sess.flush()
+    sess.add_all([node(redirects_to=kept.entity_id), node(node_type="annotation")])
+    await sess.flush()
+
+    assert (await corpus_stats(sess)).entities == before + 1
+    await sess.rollback()

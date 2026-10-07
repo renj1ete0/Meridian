@@ -84,6 +84,15 @@ describe('the registry', () => {
     )
 
     expect(text(markup)).toContain('Nothing serves relation_extraction')
+    expect(text(markup)).toContain('A run reaching that stage will defer')
+  })
+
+  it('agrees in number when several task types are unserved', () => {
+    const markup = renderToStaticMarkup(
+      <AgentsPanel rows={[agent({ enabled: false })]} unserved={['chat', 'triage']} />,
+    )
+
+    expect(text(markup)).toContain('A run reaching those stages will defer')
   })
 
   it('says so plainly when every task type is covered', () => {

@@ -230,6 +230,14 @@ describe('the page', () => {
     expect(sources.textContent).toContain('pending')
   })
 
+  it('writes a kind with several words as words', async () => {
+    // `replace('_', ' ')` changed only the first, so the label read "search off_topic".
+    await renderWith(() => respond(body([gap({ id: 'search-off-topic:x', subject: 'x', kind: 'search_off_topic' })])))
+    const row = within(screen.getByRole('list', { name: /most severe first/ })).getAllByRole('listitem')[0]!
+    expect(row.textContent).toContain('x · search off topic')
+    expect(row.textContent).not.toContain('_')
+  })
+
   it('ranks as served and flags the severe ones with the dagger', async () => {
     const mild = gap({
       id: 'topic-stale:x',

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { readable } from '../lib/readable'
+import { plainLetters, readable } from '../lib/readable'
 import { hrefForSource, onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
 import type { SearchHit } from '../lib/api'
@@ -130,7 +130,7 @@ export function ResultList({ hits }: ResultListProps) {
               onClick={onInternalClick(hrefForSource(hit.source_id))}
               className="min-w-0 font-sans text-[14.5px] font-semibold leading-snug text-text hover:text-accent-graph"
             >
-              {hit.title ?? domainOf(hit.url)}
+              {hit.title ? plainLetters(hit.title) : domainOf(hit.url)}
             </a>
             <a
               href={hrefForSource(hit.source_id)}

@@ -575,3 +575,18 @@ def test_place_gaps_rank_below_every_other_kind():
     )
     assert empty < lowest_other
     assert place(gaps.PLACE_THIN - 1)[0].severity > 0
+
+
+def test_a_gap_names_its_topic_in_words_and_groups_its_digits() -> None:
+    """The list is read by people: a topic's slug and an unseparated count read as
+    machinery (found on a live corpus, "779 of 2168 ... about on-demand-bus")."""
+    g = gaps.off_topic_gap("on-demand-bus", description=None, examined=2168, on_topic=779)
+    assert g is not None
+    assert g.title == "779 of 2,168 search results are about on demand bus"
+    assert "2,168 pages" in g.reason and "labelled on demand bus" in g.reason
+    assert g.id == "search-off-topic:on-demand-bus" and g.subject == "on-demand-bus"
+
+    place = gaps.place_gaps(
+        "on-demand-bus", "SG", "Singapore", sources=1, strong=0, topic_sources=1234
+    )
+    assert "labelled on demand bus in all" in place[0].reason and "1,234" in place[0].reason

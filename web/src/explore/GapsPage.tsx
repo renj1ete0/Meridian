@@ -179,7 +179,7 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
             flagged ? 'text-accent-attention' : 'text-text-faint'
           }`}
         >
-          {gap.subject} · {gap.kind.replace('_', ' ')}
+          {gap.subject} · {gap.kind.replaceAll('_', ' ')}
           {flagged ? <span aria-label="flagged"> †</span> : null}
         </span>
         <h2 className="text-[15px] font-semibold leading-[1.35] text-text">{gap.title}</h2>

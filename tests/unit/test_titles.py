@@ -144,3 +144,12 @@ def test_a_title_case_title_with_commas_is_still_a_title() -> None:
 def test_only_the_start_of_the_text_is_read() -> None:
     text = "\n".join(["x"] * 40 + ["Shared autonomous vehicles in microtransit systems"])
     assert title_from_text(text) is None
+
+
+def test_small_capitals_in_a_declared_title_are_read_as_letters() -> None:
+    """A PDF's metadata title in Adobe's private-use small capitals (found on a live corpus)."""
+    from meridian_core.titles import plain_letters
+
+    declared = "T J  L U"
+    assert clean_title(declared) == "The Journal of Land Use"
+    assert plain_letters("V. 9 ") == "Vol. 9 ", "other private use is kept"

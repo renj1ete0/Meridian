@@ -52,6 +52,21 @@ See [ask-the-graph.md](ask-the-graph.md).
 
 ## Design choices
 
+### Phone widths
+
+At 390px the top bar holds the mark, five sections, the bell and settings, so below `sm` it
+drops its dividers and tightens its gaps; above, it is as the mocks draw it. Two traps made
+every page scroll sideways on a phone:
+
+- A table that scrolls inside its card still widened the page through an `sr-only` header
+  cell: `sr-only` is absolutely positioned, and with no positioned ancestor its containing
+  block is the page. `TableCard` is `relative` for that reason.
+- A flex row inside a wrapping toolbar does not wrap with it; the Map's shade and level
+  controls wrap themselves.
+
+There is no phone mock; a page is checked at 390px by measuring
+`document.documentElement.scrollWidth` against the window in a headless browser.
+
 ### The shell
 
 §12.6 splits the interface into Explore and Admin, the same split the API draws:
@@ -310,6 +325,12 @@ a word such as "of" or "the" that no sentence ends with. A break after a full st
 capitalised line, a list item or a blank line stays, and a word hyphenated across a break is
 rejoined. The rule is conservative on purpose; see the handover before loosening it.
 
+Some PDFs are set in fonts that hand extractors Adobe's private-use small capitals and figures
+(U+F721–U+F77E, each an ASCII character plus 0xF700), so a title or passage reads as boxes.
+`meridian_core.titles.plain_letters` maps them back at extraction, for titles and PDF pages;
+`plainLetters` does the same in `readable()` and in result titles for what was stored before.
+Other private-use characters (icon fonts) are left alone, having no letter to map to.
+
 ## The surfaces in detail
 
 ### Explore and Find
@@ -335,7 +356,9 @@ typing. A superseded request is aborted rather than left to land out of order.
 The summary line counts per arm in a reader's words ("matched the words", "near in meaning",
 `P6-44`): "lexical" and "vector" are how it was done, not what it means. The older "20 of N
 candidates" took N from the lexical arm alone and read "20 of 0" whenever meaning-based
-matching found everything, a sentence contradicting itself on a correct result.
+matching found everything, a sentence contradicting itself on a correct result. Each arm stops
+at the candidate pool, so a count that reached it is written `100+`: "100 matched the words"
+read as an exact count when it was a ceiling.
 
 **`/?q=…` opens with that search run**, so a search can be linked and shared. Gaps' "Search it
 in Find" (`P6-36`) and the Map's "Open in Find" (`P6-34`) link here. `topic=` (repeated) and
@@ -420,6 +443,11 @@ statement about an empty corpus, and a reader cannot tell "nothing has been craw
 API did not answer". `contested` carries the dagger as text beside its brass figure, because
 §6's rule is that the tint never appears without the mark, and a count is where a reader
 colour-blind to brass would otherwise lose the distinction. Both only above zero.
+
+"Concepts" counts nodes that are neither notes nor merged into another node
+(`stats.live_entities`), the rule Growth uses, so the landing and Growth agree. Sources are
+counted differently on purpose: the landing counts every document, Growth only those kept (not
+junk, not copies), and says "sources kept".
 
 ### Where you were
 

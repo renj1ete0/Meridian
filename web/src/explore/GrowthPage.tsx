@@ -8,6 +8,7 @@ import {
   growthQuery,
   readGrowthQuery,
   seriesColour,
+  topicWords,
   type Growth,
   type GrowthCount,
   type GrowthDay,
@@ -183,7 +184,7 @@ function TopicFilter({
             }`}
           >
             <span aria-hidden className="block h-2 w-2 rounded-[2px]" style={{ background: seriesColour(t.series) }} />
-            {t.topic}
+            {topicWords(t.topic)}
           </button>
         )
       })}
@@ -358,7 +359,7 @@ function Legend({ topics }: { topics: readonly TopicGrowth[] }) {
       {topics.map((t) => (
         <li key={t.topic} className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
           <span aria-hidden className="block h-2 w-2 rounded-[2px]" style={{ background: seriesColour(t.series) }} />
-          {t.topic}
+          {topicWords(t.topic)}
         </li>
       ))}
       <li className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
@@ -392,7 +393,7 @@ function DayTip({
       {topics.map((t) => (
         <span key={t.topic} className="flex items-center gap-2">
           <span aria-hidden className="block h-2 w-2 rounded-[2px]" style={{ background: seriesColour(t.series) }} />
-          <span className="grow">{t.topic}</span>
+          <span className="grow">{topicWords(t.topic)}</span>
           <span className="font-mono text-text">{n(day.by_topic[t.topic] ?? 0)}</span>
         </span>
       ))}
@@ -414,7 +415,7 @@ function DailyTable({ days, topics }: { days: readonly GrowthDay[]; topics: read
             <th className={`${LABEL} pb-2 text-left`}>Day</th>
             {topics.map((t) => (
               <th key={t.topic} className={`${LABEL} pb-2 text-right`}>
-                {t.topic}
+                {topicWords(t.topic)}
               </th>
             ))}
             <th className={`${LABEL} pb-2 text-right`}>Two or more</th>
@@ -491,7 +492,7 @@ function ByTopic({ topics, span }: { topics: readonly TopicGrowth[]; span: strin
                     className="block h-2 w-2 rounded-[2px]"
                     style={{ background: seriesColour(t.series) }}
                   />
-                  {t.topic}
+                  {topicWords(t.topic)}
                 </span>
               </td>
               <td className="text-right font-mono text-[11.5px] text-text tabular-nums">{n(t.passages.total)}</td>

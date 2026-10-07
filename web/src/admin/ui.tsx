@@ -74,8 +74,10 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 /** A card holding one table. The table scrolls sideways inside the card rather
  * than pushing the page wider than the window. */
 export function TableCard({ children }: { children: ReactNode }) {
+  // `relative`: an absolutely positioned cell child (an `sr-only` header) otherwise
+  // takes the page as its containing block, escapes the scroll, and widens the page.
   return (
-    <Card className="overflow-x-auto">
+    <Card className="relative overflow-x-auto">
       <table className="w-full">{children}</table>
     </Card>
   )

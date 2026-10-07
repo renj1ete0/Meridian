@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { flattenTables, readable, unwrapLines } from '../src/lib/readable'
+import { flattenTables, plainLetters, readable, unwrapLines } from '../src/lib/readable'
 
 describe('readable', () => {
   it('keeps a link’s words and drops its address', () => {
@@ -153,5 +153,24 @@ describe('Markdown tables in a passage', () => {
   it('handles aligned separators and leaves a lone pipe in prose alone', () => {
     expect(flattenTables('| a | b |\n| :-- | --: |')).toBe('a · b')
     expect(flattenTables('either this | or that')).toBe('either this | or that')
+  })
+})
+
+describe('plainLetters', () => {
+  // A journal title as one PDF's small-caps font handed it over: letters as U+F7xx.
+  const smallCaps = 'T J  L U'
+
+  it('turns private-use small capitals back into the letters they draw', () => {
+    expect(plainLetters(smallCaps)).toBe('The Journal of Land Use')
+    expect(plainLetters('V. 9')).toBe('Vol. 9')
+  })
+
+  it('leaves every other character alone, including other private-use code points', () => {
+    const icons = 'menu  and  stay; café, naïve, 東京 too'
+    expect(plainLetters(icons)).toBe(icons)
+  })
+
+  it('is part of what a reader sees in a passage', () => {
+    expect(readable(`From ${smallCaps}.`)).toBe('From The Journal of Land Use.')
   })
 })

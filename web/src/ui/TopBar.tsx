@@ -148,7 +148,7 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
   return (
     <header
       data-surface={translucent ? 'translucent' : 'opaque'}
-      className={`sticky top-0 z-40 flex h-[54px] shrink-0 items-center gap-3 border-b border-line px-3 sm:gap-5 sm:px-[18px] ${
+      className={`sticky top-0 z-40 flex h-[54px] shrink-0 items-center gap-2 border-b border-line px-3 sm:gap-5 sm:px-[18px] ${
         translucent ? 'bg-surface/90 backdrop-blur-[10px]' : 'bg-surface'
       }`}
     >
@@ -167,16 +167,18 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
         </span>
       </a>
 
-      <span aria-hidden="true" className="h-[22px] w-px shrink-0 bg-line" />
+      {/* Below `sm` the bar holds five sections, the bell and settings in 390px: the
+          dividers and wider gaps are what pushed it past the screen edge. */}
+      <span aria-hidden="true" className="hidden h-[22px] w-px shrink-0 bg-line sm:block" />
 
-      <nav className="flex shrink-0 gap-1" aria-label="Sections">
+      <nav className="flex shrink-0 gap-0.5 sm:gap-1" aria-label="Sections">
         {NAV.map(({ path, label, name }) => (
           <a
             key={path}
             href={path}
             onClick={onInternalClick(path)}
             aria-current={section === name ? 'page' : undefined}
-            className={`px-2 py-1.5 sm:px-3 font-sans text-[12.5px] leading-[1.35] ${
+            className={`px-1.5 py-1.5 sm:px-3 font-sans text-[12.5px] leading-[1.35] ${
               section === name ? 'bg-surface-raised text-text' : 'text-text-faint hover:text-text-muted'
             }`}
           >
@@ -187,9 +189,9 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
 
       <div ref={slotRef} className="flex min-w-0 flex-1 items-center gap-3" data-role="topbar-slot" />
 
-      <div className="flex shrink-0 items-center gap-2.5">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
         <StatusPill progress={data.progress} runs={data.runs} />
-        <span aria-hidden="true" className="h-5 w-px bg-line" />
+        <span aria-hidden="true" className="hidden h-5 w-px bg-line md:block" />
         <Bell notifications={data.notifications} />
         <Settings theme={theme} onTheme={onTheme} />
       </div>

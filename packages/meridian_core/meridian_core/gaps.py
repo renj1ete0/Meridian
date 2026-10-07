@@ -141,7 +141,7 @@ def _seed_and_boost(topic: str, description: str | None) -> tuple[Action, ...]:
 
 
 def _plural(n: int, word: str) -> str:
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+    return f"{n} {word}" if n == 1 else f"{n:,} {word}s"
 
 
 def _elsewhere(passage_sources: int) -> str:
@@ -204,7 +204,7 @@ def coverage_gaps(
                 subject=topic,
                 title=title,
                 reason=(
-                    f"{_plural(sources, 'source')} labelled {topic} by content, "
+                    f"{_plural(sources, 'source')} labelled {topic_words(topic)} by content, "
                     f"{_plural(passages, 'passage')} about it; fewer than {THIN_SOURCES} "
                     "sources is thin." + _elsewhere(passage_sources) + share_note
                 ),
@@ -220,7 +220,7 @@ def coverage_gaps(
                 source="topic-coverage",
                 kind="weak",
                 subject=topic,
-                title=f"{sources} sources, {strong} government or peer-reviewed",
+                title=f"{sources:,} sources, {strong:,} government or peer-reviewed",
                 reason=(
                     f"{_plural(sources, 'source')}, {strong} of them government or "
                     f"peer-reviewed; fewer than {WEAK_STRONG} leaves an evidence question "
@@ -242,7 +242,7 @@ def coverage_gaps(
                 subject=topic,
                 title=f"Newest dated source {newest.year}",
                 reason=(
-                    f"The newest dated {topic} source is from {newest.isoformat()}, "
+                    f"The newest dated {topic_words(topic)} source is from {newest.isoformat()}, "
                     f"more than {STALE_YEARS} years ago."
                 ),
                 severity=0.3,
@@ -387,7 +387,8 @@ def place_gaps(
     """
     if sources >= PLACE_THIN:
         return []
-    words = f"{topic_words(topic)} {place_name}"
+    named = topic_words(topic)
+    words = f"{named} {place_name}"
     evidence = {
         "place": place,
         "sources": sources,
@@ -401,13 +402,13 @@ def place_gaps(
             kind="place_thin",
             subject=f"{topic} · {place_name}",
             title=(
-                f"No {topic} sources about {place_name}"
+                f"No {named} sources about {place_name}"
                 if sources == 0
                 else f"{_plural(sources, 'source')} about {place_name}"
             ),
             reason=(
-                f"{_plural(sources, 'source')} labelled {topic} are about {place_name} "
-                f"({place}), of {topic_sources} labelled {topic} in all; fewer than "
+                f"{_plural(sources, 'source')} labelled {named} are about {place_name} "
+                f"({place}), of {topic_sources:,} labelled {named} in all; fewer than "
                 f"{PLACE_THIN} leaves this place out of any comparison."
             ),
             severity=round(
@@ -738,8 +739,8 @@ def query_gaps(
                 subject=topic,
                 title=title,
                 reason=(
-                    f"{n} of {answered} answered {'search' if answered == 1 else 'searches'} "
-                    f"for {topic} {outcome}: "
+                    f"{n:,} of {answered:,} answered {'search' if answered == 1 else 'searches'} "
+                    f"for {topic_words(topic)} {outcome}: "
                     f"{_quoted(texts)}. {advice}"
                 ),
                 severity=round(floor + span * min(share, 1.0), 3),
@@ -842,10 +843,10 @@ def off_topic_gap(
         source="search-results",
         kind="search_off_topic",
         subject=topic,
-        title=f"{on_topic} of {examined} search results are about {topic}",
+        title=f"{on_topic:,} of {examined:,} search results are about {topic_words(topic)}",
         reason=(
-            f"Of {_plural(examined, 'page')} that searches for {topic} found and the "
-            f"content labeller has read, {on_topic} are labelled {topic}; under "
+            f"Of {_plural(examined, 'page')} that searches for {topic_words(topic)} found and the "
+            f"content labeller has read, {on_topic:,} are labelled {topic_words(topic)}; under "
             f"{OFF_TOPIC_SHARE:.0%} means the words are reaching something else. "
             "Narrower words, or a description for the topic, would steer them."
         ),

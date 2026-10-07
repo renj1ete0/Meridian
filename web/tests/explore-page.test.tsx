@@ -320,7 +320,16 @@ describe('the page number is labelled, not hedged', () => {
 describe('the results summary', () => {
   it('counts per arm, so a vector-only result does not read "20 of 0"', () => {
     const line = summaryLine(response({ arms: ['lexical', 'vector'], lexical_candidates: 0, vector_candidates: 100 }))
-    expect(line).toBe('1 passage shown · 0 matched the words · 100 near in meaning')
+    expect(line).toBe('1 passage shown · 0 matched the words · 100+ near in meaning')
+  })
+
+  it('says "at least" for an arm that stopped at the candidate pool', () => {
+    // Both arms stop at the pool; "100 matched the words" read as an exact count.
+    const capped = response({ arms: ['lexical', 'vector'], lexical_candidates: 100, vector_candidates: 99 })
+    expect(summaryLine(capped)).toBe('1 passage shown · 100+ matched the words · 99 near in meaning')
+    expect(summaryLine(response({ candidate_pool: 2000, lexical_candidates: 1500 }))).toBe(
+      '1 passage shown · 1,500 matched the words',
+    )
   })
 
   it('names only the arms that ran', () => {

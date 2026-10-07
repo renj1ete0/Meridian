@@ -35,6 +35,7 @@ from .schemas.growth import (
     MapSize,
     TopicGrowth,
 )
+from .stats import live_entities
 
 #: Windows the page offers; None is all time.
 WINDOWS: tuple[int | None, ...] = (7, 30, None)
@@ -205,11 +206,7 @@ async def growth(
     # The graph: concepts (not notes, not merged away) and links. Not narrowed by topic.
     concepts_total, concepts_window = (
         await sess.execute(
-            select(*counts(Entity.created_at)).where(
-                Entity.node_type != "annotation",
-                Entity.redirects_to.is_(None),
-                Entity.created_at <= now,
-            )
+            select(*counts(Entity.created_at)).where(*live_entities(), Entity.created_at <= now)
         )
     ).one()
     links_total, links_window = (

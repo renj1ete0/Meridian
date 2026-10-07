@@ -117,8 +117,8 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel }: AgentsP
 
       {unserved.length > 0 ? (
         <p className="border border-accent-attention bg-surface px-[18px] py-3.5 text-[12.5px] text-accent-attention">
-          Nothing serves {unserved.join(', ')}. A run reaching {unserved.length > 1 ? 'those' : 'that'} stage will defer
-          rather than fail, and the registry below will look fine while it does.
+          Nothing serves {unserved.join(', ')}. A run reaching {unserved.length > 1 ? 'those stages' : 'that stage'}{' '}
+          will defer rather than fail, and the registry below will look fine while it does.
         </p>
       ) : (
         <p className="text-[12.5px] text-text-muted">Every task type has an agent that can serve it.</p>
