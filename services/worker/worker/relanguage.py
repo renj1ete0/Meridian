@@ -2,8 +2,9 @@
 
 ``python -m worker.relanguage`` — reports by default, writes only with ``--apply``. The fetch
 loop detects an undeclared language as it stores a page now; this does the same for sources
-stored before it, from their first passages. A source found to be in another language, and its
-passages, are marked for relabelling, so the next `topics` pass scores them as one (`B-53`). See
+stored before it, from their first passages, and re-checks its own earlier guesses, clearing
+one the detector no longer makes. A source whose language changes from or to another language,
+and its passages, are marked for relabelling, so the next `topics` pass scores them (`B-53`). See
 docs/features/extraction.md#language.
 """
 
@@ -16,7 +17,7 @@ import contextlib
 import dataclasses
 import time
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.db import dispose_engines, session
@@ -43,6 +44,7 @@ class RelanguageStats:
     examined: int = 0
     detected: int = 0
     unsure: int = 0
+    cleared: int = 0
     relabel: int = 0
     by_language: collections.Counter = dataclasses.field(default_factory=collections.Counter)
 
@@ -86,7 +88,13 @@ async def run_pass(
             rows = list(
                 await sess.scalars(
                     select(Source)
-                    .where(Source.source_id > after, Source.language.is_(None))
+                    .where(
+                        Source.source_id > after,
+                        or_(
+                            Source.language.is_(None),
+                            Source.extra["language_from"].astext == "text",
+                        ),
+                    )
                     .order_by(Source.source_id)
                     .limit(BATCH)
                 )
@@ -101,15 +109,29 @@ async def run_pass(
                 language = detect_language(leads.get(source.source_id))
                 if language is None:
                     stats.unsure += 1
+                    if source.language is None:
+                        continue
+                    stats.cleared += 1  # an earlier guess the detector no longer makes
+                else:
+                    stats.detected += 1
+                    stats.by_language[language] += 1
+                if language == source.language:
                     continue
-                stats.detected += 1
-                stats.by_language[language] += 1
-                # Unknown was scored as English; only another language changes a score.
-                relabel = not is_english(language) and source.topic_basis is not None
+                # Unknown is scored as English, so only a move to or from another language
+                # changes a score.
+                was_other = is_english(source.language) is False
+                relabel = (was_other or is_english(language) is False) and (
+                    source.topic_basis is not None
+                )
                 stats.relabel += relabel
                 if apply:
                     source.language = language
-                    source.extra = {**(source.extra or {}), "language_from": "text"}
+                    extra = dict(source.extra or {})
+                    if language is None:
+                        extra.pop("language_from", None)
+                    else:
+                        extra["language_from"] = "text"
+                    source.extra = extra
                     if relabel:
                         source.topic_basis = None
                         relabelled.append(source.source_id)
@@ -141,7 +163,8 @@ def main() -> None:
     done = "" if args.apply else "would be "
     print(
         f"examined {stats.examined}  detected {stats.detected}  unsure {stats.unsure}  "
-        f"{stats.relabel} in another language {done}sent back for topic labels"
+        f"earlier guesses cleared {stats.cleared}  "
+        f"{stats.relabel} moved to or from another language {done}sent back for topic labels"
     )
     for language, n in stats.by_language.most_common(15):
         print(f"    {n:6}  {language}")

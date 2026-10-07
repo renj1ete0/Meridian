@@ -99,3 +99,31 @@ async def test_a_report_writes_nothing(sess) -> None:
 
     assert stats.relabel >= 1 and stats.by_language["fr"] >= 1
     assert french.language is None and french.topic_basis == BASIS
+
+
+async def test_an_earlier_guess_the_detector_no_longer_makes_is_cleared(sess) -> None:
+    """A table once read as a small language goes back to unknown, and back to labelling."""
+    table = await page(sess, "Vehicle population\n" + "Cars 612,256 617,570 630,596\n" * 60)
+    table.language, table.extra = "vo", {"language_from": "text"}
+    await sess.flush()
+
+    stats = await run_pass(
+        apply=True, session_factory=scoped(sess), start_after=table.source_id - 1
+    )
+    await sess.refresh(table)
+
+    assert stats.cleared >= 1
+    assert table.language is None and "language_from" not in table.extra
+    assert table.topic_basis is None, "it was scored as another language; now as unknown"
+
+
+async def test_a_declared_language_is_never_touched(sess) -> None:
+    """Even when the text disagrees: the page said what it is."""
+    declared = await page(sess, FRENCH)
+    declared.language = "en"
+    await sess.flush()
+
+    await run_pass(apply=True, session_factory=scoped(sess), start_after=declared.source_id - 1)
+    await sess.refresh(declared)
+
+    assert declared.language == "en" and declared.topic_basis == BASIS

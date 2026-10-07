@@ -394,12 +394,17 @@ the primary subtag. A quarter of the pages one crawl hour stored declared none, 
 a page with no language is scored as English by the topic labeller (`B-53`), so a page in
 another language without a declaration missed that correction. Since `B-153` an undeclared
 language is read from the text with py3langid and marked `extra['language_from'] = 'text'`: only
-from at least 200 letters of the opening, and only at a normalised probability of 0.9 or more,
-so a table or a heading stays unknown rather than guessed. On 2,000 stored pages that did declare
+from at least 200 letters of the opening, only when letters are at least 60% of its visible
+characters, and only at a normalised probability of 0.9 or more, so a table or a heading stays
+unknown rather than guessed. The share rule came from the first backfill: a statistics table, a
+quarter letters, was read as Volapük at 0.99; the identifier is confidently wrong on such text. On 2,000 stored pages that did declare
 a language it agreed with the declaration 98.5% of the time and decided on 97% (some of the
 disagreements were declarations that were themselves wrong). A declared language is never
-overridden. `relanguage` does the same for stored sources, from their first passages; one found
-to be in another language has its own and its passages' topic labels marked for relabelling.
+overridden. `relanguage` does the same for stored sources, from their first passages, and
+re-checks its own earlier guesses, clearing one the detector no longer makes; a source whose
+language moves to or from another language has its own and its passages' topic labels marked
+for relabelling. On the local corpus (2026-10-07) it read 7,629 of 12,272 undeclared sources,
+321 of them in another language.
 
 ### The source row
 

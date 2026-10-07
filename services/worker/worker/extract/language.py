@@ -13,6 +13,10 @@ import functools
 #: Characters of text below which no guess is made: headings and tables mislead it.
 MIN_CHARS = 200
 
+#: Share of the opening's non-space characters that must be letters: a statistics table can
+#: have 200 letters and still be mostly numbers, and is then read as some small language.
+MIN_LETTER_SHARE = 0.6
+
 #: How much of the text is read; the opening is enough and keeps it under a millisecond.
 SAMPLE_CHARS = 4000
 
@@ -35,7 +39,9 @@ def detect_language(text: str | None) -> str | None:
     if not text:
         return None
     sample = text[:SAMPLE_CHARS]
-    if sum(ch.isalpha() for ch in sample) < MIN_CHARS:
+    letters = sum(ch.isalpha() for ch in sample)
+    visible = sum(not ch.isspace() for ch in sample)
+    if letters < MIN_CHARS or letters < MIN_LETTER_SHARE * visible:
         return None
     language, probability = _identifier().classify(sample)
     if probability < CONFIDENCE or language in NOT_A_LANGUAGE:

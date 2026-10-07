@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.3] — 2026-10-07
+
+### Fixed
+
+- `B-153`: a statistics table could be read as a small language: its words passed the
+  200-letter floor and the identifier was confidently wrong (Volapük at 0.99). Letters must now
+  also be at least 60% of the opening's visible characters. `worker.relanguage` re-checks its
+  own earlier guesses and clears those the detector no longer makes.
+
 ## [0.163.2] — 2026-10-07
 
 ### Fixed
