@@ -1,16 +1,9 @@
 """A response kept for a while, refreshed behind the reader (`B-121`).
 
-For reads that are expensive and slow-moving: Gaps counts every on-topic
-passage in the corpus, several seconds at corpus size and growing with it,
-for a list that changes when the crawl does — over hours, not seconds.
-
-Stale-while-revalidate, in-process: within ``ttl_s`` the kept value is served;
-after it, the kept value is *still* served and one refresh runs in the
-background, so no reader waits but the first after a restart. The value
-carries its own time (`computed_at`), so a page can say how old it is.
-
-Not shared between API processes and not persisted — a restart recomputes
-once. That is the right size for one API behind one front door.
+Stale-while-revalidate, in process: within ``ttl_s`` the kept value is served; after it,
+the kept value is still served while one refresh runs in the background. The value
+carries `computed_at`. Not shared between processes or persisted.
+See docs/features/api-and-access.md#caching.
 """
 
 from __future__ import annotations

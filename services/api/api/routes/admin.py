@@ -1,24 +1,9 @@
 """`/api/admin/*` — the control surface (task P6-13, spec §12.6, §5.6).
 
-The first routes in this service that change anything, which is why the shape is
-conservative.
-
-**One writable session, gated once.** `WriteSession` and `AdminAllowed` both
-come from `deps`, so a route added under this prefix cannot get a session
-without also getting the gate — and a route under `/api/explore` cannot get one
-at all. §12.6's whole deferred-auth plan rests on the prefix being the role
-boundary, and that only holds if nothing crosses it.
-
-**Approving a term reports what the matcher will do with it.** §5.6 loads
-approved rows into the `EntityRuler`, and a row two other rows collide with is
-withheld — so a curator can approve a term, see it marked approved, and never
-see it match anything. The compiler is the only thing that knows, so the answer
-comes back with the decision rather than being discoverable by noticing an
-absence months later.
-
-**Nothing here deletes.** A rejected term stays as a tombstone, because the
-harvest reads the same documents again: a deleted row is re-created by the next
-pass, and the queue refills with exactly what somebody already turned down.
+The only routes that change anything. `WriteSession` and `AdminAllowed` both come from
+`deps`, so no route here gets a session without the gate. Approving a term reports what
+the matcher will do with it, and nothing here deletes except a saved view.
+See docs/features/api-and-access.md#admin-routes.
 """
 
 from __future__ import annotations
@@ -151,10 +136,8 @@ async def _counts(sess) -> tuple[int, int, int]:
 async def _rows_for(sess, terms: list[GazetteerTerm]) -> list[GazetteerRowRead]:
     """Attach each term's verdict, computed against the whole approved set.
 
-    The approved set is loaded even when the page shows none of it, because a
-    collision is a fact about two rows and the other one is usually not on this
-    page. Cheap: §5.6's table is hundreds of rows, not millions, and it is the
-    same read the worker does at startup.
+    The whole approved set is loaded, because the colliding row is usually on
+    another page.
     """
     approved = list(
         await sess.scalars(select(GazetteerTerm).where(GazetteerTerm.approved.is_(True)))
@@ -186,11 +169,7 @@ async def gazetteer_queue(
 ) -> GazetteerQueueRead:
     """The approval queue, most corroborated first.
 
-    Ordered by `occurrence_count` because that is the curator's own triage: a
-    term forty documents defined the same way is worth two seconds, and one
-    document's typo is worth none. `term_id` breaks ties so paging is stable —
-    without it two rows with equal counts can swap between pages and one is
-    never seen.
+    Ordered by `occurrence_count`, with `term_id` breaking ties so paging is stable.
     """
     statement = (
         select(GazetteerTerm)
@@ -232,10 +211,7 @@ async def _decided(sess, term: GazetteerTerm) -> GazetteerRowRead:
 async def approve_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> GazetteerRowRead:
     """Let this term override statistical NER.
 
-    Clears any rejection, because approving is the reversal: leaving the
-    tombstone would make the row approved *and* rejected, and the harvest reads
-    the tombstone — so the term would load into the matcher while the pass that
-    found it went on treating it as thrown away.
+    Clears any rejection, which the harvest would otherwise still read.
     """
     term = await _term(sess, term_id)
     term.approved = True
@@ -252,10 +228,7 @@ async def approve_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> Gaz
 async def reject_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> GazetteerRowRead:
     """Turn this term down, and keep the row so it stays down.
 
-    The row is not deleted. §5.6's harvest reads the same documents on every
-    pass, so a deleted row is re-created by the next one and the queue refills
-    with what a curator already rejected — which is how an approval queue becomes
-    something nobody opens.
+    The row is kept as a tombstone, or the next harvest pass re-creates it.
     """
     term = await _term(sess, term_id)
     term.approved = False
@@ -284,14 +257,7 @@ async def edit_term(
 ) -> GazetteerRowRead:
     """Correct a term before deciding on it.
 
-    A harvested term arrives as `concept` with no jurisdiction, because a regex
-    cannot tell an agency from a metric. Correcting that is most of the work of
-    approving one, and a queue that could only say yes or no would make the
-    curator's only options "accept it filed wrongly" or "throw away a real term".
-
-    `exclude_unset` is what makes clearing a field possible: sending
-    `jurisdiction: null` clears it, omitting the key leaves it alone. Without the
-    distinction one of those two edits is unexpressible.
+    An explicit `null` clears a field; an omitted key leaves it alone (`exclude_unset`).
     """
     term = await _term(sess, term_id)
     changes = edit.model_dump(exclude_unset=True)
@@ -312,21 +278,8 @@ async def edit_term(
 # Topics (task P6-12, spec §10, §10.1)
 # ---------------------------------------------------------------------------
 #
-# §10 is one sentence — "attention is a weight vector over topics; seeds are
-# drawn proportionally" — and these routes are the only place a person changes
-# it. Three things follow.
-#
-# **Every change is logged before it is applied**, actor and reason, because
-# §10.1 says so and because with two writers the alternative is opening this
-# screen in a month with no idea what moved anything.
-#
-# **Nothing here deletes.** Archiving is a status, not a DELETE: it drops the
-# topic out of the pool and leaves every node, edge and tag it produced
-# untouched, so coming back is a status change rather than a re-crawl.
-#
-# **An invalid steering change is refused, not clamped.** Silently adjusting a
-# number somebody typed shows them a different one and explains nothing — and
-# the bound they would need to change is exactly what the message names.
+# Every change is logged before it is applied; archiving is a status, not a DELETE;
+# an invalid change is refused, not clamped. See docs/features/api-and-access.md#admin-routes.
 
 #: Who the log records for a change made through this surface. The other actor
 #: §10.1 names is `orchestrator`, which writes the same tables from phase 4.
@@ -364,10 +317,7 @@ async def list_topics(_: AdminAllowed, sess: WriteSession) -> TopicsRead:
 def _refused(exc: Exception) -> HTTPException:
     """Turn a steering rule into a 422 that names the rule.
 
-    422 rather than 400: these are semantically invalid changes, not malformed
-    requests, and the body carries a sentence a person can act on — which is the
-    whole reason the steering layer raises with bounds in the message instead of
-    clamping.
+    422: a semantically invalid change, with a sentence a person can act on.
     """
     return HTTPException(status_code=422, detail=str(exc))
 
@@ -386,13 +336,8 @@ async def edit_topic(
 async def _steer(sess, topic: str, edit: TopicEdit) -> list[str]:
     """Apply a steering change to the session without committing it.
 
-    Shared by the write and by its preview (`P6-28`), so the arithmetic a
-    person is shown before committing is the arithmetic that commits.
-
-    The order matters. Status first, so pausing and re-weighting in one request
-    cannot try to set a share on a topic that is leaving the pool; bounds before
-    weight, so a weight sent alongside a raised ceiling is judged against the
-    new ceiling rather than refused by the old one.
+    Shared by the write and its preview (`P6-28`). Applies status, then bounds, then
+    weight. See docs/features/api-and-access.md#admin-routes.
     """
     now = _now()
     changes = edit.model_dump(exclude_unset=True)
@@ -446,10 +391,7 @@ async def add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> Topi
 async def _add(sess, body: TopicAdd) -> None:
     """Insert a topic into the session without committing it.
 
-    It starts at its floor rather than at a share somebody chose, because a new
-    topic has no hand-seeded sources yet (§10.2 calls this "a small repeat of
-    cold start") and a large share spent on a topic with nothing to crawl is
-    attention going nowhere.
+    It starts at its floor: a new topic has nothing to crawl yet (§10.2).
     """
     try:
         await steering.add_topic(
@@ -493,24 +435,9 @@ async def steering_log(
 # Fetch policy (task P6-22, spec §6.4, §13.2)
 # ---------------------------------------------------------------------------
 #
-# The one admin surface whose changes reach the outside world. Everything else
-# here rearranges rows; this decides how a machine behaves towards somebody
-# else's server, so two things are stricter than they are elsewhere.
-#
-# **Only some keys are editable, and the list is short.** `ResolvedPolicy`
-# carries the SSRF guards — `block_private_addresses`, `block_cloud_metadata`,
-# `allowed_schemes`, `require_https_final`, `block_mixed_dns`,
-# `revalidate_each_redirect` — and none of them belongs behind a form field. A
-# browser form that could turn off private-address blocking is the single worst
-# change available in this system, and it would be one click on a screen whose
-# other controls are about politeness. `respect_robots` and `user_agent` are out
-# for a different reason: a crawler that can stop honouring robots.txt, or change
-# who it says it is, from a web form is a crawler whose operator did not decide
-# that. Those are deployment decisions and they stay in the deployment.
-#
-# **Editing the global row needs `confirm`.** It is the only edit here whose
-# blast radius is the entire crawl, and a client-side dialog is a promise rather
-# than a check.
+# Only politeness, patience and render mode are editable: never the SSRF guards,
+# `respect_robots` or `user_agent`. The global row needs `confirm`.
+# See docs/features/api-and-access.md#admin-routes.
 
 #: What Admin may change: politeness, patience, and how a page is fetched.
 #: Everything absent is either a safety guard or an identity claim.
@@ -648,11 +575,8 @@ async def edit_fetch_policy(
 ) -> FetchPolicyRowRead:
     """Change one domain's politeness, patience, or render mode.
 
-    The edit is applied to a copy and validated by building a `ResolvedPolicy`
-    from it, so the field bounds that already exist — a delay may not be
-    negative, a timeout may not be zero — are the same ones enforced here. §2.6:
-    all writes validate server-side, and a value that reached the crawler
-    unchecked would fail at whatever hour the domain came up next.
+    Validated by building a `ResolvedPolicy` from an edited copy, so its field bounds
+    apply (§2.6).
     """
     row = await _policy_row(sess, domain)
 
@@ -716,10 +640,7 @@ def _first_error(exc: PydanticValidationError) -> str:
 async def unblock_domain(domain: str, _: AdminAllowed, sess: WriteSession) -> FetchPolicyRowRead:
     """Put an auto-blocked domain back in the crawl, and clear the count.
 
-    Both, because either alone is a trap. Clearing the status without the
-    counter leaves the domain one failure from being blocked again, which reads
-    as the unblock not having worked; clearing the counter without the status
-    leaves it blocked with nothing explaining why.
+    Both together; either alone looks like the unblock did not work.
     """
     row = await _policy_row(sess, domain)
     row.status = "active"
@@ -738,10 +659,8 @@ async def forget_render_learning(
 ) -> FetchPolicyRowRead:
     """Discard what the crawl learned about needing a browser (`P1-27`).
 
-    For the case the expiry is too slow for: a site that dropped its JavaScript
-    shell today, where waiting a week to re-probe means a week of browser
-    launches that were not needed. It clears the observation rather than setting
-    a policy, so the domain goes back to deciding for itself.
+    For when the expiry is too slow. Clears the observation rather than setting a
+    policy, so the domain decides for itself again.
     """
     row = await _policy_row(sess, domain)
     row.render_js_escalations = 0
@@ -755,23 +674,17 @@ async def forget_render_learning(
 # Saved views (task P6-09, spec §12.5)
 # ---------------------------------------------------------------------------
 #
-# Reading them is `/api/explore/views`; every write is here. That looks
-# inconsistent for something a reader creates while reading, and it is the
-# consequence of §12.6 splitting the prefixes by *mutation* rather than by
-# audience — which turns out to be the right split for this table specifically.
-# Saved views are shared state with no per-viewer scoping, so on an instance
-# shared with somebody else (`P3-06`'s grants) a guest should be able to open the
-# owner's views and should not be able to add to them.
+# Read under `/api/explore/views`, written here: the prefixes split by mutation, so a
+# guest can open the owner's views but not add to them.
+# See docs/features/api-and-access.md#admin-routes.
 
 
 @router.post("/views", response_model=SavedViewRead, status_code=201)
 async def create_view(body: SavedViewCreate, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
     """Save a filter set under a name.
 
-    The filters are validated against `SearchFilters` on the way in, so a view
-    cannot store something the search cannot apply. A view that silently drops a
-    filter when it is reopened is worse than one that refuses to save: the
-    reader gets a result set they believe is narrowed and is not.
+    The filters are validated against `SearchFilters`, so a view cannot store one the
+    search cannot apply.
     """
     _validated_filters(body.filters)
 
@@ -838,10 +751,7 @@ async def edit_view(
 async def mark_view_opened(view_id: int, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
     """Record that somebody returned to this view.
 
-    What orders the landing screen. A separate call rather than a side effect of
-    reading the list, because listing views is not returning to one — and a read
-    that wrote would also put `/api/explore` on the wrong side of §12.6's
-    boundary.
+    What orders the landing screen. A separate call: listing is not returning.
     """
     view = await sess.get(SavedView, view_id)
     if view is None:
@@ -856,10 +766,7 @@ async def mark_view_opened(view_id: int, _: AdminAllowed, sess: WriteSession) ->
 async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None:
     """Remove a view.
 
-    The one delete on this surface, and it is right: a saved view holds no
-    evidence and cites nothing. Everything else here keeps its row because
-    something downstream depends on it — a view depends on nothing, and keeping a
-    tombstone would clutter the list it exists to be read from.
+    The one delete on this surface: a view holds no evidence and nothing depends on it.
     """
     view = await sess.get(SavedView, view_id)
     if view is None:
@@ -873,13 +780,8 @@ async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None
 # Annotations (task P6-05, spec §12.5)
 # ---------------------------------------------------------------------------
 #
-# Writing a note is here and reading them is `/api/explore/annotations`, the
-# same split saved views take and for a sharper reason. §12.5 calls this layer
-# the one that actually reflects the reader's thinking; an annotation surface
-# open to the internet is a way to put text into the corpus that reads as the
-# owner's own thinking, which is the worst thing on this system to be able to
-# forge. On a shared instance (`P3-06`) a guest should see the owner's notes and
-# have no way to add to them.
+# Written here, read under `/api/explore/annotations`, as saved views are: a guest
+# sees the owner's notes and cannot add to them.
 
 
 @router.post("/annotations", response_model=AnnotationRead, status_code=201)
@@ -888,10 +790,8 @@ async def write_annotation(
 ) -> AnnotationRead:
     """Write one of the reader's own notes.
 
-    `produced_by` is absent from `AnnotationCreate` and the model forbids extra
-    keys, so a request that tries to claim authorship is refused at the boundary
-    rather than silently overwritten — including, later, a request from a model
-    holding a write tool (`P4-04`).
+    `AnnotationCreate` forbids extra keys, so a request claiming `produced_by` is
+    refused at the boundary.
     """
     try:
         note = await annotations.create(sess, body)
@@ -912,10 +812,7 @@ async def rewrite_annotation(
 ) -> AnnotationRead:
     """Rewrite a note, or re-point what it is about.
 
-    404 for a corpus-derived entity, which is the refusal that matters: §2.4
-    re-derives the graph from source chunks, and a hand-edit surviving into a
-    derived node is a change nothing can re-derive or explain. This surface
-    writes the reader's own nodes only.
+    404 for a corpus-derived entity: this writes the reader's own nodes only (§2.4).
     """
     try:
         note = await annotations.edit(sess, entity_id, change)
@@ -933,16 +830,8 @@ async def rewrite_annotation(
 # The budget (tasks `P4-10`, `P4-13`, §16)
 # ---------------------------------------------------------------------------
 #
-# §16's mitigation for the seed→ingest→cost loop is "caps set before first
-# autonomous run", and `check_can_start_run` refuses without them. That refusal
-# is only fair if there is somewhere to set them, and this is it.
-#
-# **Nothing seeds a default budget**, deliberately. `config/*.yaml` seeds topics
-# and fetch policy at first boot because a sensible default is better than an
-# empty table; a sensible default *cap* is the opposite, because it would mean
-# every install starts with limits nobody chose and the ordering requirement
-# §16 states would be satisfied by accident. A fresh install has no budget and
-# the first run says so.
+# Where §16's caps are set. Nothing seeds a default budget.
+# See docs/features/api-and-access.md#admin-routes.
 
 
 async def _budget_read(sess: WriteSession) -> BudgetRead:
@@ -983,14 +872,8 @@ async def read_budget(_: AdminAllowed, sess: WriteSession) -> BudgetRead:
 async def set_budget(edit: BudgetEdit, _: AdminAllowed, sess: WriteSession) -> BudgetRead:
     """Set or change the caps.
 
-    `PUT` rather than `PATCH` on a singleton, and still a partial update: there
-    is exactly one budget, so there is no collection to create into and no id to
-    choose. Omitted fields are left alone; an explicit `null` clears a cap,
-    which un-configures it and stops runs starting. Both have to be expressible
-    — a cap set by mistake must be removable — and `exclude_unset` is what keeps
-    them apart.
-
-    The row is created on first write, which is why a fresh install has none.
+    A partial `PUT` on the singleton: omitted fields are kept, an explicit `null`
+    clears a cap (and stops runs). The row is created on first write.
     """
     changes = edit.model_dump(exclude_unset=True)
     if not changes:
@@ -1022,18 +905,8 @@ async def set_budget(edit: BudgetEdit, _: AdminAllowed, sess: WriteSession) -> B
 # The first run (task `B-07`, scaffold §1.7, §15 phase 0)
 # ---------------------------------------------------------------------------
 #
-# §16 lists cold-start seed quality as a real risk — "worth spending an evening
-# on" — and until now the only way to spend that evening was editing
-# `config/seed_sources.yaml` *before* the first boot, because the file is read
-# once and never again (§13.1). Somebody installing Meridian to see what it
-# does has no idea what to put there yet.
-#
-# So the seeds stay editable for as long as they are still pending. This is not
-# a wizard and deliberately not a gate: the crawl has already started by the
-# time anyone opens this, and pretending otherwise would invite removing a seed
-# that has already been fetched. What it offers is the window between a seed
-# being queued and being reached, which per-domain rate limiting makes
-# generous.
+# Seeds stay editable while pending; not a wizard or a gate.
+# See docs/features/api-and-access.md#admin-routes.
 
 
 @router.get("/first-run", response_model=FirstRunRead)
@@ -1074,11 +947,8 @@ async def read_first_run(_: AdminAllowed, sess: WriteSession) -> FirstRunRead:
 async def add_seed(seed: SeedCreate, _: AdminAllowed, sess: WriteSession) -> QueueTaskRead:
     """Add a cold-start seed from the interface.
 
-    `seed_source="user"` — this is somebody typing a URL, which is consent, and
-    `P4-12` treats it as such by allowing the domain immediately. Validated the
-    same way a model's seed is (`check_seed_allowed`), because the checks that
-    matter here are about the *URL* — a `file:` scheme or a private address is
-    no safer for having been typed by the operator than proposed by a model.
+    `seed_source="user"`, so `P4-12` allows the domain at once; validated by
+    `check_seed_allowed` as a model's seed is.
     """
     if seed.task_type == "url":
         try:
@@ -1121,19 +991,8 @@ async def add_seed(seed: SeedCreate, _: AdminAllowed, sess: WriteSession) -> Que
 async def drop_seed(task_id: int, _: AdminAllowed, sess: WriteSession) -> None:
     """Remove a cold-start seed that has not been fetched yet.
 
-    **Only while pending and unclaimed**, which is two conditions rather than
-    one. A task that has moved past `pending` has already produced a fetch
-    attempt and possibly a source, and deleting the queue row would leave that
-    evidence with nothing explaining where it came from.
-
-    But claiming is a *lease*, not a status (`P1-01`) — a seed a worker is
-    fetching right now is still `pending`, with `claimed_by` set. Checking only
-    the status would delete a row out from under a worker mid-fetch, which is
-    the one case somebody is most likely to hit: they see the crawl start and
-    reach for the seed they did not mean to include.
-
-    The 409 names which of the two it is, because "I removed that seed" and
-    "that seed had already run" are different things to believe.
+    Only while `pending` and unclaimed (a claim is a lease, `P1-01`); the 409 says which
+    condition failed.
     """
     task = await sess.get(QueueTask, task_id)
     if task is None:
@@ -1201,12 +1060,8 @@ def _blocked_by(agent: Agent, *, key_present: bool) -> list[str]:
 async def list_agents(_: AdminAllowed, sess: WriteSession) -> AgentsRead:
     """The registry, with the reason each row is or is not routable.
 
-    **`unserved_tasks` is the question this screen exists to answer.** §11.3
-    routes by task type, so a type no enabled row declares is a stage that
-    defers every run — and nothing about the rows themselves looks wrong,
-    because the absence is *between* them. A run that defers at `extract` and
-    an operator staring at a registry full of plausible agents is exactly the
-    afternoon this line is meant to save.
+    `unserved_tasks` lists task types no enabled row declares: stages that defer every
+    run.
     """
     rows = list(await sess.scalars(select(Agent).order_by(Agent.quality_tier.desc().nulls_last())))
 
@@ -1231,15 +1086,7 @@ async def edit_agent(
 ) -> AgentsRead:
     """Enable or disable one agent, and return the whole registry.
 
-    The whole registry because `unserved_tasks` is computed across rows:
-    disabling the only agent that declares a task type changes a fact about
-    every other row's screen, and patching one row in place would leave Admin
-    stating something that stopped being true as it was clicked.
-
-    Only `enabled` is writable. Models, endpoints and task types are deployment
-    configuration and belong in `config/agents.yaml` with a migration behind
-    them; enabling is the switch that starts spending, which is the one an
-    operator needs immediately.
+    The whole registry, because `unserved_tasks` spans rows. Only `enabled` is writable.
     """
     agent = await sess.get(Agent, agent_id)
     if agent is None:
@@ -1274,10 +1121,7 @@ async def list_runs(
 ) -> RunsRead:
     """Recent synthesis runs, newest first, with the one in flight called out.
 
-    **Counters rather than a verdict.** §11.9 compares cost and volume per run
-    week on week, and a column that said "successful" would hide the run that
-    finished having written nothing — which is the common case while stages are
-    still being built, and the interesting case afterwards.
+    Counters rather than a verdict, so a run that wrote nothing is visible.
     """
     total = int(await sess.scalar(select(func.count()).select_from(Run)) or 0)
     rows = list(await sess.scalars(select(Run).order_by(Run.run_id.desc()).limit(limit)))
@@ -1293,18 +1137,8 @@ async def list_runs(
 # Admin as designed (task P6-28)
 # ---------------------------------------------------------------------------
 #
-# Two small additions the designed Admin needs and nothing else did.
-#
-# **A preview that is the write, rolled back.** §8 of the design system says the
-# add-topic dialog "shows the arithmetic before you commit", and the arithmetic
-# is clamp-and-redistribute over every active topic's floor and ceiling. A
-# client that re-implemented it would one day show a number the server then
-# did not produce — so the preview runs the same `_steer` / `_add` the write
-# runs, reads the vector, and rolls back. Nothing is logged, because nothing
-# happened.
-#
-# **The gazetteer decided a page at a time.** The harvest files terms by the
-# thousand, and one POST per click makes that queue something nobody finishes.
+# A topic preview that is the write, rolled back, and gazetteer decisions a page at
+# a time. See docs/features/api-and-access.md#admin-routes.
 
 
 async def _preview(sess) -> TopicsRead:
@@ -1341,10 +1175,7 @@ async def decide_terms(
 ) -> GazetteerBulkRead:
     """One verdict for up to a page of terms, all or none.
 
-    All or none because a partial bulk decision is a queue in a state nobody
-    chose: an unknown id refuses the whole request and names every id it could
-    not find, rather than deciding the rest and leaving the curator to work out
-    which ones took.
+    An unknown id refuses the whole request and names every id not found.
     """
     wanted = list(dict.fromkeys(body.term_ids))
     found = list(await sess.scalars(select(GazetteerTerm).where(GazetteerTerm.term_id.in_(wanted))))
@@ -1387,11 +1218,8 @@ async def decide_terms(
 # Steering from the map (task P6-35)
 # ---------------------------------------------------------------------------
 #
-# Right-click on the map writes through the steering that already exists — a
-# topic boost with an expiry, a search on the queue, a saved view — so each
-# steer is reversible where those are and lands in `steering_log`. What it
-# refuses, it refuses in words: "less" of an area about no topic has nothing
-# to turn down.
+# Writes through existing steering (a boost with an expiry, a search, a saved view),
+# so each steer is reversible and logged. Refusals are in words.
 
 
 def _steer_refused(exc: Exception) -> HTTPException:
@@ -1455,10 +1283,8 @@ async def suggest_search(
 async def ask_the_graph(body: ChatAsk, _: AdminAllowed, sess: WriteSession) -> ChatExchangeRead:
     """One question answered from the corpus, both turns stored.
 
-    Under Admin because it writes (the thread) and spends (a model's tokens),
-    and §12.6 puts every write here. A model that cannot answer is not an
-    error response: the stored answer carries the reason, so the panel shows it
-    in the thread where it happened.
+    Under Admin because it writes a thread and spends tokens. A model that cannot
+    answer is stored with its reason, not returned as an error.
     """
     try:
         exchange = await chat.ask_corpus(

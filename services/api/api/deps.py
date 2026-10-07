@@ -1,31 +1,9 @@
 """Request-scoped dependencies (task P2-07, scaffold §4, spec §12.6).
 
-One dependency per database role, and the role is chosen by the route prefix it
-serves — §12.6's first deferred-auth decision: "route prefixes by mutation,
-`/api/explore/*` for reads, `/api/admin/*` for writes and control. Role-gating
-then becomes a single middleware check on a path prefix."
-
-**The read-only guarantee is Postgres's, not this module's.** `meridian_ro`
-cannot write, so an explore route that tried would fail at the database even if
-every layer above it had a bug. `session_ro` additionally issues
-`SET TRANSACTION READ ONLY`, which turns a mistake into an immediate error at
-the statement rather than a surprise at commit — belt and braces, and the belt
-is the one that matters. AGENTS.md: "Enforcing read-only at the database, not in
-application code, is what makes the read-only escape hatch safe."
-
-**`/api/admin/*` gets a writable session and nothing else does.** `WriteSession`
-is defined here rather than in the admin router so that the role boundary is one
-file: a handler under `/api/explore` that wanted to write would have to import
-across the prefix to do it, which is visible in review in a way a session opened
-inline is not.
-
-It is also gated. Admin is the only surface that changes anything, and a
-deployment that puts this behind a tunnel without Cloudflare Access in front is
-one forgotten variable away from handing the corpus's configuration to whoever
-finds the hostname. So the routes refuse unless identity is verified or somebody
-has explicitly said this instance is not exposed — the same opt-out shape the MCP
-surface uses, for the same reason: open-unless-configured fails silently and in
-the wrong direction.
+One dependency per database role, chosen by route prefix: `/api/explore/*` reads on
+`meridian_ro`, which Postgres keeps read-only; `/api/admin/*` gets the only writable
+session, behind the admin gate. The role boundary is this one file.
+See docs/features/api-and-access.md#design-choices.
 """
 
 from __future__ import annotations
@@ -63,10 +41,7 @@ ReadSession = Annotated[AsyncSession, Depends(read_session)]
 def admin_is_unprotected() -> bool:
     """Whether anybody has said this instance is not exposed.
 
-    Deliberately an opt-out rather than a default. The failure mode of
-    open-unless-configured is a write surface published to the internet by a
-    deployment step somebody forgot, and the person who forgets is deploying
-    rather than reading this file.
+    An opt-out (`MERIDIAN_ADMIN_ALLOW_ANONYMOUS`), never a default.
     """
     return (os.environ.get("MERIDIAN_ADMIN_ALLOW_ANONYMOUS") or "").strip().lower() in TRUTHY
 
@@ -74,11 +49,8 @@ def admin_is_unprotected() -> bool:
 def admin_is_allowed() -> None:
     """Refuse admin entirely unless callers are identified, or the opt-out is set.
 
-    `CF_ACCESS_TEAM_DOMAIN` plus `CF_ACCESS_AUD` is what makes the middleware
-    verify an Access assertion (`P3-08`), and that is the only identity this
-    service has. With neither that nor the opt-out, admin is a set of
-    unauthenticated write endpoints, and 503 with a message naming the fix is a
-    better answer than serving them.
+    Identity is a verified Access assertion (`CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`,
+    `P3-08`). With neither that nor the opt-out, answers 503 naming the fix.
     """
     if admin_is_unprotected():
         return
@@ -97,10 +69,7 @@ def admin_is_allowed() -> None:
 async def write_session() -> AsyncIterator[AsyncSession]:
     """A read-write session for the life of one request.
 
-    Committing is the handler's job, not this dependency's. A generator that
-    committed on the way out would commit whatever a handler had flushed before
-    raising, which turns a rejected request into a half-applied one — and the
-    response would say it failed.
+    Committing is the handler's job, so a request that raises is never half-applied.
     """
     async with session("rw") as sess:
         yield sess

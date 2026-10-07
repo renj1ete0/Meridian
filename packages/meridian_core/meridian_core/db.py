@@ -1,16 +1,9 @@
 """Database engines, sessions, and the declarative base.
 
-Two roles, two engines (scaffold §4):
-
-- ``meridian_rw`` — worker, orchestrator, and ``/api/admin/*`` routes
-- ``meridian_ro`` — ``/api/explore/*`` routes and ``run_readonly_query`` (spec §12.4)
-
-Read-only is enforced by Postgres, not by application code. That is the whole
-point: the read-only escape hatch is safe because the role cannot write, not
-because the query builder declines to.
-
-Engines are created lazily on first use so that importing this module has no
-side effects — tests, Alembic, and ``--help`` invocations must not open sockets.
+Three roles, three engines (scaffold §4): ``meridian_rw`` (worker, orchestrator,
+``/api/admin/*``), ``meridian_ro`` (``/api/explore/*``, MCP tools) and ``meridian_guest``
+(``run_readonly_query``, spec §12.4). Read-only is enforced by Postgres, not by application
+code. Engines are created lazily, so importing this opens no sockets.
 """
 
 from __future__ import annotations
@@ -31,21 +24,16 @@ from sqlalchemy.orm import DeclarativeBase
 
 Role = Literal["rw", "ro", "guest"]
 
-# `guest` is `P3-07`'s narrow role: SELECT on the corpus and the graph, and
-# nothing on `agent_tokens` or `fetch_policy`. It is what `run_readonly_query`
-# (`P3-04`) runs as, because `meridian_ro` can read the table holding every
-# token hash and is therefore the wrong role to put behind a query tool an
-# external agent can reach.
+# `guest` (`P3-07`) can SELECT the corpus and graph only; `run_readonly_query` runs as
+# it because `meridian_ro` can read token hashes.
 _ENV_VAR: Final[dict[Role, str]] = {
     "rw": "PG_RW_URL",
     "ro": "PG_RO_URL",
     "guest": "PG_GUEST_URL",
 }
 
-# Postgres runs with max_connections=40 (scaffold §3) shared across the worker,
-# orchestrator, API (which holds both engines), migrations, and any psql session.
-# These defaults keep the total comfortably under that; override per service via
-# the environment rather than editing this file.
+# Postgres's max_connections is shared by every service (scaffold §3); these keep the
+# total under it. Override per service in the environment.
 _DEFAULT_POOL_SIZE: Final[int] = 5
 _DEFAULT_MAX_OVERFLOW: Final[int] = 5
 _DEFAULT_POOL_TIMEOUT: Final[int] = 30
@@ -165,10 +153,7 @@ async def session(role: Role = "rw") -> AsyncIterator[AsyncSession]:
 def guest_configured() -> bool:
     """Whether this deployment has a guest connection at all.
 
-    A deployment that shares nothing leaves `PG_GUEST_URL` unset, and the tools
-    that depend on it are simply absent rather than failing at call time. Same
-    shape as every other optional dependency here: not configured degrades, it
-    does not break.
+    Without `PG_GUEST_URL`, the tools that need it are absent rather than failing.
     """
     return bool(os.environ.get("PG_GUEST_URL", "").strip())
 
@@ -177,10 +162,7 @@ def guest_configured() -> bool:
 async def session_guest() -> AsyncIterator[AsyncSession]:
     """A session on the narrowest role there is, for untrusted SQL.
 
-    Read-only at the transaction *and* at the role, like `session_ro` — but the
-    role here can see only the corpus and the graph. §12.4's escape hatch is
-    arbitrary SQL from an external agent, and "arbitrary" is the operative word:
-    the enforcement has to be something no query can talk its way past.
+    Read-only at the transaction and at the role, which sees only the corpus and graph.
     """
     async with get_sessionmaker("guest")() as sess:
         await sess.execute(text("SET TRANSACTION READ ONLY"))

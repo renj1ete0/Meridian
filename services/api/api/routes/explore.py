@@ -1,16 +1,8 @@
 """`/api/explore/*` — the read surface (task P2-07, spec §12.5, §12.6).
 
-Every route here reads through `meridian_ro`. §12.6 makes the prefix the
-role boundary so that adding auth later is middleware on a path rather than a
-refactor of each handler, and that only holds if nothing under this prefix ever
-reaches for a writable session. Nothing here does; `deps` does not offer one.
-
-**The shape follows what reading actually requires.** §12.5's bottleneck is
-reading time, not generation, and §2 principle 3 is that nothing is assertable
-without a citation you can follow back to a file. So a hit carries its source
-inline, and there is a route for the chunks *around* a hit — having found a
-passage, the next thing a reader wants is its context, and a surface that makes
-that a second search sends them back through the ranking to find a neighbour.
+Every route reads through `meridian_ro`; `deps` offers nothing writable here. A hit
+carries its source inline, and there is a route for the chunks around a hit.
+See docs/features/api-and-access.md#explore-routes.
 """
 
 from __future__ import annotations
@@ -110,24 +102,15 @@ DEFAULT_LIMIT = 20
 #: would be a page of prose where §12.5 asked for evidence a reader can follow.
 MAX_SUPPORTING_CHUNKS = 40
 
-#: How many of the reader's own notes the node panel carries. Lower than the
-#: chunk cap and deliberately so: the panel shows the most recent few and the
-#: notes list shows the rest. A node somebody has annotated forty times is a
-#: node they are working on, and burying its attributes under their own backlog
-#: is not what §12.5 asked the panel for.
+#: How many of the reader's own notes the node panel carries: the latest few, below
+#: the chunk cap; the notes list shows the rest.
 MAX_PANEL_ANNOTATIONS = 10
 
-#: How many notes one export may carry. Notes are the reader's own writing, so
-#: this is a page cap rather than a courtesy one — the whole point of §12.5's
-#: export is that the material can leave, and a cap that made "all of them"
-#: unreachable would defeat it.
+#: How many notes one export may carry: a page cap, so all of them stay reachable.
 MAX_EXPORT_ANNOTATIONS = 500
 
 
-# `Annotated[...]` rather than `= Query(...)` defaults throughout. Both work;
-# this one keeps the default an ordinary value, which means a handler stays
-# callable from a test without constructing FastAPI parameter objects — and it
-# is what FastAPI's own documentation now recommends.
+# `Annotated[...]` rather than `= Query(...)`, so a handler stays callable from a test.
 @router.get("/search", response_model=SearchResponse)
 async def explore_search(
     sess: ReadSession,
@@ -187,14 +170,9 @@ async def explore_search(
 ) -> SearchResponse:
     """Hybrid retrieval over the corpus.
 
-    An empty `q` returns an empty result rather than a 422. An empty search box
-    is a state a UI has on first render, and making the client special-case its
-    own initial paint to avoid an error is a worse boundary than returning the
-    honest answer: nothing was asked, so nothing was found.
-
-    Check `degraded` on every response. This deployment has no embedder, so the
-    vector arm does not run and results are matched on words rather than
-    meaning — see `api/search_service.py` for why, and what would change it.
+    An empty `q` returns an empty result rather than a 422. Check `degraded`: without an
+    embedding service, the vector arm does not run and results match on words only.
+    See docs/features/search.md.
     """
     filters = SearchFilters(
         source_tiers=source_tier,
@@ -367,10 +345,7 @@ async def explore_bridge(area_a: int, area_b: int, sess: ReadSession) -> BridgeR
 async def explore_source(source_id: int, sess: ReadSession) -> SourceRead:
     """One source, with everything recorded about how it was acquired.
 
-    Including `extractor` (`P1-44`) and the OCR columns, because "this source
-    has no text" and "this source is a scan nobody has run OCR on" are different
-    answers and §6.5 makes metadata-only a valid resting state rather than a
-    failure.
+    Including `extractor` (`P1-44`) and the OCR columns.
     """
     source = await sess.get(Source, source_id)
     if source is None:
@@ -387,14 +362,7 @@ async def explore_source_chunks(
 ) -> SourceChunksRead:
     """A source's chunks in document order — the context around a hit.
 
-    Ordered by `chunk_index`, which is document order, so an offset here means
-    what an offset normally means. That is not true of `/search`, where the
-    order is a fused rank; keeping the two kinds of paging in separate routes
-    stops one being mistaken for the other.
-
-    A source that exists with no chunks returns an empty list, not a 404. §6.5:
-    metadata-only is a resting state, and a reader who followed a link here
-    needs to see that the source is real and unextracted rather than absent.
+    Ordered by `chunk_index`. A source with no chunks returns an empty list, not a 404.
     """
     if await sess.get(Source, source_id) is None:
         raise HTTPException(status_code=404, detail=f"no source {source_id}")
@@ -426,10 +394,8 @@ async def explore_source_chunks(
 async def explore_chunk(chunk_id: int, sess: ReadSession) -> ChunkRead:
     """One chunk, including the novelty gate's verdict on it.
 
-    `duplicate_of` and `nearest_similarity` are exposed for the reason §12.5
-    gives: a chunk filtered as a near-duplicate and a chunk that was never
-    crawled look identical from a result set, and only one of them is worth
-    investigating.
+    `duplicate_of` and `nearest_similarity` tell a filtered near-duplicate from a page
+    never crawled (§12.5).
     """
     chunk = await sess.get(Chunk, chunk_id)
     if chunk is None:
@@ -444,15 +410,8 @@ async def explore_export_bibtex(
 ) -> str:
     """A BibTeX bibliography for the given sources (`P6-15`, §12.5).
 
-    Explicit ids rather than a search query, deliberately. A bibliography is
-    something a person assembled — they read the results, kept some, and are
-    exporting *those*. Exporting a whole result set would produce a file whose
-    contents depend on a ranking that moves as the corpus grows, which is not a
-    citation list, it is a snapshot of an opinion.
-
-    Plain text, because that is what a `.bib` file is. A JSON envelope would put
-    every consumer one `json.loads` and one escape away from a file they could
-    have saved directly.
+    Explicit ids, not a query; plain text, as a `.bib` file is.
+    See docs/features/api-and-access.md#explore-routes.
     """
     if not source_id:
         raise HTTPException(status_code=422, detail="Name at least one source_id.")
@@ -498,11 +457,8 @@ async def explore_export_markdown(
 def _raw_is_served() -> bool:
     """Whether this deployment serves stored raw files (`P6-14`).
 
-    Off unless asked. §12.5 wants page-accurate links for the operator reading
-    their own corpus, and the raw store holds copies of third-party material —
-    serving it is redistribution, which is a decision rather than a default.
-    `P3-10`'s `grants.raw_files` is the finer-grained version for guests; this is
-    the deployment-level switch beneath it.
+    Off unless `MERIDIAN_SERVE_RAW` is set; `grants.raw_files` is the per-guest switch
+    beneath it.
     """
     return os.environ.get("MERIDIAN_SERVE_RAW", "").strip().lower() in {"1", "true", "yes"}
 
@@ -556,15 +512,7 @@ async def explore_source_figures(source_id: int, sess: ReadSession) -> SourceFig
 async def explore_source_raw(source_id: int, sess: ReadSession) -> FileResponse:
     """The stored raw file for one source (`P6-14`, §5.4).
 
-    **The path comes from the database, never from the request.** The caller
-    supplies an integer; `raw_file_path` is read off the row. That is not a
-    hardened traversal check, it is the absence of anything to traverse — there
-    is no user-supplied path in this handler at all, which is a stronger
-    property than validating one would be.
-
-    Off unless `MERIDIAN_SERVE_RAW` says otherwise. The raw store holds copies of
-    third-party material kept as a research archive (§14.2), and serving it is a
-    different act from serving what was extracted from it.
+    The path comes from the row, never the request. Off unless `MERIDIAN_SERVE_RAW`.
     """
     if not _raw_is_served():
         raise HTTPException(
@@ -597,13 +545,7 @@ async def explore_notifications(
 ) -> NotificationsRead:
     """What happened while nobody was looking (`P6-08`, §12.5, §13.3).
 
-    The in-app counterpart to the Telegram digest, reading the same rows — an
-    alert is recorded before it is delivered (`P5-07`), so a deployment with no
-    bot token still has somewhere to see what would have been sent.
-
-    Filterable by type rather than by read state, per the model's own reasoning:
-    the useful question is "what finished" or "what needs a decision", not "what
-    have I glanced at".
+    The same rows as the Telegram digest (`P5-07`), filterable by type.
     """
     query = select(Notification).order_by(Notification.created_at.desc()).limit(limit)
     if notification_type:
@@ -635,17 +577,9 @@ async def explore_notifications(
 async def explore_node(entity_id: int, sess: ReadSession) -> NodeDetailRead:
     """One node, with what is claimed about it and what justified each claim.
 
-    §12.5's node detail panel, assembled in one request: description, attribute
-    tags with confidence, the supporting chunks with their source and tier, and
-    how many of this node's edges §9 marked contested.
-
-    **Superseded chunks are still shown here**, and that is the one place in the
-    read surface where they are. Everywhere else a superseded chunk is text the
-    page no longer carries and serving it would misquote a document (`P1-32`).
-    Here it is the evidence an attribute was actually derived from, and §2.4
-    re-derives from source chunks — so a tag whose chunk has since been replaced
-    must still be followable, or the tag becomes an assertion with a citation
-    that resolves to nothing.
+    §12.5's node panel in one request: description, tags with confidence, supporting
+    chunks (superseded ones included, uniquely here) and the contested edge count.
+    See docs/features/api-and-access.md#explore-routes.
     """
     entity = await sess.get(Entity, entity_id)
     if entity is None:
@@ -756,17 +690,8 @@ async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
 async def list_views(sess: ReadSession) -> SavedViewsRead:
     """Saved views, most recently opened first (task P6-09, §12.5).
 
-    A **read** under `/api/explore`, while every write to them is under
-    `/api/admin` — which looks inconsistent for something a reader creates while
-    reading, and is not. §12.6 splits the prefixes by *mutation*, and the
-    consequence here is the one that matters: saved views are shared state with
-    no per-viewer scoping, so on an instance shared with somebody else
-    (`P3-06`'s grants) a guest must be able to open the owner's views and must
-    not be able to add to them.
-
-    A view never opened sorts last rather than being hidden. Somebody saved it
-    and did not come back; disappearing it would be the system deciding that was
-    a mistake.
+    Writes are under `/api/admin`. A view never opened sorts last rather than being
+    hidden.
     """
     rows = await sess.scalars(
         select(SavedView).order_by(
@@ -786,9 +711,7 @@ async def list_views(sess: ReadSession) -> SavedViewsRead:
 # Annotations (task P6-05, spec §12.5)
 # ---------------------------------------------------------------------------
 #
-# Reads only. Every write is `/api/admin/annotations`, so a shared instance
-# (`P3-06`) can show the owner's notes without offering a way to add to them —
-# and the read-only role is what enforces that rather than this comment.
+# Reads only; every write is `/api/admin/annotations`.
 
 
 @router.get("/annotations", response_model=AnnotationsRead)
@@ -816,10 +739,7 @@ async def explore_export_annotations(
 ) -> str:
     """Notes as Markdown (`P6-15`, §12.5: "avoid trapping material in a bespoke store").
 
-    The export that matters most of the four, because this is the only material
-    in the corpus that is not recoverable by crawling again. Everything else
-    here can be re-fetched from the web; a note cannot be re-derived from
-    anything.
+    The one export of material crawling cannot recover.
     """
     mine = await annotations.listing(sess, about=about, limit=MAX_EXPORT_ANNOTATIONS)
     return annotations.to_markdown(mine.annotations)
@@ -829,19 +749,8 @@ async def explore_export_annotations(
 async def explore_progress(sess: ReadSession) -> CrawlProgressRead:
     """What the crawl is doing right now (task `B-09`, scaffold §1.7).
 
-    Production starts empty by design, so for the first hour there is nothing
-    to search and a landing page has to say something true anyway. The decision
-    this takes: **make the first hour legible rather than ship a demo corpus.**
-
-    Shipping one was the alternative, and it is worse twice over. A snapshot of
-    a real crawl is third-party content, and whether it may be redistributed is
-    the question §14.2 keeps carefully separate — the same reasoning that keeps
-    `MERIDIAN_SERVE_RAW` off by default. Synthetic fixtures are worse still and
-    the task rules them out: they do not resemble real extraction output, so
-    the first impression would be of a system that works better than it does.
-
-    A queue draining is a system working. These are the numbers that make that
-    visible, and every one of them is true.
+    Makes an empty instance's first hour legible instead of shipping a demo corpus.
+    See docs/features/api-and-access.md#explore-routes.
     """
     now = dt.datetime.now(dt.UTC)
     hour_ago = now - dt.timedelta(hours=1)
@@ -890,12 +799,8 @@ async def explore_progress(sess: ReadSession) -> CrawlProgressRead:
 async def explore_crawl_health(sess: ReadSession) -> CrawlHealthRead:
     """A day of fetching and a verdict on whether it has stopped (task `P6-25`).
 
-    Behind Admin's crawl-health panel, and here rather than under `/api/admin/*` on purpose.
-    Everything it does is read, and the scaffold rule is that `/api/admin/*` exists for the routes
-    that write — a read placed there takes the writable role for no reason, and inherits the admin
-    gate, which is closed exactly on the deployments nobody has finished configuring. The person
-    watching an unattended crawl on one of those needs this most. It is `/progress`'s sibling, over
-    the same tables, on the same read-only role.
+    Behind Admin's crawl-health panel, but a read, so here rather than behind the admin
+    gate. See docs/features/api-and-access.md#explore-routes.
     """
     return CrawlHealthRead.model_validate(await crawl_health(sess))
 

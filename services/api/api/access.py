@@ -1,30 +1,9 @@
 """Cloudflare Access assertions (task P3-08, spec §11.4, §12.6).
 
-When a tunnel fronts this service, Cloudflare authenticates the person and
-passes a signed JWT in `Cf-Access-Jwt-Assertion`. This verifies it.
-
-**The header is never trusted.** That is the whole task, and the reason it is a
-task rather than a line of code: a header is a string, and an application that
-reads the identity out of one is a single misconfiguration away from letting
-anyone assert any identity by typing it. A direct port publish, a second
-ingress, a reverse proxy added later for an unrelated reason — each of those
-turns "Cloudflare always sets this" into "anyone can set this", and none of them
-looks like a security change when it is made.
-
-So every assertion is verified cryptographically against the team's published
-keys, with the audience checked, on every request. An assertion that does not
-verify is refused; there is deliberately no path where an unverifiable one is
-treated as anonymous-but-allowed, because that path is the bug.
-
-**Not configured means not installed.** A deployment with no team domain runs
-without this middleware and says so at startup — it is for a service behind a
-tunnel, and demanding it locally would push everyone into disabling it.
-`P3-03`'s token check is the layer that does not depend on deployment shape, and
-it fails closed on its own.
-
-**`/health` bypasses**, because the watchdog cannot complete an SSO flow. It
-reports liveness and a database connection and deliberately nothing about the
-corpus (`P2-07`), so exempting it discloses nothing.
+Verifies `Cf-Access-Jwt-Assertion` against the team's keys and audience on every request;
+the header itself is never trusted, and one that does not verify is refused. Not installed
+without a team domain. `/health` bypasses it.
+See docs/features/api-and-access.md#identity.
 """
 
 from __future__ import annotations
@@ -71,10 +50,7 @@ class AccessSettings:
     def from_env(cls) -> AccessSettings | None:
         """Both or neither.
 
-        A team domain without an audience would verify that *some* Access
-        application signed the token — including one belonging to a different
-        service on the same team, which is not the same as authenticating for
-        this one.
+        A domain without an audience would accept any Access application on the team.
         """
         team = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip()
         audience = os.environ.get("CF_ACCESS_AUD", "").strip()
@@ -88,19 +64,13 @@ class AccessVerifier:
 
     def __init__(self, settings: AccessSettings, *, jwk_client: object | None = None) -> None:
         self._settings = settings
-        # Injectable so a test can supply a local key set. The real client
-        # caches and refreshes on its own; Cloudflare rotates keys, and a
-        # verifier that fetched them once would start failing weeks later for a
-        # reason nobody would connect to a deploy.
+        # Injectable for tests. The real client caches and refreshes as keys rotate.
         self._keys = jwk_client or jwt.PyJWKClient(settings.jwks_url, cache_keys=True)
 
     def verify(self, assertion: str) -> dict[str, object] | None:
         """The claims, or None. Never raises to the caller.
 
-        None for every failure — bad signature, wrong audience, wrong issuer,
-        expired, malformed. They are not distinguished in the response for the
-        same reason token rejections are not (`P3-03`): the caller is
-        unauthenticated, and which check failed tells it how to get closer.
+        None for every failure, undistinguished, as for token rejections (`P3-03`).
         """
         try:
             key = self._keys.get_signing_key_from_jwt(assertion)
