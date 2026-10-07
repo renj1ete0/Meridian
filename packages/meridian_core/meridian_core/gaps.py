@@ -1,46 +1,8 @@
 """Gaps: one ranked list of what the corpus cannot yet answer (task P6-36).
 
-Each gap is a concrete finding with its reason in numbers and an action that
-goes through machinery that already exists — a search seed in the queue, a
-topic boost through :mod:`meridian_core.steering` — so every action is
-reversible and leaves a `steering_log` row (§10.1). Nothing here writes; the
-actions are applied by the admin routes.
-
-**The sources are pluggable.** A gap source is an async function from a
-session to a list of :class:`Gap`, registered under a name. What exists today:
-
-- ``topic-coverage`` — per topic: thin (few sources), weak (few of them
-  government or peer-reviewed), stale (the newest dated one is old). Each
-  finding also counts on-topic *passages* (`P2-24`), including those inside
-  documents labelled with something else.
-- ``place-coverage`` — per topic, the places of the comparison set (§7.2)
-  with fewer than a few sources about them (`P2-23`). Unavailable until a
-  source has been examined for places.
-- ``search-queries`` (`P6-37`) — answered searches that found nothing, or
-  only pages already queued, from each query's recorded yield (`B-56`);
-  grouped per topic and kind so repeated failures are one row.
-- ``search-results`` (`P6-37`) — topics whose search-found pages turned out,
-  by content, to be mostly about something else. Per topic: the queue does
-  not link a result to the query that found it.
-- ``question-set`` — items of the held-out set that score low in the newest
-  run file. An operator grade counts; a heuristic proposal is shown as one and
-  ranked below any real score.
-
-- ``routes`` — pairs of topics whose most-cited nodes no chain of stated
-  links joins within a few hops, using `P6-32`'s claims-only answer: joined
-  only by resemblance, or not at all. Bounded to a few pairs per read.
-
-- ``areas`` (`P6-42`) — fields of the newest map build that are mostly about
-  the topics yet rest on few sources, hold no government or peer-reviewed
-  passage, or have had nothing new in months. A field mostly *off* the topics
-  is not a gap in the evidence; the Map shades it instead.
-
-A source the design names and nobody built is listed as *pending* rather than
-silently absent, so an empty list is never mistaken for "no gaps of that kind".
-
-**The held-out rule shapes the question-set actions.** `eval/README.md` forbids
-using a question as a seed or a steering reason, so a low-scoring item offers
-"search it in Find" — reading, not steering — and never "seed this question".
+Each gap source is an async function registered by name; the list reads them all and
+ranks the results together. Nothing here writes: the actions are applied by the admin
+routes. See docs/features/gaps.md for the sources and the reasons behind them.
 """
 
 from __future__ import annotations
@@ -209,13 +171,7 @@ def coverage_gaps(
     ``passages`` counts on-topic passages (`P2-24`): chunks labelled with the
     topic themselves, or belonging to a source that is. ``passage_sources``
     counts the documents *not* labelled with the topic that hold at least one
-    passage about it — a chapter inside a book about something else.
-
-    **Thin is still judged on sources.** A passage label is one chunk's vector,
-    noisier than a document's mean, and a topic that exists in the corpus only
-    as asides in other documents is thin in the sense that matters: there is
-    no document to cite as being about it. So those documents are counted and
-    shown, and do not lift a topic out of "thin".
+    passage about it. Thin is judged on sources alone; see docs/features/gaps.md#thin.
     """
     evidence = {
         "sources": sources,
@@ -427,11 +383,7 @@ def place_gaps(
 ) -> list[Gap]:
     """The finding for one topic in one place. Pure, so the threshold is testable.
 
-    Ranked below every other kind of gap (`B-97`, the operator's call): each
-    topic is paired with every place in the filter list, so most empty cells
-    are pairings nobody asked about ("no biology sources about <city>"), and at
-    their old weight they led the list whenever few other gaps were open. They
-    stay listed, last, for the reader who does want a topic in a place.
+    Ranked below every other kind of gap (`B-97`); see docs/features/gaps.md#places.
     """
     if sources >= PLACE_THIN:
         return []
@@ -474,10 +426,8 @@ def place_gaps(
 async def place_coverage(sess: AsyncSession) -> list[Gap]:
     """Per topic, the comparison set's places with few sources (`P2-23`, §7.2).
 
-    The comparison set is :func:`meridian_core.places.comparison_set` — the
-    places the configuration already names. Unavailable, rather than empty,
-    until some source has been examined for places: with nothing examined,
-    every cell would read as a gap and none of them would be one.
+    The comparison set is :func:`meridian_core.places.comparison_set`. Unavailable,
+    rather than empty, until some source has been examined for places.
     """
     from .places import comparison_set
 
@@ -697,19 +647,8 @@ async def field_coverage(sess: AsyncSession) -> list[Gap]:
 # ---------------------------------------------------------------------------
 # Search queries — per query, from what each answered search yielded (`B-56`)
 # ---------------------------------------------------------------------------
-#
-# This replaces P6-36's per-topic "search-yield" source rather than sitting
-# beside it. That source could only say "no search for this topic ever queued
-# a page", because the queue did not record what a query returned. With the
-# yield on the row, the same finding falls out of the per-query source as the
-# case where every answered query failed (share 1.0, the top severity), and a
-# topic whose searches mostly work but where some words find nothing — which
-# the per-topic count could never see — becomes visible too. Keeping both
-# would list the all-failed topic twice.
-#
-# Queries answered before `B-56` have NULL yields. They are *not measured*,
-# not failures: counting a NULL as zero is the absent-signal-as-zero trap the
-# handover warns about.
+# Queries answered before `B-56` have NULL yields: not measured, not failures.
+# See docs/features/gaps.md#search-queries.
 
 #: Failing queries quoted in a gap's reason; the rest are counted, not listed.
 QUERY_EXAMPLES = 3
@@ -721,10 +660,8 @@ OFF_TOPIC_MIN = 5
 OFF_TOPIC_SHARE = 0.5
 
 #: Query failure kinds, and how bad each is at its worst (every answered search
-#: for the topic failed that way). Nothing found outranks found-only-known:
-#: the second at least shows the words reach the topic, the crawl has simply
-#: been there. Both stay under an empty topic (1.0) and an operator-graded
-#: question (0.7–0.9) — a search that missed is a symptom; those are the gap.
+#: for the topic failed that way). Both stay under an empty topic and a graded
+#: question; see docs/features/gaps.md#ranking.
 QUERY_KINDS: dict[str, tuple[float, float]] = {
     # kind: (floor, span) — severity = floor + span * failing share
     "search_empty": (0.3, 0.3),
@@ -892,11 +829,8 @@ def off_topic_gap(
 ) -> Gap | None:
     """Search results that turned out, by their content, to be about something else.
 
-    Per topic, not per query, and that is the queue's limit, not a choice:
-    a result row carries its query's topic but not its query (`B-56` stored the
-    counts on the query, not a link from each result back to it). So "these
-    words find off-topic pages" is not answerable; "searches for this topic
-    do" is.
+    Per topic, not per query: a result row carries its query's topic but not its
+    query.
     """
     if examined < OFF_TOPIC_MIN:
         return None
@@ -963,14 +897,8 @@ async def search_results(sess: AsyncSession) -> list[Gap]:
 # ---------------------------------------------------------------------------
 # Routes — topics the graph does not connect by stated links (`P6-32`)
 # ---------------------------------------------------------------------------
-#
-# Which pairs are worth checking: each topic's most-cited node against every
-# other topic's. Most-cited means the most passages behind the edges touching
-# it — the node a reader of that topic is likeliest to start from — so a
-# missing link between two of those is a missing link between the topics,
-# not between two obscure names. One node per topic keeps the pair count at
-# topics², and `ROUTE_PAIRS` caps it, because each pair is a graph search and
-# this runs on every read of the list.
+# Each topic's most-cited node against every other topic's, capped at `ROUTE_PAIRS`
+# because each pair is a graph search on every read. See docs/features/gaps.md#routes.
 
 #: Pairs searched per read, most-cited first.
 ROUTE_PAIRS = 10
@@ -1167,10 +1095,8 @@ async def routes(sess: AsyncSession) -> list[Gap]:
 # Acting on a gap — through the queue and steering, so it is logged and undoable
 # ---------------------------------------------------------------------------
 
-#: Where a seed from Gaps sits in the queue: the priority `worker.seedsearch`
-#: gives its own queries (`QUERY_PRIORITY`), so a person's seed neither jumps
-#: nor trails the crawl's own questions. Mirrored, not imported: the worker is
-#: a service and `meridian_core` does not import services.
+#: Where a seed from Gaps sits in the queue: `worker.seedsearch.QUERY_PRIORITY`,
+#: mirrored because `meridian_core` does not import services.
 SEED_PRIORITY = 70
 
 #: The steering-log field a Gaps seed is recorded under.

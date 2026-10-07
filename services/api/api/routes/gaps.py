@@ -1,10 +1,7 @@
 """Gaps (task P6-36): the ranked list on Explore, the actions on Admin.
 
-The list is a read, so it lives under `/api/explore` on the read-only role; the
-two actions change what the crawl does, so they live under `/api/admin`, behind
-the admin gate, on the writable role. Both actions go through existing
-machinery — the queue and :mod:`meridian_core.steering` — and each writes a
-`steering_log` row, so "why is the crawl doing this" has an answer (§10.1).
+The list is read-only; the seed and boost actions go through the queue and
+:mod:`meridian_core.steering` and each writes a `steering_log` row (§10.1).
 """
 
 from __future__ import annotations

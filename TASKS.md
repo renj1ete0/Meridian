@@ -1614,7 +1614,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       rationale, history and measurements move to `docs/features/`. About 30% of the Python is
       comments and docstrings, so this is done per feature, as each one gets its doc, and
       whenever a file is touched. Tick a feature here once its modules are trimmed.
-      Done: search (`search.py`, `search_service.py`)
+      Done: search (`search.py`, `search_service.py`), gaps (`gaps.py`, `routes/gaps.py`).
+      `tests/unit/test_doc_pointers.py` checks every `docs/…md#anchor` pointer in the code
 - [x] `B-142` **Linting and formatting for the web package** — `v0.162.1`, ADR 0012. oxlint
       rather than ESLint: the package's TypeScript 7 has no compiler API for typescript-eslint.
       Hooks rules, unused vars, no `any`, TSDoc syntax, correctness; Prettier in its own
