@@ -1,11 +1,7 @@
 /**
- * Recently focused nodes, for the landing's "where you were" (§8, task P6-01).
- *
- * Per viewer and per browser, like the since-last-visit stamp: two people on
- * one Meridian have different answers to "where was I". Stored in the shape
- * `WhereYouWere` renders, so the landing can pass `readRecentNodes()` straight
- * through. Every access is guarded — `localStorage` throws outright in a
- * private window, and this runs on every refocus.
+ * Recently focused nodes, for the landing's "where you were" (§8, task P6-01), per
+ * browser in guarded `localStorage`, in the shape `WhereYouWere` renders.
+ * See docs/features/web-app.md#browser-storage.
  */
 
 import type { RecentNode } from '../WhereYouWere'

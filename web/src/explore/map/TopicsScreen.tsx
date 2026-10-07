@@ -19,18 +19,9 @@ import {
 } from '../../lib/topicweb'
 
 /**
- * The Map's Topics view (task B-72): the web of topics.
- *
- * Topics are multi-label — a source carries every topic its content is about —
- * so the corpus is a web rather than a partition. A circle per topic, its area
- * proportional to the sources carrying it; a line between two topics wherever
- * sources carry both, thicker for more. Choosing circles (or a line, which
- * chooses its two ends) answers "how many sources lie in all of these", and
- * hands that intersection to Find as a search with `topic_match=all`.
- *
- * The readout lists exact combinations as bars rather than drawing a Venn
- * diagram: past three sets a Venn cannot be drawn with honest areas, and a bar
- * per combination reads the same at two topics as at six.
+ * The Map's Topics view (task B-72): a circle per topic, a line wherever sources carry
+ * both; choosing circles hands their intersection to Find with `topic_match=all`. The
+ * readout uses bars, not a Venn. See docs/features/map.md#the-topics-readout.
  */
 
 type Load = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: TopicOverlaps }

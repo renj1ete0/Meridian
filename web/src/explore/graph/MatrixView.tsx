@@ -4,23 +4,9 @@ import type { GraphEdge, GraphNode, Neighbourhood } from './api'
 import { DAGGER } from '../../ui/Contested'
 
 /**
- * §12.3's adjacency matrix: "which clusters are dense? where are the gaps?"
- *
- * The same neighbourhood the canvas draws — same filters, same cap — as a
- * square of the focus and its shown neighbours, one cell per pair. The spec
- * picks this view out because it makes *absence* visible: an empty cell is a
- * pair the graph has no relation for, which a node-link picture shows only as
- * the lack of a line nobody looks for.
- *
- * Second-hop hints are left out. They are drawn on the canvas as a hint of
- * where the graph goes next, not as members of this neighbourhood, and the API
- * returns only their edge to the neighbour that leads there — a row for one
- * would be empty by construction, which is a gap in the request, not in the
- * graph.
- *
- * The matrix is symmetric: a cell counts the edges joining a pair in either
- * direction. Direction survives in the readout, where each relation is spelled
- * out as the graph stores it.
+ * §12.3's adjacency matrix: the canvas's neighbourhood (same filters, same cap) as a
+ * symmetric square of the focus and its shown neighbours, without second-hop hints.
+ * See docs/features/knowledge-graph.md#the-graph-workspace.
  */
 
 export interface MatrixCell {

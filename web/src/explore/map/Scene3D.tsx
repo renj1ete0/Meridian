@@ -30,13 +30,9 @@ const AXIS_ENDS = [
 ]
 
 /*
- * One draw call for every dot. A mesh per point would be thousands of draw
- * calls and would not hold 60fps past a few hundred; a single `Points` with
- * per-vertex colour and visibility holds eight thousand without trying.
- *
- * Round dots with a soft edge, cut in the fragment shader, and fading with
- * depth so the far side of the cloud reads as farther — the one cue a
- * rotating picture on a flat screen needs to be seen as a volume.
+ * One draw call for every dot: a single `Points` with per-vertex colour and visibility.
+ * Round soft-edged dots fade with depth so the cloud reads as a volume.
+ * See docs/features/map.md#the-passage-cloud.
  */
 const VERTEX = /* glsl */ `
   attribute vec3 aColour;
@@ -105,10 +101,9 @@ interface Live {
 }
 
 /**
- * The corpus map in three dimensions (task P6-29): orbit by dragging, zoom with
- * the wheel, pan with the right button or shift-drag. It turns slowly on its
- * own until the reader touches it, then holds still for good — a picture that
- * kept moving under a reader would make every comparison a chase.
+ * The corpus map in three dimensions (task P6-29): orbit by dragging, zoom with the wheel,
+ * pan with the right button or shift-drag. It turns slowly until first touched, then holds
+ * still for good.
  */
 export function Scene3D({
   points,

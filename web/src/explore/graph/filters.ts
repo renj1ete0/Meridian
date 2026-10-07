@@ -1,16 +1,7 @@
 /**
- * The workspace's filter state, its URL and its saved-view form (task P6-02).
- *
- * **The URL carries the filters.** A workspace whose filters lived only in
- * component state could not be linked, and a corpus that insists everything be
- * checkable should not make its own views unaddressable. The query string uses
- * the API's parameter names, so the URL, the request and a saved view all spell
- * a filter the same way.
- *
- * **Parsing refuses rather than guesses.** A tier the database does not know,
- * or a date that is not `YYYY-MM-DD`, is dropped here instead of being sent and
- * answered with a 422 — a hand-edited link should open the workspace, not an
- * error.
+ * The workspace's filter state, its URL and its saved-view form (task P6-02). The URL
+ * uses the API's parameter names; parsing drops what the API would refuse.
+ * See docs/features/knowledge-graph.md#the-graph-workspace.
  */
 
 import { SOURCE_TIERS, type SourceTier } from '../../ui/Tier'

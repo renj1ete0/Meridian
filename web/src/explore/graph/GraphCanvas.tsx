@@ -6,22 +6,9 @@ import type { Scene, SceneNode } from './scene'
 import { DAGGER } from '../../ui/Contested'
 
 /**
- * The node-link canvas: Sigma.js over graphology (task P6-01, spec §12.1).
- *
- * §12.1 picks Sigma for WebGL, so it stays smooth past where canvas libraries
- * struggle. What WebGL cannot draw — the meridian graticule, the halo rings,
- * a dashed cross-topic edge — is an SVG layer *under* the WebGL canvas, placed
- * from Sigma's own coordinate conversion on every frame, so it pans and zooms
- * with the nodes rather than floating over them.
- *
- * Labels are drawn by hand (`drawLabel`) to match design-system.md §2: Archivo
- * 12 under the node, a 3.5px halo in the canvas ground, and §6's dagger on a
- * contested node's label. Sigma's default puts the label to the right with no
- * halo, which on a dense neighbourhood is unreadable where edges cross text.
- *
- * Sigma is imported lazily. It needs WebGL at construction, and jsdom has none;
- * a lazy import keeps every test that renders the workspace off the GPU path,
- * and a machine without WebGL gets a sentence instead of a blank rectangle.
+ * The node-link canvas: Sigma.js over graphology (task P6-01, spec §12.1), with an SVG
+ * layer under the WebGL canvas, hand-drawn labels, and Sigma imported lazily.
+ * See docs/features/knowledge-graph.md#the-graph-workspace.
  */
 
 export interface CanvasApi {
@@ -78,12 +65,9 @@ export interface LabelBox {
 }
 
 /**
- * Which labels fit this frame (`B-124`). Sigma draws a label for every node,
- * and on a dense neighbourhood they ran into each other ("stopping sight
- * distances|uired sight distances"), worst on a phone. Greedy: a label whose
- * box overlaps one already drawn this frame is left out — its node is still
- * drawn and still names itself on hover. The focus is always drawn. Reset on
- * every frame, so panning and zooming bring labels back as room appears.
+ * Which labels fit this frame (`B-124`), greedily: a label overlapping one already drawn
+ * is left out (its node still names itself on hover). The focus is always drawn. Reset
+ * every frame.
  */
 export class LabelPlacer {
   private boxes: LabelBox[] = []

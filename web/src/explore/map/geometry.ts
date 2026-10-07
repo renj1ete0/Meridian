@@ -1,23 +1,15 @@
 /**
- * The 3D map's arithmetic (task P6-29), without three.js or WebGL.
- *
- * Everything the reader depends on — where a point lands on the screen, which
- * point the cursor is over, how far back the camera sits to show them all, what
- * colour a topic is on the canvas — is computed here from plain arrays, so it
- * is testable in jsdom, which has no WebGL. The scene component only moves
- * these numbers onto the GPU.
+ * The 3D map's arithmetic (task P6-29), without three.js or WebGL, so it is testable in
+ * jsdom: projection, picking, camera distance and colours. The scene only moves these
+ * numbers onto the GPU.
  */
 import type { MapPoint } from '../../lib/api'
 
 export type RGB = [number, number, number]
 
 /**
- * A computed CSS colour as linear-ish 0..1 channels, or null if unreadable.
- *
- * Accepts `#rgb`, `#rrggbb` and `rgb()`/`rgba()`, which is what
- * `getComputedStyle` hands back for a custom property holding a hex or for a
- * resolved colour. Unreadable is null rather than black: a dot drawn black on
- * a near-black canvas is a dot that silently vanished.
+ * A computed CSS colour as linear-ish 0..1 channels, or null if unreadable (never black,
+ * which would vanish on the canvas). Accepts `#rgb`, `#rrggbb`, `rgb()` and `rgba()`.
  */
 export function parseColour(value: string): RGB | null {
   const text = value.trim()
@@ -145,14 +137,9 @@ export function toViewport(
 }
 
 /**
- * The index of the visible point under the cursor, or −1.
- *
- * Picking is done in screen space rather than by casting a ray at a world-space
- * threshold. A ray threshold is in scene units, so it grows and shrinks with
- * zoom: generous when zoomed in, impossible when zoomed out. `radius` here is
- * pixels, the unit a hand actually misses by. Of the points inside it the one
- * nearest the cursor wins, and between two at the same spot, the nearer the
- * camera — the one drawn in front.
+ * The index of the visible point under the cursor, or −1. Picked in screen space, with
+ * `radius` in pixels; the point nearest the cursor wins, then the one nearer the camera.
+ * See docs/features/map.md#the-passage-cloud.
  */
 export function pick(
   positions: Float32Array,

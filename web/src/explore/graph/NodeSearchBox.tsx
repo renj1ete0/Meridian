@@ -4,14 +4,8 @@ import { searchNodes, type NodeMatch } from './api'
 import { ApiError } from '../../lib/api'
 
 /**
- * Find a node by name or alias (task P6-01): the workspace's own way in, and
- * path mode's way to pick a node that is not on screen.
- *
- * A combobox with the keyboard behaviour one expects — arrows move, Enter
- * picks, Escape closes — because a reader who types a name wants to land on
- * it without reaching for the mouse. Requests are debounced and aborted when
- * superseded, so a fast typist never sees results for a prefix they have
- * already typed past.
+ * Find a node by name or alias (task P6-01): a keyboard combobox whose requests are
+ * debounced and aborted when superseded.
  */
 
 export const DEBOUNCE_MS = 180

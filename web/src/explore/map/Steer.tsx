@@ -15,15 +15,9 @@ import {
 import { MenuItem, type MapActions } from './AreasScreen'
 
 /**
- * Steering from the map (task P6-35).
- *
- * Right-click an area: more, less, make a topic, watch. Right-click empty
- * canvas: suggest something new to search for. Each writes through the
- * steering that already exists — a topic boost with an expiry, a search on
- * the queue, a new topic, a saved view — so each is reversible where those
- * are and lands in the steering log. The menu reads first what an action
- * would move, and says so: "more" of an area names the topic it will boost,
- * and "less" of an area no topic holds is shown disabled with the reason.
+ * Steering from the map (task P6-35): right-click an area for more, less, make a topic or
+ * watch; right-click empty canvas to suggest a search. Each goes through existing,
+ * logged steering. See docs/features/map.md#steering-from-the-map.
  */
 export function mapActions(): MapActions {
   return {

@@ -12,10 +12,8 @@ const HIT_RADIUS = 8
 const CELLS = 4
 
 /**
- * The flat map (task P6-26, restyled in P6-29): the first two axes only, drawn
- * on a 2D canvas. Kept beside the 3D view rather than replaced by it — it
- * needs no WebGL, it holds still, and a flat picture is the one a reader can
- * compare against a screenshot from last week.
+ * The flat map (task P6-26, restyled in P6-29): the first two axes only, on a 2D canvas,
+ * kept beside the 3D view. See docs/features/map.md#the-passage-cloud.
  */
 export function Plot2D({
   points,

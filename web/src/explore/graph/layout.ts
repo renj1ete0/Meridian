@@ -1,18 +1,7 @@
 /**
- * Where each node sits on the canvas (task P6-01).
- *
- * **Radial and deterministic, not force-directed.** §12.2 draws one focus and
- * its depth-1 neighbours, so the geometry already has a centre: the focus. A
- * force layout would spend its iterations rediscovering that, would place the
- * same neighbourhood differently on every visit, and would pull in a second
- * dependency. Here the focus is at the origin, neighbours are on a ring in rank
- * order, and second-hop hints sit just outside the neighbour they hang from —
- * so the same data draws the same picture twice, and "strongest first" reads
- * clockwise from the top.
- *
- * Units are abstract: Sigma fits the bounding box to the viewport. The
- * graticule behind the graph (design `Explore`) is drawn in the same units, so
- * it scales and pans with the nodes.
+ * Where each node sits on the canvas (task P6-01): radial and deterministic, focus at the
+ * origin, neighbours on a ring in rank order. Units are abstract; Sigma fits them.
+ * See docs/features/knowledge-graph.md#the-graph-workspace.
  */
 
 import type { GraphEdge, GraphNode } from './api'

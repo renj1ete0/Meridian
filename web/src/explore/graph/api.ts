@@ -1,11 +1,6 @@
 /**
- * Typed client over `/api/explore/graph/*` (tasks P6-01, P6-02, P6-03).
- *
- * Kept beside the workspace rather than in `lib/api.ts` because nothing else
- * reads these routes, and it follows the same two-link drift chain that file
- * documents: `tsc` ties each interface to its `*_FIELDS` list through the
- * `Expect<Equal<...>>` lines below, and `tests/graph-api.test.ts` ties each
- * list to the pydantic class in `meridian_core/schemas/graphview.py`.
+ * Typed client over `/api/explore/graph/*` (tasks P6-01, P6-02, P6-03), with the same
+ * two-link drift chain as `lib/api.ts` (`tests/graph-api.test.ts`).
  */
 
 import {
@@ -409,11 +404,8 @@ export function getPath(source: number, target: number, maxDepth?: number, init?
 }
 
 /**
- * Save the workspace as a view: its focus node and its filters (§12.5, `P6-09`).
- *
- * The filter keys are the neighbourhood route's own parameter names, so a view
- * saved here reopens by passing them straight back — and `topic` is the key the
- * search landing already reads, so a view saved here filters there too.
+ * Save the workspace as a view: its focus node and its filters (§12.5, `P6-09`), keyed by
+ * the neighbourhood route's own parameter names, so `topic` filters Find too.
  */
 export function saveGraphView(
   name: string,

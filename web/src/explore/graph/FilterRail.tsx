@@ -8,14 +8,9 @@ import type { SavedViewRecord } from '../../lib/api'
 import { SOURCE_TIERS, TIER_LABEL, type SourceTier } from '../../ui/Tier'
 
 /**
- * The left rail: §12.2's live filters, saved views, and the legend (task
- * P6-02, design `Explore`).
- *
- * Every count here is a count of *neighbours of this focus*, taken before any
- * filter (see `GraphFacetsRead`). The artboard's thousands are corpus-wide
- * document counts; a rail beside one node's neighbourhood that showed corpus
- * totals would suggest ticking a box brings back thousands of things when it
- * brings back three.
+ * The left rail: §12.2's live filters, saved views, and the legend (task P6-02, design
+ * `Explore`). Every count is of this focus's neighbours, before any filter
+ * (`GraphFacetsRead`). See docs/features/knowledge-graph.md#the-graph-workspace.
  */
 
 const LBL = 'font-mono text-[9px] font-medium uppercase tracking-[0.15em] text-text-faint'

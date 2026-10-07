@@ -407,3 +407,63 @@ being configured (ADR 0002).
 `test_resolution.py`, `test_mentions.py`, `test_merge_folds.py`, `test_graph_workspace.py`,
 `test_graph_store.py`, `test_route.py`, `test_neighbourhood.py`, `test_annotations.py`;
 `tests/unit/test_edge_schema.py`, `test_export.py`, `test_neighbourhood.py`.
+
+## In the web app
+
+### The graph workspace
+
+`/nodes/{id}` lives in `web/src/explore/graph/` (`P6-01`–`P6-03`). Its drawing decisions
+(which node is brass, which edge dashed, what is labelled) are made in pure modules
+(`scene.ts`, `style.ts`, `layout.ts`) that the renderer only copies into Sigma, so a test can
+read them without WebGL. The client (`graph/api.ts`) sits beside the workspace rather than in
+`lib/api.ts` because nothing else reads these routes.
+
+**The canvas.** §12.1 picks Sigma for WebGL, so it stays smooth past where canvas libraries
+struggle. What WebGL cannot draw (the meridian graticule, halo rings, a dashed cross-topic edge)
+is an SVG layer *under* the WebGL canvas, placed from Sigma's own coordinate conversion every
+frame, so it pans and zooms with the nodes. Labels are drawn by hand to design-system.md §2:
+Archivo 12 under the node, a 3.5px halo in the canvas ground, and §6's dagger on a contested
+node's label; Sigma's default puts the label to the right with no halo, unreadable where edges
+cross text. On a dense neighbourhood labels ran into each other, worst on a phone (`B-124`), so
+a label overlapping one already drawn this frame is left out; its node still names itself on
+hover. Sigma is imported lazily: it needs WebGL at construction and jsdom has none, so tests
+stay off the GPU path, and a machine without WebGL gets a sentence instead of a blank rectangle.
+Colours are read from the tokens at runtime, because WebGL takes colour strings, not CSS
+classes, and `tests/tokens.test.ts` forbids a literal outside `tokens.css`. The brass tint never
+appears without the dagger: strip the colour and the reading survives. Several edges between one
+pair are drawn as one line, a contested one winning, since WebGL would stack them; the table view
+lists every edge.
+
+**The layout is radial and deterministic**, not force-directed. §12.2 draws one focus and its
+neighbours, so the geometry already has a centre; a force layout would spend its iterations
+rediscovering that, would place the same neighbourhood differently on every visit, and would
+pull in a second dependency. The focus is at the origin, neighbours on a ring in rank order, and
+second-hop hints just outside the neighbour they hang from, so the same data draws the same
+picture twice and "strongest first" reads clockwise from the top. The graticule is drawn in the
+same abstract units, so it scales with the nodes. A path is laid out left to right on a shallow
+arc: a route is a sequence, a line reads as one, and the arc keeps a long route's labels off
+the straight edges between them.
+
+**The URL carries the filters**, in the API's parameter names, so the URL, the request and a
+saved view spell a filter the same way, and a saved view's `topic` filters Find too. A
+workspace whose filters lived only in component state could not be linked. **Parsing refuses
+rather than guesses**: an unknown tier or a date that is not `YYYY-MM-DD` is dropped rather
+than sent and answered with a 422, so a hand-edited link opens the workspace, not an error.
+
+**The filter rail's counts are of this focus's neighbours**, taken before any filter
+(`GraphFacetsRead`). The artboard's thousands are corpus-wide document counts; beside one
+node's neighbourhood they would suggest a box brings back thousands of things when it brings
+back three.
+
+**The matrix view** (§12.3, "which clusters are dense? where are the gaps?") makes *absence*
+visible: an empty cell is a pair with no relation, which a node-link picture shows only as a
+missing line nobody looks for. Second-hop hints are left out: the API returns only their edge to
+the neighbour that leads there, so a row for one would be empty by construction, a gap in the
+request rather than in the graph. The matrix is symmetric (a cell counts edges either way);
+direction survives in the readout.
+
+The node search box is a combobox with the keyboard behaviour one expects, because a reader who
+types a name wants to land on it without the mouse; its requests are debounced and aborted when
+superseded, so a fast typist never sees results for a prefix already typed past. Recently
+focused nodes are kept per browser for the landing's "where you were", like the since-last-visit
+stamp. Returning to a node already on the breadcrumb trail cuts the trail there.

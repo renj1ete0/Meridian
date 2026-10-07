@@ -58,22 +58,9 @@ import { LevelControl, MorphLayer, useZoomGestures } from './Zoom'
 import { dayOf } from '../../lib/time'
 
 /**
- * The Map screen's default view (task P6-34): the corpus as nested areas.
- *
- * On screen these are fields, subfields and themes (level 1, 2, 3); the code,
- * the API and the URL keep the older word "area", so old links still open.
- *
- * One level at a time — fields, then the subfields inside one field, then its
- * themes — so the picture stays readable whatever the corpus holds. Circle
- * *area* is passages collected, with a key drawn at the same scale; an amber
- * outline marks an area that is weak (few independent sources) or stale
- * (nothing new stored for months), and its reasons are in words on hover and
- * in the panel. Lines are bridges: solid where a claim in the graph is cited
- * across the two, dashed where the nearest passages are merely similar.
- *
- * **A field is a cluster, not a topic**, and the screen says so where it
- * lists them: the server names each cluster for the field of work its
- * passages read as; topics are a filter over the clusters, not their bounds.
+ * The Map screen's default view (task P6-34): the corpus as nested areas, one level at a
+ * time. On screen these are fields, subfields and themes; the code, API and URL keep
+ * "area" so old links open. See docs/features/map.md#the-areas-screen.
  */
 
 /** What the context menu can do beyond reading; wired by P6-35. */
@@ -577,16 +564,14 @@ function useSize(ref: React.RefObject<HTMLElement | null>): { width: number; hei
   return size
 }
 
-/**
- * By how many levels below the root: each level's circle scale as a share of
- * the level above's, how far children spread across their parent's circle,
- * and the space kept between circles. A level's circles together hold the
- * same passages as the level above, so at a share of 1 they cover the same
- * area; the spacing lets them spread into the room the coarser level left.
- */
 /** Room kept at the bottom of the canvas for the key's line. */
 const CANVAS_BOTTOM = 40
 
+/**
+ * By how many levels below the root: each level's circle scale as a share of the level
+ * above's, how far children spread across their parent's circle, and the space kept
+ * between circles. See docs/features/map.md#semantic-zoom.
+ */
 const SHRINK = [1, 0.98, 0.9]
 const SPREAD = [0, 0.95, 0.85]
 const GAPS = [14, 5, 2.5]

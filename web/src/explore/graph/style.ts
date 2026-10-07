@@ -1,15 +1,7 @@
 /**
- * How each node and edge is drawn — design-system.md §2 "Graph canvas colours"
- * and §6, the contested mark (task P6-01).
- *
- * Pure, and separate from the renderer, so the published table can be tested
- * row by row without WebGL. The colours are read from the token file at
- * runtime (`palette.ts`) rather than written here: `tests/tokens.test.ts`
- * forbids a colour literal anywhere outside `tokens.css`.
- *
- * §6's rule is the one to keep: **the brass tint never appears without the
- * dagger.** A contested node is brass *and* its label carries a † — strip the
- * colour and the reading survives.
+ * How each node and edge is drawn — design-system.md §2 "Graph canvas colours" and §6
+ * (task P6-01). Colours come from `palette.ts`; the brass tint never appears without the
+ * dagger.
  */
 
 import type { GraphEdge, GraphNode } from './api'

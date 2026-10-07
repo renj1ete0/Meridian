@@ -1,11 +1,6 @@
 /**
- * What the canvas draws, as data (tasks P6-01, P6-03).
- *
- * The API's subgraph plus layout plus the published styling, resolved into one
- * flat list of positioned, styled nodes and edges. The renderer only copies
- * this into Sigma, so everything a reader could get wrong about the picture —
- * which node is brass, which edge is dashed, what is labelled — is decided
- * here, where a test can read it.
+ * What the canvas draws, as data (tasks P6-01, P6-03): positioned, styled nodes and edges
+ * that the renderer only copies into Sigma, so a test can read every drawing decision.
  */
 
 import type { GraphEdge, GraphNode, GraphPath, Neighbourhood } from './api'

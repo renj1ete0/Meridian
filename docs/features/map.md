@@ -266,3 +266,54 @@ make distances along it look larger. The hover target is larger than a dot, and 
 point wins a tie because it is on top. A topic with null labels and one with an empty list look
 the same on the canvas and are opposite answers ("not yet examined" against "no topic"), so the
 hover card says which.
+
+The flat view (`P6-26`) is kept beside the 3D one rather than replaced by it: it needs no
+WebGL, it holds still, and a flat picture is the one a reader can compare with last week's
+screenshot. The 3D view draws every dot in one call, a single `Points` with per-vertex colour
+and visibility: a mesh per point would be thousands of draw calls and would not hold 60 fps
+past a few hundred, while one `Points` holds eight thousand without trying. Dots are round
+with a soft edge, cut in the fragment shader, and fade with depth, the one cue a rotating
+picture on a flat screen needs to read as a volume. It turns slowly until the reader touches
+it, then holds still for good: a picture that kept moving would make every comparison a
+chase. The camera frames the visible points about their centroid, not the origin, since with a
+topic hidden what remains can sit well off-centre.
+
+Its arithmetic (`explore/map/geometry.ts`) is computed from plain arrays so it is testable in
+jsdom, which has no WebGL. Picking is in screen space rather than by casting a ray at a
+world-space threshold: a ray threshold is in scene units, so it is generous zoomed in and
+impossible zoomed out, while a radius in pixels is the unit a hand actually misses by. Of the
+points inside it the nearest the cursor wins, then the one nearer the camera, the one drawn in
+front. An unreadable colour token is null rather than black, because a dot drawn black on a
+near-black canvas silently vanishes. Colours are read from the tokens at draw time, so a theme
+switch reaches the dots on the next read and `tokens.test.ts` needs no exemption.
+
+### The areas screen
+
+The Map's default view (`P6-34`) shows the corpus as nested areas, one level at a time (fields,
+then the subfields inside one field, then its themes), so the picture stays readable whatever
+the corpus holds. On screen they are fields, subfields and themes; the code, API and URL keep
+the older word "area", so old links still open. An amber outline marks an area that is weak (few
+independent sources) or stale (nothing new stored for months), with the reasons in words on
+hover and in the panel. Lines are bridges: solid where a claim in the graph is cited across the
+two, dashed where the nearest passages are merely similar. **A field is a cluster, not a
+topic**, and the screen says so where it lists them: the server names each cluster for the
+field of work its passages read as, and topics are a filter over the clusters, not their bounds.
+
+Each level's circles together hold the same passages as the level above, so at a scale share
+of 1 they cover the same area; the per-level spacing lets them spread into the room the
+coarser level left.
+
+### Steering from the map
+
+Right-click an area for more, less, make a topic, or watch; right-click empty canvas to suggest
+something new to search for (`P6-35`). Each writes through steering that already exists (a
+topic boost with an expiry, a search on the queue, a new topic, a saved view), so each is
+reversible where those are and lands in the steering log. The menu reads first what an action
+would move, and says so: "more" of an area names the topic it will boost, and "less" of an area
+no topic holds is shown disabled with the reason.
+
+### The topics readout
+
+The Topics view's readout lists exact combinations as bars rather than drawing a Venn diagram:
+past three sets a Venn cannot be drawn with honest areas, and a bar per combination reads the
+same at two topics as at six.
