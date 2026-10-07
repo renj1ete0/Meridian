@@ -1,20 +1,8 @@
 """Seed configuration from ``config/*.yaml`` into the database (spec §13.1).
 
-Run once at first boot, and safely re-runnable. After this, **the database is
-authoritative** — the YAML is not read again, and editing it has no effect.
-Topic weights, fetch policy, model routing and gazetteer terms are changed in
-Admin or over MCP, not by editing a file on the host.
-
-**This script loads configuration only. It never loads content.** Production
-starts empty (scaffold §1.7): no sources, no chunks, no entities, no edges.
-There is deliberately no fixture-loading path here, because synthetic fixtures
-do not resemble real extraction output and UI built against them gets rebuilt.
-Development corpora are snapshots of real crawls, restored separately.
-
-Idempotency rule: this **inserts what is missing and leaves what exists alone**.
-It does not overwrite. A weight you changed in Admin six months ago must survive
-a re-run — otherwise re-seeding would silently undo steering, and §10's promise
-that nothing is destroyed would be false.
+Run once at first boot, and safely re-runnable: it inserts what is missing and never
+overwrites. After this the database is authoritative. Configuration only, never content.
+See docs/reference/data-model.md#seeding.
 """
 
 from __future__ import annotations
@@ -104,14 +92,7 @@ async def seed_attributes(sess) -> tuple[int, int]:
 
 
 async def seed_fetch_policy(sess) -> tuple[int, int]:
-    """The global '*' row. Per-domain overrides are created in Admin (§6.4).
-
-    The source-tier mapping rides along in the same row rather than in a table
-    of its own. It is one global blob of domain policy, read together with the
-    fetch settings on every request, and §13.1 requires it to live in the
-    database — leaving it in a file the worker re-reads would make the YAML
-    authoritative again.
-    """
+    """The global '*' row, with the source-tier mapping; per-domain rows are made in Admin."""
     settings = _load("fetch_policy.yaml")
     if settings is None:
         return 0, 0
@@ -165,11 +146,8 @@ async def seed_agents(sess) -> tuple[int, int]:
     added = skipped = 0
     for row in data.get("agents", []):
         if row["agent_id"] == HUMAN:
-            # `produced_by = HUMAN` is what marks a row as the reader's own
-            # thinking (`P6-05`, §12.5), and it is only a distinguishable layer
-            # while nothing else can write it. An agent registered under this id
-            # would produce edges and tags indistinguishable from the reader's
-            # own notes, and nothing downstream could tell them apart again.
+            # `produced_by = HUMAN` marks the reader's own notes (`P6-05`); no agent may
+            # be registered under it.
             raise ValueError(
                 f"{HUMAN!r} is reserved for the reader's own annotations and cannot be an agent id."
             )
@@ -208,12 +186,9 @@ async def seed_agents(sess) -> tuple[int, int]:
 
 
 async def seed_cold_start_queue(sess) -> tuple[int, int]:
-    """Cold-start sources become queue tasks — the only rows that lead to content.
+    """Cold-start sources become queue tasks: URLs to crawl, the only rows that lead to content.
 
-    These are URLs to crawl, not content itself, so this stays within "config
-    only". The list is expected to be empty until it is hand-seeded (§15 phase 0,
-    a task the spec deliberately reserves for a human because seed quality
-    propagates through everything downstream).
+    Empty until hand-seeded (§15 phase 0).
     """
     data = _load("seed_sources.yaml") or {}
     sources = data.get("sources") or []
@@ -244,13 +219,7 @@ async def seed_cold_start_queue(sess) -> tuple[int, int]:
 
 
 async def seed_schedule(sess) -> tuple[int, int]:
-    """The timetable (§13.1, task P5-06).
-
-    First boot only. §13.1 makes the database authoritative for schedules and
-    §13.2 makes changing one a UI action, so re-reading this file on a later
-    seed would silently undo every change made through the interface — which is
-    exactly the failure "config lives in the database" exists to prevent.
-    """
+    """The timetable (§13.1, task P5-06). First boot only."""
     from meridian_core.models import ScheduledJob
 
     data = _load("schedule.yaml")
@@ -277,15 +246,7 @@ async def seed_schedule(sess) -> tuple[int, int]:
 async def seed_budget(sess) -> tuple[int, int]:
     """The caps, before anything can spend (§11.9, §16, task `B-32`).
 
-    First boot only, and one row: `budget_config` carries a CHECK that keeps it
-    to `budget_id = 1`, so "the budget" is never whichever row a query happened
-    to order first.
-
-    A row that already exists is left exactly as it is, including its nulls. A
-    null cap means unconfigured and refuses, and an operator who cleared one
-    was making a decision — re-filling it from a file would turn "stop until I
-    think about this" into "carry on with the default", which is the failure
-    mode the whole table exists to prevent.
+    First boot only. An existing row is left exactly as it is, including its nulls.
     """
     from meridian_core.budget import BUDGET_ID
     from meridian_core.models import BudgetConfig

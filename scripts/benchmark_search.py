@@ -1,48 +1,9 @@
 #!/usr/bin/env python
 """Measure the retrieval stack (task P2-04's second half, spec §12.5).
 
-`P2-04` is two jobs wearing one task id: build the HNSW index, and *measure
-recall and latency at corpus size*. The index shipped in `v0.30.0`; this is the
-measurement, and it is deliberately a script rather than a test because its
-answers are numbers to read rather than assertions to pass.
-
-What it measures, and what it refuses to pretend to measure:
-
-**Index recall — yes, today.** Whether HNSW returns the same neighbours an exact
-scan would is pure mechanics: no question set, no judgement, no corpus quality.
-Query vectors are sampled from the corpus itself, which is legitimate here
-because the question is "does the index find what brute force finds", and any
-vector answers it.
-
-**Latency — yes, today**, though the number only means something at corpus size.
-
-**Arm overlap — yes, today.** How often the lexical and vector arms return the
-same chunks *for the same question*. This is the cheapest evidence about
-whether hybrid search is earning its second query: perfect agreement means
-fusion is decoration, and no agreement at all usually means one arm is
-misconfigured rather than that the two are beautifully complementary.
-
-**The pairing is the whole measurement, and it was wrong.** Until `B-29` this
-asked the vector arm to find neighbours of a randomly sampled chunk while
-asking the lexical arm for an unrelated frequent word — two different
-questions, so the arms could not agree and the figure was 0% by construction.
-It then printed the warning about a misconfigured arm, which sends somebody
-hunting a text-search bug that does not exist. Both arms now answer the same
-probe: a chunk's own distinctive terms against its own vector, with the probe
-chunk itself excluded, because a chunk trivially matching itself in both arms
-would inflate agreement rather than measure it.
-
-**Retrieval quality — no.** Does hybrid actually answer questions better? That
-needs `P0-15`'s held-out questions, and it needs them written *before* the
-results are visible, or the question set is a description of the results. Pass
-`--questions` once they exist.
-
-**The honesty check.** At a small corpus Postgres will sequentially scan rather
-than use the index, because a seq scan over a few hundred vectors is genuinely
-cheaper. Recall then compares exact search against exact search and is 1.0 by
-construction, which looks like a perfect index and is not evidence of anything.
-So every recall figure is reported alongside whether the planner actually used
-the index, and the script says so loudly when it did not.
+Reports index recall (beside whether the planner used the index at all), latency, and
+how often the lexical and vector arms agree on the same probe. Retrieval quality needs
+a held-out question set (--questions). See docs/features/search.md#the-benchmark.
 
 Usage:
     make bench-search
@@ -103,17 +64,8 @@ async def census(sess: AsyncSession) -> Census:
 
 
 async def sample_vectors(sess: AsyncSession, trials: int) -> list[list[float]]:
-    """Query vectors drawn from the corpus.
-
-    Sampling real vectors rather than random ones matters: a random 1024-dim
-    vector is near-orthogonal to everything, so every candidate is equidistant
-    and the index has no structure to exploit. That measures nothing except the
-    scan rate.
-    """
-    # Through the mapped column, not a raw `text()` query. A raw select returns
-    # the vector as its text representation — asyncpg has no reason to know the
-    # type — and `list()` of that is a list of single characters, which fails
-    # confusingly much later, at the next bind rather than here.
+    """Query vectors drawn from the corpus; random vectors would measure only the scan rate."""
+    # Through the mapped column: a raw `text()` select returns the vector as text.
     rows = await sess.execute(
         select(Chunk.embedding)
         .where(Chunk.embedding.is_not(None))
@@ -191,10 +143,8 @@ async def latency(sess: AsyncSession, vectors: list[list[float]], terms: list[st
     return timings
 
 
-#: Words too short or too common to distinguish a passage. Deliberately tiny —
-#: `websearch_to_tsquery` ANDs its terms, so every word added to a probe makes
-#: the lexical arm stricter, and a list long enough to be principled would
-#: leave probes with nothing to search for.
+#: Words too short or too common to distinguish a passage. Deliberately tiny, so probes
+#: keep something to search for.
 _STOPWORDS = frozenset(
     [
         "the",
@@ -237,19 +187,10 @@ _STOPWORDS = frozenset(
 
 
 def probe_terms(text_value: str, *, count: int = 3) -> str:
-    """A few distinctive words from a chunk, as a lexical query.
+    """A few distinctive words from a chunk, longest first, joined with `or`.
 
-    Longest-first rather than TF-IDF: the ranking only has to be better than
-    "the first three words", and a scoring pass over the corpus to choose probe
-    terms would be a second retrieval system inside the benchmark for it.
-
-    **Joined with `or`, and that is not a detail.** `websearch_to_tsquery` ANDs
-    bare terms, so three rare words co-occur in exactly one chunk — the probe
-    itself, which the overlap count excludes. The first version of this did
-    that and reported the lexical arm finding *nothing*, 100% vector-only,
-    which looks like a broken tsvector and was a broken probe. `or` asks the
-    lexical arm the question the vector arm is being asked: passages about any
-    of these things, not the one passage about all of them.
+    ANDed, rare words match only the probe itself, which the overlap excludes. See
+    docs/features/search.md#the-benchmark.
     """
     seen: list[str] = []
     for word in sorted(set(text_value.lower().split()), key=len, reverse=True):
@@ -314,18 +255,7 @@ async def arm_overlap(sess: AsyncSession, probes, k: int) -> dict[str, float]:
 
 
 async def source_concentration(sess: AsyncSession, probes, k: int) -> dict[str, float]:
-    """How much of a page one document fills (`B-30`).
-
-    The number behind the decision this measurement exists to inform: adjacent
-    chunks of a document are genuinely its nearest neighbours, so a vector arm
-    returning four of them is working correctly and a reader searching a
-    concept still gets one paper four times. Whether that is right is a product
-    question, and it should be answered against numbers rather than taste.
-
-    The probe's own source is counted separately, because "the passage I asked
-    about comes from a document, and so do its neighbours" is a different fact
-    from "ten hits came from three papers".
-    """
+    """How much of a page one document fills (`B-30`), the probe's own source counted apart."""
     own = []
     distinct = []
     for chunk_id, terms, vector in probes:
@@ -368,10 +298,8 @@ async def frequent_terms(sess: AsyncSession, n: int = 12) -> list[str]:
 async def score_questions(sess: AsyncSession, path: Path, k: int) -> None:
     """Recall@k and MRR per method against a held-out question set (`P0-15`).
 
-    Format: [{"question": "...", "relevant_urls": ["https://..."]}, ...]
-    URLs rather than chunk ids, because chunk ids change on every re-crawl
-    (`replace_chunks`) and a question set has to outlive the corpus it was
-    written against.
+    Format: [{"question": "...", "relevant_urls": ["https://..."]}, ...]. URLs, because
+    chunk ids change on every re-crawl.
     """
     questions = json.loads(path.read_text())
     print(f"\n=== Held-out questions ({len(questions)}) — {path} ===")
@@ -460,13 +388,8 @@ async def main() -> None:
             for label, share in overlap.items():
                 print(f"  {label:16} {share:6.1%}")
 
-            # The same honesty problem the index check has, in a different
-            # place. The vector arm takes `DEFAULT_CANDIDATES` neighbours; when
-            # the corpus is smaller than that, it returns *everything*, so every
-            # lexical hit is necessarily also a vector hit and agreement is 100%
-            # by arithmetic. Reporting that as "fusion is buying nothing" would
-            # be a confident conclusion drawn from a corpus that cannot support
-            # one.
+            # Below `DEFAULT_CANDIDATES` chunks the vector arm returns everything, so
+            # agreement is 100% by arithmetic.
             saturated = counts.searchable <= DEFAULT_CANDIDATES
             if saturated:
                 print(f"  ! Only {counts.searchable} searchable chunks against a candidate pool")

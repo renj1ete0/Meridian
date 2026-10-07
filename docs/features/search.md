@@ -287,6 +287,49 @@ and forgotten in the DTO fails rather than being dropped on the way out.
 - With the dev environment exported, `scripts/benchmark_search.py` reaches the database
   directly.
 
+### The benchmark
+
+`scripts/benchmark_search.py` is the measuring half of `P2-04` (the index was the other half). It
+is a script, not a test, because its answers are numbers to read rather than assertions to pass.
+
+- **Index recall.** Whether HNSW returns the neighbours an exact scan would. Pure mechanics, so
+  query vectors are sampled from the corpus itself; any vector answers "does the index find what
+  brute force finds". They are real vectors, not random ones: a random 1024-dimensional vector
+  is near-orthogonal to everything, so every candidate is equidistant and only the scan rate is
+  measured.
+- **The honesty check.** On a small corpus Postgres scans sequentially rather than using the
+  index, because that is genuinely cheaper; recall then compares exact against exact and is 1.0
+  by construction. Every recall figure is reported beside whether the planner used the index,
+  and the script says so loudly when it did not. Arm agreement has the same problem: when the
+  corpus is smaller than `DEFAULT_CANDIDATES`, the vector arm returns everything, so every
+  lexical hit is also a vector hit and agreement is 100% by arithmetic. That is reported as
+  inconclusive rather than as "fusion is buying nothing".
+- **Latency**, which means something only at corpus size.
+- **Arm overlap**: how often the two arms return the same chunks for the same question, the
+  cheapest evidence about whether hybrid search earns its second query. Perfect agreement means
+  fusion is decoration; none usually means one arm is misconfigured. **The pairing is the whole
+  measurement** (`B-29`): it used to ask the vector arm for neighbours of a sampled chunk and the
+  lexical arm for an unrelated frequent word, so agreement was 0% by construction and the
+  misconfigured-arm warning sent people hunting a text-search bug that did not exist. Both arms
+  now answer the same probe, a chunk's own distinctive terms against its own vector, with the
+  probe chunk excluded so it cannot inflate agreement by matching itself.
+- **Probe terms** are the longest words, not TF-IDF, which would be a second retrieval system
+  inside the benchmark. They are **joined with `or`**: `websearch_to_tsquery` ANDs bare terms,
+  so three rare words co-occur only in the probe itself, which is excluded. The first version did
+  that and reported the lexical arm finding nothing. The stopword list is deliberately tiny for
+  the same reason: every word added makes a probe stricter.
+- **Source concentration** (`B-30`): how much of a page one document fills, the number behind
+  the per-source cap. The probe's own source is counted separately, since "the passage I asked
+  about and its neighbours come from one document" differs from "ten hits came from three".
+- **Retrieval quality is not measured** without `--questions`. It needs `P0-15`'s held-out
+  questions, written *before* the results are visible, or the set describes the results. A
+  question names relevant **URLs**, not chunk ids, because chunk ids change on every re-crawl and
+  a question set must outlive the corpus it was written against.
+
+Query vectors are read through the mapped column, not a raw `text()` select: a raw select returns
+the vector as text, and `list()` of that is a list of characters that fails much later, at the
+next bind.
+
 ## Failure modes and traps
 
 - **The GIN index may now be redundant.** The planner answers plain `@@` from RUM too.

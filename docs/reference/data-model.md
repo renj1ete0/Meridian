@@ -251,6 +251,29 @@ actions. Credentials are the exception: `agents` stores the *name* of the enviro
 never the value, because the database is snapshotted off-device and keys would travel with
 every snapshot (§11.11).
 
+### Seeding
+
+`scripts/seed.py` loads `config/*.yaml` once at first boot and is safe to re-run.
+
+- **It inserts what is missing and leaves what exists alone.** A weight changed in Admin months
+  ago must survive a re-run, or re-seeding would silently undo steering and §10's promise that
+  nothing is destroyed would be false. The timetable and the budget are seeded on first boot
+  only: re-reading the schedule would undo every change made in the interface (§13.2), and an
+  existing budget row is left as it is, nulls included, because an operator who cleared a cap
+  decided "stop until I think about this", and refilling it would mean "carry on with the
+  default".
+- **Configuration only, never content.** Production starts empty (scaffold §1.7). There is no
+  fixture path, because synthetic fixtures do not resemble real extraction output and UI built
+  against them gets rebuilt; development corpora are snapshots of real crawls, restored
+  separately. Cold-start seeds become queue rows (URLs to crawl, not content), and the list is
+  empty until a person writes it (§15 phase 0), since seed quality propagates through
+  everything downstream.
+- **The source-tier mapping rides in the global `fetch_policy` row**, as one blob of domain
+  policy read with the fetch settings on every request; leaving it in a file the worker
+  re-reads would make the YAML authoritative again.
+- **No agent may be registered as `HUMAN`.** `produced_by = HUMAN` marks the reader's own notes
+  (`P6-05`, §12.5), and that layer stays distinguishable only while nothing else can write it.
+
 ### Topic config
 
 Attention as a weight vector over topics (§10). Steering rewrites the vector and never deletes,
