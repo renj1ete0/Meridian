@@ -225,6 +225,19 @@ async def test_the_nearest_neighbour_is_the_nearest_one(session_for, url, cleanu
     assert far.chunk_id != close.chunk_id
 
 
+async def test_the_gate_scans_as_far_as_search_does(session_for, url, cleanup) -> None:
+    """A boilerplate passage can have tens of thousands of marked copies; pgvector's default
+    scan limit (20,000) would give up before the original behind them (`B-161`)."""
+    from meridian_core.vectorindex import MAX_SCAN_TUPLES
+
+    sess = await session_for("rw")
+    _, chunks = await a_source(sess, url, [BASE, BASE])
+    await nearest_earlier_neighbours(sess, [chunks[-1].chunk_id])
+
+    setting = await sess.scalar(text("SELECT current_setting('hnsw.max_scan_tuples')"))
+    assert setting == str(MAX_SCAN_TUPLES)
+
+
 async def test_the_nearest_survivor_is_found_behind_nearer_duplicates(
     session_for, url, cleanup
 ) -> None:

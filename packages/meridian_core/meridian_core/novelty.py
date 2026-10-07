@@ -19,7 +19,7 @@ from sqlalchemy.orm import aliased
 
 from .logging import get_logger
 from .models import Chunk, Source
-from .vectorindex import indexed_distance, scan_past_filtered
+from .vectorindex import MAX_SCAN_TUPLES, indexed_distance, scan_past_filtered
 
 log = get_logger(__name__)
 
@@ -184,7 +184,8 @@ async def nearest_earlier_neighbours(
     """
     if not chunk_ids:
         return {}
-    await scan_past_filtered(sess)
+    # A boilerplate passage can have tens of thousands of marked copies to scan past.
+    await scan_past_filtered(sess, max_tuples=MAX_SCAN_TUPLES)
 
     candidate = aliased(Chunk, name="candidate")
     subject = aliased(Chunk, name="subject")

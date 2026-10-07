@@ -76,7 +76,11 @@ deliberately avoid the index (`+ 0`) to get an exact answer within a subset.
 candidates and the query's `WHERE` runs afterwards, so when the nearest rows are all filtered
 out a query can return nothing or a far row. pgvector 0.8's iterative scan keeps going until
 enough rows pass; `vectorindex.scan_past_filtered` turns it on, in strict order, for the rest
-of the transaction. The novelty gate uses it in strict order, so its `LIMIT 1` is the nearest.
+of the transaction. The novelty gate uses it in strict order, so its `LIMIT 1` is the nearest,
+with the same raised scan limit as search (`B-161`): a boilerplate passage can have tens of
+thousands of marked copies between a new copy and the original, and at pgvector's default the
+scan gave up and the gate found no neighbour (seen as an intermittent test failure on a fresh
+database after the whole suite had filled the index with near-identical rows).
 
 Search's vector arm and the neighbourhood's similar passages use it in relaxed order, which is
 cheaper and comes back almost sorted, and sort what comes back (`B-152`). They also raise

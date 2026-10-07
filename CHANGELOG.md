@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.6] — 2026-10-07
+
+### Fixed
+
+- `B-161`: the novelty gate's scan stopped at pgvector's default of 20,000 index entries, so a
+  passage with many marked copies (boilerplate repeated across a site) could find no neighbour
+  and be kept. It scans as far as search does now (`MAX_SCAN_TUPLES`).
+
 ## [0.164.5] — 2026-10-07
 
 ### Fixed
