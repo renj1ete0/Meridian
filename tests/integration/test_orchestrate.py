@@ -12,15 +12,18 @@ the cycle dry, and looks for what it wrote.
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 from collections.abc import AsyncIterator
 
 import pytest
 from sqlalchemy import delete, func, select
 
+from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.db import dispose_engines
-from meridian_core.models import BudgetConfig, Chunk, Run
+from meridian_core.models import BudgetConfig, Chunk, Run, Source
 from meridian_core.provider import Completion
 from meridian_core.runs import FINAL_STAGE, STAGES, begin_or_resume, unfinished
+from meridian_core.sources import upsert_source
 from worker import orchestrate
 from worker.orchestrate import Journal, cycle, pending_work, run_orchestrator
 
@@ -291,7 +294,28 @@ async def test_max_cycles_is_a_ceiling_nothing_can_exceed(clean) -> None:
     assert sum(1 for line in journal.entries if "started run" in line) == 1
 
 
-async def test_a_deferral_ends_the_wake_up_rather_than_churning_runs(clean) -> None:
+@pytest.fixture
+async def work_past_the_mark(clean) -> AsyncIterator[None]:
+    """A committed passage newer than any mark, so a run has a batch to defer on.
+
+    Without it the test passed only on a database that already held passages: on an empty one
+    the run finds nothing to pull and finishes instead of deferring.
+    """
+    url = f"https://{uuid.uuid4().hex[:10]}.test/deferral"
+    source, _ = await upsert_source(clean, url, checksum=f"sha256:{uuid.uuid4().hex}")
+    await replace_chunks(clean, source.source_id, [ChunkWrite(text="A passage.", chunk_index=0)])
+    await clean.commit()
+
+    yield
+
+    await clean.rollback()
+    await clean.execute(delete(Source).where(Source.url == url))
+    await clean.commit()
+
+
+async def test_a_deferral_ends_the_wake_up_rather_than_churning_runs(
+    clean, work_past_the_mark
+) -> None:
     """With nothing able to answer, each further cycle in the same wake-up
     closed the deferred run with no batch and opened another that deferred the
     same way — five throwaway runs per tick on the live stack."""

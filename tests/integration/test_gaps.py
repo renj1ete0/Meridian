@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 import yaml
+from cleanup import forget_new_policies, policy_domains
 from sqlalchemy import delete, select
 
 from api.main import create_app
@@ -539,11 +540,13 @@ async def committed_topic(session_for):
     """A committed active topic the app can see; removed with its queue and log rows."""
     sess = await session_for("rw")
     await sess.rollback()
+    policies = await policy_domains(sess)
     topic = marker()
     await add_topic(sess, topic)
     await sess.commit()
     yield topic
     await sess.rollback()
+    await forget_new_policies(sess, policies)
     await sess.execute(delete(QueueTask).where(QueueTask.topic == topic))
     await sess.execute(delete(SteeringLog).where(SteeringLog.topic == topic))
     await sess.execute(delete(TopicConfig).where(TopicConfig.topic == topic))

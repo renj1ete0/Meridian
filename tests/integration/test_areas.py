@@ -23,7 +23,15 @@ from meridian_core import areabuild
 from meridian_core.areabuild import KEEP_BUILDS, build_areas
 from meridian_core.areaview import area_detail, areas_level, jump
 from meridian_core.db import dispose_engines
-from meridian_core.models import Area, AreaBuild, AreaMember, ChunkTopics, ScheduledJob, Source
+from meridian_core.models import (
+    Area,
+    AreaBuild,
+    AreaBuildHistory,
+    AreaMember,
+    ChunkTopics,
+    ScheduledJob,
+    Source,
+)
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -229,6 +237,8 @@ async def committed(session_for, topic):
     await sess.commit()
     yield report
     await sess.execute(delete(AreaBuild).where(AreaBuild.build_id == report.build_id))
+    # The history outlives its build on purpose (`B-140`), so it is removed by hand.
+    await sess.execute(delete(AreaBuildHistory).where(AreaBuildHistory.build_id == report.build_id))
     await sess.execute(delete(Source).where(Source.url.like(f"https://{topic}.test/%")))
     await sess.commit()
 

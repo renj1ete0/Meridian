@@ -59,6 +59,25 @@ add it here.
 >   clock. Since `B-147`, `make clock-check DAYS=…` runs every test with all clocks moved
 >   ahead and lists what fails only then; on 2026-10-07 nothing did, at +400 and +1500 days.
 >   Run it after adding a test with a fixed date.
+> - **Tests must leave the database as they found it** (`B-148`): `make leak-check` runs the
+>   integration suite on a fresh database and lists what it left. Fixtures that commit use
+>   `tests/cleanup.py`; restore with statements, not attribute sets on a stale session row.
+>   The dev database still holds what leaked before (2026-10-07: 2,510 test sources, 29,041
+>   test-domain policy rows, 222 test entities, 42 orphaned map-build history rows, 184 test
+>   weight-log rows, and `walkability` left at 0.4 against the seeded 0.22). Not cleaned; the
+>   operator's call. The SQL, for the dev database only (port 21111), never the corpus:
+>   ```sql
+>   DELETE FROM sources WHERE url ~ '^https?://[^/]*\.test(/|$)';   -- chunks cascade
+>   DELETE FROM fetch_policy WHERE domain ~ '\.test$' OR domain ~ '\s';
+>   DELETE FROM edges WHERE from_node IN (SELECT entity_id FROM entities
+>     WHERE canonical_name IN ('shade', 'enzyme', 'my note'))
+>     OR to_node IN (SELECT entity_id FROM entities
+>     WHERE canonical_name IN ('shade', 'enzyme', 'my note'));
+>   DELETE FROM entities WHERE canonical_name IN ('shade', 'enzyme', 'my note');
+>   DELETE FROM area_build_history h
+>     WHERE NOT EXISTS (SELECT 1 FROM area_builds b WHERE b.build_id = h.build_id);
+>   DELETE FROM steering_log WHERE field = 'weight' AND reason = 'test';
+>   ```
 > - Operator decisions recorded: `B-133` (triage floor for huge documents, measured), `B-134`
 >   (seeded hosted models are the previous generation), `B-135` (a model on the server, live or
 >   scheduled), `B-136` (half-precision vector index).

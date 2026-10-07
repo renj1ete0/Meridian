@@ -1645,6 +1645,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-148` **Integration tests leave the database as they found it** — test tooling, no
+      bump. `make leak-check` runs the integration suite once on a fresh seeded database and
+      prints every changed row count (all tables, from the catalogue) and configuration field
+      (topics, agents, budget, the global fetch policy, the timetable). Leaks found and fixed:
+      sources and history of map builds, a test graph's entities, policy rows created by
+      queueing, a withdrawn seed's log row, the global fetch policy's `timeout_s` and editor
+      (an attribute-set restore on a stale row wrote nothing), the editor after a display-zone
+      change, and a seed test that "restored" a topic weight to a constant. That last one
+      unbalanced the weights, so the next `add_topic` renormalised and logged every topic;
+      fixtures that add topics now snapshot and restore them (`tests/cleanup.py`). A teardown
+      that deleted every saved view named "Area: …" now deletes only its own. Two tests that
+      passed only on a database other tests had filled now make their own rows. **Found, not
+      fixed (operator's call):** queueing a search query records the query text as a
+      `fetch_policy` domain (`trust.record_discovery` runs for every task type), so the policy
+      table holds one row per query; and the dev database holds thousands of rows leaked
+      before this (counts and cleanup SQL in handover §0)
 - [x] `B-147` **Which tests expire with the calendar** — test tooling, no bump. `make
       clock-check DAYS=n` runs the Python and web suites today and `n` days ahead on every
       clock (Python via `time-machine`, the web's `Date` via a Node preload, Postgres via

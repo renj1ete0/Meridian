@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 from area_doubles import a_topic, seed, shrink_levels
+from cleanup import forget_new_policies, policy_domains, restore_topics, topics_now
 from sqlalchemy import delete, func, select
 
 from api.main import create_app
@@ -25,6 +26,7 @@ from meridian_core.db import dispose_engines
 from meridian_core.models import (
     Area,
     AreaBuild,
+    AreaBuildHistory,
     AreaMember,
     Chunk,
     QueueTask,
@@ -230,16 +232,23 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
 @pytest.fixture
 async def committed(session_for, topic):
     sess = await session_for("rw")
+    await sess.rollback()
+    policies = await policy_domains(sess)
+    topics = await topics_now(sess)
+    views = set(await sess.scalars(select(SavedView.view_id)))
     area = await mapped(sess, topic)
     await sess.commit()
     yield area
+    await sess.rollback()
+    await forget_new_policies(sess, policies)
     await sess.execute(delete(AreaBuild).where(AreaBuild.build_id == area.build_id))
+    await sess.execute(delete(AreaBuildHistory).where(AreaBuildHistory.build_id == area.build_id))
     await sess.execute(delete(QueueTask).where(QueueTask.topic == topic))
     await sess.execute(delete(QueueTask).where(QueueTask.url_or_query.like(f"%{topic}%")))
-    await sess.execute(delete(SavedView).where(SavedView.name.like("Area: %")))
-    await sess.execute(delete(SteeringLog).where(SteeringLog.topic == topic))
-    await sess.execute(delete(TopicConfig).where(TopicConfig.topic == topic))
+    # Only the views saved here: a developer's own "Area: …" views stay.
+    await sess.execute(delete(SavedView).where(SavedView.view_id.notin_(views or {-1})))
     await sess.execute(delete(Source).where(Source.url.like(f"https://{topic}.test/%")))
+    await restore_topics(sess, topics)
     await sess.commit()
 
 

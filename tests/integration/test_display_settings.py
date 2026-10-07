@@ -32,10 +32,11 @@ async def client():
 
 @pytest.fixture
 async def restore(session_for):
-    """Put the global row's zone back as it was."""
+    """Put the global row's zone, and who last edited it, back as they were."""
     sess = await session_for("rw")
     row = await sess.scalar(select(FetchPolicy).where(FetchPolicy.domain == GLOBAL_DOMAIN))
     before = (row.settings or {}).get(ZONE_KEY)
+    edited_by = row.updated_by
     await sess.commit()
     yield
     # The API wrote through another connection: expire, or this reads the cached row and
@@ -48,6 +49,7 @@ async def restore(session_for):
     else:
         settings[ZONE_KEY] = before
     row.settings = settings
+    row.updated_by = edited_by
     await sess.commit()
 
 

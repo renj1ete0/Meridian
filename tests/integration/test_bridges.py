@@ -24,6 +24,7 @@ from meridian_core.models import (
     Area,
     AreaBridge,
     AreaBuild,
+    AreaBuildHistory,
     AreaMember,
     Chunk,
     Edge,
@@ -274,20 +275,19 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
 async def committed(session_for, topic):
     sess = await session_for("rw")
     chunks = await seed(sess, topic)
-    await graph(sess, chunks)
+    edge_ids = list((await graph(sess, chunks)).values())
+    ends = (
+        await sess.execute(select(Edge.from_node, Edge.to_node).where(Edge.edge_id.in_(edge_ids)))
+    ).all()
+    entity_ids = {node for pair in ends for node in pair}
     report = await build_areas(sess, topics=[topic])
     await sess.commit()
     yield report
+    # By id: a real graph may hold concepts with these names.
     await sess.execute(delete(AreaBuild).where(AreaBuild.build_id == report.build_id))
-    await sess.execute(
-        delete(Edge).where(
-            Edge.from_node.in_(
-                select(Entity.entity_id).where(
-                    Entity.canonical_name.in_(["shade", "enzyme", "my note"])
-                )
-            )
-        )
-    )
+    await sess.execute(delete(AreaBuildHistory).where(AreaBuildHistory.build_id == report.build_id))
+    await sess.execute(delete(Edge).where(Edge.edge_id.in_(edge_ids)))
+    await sess.execute(delete(Entity).where(Entity.entity_id.in_(entity_ids)))
     await sess.execute(delete(Source).where(Source.url.like(f"https://{topic}.test/%")))
     await sess.commit()
 

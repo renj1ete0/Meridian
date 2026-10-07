@@ -20,11 +20,6 @@ export PG_GUEST_URL=postgresql://meridian_guest:dev@localhost:21121/meridian
 database_at() {
   docker compose -f "$HERE/compose.yml" down -v >/dev/null 2>&1 || true
   FAKETIME="+${1}d" docker compose -f "$HERE/compose.yml" up -d --build --wait >/dev/null 2>&1
-  for _ in $(seq 60); do
-    docker exec meridian-clockshift-postgres-1 psql -U meridian -d meridian -Atc 'SELECT 1' \
-      >/dev/null 2>&1 && break
-    sleep 1
-  done
   uv run alembic upgrade head >/dev/null 2>&1
   uv run python scripts/seed.py >/dev/null 2>&1
 }

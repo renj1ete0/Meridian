@@ -84,6 +84,12 @@ async def test_seed_does_not_overwrite_steering(session_for) -> None:
     """
     _run_seed()
     sess = await session_for("rw")
+    # Put back what was there, not a constant: the row is the developer's own steering.
+    original = (
+        await sess.execute(
+            text("SELECT weight, pinned FROM topic_config WHERE topic = 'walkability'")
+        )
+    ).one()
     await sess.execute(
         text("UPDATE topic_config SET weight = 0.99, pinned = true WHERE topic = 'walkability'")
     )
@@ -102,9 +108,8 @@ async def test_seed_does_not_overwrite_steering(session_for) -> None:
     finally:
         restore = await session_for("rw")
         await restore.execute(
-            text(
-                "UPDATE topic_config SET weight = 0.40, pinned = false WHERE topic = 'walkability'"
-            )
+            text("UPDATE topic_config SET weight = :w, pinned = :p WHERE topic = 'walkability'"),
+            {"w": original.weight, "p": original.pinned},
         )
         await restore.commit()
 

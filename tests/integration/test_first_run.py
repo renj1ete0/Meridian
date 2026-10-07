@@ -20,7 +20,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select
 
 from api.routes.admin import add_seed, drop_seed, read_first_run
-from meridian_core.models import QueueTask, Source, SteeringLog
+from meridian_core.models import FetchPolicy, QueueTask, Source, SteeringLog
 from meridian_core.schemas.admin import SeedCreate
 
 pytestmark = pytest.mark.usefixtures("require_db")
@@ -28,9 +28,7 @@ pytestmark = pytest.mark.usefixtures("require_db")
 URL = "https://first-run.test/root"
 
 
-@pytest.fixture
-async def clean(session_for):
-    sess = await session_for("rw")
+async def _forget_ours(sess) -> None:
     await sess.execute(delete(QueueTask).where(QueueTask.url_or_query.like("%first-run.test%")))
     await sess.execute(delete(Source).where(Source.url.like("%first-run.test%")))
     await sess.execute(
@@ -41,8 +39,20 @@ async def clean(session_for):
             | SteeringLog.old_value.like("%first-run.test%")
         )
     )
+    # Queueing a seed records its domain (and, for a query, the query) in fetch_policy.
+    await sess.execute(delete(FetchPolicy).where(FetchPolicy.domain.like("%first-run.test%")))
+
+
+@pytest.fixture
+async def clean(session_for):
+    """A session without this file's rows; the seed routes commit, so they are removed after too."""
+    sess = await session_for("rw")
+    await _forget_ours(sess)
     await sess.flush()
-    return sess
+    yield sess
+    await sess.rollback()
+    await _forget_ours(sess)
+    await sess.commit()
 
 
 async def a_seed(sess, *, url=URL, status="pending") -> QueueTask:

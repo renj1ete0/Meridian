@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 import pytest
 from sqlalchemy import delete
 
-from meridian_core.models import QueueTask, TopicConfig
+from meridian_core.models import FetchPolicy, QueueTask, TopicConfig
 from meridian_core.queueing import enqueue
 from worker.main import Worker, WorkerSettings
 
@@ -90,6 +90,8 @@ async def frontier(session_for, marker: str, monkeypatch):
     await sess.rollback()
     await sess.execute(delete(QueueTask).where(QueueTask.url_or_query.like(f"https://{marker}%")))
     await sess.execute(delete(TopicConfig).where(TopicConfig.topic.like(f"{marker}%")))
+    # Claiming a URL records a policy row for its domain; ours are named for the marker.
+    await sess.execute(delete(FetchPolicy).where(FetchPolicy.domain.like(f"{marker}%")))
     await sess.commit()
 
 

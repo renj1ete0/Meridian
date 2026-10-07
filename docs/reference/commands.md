@@ -17,6 +17,7 @@
 | `make snapshot-corpus` / `restore-corpus` | Dump and restore the corpus |
 | `make backup` | Off-device backup |
 | `make bench-search` | Search recall, latency and arm agreement |
+| `make leak-check` | The integration suite on a fresh database; prints any rows or settings it left behind ([below](#leak-check)) |
 | `make clock-check DAYS=400` | Every test today and `DAYS` ahead on every clock; prints what fails only ahead ([below](#clock-check)) |
 | `make build-push` / `promote SHA=…` | Build images, and move the `stable` channel (GHCR, operator only) |
 
@@ -40,6 +41,26 @@ modification time, which no shift moves. Tests marked `server_timer` are left ou
 libfaketime moves Postgres's timers with its clock, so a statement timeout stops firing. A unit
 test fails if a test that waits on `pg_sleep` is not marked. Needs Docker and `web/node_modules`; takes about
 eight minutes.
+
+### Leak check
+
+Integration tests run against the developer's own dev database, so a fixture that commits and
+does not clean up leaves rows behind, and one that changes configuration and restores it wrongly
+re-tunes somebody's crawler. Neither fails a test. `make leak-check` brings up the same
+throwaway Postgres as the clock check, seeded, snapshots it (`scripts/clockshift/snapshot.sql`:
+every table's row count from the catalogue, so a new table is covered without editing the
+check, plus the contents of `topic_config`, `agents`, `budget_config`, the global
+`fetch_policy` row and `scheduled_jobs`, leaving out `_at` columns and run bookkeeping), runs
+the integration suite once, snapshots again, and prints each changed count or field
+(`snapdiff.py`). It exits 1 on any change. About four minutes.
+
+Fixtures that commit use `tests/cleanup.py`: `policy_domains` / `forget_new_policies` remove
+the `fetch_policy` rows that queueing created, and `topics_now` / `restore_topics` put every
+topic and the steering log back, since `steering.add_topic` renormalises the other topics. Both
+remove only what appeared during the test, so the developer's own rows are never touched.
+Restore with statements rather than by setting attributes on a row the session already holds:
+after a route commits through another connection, the session's copy is stale, and setting it
+back to the value it thinks it holds writes nothing.
 
 ## Worker passes
 
@@ -104,4 +125,4 @@ Run in the API container: `docker compose exec api python -m api.<name> …`.
 | `scripts/build_and_push.sh`, `promote.sh` | Image release |
 | `scripts/preflight.sh`, `quickstart.sh` | Server checks and local bootstrap |
 | `scripts/init-roles.sh` | Creates the database roles on first Postgres start |
-| `scripts/clockshift/` | The clock check (`make clock-check`) |
+| `scripts/clockshift/` | The clock check and the leak check (`make clock-check`, `make leak-check`) |

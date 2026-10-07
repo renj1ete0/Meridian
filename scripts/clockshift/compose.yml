@@ -11,6 +11,12 @@ services:
     # cannot be opened after the drop to postgres, and the server exits.
     user: postgres
     command: ["postgres", "-c", "shared_preload_libraries=age"]
+    # Over TCP: during first start the image runs a temporary server on the socket only,
+    # and a probe that reached it let migrations start before the real server was up.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U meridian -d meridian"]
+      interval: 2s
+      retries: 60
     ports: ["21121:5432"]
     environment:
       POSTGRES_DB: meridian

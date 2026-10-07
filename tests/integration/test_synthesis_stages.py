@@ -175,6 +175,7 @@ async def corpus(session_for, marker: str):
         delete(AttributeDefinition).where(AttributeDefinition.name.like(f"{marker}%"))
     )
     await sess.execute(delete(Chunk).where(Chunk.source_id == source_id))
+    await sess.execute(delete(Source).where(Source.source_id == source_id))
     await sess.execute(delete(Run).where(Run.agent_id == AGENT))
     await sess.execute(delete(Agent).where(Agent.agent_id == AGENT))
     if budget_created:

@@ -23,7 +23,7 @@ import uuid
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from api.main import create_app
 from meridian_core.db import dispose_engines
@@ -63,7 +63,7 @@ async def row(session_for, domain: str):
     sess = await session_for("rw")
     await sess.rollback()
     glob = await sess.get(FetchPolicy, GLOBAL_DOMAIN)
-    before = dict(glob.settings or {}) if glob else None
+    before = (dict(glob.settings or {}), glob.updated_by) if glob else None
 
     sess.add(FetchPolicy(domain=domain, settings={}, status="active"))
     await sess.commit()
@@ -73,8 +73,14 @@ async def row(session_for, domain: str):
     await sess.rollback()
     await sess.execute(delete(FetchPolicy).where(FetchPolicy.domain == domain))
     if before is not None:
-        current = await sess.get(FetchPolicy, GLOBAL_DOMAIN)
-        current.settings = before
+        # An UPDATE, not an attribute set: the session's copy of the row is stale after the
+        # route's commit, and setting it back to what the session thinks it holds wrote nothing.
+        settings, updated_by = before
+        await sess.execute(
+            update(FetchPolicy)
+            .where(FetchPolicy.domain == GLOBAL_DOMAIN)
+            .values(settings=settings, updated_by=updated_by)
+        )
     await sess.commit()
 
 
