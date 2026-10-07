@@ -1,28 +1,11 @@
 """Ask the graph: a question answered from the corpus, citing it (tasks P6-06, P6-07, §12.4).
 
-§12.4: "the chat panel calls the same curated tools — no separate retrieval
-path." So the passages come from `search.search`, the hybrid retrieval Find
-uses, and the nodes from the edges those passages support. The model sees
-nothing else, and is told to cite both: passages as ``[n]``, nodes as ``{Nn}``.
-
-**The citations are checked, not trusted (§2.6).** A model can write ``[9]``
-when it was given eight passages, or ``{N4}`` for a node it never saw. Every
-marker is looked up against what was actually supplied; one that is not there
-is removed from the text before it is stored, so a stored answer only ever
-points at evidence its model could have read. Valid node markers become the
-node's name in the text and a chip beside it.
-
-**Retrieved text is framed as data (`P4-06`).** Passages go inside a random
-fence with the preamble that says they are quotations, not instructions. This
-answer is only text for a reader — nothing it says is written to the graph —
-but a panel that repeated an injected instruction to its reader would still be
-the corpus lying on its own screen.
-
-**A cap with no default (§11.9).** The model may be hosted and billed. Before
-each question the day's tokens are counted from the stored messages, and a
-question over ``MERIDIAN_CHAT_DAILY_TOKENS`` is refused in words.
-
-Nothing here runs in the worker (§2.1): the API calls it, on a reader's click.
+Passages come from `search.search`, the retrieval Find uses, and nodes from the edges those
+passages support. Retrieved text is framed as data (`P4-06`). Every ``[n]`` and ``{Nn}``
+marker is checked against what was supplied, and one that points at nothing is removed
+before the answer is stored (§2.6). A day's tokens are capped by
+``MERIDIAN_CHAT_DAILY_TOKENS`` (default `DEFAULT_DAILY_TOKENS`). Called by the API, never
+the worker (§2.1). See docs/features/ask-the-graph.md.
 """
 
 from __future__ import annotations

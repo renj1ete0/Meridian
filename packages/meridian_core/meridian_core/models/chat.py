@@ -1,18 +1,8 @@
 """Questions asked of the corpus, and what it answered (tasks P6-06, P6-07, §12.4).
 
-A thread is a conversation; a message is one turn. Kept in the database rather
-than in the browser for the reason saved views are: a question somebody asked
-and the evidence it was answered from are research method, and belong with the
-corpus — in the snapshot, on a second device.
-
-**The answer is stored with what it was allowed to cite.** `citations` and
-`nodes` are what the server validated, not what the model wrote: a reference
-to a passage or a node that was not in the context it was given is dropped
-before it is stored (§2.6), so a stored answer never points at something its
-model could not have read.
-
-**Provenance, not only text.** `agent_id`, `model` and the token counts say
-which model answered and at what cost, as every other model output here does.
+A thread is a conversation; a message is one turn. `citations` and `nodes` are what the
+server validated, not what the model wrote, and every answer records its agent, model and
+token counts. See docs/features/ask-the-graph.md#threads.
 """
 
 from __future__ import annotations

@@ -37,6 +37,20 @@ every reading surface except Admin.
   Reading threads is under `/api/explore`.
 - **Not in the worker.** The API calls it on a reader's click; the worker never calls a model
   (§2.1).
+- **Framed even though nothing is written.** An answer is only text for a reader and never
+  reaches the graph, but a panel that repeated an injected instruction would still be the
+  corpus lying on its own screen.
+- **A model that cannot answer is not a refusal.** `ChatRefused` is for a question not asked
+  at all (empty, too long, over the cap, an unknown thread). An unanswered question is stored
+  with its reason in `error`, so the thread shows what happened.
+
+### Threads
+
+Threads and messages are kept in the database rather than the browser, for the reason saved
+views are: a question and the evidence it was answered from are research method, and belong
+with the corpus, in the snapshot and on a second device. Each answer is stored with what it was
+allowed to cite (the validated `citations` and `nodes`) and with its provenance: `agent_id`,
+`model` and token counts, as every other model output records.
 
 ## Configuration
 
