@@ -21,16 +21,15 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-07 (evening) — `v0.163.1`, pushed to GitHub (GHCR held); all stacks stopped except
-> the dev Postgres.** Built today: `D-01` (narrative into the docs), `B-147` clock check, `B-148`
-> leak check, `B-149` queries made no policy rows, `B-53` non-English scores rescaled (ADR 0014),
-> `B-99` Find in plain words (ADR 0013), `B-150` followed links follow the evidence (ADR 0015),
-> `B-151` the novelty gate finds originals behind marked copies. Local DB migrated to
-> `b150c0ffee01` and host scores rebuilt: 5,490 vouched hosts; the next `requeue_links` will
-> raise ~15.8k links from on-topic pages and ~4.9k into vouched hosts. **Next:** a loop run
-> to measure `B-150` (on-topic share of fetched followed links vs run 15); `B-152`; on the
-> server `B-131`, `B-135`. **By hand:** the dev-database cleanup SQL in handover §0 (approved,
-> but refused by the session's permission check).
+> **2026-10-07 (evening) — `v0.164.2`, pushed to GitHub (GHCR held).** Built today: `D-01`,
+> `B-147`–`B-149`, `B-53` (ADR 0014), `B-99` (ADR 0013), `B-150` link vouches (ADR 0015), `B-151`,
+> `B-153` languages from text, `B-154`, `B-155` proven by following (ADR 0016), `B-156` the site
+> review's reader fixes, `B-152` filtered searches no longer come back empty. Loop run 17
+> (v0.163.1): 589 on-topic pages in the hour against 356 / 310 for runs 15–16; ~40% of fetches
+> wasted on five search-proven hosts → `B-155`. Run 18 (v0.164.0) measures `B-155`
+> (`meridian-calibration/loop/run18`). Local DB at `b155f011ed00`. **Next:** write up run 18;
+> `B-157` map fields; on the server `B-131`, `B-135`. **By hand:** the dev-database cleanup SQL
+> in handover §0 (approved, but refused by the session's permission check).
 
 > **2026-10-04 (night) — `v0.162.1`, pushed to GitHub (GHCR held), all stacks stopped.**
 > Last: `B-142` web lint and format in `make lint` (oxlint + Prettier, ADR 0012); `make lint`
