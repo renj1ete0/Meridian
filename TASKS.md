@@ -16,14 +16,18 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.162.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4872 backend tests
+**`v0.162.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-07 — `D-01` done, on `main`, unpushed.** Narrative comments moved into the docs for
-> every feature and the web package (comments-only, verified; full suites pass). Next:
-> `B-131` and `B-135` on the server; the operator's open calls in the notes below.
+> **2026-10-07 — `v0.162.2`, on `main`, unpushed (GitHub push needs the operator).** `D-01` done:
+> narrative comments moved into the docs for every feature and the web package (comments-only,
+> verified). `B-147` `make clock-check`: nothing expires with the calendar through 2030.
+> `B-148` `make leak-check`: tests leave the database as they found it; the dev database still
+> holds earlier leaks (SQL in handover §0, the operator's call). `B-149` queued queries no
+> longer make fetch-policy rows; existing ones listed by SQL in handover §0. Next: `B-131`
+> and `B-135` on the server; the operator's open calls in the notes below.
 
 > **2026-10-04 (night) — `v0.162.1`, pushed to GitHub (GHCR held), all stacks stopped.**
 > Last: `B-142` web lint and format in `make lint` (oxlint + Prettier, ADR 0012); `make lint`
