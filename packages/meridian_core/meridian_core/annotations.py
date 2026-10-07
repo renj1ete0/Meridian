@@ -1,38 +1,9 @@
 """Annotation as first-class nodes (task P6-05, spec §12.5, §2 principle 3).
 
-> "**Annotation as first-class nodes** — my own notes and edges, tagged as mine.
-> Over months this becomes the highest-quality layer in the system and the one
-> that actually reflects my thinking. Build the affordance early or it won't get
-> used."
-
-A note is an ``entities`` row with ``node_type='annotation'``, attached to what
-it is about by ordinary ``annotates`` edges. Not a side table, because §12.1's
-traversal, path mode and canvas filters all read `entities` and `edges` — a
-notes table would need every one of them taught about it, and the layer §12.5
-calls the highest-quality one in the system would be the only layer the graph
-cannot see.
-
-**Authorship is set here and nowhere else.** The layer is worth having because a
-reader can tell their own thinking from the corpus's, so `produced_by` is
-assigned by this module rather than accepted from a caller (§11.8: never trust
-the structure in a request). A note that merely *says* a human wrote it, on a
-surface where anything could say that, is not a distinguishable layer — and a
-model with a write tool (`P4-04`) will eventually be calling into this service.
-
-**A person is not on the agent registry's scale.** §11.12's `quality_tier` is an
-ordinal over models, local small to hosted frontier. A note carrying one would
-be ranked against model output on an axis it is not on, and "quality tier only
-moves up" would become a rule about a person. It stays null, and so does
-`model`.
-
-**Where a citation lives, and why in two places.** The note's own
-`supporting_chunk_ids` is the source of truth: a note with no target yet — a
-thought that has not found its node — has no edges at all, and the passages the
-reader was looking at would otherwise have nowhere to go. Each `annotates` edge
-then carries the same list, because AGENTS.md's invariant is that *every* edge
-names the chunks behind it and writing `{}` onto an edge while holding the ids
-would be forfeiting that for tidiness. The two cannot drift: this module is the
-only writer, and it rewrites the edges from the note on every change.
+A note is an ``entities`` row with ``node_type='annotation'``, attached by ``annotates``
+edges. This module is the only writer: it sets authorship (never a tier or model), and
+rewrites the edges, which carry the note's own citations, on every change. See
+docs/features/knowledge-graph.md#annotations.
 """
 
 from __future__ import annotations
@@ -69,11 +40,8 @@ __all__ = [
     "to_markdown",
 ]
 
-#: The reserved `produced_by`. Not an agent id and deliberately not shaped like
-#: one — the registry's ids name a provider and a tier (`hosted-frontier`), and
-#: this names the one author who has neither. `scripts/seed.py` refuses to
-#: register an agent under it, because an agent that could would be able to
-#: write rows indistinguishable from the reader's own thinking.
+#: The reserved `produced_by`, deliberately not shaped like an agent id;
+#: `scripts/seed.py` refuses to register an agent under it.
 HUMAN = "human"
 
 #: The relation a note attaches by. One relation rather than a vocabulary
@@ -88,10 +56,7 @@ ANNOTATION = "annotation"
 async def create(sess: AsyncSession, body: AnnotationCreate) -> Entity:
     """Write a note. Raises before writing anything if it cannot be written whole.
 
-    `LookupError` for a node that does not exist, `ValueError` for a chunk that
-    does not. Both are checked first: a partly-applied write here is an
-    annotation with a dangling edge, which is the shape that survives review
-    because the note itself looks fine.
+    `LookupError` for a node that does not exist, `ValueError` for a chunk that does not.
     """
     await _targets_exist(sess, body.about)
     await _citations_resolve(sess, body.supporting_chunk_ids)
@@ -121,15 +86,8 @@ async def create(sess: AsyncSession, body: AnnotationCreate) -> Entity:
 async def edit(sess: AsyncSession, entity_id: int, change: AnnotationEdit) -> Entity:
     """Rewrite a note.
 
-    Unset fields are left alone; ``about`` given is ``about`` *replaced*, because
-    re-reading changes what a note is about and a note that accumulated every
-    node it was ever pointed at would end up attached to the reader's whole
-    search history.
-
-    Raises `LookupError` for anything that is not the reader's own note —
-    including a corpus-derived entity. §2.4 re-derives the graph from source
-    chunks, so a hand-edit that survived into a derived node would be a change
-    nothing can re-derive or explain.
+    Unset fields are left alone; ``about`` given replaces ``about``. Raises `LookupError`
+    for anything that is not the reader's own note, including a derived entity.
     """
     note = await _own_note(sess, entity_id)
     changes = change.model_dump(exclude_unset=True)
@@ -155,11 +113,8 @@ async def edit(sess: AsyncSession, entity_id: int, change: AnnotationEdit) -> En
     # rewritten today in the position it had in March.
     note.produced_at = func.now()
 
-    # The edges are rewritten whenever either half of what they carry moved —
-    # the targets, or the citations copied onto them. Rebuilt wholesale rather
-    # than diffed: an `annotates` edge holds nothing the note does not, so there
-    # is no state on it worth preserving, and a diff is a second code path that
-    # can disagree with this one about what the note now says.
+    # Rebuilt wholesale when the targets or citations moved: the edges hold nothing the
+    # note does not.
     if about is not None or cited is not None:
         targets = about if about is not None else await _current_targets(sess, entity_id)
         await sess.execute(delete(Edge).where(Edge.from_node == entity_id))
@@ -218,10 +173,7 @@ async def _targets_exist(sess: AsyncSession, about: Sequence[int]) -> None:
 async def _citations_resolve(sess: AsyncSession, cited: Sequence[int]) -> None:
     """Refuse a chunk id the corpus cannot follow.
 
-    The one thing this corpus exists to prevent (§2 principle 3), and worse on
-    an annotation than anywhere else: the annotation layer is the part a reader
-    trusts without re-checking, so a citation that goes nowhere here is one
-    nobody will ever click to discover.
+    §2 principle 3; a reader trusts this layer without re-checking.
     """
     if not cited:
         return
@@ -255,14 +207,7 @@ async def listing(
 ) -> AnnotationsRead:
     """The reader's notes, most recently *written* first.
 
-    Ordered by `produced_at` rather than `created_at`, so a note rewritten this
-    morning comes back to the top — which is what "most recent" means for a
-    notebook, and not what it means for a crawl.
-
-    ``about`` narrows to the notes attached to one node. A note that mentions
-    the node in its prose and is not attached to it does not match, and that is
-    the right answer: the attachment is the claim, and matching on text would
-    make the panel's contents depend on wording.
+    ``about`` narrows to the notes attached to one node, by attachment, not by text.
     """
     where = [Entity.is_annotation.is_(True)]
     query = select(Entity)
@@ -292,10 +237,7 @@ async def listing(
 async def hydrate(sess: AsyncSession, notes: Sequence[Entity]) -> list[AnnotationRead]:
     """Notes with their targets named rather than numbered.
 
-    `P6-04`'s rule applied here: a panel showing ``entity_id: 412`` asks the
-    reader to resolve a foreign key by hand. One query for every note's targets
-    rather than one per note, because the node panel and the notes list both
-    render a page of these at a time.
+    One query for every note's targets (`P6-04`).
     """
     if not notes:
         return []
@@ -333,11 +275,7 @@ async def hydrate(sess: AsyncSession, notes: Sequence[Entity]) -> list[Annotatio
 def to_markdown(notes: Sequence[AnnotationRead], *, title: str = "Meridian notes") -> str:
     """Notes as Markdown (§12.5: "avoid trapping material in a bespoke store").
 
-    The export a reader leaves with, so it carries what the note *means* — its
-    text and what it is about, by name — rather than what the database needed to
-    store it. Chunk ids are kept as a trailing line because they are the thread
-    back into the corpus, and dropping them would make the export prettier and
-    unfollowable.
+    Text and targets by name, with the chunk ids on a trailing line.
     """
     lines = [f"# {title}", ""]
     count = len(notes)

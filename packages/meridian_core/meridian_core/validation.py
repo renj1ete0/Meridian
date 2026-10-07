@@ -1,34 +1,8 @@
 """Server-side write validation (task P4-05, spec §11.8, §11.4, §2 principle 6).
 
-> "Validate writes server-side. Anything enforced only by prompting will
-> eventually be talked around."
-
-**What this defends against, concretely.** The crawler fetches arbitrary web
-pages. Those pages become chunks. Chunks are assembled into a batch and handed
-to a model that holds `add_edge`, `tag_entity` and `enqueue_seed` (§11.6). A
-page containing injected instructions is therefore not a theoretical attack on
-this system — it is the ordinary path with hostile content in it, and §11.8
-says so in as many words. This module is the part §11.8 calls load-bearing.
-
-**Why a separate module rather than checks inside the write tools.** §11.1b:
-three callers reach the same writes — the orchestrator's local functions, an
-external agent over MCP, and an agent CLI holding a scoped write token — and
-"none gets privileged access". Guards living inside one caller's code path are
-guards the other two do not have. They live here so that adding a fourth caller
-cannot accidentally mean adding a fourth, weaker, copy of the rules.
-
-**Every function refuses by raising.** None of them return a boolean. A boolean
-gets assigned to a variable that is then not checked, and the failure mode of
-this module is silence — a guard that did not run looks exactly like a guard
-that passed. `ValidationError` carries the rule it broke so a caller can hand
-the model back something it can act on, and so a refusal is greppable in the
-logs by rule rather than by message text.
-
-**What this module deliberately does not do.** It does not close the relation
-vocabulary. §5.4 lists node types exhaustively and does not list relation types,
-so a fixed list here would be this module inventing schema — which AGENTS.md
-says to ask about rather than do. `check_relation_type` refuses a *shape*, not
-a value.
+Every guard refuses by raising :class:`ValidationError`, which names the rule broken.
+The relation vocabulary is left open. See
+docs/features/knowledge-graph.md#writes-and-validation.
 """
 
 from __future__ import annotations
@@ -63,16 +37,11 @@ __all__ = [
     "reserve_seeds",
 ]
 
-#: `produced_by` values an *agent* may never write. `human` is reserved for the
-#: reader's own annotations (`P6-05`), and that layer is only distinguishable
-#: while nothing else can claim it. `scripts/seed.py` already refuses to
-#: register an agent under this id; this refuses the write even if one existed.
+#: `produced_by` values an *agent* may never write: `human` marks the reader's own
+#: annotations (`P6-05`).
 RESERVED_AUTHORS = frozenset({"human"})
 
-#: A relation type is an identifier a traversal groups by, not prose. The cap is
-#: generous — `regulatory_requirement_applies_to` is 31 — and exists to refuse
-#: the shape an injected instruction arrives in, where every edge would end up
-#: its own relation and the grouping would mean nothing.
+#: Longest relation type accepted: generous for an identifier, short of prose.
 MAX_RELATION_TYPE = 64
 
 
@@ -98,15 +67,8 @@ class ValidationError(Exception):
 async def check_nodes_exist(sess: AsyncSession, ids: Sequence[int]) -> None:
     """Every id names a row in `entities`, or nothing is written.
 
-    The foreign key is not this check. It raises at flush — after a batch has
-    been assembled, inside whatever transaction the caller had open — so the
-    failure surfaces far from the tool call that caused it and takes the rest of
-    the batch with it. Checking first means the model gets told which id was
-    wrong while it still has the context to fix it.
-
-    Named in §11.8 as the first mitigation for injected content, because "add an
-    edge to node 99999999" is what a model does after reading a page that told
-    it to.
+    Checked before the foreign key would raise at flush, so the model is told which id
+    was wrong (§11.8).
     """
     wanted = {int(i) for i in ids}
     if not wanted:
@@ -127,11 +89,7 @@ async def check_nodes_exist(sess: AsyncSession, ids: Sequence[int]) -> None:
 def check_not_self_edge(from_node: int, to_node: int) -> None:
     """Refuse an edge from a node to itself.
 
-    Nothing in the schema forbids it and it is never a finding. "X relates to X"
-    is what a model emits when it has resolved two mentions to the same node and
-    not noticed — so a self-edge is a symptom of an entity-resolution failure
-    (§5.5), and it is cheaper to refuse here than to find later in a traversal
-    that will not terminate.
+    Never a finding; a symptom of a resolution failure (§5.5).
     """
     if from_node == to_node:
         raise ValidationError(
@@ -151,10 +109,8 @@ async def check_chunks_resolve(
 ) -> None:
     """Every cited chunk exists.
 
-    ``allow_empty`` is the one place this differs from an annotation. A note may
-    cite nothing, because its author is the justification (`P6-05`); a *derived*
-    edge citing nothing cannot be re-derived from source chunks (§2.4) and
-    cannot be checked by anyone, so for model writes the default stands.
+    ``allow_empty`` is for annotations (`P6-05`), whose author is the justification; a
+    derived edge must cite something.
     """
     wanted = {int(i) for i in ids}
     if not wanted:
@@ -196,31 +152,10 @@ async def check_seed_allowed(
 ) -> str:
     """Refuse a seed that must not be queued; return its registrable domain.
 
-    Three refusals, in the order that makes the logged reason the useful one.
-
-    **The scheme**, because `file:`, `gopher:` and `data:` are the classic SSRF
-    escalations and a crawler speaks neither. `netguard` refuses these at fetch
-    time too, and refusing them here as well is not redundant: a rejected seed
-    that reached `queue` would sit there as `pending` and be retried with
-    backoff, which turns a rejected injection into a scheduled one.
-
-    **A literal private address**, judged without a DNS lookup because there is
-    nothing to look up. This is where §11.8's attack path actually ends — a page
-    saying "fetch http://169.254.169.254/latest/meta-data/" is asking the
-    crawler to be a proxy into the network it runs on. Hostnames are *not*
-    resolved here: DNS at seed time would be a second answer that can disagree
-    with the one `netguard` gets at fetch time, and the fetch-time one is the
-    one that matters (`P1-24`).
-
-    **An operator's block.** `fetch_policy.status = 'blocked'` is a decision a
-    person made, and a model must not be able to route around it by seeding the
-    domain again.
-
-    **And, with `require_seed_allowed`, an unapproved domain** (`P4-12`). Off by
-    default because the crawl's own frontier expansion seeds constantly and
-    legitimately; on for the tool surface, where the caller is a model. A domain
-    the crawl discovered itself and has not yet approved is still seedable —
-    `seed_allowed` gates *proposals*, not the crawl's own reach.
+    Refuses, in order: a non-web scheme, a literal private address (no DNS lookup;
+    `netguard` resolves at fetch time), an operator-blocked domain, and, with
+    ``require_seed_allowed``, a domain nobody approved (`P4-12`). See
+    docs/features/knowledge-graph.md#writes-and-validation.
     """
     if not url or not url.strip():
         raise ValidationError("seed_url", "A seed needs a URL.")
@@ -249,10 +184,8 @@ async def check_seed_allowed(
     if row is not None and row.status == "blocked":
         raise ValidationError("domain_allowed", f"{domain} is blocked by fetch policy.")
 
-    # `P4-12`. A model proposing a domain nobody has ruled on does not get to
-    # seed it. **False and None are refused for different reasons** and the
-    # message says which, because "somebody declined this" and "nobody has
-    # looked yet" lead to different actions.
+    # `P4-12`. False (declined) and None (not yet looked at) get different messages,
+    # because they lead to different actions.
     if require_seed_allowed and row is not None and row.seed_allowed is not True:
         if row.seed_allowed is False:
             raise ValidationError("domain_allowed", f"{domain} is not allowed for seeding.")
@@ -274,25 +207,8 @@ async def check_seed_allowed(
 async def reserve_seeds(sess: AsyncSession, run_id: int, count: int, *, cap: int | None) -> None:
     """Take ``count`` seeds out of this run's budget, or refuse the lot.
 
-    §11.9 describes the one feedback loop in this design that nothing else caps:
-    gap analysis emits seeds, seeds become crawl targets, tomorrow's batch is
-    larger, so more seeds are emitted. It compounds until crawl capacity
-    saturates, and because the loop is unattended the first signal would be the
-    bill.
-
-    **`cap=None` refuses.** "Nobody configured a cap" must never read as
-    "unlimited" — that is `P4-13`'s whole point and §16's ordering requirement,
-    and a default of infinity is the shape in which a missing config becomes an
-    incident.
-
-    **All or nothing.** Partially admitting a batch would make the cap depend on
-    the order the model happened to list its seeds in, and leave the caller
-    unable to say which of its seeds were taken.
-
-    **The row is locked, not just read.** Two tool calls reading `seeds_emitted`
-    at 9 against a cap of 10 would both pass and both write. `SELECT ... FOR
-    UPDATE` serialises them, which matters precisely because the caller here may
-    be several concurrent tool invocations inside one run.
+    ``cap=None`` refuses (`P4-13`). The run row is locked (``FOR UPDATE``) so concurrent
+    tool calls cannot both pass. See docs/features/knowledge-graph.md#writes-and-validation.
     """
     if cap is None or cap <= 0:
         raise ValidationError(
@@ -339,11 +255,7 @@ def check_provenance(
 ) -> None:
     """Every derived write names the agent, the exact model and the tier.
 
-    Stated as an absolute in AGENTS.md, and the reason is downstream: §11.12's
-    downgrade guard compares an incoming tier against the one already on the
-    row, so a row missing its tier is a row nothing can protect. The agent and
-    the model are what make `P7-10`'s precision sampling able to say *which*
-    model produces bad edges rather than that some do.
+    The downgrade guard needs the tier, and `P7-10`'s sampling the agent and model.
     """
     missing = [
         name
@@ -369,13 +281,7 @@ def check_provenance(
 def check_tier_not_downgraded(*, existing: int | None, incoming: int | None) -> None:
     """A lower tier never silently overwrites a higher one (§11.12).
 
-    The schedule is what makes this load-bearing rather than pedantic: nightly
-    tier-2 tagging runs far more often than the frontier sessions that produce
-    tier-4 edges (§11.1a), so without the guard the cheap work overwrites the
-    good work on a timer, and the corpus quietly degrades while every individual
-    run looks successful.
-
-    An absent ``existing`` is not a higher tier — there is nothing to protect.
+    An absent ``existing`` is not a higher tier: there is nothing to protect.
     """
     if existing is None or incoming is None:
         return
@@ -395,11 +301,8 @@ def check_tier_not_downgraded(*, existing: int | None, incoming: int | None) -> 
 def check_relation_type(relation_type: str | None) -> None:
     """A relation type is an identifier, not prose.
 
-    §5.4 closes the node-type ontology and deliberately leaves relations open,
-    so this refuses a shape rather than a value — inventing a fixed list here
-    would be inventing schema. The shape it refuses is the one injected
-    instructions arrive in: free text in a column a traversal groups by, where
-    every edge becomes its own relation and the grouping stops meaning anything.
+    Refuses a shape (length, non-identifier characters), not a value: relations are
+    open (§5.4).
     """
     if relation_type is None or not relation_type.strip():
         raise ValidationError("relation_type", "An edge needs a relation type.")
@@ -436,15 +339,7 @@ async def check_edge(
 ) -> None:
     """Every guard `add_edge` needs, in one call.
 
-    Offered so a write tool cannot pass four of the five checks by forgetting
-    the fifth — the failure this module exists to make impossible is a guard
-    that was never called, which looks identical to one that passed.
-
-    Order is cheapest-first: the pure checks run before the two queries, so a
-    malformed edge costs no database round trip. Nothing is written here, by
-    anything, ever — a refusal must leave no row, or a rejected seed sits in the
-    queue being retried with backoff and the rejection has scheduled the attack
-    rather than stopped it.
+    Cheapest first: the pure checks run before the two queries. Writes nothing.
     """
     check_not_self_edge(from_node, to_node)
     check_relation_type(relation_type)

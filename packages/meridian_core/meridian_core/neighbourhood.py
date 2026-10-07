@@ -1,26 +1,9 @@
 """A term's neighbourhood: what a passage states, and what merely reads alike (task P6-33).
 
-The rules are pure functions at the top of this module; `neighbourhood()` at
-the bottom runs the queries, and `/api/explore/neighbourhood` serves it on the
-read-only role.
-
-Two rings, and they are different kinds of evidence:
-
-- **Inner ring — cited.** Entities a passage *states* a link to: the other end
-  of an edge (or an observation's place), each carrying the passages behind it.
-- **Outer ring — similar.** Entities whose name vectors sit near the term's.
-  Nothing says they are connected; they only read alike.
-
-**The rings never mix.** An entity that is both cited and similar is shown in
-the inner ring only, because "a source says so" is the stronger and different
-claim, and listing it twice would let resemblance pass as corroboration.
-
-**The anchor is chosen by name, not by meaning.** A term becomes a node only
-when it equals a node's name or alias once case, spacing and a regular plural
-are set aside. Picking the nearest node by embedding instead would put a stranger's
-stated links in the inner ring under the reader's term — the one mixing of
-cited and similar this module exists to prevent. Near-miss names are returned
-as candidates for the reader to choose.
+Pure rules at the top; `neighbourhood()` runs the queries. The inner ring is what a
+passage states a link to (an edge's other end, or an observation's place); the outer ring
+is names that only read alike. An entity in both is shown inner only, and the anchor is
+chosen by name, never by vector. See docs/features/knowledge-graph.md#a-terms-neighbourhood.
 """
 
 from __future__ import annotations
@@ -51,10 +34,8 @@ from .vectorindex import indexed_distance
 #: around 0.58–0.67 pairs were unrelated names sharing a word or a shape.
 SIMILAR_FLOOR = 0.70
 
-#: The same floor for a name against a passage, which sits on a different
-#: scale: a short name against a paragraph scores lower however relevant the
-#: paragraph. Measured on the same graph, passages that were plainly about the
-#: name scored 0.58–0.69.
+#: The floor for a name against a passage, on a lower scale than name against name.
+#: See docs/features/knowledge-graph.md#a-terms-neighbourhood.
 PASSAGE_FLOOR = 0.55
 
 #: Ring sizes. The panel sits beside a result list; more than this is a list
@@ -437,12 +418,7 @@ async def similar_passages(
 ) -> list[tuple[int, float]]:
     """Chunk ids nearest the vector, one per source, under search's own filters.
 
-    `search._arm` rather than a second copy of the filter: superseded chunks,
-    duplicates and junk are out here for the same reasons they are out of
-    search, and two filter sites is how one of them drifts.
-
-    One per source because five neighbouring chunks of one long document are
-    one voice, and a short list of them reads as five.
+    Through `search._arm`, so search's filter applies from one site.
     """
     pool = limit * PASSAGE_POOL_FACTOR
     await sess.execute(
@@ -486,11 +462,8 @@ async def neighbourhood(
 ) -> TermNeighbourhoodRead:
     """Both rings for a term, or for a node the reader picked (task P6-33).
 
-    ``embed`` turns the term into a vector, and is called only when there is
-    no anchor or the anchor has no vector: the anchor's name vector is the
-    better basis, since it is what the other names were embedded as, and it
-    costs no call to the embedding service. When neither yields a vector the
-    outer ring is not computed and ``similar_basis`` is ``none``.
+    ``embed`` is called only when there is no anchor vector to use. With neither, the
+    outer ring is skipped and ``similar_basis`` is ``none``.
     """
     if entity_id is not None:
         anchor = await sess.get(Entity, entity_id)

@@ -1,32 +1,9 @@
 """The graph workspace's read path (tasks P6-01, P6-02, P6-03; spec §12.1–§12.3).
 
-§12.2 is the rule this module exists to keep: **never render the whole graph.**
-A reader lands on one node and sees its neighbours to depth 1, capped and
-ranked; everything else is a click away. So nothing here returns more than one
-node's neighbourhood, one node's evidence, or one route between two nodes.
-
-**The relational tables are the source of truth**, not Apache AGE (see
-`models/graph.py` and `docs/handover.md`). Every query below reads `entities`,
-`edges`, `attribute_values`, `chunks` and `sources` directly. §12.1 puts
-topology in the client, over a filtered subgraph; the one piece of topology
-done here is path mode's breadth-first search, because the client only ever
-holds one neighbourhood and a route usually leaves it.
-
-Three decisions carry the rest.
-
-**Ranking is by support, and says so.** §12.2 asks for neighbours "ranked by
-edge weight", and `edges` has no weight column. The nearest measured quantity
-is how many distinct passages justify the connection, so that is the rank —
-named `support`, not `weight`, so no surface can pass a count of passages off
-as a score somebody computed.
-
-**Filters act on evidence.** An edge survives a tier, date or topic filter when
-at least one passage behind it satisfies all of them together — see
-`GraphFilters`. Filtering on the node's own labels instead would keep an edge
-whose only evidence is exactly what the reader excluded.
-
-**Facets are counted before filtering.** A rail whose counts shrink as boxes
-are ticked hides the one option that would bring a neighbour back.
+Never the whole graph (§12.2): one node's neighbourhood, one node's evidence, or one
+route. Neighbours rank by ``support`` (distinct passages), filters act on the evidence,
+and facets are counted before filtering. See
+docs/features/knowledge-graph.md#reading-the-graph.
 """
 
 from __future__ import annotations
@@ -154,11 +131,8 @@ async def _evidence_for(sess: AsyncSession, chunk_ids: Iterable[int]) -> dict[in
 def edge_passes(edge: Edge, evidence: dict[int, _Evidence], filters: GraphFilters) -> bool:
     """Whether one edge survives the filters (§12.2, task P6-02).
 
-    Pure, so the rule is testable without a database. At least one passage
-    must satisfy tier, date and topic *together* — see the module docstring.
-    A passage whose source has no date fails any date bound: an undated
-    passage is not evidence "from 2020 onwards", and passing it would make the
-    filter a suggestion.
+    At least one passage must satisfy tier, date and topic together. A passage whose
+    source has no date fails any date bound.
     """
     if filters.contested_only and not is_contested(edge):
         return False
@@ -665,16 +639,8 @@ async def contested_pairs(
 ) -> ContestedListRead:
     """Every disagreement §9 marked, across the graph (task P6-10, §12.5).
 
-    The third entry point beside search and coverage. **Each pair once**: §9
-    names the disagreement on both edges, so reading `contested_with` from every
-    edge would list each pair twice, once from either side. The side with the
-    lower edge id is ``ours`` — an arbitrary order, and stated as one, because
-    on a list with no node to arrive from neither side is the reader's.
-
-    Newest disagreement first: the list is an entry point, and the reader
-    returning to it wants what changed. ``total`` counts pairs before the cap,
-    so a capped list says so. A `contested_with` id naming an edge that no
-    longer exists is dropped, as on the node panel.
+    Each pair once, the lower edge id as ``ours``; newest first. ``total`` counts pairs
+    before the cap, and an id naming a vanished edge is dropped.
     """
     edges = (
         await sess.scalars(
@@ -954,10 +920,8 @@ async def shortest_path(
 ) -> PathRead:
     """One shortest route between two nodes, edges taken in either direction.
 
-    Breadth-first, level by level, one query per level — so the work is bounded
-    by `max_depth` and `MAX_PATH_VISITED` rather than by the size of the graph.
-    Within a level the best-supported edge is tried first, so where two routes
-    are equally short the one with more evidence behind it is returned.
+    Breadth-first, one query per level, bounded by `max_depth` and `MAX_PATH_VISITED`.
+    Of equally short routes, the better-supported one is returned.
     """
     max_depth = max(1, min(max_depth, MAX_PATH_DEPTH))
     ends = {

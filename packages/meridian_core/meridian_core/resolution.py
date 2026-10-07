@@ -1,26 +1,8 @@
 """Deciding whether two mentions are the same thing (task `P4-02`, §5.5).
 
-Without this the graph fragments: §5.5's own example is "LTA", "Land Transport
-Authority", "the Authority" and "LTA Singapore" becoming four nodes. It breaks
-downstream *silently* — coverage undercounts, the attribute discrimination test
-misfires, and cross-topic edges never form because the shared entity was split.
-
-**Resolve at write time, not as periodic cleanup.** A duplicate that reaches the
-graph propagates into edges before anybody notices, and then the cleanup has to
-reason about edges too.
-
-The pipeline §5.5 specifies, in four steps, each a separate function so each is
-testable on its own: normalise, block, score, decide.
-
-**This module decides and does not act.** `merge` lives in `P4-03` with the
-reversibility it needs. Splitting them is deliberate: §16 calls bad merges
-"harder to detect than duplicates", so the thing that *scores* and the thing
-that *writes* should be separately arguable, and a change to the threshold
-should not be a change to a function that rewrites rows.
-
-**Never across node types.** §5.5's first "cheap win", enforced in `block` so
-it cannot be forgotten by a caller — an organisation and a place that share a
-name are two things, always, and no score should be able to overturn that.
+Four steps, each its own function: normalise, block, score, decide. Never across node
+types. The reversible merge (`P4-03`) lives below, separate from the scoring. See
+docs/features/knowledge-graph.md#resolution and #merges-and-reversal.
 """
 
 from __future__ import annotations
@@ -60,10 +42,8 @@ AUTO_MERGE = 0.90
 #: and train whoever reads it to approve without looking.
 SEPARATE_BELOW = 0.55
 
-#: How the three signals are weighted. Context is the heaviest because §5.5
-#: says so and gives the reason: "Cambridge" the city and "Cambridge" the
-#: university sit in entirely different neighbourhoods, and no amount of string
-#: or vector similarity separates them.
+#: How the three signals are weighted. Context is the heaviest (§5.5): two things
+#: sharing a name sit in different neighbourhoods.
 WEIGHTS = {"string": 0.3, "embedding": 0.3, "context": 0.4}
 
 #: Candidates `block` will consider. Not a limit on correctness — a blocking
@@ -95,26 +75,16 @@ __all__ = [
 _PUNCT = re.compile(r"[^\w\s]")
 _SPACE = re.compile(r"\s+")
 
-#: Words that carry no identity. "The Authority" and "Authority" are the same
-#: mention; so are "LTA" and "LTA Ltd". Kept short deliberately — a long list
-#: starts removing words that *do* distinguish, and "National" is the example
-#: that always gets added and always should not be.
+#: Words that carry no identity ("the", "Ltd"). Kept short: a long list starts removing
+#: words that do distinguish ("National" does).
 _NOISE = frozenset({"the", "a", "an", "of", "and", "ltd", "limited", "inc", "plc", "pte"})
 
 
 def normalise(name: str, *, expansions: dict[str, str] | None = None) -> str:
     """Step 1. Lowercase, strip punctuation, expand known abbreviations.
 
-    Unicode is normalised to NFKD and stripped of combining marks, so "Zürich"
-    and "Zurich" are the same mention. A crawl reaches both spellings of the
-    same place routinely, and a resolver that treated them as different
-    entities would fragment on exactly the material it is most likely to see.
-
-    `expansions` comes from the gazetteer (§5.6) — which already holds the
-    alias lists resolution needs, so the two share one table rather than
-    duplicating. Expansion happens per token, so "LTA Singapore" becomes "land
-    transport authority singapore" without needing that whole phrase to have
-    been curated.
+    Unicode goes to NFKD without combining marks, so accented and plain spellings
+    match. ``expansions`` comes from the gazetteer (§5.6) and applies per token.
     """
     folded = unicodedata.normalize("NFKD", name.casefold())
     folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
@@ -191,17 +161,7 @@ def _tokens(normalised: str) -> frozenset[str]:
 def string_similarity(left: str, right: str) -> float:
     """Token-set overlap, with a character-level tiebreak.
 
-    §5.5 says "token-set / Jaro-Winkler" and this takes the token-set half,
-    plus `difflib` for the character level. **Deliberately not a new
-    dependency**: the alternative was `rapidfuzz`, and the argument against is
-    not size — it is that these two are a set intersection and a stdlib call,
-    both of which are hard to get subtly wrong, and a subtle bug here is a
-    silent bad merge, which §16 says is the failure that cannot be spotted
-    afterwards.
-
-    Token-set leads because entity names differ by word rather than by
-    character: "Land Transport Authority" against "Authority, Land Transport"
-    is a perfect token match and a poor character one.
+    `difflib` rather than a new dependency; see docs/features/knowledge-graph.md#resolution.
     """
     left_tokens, right_tokens = _tokens(left), _tokens(right)
     if not left_tokens or not right_tokens:
@@ -235,14 +195,8 @@ def embedding_similarity(
 def context_overlap(left: Sequence[int] | None, right: Sequence[int] | None) -> float | None:
     """How much two entities' evidence overlaps, or None when either has none.
 
-    §5.5 calls context the strongest signal and gives the reason: "Cambridge"
-    the city and "Cambridge" the university sit in entirely different
-    neighbourhoods. Before there are edges, the neighbourhood is the set of
-    chunks each entity was drawn from — two mentions supported by the same
-    passages are the same thing far more often than two that merely spell alike.
-
-    Jaccard rather than raw count: an entity cited by two hundred chunks would
-    otherwise overlap with everything.
+    Jaccard over the chunks each entity was drawn from, so a much-cited entity does not
+    overlap with everything.
     """
     if not left or not right:
         return None
@@ -253,10 +207,7 @@ def context_overlap(left: Sequence[int] | None, right: Sequence[int] | None) -> 
 def score(left: Entity, right: Entity, *, expansions: dict[str, str] | None = None) -> Verdict:
     """Step 3. Combine the three signals into one number and a band.
 
-    **Absent signals are dropped and the weights renormalised**, rather than
-    counted as zero. An entity with no embedding and no supporting chunks would
-    otherwise score at most 0.3 however exactly its name matched, and a corpus
-    that has not finished embedding would be unable to resolve anything.
+    Absent signals are dropped and the weights renormalised, never counted as zero.
     """
     exp = expansions or {}
     signals: dict[str, float] = {
@@ -288,10 +239,7 @@ def score(left: Entity, right: Entity, *, expansions: dict[str, str] | None = No
 def decide(combined: float) -> str:
     """Step 4. The three bands.
 
-    §5.5: "high → auto-merge; low → separate entity; middle band → queue for
-    model adjudication". The middle band is meant to be small, cheap, and the
-    only place a model adds value — so the two thresholds are set to make it
-    narrow, not to make merging easy.
+    High merges, low separates, the middle band (kept narrow) is for adjudication (§5.5).
     """
     if combined >= AUTO_MERGE:
         return "merge"
@@ -311,23 +259,11 @@ async def block(
 ) -> list[Candidate]:
     """Step 2. Everything worth scoring against, and nothing else.
 
-    **Same node type, always** (§5.5's first cheap win). Enforced here rather
-    than left to the caller, because a resolver that can merge an organisation
-    into a place has no threshold safe enough to compensate.
-
-    Two rules, unioned. Name and alias overlap catches the spellings; embedding
-    kNN catches the ones that share no words — "the Authority" against "Land
-    Transport Authority" survives normalisation with one token in common and
-    would be missed by string matching alone.
-
-    Entities that already redirect are excluded: they are not destinations, and
-    merging into one would build a chain somebody has to follow.
+    Same node type always. Name and alias overlap, unioned with embedding kNN; entities
+    that already redirect are excluded. See docs/features/knowledge-graph.md#resolution.
     """
-    # The name as written *and* as expanded (`B-35`). Expanded alone, "ODD"
-    # searched for "operational design domain" and never found the node
-    # literally named "ODD", so every re-read of an acronym founded another
-    # copy of it. The two token sets are unioned rather than chosen between:
-    # blocking is meant to over-include, and scoring decides.
+    # The name as written *and* as expanded (`B-35`): expanded alone, an acronym never
+    # found the node literally named by it.
     tokens = sorted(
         {
             token
@@ -345,18 +281,13 @@ async def block(
     found: dict[int, str] = {}
     rows: list[Entity] = []
 
-    # Any shared token is enough to be *considered* — blocking is meant to be
-    # generous and cheap, and the scoring step is what is strict. The exact
-    # name is always a candidate, because a name of two letters has no token
-    # long enough to search by and was otherwise re-created on every mention.
+    # Any shared token is enough to be considered; the exact name always is, since a
+    # two-letter name has no token long enough to search by.
     like = [Entity.canonical_name.ilike(f"%{token}%") for token in tokens]
     exact = func.lower(Entity.canonical_name) == name.strip().lower()
     if name.strip():
-        # Exact matches first, so a common word's ILIKE hits can never push the
-        # node this name already has past the candidate limit. Then by id, so
-        # the order — and with it which of two equal candidates wins a tie — is
-        # the same on every read (`B-37`); without it the table scan decided,
-        # and an updated row moves in the heap.
+        # Exact matches first, so common-word hits cannot push them past the limit; then
+        # by id, so ties break the same way on every read (`B-37`).
         by_name = (
             (
                 await sess.execute(
@@ -391,11 +322,8 @@ async def block(
 
     log.info(
         "resolution candidates",
-        # `entity_name`, not `name`: `logging` refuses to let an `extra` key
-        # shadow a `LogRecord` attribute and *raises* rather than dropping it,
-        # so this line would take down every caller — but only once logging is
-        # configured, which is why it passed in isolation and failed in the
-        # suite. The handover lists the whole set.
+        # `entity_name`, not `name`: an `extra` key shadowing a `LogRecord` attribute
+        # raises. See docs/features/knowledge-graph.md#logging-extra-keys.
         extra={"entity_name": name, "node_type": node_type, "candidates": len(rows)},
     )
     return [Candidate(entity=row, via=found[row.entity_id]) for row in rows[:limit]]
@@ -404,15 +332,7 @@ async def block(
 # ---------------------------------------------------------------------------
 # Acting on the decision, reversibly (task `P4-03`, §5.5)
 # ---------------------------------------------------------------------------
-#
-# §5.5: "Merges must be reversible. Reassign edges to the canonical node,
-# retain the old ID as a redirect rather than deleting, log every merge. Bad
-# merges are worse than duplicates because conflation is invisible once done."
-#
-# The last sentence is why this is written the way it is. A duplicate is
-# visible — two nodes with similar names, and somebody notices. A conflation
-# leaves one node that looks correct, and the evidence that it was two is gone
-# unless something kept it.
+# See docs/features/knowledge-graph.md#merges-and-reversal.
 
 
 class MergeError(RuntimeError):
@@ -482,30 +402,10 @@ async def merge(
 ) -> MergeLog:
     """Absorb ``source_id`` into ``target_id``, reversibly.
 
-    The source is **kept as a redirect, never deleted**. Deleting it would
-    break every citation that already named it, and would make the merge
-    exactly the invisible thing §5.5 warns about.
-
-    Four refusals, and each is a merge somebody would regret:
-
-    - **across node types**, which no score may overturn;
-    - **into itself**, which would empty an entity into nothing;
-    - **from an entity that already redirects**, which builds a chain somebody
-      has to follow to find the real node;
-    - **into an entity that redirects**, for the same reason from the other
-      side — the target must be a destination.
-
-    Everything that pointed at the source is moved and the moved ids are
-    recorded, so `reverse` can put back exactly this merge's rows rather than
-    whatever currently points at the target.
-
-    **A claim the target already holds is folded, not duplicated** (`B-41`).
-    `add_edge` treats subject, relation and object as one claim with several
-    citations; a merge that re-pointed an edge onto a triple the target
-    already had would leave two rows for that one claim, and every count built
-    on edges would count it twice. The same holds for an attribute the target
-    already carries, where the table allows one value per entity and the move
-    would simply be refused. Observations are not folded — see `_fold_edges`.
+    The source is kept as a redirect, never deleted. Refuses across node types, into
+    itself, and from or into an entity that already redirects. The moved ids are
+    recorded for `reverse`, and a claim or attribute the target already holds is
+    folded (`B-41`). See docs/features/knowledge-graph.md#merges-and-reversal.
     """
     source = await sess.get(Entity, source_id, with_for_update=True)
     target = await sess.get(Entity, target_id, with_for_update=True)
@@ -584,19 +484,8 @@ async def merge(
 async def reverse(sess: AsyncSession, merge_id: int, *, reversed_by: str) -> MergeLog:
     """Undo one merge, exactly.
 
-    Moves back the rows *this* merge moved, not everything now pointing at the
-    target — two merges into the same entity are otherwise indistinguishable
-    afterwards, and reversing the second would take the first's edges with it.
-
-    Folds are split first, newest first: the folded row comes back whole under
-    its own id, and the survivor loses what the fold gave it — but only that.
-    A citation the survivor gained *after* the merge stays, and a field that
-    something else has since rewritten is left as that write left it, because
-    the reversal undoes this merge and not the writes that followed it.
-
-    The log row is kept and stamped rather than deleted. "Merged and then
-    reversed" is a more interesting fact than "never merged": it is the signal
-    that a threshold is wrong, which is what `P7-10`'s sampling looks for.
+    Moves back the rows *this* merge moved and splits its folds, newest first, keeping
+    what the survivor gained since. The log row is stamped, not deleted.
     """
     entry = await sess.get(MergeLog, merge_id, with_for_update=True)
     if entry is None:
@@ -655,13 +544,8 @@ async def _reassign(
 ) -> tuple[list[int], dict[str, list[str]]]:
     """Point every ``columns`` reference at the target, and report which rows.
 
-    Reads the ids first and updates by primary key. The obvious alternative —
-    one `UPDATE ... WHERE from_node = source` — cannot tell you afterwards
-    which rows it touched, and that list is the whole reversibility story.
-
-    Which *columns* moved is reported per row as well: an edge from the target
-    to the source moves only its object, and a reversal that moved both ends
-    back would hand the source an edge it never had.
+    Reads the ids first and updates by primary key, and reports which columns moved
+    per row, so a reversal moves back exactly those.
     """
     pk_column = list(model.__table__.primary_key.columns)[0]
     per_row: dict[str, list[str]] = {}
@@ -685,10 +569,8 @@ async def _restore(
 ) -> None:
     """Point the recorded rows back at the source.
 
-    ``per_row`` names the columns that moved; without it (a merge logged
-    before `B-41`) every column naming the target is moved back, which is
-    what the reversal always did and is wrong only for a row that joined the
-    two entities.
+    ``per_row`` names the columns that moved; without it (before `B-41`) every column
+    naming the target is moved back.
     """
     if not ids:
         return
@@ -727,10 +609,7 @@ def _jsonable(value: Any) -> Any:
 def snapshot(row, fields: Sequence[str] | None = None) -> dict[str, Any]:
     """A row as JSON: every column, unless ``fields`` narrows it.
 
-    Every column is read from the table rather than listed here, so a column
-    added to `edges` later is kept by a fold without anybody remembering to
-    add it. A snapshot that silently dropped one would make a reversal that
-    looks exact and is not.
+    Columns are read from the table, so one added later is kept without a change here.
     """
     names = fields or [column.key for column in row.__table__.columns]
     return {name: _jsonable(getattr(row, name)) for name in names}
@@ -760,10 +639,8 @@ def _is_list(model, name: str) -> bool:
 def _restore_fields(row, before: dict[str, Any], after: dict[str, Any]) -> None:
     """Take back what a fold gave ``row``, and nothing it gained since.
 
-    Lists lose exactly the items the fold added and regain the ones it
-    removed; any other item — a citation `add_edge` attached after the merge —
-    stays. A scalar goes back only if it still holds what the fold set: if a
-    later, better-tiered write has replaced it, that write stands.
+    Lists lose exactly the items the fold added and regain the ones it removed; a
+    scalar goes back only if it still holds what the fold set.
     """
     model = type(row)
     for name, was in before.items():
@@ -783,19 +660,9 @@ async def _fold_edge(
 ) -> dict[str, Any]:
     """Fold ``folded`` into ``survivor``: one claim, every citation.
 
-    The citations, topic labels and contradictions unite. The judgement —
-    confidence, stance, certainty and the provenance that produced them —
-    moves only if the folded edge's tier is strictly higher, exactly as
-    `add_edge` treats the same claim arriving twice. Fields the survivor left
-    empty (a validity period, a comparison's dimension and disanalogy) are
-    filled in pairs, so a half-borrowed period cannot end before it begins.
-
-    Edges that named the folded edge as their contradiction name the survivor
-    instead: a contradiction pointing at a row that has left the table would
-    be a dangling claim of disagreement.
-
-    The folded row leaves `edges` and is kept whole in the returned record,
-    which the caller puts in `merge_log.combined`.
+    Citations, topic labels and contradictions unite; the judgement moves only to a
+    strictly higher tier; empty paired fields fill in pairs. The folded row leaves `edges`
+    and is returned whole for `merge_log.combined`.
     """
     absorbed = snapshot(folded)
     before = snapshot(survivor, _EDGE_FOLD_FIELDS)
@@ -864,19 +731,8 @@ async def _fold_edges(
 ) -> list[dict[str, Any]]:
     """Fold every moved edge that landed on a claim already held.
 
-    The survivor is the edge the target already had (the lowest id, if it had
-    several); when two *moved* edges collide with each other — an edge from the
-    source to the target and one back, say — the lower id survives. Only moved
-    edges are folded: a duplicate the target held before this merge is not this
-    merge's doing, and folding it here would put it in a log that does not
-    explain it.
-
-    **Observations are not folded, deliberately.** An observation is a reading
-    — a metric, value, period and qualifiers — and two identical readings from
-    two sources are two pieces of evidence for one figure, which is how a time
-    series and §9's contested figures are built. Nothing in the codebase says
-    when two observations are the same claim, and inventing that rule inside a
-    merge would be inventing schema.
+    The survivor is the edge the target already had (the lowest id), or the lower id of
+    two moved edges. Only moved edges are folded, and observations never are.
     """
     if not moved_ids:
         return []
@@ -917,12 +773,8 @@ async def _fold_attribute_values(
 ) -> list[dict[str, Any]]:
     """Fold the source's attribute values into the target's where both have one.
 
-    One value per entity, attribute and schema version is the table's rule, so
-    this is not optional: the move would be refused. The target's row
-    survives; citations unite, as `tag_entity` unites them on a re-tag; the
-    value and its provenance move only to a strictly higher tier. The
-    attribute's usage count drops by the row that left, and `reverse` gives
-    it back.
+    The target's row survives; citations unite; the value moves only to a strictly
+    higher tier. The attribute's usage count drops by one, which `reverse` restores.
     """
     rows = (
         (
@@ -1024,19 +876,8 @@ async def fold_repeated_edges(
 ) -> RepeatedEdges:
     """Fold the duplicate edges earlier merges left behind (`B-41`).
 
-    Report by default; ``apply`` writes. **Each fold is logged on the merge
-    that caused it**, in that merge's `combined`, so reversing the merge
-    splits the fold exactly as if the merge had made it — the repair adds no
-    second log to reconcile.
-
-    A group is attributed to the newest unreversed merge that moved one of its
-    edges and whose target the triple names. A group no merge explains is
-    reported and left alone: without a merge there is no log a reversal would
-    read, and a fold that cannot be undone is the one thing this module does
-    not do.
-
-    Idempotent: a folded edge leaves the table, so a second pass finds nothing
-    to attribute.
+    Report by default; ``apply`` writes. Each fold is logged on the newest unreversed
+    merge that explains it; a group no merge explains is reported and left. Idempotent.
     """
     groups = (
         await sess.execute(

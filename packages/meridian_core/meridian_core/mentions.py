@@ -1,32 +1,8 @@
 """Turning a name a model read into a node the graph holds (task `P4-16`, §5.5).
 
-`resolution.py` decides and deliberately does not act: it normalises, blocks,
-scores and bands, and `merge` is kept separate so a change to a threshold is
-not a change to a function that rewrites rows. That leaves a gap exactly one
-caller wide — the extraction stage, which has a name and a type and needs an
-`entity_id` before `add_edge` will look at it. This module is that caller, and
-it is here rather than inside `resolution.py` so that module's own boundary
-stays true.
-
-**A duplicate is preferred to a merge nobody asked for.** §5.5 bands the
-middle range "queue for model adjudication", and the safe disposition of that
-band is a *second node* plus a notification, not a merge on the balance of
-probability. A duplicate is visible — two similar names, and somebody notices —
-while a conflation leaves one plausible-looking node and no evidence it was
-ever two. The adjudication notification is written here rather than left to
-the caller, because a caller that forgot it would drop the middle band in
-silence, which is the failure this whole band exists to prevent.
-
-**A model may not mint an annotation.** `annotation` is the one node type that
-means "a person wrote this" (`P6-05`, §12.5), and nothing downstream
-distinguishes a forged one. Refused here as well as omitted from the prompt:
-the prompt is what the model reads, this is what the database gets.
-
-**Jurisdiction separates before scoring does.** §5.5's uniqueness key includes
-it because one name routinely denotes unrelated things in two countries, and
-those are cases where string and embedding similarity both say "the same" with
-complete confidence. Two *stated* and different jurisdictions is a fact about
-identity, not a signal to be weighed against others.
+The middle band creates a second node and a notification rather than a merge; a model
+may not mint an annotation; two stated, different jurisdictions never match. See
+docs/features/knowledge-graph.md#resolution.
 """
 
 from __future__ import annotations
@@ -61,10 +37,8 @@ class Resolved:
     entity: Entity
     created: bool
     band: str
-    #: The best candidate's verdict, when there was a candidate at all. Kept so
-    #: the journal can say "merged at 0.94, string 0.99 context 0.88" rather
-    #: than "merged" — a number nobody can argue with is a threshold nobody can
-    #: tune.
+    #: The best candidate's verdict, when there was one: the journal shows the score and
+    #: its signals so the thresholds can be tuned.
     verdict: Verdict | None = None
 
     @property
@@ -89,10 +63,7 @@ def _compatible(candidate: Entity, jurisdiction: str | None) -> bool:
 async def _adjudication(sess: AsyncSession, *, mention: str, kept: Entity, other: Entity) -> None:
     """Queue the middle band for a person, naming both rows.
 
-    §5.5 wants the middle band small, cheap and the only place a model adds
-    value. Until something adjudicates it, the row that matters is the one a
-    reader can act on — so this says which two nodes and why, not that a
-    decision is outstanding.
+    Says which two nodes and why, so a reader can act on it.
     """
     sess.add(
         Notification(
@@ -127,14 +98,8 @@ async def resolve_mention(
 ) -> Resolved:
     """The node this mention refers to, creating one if it refers to nothing yet.
 
-    ``embedding`` is the mention name's vector (`B-40`). With it, blocking
-    also considers the nearest entities by meaning and scoring weighs §5.5's
-    embedding signal; without it both fall back to the name alone, which
-    cannot see that two differently-worded names mean the same thing.
-
-    Flushes so the id exists; does not commit. The caller's transaction owns
-    whether any of this survives, which is what lets `--dry-run` cover a stage
-    that never heard of it.
+    ``embedding`` is the mention name's vector (`B-40`); without it blocking and
+    scoring use the name alone. Flushes so the id exists; does not commit.
     """
     cleaned = name.strip()
     if not cleaned:
@@ -153,21 +118,8 @@ async def resolve_mention(
         if _compatible(candidate.entity, jurisdiction)
     ]
 
-    # Scored against a transient row rather than a second code path: `score`
-    # takes two entities and reads four fields off each, so building the one we
-    # are about to write anyway keeps the signals identical to the ones a later
-    # comparison of two stored entities would produce.
-    #
-    # **With no context, deliberately.** A mention has been seen exactly once,
-    # so "shares no neighbours with that entity" is an absence, not a
-    # disagreement — and §5.5's rule for an absent signal is to drop it and
-    # renormalise, never to count it as zero. Passing the batch's chunks here
-    # instead scores an exact name match at 0.43 the moment the second passage
-    # mentioning it is a different chunk, which is below the separation
-    # threshold: every mention would then found a new node until two of them
-    # happened to share a chunk, which is the fragmentation this whole module
-    # exists to prevent. The chunks are still recorded on the row below; they
-    # are what gives the *entity* a neighbourhood for next time.
+    # Scored against a transient row, with no context: a mention seen once has no
+    # neighbourhood to disagree with. See docs/features/knowledge-graph.md#resolution.
     vector = list(embedding) if embedding is not None else None
     probe = Entity(
         canonical_name=cleaned,

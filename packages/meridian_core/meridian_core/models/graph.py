@@ -1,18 +1,8 @@
 """Entities, edges, and the attribute system (spec §5.4, §5.5, §7).
 
-Modelled as relational adjacency tables rather than Apache AGE storage. The
-scaffold's `graph.py` specifies "traversal queries, recursive CTEs", and §12.1
-loads a *filtered subgraph* client-side and runs topology (Louvain, centrality,
-pathfinding) in graphology rather than in the database. Recursive CTEs over
-these tables serve that retrieval directly; AGE can be layered on later (P4-01)
-without the schema changing.
-
-Two invariants worth restating because the columns exist to enforce them:
-
-- Every edge names the chunks that justify it (``supporting_chunk_ids``). An
-  edge without provenance is not assertable (§2 principle 3).
-- Contradictions are kept, not resolved. When sources conflict, both edges live
-  and the pair is marked ``contested_with`` (§9).
+Relational adjacency tables, not Apache AGE storage. Every edge names the chunks that
+justify it, and contradictions are kept and marked ``contested_with`` (§9). See
+docs/features/knowledge-graph.md#storage.
 """
 
 from __future__ import annotations
@@ -104,12 +94,8 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
         BigInteger, ForeignKey("entities.entity_id", ondelete="SET NULL"), index=True
     )
 
-    # ISO country code, or NULL for genuinely global concepts. Part of the
-    # uniqueness key, because the same name is routinely a different thing in a
-    # different country: one term can name three unrelated systems in three
-    # jurisdictions. Alias matching and string matching both succeed on those,
-    # so without this the graph is *forced* to conflate them — and §5.5's rule
-    # that a bad merge is worse than a duplicate applies exactly here.
+    # ISO country code, or NULL for genuinely global concepts. Part of the uniqueness key:
+    # one name is often a different thing in another country.
     jurisdiction: Mapped[str | None] = mapped_column(Text, index=True)
 
     # Set for annotation nodes — the highest-quality layer in the system, and the
@@ -118,20 +104,8 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
         default=False, server_default=text("false"), nullable=False
     )
 
-    # What a hand-written node was drawn from, and the one column on this table
-    # that exists for annotations (`P6-05`).
-    #
-    # §2 principle 3 names edges, tags and attributes, not nodes, and that is
-    # right for a derived entity: what justifies it is the edges and attribute
-    # values that cite it, each carrying their own chunks. A node a *person*
-    # wrote has none of those — the note is the claim — so the passages they
-    # were reading have nowhere else to live. Empty for everything the pipeline
-    # derives.
-    #
-    # This is the source of truth, and the note's `annotates` edges carry the
-    # same ids rather than `{}` — an edge that named no chunk would break the
-    # invariant that every edge does, and the two cannot drift because
-    # `annotations.py` is the only writer and rewrites the edges from the note.
+    # What a hand-written note was drawn from (`P6-05`); empty for derived entities.
+    # See docs/features/knowledge-graph.md#annotations.
     supporting_chunk_ids: Mapped[list[int]] = mapped_column(
         ARRAY(BigInteger), nullable=False, default=list, server_default=text("'{}'")
     )
@@ -178,21 +152,12 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
     # a graph that silently resolves conflicts hides the interesting part (§9).
     contested_with: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
 
-    # Analogical expansion (§7.2) decomposes a context into attributes and
-    # searches each axis independently, so a comparison is only meaningful
-    # alongside the axis it runs on and the point where it breaks down.
-    # "these two places share one attribute, therefore findings transfer" is
-    # the shallow inference this guards against: two cases can match on one
-    # axis and diverge completely on the ones that decide the outcome.
-    # Comparisons without stated limits are how bad policy papers get written.
+    # A comparison is meaningful only with its axis and where it breaks down (§7.2).
     similarity_dimension: Mapped[str | None] = mapped_column(Text)
     disanalogy: Mapped[str | None] = mapped_column(Text)
 
-    # When the *fact* held — distinct from created_at (when we wrote the edge),
-    # produced_at (when a model derived it), and Source.publication_date (when
-    # the evidence was published). Without this, an AV pilot that ran 2019–2021
-    # is indistinguishable from one still running, and the difference is only
-    # recoverable by re-reading the chunk. Null means open-ended or unknown.
+    # When the *fact* held, not when it was written, derived or published. Null means
+    # open-ended or unknown.
     valid_from: Mapped[dt.date | None] = mapped_column(Date, index=True)
     valid_to: Mapped[dt.date | None] = mapped_column(Date, index=True)
 
@@ -202,12 +167,8 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
         # Traversal in both directions, for recursive-CTE neighbourhood queries.
         Index("ix_edges_from", "from_node", "relation_type"),
         Index("ix_edges_to", "to_node", "relation_type"),
-        # One row per claim (`B-60`): same subject, relation and object is the
-        # same claim, which `add_edge` corroborates. Here too, because two
-        # writers that each find no row both insert, and only the database sees
-        # both. Deferred to commit: a merge moves edges first and folds the
-        # duplicates that makes before it commits (`_fold_edges`), and a check
-        # per statement would refuse the move itself.
+        # One row per claim (`B-60`), deferred to commit because a merge moves edges
+        # before it folds the duplicates that makes (`_fold_edges`).
         UniqueConstraint(
             "from_node",
             "relation_type",
@@ -237,20 +198,9 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
 class MergeLog(Base):
     """Every merge, and enough to undo exactly this one (task `P4-03`, §5.5).
 
-    §5.5: "Merges must be reversible. Reassign edges to the canonical node,
-    retain the old ID as a redirect rather than deleting, log every merge. Bad
-    merges are worse than duplicates because conflation is invisible once
-    done."
-
-    **The rows moved are recorded, not just the fact of the move.** `merged_from`
-    says *that* an entity was absorbed; it cannot say which edges came with it.
-    Reverse two merges into the same target without that and the second
-    reversal takes rows belonging to the first — so each merge stores the ids
-    it actually reassigned, and a reversal moves exactly those back.
-
-    **A log, not an audit trail bolted on.** `P7-10` asks for merge sampling as
-    routine, and the numbers it needs — the score and its three signals — are
-    only knowable at the moment of the decision.
+    Stores the ids each merge reassigned, so a reversal moves exactly those back, and
+    the score and signals behind the decision for `P7-10`'s sampling. See
+    docs/features/knowledge-graph.md#merges-and-reversal.
     """
 
     __tablename__ = "merge_log"
@@ -282,26 +232,16 @@ class MergeLog(Base):
     moved_attribute_value_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
     moved_observation_ids: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
 
-    #: Which *columns* of each moved row pointed at the source, by table and
-    #: row id (`B-41`). The id lists above cannot say, and an edge between the
-    #: source and the target — or an observation measured *at* the source but
-    #: *about* the target — has one column that moved and one that did not.
-    #: Null on merges logged before this existed; `reverse` then falls back to
-    #: moving back every column that names the target.
+    #: Which *columns* of each moved row pointed at the source, by table and row id
+    #: (`B-41`). Null on merges logged before it existed.
     moved_columns: Mapped[dict | None] = mapped_column(JSONB)
 
-    #: Rows this merge folded into another rather than moved (`B-41`): a moved
-    #: edge that landed on a claim the target already held, or an attribute
-    #: the target already carried. Each record keeps the folded row whole and
-    #: the surviving row's fields before and after, so `reverse` can split
-    #: them apart again. The folded row leaves its table; it does not leave
-    #: the database.
+    #: Rows this merge folded into another rather than moved (`B-41`): each keeps the
+    #: folded row whole and the survivor's fields before and after, for `reverse`.
     combined: Mapped[list | None] = mapped_column(JSONB)
 
-    #: The target's aliases, `merged_from` and supporting chunks before and
-    #: after the merge (`B-41`). A reversal that left the source's name among
-    #: the target's aliases would send the next mention of the source straight
-    #: back into the target, undoing the reversal by resolution.
+    #: The target's aliases, `merged_from` and supporting chunks before and after the
+    #: merge (`B-41`), so a reversal takes the source's name back off the target.
     target_fields: Mapped[dict | None] = mapped_column(JSONB)
 
     #: Set when the merge is undone. The row stays: "this was merged and then
@@ -317,10 +257,8 @@ class MergeLog(Base):
 class AttributeDefinition(Base, TimestampMixin):
     """The attribute schema itself (§7.1, §7.3).
 
-    Hard cap of roughly a dozen active attributes, with auto-retirement of the
-    lowest-utility one when a stronger candidate qualifies. Retirement requires
-    failing two or three consecutive audits — every schema change triggers
-    backfill cost, so slow-moving schema is a feature, not friction.
+    Capped at roughly a dozen active attributes; see
+    docs/features/knowledge-graph.md#storage.
     """
 
     __tablename__ = "attribute_definitions"
@@ -401,24 +339,9 @@ class AttributeValue(Base, TimestampMixin, ProvenanceMixin):
 class Observation(Base, TimestampMixin, ProvenanceMixin):
     """A measured quantity attached to an entity.
 
-    Added after the §14.3 design exercise: the schema could not answer "what is
-    the market share of AVs by deployment?" at all. A measurement is
-    ``(metric, value, unit, denominator, geography, period)``, and none of that
-    fits a ``finding`` node — whose only text fields are a name and a
-    description — nor ``attribute_values``, which holds the ~12 capped,
-    audited comparison dimensions of §7.3 rather than arbitrary facts.
-
-    **One entity, many observations.** The subject is the recurring claim
-    ("AV share of Phoenix taxi trips"), not the individual reading, so a time
-    series accumulates against one stable node. Modelling each reading as its
-    own ``finding`` entity would produce thousands of near-identical
-    ``canonical_name`` values, and entity resolution — which matches on exactly
-    string similarity, embedding cosine and shared neighbours (§5.5) — would
-    eventually merge two quarters into one. Conflation is invisible once done,
-    which makes that failure worse than the duplication it looks like.
-
-    Keeping observations in the graph rather than in a side store means edges,
-    contested pairs, and path traversal all reach them unchanged.
+    ``(metric, value, unit, denominator, geography, period)`` against one entity that
+    names the recurring claim, so a series accumulates on a stable node. See
+    docs/features/knowledge-graph.md#storage.
     """
 
     __tablename__ = "observations"
@@ -453,12 +376,9 @@ class Observation(Base, TimestampMixin, ProvenanceMixin):
     # on whether the figure is trustworthy (§8).
     method: Mapped[str | None] = mapped_column(Text)
 
-    # Open-ended dimensions the measurement is broken down by: user segment,
-    # time of day, trip purpose. A column per dimension does not scale — "price
-    # sensitivity for students at peak on the MRT" has three at once — and
-    # pushing them into the subject entity instead would produce thousands of
-    # near-identical node names for entity resolution to mis-merge (§5.5).
-    # JSONB is what the stack already uses to absorb schema evolution (§4).
+    # Open-ended dimensions the measurement is broken down by (segment, time of day):
+    # JSONB, since a column each does not scale and folding them into the subject's
+    # name would multiply near-identical nodes.
     qualifiers: Mapped[dict | None] = mapped_column(JSONB)
 
     confidence: Mapped[float | None] = mapped_column(Float)

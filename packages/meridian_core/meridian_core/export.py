@@ -1,25 +1,8 @@
 """Export (task P6-15, spec §12.5).
 
-> "**Export:** BibTeX (citations) and Markdown (notes) — avoid trapping material
-> in a bespoke store."
-
-The requirement is about leaving, and it is not a courtesy. A research corpus
-that can only be read through its own interface is a bet that the interface
-outlives the research, and that bet is usually lost. BibTeX goes into Zotero and
-LaTeX; Markdown goes into anything.
-
-**Nothing here is generated.** Every field comes from a `sources` row that a
-crawl filled in, and a field the document did not carry is *omitted* rather than
-guessed. A fabricated author or year in a bibliography is worse than a missing
-one — it is wrong in a file somebody will paste into a paper, and the whole
-point of this corpus is being checkable.
-
-**The entry type is derived from the tier and says nothing about quality.**
-§8 extracts structure and scores nothing, and a bibliography is exactly where an
-implied verdict would do damage: `@article` versus `@misc` reads as a judgement
-if it is allowed to. It is a *format* decision — what fields a reader of the
-bibliography will expect — and `note` carries the tier verbatim so the
-information is present without being ranked.
+BibTeX and Markdown from stored fields only: a field the document did not carry is
+omitted, never guessed. The entry type is a format choice, not a ranking. See
+docs/features/knowledge-graph.md#export.
 """
 
 from __future__ import annotations
@@ -33,11 +16,7 @@ from .models import Chunk, Source
 
 log = get_logger(__name__)
 
-#: §5.2's tiers to BibTeX entry types. A *format* mapping, not a ranking — see
-#: the module docstring. Government and institutional reports are `@techreport`
-#: because that is the entry a reader expects for an issuing body with no
-#: journal; everything web-native is `@online`, which is the type that carries
-#: `urldate`.
+#: §5.2's tiers to BibTeX entry types: a format mapping, not a ranking.
 ENTRY_TYPE = {
     "peer_reviewed": "article",
     "government": "techreport",
@@ -72,11 +51,7 @@ def tex_escape(value: str) -> str:
 def citation_key(source: Source) -> str:
     """A stable, unique key for one source.
 
-    Stable because a bibliography is re-exported and diffed, and a key that
-    changed between runs would rewrite every citation in a document that
-    referenced it. Unique because `source_id` is appended — two reports from the
-    same body in the same year is the ordinary case, not an edge one, and
-    silently colliding keys drop entries with no error anywhere.
+    Unique because `source_id` is appended.
     """
     stem = source.author or source.publisher or _host(source.url) or "source"
     year = source.publication_date.year if source.publication_date else "nd"
@@ -92,10 +67,7 @@ def _host(url: str) -> str:
 def to_bibtex(sources: Sequence[Source], *, accessed: dt.date | None = None) -> str:
     """A BibTeX bibliography for ``sources``.
 
-    ``accessed`` overrides the per-source access date, for a deterministic
-    export in a test. Otherwise each entry carries its own `accessed_at`, which
-    is the date that actually matters for a web citation: it says what the page
-    said when this corpus read it, which is the claim the raw file backs up.
+    ``accessed`` overrides each entry's own `accessed_at`, for a deterministic test.
     """
     return "\n\n".join(_entry(source, accessed) for source in sources) + "\n" if sources else ""
 
@@ -140,10 +112,7 @@ def to_markdown(
 ) -> str:
     """Passages as Markdown, each under the source that justifies it.
 
-    Grouped by source rather than listed flat, because a reader scanning this
-    later is asking "what did this document say" far more often than "what was
-    the fourth result". The citation line carries what makes the passage
-    checkable — the URL, the page or offset, and the tier.
+    Each citation line carries the URL, the page or offset, and the tier.
     """
     grouped: dict[int, tuple[Source, list[Chunk]]] = {}
     for chunk, source in rows:

@@ -1,34 +1,10 @@
 """A route from one subject to another, across claims and resemblance (task P6-32).
 
-`graphview.shortest_path` (`P6-03`) answers "how do two nodes connect by
-stated links". This module widens that in two directions and keeps the two
-kinds of step apart:
-
-- **cited** hops are edges: a passage states the link, and the hop carries the
-  edge, its relation and its first passage;
-- **similar** hops join two things that only read alike: two nodes whose name
-  vectors clear `SIMILAR_FLOOR`, or a free-text term and the nodes nearest it.
-
-**Every hop is labelled, and the claims-only answer is always computed
-beside the mixed one.** "No cited route within N hops" is a finding, not a
-failure: two subjects the corpus never links are a gap worth crawling. So the
-result carries it as a value (`RouteRead.cited_only`), which the Gaps screen
-(`P6-36`) can read without re-running anything.
-
-**Hop sources are pluggable.** A search asks each `HopSource` for the hops
-leaving its frontier. Cited edges and name resemblance are the two that exist
-today. Areas (`P6-30`) are a third kind of stop: a source that yields hops to
-and from ("area", id) keys joins the search without changing it.
-
-**Which route is best.** Fewest hops first, as in `P6-03`. Among equally
-short routes, the one with fewer similar hops wins, and then the one whose
-steps are better supported. A route through resemblance is therefore never
-preferred to an equally short route of claims.
-
-**What a route does not pass through.** A node merged into another is a
-redirect (§5.5), never a stop. A reader's note is an entity too, but a route
-through the reader's own note is not the corpus connecting two things, so
-annotation nodes are not stops either.
+**Cited** hops are edges; **similar** hops join names whose vectors clear
+`SIMILAR_FLOOR`, or a free-text term and its nearest nodes. Every hop is labelled, and
+the claims-only answer (`RouteRead.cited_only`) is computed beside the mixed one. Hop
+sources are pluggable (`HopSource`). Redirects and annotations are never stops. See
+docs/features/knowledge-graph.md#routes.
 """
 
 from __future__ import annotations
@@ -60,10 +36,8 @@ MAX_ROUTE_DEPTH = graphview.MAX_PATH_DEPTH
 #: Nodes a search may reach before it stops and says so.
 MAX_VISITED = graphview.MAX_PATH_VISITED
 
-#: Nearest names asked for per node on a similar hop, and how many frontier
-#: nodes are expanded by resemblance per level. Bounds on work: resemblance
-#: connects everything to something, so an unbounded similar expansion is a
-#: scan of the graph.
+#: Nearest names asked for per node on a similar hop, and frontier nodes expanded by
+#: resemblance per level: unbounded, resemblance reaches the whole graph.
 SIMILAR_K = 5
 MAX_SIMILAR_FRONTIER = 200
 

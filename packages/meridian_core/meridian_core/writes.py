@@ -1,40 +1,10 @@
 """The four write tools (task `P4-04`, §11.6, §11.8).
 
-§11.6 lists the write surface as "narrow, validated, orchestrator scope only",
-and each of those three words is a decision somewhere else in the tree:
-
-*Narrow* is this file — four functions, not an ORM handed to a model.
-*Validated* is `validation.py` (`P4-05`), built first so these are callers
-rather than authors of the rules. *Orchestrator scope only* is `grants.py`,
-where `PROFILE_TOOLS` gives no shared profile a write tool at all, including
-`operator`. Nothing here is reachable over the MCP surface an external agent
-holds a grant for.
-
-**These are the only writes a model's output ever causes.** §11.1b's point is
-that three callers reach the same writes and none gets privileged access, so
-the validation lives below this layer and cannot be skipped by arriving from a
-different direction.
-
-Four decisions worth stating:
-
-**The same claim twice is corroboration, not a second edge.** Two extractions
-of "A supersedes B" from different chunks are one relation with two citations.
-Inserting both would double every edge count, and everything built on those
-counts — contested pairs, coverage scores, the digest's "edges added" — would
-be counting extraction passes rather than knowledge.
-
-**A cheaper model never overwrites a better one.** §11.12's guard is
-load-bearing because of the schedule: nightly tier-2 tagging runs far more
-often than the frontier sessions producing tier-4 edges, so without it the
-cheap work overwrites the good work on a timer while every run reports success.
-
-**A refusal writes nothing, including the queue.** A seed rejected at seed time
-must not land in `queue` to be retried with backoff — that turns a rejection
-into a schedule for the thing that was rejected.
-
-**Every tool counts what it did on the run.** §11.9 compares cost and volume
-per run week on week, and a tool that wrote without counting would make the
-run look cheaper than it was.
+The only writes a model's output ever causes. Validation lives below them in
+`validation.py`; no MCP profile holds them (`grants.py`). The same claim twice is
+corroboration, a lower tier never overwrites a higher one, a refusal writes nothing, and
+every tool counts what it did on the run. See
+docs/features/knowledge-graph.md#writes-and-validation.
 """
 
 from __future__ import annotations
@@ -79,10 +49,8 @@ __all__ = [
 class WriteResult:
     """What a write tool did, in terms the caller can act on.
 
-    `created` separates a new row from an existing one that was corroborated or
-    updated. The orchestrator counts only the first towards `edges_added`, and
-    a model that cannot tell the difference will keep re-asserting what the
-    corpus already holds because nothing told it otherwise.
+    `created` separates a new row from one corroborated or updated; only new rows count
+    towards `edges_added`.
     """
 
     row_id: int
@@ -119,16 +87,8 @@ async def add_edge(
 ) -> WriteResult:
     """Assert one relation, with the chunks that justify it (§11.6, §11.8).
 
-    Validation first and in one call: `check_edge` exists so a tool cannot pass
-    four guards by forgetting the fifth — the failure this design is built
-    against is a guard that never ran, which looks exactly like one that
-    passed.
-
-    **An existing edge is corroborated rather than duplicated.** Same subject,
-    relation and object is the same claim; the new chunks join its citations.
-    Scalar judgements — confidence, stance, certainty — are replaced only by a
-    *strictly better* tier, because an equal tier disagreeing with itself is a
-    contradiction to record (`P7-05`) rather than a value to overwrite.
+    Validated first by `check_edge`. An existing claim gains the new chunks as citations;
+    confidence, stance and certainty are replaced only by a strictly better tier.
     """
     await check_edge(
         sess,
@@ -258,14 +218,8 @@ async def tag_entity(
 ) -> WriteResult:
     """Assign one audited attribute to one entity (§7.3, §11.6).
 
-    **The attribute must already be active.** §7.3 caps the comparison
-    dimensions and `P7-01` gates proposals; a tool that created a definition on
-    first use would route around both, and the cap would be whatever the models
-    happened to invent.
-
-    One row per entity, attribute and schema version — the table says so — so a
-    re-tag updates rather than accumulating. The downgrade guard applies for
-    the same reason it does on edges.
+    The attribute must already be active. One row per entity, attribute and schema
+    version, so a re-tag updates; the downgrade guard applies as on edges.
     """
     check_provenance(produced_by=produced_by, model=model, quality_tier=quality_tier)
     if value is None and value_numeric is None and value_json is None:
@@ -352,14 +306,8 @@ async def enqueue_seed(
 ) -> WriteResult:
     """Queue one seed against this run's cap (§11.4, §11.9).
 
-    **The cap is reserved before the row is written**, and `cap=None` refuses:
-    "nobody configured a cap" must never read as unlimited, because §11.9's
-    compounding loop — seeds become documents become more seeds — is the one
-    nothing else bounds, and it is unattended.
-
-    **A refused seed leaves no row.** Writing first and validating after would
-    leave a rejected target in `queue` to be retried with backoff, which is a
-    rejection that has scheduled the thing it rejected.
+    The cap is reserved before the row is written, and `cap=None` refuses. A refused
+    seed leaves no row.
     """
     if not target or not target.strip():
         raise ValidationError("seed_url", "A seed needs a target.")
@@ -383,11 +331,7 @@ async def advance_mark(
 ) -> WriteResult:
     """Move the high-water mark, after the writes it covers (§6.3, `P4-11`).
 
-    A tool rather than direct access to `runs.mark`, because §11.6 names it as
-    one of the four and a model calling it is making a claim — "everything up
-    to here has been reasoned over" — that deserves the same refusals as any
-    other write. `mark` itself refuses while unflushed changes are outstanding,
-    so a model that asks to advance before its writes have landed is told so.
+    Refused while unflushed changes are outstanding (`runs.mark`).
     """
     await mark(sess, run, chunk_id, now=now)
     return WriteResult(run.run_id, False, f"mark at {chunk_id}")
