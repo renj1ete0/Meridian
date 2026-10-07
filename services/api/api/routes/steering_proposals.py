@@ -1,13 +1,7 @@
 """Steering proposals in Admin (task P6-38, spec §10.1, §10.2).
 
-A proposal applies by itself once its window passes; these routes are the
-objection and the shortcut. **Accept** applies it now, through
-:mod:`meridian_core.steering`, logged as the operator's change. **Reject**
-means it never applies, and is logged with the reason if one is given — which
-also keeps the pass from proposing for that topic again the next hour.
-
-Writes, so they live under `/api/admin`, behind the admin gate, on the
-writable role.
+Accept applies a proposal now, logged as the operator's change; reject means it never
+applies, logged with any reason. Under `/api/admin`, on the writable role.
 """
 
 from __future__ import annotations

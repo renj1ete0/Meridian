@@ -1,67 +1,12 @@
 """Steering proposals that apply by default (task P6-38, spec §10, §10.1, §10.2).
 
-The operator's rule, in their words: *by default you propose what to steer, and
-if I don't select, it will be steered that way.* §10.2 already says the system
-steers itself and nothing waits for approval; this module is how it does so
-without surprising anybody. Every change is proposed first, in plain words with
-the numbers behind it, waits a window (`steering_proposal_window_hours` in the
-global policy row) for an objection, and then applies itself through
-:mod:`meridian_core.steering` — so it lands in `steering_log` like any other
-change, and is undone the way any other change is.
-
-**The signal is measured, and heuristic.** The worker never calls a model
-(§2.1), so a proposal comes from counting: each active topic's share of the
-*new on-topic sources* of the last ``LOOKBACK_HOURS``, against the share of the
-crawl its weight gives it, and each topic's *yield* — new on-topic sources per
-fetch — against the crawl's as a whole. Two findings are acted on:
-
-- **Starved** — the topic produced well under the share its weight promises
-  (or it is thin by :mod:`meridian_core.gaps`' measure and behind), *and* more
-  crawl would help: either the draw is not reaching it (fewer fetches than its
-  share) or the fetches it does get yield. Proposed: a boost,
-  ×``BOOST_FACTOR`` for ``BOOST_HOURS``. A boost is the gentlest lever there
-  is, because it removes itself (§10). Boosting a topic whose fetches already
-  find nothing only spends more crawl finding nothing.
-- **Inefficient** — it takes at least its share of the fetches and yields
-  under ``LOW_YIELD_RATIO`` of the crawl's average per fetch. Proposed: its
-  baseline weight lowered by a small, capped step, never below its floor, and
-  never for a thin topic. Lowering a weight frees crawl for the topics that
-  turn it into sources; raising one would be a permanent change made on a
-  day's evidence, and a boost already does that job temporarily.
-
-  This replaced an "over-served" rule (`B-64`) that cut a topic for producing
-  *more* than its share — which on a live crawl meant cutting exactly the
-  topics the crawl was doing well on. Producing a lot is the goal; producing
-  little per fetch is the waste.
-
-Fetches are attributed to the topic that drew them and sources to the topics
-their content carries, so yield is a heuristic across the two: a fetch drawn
-for one topic that lands a page about another counts for the other. Over a
-day's crawl that is the signal wanted — which topics' crawl turns into
-on-topic pages at all.
-
-**Bounds, each of them a failure this is built against:**
-
-- One proposal per topic per pass, one change per proposal; and at most one
-  pending per topic and kind, held by a partial unique index.
-- Weights stay within floor and ceiling (``steering.set_weight`` refuses
-  anything else), and one proposal moves a weight by at most
-  ``MAX_WEIGHT_STEP`` and at most ``MAX_RELATIVE_STEP`` of itself.
-- Boosts always expire; a topic already boosted is not boosted again.
-- Pinned topics are never proposed for (§10.1: autonomous adjustment may not
-  touch them), and neither are paused, archived or maintenance ones.
-- **A topic anybody changed in the last ``QUIET_HOURS`` is left alone.** The
-  operator's manual choice wins, and the evidence for a proposal has to be
-  measured *after* the last change — otherwise a weight lowered this morning
-  is lowered again this evening on the same day's numbers, and ratchets to
-  its floor.
-- Too little evidence (``MIN_FETCHES``, ``MIN_NEW_SOURCES``) proposes nothing.
-
-**Silence is consent only while the basis holds.** A pending proposal is
-superseded, never applied, when the signal it rested on has gone, when the
-topic has been paused, archived or pinned, when somebody else changed it after
-it was proposed, or when its weight has moved underneath it. Superseding is
-the safe direction: the next pass proposes again if the signal is still there.
+Each active topic's share of the last ``LOOKBACK_HOURS``' new on-topic sources and its
+yield per fetch are counted (no model, §2.1). **Starved** proposes a boost
+(×``BOOST_FACTOR`` for ``BOOST_HOURS``); **inefficient** (yield under ``LOW_YIELD_RATIO``
+of the average) a capped cut to its weight (`B-64`). A proposal waits
+`steering_proposal_window_hours`, then applies through :mod:`meridian_core.steering`
+unless rejected, and is superseded if its basis no longer holds. See
+docs/features/steering.md#proposals for the bounds and the reasons.
 """
 
 from __future__ import annotations
@@ -326,10 +271,8 @@ def draft_proposals(
 async def measure(sess: AsyncSession, *, now: dt.datetime) -> list[TopicMeasure]:
     """Every active topic, with the last ``LOOKBACK_HOURS`` counted.
 
-    Fetches are attributed to the topic of the queue task that asked for
-    them — the topic the draw chose. New sources are attributed by their
-    content labels, which is what "on-topic" means everywhere else (`P2-21`).
-    Duplicates of an earlier source are not new.
+    Fetches count for the queue task's topic, new sources for their content labels
+    (`P2-21`); copies are not new.
     """
     rows = [row for row in await steering.topics(sess) if row.status == steering.DRAWING]
     if not rows:
@@ -457,11 +400,7 @@ async def record_drafts(
 ) -> PassReport:
     """Write this pass's drafts; supersede what they replace or no longer confirm.
 
-    A pending proposal this pass did not re-derive is superseded: its signal is
-    gone, or the topic stopped being eligible. The next pass proposes again if
-    the signal returns, so the cost of superseding is a restarted window and
-    the cost of not superseding is a change applied on evidence that no longer
-    holds.
+    A pending proposal this pass did not re-derive is superseded.
     """
     report = report or PassReport(window_hours=window)
     by_key = {(p.topic, p.kind): p for p in await pending(sess)}

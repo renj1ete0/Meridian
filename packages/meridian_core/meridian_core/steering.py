@@ -1,27 +1,8 @@
 """Attention as a weight vector over topics (task P6-12, spec §10, §10.1).
 
-§10 opens with the whole model in one line: "attention is a weight vector over
-topics; seeds are drawn proportionally". Everything here serves that sentence,
-and the parts worth reading are the three places the obvious implementation is
-wrong.
-
-**Normalising is not dividing by the total.** Every active topic has a floor —
-§10's "5–10% minimum so nothing fully stalls" — and a ceiling. Proportional
-scaling violates both the moment one topic dominates, and a floor that is
-silently violated is the guarantee not existing: the topic stalls, which is the
-exact failure the floor was written to prevent. So the pool is filled by
-clamping and redistributing until nothing is outside its bounds.
-
-**A boost is applied at read time and never cleared.** §10 wants "steer back
-later without needing to remember", and the way that promise breaks is a boost
-stored into `weight` and a cleanup job that does not run. An expired boost here
-is simply not applied; nothing has to notice it expired.
-
-**Archived and paused topics leave the pool entirely.** §10.2: archiving "drops
-out of the weight-normalization pool, exactly like maintenance mode but
-permanent until reversed". Their stored weight is untouched, so un-archiving is
-a status change rather than a rebuild — "nothing is deleted, so returning costs
-nothing" applies to whole topics.
+Normalising clamps and redistributes so floors and ceilings hold; a boost applies at
+read time until it expires; paused and archived topics leave the pool with their weight
+kept. See docs/features/steering.md#weights.
 """
 
 from __future__ import annotations
@@ -49,15 +30,8 @@ DRAWING = "active"
 class InfeasibleWeights(ValueError):
     """Floors that cannot all be honoured at once.
 
-    Raised by the write paths only. A configuration where the floors sum past
-    1.0 is a mistake somebody is in the middle of making, and the moment to say
-    so is while they are making it — refusing `add_topic` with "you cannot
-    guarantee seven topics twenty percent each" is useful, and discovering it
-    three weeks later from a stalled crawl is not.
-
-    Reads never raise it. :func:`normalise` relaxes instead, because a stored
-    configuration that has become infeasible must not take down the screen that
-    would let somebody fix it.
+    Raised by the write paths only; :func:`normalise` relaxes instead, so a read never
+    fails.
     """
 
 
@@ -74,11 +48,7 @@ class TopicShare:
 def effective_weight(row, *, now: dt.datetime) -> float:
     """The weight a draw should use, boost included while it lasts.
 
-    **Both** a factor and an expiry, or no boost. §10 makes decay the mechanism
-    that removes a boost — "handled by expiry, not by memory" — so a factor
-    stored without an expiry is a permanent multiplier wearing a temporary
-    one's clothes, and applying it would make the mode's central promise false
-    for whoever set it.
+    A factor without an expiry is ignored: a boost is both or neither.
     """
     factor = getattr(row, "boost_factor", None)
     expires = getattr(row, "boost_expires_at", None)
@@ -100,31 +70,9 @@ def boost_is_active(row, *, now: dt.datetime) -> bool:
 def normalise(shares: list[TopicShare]) -> dict[str, float]:
     """Weights that sum to 1.0 with every floor and ceiling honoured.
 
-    Clamp-and-redistribute rather than divide-by-total. Each pass scales the
-    still-free topics into whatever the clamped ones left behind; anything that
-    lands outside its bounds is pinned there and the pass runs again. It settles
-    in at most one pass per topic, because a topic pinned in one pass is never
-    freed by a later one.
-
-    Two degenerate inputs are handled rather than left to produce NaN: an empty
-    set returns nothing, and a set whose weights are all zero is spread evenly
-    before clamping — a fresh topic added at weight 0 alongside others at 0
-    should end up sharing, not dividing by zero.
-
-    **Bounds that cannot be met are relaxed here rather than raising**, and the
-    two are relaxed differently because they fail differently.
-
-    Ceilings yield whenever they cannot reach 1.0, and that is not a degenerate
-    case: pausing every topic but one leaves a single topic with a ceiling of
-    0.6, and the seeds still have to come from somewhere. A ceiling is a guard
-    against one topic crowding out the others; with no others to crowd out it
-    constrains nothing, and enforcing it would mean drawing 60% of a pool and
-    leaving the rest undrawn.
-
-    Floors are scaled down proportionally when they sum past 1.0, so every topic
-    still keeps a share in the same ratio it was promised. That configuration is
-    a mistake, and the write paths refuse to create it — but a read must not
-    throw, because the screen that would let somebody fix it is the one reading.
+    Clamp-and-redistribute. All-zero weights are spread evenly; an empty set returns
+    nothing. Unmeetable bounds are relaxed, never raised: ceilings yield, and floors
+    summing past 1.0 scale down proportionally. See docs/features/steering.md#weights.
     """
     if not shares:
         return {}
@@ -211,28 +159,9 @@ def draw_shares(rows, *, now: dt.datetime) -> dict[str, float]:
 def draw_topic(shares: dict[str, float], *, rng: random.Random | None = None) -> str | None:
     """One topic, chosen with probability equal to its share (`B-26`, §10).
 
-    §10's first line is that attention is a weight vector and seeds are drawn
-    proportionally. Until this existed, nothing in the acquisition path read
-    the vector at all: `steering.py` was the only module that touched those
-    weights, and the crawl claimed by priority and age alone.
-
-    **What that costs is not subtle, and it compounds.** A link discovered on a
-    page inherits that page's topic, so whatever the crawl happens to be
-    working on produces more of itself. One real run finished with 97% of a
-    44,000-row frontier on a single topic — the one weighted *lowest* of the
-    three — because an early citation trail went that way and nothing pulled it
-    back. Claiming proportionally closes the loop in the other direction: a
-    topic that is crawled produces successors in its own topic, so consumption
-    is what makes a frontier grow.
-
-    Returns None for an empty pool, which is the signal to claim without a
-    topic filter rather than to stop. A deployment can legitimately have no
-    active topics for a moment — during a re-topic, or before the seed runs —
-    and a crawl that stalled for it would be choosing purity over the work.
-
-    The generator is a parameter so a test can be exact rather than
-    statistical: proportions are the kind of thing that look right in ten
-    thousand draws and are wrong by a factor of two in the code.
+    Returns None for an empty pool: claim without a topic filter rather than stop. The
+    generator is a parameter so tests can be exact. See
+    docs/features/steering.md#drawing-a-topic.
     """
     pool = {topic: share for topic, share in shares.items() if share > 0}
     if not pool:
@@ -252,11 +181,8 @@ def draw_topic(shares: dict[str, float], *, rng: random.Random | None = None) ->
 # ---------------------------------------------------------------------------
 # Writing: every change to the vector, and why (§10.1)
 # ---------------------------------------------------------------------------
-#
-# `steering_log` is not optional. §10.1: "with two writers, the alternative is
-# opening the UI in a month and not knowing why a weight is where it is." So
-# every function below takes an actor and a reason, and neither has a default —
-# a logged change with no reason answers the question no better than no log.
+# Every function below takes an actor and a reason, neither defaulted, for
+# `steering_log`.
 
 #: Fields a caller may set directly. `weight` is not among them: it is a share
 #: of a pool, so it is set through :func:`set_weight`, which redistributes.
@@ -306,14 +232,8 @@ async def renormalise(
 ) -> dict[str, float]:
     """Rewrite the active pool so it sums to 1.0, and log every weight that moved.
 
-    ``hold`` pins a topic at an exact share — what "set walkability to 40%"
-    means. Without it, setting a weight and then scaling everything including
-    that weight gives the person a different number from the one they typed,
-    which reads as the control not working.
-
-    Every consequent change is logged, not just the requested one. The question
-    §10.1 exists to answer is "why is this topic at 0.18", and the answer is
-    usually a change somebody made to a different topic.
+    ``hold`` pins a topic at the exact share typed. Every weight that moved is logged,
+    not only the one requested.
     """
     rows = await topics(sess)
     active = [row for row in rows if row.status == DRAWING]
@@ -357,9 +277,6 @@ async def set_weight(
     """Give one topic an exact share and redistribute the rest.
 
     Refuses a value outside the topic's own bounds rather than clamping it.
-    Silently clamping a number somebody typed shows them a different one and
-    offers no explanation — and the bounds are the thing they would need to
-    change.
     """
     row = await sess.get(TopicConfig, topic)
     if row is None:
@@ -485,10 +402,7 @@ async def set_description(
 ) -> None:
     """Say what a topic is about (task P2-21). Blank clears it.
 
-    No renormalisation — it moves no share. Logged anyway: a description is
-    most of what the content labeller compares a page against, so changing one
-    re-labels every source, and "why did these labels move" deserves the same
-    answer as "why did this weight move".
+    No renormalisation; logged anyway, since a description re-labels every source.
     """
     row = await sess.get(TopicConfig, topic)
     if row is None:
@@ -522,13 +436,8 @@ async def set_boost(
 ) -> None:
     """A temporary multiplier that removes itself.
 
-    Both or neither, and an expiry in the future. §10 makes decay the mechanism
-    — "steer back later without needing to remember" — so a factor with no
-    expiry is a permanent change that will be remembered as temporary, which is
-    the one outcome the mode exists to prevent.
-
-    The stored weight is untouched. The boost multiplies at draw time, so when
-    it expires the baseline is still there with nothing to restore.
+    Factor and expiry both or neither, the expiry in the future. The stored weight is
+    untouched; the boost multiplies at draw time.
     """
     row = await sess.get(TopicConfig, topic)
     if row is None:
@@ -570,10 +479,7 @@ async def add_topic(
 ) -> dict[str, float]:
     """Insert a topic and redistribute (§10.2's `add_topic`).
 
-    It starts at weight 0 and gets its floor from the renormalisation, which is
-    the right amount of attention for something with no seeds behind it yet:
-    §10.2 calls adding a topic "a small repeat of cold start", and a topic with
-    a large share and no hand-seeded sources spends that share on nothing.
+    It starts at weight 0 and gets its floor from the renormalisation.
     """
     if await sess.get(TopicConfig, topic) is not None:
         raise ValueError(f"{topic!r} already exists. Reactivate it rather than adding it again.")
