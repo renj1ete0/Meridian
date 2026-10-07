@@ -291,25 +291,22 @@ describe('the copy holds the voice guide', () => {
 // A citation says what its number counts (task P2-18, spec §5.3)
 // --------------------------------------------------------------------------
 
-describe('the page number is labelled, not hedged', () => {
+describe('a card shows a position a reader can cite, and only that (B-156)', () => {
   it('says "page" for a paginated source', () => {
     const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ page_unit: 'page' })]} />))
     expect(rendered).toContain('page 1')
   })
 
-  it('says "offset" for one that is not', () => {
+  it('leaves a character offset off the card: it is bookkeeping, not a citation', () => {
     const rendered = text(
       renderToStaticMarkup(<ResultList hits={[hit({ page_unit: 'offset', media_type: 'text/html' })]} />),
     )
-    expect(rendered).toContain('offset 1')
+    expect(rendered).not.toMatch(/offset/)
   })
 
-  it('hedges only when the source never recorded a media type', () => {
-    // The fallback has to stay, and has to stay rare. Picking one name for an
-    // unknown source mislabels a citation someone will open; hedging on every
-    // source teaches readers the label carries no information.
+  it('names no position when the unit was never recorded, rather than hedging', () => {
     const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ page_unit: null, media_type: null })]} />))
-    expect(rendered).toContain('page/offset 1')
+    expect(rendered).not.toMatch(/page\/offset|offset 1|page 1/)
   })
 })
 
@@ -364,6 +361,7 @@ describe('what the entry cards claim', () => {
     return {
       as_of: '2026-09-23T00:00:00Z',
       sources: 10,
+      kept_sources: 8,
       chunks: 100,
       embedded_chunks: 100,
       duplicate_chunks: 0,

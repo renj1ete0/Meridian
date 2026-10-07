@@ -161,6 +161,14 @@ one source dominates a region, whether a crawl drifted.
   refreshes. Ordering by id instead would draw the oldest chunks: the first site the crawl
   reached, not the corpus. The hash is Knuth's multiplicative one modulo 2³², a third of the
   cost of `md5(chunk_id::text)` on a real corpus.
+- **Kept, not recomputed per request** (`B-156`). The route once recomputed on every read, on
+  the premise that a projection is well under a second; on the live corpus it took about two.
+  Profiled, a third was pgvector parsing 3,000 vectors from text in Python, so the vectors are
+  now read as `real[]`, which the driver decodes in C (1.6 s to 1.2 s). The rest is the two
+  queries over every passage. The answer is kept per sample and filter for ten minutes and
+  refreshed behind the reader, as Gaps is (`api/cache.py`); a warm read takes milliseconds.
+  The corpus moves over hours, and `as_of` says when the picture was taken, so the lag is
+  stated, not hidden.
 
 ### Steering from an area
 

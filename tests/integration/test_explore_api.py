@@ -29,6 +29,7 @@ from api.deps import read_session
 from api.main import create_app
 from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.db import dispose_engines
+from meridian_core.figures import FigureWrite, replace_figures
 from meridian_core.models import Chunk, Source
 from meridian_core.sources import upsert_source
 
@@ -180,8 +181,17 @@ def test_no_explore_route_can_reach_a_writable_session() -> None:
     body = source.read_text()
 
     assert "session_rw" not in body
-    # `session_ro` is fine; a bare `import session` is the read-write one.
-    assert "from meridian_core.db import session" not in body
+    # `session_ro` is fine (the map's background refresh needs its own); a bare `session` is
+    # the read-write one. Compared by imported name: a substring check refused `session_ro`
+    # too, the opposite of what this comment always said.
+    import re
+
+    imported = {
+        name.strip().split(" as ")[0]
+        for line in re.findall(r"^from meridian_core\.db import \(?([^)\n]+)\)?$", body, re.M)
+        for name in line.split(",")
+    }
+    assert "session" not in imported, imported
 
 
 # --------------------------------------------------------------------------
@@ -421,6 +431,70 @@ async def test_a_chunk_reads_back_with_the_gates_verdict(client, session_for, co
 )
 async def test_a_missing_row_is_a_404(client, path: str) -> None:
     assert (await client.get(path)).status_code == 404
+
+
+async def test_a_source_says_whether_its_position_is_a_page(client, session_for, marker) -> None:
+    """`B-156`: a reader can cite a page, not a character offset, so the source page needs
+    to know which its passages carry, as a search hit already does."""
+    sess = await session_for("rw")
+    pdf, _ = await upsert_source(
+        sess,
+        f"https://{marker}.test/report.pdf",
+        checksum=f"sha256:{marker}pdf",
+        media_type="application/pdf",
+    )
+    page, _ = await upsert_source(
+        sess,
+        f"https://{marker}.test/page",
+        checksum=f"sha256:{marker}html",
+        media_type="text/html",
+    )
+    unknown, _ = await upsert_source(sess, f"https://{marker}.test/x", checksum=f"sha256:{marker}x")
+    await sess.commit()
+    try:
+        units = [
+            (await client.get(f"/api/explore/sources/{s.source_id}")).json()["page_unit"]
+            for s in (pdf, page, unknown)
+        ]
+        assert units == ["page", "offset", None]
+    finally:
+        ids = [pdf.source_id, page.source_id, unknown.source_id]
+        await sess.execute(delete(Source).where(Source.source_id.in_(ids)))
+        await sess.commit()
+
+
+async def test_a_reader_is_shown_figures_not_page_furniture(client, session_for, marker) -> None:
+    """`B-156`: logos, icons and social links are stored as figures, and a reader is not
+    shown them; they are counted instead. A caption that is only a file name is not shown
+    as one."""
+    sess = await session_for("rw")
+    source, _ = await upsert_source(
+        sess, f"https://{marker}.test/fig", checksum=f"sha256:{marker}f"
+    )
+    await replace_figures(
+        sess,
+        source.source_id,
+        [
+            FigureWrite(image_url="https://x.test/assets/logo.svg", alt_text="Agency"),
+            FigureWrite(image_url="https://x.test/img/social/facebook.png", alt_text="Facebook"),
+            FigureWrite(
+                image_url="https://x.test/up/olivia-hutcherson-0Wjcr3j8CU-unsplash.jpg",
+                alt_text="olivia hutcherson 0 Wjcr3j8CU unsplash",
+            ),
+            FigureWrite(image_url="https://x.test/up/fig3.png", caption="Ridership by month"),
+        ],
+    )
+    await sess.commit()
+    try:
+        body = (await client.get(f"/api/explore/sources/{source.source_id}/figures")).json()
+        assert body["furniture_hidden"] == 2
+        assert [f["reader_caption"] for f in body["figures"]] == [None, "Ridership by month"]
+        assert body["figures"][0]["alt_text"] == "olivia hutcherson 0 Wjcr3j8CU unsplash", (
+            "what was extracted is still returned; only the reader's caption is withheld"
+        )
+    finally:
+        await sess.execute(delete(Source).where(Source.source_id == source.source_id))
+        await sess.commit()
 
 
 async def test_a_source_with_no_chunks_is_empty_not_missing(client, session_for, marker) -> None:

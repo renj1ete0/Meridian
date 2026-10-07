@@ -23,7 +23,10 @@ from meridian_core.areaview import AreaNotFound, area_detail, areas_level, jump
 from meridian_core.bridgeview import bridge
 from meridian_core.corpusmap import DEFAULT_SAMPLE, MAX_SAMPLE, corpus_map
 from meridian_core.crawlhealth import crawl_health
+from meridian_core.crawlhealth import liveness as crawl_liveness
+from meridian_core.db import session_ro
 from meridian_core.export import to_bibtex, to_markdown
+from meridian_core.figures import is_furniture, reader_caption
 from meridian_core.mapsteer import area_steering
 from meridian_core.models import (
     AttributeDefinition,
@@ -64,6 +67,7 @@ from meridian_core.schemas.search import (
     CrawlHealthRead,
     CrawlProgressRead,
     FigureRefRead,
+    LivenessRead,
     NodeAttributeRead,
     NodeDetailRead,
     NotificationsRead,
@@ -74,13 +78,14 @@ from meridian_core.schemas.search import (
     TopicOverlapsRead,
 )
 from meridian_core.schemas.settings import DisplaySettingsRead
-from meridian_core.schemas.source import ChunkRead, SourceRead
+from meridian_core.schemas.source import ChunkRead, SourcePageRead
 from meridian_core.schemas.views import SavedViewRead, SavedViewsRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for
 from meridian_core.stats import corpus_stats
 from meridian_core.timefmt import display_zone, zone_label
 from meridian_core.topicoverlaps import topic_overlaps
 
+from ..cache import KeptByKey
 from ..deps import ReadSession
 from ..search_service import WindowTooDeep, answer_search, paged_search
 
@@ -263,22 +268,39 @@ async def explore_stats(
     return CorpusStatsRead.model_validate(await corpus_stats(sess, since=since))
 
 
+#: Seconds a projection is served before a background refresh (`B-156`).
+MAP_TTL_S = 600.0
+
+KEPT_MAP: KeptByKey[tuple[int, tuple[str, ...], tuple[str, ...]], CorpusMapRead] = KeptByKey(
+    MAP_TTL_S
+)
+
+
+async def compute_map(
+    sample: int, topics: tuple[str, ...], places: tuple[str, ...]
+) -> CorpusMapRead:
+    """One projection, on its own session: a background refresh outlives the request."""
+    async with session_ro() as sess:
+        return CorpusMapRead.model_validate(
+            await corpus_map(sess, sample=sample, topics=list(topics), places=list(places))
+        )
+
+
 @router.get("/map", response_model=CorpusMapRead)
 async def explore_map(
-    sess: ReadSession,
     sample: Annotated[int, Query(ge=1, le=MAX_SAMPLE)] = DEFAULT_SAMPLE,
     topic: Annotated[list[str] | None, Query()] = None,
     place: Annotated[list[str] | None, Query()] = None,
 ) -> CorpusMapRead:
     """The embedding space, projected to three dimensions (`P6-26`, `P6-29`).
 
-    Read-only and recomputed per request: a projection of a few thousand
-    vectors is well under a second, and caching it would mean a map that lags
-    the corpus it claims to show.
+    Kept per sample and filter for ten minutes and refreshed behind the reader (`B-156`):
+    on a real corpus a projection takes over a second, and the corpus moves over hours.
+    `as_of` says when it was computed. See docs/features/map.md#the-3d-projection.
     """
-    return CorpusMapRead.model_validate(
-        await corpus_map(sess, sample=sample, topics=topic, places=place)
-    )
+    topics = tuple(sorted(set(topic or ())))
+    places = tuple(sorted(set(place or ())))
+    return await KEPT_MAP.get((sample, topics, places), lambda: compute_map(sample, topics, places))
 
 
 @router.get("/areas", response_model=AreasRead)
@@ -341,8 +363,8 @@ async def explore_bridge(area_a: int, area_b: int, sess: ReadSession) -> BridgeR
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/sources/{source_id}", response_model=SourceRead)
-async def explore_source(source_id: int, sess: ReadSession) -> SourceRead:
+@router.get("/sources/{source_id}", response_model=SourcePageRead)
+async def explore_source(source_id: int, sess: ReadSession) -> SourcePageRead:
     """One source, with everything recorded about how it was acquired.
 
     Including `extractor` (`P1-44`) and the OCR columns.
@@ -350,7 +372,9 @@ async def explore_source(source_id: int, sess: ReadSession) -> SourceRead:
     source = await sess.get(Source, source_id)
     if source is None:
         raise HTTPException(status_code=404, detail=f"no source {source_id}")
-    return SourceRead.model_validate(source)
+    read = SourcePageRead.model_validate(source)
+    read.page_unit = page_unit_for((source.extra or {}).get("media_type"))
+    return read
 
 
 @router.get("/sources/{source_id}/chunks", response_model=SourceChunksRead)
@@ -483,7 +507,13 @@ async def explore_source_figures(source_id: int, sess: ReadSession) -> SourceFig
 
     served = _raw_is_served() and source.raw_file_path is not None
     figures = []
+    furniture = 0
     for figure in rows:
+        # `B-156`: a page's logos, icons and controls are stored as figures; a reader is not
+        # shown them. See docs/features/web-app.md#figures-furniture.
+        if is_furniture(figure.image_url, figure.caption, figure.alt_text):
+            furniture += 1
+            continue
         raw_url = None
         if served:
             # `#page=N` is what a PDF viewer reads, and it is the whole of
@@ -502,10 +532,16 @@ async def explore_source_figures(source_id: int, sess: ReadSession) -> SourceFig
                 source_title=source.title,
                 source_url=source.url,
                 raw_url=raw_url,
+                reader_caption=reader_caption(figure.caption, figure.alt_text, figure.image_url),
             )
         )
 
-    return SourceFiguresRead(source_id=source_id, figures=figures, raw_available=_raw_is_served())
+    return SourceFiguresRead(
+        source_id=source_id,
+        figures=figures,
+        raw_available=_raw_is_served(),
+        furniture_hidden=furniture,
+    )
 
 
 @router.get("/sources/{source_id}/raw")
@@ -792,6 +828,7 @@ async def explore_progress(sess: ReadSession) -> CrawlProgressRead:
         recent_domains=[domain for domain, _ in recent],
         attempts_last_hour=attempts,
         successes_last_hour=successes,
+        liveness=LivenessRead.model_validate(await crawl_liveness(sess, now=now)),
     )
 
 

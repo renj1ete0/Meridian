@@ -26,7 +26,11 @@ class CorpusStats:
     #: When these numbers were counted (`P2-18`).
     as_of: dt.datetime
 
+    #: Every source row, junk and copies included: what the crawl has fetched.
     sources: int
+    #: What a reader can find (`B-156`): not junk and not a copy of another source. The
+    #: landing and Growth both count this, so they agree. See docs/features/search.md#corpus-counts.
+    kept_sources: int
     chunks: int
     embedded_chunks: int
     duplicate_chunks: int
@@ -61,6 +65,14 @@ class CorpusStats:
         return self.chunks - self.duplicate_chunks
 
 
+def kept_sources() -> tuple:
+    """What counts as a document a reader can find: not junk, and not a copy of another.
+
+    The landing, the since-your-last-visit delta and Growth all count with it (`B-156`).
+    """
+    return (Source.retention_tier != "junk", Source.duplicate_of.is_(None))
+
+
 def live_entities() -> tuple:
     """What counts as a concept: not a note, and not merged into another node.
 
@@ -83,7 +95,9 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
     new_sources = new_chunks = None
     if since is not None:
         new_sources = await count(
-            select(func.count()).select_from(Source).where(Source.created_at > since)
+            select(func.count())
+            .select_from(Source)
+            .where(Source.created_at > since, *kept_sources())
         )
         new_chunks = await count(
             select(func.count())
@@ -113,6 +127,7 @@ async def corpus_stats(sess: AsyncSession, *, since: dt.datetime | None = None) 
             select(func.count()).select_from(Source).where(Source.places.is_(None))
         ),
         sources=await count(select(func.count()).select_from(Source)),
+        kept_sources=await count(select(func.count()).select_from(Source).where(*kept_sources())),
         # Live chunks only (`P1-32`). "How much is in here" means the text on the
         # pages now; counting retired generations would make the corpus appear
         # to grow every time a page changed.

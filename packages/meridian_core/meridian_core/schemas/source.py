@@ -10,7 +10,7 @@ import datetime as dt
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import CreateBase
-from .enums import DocKind, OcrTier, RetentionTier, SourceTier, TrustState
+from .enums import DocKind, OcrTier, PageUnit, RetentionTier, SourceTier, TrustState
 
 
 class SourceCreate(CreateBase):
@@ -110,6 +110,19 @@ class SourceRead(BaseModel):
     acronyms_harvested_at: dt.datetime | None = None
     extra: dict | None
     created_at: dt.datetime
+
+
+class SourcePageRead(SourceRead):
+    """One source as the source page reads it: the row, and what the row implies (`B-156`).
+
+    A subclass so `SourceRead` stays a mirror of the table, which `tests/unit/test_drift.py`
+    holds it to.
+    """
+
+    #: What its passages' `page_or_offset` counts: a page a reader can cite, or a character
+    #: offset that is the corpus's own bookkeeping. None when the media type is unknown. Set
+    #: from `extra['media_type']`, as search sets it on a hit.
+    page_unit: PageUnit | None = None
 
 
 class ChunkCreate(CreateBase):

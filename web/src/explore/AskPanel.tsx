@@ -79,8 +79,46 @@ function messageOf(cause: unknown, fallback: string): string {
 /** How many earlier questions show before "Show all". */
 export const EARLIER_SHOWN = 3
 
+/** Below `sm`, where the button sits over the content rather than beside it. */
+const NARROW = '(max-width: 639px)'
+
+/**
+ * Whether the floating button should step aside: on a phone, while the reader scrolls down
+ * (`B-156`). Measured at 390px wide, it covered a search box, a "Write a note" button and a
+ * table toggle as they scrolled past, and the last lines of a short screen's results. It
+ * comes back on any scroll up and at the top, so it is never more than a flick away.
+ * Listens in the capture phase because some pages scroll an inner element, not the window.
+ */
+export function useTuckedWhileScrollingDown(): boolean {
+  const [tucked, setTucked] = useState(false)
+  useEffect(() => {
+    const last = new WeakMap<EventTarget, number>()
+    const onScroll = (event: Event) => {
+      if (!window.matchMedia?.(NARROW).matches) {
+        setTucked(false)
+        return
+      }
+      const target =
+        event.target === document
+          ? (document.scrollingElement ?? document.documentElement)
+          : (event.target as Element | null)
+      if (!target) return
+      const y = (target as Element).scrollTop
+      const before = last.get(target) ?? 0
+      last.set(target, y)
+      if (y <= 8) setTucked(false)
+      else if (y > before + 4) setTucked(true)
+      else if (y < before - 4) setTucked(false)
+    }
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [])
+  return tucked
+}
+
 export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
   const { subjects } = useContext(AskContext)
+  const tucked = useTuckedWhileScrollingDown()
   const [open, setOpen] = useState(initiallyOpen)
   const [threads, setThreads] = useState<ChatThread[]>([])
   const [total, setTotal] = useState(0)
@@ -157,7 +195,11 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
         aria-label="Ask the graph"
         title="Ask the graph"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex h-11 w-11 items-center justify-center rounded-[3px] bg-accent-graph/[0.92] text-ground-deep backdrop-blur-[8px] hover:bg-accent-graph"
+        data-tucked={tucked ? 'true' : 'false'}
+        tabIndex={tucked ? -1 : undefined}
+        className={`fixed bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-[3px] bg-accent-graph/[0.92] text-ground-deep backdrop-blur-[8px] transition-[transform,opacity] duration-200 hover:bg-accent-graph sm:bottom-6 sm:right-6 ${
+          tucked ? 'pointer-events-none translate-y-[calc(100%+1rem)] opacity-0' : ''
+        }`}
       >
         <AskGlyph size={20} />
       </button>

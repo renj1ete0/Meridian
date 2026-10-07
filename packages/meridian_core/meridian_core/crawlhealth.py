@@ -172,6 +172,26 @@ async def crawl_health(sess: AsyncSession, *, now: dt.datetime | None = None) ->
         )
     ).all()
 
+    depth = await queue_depth(sess)
+    return CrawlHealth(
+        as_of=now,
+        stall_after_seconds=int(STALL_AFTER.total_seconds()),
+        hours=hours,
+        outcomes=outcomes,
+        queue={status: depth.get(status, 0) for status in TASK_STATUS.enums},
+        embedding_backlog=int(await embedding_backlog(sess)),
+        top_domains=[DomainCount(domain=d, attempts=a, succeeded=s) for d, a, s in top],
+        liveness=await liveness(sess, now=now),
+    )
+
+
+async def liveness(sess: AsyncSession, *, now: dt.datetime | None = None) -> Liveness:
+    """Whether the crawl is still fetching, as of ``now``. Reads only.
+
+    Separate from :func:`crawl_health` so the top bar's status pill can ask it on every page
+    without the day of history (`B-156`).
+    """
+    now = now or dt.datetime.now(dt.UTC)
     last = await sess.scalar(
         select(func.max(FetchAttempt.attempted_at)).where(FetchAttempt.attempted_at <= now)
     )
@@ -193,21 +213,10 @@ async def crawl_health(sess: AsyncSession, *, now: dt.datetime | None = None) ->
         )
         or 0
     )
-
-    depth = await queue_depth(sess)
-    return CrawlHealth(
-        as_of=now,
-        stall_after_seconds=int(STALL_AFTER.total_seconds()),
-        hours=hours,
-        outcomes=outcomes,
-        queue={status: depth.get(status, 0) for status in TASK_STATUS.enums},
-        embedding_backlog=int(await embedding_backlog(sess)),
-        top_domains=[DomainCount(domain=d, attempts=a, succeeded=s) for d, a, s in top],
-        liveness=Liveness(
-            state=judge(last_attempt_at=last, ready=ready, pending=pending, now=now),
-            last_attempt_at=last,
-            quiet_seconds=None if last is None else int((now - last).total_seconds()),
-            ready=ready,
-            pending=pending,
-        ),
+    return Liveness(
+        state=judge(last_attempt_at=last, ready=ready, pending=pending, now=now),
+        last_attempt_at=last,
+        quiet_seconds=None if last is None else int((now - last).total_seconds()),
+        ready=ready,
+        pending=pending,
     )

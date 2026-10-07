@@ -12,13 +12,15 @@ import {
 import { onInternalClick } from '../lib/route'
 import {
   bellState,
+  crawlStalled,
+  pillHealth,
   readSeenAt,
   runHealth,
   statusDetail,
   statusLine,
   writeSeenAt,
   type NotificationKind,
-  type RunHealth,
+  type PillHealth,
   type RunHistory,
 } from '../lib/status'
 import { THEMES, type Theme } from '../lib/theme'
@@ -202,9 +204,10 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
 // --------------------------------------------------------------------------
 // Status pill
 
-const DOT: Record<RunHealth, string> = {
+const DOT: Record<PillHealth, string> = {
   ok: 'bg-accent-graph',
   failed: 'bg-accent-attention',
+  stalled: 'bg-accent-attention',
   // Hollow, not cyan: a health check that could not run is not a pass.
   unknown: 'border border-text-faint',
 }
@@ -212,20 +215,22 @@ const DOT: Record<RunHealth, string> = {
 export function StatusPill({ progress, runs }: { progress: CrawlProgress | null; runs: RunHistory | null }) {
   const health = runHealth(runs)
   const detail = statusDetail(progress, health, runs)
+  const shown = pillHealth(progress, health)
 
   return (
     <a
       href="/admin"
       onClick={onInternalClick('/admin')}
       title={detail}
-      data-health={health}
+      data-health={shown}
       className="hidden items-center gap-[7px] border border-line px-2.5 py-[5px] font-mono text-[10.5px] leading-none whitespace-nowrap text-text-muted hover:border-line-strong md:flex"
     >
-      <span aria-hidden="true" className={`block h-1.5 w-1.5 shrink-0 rounded-full ${DOT[health]}`} />
+      <span aria-hidden="true" className={`block h-1.5 w-1.5 shrink-0 rounded-full ${DOT[shown]}`} />
       <span>{progress ? statusLine(progress) : 'status unavailable'}</span>
       {/* §5: state in form, not only colour. The brass dot alone would be
           invisible to a reader who cannot see brass. */}
       {health === 'failed' ? <span className="text-accent-attention">· run failed</span> : null}
+      {crawlStalled(progress) ? <span className="text-accent-attention">· crawl stalled</span> : null}
       <span className="sr-only">. {detail}</span>
     </a>
   )

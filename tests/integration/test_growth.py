@@ -232,3 +232,29 @@ def test_the_history_backfill_uses_the_weak_rule() -> None:
         .glob("migrations/versions/*map_build_history.py")
     )
     assert f"a.sources < {WEAK_BELOW_SOURCES}" in migration.read_text()
+
+
+async def test_the_landing_counts_what_growth_counts(sess, topics) -> None:
+    """`B-156`: the landing said a fifth more documents than Growth, because it counted junk
+    and copies. Both now count with `stats.kept_sources`, so a reader moving between them
+    sees one number."""
+    from meridian_core.stats import corpus_stats
+
+    a, _ = topics
+    before = await corpus_stats(sess)
+    original = await page(sess, utc(6, 4), [a])
+    await page(sess, utc(6, 5), [a], junk=True)
+    copy = await page(sess, utc(6, 6), [a])
+    await sess.execute(
+        update(Source)
+        .where(Source.source_id == copy.source_id)
+        .values(duplicate_of=original.source_id, duplicate_reason="exact")
+    )
+    after = await corpus_stats(sess)
+    assert after.sources - before.sources == 3, "every row is still counted as fetched"
+    assert after.kept_sources - before.kept_sources == 1, "a reader can find one of them"
+
+    everything = await growth(
+        sess, zone=ZONE, days=None, now=dt.datetime(2999, 1, 1, tzinfo=dt.UTC)
+    )
+    assert everything.sources.total == after.kept_sources

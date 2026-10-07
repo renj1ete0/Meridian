@@ -19,6 +19,24 @@ export type RunHistory =
 export type RunHealth = 'ok' | 'failed' | 'unknown'
 
 /**
+ * What the pill's dot shows: the worse of synthesis and the crawl (`B-156`). A failed run
+ * outranks a stalled crawl only in which word comes first; both turn the dot brass.
+ */
+export type PillHealth = RunHealth | 'stalled'
+
+/** Whether the crawl has stopped with work it could be doing. */
+export function crawlStalled(progress: CrawlProgress | null): boolean {
+  return progress?.liveness?.state === 'stalled'
+}
+
+/** The pill's state, from run health and the crawl's liveness. */
+export function pillHealth(progress: CrawlProgress | null, health: RunHealth): PillHealth {
+  if (health === 'failed') return 'failed'
+  if (crawlStalled(progress)) return 'stalled'
+  return health
+}
+
+/**
  * The most recent run that has finished, judged. A running run is skipped, so an earlier
  * failure still shows; `deferred` is not a failure.
  */
@@ -63,6 +81,18 @@ export function statusDetail(progress: CrawlProgress | null, health: RunHealth, 
         ? 'No fetch attempted in the last hour.'
         : `${progress.successes_last_hour.toLocaleString('en')} of ${progress.attempts_last_hour.toLocaleString('en')} fetches succeeded in the last hour.`,
     )
+    const live = progress.liveness
+    if (live?.state === 'stalled') {
+      const quiet =
+        live.quiet_seconds === null
+          ? 'nothing has ever been fetched'
+          : `no fetch for ${Math.max(1, Math.round(live.quiet_seconds / 60)).toLocaleString('en')} min`
+      parts.push(`The crawl has stalled: ${quiet}, with ${live.ready.toLocaleString('en')} pages ready.`)
+    } else if (live?.state === 'waiting') {
+      parts.push('Every queued page is waiting out a back-off.')
+    } else if (live?.state === 'idle') {
+      parts.push('Nothing is queued.')
+    }
   }
   if (health === 'failed') parts.push('The most recent synthesis run failed.')
   if (health === 'ok') parts.push('No failed synthesis run.')

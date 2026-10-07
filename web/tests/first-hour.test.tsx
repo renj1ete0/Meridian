@@ -32,6 +32,7 @@ function progress(over: Partial<CrawlProgress> = {}): CrawlProgress {
     recent_domains: [],
     attempts_last_hour: 0,
     successes_last_hour: 0,
+    liveness: null,
     ...over,
   }
 }

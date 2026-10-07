@@ -188,7 +188,7 @@ export function CoverageStrip({ answer }: { answer: Answer }) {
               data-coverage="unplaced"
               className="inline-flex items-center gap-1.5 border border-line px-2 py-[3px] font-mono text-[10.5px] leading-[1.4] text-text-faint hover:border-line-strong"
             >
-              <span className="tabular-nums">{answer.unplaced.sources}</span> name no place
+              <span className="tabular-nums">{answer.unplaced.sources}</span> with no place
             </a>
           </li>
         ) : null}

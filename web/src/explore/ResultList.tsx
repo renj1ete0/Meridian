@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { citablePosition } from '../lib/position'
 import { plainLetters, readable } from '../lib/readable'
 import { hrefForSource, onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
@@ -39,6 +40,7 @@ export function passageOnlyTopics(hit: Pick<SearchHit, 'topic_labels' | 'passage
 }
 
 function Provenance({ hit }: { hit: SearchHit }) {
+  const position = citablePosition(hit.page_unit, hit.page_or_offset)
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
       {/* Two destinations, kept distinct: the domain goes to the live page,
@@ -54,15 +56,9 @@ function Provenance({ hit }: { hit: SearchHit }) {
       </a>
       <TierChip tier={hit.source_tier} />
       <span className={META}>{hit.publication_date ?? 'no date'}</span>
-      {hit.page_or_offset !== null ? (
-        // `P2-18` gave the hit a `page_unit`, so this can name the number
-        // instead of hedging. `null` still means the source's media type was
-        // never recorded — falling back to both names there is honest, where
-        // picking one would mislabel a citation someone will try to follow.
-        <span className={META}>
-          {hit.page_unit ?? 'page/offset'} {hit.page_or_offset}
-        </span>
-      ) : null}
+      {/* A page is citable; a character offset is bookkeeping and stays off a
+          reader's card (`B-156`). */}
+      {position !== null ? <span className={META}>{position}</span> : null}
       {/* Topics, when the source has been examined for them (`P2-14`). A hit
           whose topic a reader cannot see is a filter they have to trust rather
           than check. Nothing is shown when the list is null or empty: neither

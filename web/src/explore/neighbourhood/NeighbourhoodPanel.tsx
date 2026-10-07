@@ -96,12 +96,24 @@ export function relationText(relation: Relation): string {
 export function basisText(basis: SimilarBasis): string {
   switch (basis) {
     case 'node':
-      return 'Measured from the node’s name.'
+      return 'Closeness is judged from the concept’s name.'
     case 'term':
-      return 'Measured from the term as typed.'
+      return 'Closeness is judged from the words as typed.'
     default:
-      return 'Not measured: no embedding was available for this term, so nothing here says what reads alike.'
+      return 'Not measured: closeness in meaning could not be worked out for these words, so nothing here says what reads alike.'
   }
+}
+
+/**
+ * A similarity in words for a reader. The number stays in the tooltip, where an operator can
+ * still read it; on the page, two decimals of cosine say less than "very close".
+ *
+ * @param similarity - Cosine similarity, 0–1.
+ */
+export function closeness(similarity: number): string {
+  if (similarity >= 0.85) return 'very close'
+  if (similarity >= 0.75) return 'close'
+  return 'related'
 }
 
 const W = 440
@@ -319,7 +331,9 @@ function SimilarList({ similar, total }: { similar: SimilarTerm[]; total: number
           style={DASHED}
         >
           <NodeLink term={term} className="min-w-0 text-[13px] leading-snug text-text-muted hover:text-accent-graph" />
-          <span className={`${META} shrink-0 tabular-nums`}>{term.similarity.toFixed(2)}</span>
+          <span className={`${META} shrink-0`} title={`similarity ${term.similarity.toFixed(2)}`}>
+            {closeness(term.similarity)}
+          </span>
         </li>
       ))}
       {total > similar.length ? (
@@ -370,7 +384,7 @@ function Body({
           </>
         ) : (
           <p className="text-[13px] leading-[1.55] text-text-muted">
-            No node is named “{data.term}”, so nothing can be stated about it yet.
+            No concept is called “{data.term}” yet, so no passage has been read as linking it to anything.
           </p>
         )}
       </div>
@@ -378,7 +392,7 @@ function Body({
       {!data.anchor && data.candidates.length > 0 ? (
         <div className="flex flex-col gap-2">
           <span className={LABEL}>
-            {/\s/.test(data.term.trim()) ? 'Nodes its words name' : 'Nodes with that in their name'}
+            {/\s/.test(data.term.trim()) ? 'Concepts its words name' : 'Concepts with that in their name'}
           </span>
           <div className="flex flex-wrap gap-1.5">
             {data.candidates.map((term) => (
@@ -413,7 +427,7 @@ function Body({
               ? data.similar.length > 0
                 ? 'No passage states a link to this yet. What reads alike is below.'
                 : 'No passage states a link to this yet.'
-              : 'Nothing to list: links are stated between nodes.'}
+              : 'Nothing to list: links are stated between concepts.'}
           </p>
         )}
       </section>
@@ -426,7 +440,9 @@ function Body({
         {measured && data.similar.length > 0 ? <SimilarList similar={data.similar} total={data.similar_total} /> : null}
         {measured && data.similar.length === 0 ? (
           <p className="text-[13px] leading-[1.55] text-text-muted">
-            No node reads alike above {data.similar_floor.toFixed(2)}.
+            <span title={`no similarity above ${data.similar_floor.toFixed(2)}`}>
+              No concept is close enough in meaning to list.
+            </span>
           </p>
         ) : null}
         <p className={META}>{basisText(data.similar_basis)}</p>
@@ -442,7 +458,9 @@ function Body({
                 <div className="flex flex-wrap items-center gap-2">
                   <TierChip tier={hit.source_tier} />
                   <span className={META}>{hit.publication_date ?? 'no date'}</span>
-                  <span className={`${META} tabular-nums`}>{similarity.toFixed(2)}</span>
+                  <span className={META} title={`similarity ${similarity.toFixed(2)}`}>
+                    {closeness(similarity)}
+                  </span>
                   <a
                     href={hrefForSource(hit.source_id)}
                     onClick={onInternalClick(hrefForSource(hit.source_id))}

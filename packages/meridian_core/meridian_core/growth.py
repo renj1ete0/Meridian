@@ -35,7 +35,7 @@ from .schemas.growth import (
     MapSize,
     TopicGrowth,
 )
-from .stats import live_entities
+from .stats import kept_sources, live_entities
 
 #: Windows the page offers; None is all time.
 WINDOWS: tuple[int | None, ...] = (7, 30, None)
@@ -47,7 +47,7 @@ def _local_day(column, zone: str):
 
 
 def _kept():
-    return (Source.retention_tier != "junk", Source.duplicate_of.is_(None))
+    return kept_sources()
 
 
 def window_start(

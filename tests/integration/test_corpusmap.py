@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import delete, select
 
 from api.main import create_app
+from api.routes.explore import KEPT_MAP
 from meridian_core.chunks import ChunkWrite, replace_chunks, store_embeddings
 from meridian_core.corpusmap import MAX_SAMPLE, corpus_map
 from meridian_core.db import dispose_engines
@@ -45,6 +46,8 @@ def topic() -> str:
 
 @pytest.fixture
 async def client() -> AsyncIterator[httpx.AsyncClient]:
+    # The route keeps answers (`B-156`); a test must not read another test's.
+    KEPT_MAP.forget()
     app = create_app()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://api.test"
@@ -165,6 +168,19 @@ async def test_the_endpoint_serves_the_map_through_the_read_only_role(
     for point in body["points"]:
         for axis in ("x", "y", "z"):
             assert -1.0 <= point[axis] <= 1.0, (axis, point)
+
+
+async def test_the_endpoint_keeps_its_answer_and_reads_filters_as_a_set(
+    client, topic, corpus
+) -> None:
+    """`B-156`: a projection takes over a second on a real corpus, so it is kept. A second
+    read is the kept answer (same `as_of`), and the same filters in another order or repeated
+    are the same request rather than another computation."""
+    first = (await client.get("/api/explore/map", params={"topic": topic})).json()
+    again = (await client.get("/api/explore/map", params={"topic": [topic, topic]})).json()
+
+    assert again["as_of"] == first["as_of"]
+    assert again["points"] == first["points"]
 
 
 @pytest.mark.parametrize("sample", ["0", str(MAX_SAMPLE + 1), "many"])

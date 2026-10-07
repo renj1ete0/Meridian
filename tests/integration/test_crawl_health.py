@@ -295,3 +295,19 @@ async def test_the_route_serves_the_full_shape_on_the_read_only_role() -> None:
     assert set(body["queue"]) == set(TASK_STATUS.enums)
     assert body["liveness"]["state"] in ("crawling", "stalled", "waiting", "idle")
     assert body["stall_after_seconds"] == int(STALL_AFTER.total_seconds())
+
+
+async def test_the_progress_route_carries_the_same_verdict() -> None:
+    """`B-156`: the status pill reads `/progress` on every page, and a stalled crawl must show
+    there, not only on Admin's crawl-health panel. Both routes judge with one function."""
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://api.test") as c:
+            progress = (await c.get("/api/explore/progress")).json()
+            health = (await c.get("/api/explore/crawl-health")).json()
+    finally:
+        await dispose_engines()
+
+    assert progress["liveness"]["state"] == health["liveness"]["state"]
+    assert progress["liveness"]["ready"] == health["liveness"]["ready"]

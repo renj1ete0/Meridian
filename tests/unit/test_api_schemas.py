@@ -290,6 +290,7 @@ def test_nobody_asked_and_nothing_arrived_are_different_answers() -> None:
     never_asked = CorpusStats(
         as_of=dt.datetime.now(dt.UTC),
         sources=1,
+        kept_sources=1,
         chunks=1,
         embedded_chunks=1,
         duplicate_chunks=0,

@@ -237,6 +237,11 @@ be two queries that can disagree.
   must be able to tell "not collected" from "collected and filtered" (§12.5).
 - **"New since" is None when nobody asked** (`P6-11`), not 0: 0 answers a question about a
   moment when nothing changed, and a returning reader shown "0 new" would believe it.
+- **Documents are the kept ones** (`B-156`). `kept_sources` counts sources that are neither junk
+  nor a copy of another, by `stats.kept_sources()`, the predicate Growth counts with; the
+  landing, About and "new since" use it. `sources` stays as every row, for operator surfaces
+  where what was fetched and judged junk matters. Before this the landing counted a fifth
+  more documents than Growth.
 - **Topics come from `topic_config`** (`P6-24`), most-attended first, on the stats response so
   Explore needs no second request on first paint. Reading the labels present on sources would
   need `DISTINCT unnest(topic_labels)` over the whole corpus, which no GIN index answers.

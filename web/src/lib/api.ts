@@ -148,7 +148,10 @@ export interface CorpusStats {
   /** When the counts were taken (`P2-18`) — a client cannot otherwise tell a
    *  cached figure from a fresh one. ISO 8601. */
   as_of: string
+  /** Every source row, junk and copies included. */
   sources: number
+  /** Documents a reader can find: not junk, not a copy (`B-156`). What the landing shows. */
+  kept_sources: number
   chunks: number
   embedded_chunks: number
   duplicate_chunks: number
@@ -185,6 +188,7 @@ export const PLACE_FIELDS = ['code', 'name'] as const
 export const CORPUS_STATS_FIELDS = [
   'as_of',
   'sources',
+  'kept_sources',
   'chunks',
   'embedded_chunks',
   'duplicate_chunks',
@@ -297,6 +301,15 @@ export interface Source {
   extra: Record<string, unknown> | null
   created_at: string
 }
+
+/** Mirrors `SourcePageRead`: the row, and what it implies for the source page (`B-156`). */
+export type SourceWithPage = Source & {
+  /** What its passages' `page_or_offset` counts: a citable page, or bookkeeping. Null when unknown. */
+  page_unit: PageUnit | null
+}
+
+/** `SourcePageRead`'s own fields, beyond `SourceRead`'s. */
+export const SOURCE_PAGE_FIELDS = ['page_unit'] as const
 
 export const SOURCE_FIELDS = [
   'source_id',
@@ -615,8 +628,8 @@ export function getTopicOverlaps(init?: RequestInit): Promise<TopicOverlaps> {
   return request<TopicOverlaps>('/api/explore/topic-overlaps', init)
 }
 
-export function getSource(sourceId: number, init?: RequestInit): Promise<Source> {
-  return request<Source>(`/api/explore/sources/${sourceId}`, init)
+export function getSource(sourceId: number, init?: RequestInit): Promise<SourceWithPage> {
+  return request<SourceWithPage>(`/api/explore/sources/${sourceId}`, init)
 }
 
 export function getSourceChunks(
@@ -650,6 +663,11 @@ export interface FigureRef {
    * when this deployment does not serve raw files, so no caption carries a dead link.
    */
   raw_url: string | null
+  /**
+   * The caption or alt text a reader is shown (`B-156`): null when both are only the image's
+   * file name. `caption` and `alt_text` stay as extracted.
+   */
+  reader_caption: string | null
 }
 
 export const FIGURE_REF_FIELDS = [
@@ -662,6 +680,7 @@ export const FIGURE_REF_FIELDS = [
   'source_title',
   'source_url',
   'raw_url',
+  'reader_caption',
 ] as const
 
 /** Mirrors `SourceFiguresRead`. */
@@ -669,9 +688,11 @@ export interface SourceFigures {
   source_id: number
   figures: FigureRef[]
   raw_available: boolean
+  /** Logos, icons and controls left out of `figures` (`B-156`), counted so their absence is said. */
+  furniture_hidden: number
 }
 
-export const SOURCE_FIGURES_FIELDS = ['source_id', 'figures', 'raw_available'] as const
+export const SOURCE_FIGURES_FIELDS = ['source_id', 'figures', 'raw_available', 'furniture_hidden'] as const
 
 export async function getSourceFigures(id: number, init?: RequestInit): Promise<SourceFigures> {
   return request<SourceFigures>(`/api/explore/sources/${id}/figures`, init)
@@ -1449,6 +1470,7 @@ export const CRAWL_PROGRESS_FIELDS = [
   'recent_domains',
   'attempts_last_hour',
   'successes_last_hour',
+  'liveness',
 ] as const
 
 /** Mirrors `CrawlProgressRead`. */
@@ -1458,6 +1480,8 @@ export interface CrawlProgress {
   recent_domains: readonly string[]
   attempts_last_hour: number
   successes_last_hour: number
+  /** Whether the crawl is still fetching (`B-156`): the pill's crawl half. Null when not computed. */
+  liveness: Liveness | null
 }
 
 export function getCrawlProgress(init?: RequestInit): Promise<CrawlProgress> {

@@ -117,7 +117,10 @@ class CorpusStatsRead(BaseModel):
     #: When these numbers were counted (`P2-18`). A client cannot
     #: otherwise tell a cached count from a fresh one.
     as_of: dt.datetime
+    #: Every source row, junk and copies included.
     sources: int
+    #: Documents a reader can find: not junk, not a copy (`B-156`). What the landing shows.
+    kept_sources: int
     chunks: int
     embedded_chunks: int
     duplicate_chunks: int
@@ -126,9 +129,9 @@ class CorpusStatsRead(BaseModel):
     edges: int
     contested_edges: int
 
-    #: The delta a returning reader asked for (`P6-11`). None means they did not
-    #: ask; 0 means nothing arrived, and a landing page must not show the first
-    #: as the second.
+    #: The delta a returning reader asked for (`P6-11`), in kept documents (`B-156`). None
+    #: means they did not ask; 0 means nothing arrived, and a landing page must not show the
+    #: first as the second.
     new_sources: int | None = None
     new_chunks: int | None = None
 
@@ -184,6 +187,10 @@ class FigureRefRead(BaseModel):
     #: None when raw files are not served — see the class docstring.
     raw_url: str | None = None
 
+    #: The caption or alt text a reader is shown: None when both are only the image's file
+    #: name (`B-156`). `caption` and `alt_text` stay as extracted.
+    reader_caption: str | None = None
+
 
 class SourceFiguresRead(BaseModel):
     source_id: int
@@ -191,6 +198,9 @@ class SourceFiguresRead(BaseModel):
     #: Whether this deployment serves raw files at all, so a client can explain
     #: an absent link rather than showing a broken one.
     raw_available: bool
+    #: Logos, icons and controls left out of `figures` (`B-156`): counted, so their absence
+    #: is said rather than silent.
+    furniture_hidden: int = 0
 
 
 class NotificationsRead(BaseModel):
@@ -284,6 +294,10 @@ class CrawlProgressRead(BaseModel):
     #: same attempt count and want opposite reactions from the reader.
     attempts_last_hour: int = 0
     successes_last_hour: int = 0
+
+    #: Whether the crawl is still fetching (`B-156`): the status pill's crawl half. None
+    #: when it was not computed.
+    liveness: LivenessRead | None = None
 
 
 class HourBucketRead(BaseModel):

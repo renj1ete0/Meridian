@@ -55,6 +55,7 @@ const SOURCE = {
   place_evidence: null,
   trust_state: 'cleared' as const,
   acronyms_harvested_at: null,
+  page_unit: 'page' as const,
   extra: null,
   created_at: '2026-09-01T00:00:00Z',
 }
@@ -88,7 +89,12 @@ beforeEach(() => {
     offset: 0,
     has_more: false,
   })
-  vi.mocked(getSourceFigures).mockResolvedValue({ source_id: 7, figures: [], raw_available: false })
+  vi.mocked(getSourceFigures).mockResolvedValue({
+    source_id: 7,
+    figures: [],
+    raw_available: false,
+    furniture_hidden: 0,
+  })
 })
 
 describe('what a reader arriving at a citation needs', () => {
@@ -97,9 +103,35 @@ describe('what a reader arriving at a citation needs', () => {
 
     expect(await screen.findByText('Annual transport report')).toBeTruthy()
     // `P1-44`. A source whose extractor failed and one that simply had no text
-    // are indistinguishable without this.
-    expect(screen.getByText(/read by pdftotext/)).toBeTruthy()
+    // are indistinguishable without this; it is kept, in the record details (`B-156`).
+    const details = screen.getByText(/record details/).closest('details')!
+    expect(details.textContent).toContain('pdftotext')
+    expect(details.textContent).toContain('7')
+    expect(details.open).toBe(false)
     expect(screen.getByText(/Government/i)).toBeTruthy()
+  })
+
+  it('keeps the corpus’s bookkeeping off the reader’s page (B-156)', async () => {
+    render(<SourcePage sourceId={7} />)
+    await screen.findByText(/A passage about modal share/)
+
+    const article = document.querySelector('article')!
+    const outsideDetails = Array.from(article.childNodes)
+      .map((node) => (node as HTMLElement).textContent ?? '')
+      .join(' ')
+      .replace(screen.getByText(/record details/).closest('details')!.textContent ?? '', '')
+    expect(outsideDetails).not.toMatch(/source 7|read by|chunk 100/)
+    // The breadcrumb names the site, and a paginated source's passage says its page.
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toContain('example.test')
+    expect(screen.getByText('page 4')).toBeTruthy()
+    expect(screen.getByText('page 4').getAttribute('title')).toBe('chunk 100 · at 4')
+  })
+
+  it('names no position for a page whose offset is bookkeeping', async () => {
+    vi.mocked(getSource).mockResolvedValue({ ...SOURCE, page_unit: 'offset' })
+    render(<SourcePage sourceId={7} />)
+    await screen.findByText(/A passage about modal share/)
+    expect(screen.queryByText(/page 4|at 4/)).toBeNull()
   })
 
   it('shows the passages the corpus actually holds', async () => {

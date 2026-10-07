@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.164.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.164.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1658,8 +1658,19 @@ deploy runbook whose first two commands could not work (`B-17`).
       *promising* until they have one. `requeue` hourly. Found: `requeue` dropped every score
       field but the counts, so vouches were lost on each run since `v0.163.0`; fixed. Left: drift
       within a host (a recency window), if loop runs keep showing it
-- [ ] `B-157` **Map field circles overlap; some field names look off-corpus** — from the site
-      review (2026-10-07): layout spacing and the naming of regions need their own look
+- [ ] `B-157` **Map fields overlap, and some are named off-corpus** — from the 2026-10-07 site
+      review. On the Fields level, circles overlap (Emergency Medical Services over Management
+      Information Systems and Artificial Intelligence; Library and Information Sciences over
+      Economics), and some field names seem far from the corpus ("Geometry and Topology",
+      "Algebra and Number Theory", "Speech and Hearing"). Needs its own design work: the layout's
+      spacing at each level, and whether a field named from a few passages should be named at all
+- [x] `B-156` **The site review's reader fixes** — `v0.164.1`. Neighbourhood panel and Answer
+      chip in reader words; the source page's and result cards' bookkeeping folded into "record
+      details" and tooltips, with a page shown only when it is citable (`SourcePageRead.page_unit`);
+      logos and icons left out of figures and file names not shown as captions (rules measured on
+      40,000 stored figures); a stalled crawl in the status pill; the Ask button stepping aside on
+      a phone's scroll down; the 3D map kept and its vectors decoded in C; the landing counting
+      kept documents as Growth does
 - [x] `B-154` **Empty pages counted as worker errors** — `v0.163.4`. All 40 errors in run 17
       were trafilatura reporting empty or unparseable pages at ERROR, which the extractor already
       records; it is held at CRITICAL now

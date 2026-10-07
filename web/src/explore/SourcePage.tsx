@@ -9,7 +9,9 @@ import {
   type Chunk,
   type NoteDraft,
   type Source,
+  type SourceWithPage,
 } from '../lib/api'
+import { citablePosition } from '../lib/position'
 import { readable } from '../lib/readable'
 import { onInternalClick } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
@@ -48,7 +50,7 @@ function useResource<T>(load: (signal: AbortSignal) => Promise<T>, key: unknown)
 }
 
 export function SourcePage({ sourceId }: { sourceId: number }) {
-  const source = useResource<Source>((signal) => getSource(sourceId, { signal }), sourceId)
+  const source = useResource<SourceWithPage>((signal) => getSource(sourceId, { signal }), sourceId)
   const chunks = useResource((signal) => getSourceChunks(sourceId, {}, { signal }), sourceId)
   const figures = useResource((signal) => getSourceFigures(sourceId, { signal }), sourceId)
 
@@ -110,7 +112,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
           Explore
         </a>
         <span aria-hidden="true">›</span>
-        <span className="text-text">source {it.source_id}</span>
+        <span className="text-text">{hostOf(it.url)}</span>
       </nav>
 
       <header className="mt-5 flex flex-col gap-3 border-b border-line pb-6">
@@ -123,9 +125,6 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
           {it.publication_date !== null ? <span className={META}>{it.publication_date}</span> : null}
           {it.publisher ? <span className={META}>{it.publisher}</span> : null}
           {it.doi !== null ? <span className={META}>doi {it.doi}</span> : null}
-          {/* `P1-44`. A source whose extractor says `pdftotext-failed` and one
-              that simply had no text look identical without this. */}
-          {it.extractor !== null ? <DataChip>read by {it.extractor}</DataChip> : null}
           {!it.text_available ? <DataChip>no extractable text</DataChip> : null}
           {(it.topic_labels ?? []).map((topic) => (
             <DataChip key={topic}>{topic}</DataChip>
@@ -139,6 +138,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
         >
           {it.url}
         </a>
+        <RecordDetails source={it} />
       </header>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -159,6 +159,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
           {chunks.status === 'ready' ? (
             <Passages
               chunks={chunks.data.chunks}
+              pageUnit={source.status === 'ready' ? source.data.page_unit : null}
               citing={citing}
               onCite={(chunkId) =>
                 setCiting((current) =>
@@ -181,8 +182,8 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
                   wants the habit formed before the graph exists. The passages
                   are the thread back, and they are the part that would be
                   unrecoverable if this screen did not offer it. */}
-              Tick the passages it comes from. A note needs no node to attach to — that is the point of having it before
-              the graph exists.
+              Tick the passages it comes from. A note needs no concept to attach to — that is the point of having it
+              before the graph exists.
             </p>
             <NoteComposer citing={citing} busy={writing} error={writeError} onWrite={onWrite} />
             {kept ? (
@@ -194,7 +195,11 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
 
           {figures.status === 'ready' ? (
             <section className="flex flex-col gap-2.5">
-              <FiguresPanel figures={figures.data.figures} rawAvailable={figures.data.raw_available} />
+              <FiguresPanel
+                figures={figures.data.figures}
+                rawAvailable={figures.data.raw_available}
+                furnitureHidden={figures.data.furniture_hidden}
+              />
             </section>
           ) : null}
         </aside>
@@ -211,12 +216,58 @@ const LABEL = 'font-mono text-[9px] font-medium uppercase leading-none tracking-
 
 const META = 'font-mono text-[10.5px] text-text-faint'
 
+/** The host, for the breadcrumb: a reader knows a site, not a row number. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+/**
+ * The corpus's own bookkeeping about a source, folded away from a reader (`B-156`): its id,
+ * which tool read it (`P1-44`: a failed extractor and a document with no text look alike
+ * without it), and its language and how that was found.
+ */
+export function RecordDetails({ source }: { source: Source }) {
+  const languageFrom = (source.extra as { language_from?: string } | null)?.language_from
+  return (
+    <details className="group font-mono text-[10.5px] text-text-faint">
+      <summary className="w-fit cursor-pointer list-none hover:text-text-muted">
+        record details <span className="inline-block transition-transform group-open:rotate-90">›</span>
+      </summary>
+      <dl className="mt-2 grid w-fit grid-cols-[auto_auto] gap-x-4 gap-y-1">
+        <dt>source</dt>
+        <dd className="tabular-nums text-text-muted">{source.source_id}</dd>
+        {source.extractor !== null ? (
+          <>
+            <dt>read by</dt>
+            <dd className="text-text-muted">{source.extractor}</dd>
+          </>
+        ) : null}
+        {source.language !== null ? (
+          <>
+            <dt>language</dt>
+            <dd className="text-text-muted">
+              {source.language}
+              {languageFrom === 'text' ? ' (read from the text)' : ''}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+    </details>
+  )
+}
+
 function Passages({
   chunks,
+  pageUnit,
   citing,
   onCite,
 }: {
   chunks: readonly Chunk[]
+  pageUnit: SourceWithPage['page_unit']
   citing: readonly number[]
   onCite: (chunkId: number) => void
 }) {
@@ -249,12 +300,21 @@ function Passages({
                 />
                 cite
               </label>
-              <span>chunk {chunk.chunk_id}</span>
-              {chunk.page_or_offset !== null ? <span>at {chunk.page_or_offset}</span> : null}
+              {/* A page is citable; the chunk id and a character offset are bookkeeping,
+                  kept within reach of an operator's hover (`B-156`). */}
+              <span
+                title={`chunk ${chunk.chunk_id}${chunk.page_or_offset !== null ? ` · at ${chunk.page_or_offset}` : ''}`}
+              >
+                {citablePosition(pageUnit, chunk.page_or_offset) ?? ''}
+              </span>
               {/* `P2-03`'s verdict. §12.5: a filtered near-duplicate and a
                   never-crawled page are indistinguishable otherwise, and only
                   one is worth investigating. */}
-              {chunk.duplicate_of !== null ? <DataChip>duplicate of {chunk.duplicate_of}</DataChip> : null}
+              {chunk.duplicate_of !== null ? (
+                <span title={`duplicate of chunk ${chunk.duplicate_of}`}>
+                  <DataChip>a copy of an earlier passage</DataChip>
+                </span>
+              ) : null}
             </p>
           </li>
         )

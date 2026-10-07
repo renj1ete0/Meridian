@@ -45,9 +45,9 @@ import { findHref, findParams } from '../lib/topicweb'
 /** §12.5's counts, from what `/stats` actually returns. */
 function figuresFrom(stats: CorpusStats): CorpusFigures {
   return {
-    // Documents, not chunks. A reader asking how much is in here means sources;
-    // chunk count is an artefact of how they were cut up.
-    documents: stats.sources,
+    // Documents, not chunks: a chunk count is an artefact of how they were cut up. And the
+    // ones a reader can find, as Growth counts them, not junk and copies too (`B-156`).
+    documents: stats.kept_sources,
     nodes: stats.entities,
     edges: stats.edges,
     contested: stats.contested_edges,

@@ -67,6 +67,14 @@ every page scroll sideways on a phone:
 There is no phone mock; a page is checked at 390px by measuring
 `document.documentElement.scrollWidth` against the window in a headless browser.
 
+**The Ask button steps aside while a reader scrolls down** (`B-156`). On a phone it floats over
+the content rather than beside it: at 390px it covered Find's term box, a source page's "Write
+a note" and Growth's table toggle as they scrolled past, and the last lines of a short screen's
+results. Below `sm` it slides away on a scroll down and returns on any scroll up or at the top;
+it listens in the capture phase because some pages (the node workspace) scroll an inner
+element, not the window. Checked by scrolling each page at 390×844 and 390×667 in a headless
+browser and testing every control's box against the button's.
+
 ### The shell
 
 §12.6 splits the interface into Explore and Admin, the same split the API draws:
@@ -296,6 +304,12 @@ honest "don't know".
   fetch figure says `idle` when nothing was attempted, because 0% would read as every fetch
   failing. The time shown is when the counts were taken, not the wall clock: a current time
   over hour-old counts would vouch for them.
+- **A stalled crawl shows too** (`B-156`). The pill once reported synthesis only: it stayed
+  cyan while Crawl health said "Stalled — no fetch in 32 min". `/api/explore/progress` now
+  carries the same liveness verdict as `/crawl-health` (one function, `crawlhealth.liveness`),
+  and the dot is the worse of the two: brass for a failed run or a stalled crawl, with
+  "· crawl stalled" beside "· run failed" in words. The tooltip says how long it has been quiet
+  and how many pages are ready; a crawl backing off or with nothing queued is not a stall.
 - **The bell** counts notifications that arrived since this reader last opened the panel,
   rather than the server's `unread`, which nothing in the product clears and so only grows.
   Opening the panel is the acknowledgement; §8 has the panel filter by type, not read state,
@@ -445,9 +459,12 @@ API did not answer". `contested` carries the dagger as text beside its brass fig
 colour-blind to brass would otherwise lose the distinction. Both only above zero.
 
 "Concepts" counts nodes that are neither notes nor merged into another node
-(`stats.live_entities`), the rule Growth uses, so the landing and Growth agree. Sources are
-counted differently on purpose: the landing counts every document, Growth only those kept (not
-junk, not copies), and says "sources kept".
+(`stats.live_entities`), the rule Growth uses, so the landing and Growth agree. **Sources too**
+(`B-156`): the landing, About and the since-your-last-visit delta count `stats.kept_sources`,
+documents that are neither junk nor a copy of another, as Growth does. They had counted every
+source row, a fifth more than Growth, and a reader moving between the two saw two answers to
+"how much is here". The raw row count (`sources`) stays in the payload for operator surfaces,
+where fetched-but-junk matters.
 
 ### Where you were
 
@@ -507,7 +524,15 @@ chunks in document order, figures with captions, and §12.5's exports, all of wh
 endpoints and nowhere to be shown. **Provenance is the page, not a footnote**: tier, date, DOI
 and how the text was extracted are in the header, because "what is this and how do I know" is
 the question a reader arrives with, and `extractor` (`P1-44`) separates a document that had no
-text from one whose extractor fell over. **Annotation lives here** (`P6-05`), since this is where
+text from one whose extractor fell over.
+
+**The corpus's bookkeeping is folded away** (`B-156`). The breadcrumb names the site, not the row
+("source 46231"); the source id, the extractor and the language (and whether it was read from
+the text) sit under a "record details" disclosure. A passage shows its page when its document is
+paginated (`page_unit`, now on the source as on a search hit) and nothing otherwise: a character
+offset is bookkeeping, not a citation. The chunk id and offset stay on the position's tooltip,
+and a near-duplicate says "a copy of an earlier passage" with the id on hover. Result cards
+follow the same rule: "page 12", never "offset 0". **Annotation lives here** (`P6-05`), since this is where
 reading happens; ticking passages puts the citations on a note without copying chunk ids by
 hand, the version of the feature that would not get used.
 
@@ -521,6 +546,24 @@ figure"), so the caption is the content and the links make it checkable. There a
 `image_url` is the picture where the publisher has it, live and liable to move; `raw_url` is
 this corpus's own copy at the caption's page, which is what §5.4 keeps raw files for, since link
 rot is the binding reason and a local copy keeps a citation checkable years later.
+
+<a id="figures-furniture"></a>**Logos and icons are not figures** (`B-156`). Extraction stores every
+image a page carries, and on a sample of 40,000 stored figures about half were the page's chrome:
+logos, social icons, close buttons, seals, banners. `figures.is_furniture` drops an inline
+(`data:`) image, an SVG, an image whose path names such a thing, and one whose short label does
+(a long label that mentions a logo is a description). A random sample of what it dropped held
+nothing else, with one exception that shaped the rule: a messaging app's name in a path also
+names photos sent through it, so it counts only in a label. The panel says how many it left out.
+
+**A file name is not a caption.** `figures.reader_caption` withholds a label that is the image's
+file name: one with a generated id ("0Wjcr3j8CU", digits in two places between letters), a long
+digit run (a stock-library id; a YYYYMMDD date is allowed), a camera or stock word in a label of
+three words or fewer, or the file's own name (a thumbnail's size suffix removed) when that also
+looks like a name, a short label ending in a bare number or one run-together CamelCase word. The
+same plain words as the file name are still a description ("happiness metrics"). Each refinement
+came from a false hide in the sample; the rules withhold 1.3% of the kept figures' labels, and
+the panel shows "Untitled image" with its links. `caption` and `alt_text` are returned as
+extracted.
 
 ### The first hour
 
@@ -596,6 +639,10 @@ stated links yet, and the panel says so and still shows the outer ring. When no 
 available the outer ring was not measured, and the panel says that rather than drawing an empty
 ring that would read as "nothing is similar". The ring diagram uses the canvas's dark ground
 and palette in both themes, like the graph workspace: it is a picture of the graph.
+
+**Reader words** (`B-156`): concepts, not nodes; "very close", "close" or "related" rather than a
+cosine to two decimals (0.85 and 0.75 are the lines), with the number on hover for an operator;
+"no concept is close enough in meaning to list" rather than the floor.
 
 ### Notifications
 

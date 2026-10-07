@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   NeighbourhoodPanel,
   basisText,
+  closeness,
   relationText,
   arcPositions,
   labelAt,
@@ -174,6 +175,36 @@ describe('pure helpers', () => {
     expect(relationText({ relation_type: 'reduces', outgoing: false })).toBe('← reduces')
   })
 
+  it('phrases a similarity in words and keeps the number for hover', () => {
+    expect([0.95, 0.85, 0.8, 0.75, 0.7, 0.55].map(closeness)).toEqual([
+      'very close',
+      'very close',
+      'close',
+      'close',
+      'related',
+      'related',
+    ])
+    render(<NeighbourhoodPanel state={{ phase: 'done', data: data() }} />)
+    const similar = screen.getByRole('region', { name: 'Near in meaning' })
+    const word = within(similar).getByText('close')
+    expect(word.getAttribute('title')).toBe('similarity 0.81')
+    expect(similar.textContent).not.toMatch(/0\.81/)
+  })
+
+  it('speaks to a reader of concepts, not nodes', () => {
+    render(
+      <NeighbourhoodPanel
+        state={{
+          phase: 'done',
+          data: data({ anchor: null, cited: [], cited_total: 0, similar: [], similar_total: 0 }),
+        }}
+      />,
+    )
+    const panel = screen.getByRole('complementary', { name: 'Neighbourhood' })
+    expect(panel.textContent).not.toMatch(/\bnodes?\b/i)
+    expect(panel.textContent).not.toMatch(/embedding/i)
+  })
+
   it('says when resemblance was not measured at all', () => {
     expect(basisText('none')).toMatch(/^Not measured/)
     expect(basisText('node')).not.toBe(basisText('term'))
@@ -252,7 +283,7 @@ describe('the panel is honest when there is little to show', () => {
         onPick={onPick}
       />,
     )
-    expect(screen.getByText(/No node is named “walkway”/)).toBeTruthy()
+    expect(screen.getByText(/No concept is called “walkway” yet/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'covered walkways' }))
     expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ entity_id: 8 }))
   })
@@ -267,7 +298,7 @@ describe('the panel is honest when there is little to show', () => {
       />,
     )
     expect(screen.getByText(/^Not measured/)).toBeTruthy()
-    expect(screen.queryByText(/No node reads alike/)).toBeNull()
+    expect(screen.queryByText(/close enough in meaning/)).toBeNull()
   })
 
   it('draws no diagram when both rings are empty, and does not point at an empty list', () => {
@@ -278,7 +309,10 @@ describe('the panel is honest when there is little to show', () => {
     )
     expect(container.querySelector('[data-role="rings"]')).toBeNull()
     expect(screen.getByText('No passage states a link to this yet.')).toBeTruthy()
-    expect(screen.getByText(/No node reads alike above 0.70/)).toBeTruthy()
+    // The floor stays in the tooltip for an operator; the reader gets a sentence.
+    expect(screen.getByText(/No concept is close enough in meaning to list/).getAttribute('title')).toBe(
+      'no similarity above 0.70',
+    )
   })
 
   it('names a failure inside the panel', () => {

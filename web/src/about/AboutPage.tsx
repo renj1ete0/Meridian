@@ -29,7 +29,7 @@ export function topicsProse(topics: readonly string[]): string | null {
 export function corpusLine(stats: CorpusStats): string {
   const n = (value: number) => value.toLocaleString('en')
   return [
-    `${n(stats.sources)} sources`,
+    `${n(stats.kept_sources)} sources`,
     `${n(stats.searchable_chunks)} searchable passages`,
     `${n(stats.entities)} nodes`,
     `${n(stats.edges)} edges`,

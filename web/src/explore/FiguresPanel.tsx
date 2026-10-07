@@ -10,9 +10,20 @@ export interface FiguresPanelProps {
   figures: readonly FigureRef[]
   /** Whether this deployment serves raw files at all. */
   rawAvailable: boolean
+  /** Logos, icons and controls the API left out (`B-156`). */
+  furnitureHidden?: number
 }
 
-export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
+/** How many of the page's own logos and icons were left out, said in a sentence. */
+export function furnitureLine(hidden: number): string | null {
+  if (hidden <= 0) return null
+  return hidden === 1
+    ? 'One logo or icon from the page is not shown.'
+    : `${hidden.toLocaleString('en')} logos and icons from the page are not shown.`
+}
+
+export function FiguresPanel({ figures, rawAvailable, furnitureHidden = 0 }: FiguresPanelProps) {
+  const furniture = furnitureLine(furnitureHidden)
   if (figures.length === 0) {
     // Stated, not blank. §12.5's whole first principle is that absence is a
     // finding — and "this document has no figures" and "figures were never
@@ -21,6 +32,7 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
       <p className="text-[12.5px] leading-[1.55] text-text-muted">
         No figures were extracted from this source. Captions are taken at ingestion; a document whose figures carry no
         caption or alt text yields none.
+        {furniture ? ` ${furniture}` : ''}
       </p>
     )
   }
@@ -34,7 +46,10 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
       <ul className="mt-3 space-y-4">
         {figures.map((figure) => (
           <li key={figure.figure_id} className="border-l border-line-strong pl-3">
-            <p className="text-[13px] leading-[1.55] text-text/90">{figure.caption ?? figure.alt_text}</p>
+            {/* A caption that is only the image's file name says nothing (`B-156`). */}
+            <p className="text-[13px] leading-[1.55] text-text/90">
+              {figure.reader_caption ?? <span className="text-text-faint">Untitled image</span>}
+            </p>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {figure.page !== null ? <DataChip>page {figure.page}</DataChip> : null}
@@ -58,12 +73,17 @@ export function FiguresPanel({ figures, rawAvailable }: FiguresPanelProps) {
               ) : null}
             </div>
 
-            {figure.caption !== null && figure.alt_text !== null ? (
+            {figure.reader_caption !== null &&
+            figure.reader_caption === figure.caption &&
+            figure.alt_text !== null &&
+            figure.alt_text !== figure.caption ? (
               <p className="mt-1 font-mono text-[length:var(--text-data)] text-text-faint">alt: {figure.alt_text}</p>
             ) : null}
           </li>
         ))}
       </ul>
+
+      {furniture ? <p className="mt-4 font-mono text-[length:var(--text-data)] text-text-faint">{furniture}</p> : null}
 
       {!rawAvailable ? (
         <p className="mt-4 font-mono text-[length:var(--text-data)] text-text-faint">

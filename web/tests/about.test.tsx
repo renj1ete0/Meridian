@@ -30,6 +30,7 @@ function stats(over: Partial<CorpusStats> = {}): CorpusStats {
   return {
     as_of: '2026-09-25T00:00:00Z',
     sources: 41643,
+    kept_sources: 38210,
     chunks: 357074,
     embedded_chunks: 1,
     duplicate_chunks: 1,
@@ -77,7 +78,7 @@ describe('the build', () => {
   it('is on the page', async () => {
     serve(() => new Response(JSON.stringify(stats())))
     render(<AboutPage />)
-    await screen.findByText(/41,643 sources/)
+    await screen.findByText(/38,210 sources/)
     expect(row('Build')).toBe(BUILD_VERSION)
   })
 })
@@ -86,7 +87,7 @@ describe('what it reads', () => {
   it('asks the read-only stats route, and nothing that writes', async () => {
     const fetch = serve(() => new Response(JSON.stringify(stats())))
     render(<AboutPage />)
-    await screen.findByText(/41,643 sources/)
+    await screen.findByText(/38,210 sources/)
     const urls = fetch.mock.calls.map((call) => String((call as unknown[])[0]))
     expect(urls).toEqual(['/api/explore/stats'])
     for (const call of fetch.mock.calls) {
@@ -98,10 +99,10 @@ describe('what it reads', () => {
   it('names the configured topics, in prose and as a list', async () => {
     serve(() => new Response(JSON.stringify(stats())))
     render(<AboutPage />)
-    await screen.findByText(/41,643 sources/)
+    await screen.findByText(/38,210 sources/)
     expect(row('Topics')).toBe('first-topic · second')
     expect(screen.getByText(/crawls public sources on first topic and second, and relates/)).toBeTruthy()
-    expect(row('Corpus')).toBe('41,643 sources · 326,458 searchable passages · 257 nodes · 196 edges')
+    expect(row('Corpus')).toBe('38,210 sources · 326,458 searchable passages · 257 nodes · 196 edges')
   })
 
   it('says a failed read failed, rather than showing an empty corpus', async () => {
@@ -126,7 +127,7 @@ describe('what it reads', () => {
   it('tells no topics from an unread list', async () => {
     serve(() => new Response(JSON.stringify(stats({ topics: [] }))))
     render(<AboutPage />)
-    await screen.findByText(/41,643 sources/)
+    await screen.findByText(/38,210 sources/)
     expect(row('Topics')).toBe('none configured')
     expect(screen.getByText(/crawls public sources, and relates/)).toBeTruthy()
   })
@@ -141,7 +142,12 @@ describe('the prose helpers', () => {
   })
 
   it('formats counts with separators', () => {
-    expect(corpusLine(stats({ sources: 1234567 }))).toMatch(/^1,234,567 sources/)
+    expect(corpusLine(stats({ kept_sources: 1234567 }))).toMatch(/^1,234,567 sources/)
+  })
+
+  it('counts the documents a reader can find, as the landing and Growth do (B-156)', () => {
+    // Junk and copies are rows the crawl fetched, not documents anyone will read.
+    expect(corpusLine(stats({ sources: 900, kept_sources: 700 }))).toMatch(/^700 sources/)
   })
 })
 

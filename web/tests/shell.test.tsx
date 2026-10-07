@@ -14,7 +14,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, sectionOf } from '../src/App'
 import { focusSearch, isCommandK, SEARCH_INPUT_ID } from '../src/lib/hotkeys'
 import { parseRoute } from '../src/lib/route'
-import { bellState, readSeenAt, runHealth, statusDetail, statusLine, type RunHistory } from '../src/lib/status'
+import {
+  bellState,
+  pillHealth,
+  readSeenAt,
+  runHealth,
+  statusDetail,
+  statusLine,
+  type RunHistory,
+} from '../src/lib/status'
 import { NAV, TopBar, type ClusterData } from '../src/ui/TopBar'
 import type { CrawlProgress, Notification, RunRow } from '../src/lib/api'
 
@@ -55,6 +63,7 @@ function progress(over: Partial<CrawlProgress> = {}): CrawlProgress {
     recent_domains: [],
     attempts_last_hour: 50,
     successes_last_hour: 48,
+    liveness: null,
     ...over,
   }
 }
@@ -136,6 +145,51 @@ describe('the status line', () => {
   it('names why run health is unknown, in the API’s own words', () => {
     const detail = statusDetail(progress(), 'unknown', { kind: 'unreadable', reason: 'Admin is closed.' })
     expect(detail).toContain('Admin is closed.')
+  })
+})
+
+const STALLED = {
+  state: 'stalled' as const,
+  last_attempt_at: '2026-09-23T06:40:00Z',
+  quiet_seconds: 32 * 60,
+  ready: 3104,
+  pending: 3150,
+}
+
+describe('a stalled crawl shows on every page (B-156)', () => {
+  it('is the worse of synthesis and the crawl', () => {
+    const stalled = progress({ liveness: STALLED })
+    expect(pillHealth(stalled, 'ok')).toBe('stalled')
+    expect(pillHealth(stalled, 'unknown')).toBe('stalled')
+    expect(pillHealth(stalled, 'failed')).toBe('failed')
+    expect(pillHealth(progress(), 'ok')).toBe('ok')
+    expect(pillHealth(progress({ liveness: { ...STALLED, state: 'waiting' } }), 'ok')).toBe('ok')
+    expect(pillHealth(null, 'ok')).toBe('ok')
+  })
+
+  it('goes brass and says why, in words, though synthesis is fine', () => {
+    bar({ data: data({ progress: progress({ liveness: STALLED }) }) })
+    const pill = screen.getByTitle(/The crawl has stalled: no fetch for 32 min, with 3,104 pages ready/)
+    expect(pill.getAttribute('data-health')).toBe('stalled')
+    expect(pill.textContent).toContain('crawl stalled')
+    expect(pill.innerHTML).toContain('bg-accent-attention')
+  })
+
+  it('names both when a run failed and the crawl stalled', () => {
+    bar({
+      data: data({
+        progress: progress({ liveness: STALLED }),
+        runs: { kind: 'read', rows: [run({ status: 'failed' })] },
+      }),
+    })
+    const pill = screen.getByTitle(/most recent synthesis run failed/)
+    expect(pill.textContent).toContain('run failed')
+    expect(pill.textContent).toContain('crawl stalled')
+  })
+
+  it('says a crawl that never fetched has stalled, not that it was quiet for no minutes', () => {
+    const detail = statusDetail(progress({ liveness: { ...STALLED, quiet_seconds: null } }), 'ok', null)
+    expect(detail).toContain('nothing has ever been fetched')
   })
 })
 

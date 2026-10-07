@@ -297,7 +297,8 @@ Admin (it overlays a document).
 ### The top-right cluster
 
 Designed once, used on every screen, in this order: **status pill** (queue depth and
-fetch health; the dot goes brass when a run has failed) · divider · **notifications**
+fetch health; the dot goes brass when a run has failed or the crawl has stalled, and the
+pill says which in words) · divider · **notifications**
 (cyan count for completions, brass count when the list holds an alert) · **settings**.
 
 No greeting copy anywhere. One person owns this system; a welcome line would be

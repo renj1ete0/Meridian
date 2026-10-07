@@ -8,7 +8,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { FiguresPanel } from '../src/explore/FiguresPanel'
+import { FiguresPanel, furnitureLine } from '../src/explore/FiguresPanel'
 import type { FigureRef } from '../src/lib/api'
 
 function figure(over: Partial<FigureRef> = {}): FigureRef {
@@ -22,6 +22,7 @@ function figure(over: Partial<FigureRef> = {}): FigureRef {
     source_title: 'Annual report',
     source_url: 'https://example.test/report',
     raw_url: '/api/explore/sources/7/raw#page=4',
+    reader_caption: 'Figure 1: modal share by corridor',
     ...over,
   }
 }
@@ -44,7 +45,10 @@ describe('the caption is the content', () => {
   it('falls back to alt text when there is no caption', () => {
     const rendered = text(
       renderToStaticMarkup(
-        <FiguresPanel figures={[figure({ caption: null, alt_text: 'A bar chart' })]} rawAvailable />,
+        <FiguresPanel
+          figures={[figure({ caption: null, alt_text: 'A bar chart', reader_caption: 'A bar chart' })]}
+          rawAvailable
+        />,
       ),
     )
     expect(rendered).toContain('A bar chart')
@@ -58,6 +62,32 @@ describe('the caption is the content', () => {
     )
     expect(rendered).toContain('modal share by corridor')
     expect(rendered).toContain('A bar chart')
+  })
+})
+
+describe('a file name is not a caption (B-156)', () => {
+  it('shows an untitled image rather than the file name', () => {
+    const name = 'olivia hutcherson 0 Wjcr3j8CU unsplash'
+    const rendered = text(
+      renderToStaticMarkup(
+        <FiguresPanel figures={[figure({ caption: null, alt_text: name, reader_caption: null })]} rawAvailable />,
+      ),
+    )
+    expect(rendered).toContain('Untitled image')
+    expect(rendered).not.toContain('Wjcr3j8CU')
+  })
+
+  it('says how many logos and icons it left out, in words', () => {
+    expect(furnitureLine(0)).toBeNull()
+    expect(furnitureLine(1)).toBe('One logo or icon from the page is not shown.')
+    expect(furnitureLine(1204)).toBe('1,204 logos and icons from the page are not shown.')
+    const withFigures = text(
+      renderToStaticMarkup(<FiguresPanel figures={[figure()]} rawAvailable furnitureHidden={3} />),
+    )
+    expect(withFigures).toContain('3 logos and icons from the page are not shown.')
+    const without = text(renderToStaticMarkup(<FiguresPanel figures={[]} rawAvailable furnitureHidden={3} />))
+    expect(without).toContain('No figures were extracted')
+    expect(without).toContain('3 logos and icons')
   })
 })
 

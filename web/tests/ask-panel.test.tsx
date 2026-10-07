@@ -214,3 +214,47 @@ describe('the panel', () => {
     expect(screen.getByRole('button', { name: 'Ask the graph' }).textContent).toBe('')
   })
 })
+
+describe('the button steps aside on a phone while the reader scrolls down (B-156)', () => {
+  function media(narrow: boolean) {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: narrow && query.includes('max-width'), media: query }))
+  }
+
+  function scrollTo(y: number) {
+    const page = document.scrollingElement ?? document.documentElement
+    Object.defineProperty(page, 'scrollTop', { value: y, configurable: true })
+    act(() => {
+      document.dispatchEvent(new Event('scroll'))
+    })
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('tucks away going down and comes back going up, and at the top', () => {
+    media(true)
+    api({})
+    renderPanel()
+    const button = screen.getByRole('button', { name: 'Ask the graph' })
+    expect(button.getAttribute('data-tucked')).toBe('false')
+
+    scrollTo(300)
+    expect(button.getAttribute('data-tucked')).toBe('true')
+    expect(button.className).toContain('pointer-events-none')
+    expect(button.getAttribute('tabindex')).toBe('-1')
+
+    scrollTo(200)
+    expect(button.getAttribute('data-tucked')).toBe('false')
+
+    scrollTo(600)
+    scrollTo(0)
+    expect(button.getAttribute('data-tucked')).toBe('false')
+  })
+
+  it('never moves on a wide screen, where it sits beside the content', () => {
+    media(false)
+    api({})
+    renderPanel()
+    scrollTo(300)
+    expect(screen.getByRole('button', { name: 'Ask the graph' }).getAttribute('data-tucked')).toBe('false')
+  })
+})

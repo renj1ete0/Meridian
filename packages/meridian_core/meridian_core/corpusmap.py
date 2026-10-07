@@ -11,7 +11,8 @@ import dataclasses
 import datetime as dt
 
 import numpy as np
-from sqlalchemy import and_, func, select
+from sqlalchemy import REAL, and_, cast, func, select
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Chunk, Source
@@ -170,7 +171,9 @@ async def corpus_map(
             select(
                 Chunk.chunk_id,
                 Chunk.source_id,
-                Chunk.embedding,
+                # As `real[]`, which the driver decodes in C: pgvector's own type is parsed
+                # from text in Python, a third of the request on a real corpus (`B-156`).
+                cast(Chunk.embedding, ARRAY(REAL)),
                 func.left(Chunk.text, SNIPPET_CHARS),
                 Source.topic_labels,
                 Source.title,

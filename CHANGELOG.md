@@ -77,6 +77,39 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.1] — 2026-10-07
+
+### Changed
+
+- `B-156`: the site review's reader fixes.
+  - **Reader words.** Find's neighbourhood panel says concepts, not nodes, and "very close",
+    "close" or "related" rather than a cosine (the number stays on hover). The Answer view's
+    chip reads "24 with no place".
+  - **Bookkeeping folded away.** The source page's breadcrumb names the site; its id, the
+    extractor and the language sit under "record details". A passage shows its page when its
+    document is paginated and nothing otherwise; result cards no longer show "offset 0". The
+    source route returns `page_unit` (`SourcePageRead`), as a search hit does.
+  - **Figures, not furniture.** Logos, icons, social links and controls are left out of a
+    source's figures and counted (`furniture_hidden`); a caption that is only the image's file
+    name is not shown as one (`reader_caption`). Measured on 40,000 stored figures: about half
+    were furniture, and 1.3% of the rest lose a caption, each a file name.
+  - **A stalled crawl shows in the status pill**, brass with "· crawl stalled" in words, though
+    synthesis is fine. `/api/explore/progress` carries the same liveness verdict as
+    `/crawl-health`.
+  - **The Ask button steps aside on a phone** while the reader scrolls down, and returns on a
+    scroll up: at 390px it covered controls as they scrolled past and the last lines of a short
+    screen's results.
+  - **The 3D map is kept**, per sample and filter, for ten minutes and refreshed behind the
+    reader, and reads vectors as `real[]` (decoded in C): about 2.4 s per request before, 1.2 s
+    cold and milliseconds warm after.
+  - **The landing counts documents as Growth does**: not junk, not copies (`kept_sources`).
+    It had shown a fifth more. About and "new since" count the same way.
+
+### Fixed
+
+- The test that keeps the Explore routes off the writable session refused the read-only
+  `session_ro` too, against its own comment; it now compares imported names.
+
 ## [0.164.0] — 2026-10-07
 
 ### Changed
