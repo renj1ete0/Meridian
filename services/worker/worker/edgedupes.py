@@ -1,13 +1,9 @@
 """Fold the duplicate edges that merges before `B-41` left side by side.
 
-A merge used to re-point the absorbed entity's edges without asking whether the
-target already held the same claim, so one subject, relation and object could
-end up as two rows. `merge` now folds them as it goes; this pass folds the ones
-already in the graph, the same way, and logs each fold on the merge that caused
-it so reversing that merge splits them again (`resolution.fold_repeated_edges`).
-
-Report by default; ``--apply`` writes. A duplicate no merge explains is listed
-and left alone.
+Folds them as `merge` now does (`resolution.fold_repeated_edges`), logging each fold on
+its merge so reversing the merge splits them again. Report by default; ``--apply``
+writes. A duplicate no merge explains is listed and left alone. See
+docs/features/duplicates.md.
 """
 
 from __future__ import annotations

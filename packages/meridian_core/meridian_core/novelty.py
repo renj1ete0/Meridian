@@ -1,31 +1,9 @@
 """The novelty gate (task P2-03, spec §6.1, §5.4, §12.5).
 
-§6.1 draws one line — ``novelty gate: cosine vs existing vectors; drop if
->0.95`` — and three decisions hide inside it.
-
-**Which of two identical chunks survives.** Compared naively, each is the
-other's nearest neighbour, both clear the threshold, and both are dropped: the
-corpus loses the text entirely rather than deduplicating it. So a chunk is only
-ever compared against chunks written *before* it (``chunk_id <``). Ids are
-monotonic, so the first copy to arrive is the one that stays, and the answer
-does not depend on which order a batch happened to be read in.
-
-**Nothing is deleted.** §5.4 says a near-duplicate loses its raw file, and
-§12.5 wants a novelty pass rate on the daily health line — a gate that deleted
-could report neither, and could not be re-run when the threshold moves. So the
-verdict is three columns on ``chunks`` and the retention sweep (`P1-31`) is
-what spends it. This is the same shape as §2.5's rule for steering: adjust what
-is generated, never destroy what was recorded.
-
-**A duplicate points at a survivor, never at another duplicate.** Chunks that
-are already marked are excluded from the candidate set, and a verdict that
-still lands on one — because both were judged in the same batch — is followed
-through to its target. Otherwise ``duplicate_of`` is a chain, and every
-consumer has to walk it.
-
-**No model is involved.** The gate needs vectors, not the thing that made them,
-so it runs against Postgres alone — on a machine with no 2.3GB download, beside
-the embedder or hours behind it.
+A chunk is compared only with chunks written before it, so the first copy survives;
+a duplicate points at a survivor, never at another duplicate. Nothing is deleted: the
+verdict is three columns on ``chunks``, and the retention sweep spends it. No model is
+needed, only Postgres. See docs/features/duplicates.md#the-novelty-gate.
 """
 
 from __future__ import annotations
@@ -51,9 +29,7 @@ log = get_logger(__name__)
 DEFAULT_THRESHOLD = 0.95
 
 #: How much of a source has to be duplicated before the *source* is junk (§5.4).
-#: Not 1.0: a page republished across three sites differs in its header, its
-#: date line and its boilerplate, so demanding every chunk match would demote
-#: almost nothing. Not 0.5 either — half a page of new material is a source.
+#: See docs/features/duplicates.md#demoting-a-source.
 DEFAULT_SOURCE_FRACTION = 0.9
 
 #: Rows read and written per transaction.
@@ -142,11 +118,7 @@ class NoveltyHealth:
 def _pending() -> Select:
     """Embedded, not yet judged, and still live, in id order.
 
-    Superseded chunks are excluded (`P1-32`). Judging text that is no longer on
-    the page spends the gate on a verdict nothing will read, and worse: a chunk
-    written by the *new* crawl of the same page would be marked a duplicate of
-    the old generation it replaced, which is true and useless — the surviving
-    copy is the one that was just retired.
+    Superseded chunks are excluded (`P1-32`): see docs/features/duplicates.md#retired-text.
     """
     return (
         select(Chunk.chunk_id, Chunk.source_id)
@@ -164,13 +136,8 @@ async def chunks_awaiting_novelty(
 ) -> list[tuple[int, int]]:
     """The next ``(chunk_id, source_id)`` batch to judge.
 
-    Paged by id rather than by OFFSET for the reason the embedding backfill is:
-    the crawl writes new chunks underneath a long pass, and an offset page would
-    both re-scan what it has read and skip what shifted past it.
-
-    ``embedding IS NOT NULL`` is half the predicate because the gate compares
-    vectors and a chunk without one cannot be compared — it is not novel, it is
-    unjudgeable, and it waits for the embedder rather than being marked.
+    Paged by id, not OFFSET, because the crawl writes new chunks underneath a long
+    pass. A chunk without a vector is unjudgeable and waits for the embedder.
     """
     rows = await sess.execute(_pending().where(Chunk.chunk_id > after_id).limit(limit))
     return [(chunk_id, source_id) for chunk_id, source_id in rows]
@@ -184,10 +151,8 @@ async def novelty_backlog(sess: AsyncSession) -> int:
 async def novelty_health(sess: AsyncSession) -> NoveltyHealth:
     """The three numbers §12.5's health line needs, in one round trip.
 
-    A pass rate that collapses means the crawl has found a mirror, a paginated
-    view of one document, or a site that serves the same boilerplate under
-    every URL — all of which look like a healthy crawl from every other number
-    on the line.
+    A collapsing pass rate means a mirror or repeated boilerplate; see
+    docs/features/duplicates.md#the-pass-rate.
     """
     row = (
         await sess.execute(
@@ -213,21 +178,10 @@ async def nearest_earlier_neighbours(
 ) -> dict[int, Neighbour]:
     """For each id, the closest chunk written before it. Missing = nothing to compare.
 
-    One statement for the whole batch, through a LATERAL join, rather than a
-    query per chunk: the round trips dominate at batch sizes that make the scan
-    worth doing at all.
-
-    Two filters on the candidate side carry the design:
-
-    - ``chunk_id <`` is what makes the *first* copy the survivor, and what stops
-      two identical chunks from deleting each other (see the module docstring).
-    - ``duplicate_of IS NULL`` keeps a verdict pointing at something that is
-      still in the corpus, rather than at another duplicate.
-
-    Note for `P2-04`: the ``chunk_id <`` predicate is applied *after* the
-    HNSW scan, so an index will speed this up without making it exact. That is
-    acceptable — a missed near-duplicate is a chunk that stays, not one that is
-    wrongly dropped.
+    One LATERAL-join statement for the batch. Candidates are earlier (``chunk_id <``)
+    and not themselves duplicates. The id filter applies after the index scan, so a
+    near-duplicate can be missed, never wrongly dropped; see
+    docs/features/duplicates.md#the-novelty-gate.
     """
     if not chunk_ids:
         return {}
@@ -241,10 +195,8 @@ async def nearest_earlier_neighbours(
         .where(
             candidate.embedding.is_not(None),
             candidate.duplicate_of.is_(None),
-            # Retired text is not a surviving copy (`P1-32`). Without this, a
-            # re-crawl of a changed page marks every one of its new chunks a
-            # duplicate of the generation it just replaced — true, and exactly
-            # backwards: the copy being pointed at is the one that is gone.
+            # Retired text is not a surviving copy (`P1-32`).
+            # See docs/features/duplicates.md#retired-text.
             candidate.superseded_at.is_(None),
             candidate.chunk_id < subject.chunk_id,
         )
@@ -274,15 +226,9 @@ def judge(
 ) -> list[Verdict]:
     """Turn nearest neighbours into verdicts. Pure — no database, no clock.
 
-    Strictly greater than the threshold, as §6.1 writes it: a chunk sitting
-    exactly on the line is kept, because the cheap error is keeping a duplicate
-    and the expensive one is dropping the only copy of something.
-
-    Chains are resolved here rather than in SQL. Two chunks judged in the same
-    batch can both be duplicates — B of A, A of some older Z — and the
-    candidate filter cannot see a verdict that has not been written yet. So a
-    target that this batch is itself marking is followed through to whatever it
-    points at.
+    Strictly greater than the threshold: a chunk exactly on the line is kept. A target
+    this batch is itself marking is followed through to what it points at, since the
+    candidate filter cannot see unwritten verdicts.
     """
     marked: dict[int, int] = {}
     verdicts: list[Verdict] = []
@@ -323,21 +269,16 @@ async def record_verdicts(
 ) -> int:
     """Write the gate's decisions. Returns how many landed. Flushes, does not commit.
 
-    Only touches rows that are still unjudged, so a second pass racing the first
-    over the same batch cannot overwrite a verdict — and cannot re-time one,
-    which would make ``novelty_checked_at`` say the corpus was bigger than it
-    was when the call was made.
+    Only touches rows that are still unjudged, so a racing second pass can neither
+    overwrite a verdict nor re-time ``novelty_checked_at``.
     """
     if not verdicts:
         return 0
 
     checked_at = now or dt.datetime.now(dt.UTC)
     written = 0
-    # One statement per verdict rather than one UPDATE ... FROM (VALUES ...)
-    # for the batch. The batched form is faster and returns a rowcount that
-    # cannot say *which* rows it skipped; this pass is offline and bounded by
-    # the vector scan beside it, so the readable version wins until a profile
-    # says otherwise.
+    # One statement per verdict rather than a batched UPDATE ... FROM (VALUES ...).
+    # See docs/features/duplicates.md#the-novelty-gate.
     for verdict in verdicts:
         result = await sess.execute(
             update(Chunk)
@@ -362,22 +303,9 @@ async def demote_duplicate_sources(
 ) -> list[int]:
     """Mark fully-judged, mostly-duplicate sources ``junk`` (§5.4). Returns the ids.
 
-    The gate's only source-level act, and the input to `P1-31`'s sweep: §5.4
-    keeps a raw file for primary sources, extracted text for background ones,
-    and nothing for junk. Nothing is deleted here — the tier is the decision and
-    the sweep is the deletion.
-
-    **A primary source is never demoted**, whatever its chunks say. §5.4 keeps
-    the raw file for government documents and papers precisely because link rot
-    makes them unrecoverable, and a mirror that happens to be crawled second is
-    still the citable copy of a real document. The asymmetry is deliberate: the
-    cost of keeping a duplicate government PDF is a few megabytes, and the cost
-    of dropping the only local copy of a page that has since been reorganised
-    away is a citation that can never be checked again.
-
-    A source is only considered once every chunk it has is judged. Demoting on a
-    partial view would junk a long document because its first page happened to
-    be boilerplate.
+    Only ``background`` sources are demoted, never primary ones, and only once every
+    chunk is judged. Nothing is deleted here; `P1-31`'s sweep spends the tier. See
+    docs/features/duplicates.md#demoting-a-source.
     """
     if not source_ids:
         return []

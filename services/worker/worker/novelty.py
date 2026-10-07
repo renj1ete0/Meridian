@@ -1,30 +1,10 @@
 """The novelty pass (task P2-03, spec §6.1, §5.4).
 
-The gate itself lives in :mod:`meridian_core.novelty`, because it is a query
-and this package must not own one. This is the thing that runs it: read a batch
-of embedded-but-unjudged chunks, ask Postgres for each one's nearest earlier
-neighbour, write the verdicts, demote the sources that turned out to be
-duplicates of something the corpus already had.
-
-**Its own process, not a stage of the fetch loop.** §6.1 draws the gate inside
-the fast loop, between extract and store, and it cannot be there in this build
-for the same reason embedding is not: the vector arrives one pass later
-(`P2-01`), so at the moment a chunk is written there is nothing to compare. The
-gate runs where the vectors are.
-
-**And not a stage of the embedding backfill either**, though it could be. The
-gate needs no model at all — it is Postgres and arithmetic — so binding it to
-the one process that carries 2.3GB of weights would mean the corpus could only
-be deduplicated on a machine that could also embed it. Two passes, one of which
-runs anywhere.
-
-**Resumable, and cheap to interrupt.** ``novelty_checked_at IS NULL`` is the
-whole queue, one batch is one transaction, and the cursor moves past each batch
-rather than re-querying from zero. A pass killed in hour three keeps everything
-it committed and the next one starts where it stopped.
-
-Runs on demand (``python -m worker.novelty``) or as a loop that watches the
-backlog, exactly like ``worker.embed``.
+Runs :mod:`meridian_core.novelty`: reads a batch of embedded-but-unjudged chunks, finds
+each one's nearest earlier neighbour, writes the verdicts and demotes mostly-duplicate
+sources. Its own process, resumable batch by batch. Runs on demand
+(``python -m worker.novelty``) or as a loop that watches the backlog, like
+``worker.embed``. See docs/features/duplicates.md#the-novelty-gate.
 """
 
 from __future__ import annotations
@@ -104,10 +84,8 @@ class NoveltyPass:
         self._session_factory = session_factory
         self._idle_sleep_s = idle_sleep_s
         self._max_batches = max_batches
-        # Where the scan begins. 0 is the whole table, which is what a first
-        # pass wants; a test that must not judge the dev corpus sitting beside
-        # its own rows passes the id it wants to start past, as
-        # `worker.embed.Backfill` does for the same reason.
+        # Where the scan begins; 0 is the whole table. Tests pass the id to start past
+        # so they do not judge the dev corpus, as `worker.embed.Backfill` does.
         self._start_after = start_after
         self._stopping = asyncio.Event()
 
@@ -136,12 +114,8 @@ class NoveltyPass:
                     break
 
                 chunk_ids = [chunk_id for chunk_id, _ in batch]
-                # The whole batch is compared against the corpus as it stood
-                # before the batch, and only then written. Judging and writing
-                # one chunk at a time would let a chunk earlier in this batch
-                # become a candidate for one later in it, which is the same
-                # answer by a slower route — the id ordering already decides
-                # who survives.
+                # The batch is judged against the corpus as it stood before it, then
+                # written; the id ordering already decides who survives.
                 neighbours = await nearest_earlier_neighbours(sess, chunk_ids)
                 verdicts = judge(chunk_ids, neighbours, threshold=self._settings.threshold)
                 written = await record_verdicts(sess, verdicts)

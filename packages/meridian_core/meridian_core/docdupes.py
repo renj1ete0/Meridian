@@ -1,28 +1,8 @@
 """The same document fetched twice (task `B-44`).
 
-The novelty gate (`P2-03`) judges passages one at a time and never demotes a
-primary source, so a document the crawl reached under two addresses — a
-preprint's page with and without a query string, `http` and `https`, a
-trailing slash, a PDF and its HTML page — was searched twice and would be
-synthesised twice. This module finds such pairs and points the later source at
-the earlier one.
-
-**Mean-vector similarity alone is not enough, and was measured not to be.** On
-a real corpus a 0.96 cosine between two sources' mean vectors caught genuine
-duplicates, and also two consecutive procedural rules of one court and two
-different agreements on one library's template: distinct documents that share
-a template and a subject. So a pair must satisfy one of two stricter rules:
-
-- **exact** — at least :data:`EXACT_SHARE` of the later source's passages,
-  whitespace-normalised, appear in the earlier source. What URL variants
-  produce.
-- **near** — the same normalised title, a mean-vector cosine of at least
-  :data:`NEAR_COSINE`, and lengths within :data:`NEAR_LENGTH_RATIO`. What a
-  PDF and its HTML page, or two versions of one preprint, produce.
-
-The earlier source (lower id — the first fetched) is canonical, and a copy
-always points straight at the canonical source, never along a chain. A source
-anything cites is never marked: its passages are somebody's evidence.
+Finds a source that is a copy of another (exact, near or translation rule) and points
+the copy straight at its canonical source. A source anything cites is never marked.
+See docs/features/duplicates.md for the rules and why mean vectors alone are not enough.
 """
 
 from __future__ import annotations
@@ -144,10 +124,8 @@ def translation_pairs(
     """A non-English source whose declared English version is in the corpus (`B-57`).
 
     ``alternates`` maps a source to the English URL it declares; ``urls`` maps
-    each source to the addresses it is known by (its URL and the one it was
-    finally served from). The English source is canonical whatever the ids —
-    the operator's preference is the English version where one exists — so
-    ``later``/``earlier`` here mean copy and canonical, not fetch order.
+    each source to the addresses it is known by. The English source is canonical
+    whatever the ids, so ``later``/``earlier`` mean copy and canonical, not fetch order.
     """
     by_url: dict[str, int] = {}
     for sid, addresses in urls.items():
@@ -187,11 +165,8 @@ def canonical(pairs: Iterable[Pair], *, protected: set[int] = frozenset()) -> di
             path.append(root)
             root = best[root].earlier
         if root in path:
-            # A loop (`B-88`): reasons disagree about which way round two pages
-            # go — a translation points at its English version, a near copy at
-            # the older one — and walking it came back to where it began, which
-            # marked a page a copy of itself. The loop gets one root for all of
-            # its members, the smallest id, and that page stays unmarked.
+            # A loop (`B-88`): its smallest id becomes the root and stays unmarked.
+            # See docs/features/duplicates.md#loops.
             root = min(path[path.index(root) :])
             if root == later:
                 continue
