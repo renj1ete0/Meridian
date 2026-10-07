@@ -21,6 +21,7 @@ import pytest
 from sqlalchemy import delete, select
 
 from meridian_core.models import Chunk, FetchPolicy, Source
+from meridian_core.queueing import enqueue
 from meridian_core.search import SearchFilters, search
 from meridian_core.tiering import is_tier_mapped
 from meridian_core.trust import (
@@ -282,6 +283,37 @@ async def test_the_first_sighting_is_not_overwritten(clean) -> None:
 
     row = await clean.get(FetchPolicy, DOMAIN)
     assert row.first_seen_via == "frontier"
+
+
+@pytest.mark.parametrize(
+    ("task_type", "text"),
+    [
+        ("query", "harbour study evidence"),
+        ("query", "!news harbour"),
+        ("doi", "10.1234/harbour.5678"),
+    ],
+)
+async def test_queueing_something_that_is_not_an_address_records_no_domain(
+    clean, task_type: str, text: str
+) -> None:
+    """A search query or a DOI names no host. Recording one made a policy row whose
+    "domain" was the query's words or a DOI prefix (`B-149`)."""
+    before = set(await clean.scalars(select(FetchPolicy.domain)))
+
+    await enqueue(clean, text, task_type=task_type, seed_source="search")
+
+    assert set(await clean.scalars(select(FetchPolicy.domain))) == before
+
+
+@pytest.mark.parametrize(
+    ("task_type", "url"),
+    [("url", f"https://www.{DOMAIN}/page"), ("sitemap", f"https://{DOMAIN}/sitemap.xml")],
+)
+async def test_queueing_an_address_records_its_domain(clean, task_type: str, url: str) -> None:
+    await enqueue(clean, url, task_type=task_type, seed_source="frontier")
+
+    row = await clean.get(FetchPolicy, DOMAIN)
+    assert row is not None and row.first_seen_via == "frontier"
 
 
 async def test_an_operators_own_seed_is_allowed_immediately(clean) -> None:

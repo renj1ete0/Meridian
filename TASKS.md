@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.162.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 4872 backend tests
+**`v0.162.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 4872 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1645,6 +1645,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-149` **Queued queries made policy rows** — `v0.162.2`;
+      found by `B-148`. `enqueue` recorded a first sighting for every task, so each queued
+      search query became a `fetch_policy` row named after its words, and each DOI one named
+      after its prefix. Now only `url` and `sitemap` tasks record a domain; a unit test makes
+      every queue task type be classified as an address or not. Existing rows are left for the
+      operator (preview SQL in handover §0)
 - [x] `B-148` **Integration tests leave the database as they found it** — test tooling, no
       bump. `make leak-check` runs the integration suite once on a fresh seeded database and
       prints every changed row count (all tables, from the catalogue) and configuration field

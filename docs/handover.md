@@ -78,6 +78,16 @@ add it here.
 >     WHERE NOT EXISTS (SELECT 1 FROM area_builds b WHERE b.build_id = h.build_id);
 >   DELETE FROM steering_log WHERE field = 'weight' AND reason = 'test';
 >   ```
+> - **Queued queries and DOIs made policy rows** (`B-149`, fixed): `enqueue` recorded a
+>   "domain" for every task, so a search query's words or a DOI prefix became a
+>   `fetch_policy` row. Every deployment that ran searches holds such rows (2026-10-07: 792
+>   with spaces in the live local database). They change no behaviour, since no URL matches
+>   them, but they clutter Admin → Fetch policy. Not removed; the operator's call. Preview,
+>   then delete:
+>   ```sql
+>   SELECT domain FROM fetch_policy
+>     WHERE domain <> '*' AND (domain ~ '\s' OR domain !~ '\.' OR domain ~ '^10\.[0-9]+$');
+>   ```
 > - Operator decisions recorded: `B-133` (triage floor for huge documents, measured), `B-134`
 >   (seeded hosted models are the previous generation), `B-135` (a model on the server, live or
 >   scheduled), `B-136` (half-precision vector index).

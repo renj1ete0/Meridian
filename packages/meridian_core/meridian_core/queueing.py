@@ -24,6 +24,9 @@ from .trust import record_discovery
 
 log = get_logger(__name__)
 
+#: Task types whose text is an address with a host; the others are search words or DOIs.
+ADDRESS_TASK_TYPES = frozenset({"url", "sitemap"})
+
 DEFAULT_LEASE_SECONDS = 900  # 15 min — longer than any single fetch should take
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_BACKOFF_BASE_S = 5
@@ -317,12 +320,14 @@ async def enqueue(
 
     ``seed_mechanism`` names which of §7.4's diversity mechanisms asked for a
     ``diversity`` query (`P5-05`). No filtering here: that is `worker/prefilter.py`.
-    Records how the domain first became known (`P4-12`), so no caller can forget it;
+    Records how a URL's domain first became known (`P4-12`), so no caller can forget it;
+    a query or DOI names no host and records nothing (`B-149`);
     `seed_allowed` is set only for an operator's own seed. See
     docs/features/discovery.md#queueing.
     """
-    with contextlib.suppress(ValueError):
-        await record_discovery(sess, registrable_domain(url), seed_source=seed_source)
+    if task_type in ADDRESS_TASK_TYPES:
+        with contextlib.suppress(ValueError):
+            await record_discovery(sess, registrable_domain(url), seed_source=seed_source)
 
     task = QueueTask(
         url_or_query=url,

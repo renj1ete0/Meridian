@@ -132,7 +132,8 @@ quarantined for a frontier model to judge (`P4-07`). Until then a person clears 
 correct failure; the alternative is admitting unscreened content because nothing could screen
 it.
 
-<a id="seeding-a-domain"></a>**Seeding a domain** (`P4-12`, §11.4). A third question beside
+<a id="seeding-a-domain"></a>**Seeding a domain** (`P4-12`, §11.4). Only a queued URL or
+sitemap records its domain; a search query or DOI names no host and records nothing (`B-149`). A third question beside
 "may we fetch this" (`status`) and "may a model read what came back" (`trust_state`): within
 which domains §11.4's cap on model seeding applies. The first `seed_source` for a domain sticks:
 a domain found by a link and later proposed by a model was still found by a link, and letting

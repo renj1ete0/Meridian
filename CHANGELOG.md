@@ -77,6 +77,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.162.2] — 2026-10-07
+
+### Fixed
+
+- `B-149`: queueing a search query or a DOI no longer creates a fetch-policy row named after
+  the query's words or the DOI's prefix. Only a queued URL or sitemap records its domain's
+  first sighting. Rows already made are left in place; handover §0 has the SQL to list them.
+
+### Tests
+
+- `B-147`: `make clock-check DAYS=n` runs the suites today and `n` days ahead on every clock,
+  and lists what fails only ahead. Nothing does at +400 or +1500 days.
+- `B-148`: `make leak-check` runs the integration suite on a fresh database and lists what it
+  left behind; every leak it found is fixed, including fixtures that changed the seeded topic
+  weights and the global fetch policy without restoring them.
+
 ## [0.162.1] — 2026-10-04
 
 ### Changed
