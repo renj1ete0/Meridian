@@ -1,60 +1,8 @@
 """One synthesis cycle, and a way to run it without letting it write (task `P4-09`, §11.10, §6.3).
 
-`P4-08` moves a run through its stages. This is the thing that calls it, and
-the two flags §11.10 asks for: `--dry-run`, which applies nothing, and `--once`,
-which stops after a single cycle.
-
-**Here rather than in `services/orchestrator/`.** The scaffold reserves a
-service for this and the compose file gates it behind `phase4` because its
-Dockerfile does not exist. Creating that service now would mean a Dockerfile, a
-compose entry, a release-script line and a healthcheck for a process whose
-stages are not built — and `docs/handover.md` already records what an empty
-profiled service costs. The worker image runs `python -m worker.<x>` entry
-points already and has every dependency; when the stages land, moving this
-module is a rename.
-
-**`--dry-run` is a rolled-back transaction, not a promise.** A flag that each
-stage had to remember to check is a flag one stage will forget, and the way you
-find out is that a dry run wrote something. Here the whole cycle runs inside a
-transaction that is rolled back unconditionally, so a stage that writes without
-asking still writes nothing. The journal is what makes the run legible: every
-intended call is recorded and printed whether or not it was applied.
-
-**A cycle that changes nothing stops the loop.** Without that, an orchestrator
-whose stages are all unbuilt — which is every orchestrator today — would find
-work past the high-water mark, fail to advance it, find the same work, and spin
-until something killed it. The loop's exit condition is progress, not emptiness.
-
-**The stages are named, not absent.** Each one says which task builds it, for
-the same reason `worker/commands.py` refuses by name: "there is no tagging
-stage" and "the tagging stage did nothing" are indistinguishable from a log,
-and only one of them is true.
-
-`P4-16` filled in the first three — `pull`, `extract` and `tag` — and four
-decisions in them are worth reading before changing anything here:
-
-**A dry run does not call the model.** It would spend real money and then roll
-the *record* of having spent it back with everything else, so the ledger would
-be wrong in the one direction that matters: understated. A dry run says which
-batch it would send and how large the prompt is, and stops there.
-
-**The batch is ordered by chunk id, never by novelty.** §11.9 suggests
-processing the most novel first when a day exceeds the budget, and that is
-incompatible with a high-water mark: reasoning over chunk 900 and then marking
-the run at 900 silently abandons 400 through 899. Novelty is spent as a filter
-instead — known duplicates are left out — and the order stays the order the
-mark can describe.
-
-**The mark moves in `tag`, not in `extract`.** Both stages read the batch
-`pull` chose, so the batch has been reasoned over only once the second of them
-is done. A failure in between leaves the mark where it was and the batch is
-pulled again next cycle, which is safe because `add_edge` corroborates a claim
-it already holds rather than writing it twice.
-
-**One refusal does not end a run.** A malformed proposal, a citation out of
-range, a write the guards refuse — each is noted in the journal and the batch
-carries on. The run is deferred only when the model itself is unreachable,
-which is §13.4's answer rather than a crash.
+Walks a run through its stages. `--dry-run` runs the cycle in a transaction that is always
+rolled back and does not call the model; `--once` stops after one cycle. The loop stops on a
+cycle that makes no progress. See docs/features/synthesis.md#the-cycle.
 """
 
 from __future__ import annotations
@@ -131,10 +79,8 @@ __all__ = [
     "step",
 ]
 
-#: How many chunks one cycle reasons over. Small enough that a frontier model
-#: reads the whole batch attentively rather than summarising the middle of it,
-#: and small enough that a failure costs one batch rather than a day. The
-#: corpus is drained by running more cycles, which is what `max_cycles` bounds.
+#: How many chunks one cycle reasons over; small so the whole batch is read and a
+#: failure costs one batch. More cycles drain the corpus.
 BATCH: Final[int] = 40
 
 #: How many existing entity names the tagging prompt lists for spelling. A long
@@ -142,11 +88,8 @@ BATCH: Final[int] = 40
 #: anchor the names a batch is actually about.
 NAMES_IN_PROMPT: Final[int] = 60
 
-#: Which task builds each stage. Named rather than omitted: a stage missing
-#: from a log reads as a stage that ran and found nothing, and the two want
-#: entirely different responses.
-#:
-#: `done` is absent because it is not work — it is the state of having finished.
+#: Which task builds each unbuilt stage, so a log says "not built" rather than
+#: "found nothing". `done` is a state, not work.
 BUILT_BY: Final[dict[str, str]] = {
     "score": "`P5-03`'s coverage scoring, which is schema-aware",
     "analogies": "`P7-04`'s analogical expansion",
@@ -223,10 +166,8 @@ async def pending_work(sess: AsyncSession, run: Run) -> int:
 class Deferred(RuntimeError):
     """The run cannot continue now, and saying so is the answer (§13.4).
 
-    Raised only when the model itself could not be reached — no agent declares
-    the task, every agent in the chain refused, or the budget will not allow
-    the call. Not for a bad proposal or a refused write: those are ordinary and
-    the batch carries on without them.
+    Raised only when no model can be asked: no agent declares the task, every agent
+    refused, or the budget will not allow the call. Not for a bad proposal or a refused write.
     """
 
 
@@ -234,10 +175,8 @@ class Deferred(RuntimeError):
 class Batch:
     """The chunks one cycle reasons over, and what the stages learn about them.
 
-    Carried between stages rather than re-queried, for two reasons. `extract`
-    and `tag` must see the *same* passages or their citation numbers mean
-    different things, and re-running the query would re-read a table the
-    crawler is writing to concurrently.
+    Carried between stages rather than re-queried, so `extract` and `tag` cite the same
+    passages by the same numbers.
     """
 
     passages: list[Passage] = dataclasses.field(default_factory=list)
@@ -322,19 +261,10 @@ async def _pull(
 ) -> None:
     """Choose the chunks this cycle reasons over (§6.3).
 
-    **Ordered by id, filtered by novelty** — see the module docstring. The
-    filter drops chunks the gate already judged duplicates and chunks a
-    re-crawl has superseded (`P1-32`): both are text the corpus holds
-    elsewhere, and reasoning over them again costs tokens to reach the same
-    conclusion. It also drops junk-tier sources (`P2-21`), as search and the
-    map already do: a source demoted as off-topic or duplicate is one the
-    corpus has decided is not evidence, and spending a model on it would be
-    reasoning over what the reader was told is not there. And it takes only
-    passages that content labelling put on a topic, stopping short of any
-    passage not yet examined, when the deployment asks for it (`B-63`).
-
-    Takes `now` and does not use it: every runner has one signature, so a stage
-    added later cannot be called with arguments the dispatcher does not send.
+    Ordered by id past the mark; leaves out duplicates, superseded chunks (`P1-32`),
+    junk-tier sources (`P2-21`) and, when configured, passages not on a topic (`B-63`).
+    See docs/features/synthesis.md#the-cycle. Takes `now` unused: every runner has one
+    signature.
     """
     del now
     stmt = (
@@ -392,10 +322,8 @@ async def _ask(
 ) -> Completion:
     """One model call, with the two refusals that end a run and the one that does not.
 
-    A budget that is unset refuses here rather than in the provider, because
-    the message differs: "nobody configured a token cap" sends somebody to
-    Admin, while "every agent refused" sends them to the registry or to the
-    provider's status page.
+    An unset budget refuses here rather than in the provider, so its message points
+    at Admin rather than at the registry.
     """
     budget = await load_budget(sess)
     if budget is None:
@@ -433,10 +361,8 @@ async def _mention_vectors(
 ) -> dict[str, list[float]]:
     """Vectors for this batch's mention names, and for entities still without one.
 
-    `B-40`: without these, resolution compares names by their words alone and
-    cannot see that two differently-worded names mean the same thing — so
-    they became separate nodes and never reached a person's adjudication.
-    An unreachable embedder degrades to names alone, as it always did.
+    Lets resolution match differently worded names (`B-40`). An unreachable embedder
+    degrades to names alone.
     """
     embedder = RemoteEmbedder.from_env()
     if embedder is None:
@@ -456,10 +382,8 @@ async def _mention_vectors(
 async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now) -> None:
     """Relations, from the passages that state them (§5.4, §11.6).
 
-    Each proposal is resolved, written and counted on its own. A proposal the
-    guards refuse is noted and skipped: `validation.py` exists to refuse model
-    output, and a refusal it produced is the system working rather than an
-    error to propagate.
+    Each proposal is resolved, written and counted on its own; one the guards refuse
+    is noted and skipped.
     """
     if not batch.passages:
         journal.note("extract", "no batch")
@@ -565,10 +489,8 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
 async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now) -> None:
     """Attribute values, onto entities the passages describe (§7.3).
 
-    **This is where the mark moves**, because it is the last stage that reads
-    the batch. It moves even when there was nothing to tag — an empty active
-    attribute set is a configuration, not a failure, and a run that refused to
-    advance over it would re-read the same batch until somebody noticed.
+    The mark moves here, as the last stage that reads the batch, even when there was
+    nothing to tag.
     """
     if not batch.passages:
         journal.note("tag", "no batch")
@@ -668,10 +590,7 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
         journal.note("tag", result.detail)
 
 
-#: The stages that are built, and what runs them. A stage in here must not
-#: also be in `BUILT_BY` — one table says "this is done" and the other says
-#: "this is not", and a stage in both would log whichever the code happened to
-#: check first.
+#: The stages that are built, and what runs them. Never also in `BUILT_BY`.
 RUNNERS: Final[dict[str, object]] = {"pull": _pull, "extract": _extract, "tag": _tag}
 
 
@@ -701,10 +620,8 @@ async def step(
             )
         else:
             await runner(sess, run, held, journal=journal, now=now)
-            # Only `tag` marks, and only over a batch a model actually saw.
-            # The two conditions are separate on purpose: a stage that ran
-            # without reaching a model has not reasoned over anything, and a
-            # mark that moved anyway would abandon the batch silently.
+            # Only `tag` marks, and only over a batch a model actually saw: a stage
+            # that never reached a model has reasoned over nothing.
             if stage == "tag" and held.reasoned and held.last_chunk_id is not None:
                 progress.reached(held.last_chunk_id)
     return await advance(sess, run, now=now)
@@ -720,10 +637,8 @@ async def cycle(
 ) -> Run:
     """Begin or resume a run and walk it to the end, or to `stop_after`.
 
-    `stop_after` leaves the run **unfinished on purpose**, which is the point:
-    it stays resumable, so the next call continues from there rather than
-    starting again. That is the only way to step through a run by hand without
-    the state machine treating each step as a fresh crash.
+    `stop_after` leaves the run unfinished on purpose, so the next call resumes it:
+    the way to step through a run by hand.
     """
     if stop_after is not None and stop_after not in STAGES:
         raise ValueError(f"{stop_after!r} is not a stage. Known: {', '.join(STAGES)}")
@@ -734,11 +649,8 @@ async def cycle(
     waiting = await pending_work(sess, run)
     journal.note("run", f"{waiting:,} chunks past the mark")
 
-    # One batch per cycle, shared by every stage that reads it. A resumed run
-    # starts with an empty one and `pull` is behind it, so the first thing a
-    # run resumed at `extract` does is say it has no batch — which is true, and
-    # better than reasoning over a different set of passages than the citation
-    # numbers in its last answer referred to.
+    # One batch per cycle, shared by its stages. A run resumed past `pull` has none
+    # and says so, rather than re-reading different passages.
     batch = Batch()
 
     while run.stage != FINAL_STAGE:
@@ -746,10 +658,8 @@ async def cycle(
         try:
             await step(sess, run, journal=journal, now=now, batch=batch)
         except Deferred:
-            # Already journalled and already written to the run row. The run is
-            # left unfinished on purpose: it resumes at the stage that could not
-            # be served, rather than walking on to stages that would fail the
-            # same way (§13.4).
+            # Already journalled and on the run row. Left unfinished, to resume at
+            # the stage that could not be served (§13.4).
             return run
         if stop_after is not None and reached == stop_after:
             journal.note("run", f"stopping after {reached}; the run stays resumable")
@@ -771,10 +681,8 @@ async def run_orchestrator(
 ) -> Journal:
     """Run cycles while there is work and each one makes progress.
 
-    **Progress, not emptiness, is the exit condition.** A cycle that advanced
-    neither the high-water mark nor any counter will do exactly the same thing
-    next time, so continuing would spin — and an orchestrator spinning on a
-    daily timer looks, from the outside, like one that is busy.
+    Stops when a cycle advances neither the mark nor any counter: the next would do
+    the same.
     """
     journal = Journal(dry_run=dry_run)
     moment = now or dt.datetime.now(dt.UTC)
@@ -824,10 +732,8 @@ async def _cycles(
         if once or stop_after is not None:
             break
         if deferred:
-            # Nothing can answer, and asking again within the same wake-up only
-            # closes the deferred run with no batch and opens another that
-            # defers the same way — five throwaway runs per tick, found on the
-            # relay agent's first afternoon. The next wake-up retries.
+            # Nothing can answer; asking again this wake only opens runs that defer
+            # the same way. The next wake-up retries.
             journal.note("run", "deferred; stopping until something can answer")
             break
         if not waiting:
@@ -844,10 +750,7 @@ async def _cycles(
 #: How long between synthesis runs when nothing forces one sooner (§6.3, daily).
 DEFAULT_INTERVAL_S: Final[int] = 86_400
 
-#: Chunks past the mark that justify waking early. §6.3 offers the early
-#: trigger as an option, and this is the number it left open: below it a run
-#: spends a frontier model's attention on a handful of passages, which is the
-#: expensive way to learn very little.
+#: Chunks past the mark that justify waking early (§6.3 left the number open).
 DEFAULT_EARLY_AT: Final[int] = 500
 
 #: Ceiling on the wait between wake-ups. The daily timer is the schedule; this
@@ -881,19 +784,9 @@ async def serve(
 ) -> None:
     """Run synthesis on §6.3's schedule until told to stop.
 
-    **A service rather than a row in the timetable, and not by preference.**
-    The scheduler spawns its jobs as subprocesses of its own container, which
-    is the worker image — and the worker image deliberately does not carry
-    `meridian-core[agent]`, because §2.1 makes "the fast loop never calls a
-    model" mechanical rather than remembered. A timetable row would therefore
-    run this in the one image that cannot do it.
-
-    **Early, not sooner.** §6.3 asks for a daily run "optionally
-    early-triggered when unprocessed novel chunk count crosses a threshold",
-    so the backlog is checked every `poll_s` and a run starts early when it is
-    large enough to be worth a model's attention. The daily timer still runs
-    on a quiet corpus, because a run that found little is also the run that
-    reports the corpus is quiet.
+    Daily, or early once `early_at` chunks wait (checked every `poll_s`). A service
+    rather than a timetable row, because the scheduler's image cannot call a model.
+    See docs/features/synthesis.md#daemon.
     """
     stopping = stop or asyncio.Event()
     next_run = 0.0  # the first cycle happens at startup, not a day later
@@ -943,11 +836,8 @@ async def _serve(args: argparse.Namespace) -> None:
 async def _main(args: argparse.Namespace) -> Journal:
     """Run, then close the pool — both inside one event loop.
 
-    The disposal belongs here rather than in `run_orchestrator`: a library
-    function that tears down the process's shared engines is a surprise to
-    anybody who calls it twice. It also has to happen in the loop that created
-    them — a second `asyncio.run` is a second loop, and disposing from it fails
-    at exit, after the work, in a traceback that says nothing about the cause.
+    Disposal is here, not in `run_orchestrator`, so a library call never tears down
+    shared engines, and it happens in the loop that created them.
     """
     try:
         return await run_orchestrator(

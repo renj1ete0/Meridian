@@ -1,48 +1,10 @@
 """Calling the agent that routing chose (task `P4-15`, §11.3, §11.7, §11.9).
 
-`P4-07` says which agent does a task. `P4-04` says where its answer goes.
-Nothing called the model in between, which is why every orchestrator stage
-reported itself unbuilt. This is that call.
-
-**Behind an optional extra, on purpose.** `meridian-worker` says of itself
-"never calls an LLM (§2.1, §6.1)", and that is an architectural invariant
-rather than a habit: the fast loop must keep acquiring while an agent is
-unavailable, which is only true if acquisition cannot depend on one. The SDK
-lives in `meridian-core[agent]`, and the worker image is built without it — so
-the fast loop *cannot* call a model, mechanically, rather than because
-somebody remembered not to.
-
-Five decisions:
-
-**The key is read from the variable the registry names.** §11.11 keeps
-credentials out of the database because it is snapshotted off-device, so the
-row holds `api_key_env_var` — the *name* — and the value is fetched at call
-time. A missing variable is a misconfiguration of one agent, not a failure of
-the run: it refuses that agent and the chain moves on.
-
-**The worst case is reserved before the call, and settled after.** A cap that
-is checked afterwards is not a cap. The only figure available beforehand is the
-prompt plus `max_tokens`, so that is what is reserved; `settle_tokens` releases
-the difference once the real usage is known. Without the settlement a run would
-exhaust its allowance on answers it never gave.
-
-**The chain is walked, not retried.** §11.3 wants an outage to degrade rather
-than halt, and §13.4 wants a deferred run rather than a crash. A provider that
-is down stays down for the seconds a retry would take, so the next agent is
-tried instead — and only when every agent has refused does the caller get an
-error worth deferring on.
-
-**Two shapes, not one client.** §11.7 is right that Ollama, llama.cpp and vLLM
-all speak an OpenAI-compatible protocol, so the local tier is one HTTP call.
-Anthropic is not that protocol and is not approximated with a shim — it goes
-through the official SDK. A third, `relay` (`P4-18`), is not a protocol at
-all: it leaves the prompt in a directory for an operator-attended model and
-reads the answer back, so a session can stand in for an API key.
-
-**What comes back is data.** The caller frames what goes in (`P4-06`) and
-validates every write that comes out (`P4-05`). Nothing here interprets the
-response: it returns text and a token count, and the tools decide what may be
-written.
+Needs `meridian-core[agent]`, which the worker image lacks, so the fast loop cannot call
+a model (§2.1). Keys are read from the variable the registry row names; the worst case is
+reserved before a call and settled after; the chain is walked, not retried. Providers:
+`anthropic` (SDK), `openai_compatible`, and `relay` (files, `P4-18`). The answer is
+returned as data. See docs/features/synthesis.md#calling-a-model.
 """
 
 from __future__ import annotations
@@ -74,10 +36,8 @@ __all__ = [
     "complete",
 ]
 
-#: Rough characters per token, for the reservation made before a call.
-#: Deliberately pessimistic — an under-estimate reserves too little and the cap
-#: stops meaning anything, while an over-estimate is released moments later by
-#: `settle_tokens`.
+#: Rough characters per token, for the reservation made before a call. Pessimistic:
+#: the excess is released by `settle_tokens`.
 CHARS_PER_TOKEN: Final[int] = 3
 
 #: What a call may produce unless the caller says otherwise. Generous, because
@@ -272,15 +232,8 @@ RELAY_DIR_ENV: Final[str] = "MERIDIAN_RELAY_DIR"
 def relay_key(prompt: str, system: str | None) -> str:
     """The name one exchange is filed under: a digest of exactly what was asked.
 
-    A digest rather than a run or batch id, because the orchestrator asks the
-    same question again after a deferral — the mark has not moved, so `pull`
-    chooses the same passages. The answer written for the first ask is
-    therefore found by the second, with no state kept anywhere but the files.
-
-    **Not quite byte-for-byte.** Each prompt fences its passages with a fresh
-    random delimiter (`framing.new_delimiter`), which is a defence and stays.
-    The digest is taken with the delimiter masked, so the same passages under a
-    different fence are the same question — and nothing else is ignored.
+    Taken with the random fence masked, so the same question asked again after a
+    deferral finds the same answer. See docs/features/synthesis.md#relay.
     """
     canonical = without_delimiters(f"{system or ''}\0{prompt}")
     digest = hashlib.sha256(canonical.encode()).hexdigest()
@@ -292,17 +245,9 @@ async def _call_relay(
 ) -> tuple[str, int, int]:
     """A model that answers through files, not a network (`P4-18`).
 
-    For an operator-attended model — an interactive session reading the prompt
-    and writing the answer — standing in where an API key would otherwise be
-    needed. The prompt is written to ``<key>.prompt.json``; until
-    ``<key>.answer.txt`` exists, the call fails as an unreachable provider
-    does, and the run defers (§13.4). Once it exists, the answer goes through
-    the same parser, guards and write tools as any other model's, and the
-    registry row's model string is what provenance records.
-
-    Nothing is exposed by this: no port, no credential, no write tool outside
-    the orchestrator. What it trusts is the relay directory, which only the
-    operator can write to.
+    Writes ``<key>.prompt.json``; until ``<key>.answer.txt`` exists the call fails as an
+    unreachable provider does, and the run defers (§13.4).
+    See docs/features/synthesis.md#relay.
     """
     del max_tokens, timeout_s
     root = os.environ.get(RELAY_DIR_ENV, "").strip()
@@ -365,13 +310,8 @@ async def complete(
 ) -> Completion:
     """Ask the best agent for this task, falling down the chain on failure.
 
-    `token_cap` has no default and `None` refuses, the same position every
-    other cap in this system takes: an unconfigured cap must never read as
-    unlimited, because the failure it guards against is unattended.
-
-    Raises `NoAgentAvailable` when the registry has nothing to offer, and
-    `ProviderError` when every agent in the chain refused — which is what
-    §13.4 means by deferring a run rather than failing it.
+    `token_cap=None` refuses. Raises `NoAgentAvailable` when the registry has nothing to
+    offer, and `ProviderError` when every agent in the chain refused (defer, §13.4).
     """
     chain = await chain_for(sess, task_type)
     if not chain:

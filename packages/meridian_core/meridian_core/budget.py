@@ -1,32 +1,8 @@
 """Caps, and the refusal to run without them (tasks `P4-10`, `P4-13`, §16, §11.9).
 
-§11.9 describes the one feedback loop in this design that nothing else bounds:
-gap analysis emits seeds, seeds become crawl targets, a larger corpus produces
-more gaps, and tomorrow's batch is bigger than today's. §16 calls the risk
-*"manageable if caps are set before first autonomous run"* — which is a
-mitigation with an ordering requirement inside it, and until now nothing
-enforced the ordering.
-
-**Absent is refused, never unlimited.** Every function here treats a missing
-budget, a missing cap, or a missing ceiling as a reason not to start. That is
-the opposite of the usual ergonomics and it is deliberate: a default of infinity
-is the shape in which forgetting to configure something becomes a bill, and the
-loop is unattended, so the first signal would be the invoice rather than a log
-line. `reserve_seeds` in `validation.py` already took this position for its own
-cap; this module is where the caps come from.
-
-**Cost is checked before a run, not during it.** A run cannot know what it will
-spend, so the ceiling is enforced as "the month so far leaves room to start" —
-and a run that overshoots is recorded honestly rather than killed halfway, which
-would leave a half-written graph to reconcile. The month's *next* run is the one
-that gets refused. That is a real limitation and the alternative is worse: §11.9
-asks for trend alerting precisely because the ceiling alone is a blunt
-instrument.
-
-**The calendar month, in UTC.** Not a rolling 30 days: a ceiling somebody sets
-by looking at a monthly invoice should reset when the invoice does, and a
-rolling window makes "how much is left" a question nobody can answer from the
-statement in front of them.
+A missing budget, cap or ceiling refuses; it is never unlimited. Cost is checked before
+a run starts, so the month's next run is the one refused. Months are calendar months in
+UTC. See docs/features/synthesis.md#budgets.
 """
 
 from __future__ import annotations
@@ -63,10 +39,7 @@ __all__ = [
 class BudgetError(RuntimeError):
     """A run must not start, or must not continue.
 
-    Deliberately not `ValidationError`: that type reports a bad *write* back to
-    a model as a tool-call failure it might retry differently. A budget refusal
-    is not about the content of the call, and a model retrying it with better
-    arguments is exactly what should not happen.
+    Not `ValidationError`, which goes back to a model as a failure to retry.
     """
 
     def __init__(self, reason: str, message: str) -> None:
@@ -150,14 +123,8 @@ def month_window(now: dt.datetime | None = None) -> tuple[dt.datetime, dt.dateti
 async def month_to_date_cost(sess: AsyncSession, *, now: dt.datetime | None = None) -> float:
     """What this calendar month's runs have cost so far.
 
-    Measured on `started_at` rather than `completed_at`, so a run that is still
-    going already counts toward the month it began in — otherwise a long run
-    spanning midnight on the 1st would be invisible to the ceiling for as long
-    as it kept spending.
-
-    Runs with no recorded cost contribute zero rather than making the total
-    null, which is what `coalesce` is doing here: an old run that predates cost
-    logging should not blank out the month.
+    Counted by `started_at`, so a running run counts already; runs with no recorded
+    cost count as zero.
     """
     start, following = month_window(now)
     total = await sess.scalar(
@@ -171,11 +138,8 @@ async def month_to_date_cost(sess: AsyncSession, *, now: dt.datetime | None = No
 async def check_can_start_run(sess: AsyncSession, *, now: dt.datetime | None = None) -> Budget:
     """Refuse to start a synthesis run that has no budget (`P4-13`).
 
-    Three refusals, in the order somebody would fix them: no budget row at all,
-    a budget with caps missing, and a month that has already reached its
-    ceiling. Returns the budget on success so the caller enforces the same
-    numbers it was checked against — reading them twice invites a run governed
-    by caps that changed in between.
+    Refuses with no budget row, with caps missing, or with the month's ceiling reached.
+    Returns the budget, so the run enforces the numbers it was checked against.
     """
     budget = await load_budget(sess)
     if budget is None:
@@ -216,18 +180,8 @@ async def check_can_start_run(sess: AsyncSession, *, now: dt.datetime | None = N
 async def reserve_tokens(sess: AsyncSession, run_id: int, count: int, *, cap: int | None) -> int:
     """Take ``count`` tokens out of this run's allowance, or refuse the lot.
 
-    The same shape as `reserve_seeds`, for the same reasons, and they are worth
-    restating because the shape is the point:
-
-    - **`cap=None` refuses.** Unconfigured is not unlimited (§16).
-    - **All or nothing**, so a partially admitted call does not leave the caller
-      unable to say what it spent.
-    - **The row is locked, not just read.** Two concurrent tool calls reading
-      `tokens_used` at 900 against a cap of 1000 would both pass and both write.
-
-    Returns the remaining allowance, so a caller can stop asking for more before
-    it is refused — a model that hits the cap mid-answer wastes the tokens it
-    already spent on that answer.
+    As `reserve_seeds`: `cap=None` refuses, all or nothing, on a locked row. Returns the
+    remaining allowance.
     """
     if cap is None or cap <= 0:
         raise BudgetError(
@@ -266,16 +220,8 @@ async def reserve_tokens(sess: AsyncSession, run_id: int, count: int, *, cap: in
 async def settle_tokens(sess: AsyncSession, run_id: int, *, reserved: int, actual: int) -> int:
     """Correct a reservation once the real cost is known (`P4-15`).
 
-    A call has to be paid for before it is made — the cap exists to stop a call
-    that cannot be afforded, and finding out afterwards is not a cap. But the
-    only figure available beforehand is the worst case: the prompt plus
-    `max_tokens`, which almost every answer comes in under. Left alone, a run
-    would exhaust its allowance on answers it never gave.
-
-    So the reservation is the worst case and this is the correction. It only
-    ever *releases* — an answer that somehow cost more than was reserved keeps
-    the larger figure, because the tokens were genuinely spent and a cap that
-    forgave an overrun would be a cap with a hole in it.
+    The reservation is the worst case (prompt plus `max_tokens`); this releases the
+    difference. It only ever releases: an overrun keeps the larger figure.
     """
     if reserved < 0 or actual < 0:
         raise BudgetError("token_cap", "Token counts cannot be negative.")
@@ -305,10 +251,7 @@ async def settle_tokens(sess: AsyncSession, run_id: int, *, reserved: int, actua
 async def record_run_spend(sess: AsyncSession, run_id: int, *, cost_usd: float) -> float:
     """Add to what this run has cost, and return the run's total.
 
-    Additive rather than assigned: a run makes many calls to many models, and a
-    setter would record whichever one happened to write last. §11.9 wants the
-    per-run figure to be comparable week on week, which it is not if it means
-    "the last call" in some runs and "all of them" in others.
+    Additive, so the figure covers every call in the run.
     """
     if cost_usd < 0:
         raise BudgetError("cost", "A run's cost cannot be negative.")

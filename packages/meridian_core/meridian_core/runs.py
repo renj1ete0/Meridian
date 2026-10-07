@@ -1,45 +1,9 @@
 """The orchestrator's state, and how a crash resumes (task `P4-08`, §11.10).
 
-§11.10 is a rejection of workflow frameworks: "a crash at `stage='tagging'`
-resumes there on the next wake… in roughly 200 lines, with no abstraction layer
-between the orchestrator and its validated tool calls." The `runs` table has
-existed since `P0-07`. This is the part that moves a row through it.
-
-**Nothing here does the work.** These functions change one row. Which chunks a
-stage reads, which model it asks and what it writes are the stages' own
-business — and keeping them apart is what lets the resumability rules be tested
-without a model, a corpus, or a stage that exists yet.
-
-Four decisions, each with a failure it exists to prevent:
-
-**At most one unfinished run, enforced by the database.** Two orchestrators on
-one corpus means double spend against §11.9's monthly ceiling and two sets of
-writes racing the same high-water mark. A unique partial index makes a second
-one an error rather than a quiet second run — the application could check
-first, but a check is a race and an index is not.
-
-**A heartbeat, because a crashed run and a live one look the same.** Both are
-`status='running'` with a stage. Without something that decays, a resume would
-either never happen (the row looks claimed forever) or happen alongside the run
-it was meant to replace. NULL reads as stale: a run that died before completing
-a step is the one that most needs taking over.
-
-**Deferred is not failed.** §13.4 wants a deferred run when the model API is
-unreachable — "skip and retry next cycle. Ingestion continues regardless." The
-stage is kept, so the next wake continues rather than restarting, and a
-provider outage costs synthesis rather than the day's crawl.
-
-**Stages only move forward.** The stage is a claim about what has already been
-committed, so moving back would redo work that is already in the corpus — and
-the duplicates would be indistinguishable from the originals. `advance` refuses
-anything but the next stage, and the high-water mark refuses to go backwards
-for the same reason.
-
-**The mark advances after the writes, never before** (§6.3, `P4-11`). Marking
-first and writing second loses those chunks permanently if anything fails in
-between: nothing would be missing from the corpus, only from the reasoning over
-it, so there is nothing to notice. `advancing()` does the ordering, and `mark()`
-refuses outright while unwritten changes are still sitting in the session.
+These functions change one `runs` row; the stages do the work. At most one run is
+unfinished (a unique partial index), a heartbeat tells a crashed run from a live one,
+deferred keeps the stage, stages only move forward, and the mark moves only after the
+writes it covers. See docs/features/synthesis.md#run-state.
 """
 
 from __future__ import annotations
@@ -78,10 +42,7 @@ __all__ = [
     "unfinished",
 ]
 
-#: §11.10's stages, in the order a run passes through them. The tuple *is* the
-#: order — a set would leave "what comes after tagging" to be re-decided at
-#: every call site, and two call sites deciding differently is a run that skips
-#: a stage without anything noticing.
+#: §11.10's stages, in the order a run passes through them. The tuple is the order.
 STAGES: Final[tuple[str, ...]] = (
     "pull",
     "extract",
@@ -96,10 +57,7 @@ STAGES: Final[tuple[str, ...]] = (
 FINAL_STAGE: Final[str] = STAGES[-1]
 
 #: How long a run may go without completing a step before another orchestrator
-#: may take it over. Generous on purpose: a single stage can legitimately spend
-#: minutes waiting on a frontier model, and a window that fired during normal
-#: work would hand the row to a second process while the first was still using
-#: it — which is the exact failure the heartbeat exists to prevent.
+#: may take it over. Generous, because one stage can wait minutes on a model.
 STALE_AFTER: Final[dt.timedelta] = dt.timedelta(minutes=30)
 
 #: Statuses that mean "this run is not over". Both are resumable; only one of
@@ -150,14 +108,8 @@ async def begin_or_resume(
 ) -> tuple[Run, bool]:
     """Take up the unfinished run, or start one. Returns `(run, resumed)`.
 
-    **Resuming is the default, not the exception.** A wake that started a fresh
-    run whenever it found one in progress would redo a whole day of extraction
-    on every crash, and pay for it twice.
-
-    Raises `RunLocked` when a run is `running` and its heartbeat is recent.
-    `FOR UPDATE` serialises two callers that arrive together, and the unique
-    index catches the one case the lock cannot — two callers finding no row at
-    all and both inserting.
+    Raises `RunLocked` when a run is `running` and its heartbeat is recent. `FOR UPDATE`
+    serialises callers; the unique index catches two that both find no row and insert.
     """
     existing = await unfinished(sess, for_update=True)
 
@@ -181,12 +133,8 @@ async def begin_or_resume(
         await sess.flush()
         return existing, True
 
-    # One mark for the system, not one per run (§6.3, `B-36`): a new run starts
-    # where the furthest earlier run reached. Left unset, `pull` reads "no
-    # mark" as "from the beginning", and every run re-read the first batch of
-    # the corpus — paid for each time, and never getting past it. The furthest
-    # rather than the latest, because a failed run's mark only ever moved over
-    # writes that had committed.
+    # One mark for the system, not one per run (§6.3, `B-36`): a new run starts where
+    # the furthest earlier run reached. See docs/features/synthesis.md#run-state.
     reached = await sess.scalar(select(func.max(Run.last_chunk_id)))
     run = Run(
         started_at=now,
@@ -243,17 +191,8 @@ async def advance(sess: AsyncSession, run: Run, *, now: dt.datetime) -> str:
 async def mark(sess: AsyncSession, run: Run, chunk_id: int, *, now: dt.datetime) -> None:
     """Advance the high-water mark (§6.3, `P4-11`).
 
-    **Monotonic, and refuses rather than clamps.** A mark that went backwards
-    would re-feed chunks the run has already paid to process; one that silently
-    clamped would hide the caller bug that sent it.
-
-    **It refuses while writes are still pending.** §6.3's rule is that the mark
-    advances only after the writes it covers, and the way that rule gets broken
-    is by marking first and writing second — at which point anything failing in
-    between loses those chunks permanently, because the mark says they were
-    handled. Unflushed objects in the session are exactly that state and are
-    visible from here, so this is a check rather than a convention.
-    `advancing()` is the supported way and does the ordering for you.
+    Refuses a mark that would go backwards, and refuses while unflushed writes sit in the
+    session: the mark moves only after the writes it covers. Use `advancing()`.
     """
     pending = [obj for obj in (*sess.new, *sess.dirty, *sess.deleted) if obj is not run]
     if pending:
@@ -298,11 +237,6 @@ class Progress:
 async def advancing(sess: AsyncSession, run: Run, *, now: dt.datetime) -> AsyncIterator[Progress]:
     """Do the writes, then move the mark — or do neither (§6.3, `P4-11`).
 
-    **The ordering is the whole point.** A mark that advanced before its writes
-    landed would tell the next run those chunks were handled, and anything
-    failing in between loses them permanently — silently, because nothing is
-    missing from the corpus, only from the reasoning over it.
-
     Used as::
 
         async with advancing(sess, run, now=now) as progress:
@@ -311,10 +245,8 @@ async def advancing(sess: AsyncSession, run: Run, *, now: dt.datetime) -> AsyncI
                 await sess.flush()
                 progress.reached(chunk.chunk_id)
 
-    An exception leaves the mark exactly where it was, and the caller's
-    transaction discards the writes with it. A clean exit marks once — and
-    because it is the same transaction, the writes and the mark commit together
-    or not at all, which is stronger than the rule asks for.
+    An exception leaves the mark where it was; a clean exit marks once, in the same
+    transaction as the writes.
     """
     progress = Progress()
     yield progress
@@ -334,11 +266,7 @@ async def record(
 ) -> None:
     """Add to the run's counters.
 
-    **Accumulates rather than assigns**, for the reason `budget.py` gives: a
-    per-run figure §11.9 compares week on week would otherwise mean "the last
-    stage" in some runs and "all of them" in others, and the trend would be
-    noise. Negative deltas are refused — a counter that can go down cannot be
-    compared to anything.
+    Accumulates rather than assigns; negative deltas are refused.
     """
     for name, value in (("tokens", tokens), ("edges", edges), ("tags", tags), ("seeds", seeds)):
         if value < 0:
@@ -358,15 +286,8 @@ async def record(
 async def defer(sess: AsyncSession, run: Run, reason: str) -> None:
     """Put the run down, to be picked up next cycle (§13.4).
 
-    The stage is kept — that is the whole point — and `completed_at` stays
-    empty, because the run has not completed. The heartbeat is cleared: nobody
-    is holding it, and leaving a recent one would make the next wake believe
-    somebody was.
-
-    No `now`, unlike the rest of this module. Deferring records no timestamp:
-    the run did not complete, and nothing here should imply a moment that is
-    not stored. Taking the argument for symmetry would be an invitation to
-    believe it was.
+    Keeps the stage, leaves `completed_at` empty and clears the heartbeat. Takes no
+    `now`: deferring records no time.
     """
     run.status = "deferred"
     run.error = reason
@@ -392,19 +313,8 @@ async def fail(sess: AsyncSession, run: Run, error: str, *, now: dt.datetime) ->
 async def finish(sess: AsyncSession, run: Run, *, now: dt.datetime) -> None:
     """End the run successfully.
 
-    Sets the stage to `done` whatever it was. A run with nothing to process is
-    finished at `pull`, and refusing to close it would leave the table holding
-    an unfinished run forever — which the unique index would then read as
-    "somebody is working", blocking every later run.
-
-    **`error` is cleared, because a run can finish after being deferred.**
-    `defer` writes the reason a run stopped, and the *same run* resumes later
-    and may complete — a provider that was down is back, or, as observed, a
-    resumed run finds nothing left in its batch and walks to the end. Leaving
-    the text behind produces a row that says `done` and carries an error, which
-    reads as "finished, with a problem" and is the kind of thing somebody
-    debugs for twenty minutes. What stopped it is in `steering_log` and in the
-    logs; what this column means is "why this run is not finished".
+    Sets the stage to `done` whatever it was, and clears `error`, which a deferral may
+    have left. See docs/features/synthesis.md#run-state.
     """
     run.stage = FINAL_STAGE
     run.status = "done"

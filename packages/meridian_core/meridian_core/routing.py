@@ -1,47 +1,9 @@
 """Which agent does a task, and what happens when it cannot (task `P4-07`, §11.3).
 
-§11.3's argument is that swapping models should be a config row rather than a
-code change, "which matters given how fast the options move". The registry has
-existed since `P0-07` and nothing read it; this is the part that reads it.
-
-**Nothing here calls a model.** Routing answers "who", the caller does the
-asking, and keeping them apart is what makes every rule below testable against
-rows rather than against a provider. It also means a provider outage is a
-failure in one place instead of a branch in five.
-
-Four rules, each with a failure it exists to prevent:
-
-**A task type is a name from a fixed set.** `task_types` is a free text array,
-so a row saying `tagging` where everything else says `tag_attributes` is not an
-error anywhere — it is an agent that is simply never chosen, and the symptom is
-that the expensive agent handles everything. That is what `TASK_TYPES` and its
-drift test are for, and the seeded registry had exactly that typo in it.
-
-**Disabled is never routed, and an empty `task_types` declares nothing.** Both
-are the same position `budget.py` and `trust.py` take: absent is refused, not
-waved through. A registry whose rows are all placeholders — which is how every
-install starts — must refuse by saying so rather than by returning a row that
-cannot answer.
-
-**The chain skips what it cannot use and stops on a cycle.** `fallback_agent_id`
-is a plain column with nothing stopping A → B → A, and a router that followed it
-literally would hang the run rather than fail it. A link that is disabled, or
-that does not declare the task, is stepped over rather than ending the chain —
-one misconfigured row in the middle should not truncate everything behind it.
-
-**The strongest agent is not the right agent.** §11.3 assigns each task a
-*profile* — strongest for the hard reasoning, mid-tier for attribute tagging,
-"any multilingual" for translation — and routing by raw quality would send
-narrow schema-constrained work to the frontier model every time. That is the
-bill the registry exists to avoid, and it is why `quality_tier` is ordinal and
-separate from `cost_tier` (§11.12).
-
-**Availability is not quality.** An `opportunistic` agent on a box that may be
-asleep still routes first if it is the best one for the task; whether it answers
-is the caller's problem, and that is precisely what the rest of the chain is
-for. Ordering by anything but quality would mean quietly trading edge quality —
-which §11.3 says "dominates everything downstream" — to avoid a wake-on-LAN
-packet.
+Reads the agent registry; nothing here calls a model. Task types come from a fixed set,
+disabled rows and empty declarations are never routed, the fallback chain skips what it
+cannot use and stops on a cycle, and agents are aimed at a task's tier rather than the
+strongest. See docs/features/synthesis.md#routing-rules.
 """
 
 from __future__ import annotations
@@ -67,17 +29,8 @@ __all__ = [
     "route",
 ]
 
-#: The quality tier each task is *aimed at*, from §11.3's table. Not "the
-#: strongest available": the table says mid-tier for attribute tagging and
-#: "any multilingual" for translation, and it says so deliberately — narrow,
-#: schema-constrained work sent to the frontier model is the expense the whole
-#: registry exists to avoid, and §11.12 keeps `quality_tier` ordinal and
-#: separate from `cost_tier` precisely so this can be expressed.
-#:
-#: Where the table says "strongest", the target is the top of the scale, so the
-#: best row wins whatever is configured. Where it says mid or mechanical, the
-#: aim is a match rather than a maximum — and a stronger agent is still a
-#: *fallback*, because overshooting costs money and undershooting costs quality.
+#: The quality tier each task is aimed at, from §11.3's table: a match, not a
+#: maximum. See docs/features/synthesis.md#routing-rules.
 TARGET_TIER: Final[dict[str, int]] = {
     # "Strong reasoning, large context" — edge quality dominates downstream.
     "relation_extraction": QUALITY_TIER_MAX,
@@ -118,10 +71,8 @@ class NoAgentAvailable(LookupError):
 def eligible(agent: Agent, task_type: str, *, min_context: int | None = None) -> bool:
     """Whether this row could do this task at all.
 
-    `min_context` is the one place absence is refused rather than assumed: an
-    agent whose `max_context` nobody recorded cannot be shown to fit a payload,
-    and finding that out from a provider error mid-run costs the run. A caller
-    that does not know its payload size omits it and gets everything.
+    With `min_context`, a row with no recorded `max_context` is refused. Omit it to
+    skip the size check.
     """
     if not agent.enabled:
         return False
@@ -136,16 +87,8 @@ def _preference(agent: Agent, task_type: str) -> tuple[bool, int, int, int, str]
     Rows with a ``route_order`` come first, lowest first (`B-137`, ADR 0002); the rest follow
     by tier, as below.
 
-    Distance rather than maximum, because §11.3 aims most tasks at a tier
-    rather than at the top of the scale. Ties go to the *stronger* agent: both
-    directions are wrong, but overshooting costs money and undershooting costs
-    quality, and §16's position is that bad output is harder to detect than an
-    invoice.
-
-    An unrecorded tier reads as 0 and therefore sorts furthest from everything
-    except the mechanical tasks — "nobody said" is not evidence of being good.
-    `agent_id` last, so two runs over the same registry make the same choice; a
-    route that varied would make a disagreement between runs unattributable.
+    Ties go to the stronger agent, an unrecorded tier reads as 0, and `agent_id` breaks
+    the rest so the choice is deterministic.
     """
     tier = agent.quality_tier or 0
     ordered = agent.route_order is not None
@@ -163,13 +106,8 @@ def resolve_chain(
 ) -> list[Agent]:
     """The ordered list to try, best first. Pure.
 
-    The head is the best eligible agent. What follows is its `fallback_agent_id`
-    chain, which is walked rather than sorted — a fallback is a stated
-    preference ("if this one is down, use that one"), and re-sorting it by
-    quality would discard the statement.
-
-    Returns `[]` when nothing is eligible; `route` is the one that raises, so a
-    caller that wants to ask without handling an exception can.
+    The head is the best eligible agent, then its `fallback_agent_id` chain (walked, not
+    sorted), then every other eligible row. Returns `[]` when nothing is eligible.
     """
     if task_type not in TASK_TYPES:
         # Not a refusal about the registry: the caller asked for something that
@@ -213,14 +151,8 @@ def resolve_chain(
             in_chain.add(nxt.agent_id)
         cursor = nxt.fallback_agent_id
 
-    # Then everything else that can do the task, nearest the target first.
-    #
-    # **The stated chain is a preference, not the whole answer.** The seeded
-    # registry points the mid tier at the frontier model, which does not
-    # declare attribute tagging — so following `fallback_agent_id` alone leaves
-    # attribute tagging with no fallback at all while a local agent that
-    # declares it sits unused. §11.3 asks that an outage degrade rather than
-    # halt, and a chain that stops at the first unusable pointer halts.
+    # Then everything else that can do the task, nearest the target first: the stated
+    # chain is a preference, not the whole answer (docs/features/synthesis.md#routing-rules).
     for agent in usable:
         if agent.agent_id not in in_chain:
             chain.append(agent)
@@ -245,13 +177,8 @@ async def chain_for(
 async def route(sess: AsyncSession, task_type: str, *, min_context: int | None = None) -> Agent:
     """The one agent to ask first, or a refusal that distinguishes the cases.
 
-    Three different messages, because three different things are wrong and
-    exactly one of them is fixed by editing a config row:
-
-    - the registry is empty — nothing was seeded;
-    - rows exist but none is enabled — the placeholders were never filled in,
-      which is how every install starts;
-    - rows are enabled but none declares this task, or none is large enough.
+    Distinguishes an empty registry, no enabled row, and no row that declares the task
+    or is large enough.
     """
     chain = await chain_for(sess, task_type, min_context=min_context)
     if chain:

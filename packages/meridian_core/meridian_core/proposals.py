@@ -1,44 +1,9 @@
 """The prompt each reasoning stage sends, and the parse that survives the answer.
 
-Task `P4-16`; spec §6.3, §11.8, §2.4.
-
-`P4-07` chose the agent, `P4-15` called it and `P4-04` holds the four writes.
-This is the middle nobody had written: what `extract` and `tag` actually ask,
-and how an answer becomes tool arguments.
-
-**Named `proposals` rather than `extraction`.** `worker/extract/` is document
-text extraction — the fast loop, no model anywhere near it — and two modules
-called the same thing in one tree is how somebody ends up reading the wrong
-one while debugging. What this file produces is a *proposal*: something a
-model suggested, which the write tools may still refuse.
-
-Four decisions, each of them a failure this is built against:
-
-**The parse never raises.** §11.8 says a model's output is untrusted, and the
-task that asked for this file says the parse is the load-bearing half. A parse
-that raised on a malformed answer would let one bad response end a run that
-should have skipped a batch — and the run that ends is the unattended one at
-three in the morning. Everything it cannot use comes back as a `Rejection`
-with a reason, so the journal says *which* item was dropped and why.
-
-**A truncated answer keeps its good items.** An answer cut off at
-`max_tokens` is the most common malformation there is, and it is malformed in
-exactly one place: the end. So the array is tried first and, when it will not
-parse, each top-level object is parsed on its own — the last, half-written one
-is dropped and the twenty before it are kept.
-
-**The model cites passage numbers; the server owns the ids.** The prompt
-numbers each passage and asks for those numbers back. `chunk_ids_for` maps
-them against the batch that was actually sent, so a citation is something the
-model *read* rather than something it reconstructed — and an id it invented
-has nowhere to land.
-
-**The vocabulary comes from the schema, not from prose.** Node types, stances
-and certainties are read out of the same `constrained(...)` tuples the CHECK
-constraints are built from. A prompt that listed them by hand would drift from
-the database the first time one was added, and the symptom — a model politely
-using a value the database refuses — looks like a model problem rather than a
-prompt problem.
+Task `P4-16`; spec §6.3, §11.8, §2.4. The parse never raises (what it cannot use is a
+`Rejection` with a reason), a truncated answer keeps its complete items, the model cites
+passage numbers that the server maps to chunk ids, and the vocabularies come from the
+schema's constraints. See docs/features/synthesis.md#framing-and-parsing.
 """
 
 from __future__ import annotations
@@ -72,11 +37,8 @@ __all__ = [
     "tag_prompt",
 ]
 
-#: Node types a model may create. `annotation` is excluded deliberately: an
-#: annotation is a note somebody wrote by hand (`P6-05`, §12.5), and it is the
-#: one layer of the graph that reflects the reader's own thinking. A model that
-#: could mint one would be forging the reader's notes, and nothing downstream
-#: distinguishes them. `resolve_mention` refuses it again at write time.
+#: Node types a model may create. Never `annotation`: that is the reader's own notes
+#: (`P6-05`), and `resolve_mention` refuses it again at write time.
 MODEL_NODE_TYPES: Final[tuple[str, ...]] = tuple(t for t in NODE_TYPE.enums if t != "annotation")
 
 #: How much of an unusable answer to quote back in a rejection. Enough to
@@ -158,10 +120,8 @@ class Parsed[T: BaseModel]:
 class CitationOutOfRange(LookupError):
     """A proposal cited a passage that was not in the batch.
 
-    Its own type because the response differs from every other rejection: a
-    model citing passage 7 of a batch of four has stopped describing what it
-    was given, and an edge written from it would carry a citation that leads
-    somewhere else entirely.
+    Its own type: a model citing a passage it was not given has stopped describing
+    what it was given.
     """
 
 
@@ -274,10 +234,7 @@ def _closing(kind: str) -> str:
 def extract_prompt(passages: Sequence[Passage], *, topics: Sequence[str] | None = None) -> Prompt:
     """The relation-extraction prompt for one batch (§5.4, §8).
 
-    Topics are named when the run has them, because the same passage yields
-    different relations depending on what is being asked — and left out
-    entirely when it does not, rather than passed as an empty list the model
-    has to interpret.
+    Topics are named when the run has them and left out entirely when it does not.
     """
     focus = ""
     if topics:
@@ -301,14 +258,8 @@ def tag_prompt(
 ) -> Prompt:
     """The attribute-tagging prompt for one batch (§7.1, §7.3).
 
-    `attributes` is the *active* set, each with its definition, read from the
-    database rather than written here: §7.3 caps the active attributes and
-    audits them monthly, so a list in a prompt would be a second schema that
-    nobody retires from.
-
-    `entities` are the names already in the graph. Given rather than withheld
-    because tagging a name the graph already holds is the whole point, and a
-    model that has not seen them invents a near-miss spelling for each one.
+    `attributes` is the active set with definitions, read from the database (§7.3).
+    `entities` are names already in the graph, so the model uses their spellings.
     """
     catalogue = "\n".join(
         f"- {name}: {definition}" if definition else f"- {name}" for name, definition in attributes
@@ -334,22 +285,9 @@ def tag_prompt(
 def _scan(text: str, opener: str, closer: str) -> tuple[list[tuple[int, int]], bool]:
     """Balanced top-level `opener`…`closer` spans, and whether one never closed.
 
-    The flag is the reason this returns a list rather than yielding: an answer
-    cut off at `max_tokens` loses its last item silently otherwise, and a run
-    whose answers are being truncated every time then looks exactly like one
-    whose model is simply terse. The items that completed are still returned —
-    the truncation is reported *beside* them, not instead of them.
-
-    Hand-written rather than regex because JSON nests and regex does not: a
-    pattern matching `{.*}` across a twenty-item answer returns one span
-    containing all of them, and the per-item recovery this module exists for
-    stops working. String awareness matters for the same reason — a passage
-    quoted inside a `disanalogy` field can contain a brace, and a scanner that
-    counted it would close the object early.
-
-    An unterminated final span yields nothing at all, which is exactly right:
-    a truncated object is not a proposal, and the complete ones before it are
-    unaffected.
+    String-aware and nesting-aware, unlike a regex. An unterminated final span yields
+    nothing; the flag reports the truncation beside the complete spans.
+    See docs/features/synthesis.md#framing-and-parsing.
     """
     spans: list[tuple[int, int]] = []
     depth = 0
@@ -478,10 +416,8 @@ def parse_tags(text: str) -> Parsed[TagProposal]:
 def chunk_ids_for(citations: Sequence[int], passages: Sequence[Passage]) -> list[int]:
     """Passage numbers back into chunk ids, against the batch that was sent.
 
-    Raises `CitationOutOfRange` rather than dropping the bad number, because a
-    proposal citing three passages of which one does not exist is not a
-    proposal with a typo — the citations are the evidence, and an edge written
-    from two of the three would silently claim support it was never given.
+    Raises `CitationOutOfRange` for any number outside the batch, rather than dropping
+    it: an edge from the remaining citations would claim support it was never given.
     """
     resolved: list[int] = []
     for number in citations:
