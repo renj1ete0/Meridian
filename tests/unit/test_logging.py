@@ -122,6 +122,16 @@ def test_noisy_libraries_are_quietened(captured) -> None:
     assert logging.getLogger("asyncpg").level >= logging.WARNING
 
 
+def test_an_empty_page_from_the_extractor_library_is_not_an_error(captured) -> None:
+    """`trafilatura` logs an empty or unparseable page at ERROR; the extractor already records
+    it as a failed extraction, and the duplicate inflated the worker's error count."""
+    logging.getLogger("trafilatura.utils").error("parsed tree length: 1, wrong data type")
+    logging.getLogger("trafilatura.core").error("empty HTML tree: None")
+    logging.getLogger("worker.main").error("a real error")
+
+    assert [r["logger"] for r in _records(captured)] == ["worker.main"]
+
+
 def test_invalid_level_fails_loudly() -> None:
     """A typo'd level must not silently fall back and hide records."""
     with pytest.raises(RuntimeError):

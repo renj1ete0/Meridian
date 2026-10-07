@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.4] — 2026-10-07
+
+### Fixed
+
+- `B-154`: an empty or unparseable page no longer counts as a worker error. trafilatura logs
+  one at ERROR, and the extractor already records it as a failed extraction; in a crawl hour
+  all 40 of the worker's logged errors were these.
+
 ## [0.163.3] — 2026-10-07
 
 ### Fixed

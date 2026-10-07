@@ -55,6 +55,9 @@ _NOISY_DEFAULTS: Final[dict[str, int]] = {
     "transformers": logging.WARNING,
     "urllib3": logging.WARNING,
     "filelock": logging.WARNING,
+    # An empty or unparseable page is logged at ERROR by trafilatura, and the extractor already
+    # records it as a failed extraction; at ERROR it counted against the worker's health.
+    "trafilatura": logging.CRITICAL,
 }
 
 

@@ -203,6 +203,9 @@ once: one JSON object per line. Standard library only, to keep the dependency li
   no allowlist to keep in step with `logging`'s internals.
 - Third-party libraries are quietened (every SQL statement, every checkout), but stay overridable
   for debugging.
+- `trafilatura` is held at CRITICAL (`B-154`): it logs an empty or unparseable page at ERROR,
+  which the extractor already records as a failed extraction, so each one counted as a worker
+  error.
 - Exceptions are formatted into the record, since `exc_info` is not JSON-serialisable and a
   check grepping for "Traceback" needs the text inline.
 - `configure_logging` is idempotent: a second call updates the level and service rather than
