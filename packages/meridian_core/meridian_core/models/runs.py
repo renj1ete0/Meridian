@@ -1,10 +1,7 @@
 """Run state, enrichment, and report jobs (spec §11.10, §6.6, §11.13).
 
-Orchestrator state is a plain table, not a workflow framework. A crash at
-``stage='tagging'`` resumes there on the next wake, and combined with the rule
-that the high-water mark advances only after writes commit (§6.3), that gives
-full resumability without an abstraction layer between the orchestrator and its
-validated tool calls.
+Orchestrator state is a plain table; a crash resumes at its ``stage`` on the next wake
+(§6.3). See docs/reference/data-model.md#runs-and-reports.
 """
 
 from __future__ import annotations
@@ -77,22 +74,13 @@ class Run(Base):
 
     error: Mapped[str | None] = mapped_column(Text)
 
-    #: Touched each time the orchestrator completes a step (`P4-08`). A crashed
-    #: run and a live one are both `status='running'` and otherwise identical
-    #: from outside; this is what separates them, and without it a resume would
-    #: either never happen or happen alongside the run it was meant to replace.
-    #:
-    #: NULL means "claimed but has not completed a step yet", which reads as
-    #: stale — a run that died before its first beat is exactly the one that
-    #: most needs taking over.
+    #: Touched each time the orchestrator completes a step (`P4-08`), separating a
+    #: crashed run from a live one. NULL ("no step yet") reads as stale.
     heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        # **At most one unfinished run, enforced by the database** (`P4-08`).
-        # Two orchestrators on one corpus means double spend and two sets of
-        # writes against the same high-water mark, and §11.9 is explicit that
-        # the first signal of runaway cost would be the bill. A unique index on
-        # `status` restricted to one value permits exactly one row holding it.
+        # At most one unfinished run, enforced by the database (`P4-08`): a unique
+        # index on `status` restricted to one value.
         Index(
             "ix_runs_one_running",
             "status",
@@ -144,12 +132,10 @@ class EnrichmentItem(Base, TimestampMixin):
 
 
 class Report(Base):
-    """A user-triggered drafting job (§11.13).
+    """A user-triggered drafting job (§11.13), bound to a scope plus a question.
 
-    Always bound to a scope — a saved view, a coverage cell, the contested list,
-    or a node pair — plus a question. ``coverage_snapshot`` records what the
-    evidence looked like at submit time, so a draft written over thin coverage
-    stays auditable afterwards rather than reading as confident prose.
+    ``coverage_snapshot`` records the evidence at submit time, so a draft over thin
+    coverage stays auditable.
     """
 
     __tablename__ = "reports"

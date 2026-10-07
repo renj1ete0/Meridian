@@ -34,14 +34,8 @@ TASK_STATUS = constrained(
 
 TASK_TYPE = constrained("url", "query", "doi", "sitemap", name="task_type")
 
-# Who put this in the queue. Frontier expansion is model-independent and
-# accounts for most of the queue; model-emitted seeds are capped per run (§11.4).
-#
-# Everything below `frontier` is distinguishable from it on purpose. "How did
-# this URL get here" is the question §5.2's seed provenance exists to answer,
-# and a link a person placed on a page, a site's own index of itself, a search
-# engine's ranking, a work another paper cited, and an open-access copy found
-# by resolving that citation are five different answers.
+# Who put this in the queue (§5.2). Model-emitted seeds are capped per run (§11.4).
+# See docs/reference/data-model.md#queue.
 SEED_SOURCE = constrained(
     "frontier",
     "sitemap",
@@ -55,11 +49,7 @@ SEED_SOURCE = constrained(
 )
 
 #: Which of §7.4's five diversity mechanisms wrote a `diversity` query (task
-#: `P5-05`). NULL for every other row, and for a diversity query that only
-#: widens a topic (a concept, a pair of concepts) rather than answering one of
-#: the five failure modes. Kept on the row, not in a log, because the question
-#: it exists for — "which mechanism's questions find anything" — joins it to
-#: `search_results` / `search_queued`, which are on the row too.
+#: `P5-05`). NULL for every other row, and for a query that only widens a topic.
 SEED_MECHANISMS = (
     "counter_seed",  # 1: counter-phrasings ("criticism of …")
     "tier_imbalance",  # 2: a node evidenced by one tier, asked for the others
@@ -101,28 +91,17 @@ class QueueTask(Base, TimestampMixin):
     # domain stops spinning the queue (§13.4) without being removed from it.
     next_attempt_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
-    # A lease, not a status. Claiming by flipping status would need a new state
-    # in the flow, and a worker that dies mid-fetch would strand the task there
-    # forever. With a lease, an expired claim is simply reclaimable — which is
-    # what "runs unattended for weeks" requires (§13.4).
+    # A lease, not a status: an expired claim is simply reclaimable (§13.4).
     claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     claimed_by: Mapped[str | None] = mapped_column(Text)
     fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
-    #: For a `query` task, what the search answered with (`B-56`): how many
-    #: result URLs came back, and how many of them were new to the queue. NULL
-    #: until answered. Without it "this question found nothing" was invisible,
-    #: and that is exactly the signal a gap list wants.
+    #: For a `query` task, how many result URLs came back and how many were new to
+    #: the queue (`B-56`). NULL until answered.
     search_results: Mapped[int | None] = mapped_column(Integer)
     search_queued: Mapped[int | None] = mapped_column(Integer)
-    #: For a `doi` task, the page whose reference list or links named it
-    #: (`B-58`). A cited paper is worth what the page citing it is worth: one
-    #: named by an on-topic page is the best material the crawl can reach, and
-    #: one named by an off-topic page is the drift `B-48` stopped. NULL for
-    #: every other task type, and for a DOI queued before this was recorded or
-    #: whose citing source was since deleted — it is a ranking input, not
-    #: provenance anything depends on, so it lets go rather than blocking a
-    #: source's deletion.
+    #: For a `doi` task, the page whose references named it (`B-58`): a ranking
+    #: input, so it is set NULL rather than blocking a source's deletion.
     parent_source_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("sources.source_id", ondelete="SET NULL"), index=True
     )
@@ -155,12 +134,8 @@ FETCH_OUTCOME = constrained(
     "blocked",  # domain marked blocked by policy before the request went out
     "connection_error",
     "parse_error",
-    # The safeguards in worker/fetch.py, each recorded separately rather than
-    # collapsed into "blocked". They diagnose different things and want
-    # different responses: an unsafe_target spike means frontier expansion is
-    # chasing internal addresses, content_type_rejected means the allowlist is
-    # too narrow for a domain, and a decompression_bomb is someone being hostile.
-    # One shared bucket would make all three read as "a domain went bad".
+    # The safeguards in worker/fetch.py, each its own outcome rather than "blocked",
+    # because each wants a different response.
     "unsafe_target",  # netguard refused the address, scheme or redirect hop
     "content_type_rejected",
     "decompression_bomb",
@@ -172,16 +147,8 @@ FETCH_OUTCOME = constrained(
 class FetchAttempt(Base):
     """One record per fetch attempt, successful or not.
 
-    ``fetch_policy.consecutive_failures`` is a counter that resets, and
-    ``queue.error`` holds only the most recent message — neither can answer "what
-    is the fetch success rate today" (§12.5's health line) or "has this domain
-    been serving nothing but 404s for a week". Unattended systems fail silently;
-    the counter tells you something is wrong now, this tells you what has been
-    happening.
-
-    High volume by design — one row per request. Prune on a retention window
-    rather than keeping it forever; the aggregate rates are what matter after a
-    few weeks, not the individual rows.
+    High volume by design, pruned on a retention window. See
+    docs/reference/data-model.md#fetch-attempts.
     """
 
     __tablename__ = "fetch_attempts"

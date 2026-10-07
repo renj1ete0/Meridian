@@ -1,20 +1,7 @@
 """The robots.txt cache, kept across restarts (task P1-29, spec §6.1, §2.3.1.3).
 
-The cache was in-process, so a worker restart re-fetched `/robots.txt` for every
-origin it touched. Harmless while the crawl is deep and a handful of domains;
-wasteful once it is wide, because a restart then costs one extra request per
-domain — paid against the same rate limiter the pages queue behind, so the
-first minutes after a restart are spent not crawling.
-
-**The raw file is stored, not the parsed rules.** Re-parsing on load is cheap,
-the compiled matchers are not serialisable in any form worth versioning, and a
-fix to the parser then applies to everything already cached rather than only to
-origins fetched afterwards. The file is also the evidence: "why was this URL
-refused" is answerable from the row.
-
-**One row per origin, overwritten in place.** The table is therefore bounded by
-the number of distinct origins the crawl has ever touched — the same order as
-`fetch_policy`, and not a growth curve anybody needs to sweep.
+The raw file is stored, not the parsed rules, one row per origin, overwritten in place.
+See docs/reference/data-model.md#robots-cache.
 """
 
 from __future__ import annotations
@@ -28,11 +15,8 @@ from meridian_core.db import Base
 
 from .mixins import TimestampMixin, constrained
 
-#: What happened when this origin's robots.txt was last read. Kept rather than
-#: inferred from `body IS NULL`, because "the server said 404" and "the server
-#: could not be reached" both store no body and mean opposite things: the first
-#: permits the whole origin, the second refuses it until it can be read
-#: (§2.3.1.3 — a crawler that cannot check must not assume permission).
+#: What happened when this origin's robots.txt was last read. Not inferable from
+#: `body IS NULL`: a 404 permits the origin, an unreachable server refuses it (§2.3.1.3).
 ROBOTS_OUTCOME = constrained("ok", "missing", "unreachable", name="robots_outcome")
 
 
@@ -52,12 +36,8 @@ class RobotsCacheEntry(Base, TimestampMixin):
 
     fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    #: Wall clock, deliberately — and this is the one thing about this table
-    #: that is easy to get wrong. The in-process cache expires on
-    #: `time.monotonic()`, which is correct there and meaningless here: it
-    #: counts from an arbitrary origin, usually boot, so a persisted monotonic
-    #: deadline would be compared against a different clock after the restart
-    #: it exists to survive.
+    #: Wall clock, deliberately: a persisted monotonic deadline would be read against a
+    #: different clock after a restart.
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (Index("ix_robots_cache_expires_at", "expires_at"),)

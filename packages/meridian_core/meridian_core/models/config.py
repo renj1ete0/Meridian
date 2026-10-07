@@ -1,13 +1,8 @@
 """Configuration that lives in the database, not in files (spec §13.1).
 
-The YAML in ``config/`` seeds these tables once at first boot and is not read
-again. Nothing routine should require editing a file on the host — topic
-weights, fetch policy, and model routing are all UI or MCP actions.
-
-Credentials are the deliberate exception: the agent registry stores the *name*
-of the environment variable to read, never the value. The database is
-snapshotted off-device for backup, and keys would travel with every snapshot
-(§11.11).
+The YAML in ``config/`` seeds these tables once at first boot. Credentials are never
+stored: the agent registry holds the *name* of the environment variable (§11.11). See
+docs/reference/data-model.md#configuration-tables.
 """
 
 from __future__ import annotations
@@ -39,10 +34,8 @@ TOPIC_STATUS = constrained("active", "maintenance", "paused", "archived", name="
 DOMAIN_STATUS = constrained("active", "blocked", "paused", name="domain_status")
 TOKEN_SCOPE = constrained("read", "read_write", name="token_scope")
 
-# Who is on the other end of a grant (task P3-06, shared-read-access §3).
-# A person arrives through SSO and a machine through a service token, and
-# they are audited differently — so the distinction is a column rather than
-# something inferred from whether the subject looks like an email address.
+# Who is on the other end of a grant (task P3-06): a person (SSO) or a machine (a
+# service token). A column, not inferred from the subject's shape.
 SUBJECT_KIND = constrained("person", "service", name="subject_kind")
 
 # A named set of tools, never a free-form list (§3). A per-person tool list
@@ -54,10 +47,8 @@ AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_a
 class TopicConfig(Base):
     """Attention as a weight vector over topics; seeds drawn proportionally (§10).
 
-    Steering rewrites the vector and never deletes, so returning to a topic costs
-    nothing — no rebuild, no re-crawl. That applies to whole topics too:
-    ``archived`` releases the topic's share of the pool and stops seeding, but
-    leaves every node, edge, and tag it produced untouched (§10.2).
+    Steering never deletes: ``archived`` stops seeding a topic and leaves everything it
+    produced (§10.2).
     """
 
     __tablename__ = "topic_config"
@@ -86,11 +77,8 @@ class TopicConfig(Base):
         TOPIC_STATUS, nullable=False, default="active", server_default="active"
     )
 
-    #: What the topic is about, in a sentence (task P2-21). A slug is a poor
-    #: description of a subject — two words, and an embedder reads them without
-    #: context — so this is most of what the content labeller compares a page
-    #: against. Optional: a topic without one is labelled from its name and its
-    #: vocabulary, which works and is less discriminating.
+    #: What the topic is about, in a sentence (task P2-21): most of what the content
+    #: labeller compares a page against. Optional, and less discriminating without.
     description: Mapped[str | None] = mapped_column(Text)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -138,16 +126,9 @@ PROPOSAL_STATUS = constrained(
 class SteeringProposal(Base, TimestampMixin):
     """A steering change the system proposes and applies unless refused (`P6-38`).
 
-    §10.2's default is that the system steers itself; §10.1 that every change is
-    logged with a reason. A proposal sits between the two: the change is stated
-    in plain words with the numbers it rests on, it waits `apply_after` for an
-    objection, and it is applied through :mod:`meridian_core.steering` — so the
-    change itself still lands in `steering_log` like any other.
-
-    **At most one pending proposal per topic and kind**, held by a partial
-    unique index rather than by the writer remembering: two pending boosts for
-    one topic would apply one after the other, and the second would be a
-    decision nobody saw.
+    Waits `apply_after` for an objection, then goes through :mod:`meridian_core.steering`.
+    At most one pending proposal per topic and kind, by a partial unique index. See
+    docs/reference/data-model.md#steering-proposals.
     """
 
     __tablename__ = "steering_proposals"
@@ -235,49 +216,28 @@ class FetchPolicy(Base):
     )
 
     # --- what the crawl learned about this domain (task P1-27) ------------
-    #
-    # Learned state, not configuration. `render_js: auto` fetches statically and
-    # re-fetches through the browser when the HTML is a shell, which is the
-    # right order for a corpus of mostly-static pages — and has no memory, so a
-    # JS-only domain pays both requests on every page forever. Those requests
-    # queue in the same per-domain slot the pages do, so the cost is crawl
-    # throughput on exactly the domains that are already slowest.
+    # Learned state, not configuration: whether `render_js: auto` should go straight
+    # to the browser. See docs/reference/data-model.md#fetch-policy.
 
-    #: *Consecutive* escalations, reset the moment a static fetch turns out to
-    #: have been enough. The same shape as `consecutive_failures` above and for
-    #: the same reason: a domain that changes behaviour should stop being
-    #: treated as though it had not.
+    #: *Consecutive* escalations, reset the moment a static fetch was enough.
     render_js_escalations: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
 
-    #: When the threshold was crossed. The learning **expires**, and without
-    #: that this is a trap: a domain going straight to the browser never fetches
-    #: statically again, so the counter cannot reset and a redesign can never be
-    #: noticed.
+    #: When the threshold was crossed. The learning expires, or a redesign could never
+    #: be noticed.
     render_js_learned_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     # --- whether this domain may be seeded at all (task P4-12, §11.4) -----
-    #
-    # Distinct from `status` and from `trust_state`, and the three answer
-    # different questions: `status` is whether to fetch what is already queued,
-    # `trust_state` is whether a model may read what came back, and this is
-    # whether new URLs on this domain may be *queued in the first place*.
-    #
-    # **NULL means undecided, and undecided is not permission.** The crawl
-    # earns a domain its allowance by fetching from it successfully; a model
-    # proposing a domain nobody has seen gets NULL and waits, the same shape as
-    # a harvested gazetteer term that queues for approval rather than applying
-    # itself (§5.6).
+    # Whether new URLs may be queued, unlike `status` and `trust_state`. NULL is
+    # undecided, and undecided is not permission. See
+    # docs/reference/data-model.md#fetch-policy.
 
     #: True once the domain may be seeded freely. NULL until something decides.
     seed_allowed: Mapped[bool | None] = mapped_column()
 
-    #: How this domain first entered the crawl's awareness — a `seed_source`
-    #: value. **The first one, never overwritten**: a domain discovered by
-    #: following a link and later proposed by a model was still discovered by
-    #: following a link, and letting the later event win would erase exactly
-    #: the provenance this column exists to keep.
+    #: How this domain first entered the crawl, a `seed_source` value. Never
+    #: overwritten by a later event.
     first_seen_via: Mapped[str | None] = mapped_column(SEED_SOURCE)
 
     #: Successful fetches that produced a *novel* document. The threshold for
@@ -288,12 +248,7 @@ class FetchPolicy(Base):
     )
 
     # --- what screening concluded about this domain (task P4-14, §2.5) ----
-    #
-    # The verdict is cached *here*, at the domain, because screening is paid
-    # once per domain and not once per page. A site with four thousand pages
-    # does not get judged four thousand times, and — more to the point — a
-    # domain cleared on Monday does not have page 3,001 quarantined on Friday
-    # because that particular page happened to quote something.
+    # Cached at the domain because screening is paid once per domain.
 
     #: `unscreened` until something concludes otherwise. A cleared domain's
     #: pages are cleared; a quarantined domain's pages are held back from the
@@ -302,10 +257,8 @@ class FetchPolicy(Base):
         TRUST_STATE, nullable=False, default="unscreened", server_default="unscreened"
     )
 
-    #: Consecutive fetches that the injection pre-screen did not flag. The same
-    #: shape as `consecutive_failures` and `render_js_escalations`, and reset
-    #: the same way: a domain that starts serving hostile pages should stop
-    #: being treated as though it had not.
+    #: Consecutive fetches the injection pre-screen did not flag; reset like the other
+    #: counters.
     clean_fetches: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
@@ -378,14 +331,8 @@ class Agent(Base, TimestampMixin):
 class Grant(Base, TimestampMixin):
     """Access for one person or one machine (task `P3-06`, shared-read-access §3).
 
-    **The unit of sharing is a person, not a credential.** Somebody will hold
-    several tokens — a browser session, an MCP client on a laptop, another on a
-    server — and revoking their access has to revoke all of them at once. A
-    per-token model cannot express that: you would be chasing credentials,
-    and the one you miss is the one that still works.
-
-    So `agent_tokens.grant_id` points here, and revoking a grant revokes every
-    token beneath it in one statement.
+    Revoking a grant revokes every token beneath it (`agent_tokens.grant_id`). See
+    docs/reference/data-model.md#grants-and-their-audit.
     """
 
     __tablename__ = "grants"
@@ -443,19 +390,9 @@ class Grant(Base, TimestampMixin):
 class GrantAudit(Base):
     """One row per tool call made under a grant (task `P3-11`, §6).
 
-    **Audited by grant, not by token.** The question worth answering later is
-    "what has this person's model been reading", and a per-token log cannot
-    answer it once they hold three clients — you would be joining logs by hand
-    and hoping you found them all. The token is recorded too, because "which
-    credential" is a real follow-up question, but the grant is the index.
-
-    **Arguments are recorded, results are not.** What somebody searched for is
-    the audit; what came back is the corpus, and copying it here would mean a
-    second store of the same content with none of the retention rules the first
-    one has (§5.4). `rows` answers "how much" without keeping any of it.
-
-    High volume by design, like `fetch_attempts`, and pruned the same way: the
-    aggregate is what matters after a few weeks.
+    Indexed by grant, with the token recorded too. Arguments are recorded, results are
+    not. High volume, pruned like `fetch_attempts`. See
+    docs/reference/data-model.md#grants-and-their-audit.
     """
 
     __tablename__ = "grant_audit"
@@ -532,23 +469,8 @@ JOB_STATUS = constrained("ok", "failed", "timeout", name="job_run_status")
 class BudgetConfig(Base, TimestampMixin):
     """The caps, and the fact that somebody set them (task `P4-10`, §16, §11.9).
 
-    §16 lists runaway cost from the seed→ingest→cost feedback loop as
-    *"manageable if caps are set before first autonomous run"* — a mitigation
-    with an ordering requirement in it, and nothing enforced the ordering. This
-    table is what "set" means, and `P4-13` is what refuses to start without it.
-
-    **One row, enforced by the database.** A settings table that can hold two
-    rows eventually holds two rows, and then "the budget" is whichever one the
-    query happened to order first. The CHECK makes the second insert an error
-    rather than a silent ambiguity, and makes `SELECT ... WHERE budget_id = 1`
-    the only access pattern anyone can write.
-
-    **Nullable caps mean unconfigured, not unlimited.** `reserve_seeds` already
-    refuses a `None` cap for that reason, and the columns carry it through: a
-    budget row that exists but leaves `max_seeds_per_run` empty has not been
-    configured for seeds, and the run does not start. "Nobody decided" must
-    never read as "no limit", because that is the shape in which a missing
-    config becomes a bill.
+    One row (`budget_id = 1`), enforced by a CHECK. A NULL cap means unconfigured, not
+    unlimited, and the run does not start. See docs/reference/data-model.md#budget-config.
     """
 
     __tablename__ = "budget_config"
@@ -596,16 +518,8 @@ class BudgetConfig(Base, TimestampMixin):
 class ScheduledJob(Base, TimestampMixin):
     """One recurring job and when it next runs (task P5-06, spec §13.1).
 
-    §13.1's corollary, stated outright: **"no cron files. The scheduler reads its
-    timetable from the DB so schedule changes are a UI action."** A crontab on
-    the box is a configuration nobody can see from the interface, cannot change
-    without SSH, and does not travel with a database snapshot.
-
-    **An interval rather than a cron expression.** Cron's grammar is expressive
-    and needs a parser, and §13.2 wants these editable from a UI — where "every
-    6 hours" is a number and `0 */6 * * *` is a support question. A job that
-    must land at a particular time of day gets `next_run_at` set to that time
-    once; the interval keeps it there.
+    An interval, not a cron expression; a job that must land at a time of day gets
+    `next_run_at` set once. See docs/reference/data-model.md#scheduled-jobs.
     """
 
     __tablename__ = "scheduled_jobs"
@@ -616,10 +530,8 @@ class ScheduledJob(Base, TimestampMixin):
     #: re-run without duplicating the timetable.
     name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
 
-    #: The module to run, as `python -m <module>`. Not a shell string: a
-    #: timetable row is editable from a UI, and a row that could name a shell
-    #: command would make the schedule table a remote execution surface for
-    #: anyone who could write to it.
+    #: The module to run, as `python -m <module>`. Never a shell string: the row is
+    #: editable from a UI.
     module: Mapped[str] = mapped_column(Text, nullable=False)
     args: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 

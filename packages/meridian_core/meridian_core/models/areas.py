@@ -1,10 +1,7 @@
 """Areas: nested clusters of passages (task P6-30).
 
-Derived data, rebuilt wholesale by ``worker.areas``. A build is one complete
-clustering; reads use the newest build, and older builds are removed by the
-job (all but the previous one, which a later build reads for stable
-positions). Deleting them breaks no promise that nothing is deleted: an area
-cites nothing and is re-derived from the passages every time.
+Derived data, rebuilt wholesale by ``worker.areas``; reads use the newest build, and
+all but the previous build are removed. See docs/reference/data-model.md#areas.
 """
 
 from __future__ import annotations

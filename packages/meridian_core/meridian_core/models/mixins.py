@@ -1,10 +1,7 @@
 """Column mixins and shared enum helpers.
 
-Provenance is the reason this module exists. Spec §2 principle 3 requires every
-node, edge, and tag to record what justified it, and §11.12 requires every
-artifact to record which model produced it so quality can be improved
-retroactively. Both are easy to forget on a new table, so they live here rather
-than being retyped per model.
+Provenance (§2 principle 3) and the producing model (§11.12) live here so no new
+table forgets them. See docs/reference/data-model.md#conventions.
 """
 
 from __future__ import annotations
@@ -22,10 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 def constrained(*values: str, name: str) -> Enum:
     """A string column constrained to ``values`` by a CHECK, not a native enum.
 
-    ``create_constraint=True`` is not optional here. SQLAlchemy has defaulted it
-    to False since 1.4, so without it these columns are plain VARCHAR that
-    silently accept any string — which defeats the entire point, and is only
-    visible if you actually try to insert a bad value.
+    ``create_constraint=True`` is required; SQLAlchemy's default since 1.4 is no CHECK.
     """
     return Enum(
         *values,
