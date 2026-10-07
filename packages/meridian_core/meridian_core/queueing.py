@@ -316,20 +316,10 @@ async def enqueue(
     """Add one task to the queue. Flushes; does not commit.
 
     ``seed_mechanism`` names which of §7.4's diversity mechanisms asked for a
-    ``diversity`` query (`P5-05`); the column's CHECK refuses anything else.
-
-    Deliberately does no filtering. Whether a URL is worth fetching is a
-    question about blocklists, what has already been seen and what the domain's
-    policy says — all of which need more than the queue table, and all of which
-    belong to `worker/prefilter.py`. A queueing function that also decided
-    policy would be impossible to test and impossible to reuse from Admin.
-
-    It does *record* one thing, though (`P4-12`): how the domain first became
-    known. That goes here rather than at the four call sites because it must not
-    be forgettable — a call site added next year that skipped it would leave a
-    domain with no provenance, and a domain with no provenance can never
-    auto-approve. Recording is not deciding: `seed_allowed` is untouched except
-    for an operator's own seed, which is consent.
+    ``diversity`` query (`P5-05`). No filtering here: that is `worker/prefilter.py`.
+    Records how the domain first became known (`P4-12`), so no caller can forget it;
+    `seed_allowed` is set only for an operator's own seed. See
+    docs/features/discovery.md#queueing.
     """
     with contextlib.suppress(ValueError):
         await record_discovery(sess, registrable_domain(url), seed_source=seed_source)
@@ -373,16 +363,9 @@ async def enqueue_dois(
 ) -> int:
     """Queue DOIs one page named, each recording that page (`B-58`). Returns how many are new.
 
-    ``dois`` must already be normalised: this compares them as strings, and two
-    spellings of one DOI would be two rows, two resolutions and two fetches.
-
-    A DOI already queued is not queued again, but a *pending* one ranked below
-    ``priority`` is raised to it and takes this page as its parent. A paper a
-    second page cites is worth what the better of the two is worth, and the
-    first page to name it is often the weaker one — a listing or a tag page
-    reaches a reference before the article that discusses it. A row that is not
-    pending is left alone: it has been answered, and re-ranking an answer does
-    nothing.
+    ``dois`` must already be normalised: they are compared as strings. A pending DOI
+    ranked below ``priority`` is raised to it and takes this page as its parent; an
+    answered one is left alone. See docs/features/discovery.md#cited-paper-rank.
     """
     if not dois:
         return 0

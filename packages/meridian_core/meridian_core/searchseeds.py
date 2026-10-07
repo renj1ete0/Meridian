@@ -1,29 +1,9 @@
 """Fresh search queries, so the crawl keeps widening (task `B-51`, spec §7.4).
 
-A corpus built by following links converges: each page links to its own
-neighbourhood, and after the first few seeds the crawl was 98% link-following
-and 2% search, fetching more of the same few sites. §7.4 reserves a share of
-the seed budget for seeds that do not come from the corpus's own links; this
-module writes them, mechanically, from what the database says each topic is.
-
-**No model.** Queries are built from each topic's name, description and
-approved vocabulary, in a handful of shapes:
-
-- the concept on its own, and beside its topic's name;
-- two concepts of one topic together, which reaches material neither finds
-  alone;
-- evidence-shaped phrasings (``… evaluation``, ``… study``);
-- §7.4's counter-seeds (``criticism of …``, ``… problems``), because a crawl
-  that only confirms its vocabulary walks toward consensus;
-- news, through SearXNG's ``!news`` category, so reporting reaches a corpus
-  that link-following from scholarly pages never would;
-- §7.4's mechanism 5, forced non-English seeds: a concept in another language's
-  own words (`translations`, from Wikipedia), under SearXNG's ``:lang``
-  prefix, and as news in that language.
-
-Every query is new: the generator is handed every query already queued, in any
-status, and never repeats one. The order is shuffled by a seed the caller
-passes, so a run is reproducible and successive runs differ.
+Built mechanically from each topic's name, description and approved vocabulary, in a
+handful of shapes: concepts, pairs, evidence phrasings, counter-seeds, news, and
+other-language seeds. Never repeats a query already queued; the shuffle is seeded. See
+docs/features/discovery.md#search.
 """
 
 from __future__ import annotations
@@ -47,10 +27,7 @@ EVIDENCE = ("evaluation", "study", "evidence", "outcomes")
 COUNTER = ("criticism of {}", "{} problems", "why {} failed")
 
 #: Which §7.4 mechanism each shape is an instance of (`P5-05`), written to
-#: `queue.seed_mechanism` so a query's yield can be read per mechanism. The
-#: counter-phrasings are mechanism 1 at *topic* level: they fire for every
-#: topic, not because a node's sources were seen to agree (that needs stance,
-#: which is a model's output and does not exist yet — see `diversity`).
+#: `queue.seed_mechanism`. Counter-phrasings are mechanism 1 at topic level.
 MECHANISM_BY_KIND = {
     "counter": "counter_seed",
     "description": "naive_phrasing",
@@ -104,11 +81,8 @@ MAX_FACET_WORDS = 5
 def description_facets(description: str | None) -> list[str]:
     """The subjects a topic's description lists (`B-103`), in order, once each.
 
-    A description written for people lists what the topic covers — "costs,
-    pricing, fares, funding and financing". Each item is a subject a search can
-    ask for. Split on punctuation and on "and"/"or", leading function words
-    dropped, clauses ("how they are regulated") and single short words left
-    out. Deterministic, and nothing here is a model's output (§2.1).
+    Split on punctuation and on "and"/"or"; leading function words dropped, clauses
+    and single short words left out.
     """
     out: dict[str, None] = {}
     for piece in _FACET_SPLIT.split((description or "").lower()):
@@ -209,11 +183,8 @@ def plan(
 ) -> list[Query]:
     """``per_topic`` new queries for each topic.
 
-    Shapes are interleaved rather than drawn in proportion to how many
-    candidates each has — pairs vastly outnumber everything else, and a run of
-    nothing but pairs would never ask for news or counter-evidence. So each run
-    first takes one of each shape in ``kinds_first`` that still has a new query,
-    then fills the rest at random.
+    One of each shape in ``kinds_first`` that still has a new query, then the rest at
+    random, so pairs do not crowd out news and counter-evidence.
     """
     if per_topic < 1:
         raise ValueError("per_topic must be at least 1")

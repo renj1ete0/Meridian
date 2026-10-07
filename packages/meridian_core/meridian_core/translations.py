@@ -1,22 +1,9 @@
 """Other-language names for the vocabulary, from Wikipedia (task `B-52`, §7.4).
 
-§7.4 mechanism 5 — forced non-English seeds — is "not optional": the comparison
-set is largely non-Anglophone, and a corpus found only through English queries
-is a corpus of the English-language literature about it. A SearXNG language
-prefix on English words was measured to return English pages; the query needs
-the other language's *words*.
-
-The worker may not call a model (§2.1), so the words come from Wikipedia's
-interlanguage links: the title of the same article in another language. They
-are written by people who speak it, they are looked up rather than generated,
-and a phrase with no article simply has no translation — which is the honest
-outcome, not a gap to fill with a guess.
-
-Cleaning is conservative. A qualifier in parentheses is dropped ("Peloton
-(routier)" → "Peloton"); a title identical to the English one is not a
-translation (a borrowed term like "Transit-oriented development" in French
-finds English pages); a title that is the whole of a broader subject is kept,
-because it is still a word people search that language with.
+Interlanguage titles of the same article, looked up, never generated; a phrase with no
+article has no translation. Cleaning is conservative: a parenthesised qualifier is
+dropped, a title identical to the English is not a translation. See
+docs/features/discovery.md#other-languages.
 """
 
 from __future__ import annotations

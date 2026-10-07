@@ -1,16 +1,9 @@
 """Look up other-language names for the search vocabulary (task `B-52`, §7.4).
 
-``python -m worker.translate --once`` asks Wikipedia, for each phrase the search
-seeds are built from (a searchable topic's name and its query vocabulary) that
-has not been looked up recently, which article the phrase names and what that
-article is called in each of the configured `search_languages`. The answers go
-to `translation_lookups`, where `worker.seedsearch` finds them.
-
-Polite by construction: one request at a time, :data:`DELAY_S` apart, a
-User-Agent that says what this is and how to reach its operator (Wikimedia's
-API policy asks for exactly that), and a bounded number of phrases per run.
-No model, and nothing here decides what a word means: a phrase with no
-article gets no translation.
+``python -m worker.translate --once`` asks Wikipedia what each search phrase's article
+is called in each configured `search_languages`, and stores the answers in
+`translation_lookups` for `worker.seedsearch`. One request at a time, spaced, with a
+contact User-Agent. See docs/features/discovery.md#other-languages.
 """
 
 from __future__ import annotations

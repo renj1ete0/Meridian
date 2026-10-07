@@ -1,31 +1,10 @@
 """Queue fresh search queries for every active topic (task `B-51`, spec §7.4).
 
-``python -m worker.seedsearch --once`` writes up to :data:`PER_TOPIC` new
-`query` rows per active topic, built by `meridian_core.searchseeds` from each
-topic's name, description and approved vocabulary. Scheduled every six hours.
-
-The rows carry ``seed_source="diversity"`` — §7.4's reserved share of the seed
-budget, which is exactly what they are — and :data:`QUERY_PRIORITY`, above
-every tier's link priority, so a query is answered promptly and its results
-then compete on their own tier. A topic that already has :data:`MAX_PENDING`
-unanswered queries gets none this run: a worker that is not keeping up with
-search should not come back to a backlog of hundreds.
-
-Since `P5-05` the same pass also reads the graph (`meridian_core.diversity`):
-§7.4 mechanism 2, counter-seeds for nodes evidenced by one source tier, and
-mechanism 4, walks from nodes far from where the crawl has been. They share
-this pass's timetable, its no-repeat rule (one set of seen queries across
-both) and its backlog rule, and have per-run caps of their own, so the graph's
-share of the reserved budget stays fixed however large the graph grows. A
-sibling job was the alternative and was not taken: two passes writing
-`diversity` queries on two timetables could each repeat what the other queued
-in between.
-
-Every row records its mechanism in ``queue.seed_mechanism`` — NULL for the
-shapes that only widen a topic — so what each mechanism's questions found can
-be read off the queue with the yield columns beside it.
-
-``--report`` prints what would be queued and why, and writes nothing.
+``python -m worker.seedsearch --once`` writes up to :data:`PER_TOPIC` new `query` rows
+per active topic, built by `meridian_core.searchseeds`, plus graph seeds from
+`meridian_core.diversity` (`P5-05`) under the same no-repeat and backlog rules.
+Scheduled every three hours. ``--report`` prints what would be queued and why, and
+writes nothing. See docs/features/discovery.md#search.
 """
 
 from __future__ import annotations
@@ -68,11 +47,8 @@ MIN_ALIAS = 5
 #: produced exactly that — a concept beside a city government's name.
 QUERY_ENTITY_TYPES = frozenset({"concept", "scheme", "metric", "infrastructure"})
 
-#: Below this many approved terms, with no description, a topic is searched by
-#: its name alone. That is deliberate: the operator runs topics broad and lets
-#: the crawl find its way in, and a bare field name is a broad query. The report
-#: names such topics, because a description or vocabulary would widen their
-#: queries — but it is an option, never a requirement.
+#: Below this many approved terms, with no description, a topic is searched by its
+#: name alone, by design; the report names such topics.
 MIN_TERMS_WITHOUT_DESCRIPTION = 3
 
 
@@ -121,10 +97,8 @@ def specific_enough(topic: TopicSeedInput) -> bool:
     )
 
 
-#: A news query may be asked again after this long (`B-105`). News is the one
-#: shape whose answers change: a news query found 29 new pages on average in the
-#: three days before this, against 11 for any other shape, and under the
-#: no-repeat rule each could be asked once, ever.
+#: A news query may be asked again after this long (`B-105`): news is the one shape
+#: whose answers change.
 NEWS_REPEAT = dt.timedelta(days=3)
 
 

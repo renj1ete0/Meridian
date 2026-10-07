@@ -1,34 +1,9 @@
 """Mine proven hosts through their sitemaps (task `B-116`).
 
-Search finds sites; a site that has proven itself is then cheaper to read from
-its own list of pages than to rediscover one search result at a time. A sitemap
-is that list: the site's statement of every URL it has, in one request. `P1-28`
-built everything that reads one — the parser, its XML-bomb defences, the
-same-site rule, the claim handler that turns entries into queue rows with the
-topic their path implies — and nothing ever queued a sitemap, so none was read.
-
-This pass is the missing trigger, and only for proven hosts (on a topic at or
-above `FULL_SHARE`). Every host would be a breadth-first crawl of the web's
-largest sites; a proven host is one whose next page was, measured, on a topic
-about half the time. The entries then go through the same host policy as a
-followed link — capped per host, boosted as proven — so a sitemap of fifty
-thousand URLs queues at most the host's cap, topic-matched paths first and the
-rest at the bottom.
-
-**Filed under the host's commonest topic.** Every claim draws a topic and
-takes only tasks filed under it, so a sitemap queued with none is claimable
-only by the last-resort fallback, which never runs while any topic has work:
-the first deployment queued a hundred and fetched none. The host's commonest
-label is the topic its pages were proven on; a sitemap left pending with no
-topic is given one on the next pass.
-
-The sitemap URLs come from the robots.txt already cached for the crawl, so the
-pass itself makes no request; a host that advertises none gets the conventional
-``/sitemap.xml``, which costs one fetch to find out. A sitemap is queued once —
-`already_queued` sees any status — so the pass is idempotent and cheap to run
-on the timetable.
-
-Report by default; ``--apply`` writes.
+Queues the sitemaps of proven hosts (at or above `FULL_SHARE`), from the cached
+robots.txt or the conventional ``/sitemap.xml``, filed under the host's commonest
+topic so they are claimable. Idempotent. Report by default; ``--apply`` writes. See
+docs/features/discovery.md#sitemap-mining.
 """
 
 from __future__ import annotations

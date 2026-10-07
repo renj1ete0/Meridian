@@ -1,38 +1,9 @@
 """The search backend (task P1-34, spec §6.4, §6.1).
 
-§6.4 picks SearXNG, self-hosted: metasearch over several upstream engines, JSON
-output, no API keys. It also states the weakness plainly, and the whole design
-of this module follows from it — *it scrapes upstream engines, so individual
-engines break or get rate-limited regularly*. Configure several, treat engine
-failure as routine, **and never let a dead engine stall the queue.**
-
-That sentence is the specification for the failure handling here, so it is worth
-being precise about what "stall" means. Three different things can go wrong and
-they are not the same event:
-
-- **An engine is unresponsive.** SearXNG says so in `unresponsive_engines` and
-  returns the other engines' results anyway. This is the routine case: it is
-  logged and otherwise ignored, because a query answered by three engines
-  instead of four is answered.
-- **Every engine failed, or the query genuinely matches nothing.** SearXNG
-  answers with an empty result list. The query is *done*, not failed — retrying
-  a query nobody can answer just burns the queue slot again tomorrow.
-- **SearXNG itself is unreachable.** That is transient and local, so the task
-  retries with the ordinary backoff, and the health line says the backend is
-  missing.
-
-**This does not go through `Crawler.fetch`, and must not.** The crawler pins
-every request to a validated public address and `netguard` refuses RFC1918 —
-which is correct for the open web and exactly wrong for an internal service
-reachable only at a private address on the compose network. A search is also not
-a *fetch*: it produces no bytes to store, no source to cite, and no
-`fetch_attempts` row that would mean anything, because the domain that answered
-is SearXNG rather than the domain the URL belongs to.
-
-**The results are candidates, not pages.** §6.4 notes SearXNG returns a lot of
-content-farm and SEO junk. Everything here does is hand URLs to the prefilter;
-what is worth a request is `prefilter.py`'s question, and what is a duplicate is
-the novelty gate's.
+SearXNG, called directly rather than through `Crawler.fetch`, which would refuse an
+internal address. An unresponsive engine is logged, an empty answer is final, an
+unreachable SearXNG is transient. The results are candidates for the prefilter. See
+docs/features/discovery.md#search.
 """
 
 from __future__ import annotations
@@ -81,10 +52,7 @@ class SearchError(RuntimeError):
 class SearchResults:
     """What one query produced.
 
-    ``unresponsive`` is kept rather than dropped because it is the number that
-    explains a thin result set, and §6.4 says to expect it — an operator looking
-    at a query that returned four URLs needs to know whether three engines were
-    down or the web simply has four.
+    ``unresponsive`` is kept because it explains a thin result set.
     """
 
     query: str
@@ -140,10 +108,7 @@ class SearxClient:
     def from_env(cls) -> SearxClient | None:
         """Build from ``SEARXNG_URL``, or return None.
 
-        None rather than a raised error, for the reason `Crawl4aiClient` returns
-        None: a worker with no search backend is degraded, not broken. It still
-        crawls every URL it already has — it just cannot widen the frontier when
-        that runs out, which is why the health line has to say so (§12.5).
+        None rather than an error: a worker with no search backend is degraded, not broken.
         """
         url = os.environ.get("SEARXNG_URL")
         if not url:

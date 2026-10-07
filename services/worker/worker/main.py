@@ -124,34 +124,16 @@ CONDITIONAL_TASK_TYPES = {"query": "_search", "doi": "_resolver"}
 HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 PDF_MEDIA_TYPES = frozenset({"application/pdf"})
 
-#: What a sitemap fetch overrides on its domain's resolved policy (`P1-28`).
-#:
-#: The content-type allowlist goes for the same reason `RobotsCache` drops it:
-#: it is the corpus's list of what can be *read as a document*, and a sitemap is
-#: not one. `text/xml` is not on it — which is what most sitemaps are served as —
-#: so leaving the allowlist in place would refuse the majority of them while
-#: looking like a network problem. `parse_sitemap` is the real gate here, and it
-#: refuses anything whose root element is not a urlset or a sitemapindex.
-#:
-#: `render_js` goes because a sitemap is XML and a browser would only add a
-#: rendering pass to a document with nothing to render.
-#: Where a sitemap URL that matched no topic goes in the queue.
-#:
-#: Below every tier — the lowest is `informal` at 5 — so these are drained only
-#: when nothing else is pending, and never at the expense of a URL something
-#: actually pointed at. Negative rather than zero so that a future tier of 0
-#: still outranks them.
+#: Where a sitemap URL that matched no topic goes in the queue: below every tier,
+#: so it is drained only when nothing else waits. See docs/features/discovery.md#sitemaps.
 UNMATCHED_SITEMAP_PRIORITY = -10
 
-#: How many of one page's citations become `doi` rows (`P1-14`, §6.1).
-#:
 #: Added to a declared English version's priority (`B-57`), so it is fetched
 #: ahead of the other links on the page that declared it.
 ENGLISH_ALTERNATE_BONUS = 10
 
-#: Added to a search result's tier priority (`B-51`). A result is an answer to a
-#: question somebody — or §7.4's seeding — asked about a topic; a frontier link
-#: is whatever a page carried. At the same tier the answer goes first.
+#: Added to a search result's tier priority (`B-51`): at the same tier, an answer
+#: to a question about a topic goes before a followed link.
 SEARCH_RESULT_BONUS = 5
 
 #: A query whose engines were all throttled waits at least this long before it
@@ -169,11 +151,8 @@ LOOKUP_TASK_TYPES = frozenset({"doi"})
 #: hours rather than the seconds the ordinary budget spans.
 THROTTLED_MAX_RETRIES = 8
 
-#: A reference list is the densest frontier signal there is — §6.4 notes the
-#: citation graph alone sustains a full queue for weeks — but a review article
-#: cites three hundred works, and letting one page put three hundred rows in
-#: ahead of everything already waiting is how a crawl ends up depth-first
-#: through one literature. Capped, in the order the document listed them.
+#: How many of one page's citations become `doi` rows (`P1-14`, §6.1), in the
+#: order the document listed them. See docs/features/discovery.md#cited-papers.
 MAX_CITATIONS_PER_PAGE = 30
 
 #: The least a resolved paper's copy is queued at: the floor a DOI waits at
@@ -181,6 +160,9 @@ MAX_CITATIONS_PER_PAGE = 30
 #: (`B-58`, :mod:`meridian_core.citedpapers`) passes its own rank on instead.
 RESOLVED_PAPER_PRIORITY = FLOOR_PRIORITY
 
+#: What a sitemap fetch overrides on its domain's resolved policy (`P1-28`): the
+#: content-type allowlist (most sitemaps are `text/xml`) and the browser.
+#: `parse_sitemap` is the real gate.
 SITEMAP_POLICY_OVERRIDES = {
     "allowed_content_types": [],
     "render_js": "never",
@@ -867,13 +849,8 @@ class Worker:
     async def _queue_sitemap_entries(self, claim: Claim, parsed: ParsedSitemap, base: str) -> int:
         """Turn a parsed sitemap's URLs into queue rows.
 
-        An index's entries become further `sitemap` tasks and a urlset's become
-        `url` tasks. The prefilter runs over the urlset case for the same reason
-        it runs over frontier links — a sitemap lists every page a site has,
-        including the several thousand already in the corpus — but *not* over the
-        index case, because `SKIP_EXTENSIONS` drops `.gz` and most large sites
-        publish `sitemap.xml.gz`, so filtering there would discard exactly the
-        indexes worth following.
+        An index's entries become `sitemap` tasks, a urlset's `url` tasks. The prefilter
+        runs on a urlset only, since it would drop `.gz` sitemaps from an index.
         """
         if not parsed.urls:
             return 0
@@ -918,23 +895,16 @@ class Worker:
                             priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
                         )
                     else:
-                        # Not dropped. A sitemap URL that matches no topic is
-                        # not known to be irrelevant — the path may simply be
-                        # opaque, and §7.4 warns that a corpus which only ever
-                        # confirms its own vocabulary is its own bias. It is
-                        # queued below every tier so it is crawled when the
-                        # frontier has nothing better, which is exactly when
-                        # incidental discovery is worth paying for.
+                        # Not dropped: an unmatched path is not known to be irrelevant (§7.4).
+                        # Queued below every tier instead.
                         priority = UNMATCHED_SITEMAP_PRIORITY
 
                 await enqueue(
                     sess,
                     url,
                     topic=topic,
-                    # Distinguishable from `frontier` on purpose: "how did this
-                    # URL get here" is the question §5.2's seed provenance exists
-                    # to answer, and a sitemap is a different kind of answer from
-                    # a link someone chose to place on a page.
+                    # Distinguishable from `frontier` on purpose: a site's list is a different
+                    # answer to "how did this URL get here" (§5.2).
                     seed_source="sitemap",
                     task_type=task_type,
                     priority=priority,
@@ -956,15 +926,8 @@ class Worker:
     async def _process_query(self, claim: Claim) -> None:
         """Run one search and turn its results into queue rows (`P1-34`, §6.4).
 
-        Nothing is fetched, stored or extracted here. A query is not a document
-        — `url_or_query` holds the query text, not a URL — so it produces queue
-        rows and nothing else, and it settles to ``done`` because running it
-        *is* the whole of its work.
-
-        No `fetch_attempts` row either, and that is not an oversight. The log is
-        keyed by domain and answers "is this host refusing us"; a search asks
-        one internal service about many hosts, so a row there would file
-        SearXNG's availability under a domain nobody crawled.
+        Nothing is fetched or stored, and no `fetch_attempts` row is written; the task
+        settles ``done``. See docs/features/discovery.md#search.
         """
         if self._search is None:  # pragma: no cover - _claimable_task_types prevents it
             log.warning("claimed a query with no search backend", extra={"task_id": claim.task_id})
@@ -993,10 +956,7 @@ class Worker:
                     max_retries=THROTTLED_QUERY_RETRIES,
                 )
                 return
-            # Answered — including answered with nothing. §6.4 says engine
-            # failure is routine, so a query that returns no usable results is
-            # done rather than retried: the same engines will be just as broken
-            # tomorrow, and the queue slot is better spent elsewhere.
+            # Answered, including with nothing: done, not retried (§6.4).
             disposition, detail = "done", "search_ok"
             queued = await self._queue_search_results(claim, results)
             # `queued` counts rows this run added to the frontier, wherever they
@@ -1034,11 +994,8 @@ class Worker:
     async def _process_doi(self, claim: Claim) -> None:
         """Resolve one DOI to a legally available copy and queue it (`P1-14`, §6.5).
 
-        The row's `url_or_query` is a DOI, not a URL. What this produces is one
-        ordinary `url` task pointing at an open-access copy — which then goes
-        through the whole fetch stack, robots and `netguard` included. That is
-        what makes it safe for a hostile page to put any DOI it likes in its
-        reference list: nothing here fetches the answer, it only queues it.
+        Produces one ordinary `url` task for the copy, which then goes through the whole
+        fetch stack; nothing here fetches it.
         """
         if self._resolver is None:  # pragma: no cover - _claimable_task_types prevents it
             log.warning("claimed a DOI with no resolver", extra={"task_id": claim.task_id})
@@ -1063,10 +1020,7 @@ class Worker:
         except ResolutionUnavailable as exc:
             disposition, detail = "retry", f"resolution_unavailable: {exc}"
         else:
-            # Including "no open-access copy exists", which is an answer. §6.5
-            # is explicit that a metadata-only work still participates in the
-            # graph — the paper is paywalled today and will be tomorrow, so the
-            # task is done rather than retried forever.
+            # Including "no open-access copy exists", which is an answer (§6.5): done.
             disposition = "done"
             detail = f"resolved_by: {copy.provider}" if copy else "no_open_access_copy"
             if copy is not None:
@@ -1119,11 +1073,8 @@ class Worker:
     async def _queue_search_results(self, claim: Claim, results: SearchResults) -> int:
         """Prefilter a query's results and enqueue what survives.
 
-        The prefilter is not optional here the way it is for frontier links.
-        §6.4 is explicit that SearXNG returns a lot of content-farm and SEO
-        junk, and a search result is a URL nobody chose — no page pointed at it
-        and no site listed it — so it is the *least* trustworthy way a URL can
-        reach this queue and the one most worth filtering.
+        Not optional here: a search result is the least trustworthy way a URL reaches
+        the queue (§6.4).
         """
         if not results.urls or self._prefilter is None:
             return 0
@@ -1138,11 +1089,7 @@ class Worker:
                 await enqueue(
                     sess,
                     url,
-                    # The query's topic, not the URL's path. Unlike a sitemap
-                    # entry — where the triggering page's topic says nothing
-                    # about what the site lists — a query was written *for* a
-                    # topic by a person, so every result is an answer to that
-                    # question and carries it.
+                    # The query's topic, not the URL's path: the query was written for it.
                     topic=claim.topic,
                     seed_source="search",
                     # `B-51`: an answer to a question outranks a link a page
@@ -1362,20 +1309,8 @@ class Worker:
     ) -> int:
         """Turn this page's outbound links into queue rows (`P1-06`, §6.1).
 
-        This is what makes the crawl a crawl. Without it the worker drains its
-        seed list once and then idles forever, which is a fetcher.
-
-        In the same pass as the fetch, not a later sweep, and for the same
-        reason chunking is: the link list lives only in memory. It is
-        deliberately not stored on the source row — 500 URLs is ~40KB of JSONB,
-        ~2GB across a 50k corpus, and the right home for a URL worth fetching is
-        a queue row, not a column.
-
-        The topic is inherited from the page that linked here. It is the only
-        signal available without a model, it is usually right — a page about a
-        subject tends to link to pages about that subject — and §10's steering acts
-        on topics, so a frontier that produced untopiced rows would be a
-        frontier steering cannot reach.
+        In the fetch pass, because the link list lives only in memory. Each link
+        inherits this page's topic. See docs/features/discovery.md#followed-links.
         """
         if document is None or not document.links or self._prefilter is None:
             return 0
@@ -1389,13 +1324,8 @@ class Worker:
         alternate = await self._queue_english_alternate(sess, claim, document, source)
         verdict = await self._prefilter.keep(sess, document.links)
 
-        # Identifiers first, and as `doi` tasks (`B-23`). A `doi.org` link
-        # queued as a URL fetches a redirect to a publisher, which is usually a
-        # paywall or a landing stub; the same identifier queued as a DOI
-        # reaches the resolver that finds an open-access copy. The citation
-        # channel had been doing this correctly all along, so the frontier was
-        # asking the wrong question about the same thing — 244 rows of it on
-        # the first real corpus, 134 with no extractable text.
+        # Identifiers first, and as `doi` tasks (`B-23`), so they reach the resolver
+        # rather than a publisher's redirect. See docs/features/discovery.md#identifier-hosts.
         dois = await self._queue_dois(sess, claim, source, verdict.dois, seed_source="frontier")
 
         if not verdict.kept:
@@ -1409,11 +1339,7 @@ class Worker:
         queued = 0
         held: collections.Counter[str] = collections.Counter()
         for url in verdict.kept:
-            # §5.2: a government link outranks a blog without anyone
-            # curating a seed list. `priority_for_domain` had existed since
-            # P1-17 with no caller; this was it, and `P2-20` added the
-            # second opinion — a page whose kind rots fast is worth
-            # fetching sooner, and is likelier to be gone if it is not.
+            # §5.2: ranked by tier; `P2-20` brings forward a page whose kind rots fast.
             priority = priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
             decision = self._admit(url, tiers)
             if not decision.queue:
@@ -1456,10 +1382,8 @@ class Worker:
     ) -> int:
         """Queue a non-English page's declared English version first (`B-57`).
 
-        The operator's preference: an English version where one exists, the
-        original otherwise. So the original is kept as it is, and its English
-        version goes ahead of every other link the page carries; once both are
-        in the corpus `worker.docdupes` hides the original behind it.
+        The original is kept; once both are stored `worker.docdupes` hides it behind its
+        English version.
         """
         url = document.english_alternate
         language = (document.language or "").lower()
@@ -1503,21 +1427,9 @@ class Worker:
     ) -> int:
         """Turn this page's reference list into `doi` rows (`P1-14`, §6.1).
 
-        §6.1 lists citations beside outbound links as frontier expansion, and
-        §6.4 says the citation graph alone sustains a full queue for weeks. It
-        is also a better signal than a link: a reference is a claim that this
-        work matters to that one, which is exactly the judgement a link in a
-        navigation bar is not making.
-
-        Only `doi` citations, for now. `arxiv`, `pmid` and `handle` identifiers
-        are extracted (`extract/base.py`) and each needs its own resolution
-        route — a `pmid` is not a DOI, and guessing a URL for one would queue
-        rows that 404. They stay in `sources.extra` until there is somewhere
-        for them to go.
-
-        The prefilter deliberately does not run here. It answers "is this URL
-        worth a request", and a DOI is not a URL — `already_queued` is the part
-        of it that applies, and it is applied directly.
+        Only `doi` citations; other identifiers stay in `sources.extra`. The prefilter
+        does not run, only its `already_queued` check. See
+        docs/features/discovery.md#cited-papers.
         """
         if document is None or not document.citations or self._resolver is None:
             return 0
@@ -1564,16 +1476,8 @@ class Worker:
     ) -> int:
         """Queue DOIs this page named, ranked by the page (`B-58`). Returns how many are new.
 
-        The page is usually not labelled yet — labels come from vectors that
-        arrive after the fetch — so most DOIs are queued at the unjudged rank
-        and `worker.requeue_dois` settles them once it is. A re-fetched page
-        that already carries labels is ranked on them now.
-
-        Normalised here for the frontier's sake as much as the citations': a
-        `doi.org` link's path is whatever case the page wrote it in, and until
-        this the frontier queued it as written, beside the citation channel's
-        lower-cased copy of the same DOI — and without asking whether it was
-        already queued at all.
+        An unlabelled page queues them at the unjudged rank, for `worker.requeue_dois` to
+        settle; DOIs are normalised first. See docs/features/discovery.md#cited-paper-rank.
         """
         dois: dict[str, None] = {}
         for raw in identifiers:

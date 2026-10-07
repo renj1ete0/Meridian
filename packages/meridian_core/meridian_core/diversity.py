@@ -1,37 +1,9 @@
 """Diversity seeds read off the graph (task `P5-05`, spec §7.4).
 
-`searchseeds` writes §7.4's seeds per *topic*. Two of the five mechanisms need
-the graph instead, because what triggers them is a property of a node:
-
-- **Mechanism 2, tier imbalance.** A node whose evidence comes entirely, or
-  overwhelmingly, from one source tier gets queries phrased to reach the tiers
-  it lacks. A node backed only by government pages is asked for research and
-  for reporting; one backed only by papers is asked for official and press
-  material. Tier is assigned mechanically at ingestion (§5.2), so this is
-  arithmetic over provenance and never a judgement.
-- **Mechanism 4, random distant walks.** A few nodes far from where the crawl
-  has been — one connected to nothing, or one whose vector is far from the
-  centroid of the most recently embedded chunks — are searched by name, so
-  the crawl occasionally steps outside its own neighbourhood.
-
-**Mechanism 1 at node level is not here, on purpose.** §7.4 triggers it when
-every *source* on a node argues the same direction, and the position a source
-argues is a model's output (§8) that no pass extracts yet. `edges.stance` is
-not that: it is one model's reading of one relation, not what each source
-argues, and counting it as the sources' stance would make a counter-seed out
-of an extraction artefact. :func:`stance_counter` is the hook — it applies the
-rule when a node carries per-source stances, and :func:`graph_inputs` passes
-none until a stance field exists to read. Topic-level counter-phrasings
-(`searchseeds.COUNTER`) run meanwhile.
-
-**No model.** Everything below is SQL over provenance columns and string
-templates; the worker that runs it never calls an LLM (§2.1).
-
-Evidence for a node is every chunk that justifies something about it: the
-edges at either end, its attribute values, its observations, and — for a
-hand-written note — its own chunks. A node's tier mix is counted over the
-*distinct sources* of those chunks, excluding sources marked as copies of
-another: ten chunks of one report are one voice, and so is a mirror of it.
+Mechanism 2 (tier imbalance) and mechanism 4 (distant walks), from SQL over
+provenance and string templates; no model. Node-level mechanism 1 waits for a
+per-source stance (:func:`stance_counter` is the hook). Tier mix counts distinct
+sources, copies excluded. See docs/features/discovery.md#diversity-seeds.
 """
 
 from __future__ import annotations
@@ -52,14 +24,8 @@ from .searchseeds import COUNTER, NEWS_BANG, topic_words
 #: Every tier a source can have, from the column's own CHECK.
 TIERS: tuple[str, ...] = tuple(SOURCE_TIER.enums)
 
-#: The tiers a counter-seed may aim at, and how a query reaches each. The
-#: phrasings are the words those tiers' own documents use about themselves,
-#: which is what a search engine matches. `!science` and `!news` are SearXNG's
-#: category bangs, sending the query to the scholarly and news engines only.
-#:
-#: `informal` is never a target. It is what an unaimed crawl already finds most
-#: of, and a node lacking blogs is not a node whose evidence is lopsided in any
-#: way that matters to a written argument.
+#: The tiers a counter-seed may aim at, and how a query reaches each. `!science`
+#: and `!news` are SearXNG's category bangs. `informal` is never a target.
 TIER_PHRASINGS: dict[str, tuple[str, ...]] = {
     "peer_reviewed": ("!science {}", "{} peer-reviewed study"),
     "government": ("{} government report", "{} official evaluation"),
@@ -68,13 +34,8 @@ TIER_PHRASINGS: dict[str, tuple[str, ...]] = {
 }
 TARGET_TIERS: tuple[str, ...] = tuple(TIER_PHRASINGS)
 
-#: Fewer distinct sources than this and a node's tier mix says nothing. One
-#: source is single-tier by construction, and two sharing a tier is what two
-#: draws from a five-tier crawl often do. Three all from one tier is the first
-#: count at which uniformity is a finding rather than a coincidence. It also
-#: keeps the mechanism aimed: most nodes of a young graph rest on one source,
-#: and firing on them would mean "search every node", not "correct an
-#: imbalance".
+#: Fewer distinct sources than this and a node's tier mix says nothing; three from
+#: one tier is the first count at which uniformity is a finding.
 MIN_SOURCES = 3
 
 #: One tier holding at least this share of a node's sources is "overwhelming".
@@ -101,10 +62,8 @@ TIER_PER_RUN = 6
 PER_NODE = 2
 WALKS_PER_RUN = 2
 
-#: A node with at most this many edges counts as far by edge count. Zero —
-#: connected to nothing — rather than one: a young graph is mostly single
-#: edges from one extraction pass, and at "one edge or fewer" four nodes in
-#: five were "far", which made the walk a uniform draw over the graph.
+#: A node with at most this many edges counts as far by edge count. Zero: at one,
+#: most nodes of a young graph were "far".
 LOW_DEGREE = 0
 #: The share of nodes, by distance from the recent crawl's centroid, that
 #: counts as far.
@@ -306,11 +265,9 @@ def plan(
 ) -> list[GraphQuery]:
     """This run's graph seeds: tier counter-seeds first, then distant walks.
 
-    Deterministic for a given ``seed`` and input. Never repeats a query in
-    ``already`` (compared case-insensitively, as `searchseeds.plan` does) or
-    within the run. Nodes with the most sources go first — the more evidence
-    behind an imbalance, the less likely it is chance — and ties are broken
-    by the seeded shuffle, so successive runs reach different nodes.
+    Deterministic for a given ``seed`` and input. Never repeats a query in ``already``
+    (case-insensitively) or within the run. Nodes with the most sources go first;
+    ties are broken by the seeded shuffle.
     """
     if tier_cap < 0 or per_node < 1 or walks < 0:
         raise ValueError("caps must not be negative, and per_node at least 1")
@@ -424,11 +381,8 @@ def file_under(
 ) -> str | None:
     """The active topic a node's queries belong to.
 
-    The node's own label if it has an active one; otherwise the active topic
-    most of its evidence sources are labelled with (content labels, `P2-21`),
-    ties to the alphabetically first so the choice is stable. None if neither
-    says: a query filed under a guessed topic would inherit that topic's
-    weight and mislabel what it finds.
+    The node's own active label, else the active topic most of its evidence sources
+    carry (ties alphabetical). None if neither says.
     """
     live = set(active)
     mine = sorted(t for t in own or () if t in live)

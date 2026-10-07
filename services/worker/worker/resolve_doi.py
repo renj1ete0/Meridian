@@ -1,55 +1,10 @@
 """Paper full-text resolution (task P1-14, spec §6.5, §6.4).
 
-§6.5 states the problem and the order: given a DOI, resolve to a **legally
-available** copy, trying Unpaywall, then OpenAlex, then CORE, then the preprint
-servers. That word is doing work — the chain is a list of places that
-redistribute papers with the publisher's or author's permission, and a corpus
-whose whole promise is checkable citations cannot be built on copies its readers
-cannot legally follow.
-
-**Why this matters more than it used to.** `P1-34` wired an academic search feed
-into the frontier, and a large share of what it returns are publisher landing
-pages: an abstract, a paywall, and nothing to extract. Without resolution those
-are requests spent to learn a title. With it they become the open-access PDF the
-same paper is already sitting in somewhere else.
-
-**Not through `Crawler.fetch`, for the reason the search client is not.** These
-are JSON APIs, and `allowed_content_types` is the corpus's list of what can be
-read *as a document* — `application/json` is not on it, so every call would be
-refused as a content-type rejection. The URLs these APIs *return* do go through
-the crawler, with `netguard` and robots and rate limits intact, which is what
-makes it safe for a hostile page to put any DOI it likes in its citation list.
-
-**A provider failing is routine; every provider failing is not.** The same
-three-way distinction the search backend needs (§6.4), because it settles the
-queue row three different ways:
-
-- one provider errors            → try the next; that is what a chain is for
-- all answered, none had a copy  → an *answer*. The paper is paywalled today,
-                                   and it will be paywalled tomorrow, so the
-                                   task is done rather than retried
-- none answered at all           → transient; raise, and let the task retry
-
-**A provider with no credential is skipped, not failed.** CORE needs an API key
-and Unpaywall needs a contact email; a deployment that has neither should still
-get OpenAlex and the preprint rule rather than an error per DOI.
-
-**Beyond §6.5's four.** Europe PMC and Semantic Scholar are added after the
-spec's list rather than in place of it. Both need no credential, both answer in
-clean JSON, and both routinely hold a copy the aggregators above them miss —
-Europe PMC because it mirrors the full text itself rather than pointing at it,
-and Semantic Scholar because it indexes the repository PDF where Unpaywall
-often has only the repository's landing page. §6.5's order is a ranking by how
-likely a provider is to be right, not a closed list, and these two sit below the
-four it names for exactly that reason.
-
-**What is deliberately not here.** Sci-Hub and its mirrors. §6.5's requirement
-is a *legally available* copy, and that is not a formality in a system whose
-output is citations someone else has to be able to follow and check. Google
-Scholar is a different case and also absent: it publishes no API, it captchas
-scrapers, and it is already reachable — `P1-34` searches it as one of SearXNG's
-engines, which is where an index belongs. An index tells you a paper exists;
-this module's question is where a copy of it legally lives.
+Resolves a DOI to a *legally available* copy: Unpaywall, OpenAlex, CORE, the preprint
+servers, then Europe PMC and Semantic Scholar. One provider failing means the next is
+tried; all answering with no copy is a final answer; none answering is transient. A
+provider without its credential is skipped. The APIs are called directly; the URLs they
+return go through the crawler. See docs/features/discovery.md#resolution.
 """
 
 from __future__ import annotations
@@ -82,16 +37,8 @@ ARXIV_DOI_PREFIX = "10.48550/arxiv."
 
 DEFAULT_TIMEOUT_S = 20.0
 
-#: Minimum seconds between calls to one provider, by name.
-#:
-#: Not politeness in the abstract — measured. Unauthenticated Semantic Scholar
-#: allows roughly a request a second, and 75 DOIs resolved back to back got a
-#: PDF for none of them while the same DOIs at one per second got a PDF for
-#: every one. The others are generous by comparison and are paced only enough
-#: that a citation-heavy page cannot burst through them.
-#:
-#: This is per-process and per-provider. The worker resolves one DOI per lane,
-#: so a handful of lanes sharing one resolver is exactly the case this bounds.
+#: Minimum seconds between calls to one provider, by name, per process. Measured:
+#: anonymous Semantic Scholar allows about a request a second (`B-67`).
 PROVIDER_MIN_INTERVAL_S = {
     "semanticscholar": 1.1,
     "europepmc": 0.3,
@@ -112,11 +59,8 @@ class ResolutionUnavailable(RuntimeError):
 class ResolutionThrottled(ResolutionUnavailable):
     """Not a final answer because a provider told us to slow down (`B-67`).
 
-    ``retry_after_s`` is how long until the soonest throttled provider may be
-    asked again. Retrying sooner asks into the same wall: the queue's ordinary
-    backoff is seconds, and three quick refusals from a shared anonymous quota
-    used to fail the task for good — a paper written off by somebody else's
-    traffic.
+    ``retry_after_s`` is how long until the soonest throttled provider may be asked
+    again; the task retries after that, not on the queue's ordinary backoff.
     """
 
     def __init__(self, message: str, *, retry_after_s: float) -> None:
@@ -126,8 +70,6 @@ class ResolutionThrottled(ResolutionUnavailable):
 
 #: A provider that rate-limited us is left alone this long when it names no
 #: Retry-After, doubling with each refusal in a row up to the cap (`B-67`).
-#: Asking it for every DOI in between costs a request each and teaches the
-#: provider's limiter that we are not listening.
 COOLDOWN_BASE_S = 60.0
 COOLDOWN_MAX_S = 1800.0
 
@@ -137,10 +79,7 @@ class OpenAccessCopy:
     """Where a legally available copy of one paper lives."""
 
     url: str
-    #: Which link in the chain answered. Kept because "Unpaywall found it" and
-    #: "we guessed from the DOI" are different levels of confidence, and §5.2's
-    #: provenance question applies to how a URL was found as much as to who
-    #: published it.
+    #: Which link in the chain answered: provenance for how the URL was found (§5.2).
     provider: str
     #: `publishedVersion` / `acceptedVersion` / `submittedVersion` when the
     #: provider says. The published version is the citable one; a preprint is
@@ -309,11 +248,8 @@ class DoiResolver:
                 return copy
 
         if waits:
-            # The distinction this whole chain turns on. "Nobody has a copy"
-            # settles the task `done` and never looks again; "we did not finish
-            # asking" has to retry, or a burst of throttling quietly writes off
-            # every paper it touched. And retry *after the cooldown*, not on the
-            # queue's usual seconds.
+            # "Nobody has a copy" settles the task; "we did not finish asking" must retry,
+            # after the cooldown, or throttling writes papers off.
             said = "no copy found" if answered else "no provider answered"
             raise ResolutionThrottled(
                 f"{said} for {doi}, but a provider was rate-limited — not a final answer",
@@ -433,15 +369,10 @@ class DoiResolver:
         return OpenAccessCopy(url=url, provider="core", version="acceptedVersion")
 
     async def _europepmc(self, doi: str) -> OpenAccessCopy | None:
-        """Beyond §6.5's list.
+        """Beyond §6.5's list: Europe PMC mirrors full text rather than pointing at it.
 
-        Europe PMC mirrors full text rather than pointing at it, so a copy here is one hop rather
-        than two — and it holds work the general aggregators miss whenever a paper touches health,
-        environment or transport epidemiology.
-
-        The DOI goes into a quoted field query, so the quote characters are the
-        thing to be careful about; `normalise_doi` has already refused anything
-        carrying URL or query syntax.
+        The DOI goes into a quoted field query; `normalise_doi` has already refused URL
+        or query syntax.
         """
         payload = await self._get_json(
             "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
@@ -480,11 +411,8 @@ class DoiResolver:
     async def _semantic_scholar(self, doi: str) -> OpenAccessCopy | None:
         """Beyond §6.5's list, and last because it is the widest net.
 
-        Worth having below Unpaywall rather than above it despite often giving a
-        *better* URL — it indexes the repository PDF where Unpaywall frequently
-        has only the repository's landing page. The order stays as §6.5 wrote it
-        because Unpaywall's answer is authoritative about licence and version,
-        and a landing page that is genuinely open still extracts.
+        Often a better URL than Unpaywall's, but below it because Unpaywall is
+        authoritative about licence and version.
         """
         headers = (
             {"x-api-key": self._settings.semantic_scholar_key}
@@ -512,10 +440,7 @@ class DoiResolver:
     async def _paced(self, provider: str):
         """Hold back until this provider's minimum interval has passed.
 
-        Around the call rather than inside `_get_json` so a provider that makes
-        no request at all — one that is skipped for a missing credential — costs
-        nothing. Waiting before a call we are not going to make would pace the
-        chain by its slowest provider even on a deployment that never uses it.
+        Around the call, so a provider skipped for a missing credential costs nothing.
         """
         interval = PROVIDER_MIN_INTERVAL_S.get(provider, 0.0)
         if interval <= 0:
@@ -544,11 +469,7 @@ class DoiResolver:
     ) -> object:
         """One GET, JSON out. Every failure becomes `_ProviderUnreachable`.
 
-        Including a 404, which is what all three APIs return for "no such DOI".
-        That is genuinely an answer rather than an outage — but it is the same
-        answer as "no copy here", and treating it as unreachable would make one
-        unknown DOI look like an outage to the caller. So it returns an empty
-        body instead: answered, nothing found.
+        Except a 404 ("no such DOI"), which returns an empty body: answered, nothing found.
         """
         request_headers = {"User-Agent": self._user_agent(), "Accept": "application/json"}
         request_headers.update(headers or {})
@@ -560,10 +481,8 @@ class DoiResolver:
         if response.status_code == 404:
             return {}
         if response.status_code in (429, 403):
-            # 403 as well as 429: several of these APIs answer 403 for "you are
-            # over the anonymous quota" rather than 429, and treating that as a
-            # flat refusal would silently drop every paper for the rest of the
-            # window.
+            # 403 as well as 429: several of these APIs answer 403 for "over the anonymous
+            # quota".
             raise _ProviderRateLimited(
                 f"HTTP {response.status_code}",
                 retry_after_s=_retry_after(response.headers.get("Retry-After")),
@@ -598,14 +517,8 @@ def _retry_after(raw: str | None) -> float | None:
 class _ProviderRateLimited(_ProviderUnreachable):
     """This provider refused *because we asked too fast*.
 
-    That is not the same as having no copy, and the difference decides whether the paper is lost.
-
-    Measured, not assumed: resolving 75 real DOIs back to back found nothing at
-    Semantic Scholar, while the same DOIs asked one per second returned an
-    open-access PDF for every one of them. Unauthenticated S2 allows roughly a
-    request a second, and a 429 folded in with connection errors is skipped
-    silently — so the chain reports "no open-access copy", the task settles
-    `done`, and the paper is never looked for again.
+    Not the same as having no copy: folded into "unreachable", it would settle the
+    task `done` and lose the paper. See docs/features/discovery.md#resolution.
     """
 
     def __init__(self, message: str, *, retry_after_s: float | None = None) -> None:

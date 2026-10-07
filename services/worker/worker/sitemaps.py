@@ -1,34 +1,8 @@
 """Sitemap discovery and parsing (`P1-28`, §6.4).
 
-A sitemap is the cheapest frontier expansion there is. `P1-06` follows the links
-a page happens to contain; a sitemap is the site telling you every URL it has,
-in one request, with no rendering and no model. `RobotsRules.sitemaps` has been
-parsed since `P1-04` and thrown away ever since — this module is what finally
-reads it.
-
-Three things make this less trivial than "parse some XML".
-
-**A sitemap is untrusted input from a hostile source, and XML has bombs.**
-lxml expands internal entities by default, so a twenty-line document declaring
-nested entities allocates gigabytes before any cap notices — the same shape of
-failure as the gzip bomb `P1-21` exists for, where the allocation happens before
-the check that was supposed to prevent it. Two defences here, and the order
-matters: the byte pre-scan refuses a DTD outright *before* parsing, and
-``resolve_entities=False`` defuses expansion for anything that gets past it.
-
-**A sitemap can name any URL it likes.** A compromised or hostile robots.txt can
-point at a sitemap that enqueues ten thousand URLs on someone else's domain, at
-whatever priority their tier grants. sitemaps.org permits this "cross-submission"
-when robots.txt authorises it; we do not, because the frontier feeds a corpus
-that eventually feeds a model holding write tools, and a same-site restriction
-costs a handful of legitimate CDN-hosted sitemaps against an unbounded injection
-of authority-tier queue rows.
-
-**Sitemaps nest.** A ``<sitemapindex>`` lists other sitemaps rather than pages,
-which is how large sites stay under the 50,000-URL cap. Those become further
-``sitemap`` tasks rather than being followed inline: recursion inside one task
-would fetch an unbounded tree while holding a lease, and the queue already knows
-how to schedule, rate-limit and give up on things.
+A sitemap is untrusted XML: a DTD is refused before parsing and entities are not
+expanded. Only same-site URLs are accepted, and an index's entries become further
+`sitemap` tasks rather than being followed inline. See docs/features/discovery.md#sitemaps.
 """
 
 from __future__ import annotations
@@ -56,11 +30,8 @@ __all__ = [
 #: an unbounded number of them.
 MAX_SITEMAP_ENTRIES = 50_000
 
-#: Refused outright. XML permits a DTD only before the root element, so scanning
-#: the whole document is broader than required — a `<!ENTITY` appearing inside
-#: ordinary text would also trip it. That is the intended trade: no legitimate
-#: sitemap contains either string, and refusing a strange one costs a frontier
-#: URL while admitting one costs the process.
+#: Refused outright, anywhere in the scanned window: no legitimate sitemap contains
+#: either string.
 _DTD_MARKERS = (b"<!doctype", b"<!entity")
 
 #: Everything else about a fetch is bounded by policy — `max_page_bytes`, the
@@ -69,10 +40,8 @@ _MAX_LOC_LENGTH = 4096
 
 _SCHEMES = frozenset({"http", "https"})
 
-#: Sitemaps in the wild get the namespace wrong, declare none at all, or use the
-#: 0.84 URL rather than the 0.9 one. Matching on the local name accepts all of
-#: them; matching on the qualified name would silently return nothing for a
-#: document that is otherwise perfectly readable.
+#: Matched by local name: sitemaps in the wild get the namespace wrong, omit it,
+#: or use the 0.84 URL.
 _LOCALNAME = re.compile(r"\{[^}]*\}")
 
 
@@ -94,10 +63,8 @@ class SitemapError(ValueError):
 class ParsedSitemap:
     """What one sitemap document yielded.
 
-    ``kind`` decides what the URLs *are*: a ``urlset`` names pages and its URLs
-    become ``url`` tasks, a ``sitemapindex`` names other sitemaps and its URLs
-    become further ``sitemap`` tasks. Conflating the two would feed XML to the
-    HTML extractor and enqueue every page as a sitemap.
+    ``kind`` decides what the URLs are: a ``urlset``'s become ``url`` tasks, a
+    ``sitemapindex``'s further ``sitemap`` tasks.
     """
 
     kind: str
@@ -124,12 +91,8 @@ def local_name(tag: object) -> str:
 def same_site(a: str, b: str) -> bool:
     """Do these two URLs belong to the same site?
 
-    Suffix matching in both directions, for the same reason
-    ``Prefilter.is_blocked`` uses it: ``registrable_domain`` keeps subdomains, so
-    equality would treat an apex and its own subdomain as unrelated and throw
-    away a legitimate sitemap's entire contents. A sitemap at the apex may name
-    its subdomains and one on a subdomain may name the apex; neither may name a
-    stranger.
+    Suffix matching in both directions: an apex may name its subdomains and a
+    subdomain its apex; neither may name a stranger.
     """
     host_a, host_b = registrable_domain(a), registrable_domain(b)
     if not host_a or not host_b:
@@ -146,11 +109,9 @@ def parse_sitemap(
 ) -> ParsedSitemap:
     """Read one sitemap or sitemap index.
 
-    Raises :class:`SitemapError` for anything unreadable — a DTD, a body that is
-    not XML, a root element that is neither ``urlset`` nor ``sitemapindex``.
-    Individual bad entries are *dropped and counted* rather than raising: one
-    malformed ``<loc>`` in a file of forty thousand is not a reason to discard
-    the other 39,999.
+    Raises :class:`SitemapError` for anything unreadable: a DTD, a body that is not
+    XML, a root that is neither ``urlset`` nor ``sitemapindex``. Bad entries are
+    dropped and counted.
     """
     if not data.strip():
         raise SitemapError("empty", "no body")
@@ -170,11 +131,8 @@ def parse_sitemap(
     urls: dict[str, None] = {}
     truncated = False
 
-    # iterparse rather than fromstring: a 50,000-URL sitemap is tens of MB of
-    # tree if it is built whole, and `.clear()` on the way past keeps the peak
-    # to one element. `resolve_entities=False` is the second entity defence,
-    # verified rather than assumed — with lxml's defaults the same document
-    # expands, and the pre-scan above is what makes it unreachable.
+    # iterparse with `.clear()` keeps the peak to one element. `resolve_entities=False`
+    # is the second entity defence, behind the pre-scan.
     context = etree.iterparse(
         io.BytesIO(data),
         events=("start", "end"),
@@ -244,11 +202,8 @@ def parse_sitemap(
 def _dtd_scan_window(data: bytes) -> int:
     """How much of the document the DTD pre-scan reads.
 
-    The whole thing, unless it is large — a DTD is only legal before the root
-    element, so a fixed window is sound, and scanning 20MB of URLs for a string
-    that can only appear in the first few hundred bytes is waste. The window is
-    generous because XML permits comments and processing instructions ahead of
-    the DOCTYPE, and a hostile document would pad with exactly those.
+    The whole thing unless it is large; then a generous window, since comments may pad
+    ahead of a DOCTYPE.
     """
     return min(len(data), 65_536)
 

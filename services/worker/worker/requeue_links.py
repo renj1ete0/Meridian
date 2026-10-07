@@ -1,21 +1,9 @@
 """Followed links wait behind their page's verdict (task `B-92`).
 
-``python -m worker.requeue_links`` — reports by default, writes only with
-``--apply``, and never deletes.
-
-Loop run 8 found followed links on a topic 4% of the time against 70% for
-search results, and two thirds of all fetches. A link is queued when its page
-is fetched, before anything has read the page — labels come from vectors, an
-hour or more later. Once the page *has* been read and found about none of the
-topics, what it links to is, almost always, more of the same. So this pass
-moves the pending links such a page carried (``queue.parent_source_id``,
-recorded since `B-91`) to :data:`DEMOTED_PRIORITY`, where they wait behind
-everything that earned its place.
-
-Only down, and only to the floor the host gate already uses for off-topic
-government links: nothing is dropped, and a link another, on-topic page also
-carries keeps whatever rank its own row has. Idempotent — a second pass finds
-nothing above the floor to move — so it is safe hourly after ``topics``.
+``python -m worker.requeue_links`` moves the pending links of a page found about
+none of the topics (``queue.parent_source_id``, `B-91`) down to
+:data:`DEMOTED_PRIORITY`. Only down, never deleted, idempotent; reports by default,
+writes only with ``--apply``. See docs/features/discovery.md#re-ranking.
 """
 
 from __future__ import annotations

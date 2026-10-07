@@ -1,29 +1,11 @@
 """Rank queued DOIs by the pages that cite them (task `B-58`).
 
-``python -m worker.requeue_dois`` — reports by default, writes only with
-``--apply``, and never deletes.
-
-Every `doi` row was queued at one priority below every link and search result,
-so none was ever claimed. :mod:`meridian_core.citedpapers` now ranks a DOI by
-its citing page, and the fetch loop records that page on the rows it queues
-(``queue.parent_source_id``). This pass does the rest:
-
-- **The backlog.** Rows queued before the parent was recorded have none. Their
-  citing pages are found where the fetch loop has always written a page's
-  references — ``sources.extra->'citations'``, as ``[{kind, value}]`` — with
-  both sides normalised by :func:`~worker.resolve_doi.normalise_doi`, because
-  the frontier queued ``doi.org`` paths in whatever case the page used.
-- **The provisional ranks.** A page is labelled an hour or more after it is
-  fetched, so a DOI it names is queued at the unjudged rank. Once the label
-  exists this pass settles it: up for an on-topic page, down to the floor for
-  an off-topic one or one on a host since judged off-topic.
-
-A DOI cited by several pages takes the best of them, and records that page as
-its parent. A row whose citing page cannot be found keeps its priority: there
-is nothing to rank it by, and moving it anyway would be a guess. A DOI queued
-more than once (the frontier did not check) is ranked on one row; the others
-keep their place, so the same paper is not resolved twice at the top of the
-queue.
+``python -m worker.requeue_dois`` — reports by default, writes only with ``--apply``,
+and never deletes. Finds citing pages for rows queued before the parent was recorded
+(``sources.extra->'citations'``, both sides normalised), and settles provisional ranks
+once the citing page is labelled. A DOI cited by several pages takes the best; one
+whose citing page cannot be found keeps its priority. See
+docs/features/discovery.md#cited-paper-rank.
 """
 
 from __future__ import annotations
@@ -259,11 +241,8 @@ async def revive_throttled(
 ) -> int:
     """Give failed DOIs back to the queue when throttling was all that failed them (`B-67`).
 
-    Before `B-67` a throttled DOI retried within seconds and was failed after
-    three refusals, so a busy spell at a shared quota wrote papers off for
-    good. Only DOIs whose error says exactly that; any other failure stands.
-    Attempts start again, the old error is kept behind a note, and nothing is
-    deleted. By hand only — on the timetable it would revive the same papers
+    Only DOIs whose error says exactly that. Attempts start again and the old error is
+    kept behind a note. By hand only: on the timetable it would revive the same papers
     forever. Flushes; the caller commits.
     """
     rows = list(

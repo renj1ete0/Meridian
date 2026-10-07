@@ -1,39 +1,8 @@
 """What is worth putting in the queue (task P1-06, spec §6.4, §6.1).
 
-Every link on every page is a candidate, and most of them are not worth a
-request. §6.4 gives the reason plainly: the novelty gate catches duplicates
-afterwards, but *not fetching them is cheaper* — a duplicate that never gets
-fetched costs nothing, and one that does costs a request, a page of bandwidth,
-an extraction, and a slot in a rate limiter some other domain wanted.
-
-Four gates, cheapest first, and the order is the design:
-
-1. **Normalise.** Two spellings of one URL are two queue rows, two fetches and
-   two source records, and the duplicate is invisible until someone counts. This
-   is free and it makes every check below actually work.
-2. **Shape.** Scheme, host, and an extension allowlist. A `.jpg` link is not a
-   document this corpus can read, and queueing it buys a `content_type_rejected`
-   at the cost of a real request.
-3. **Blocklist.** A domain the policy says is blocked, or one seeded as never
-   worth following. Social platforms and link shorteners appear on every
-   government page and lead nowhere a research corpus wants to go.
-4. **Already seen.** One query for the whole batch against `queue` and one
-   against `sources`.
-5. **Refused by robots.txt** (`B-90`), when the crawl already holds a fresh
-   copy of the file. Nothing is fetched here: an origin never visited is
-   waved through and asked at fetch time as before. What this stops is a
-   search engine returning the same refusing site's pages every day, each of
-   which took a claim only to be refused.
-
-The database queries come last because they are the expensive ones, and by the
-time a batch of 500 links reaches them it is usually a batch of 40.
-
-**Normalisation stays conservative.** Anything that changes *which resource is
-requested* trades duplicates for missing pages, and a missing page is invisible
-in a way a duplicate is not. So the fragment goes, tracking parameters go, the
-host is lowercased and a default port dropped — and a trailing slash stays,
-because `/a` and `/a/` are different resources in principle and the cost of
-being wrong is a page that silently never enters the corpus.
+Gates, cheapest first: normalise, shape, blocklist, already seen, refused by a cached
+robots.txt (`B-90`). Normalisation is conservative: a trailing slash stays. See
+docs/features/discovery.md#the-prefilter.
 """
 
 from __future__ import annotations
@@ -154,28 +123,13 @@ SKIP_EXTENSIONS = frozenset(
     }
 )
 
-#: Hosts that resolve an identifier rather than serving a document (`B-23`).
-#:
-#: A `doi.org` URL is a DOI wearing a URL's clothes. Fetching it follows a
-#: redirect to a publisher, which is usually a paywall, a consent wall or a
-#: landing stub — measured on the first real corpus: 244 such rows, 134 of them
-#: with no extractable text at all. Meanwhile the citation channel was already
-#: queueing the *same* identifiers correctly, as `doi` tasks that the resolver
-#: turns into open-access copies. The frontier was simply asking the wrong
-#: question about the same thing.
-#:
-#: So these are routed, not dropped — see `Verdict.dois`.
+#: Hosts that resolve an identifier rather than serving a document (`B-23`). Routed
+#: as `doi` tasks, not dropped — see `Verdict.dois` and
+#: docs/features/discovery.md#identifier-hosts.
 IDENTIFIER_HOSTS = frozenset({"doi.org", "dx.doi.org"})
 
-#: Path segments that mean "this page is about the website" (`B-23`).
-#:
-#: Not a blocklist of topics — a shape. A corpus of research documents has no
-#: use for a site's contact form, and one real run indexed 106 pages of a
-#: single site's help section, which is a tenth of everything it fetched that
-#: day. Checked as a whole path segment, so `/about/` matches and
-#: `/about-congestion-pricing` does not: the second is an article and the
-#: distinction is the entire reason this is a segment match rather than a
-#: substring one.
+#: Path segments that mean "this page is about the website" (`B-23`). Matched as a
+#: whole segment, so `/about/` matches and `/about-the-programme` does not.
 FURNITURE_SEGMENTS = frozenset(
     {
         "about",
@@ -203,12 +157,8 @@ FURNITURE_SEGMENTS = frozenset(
     }
 )
 
-#: Whole-segment phrases that mean the same thing as `FURNITURE_SEGMENTS`
-#: (`B-42`). The single-word rule caught `/privacy` and let `/privacy-policy`,
-#: `/terms-of-use`, `privacy_policy.html` and `/contact-us/` through — every one
-#: of which reached a real corpus. A segment matches only when its *entire*
-#: word sequence is one of these, so `/terms-of-reference-for-the-review` and
-#: `/contact-lens-associated-problems` stay documents.
+#: Whole-segment phrases that mean the same thing as `FURNITURE_SEGMENTS` (`B-42`).
+#: A segment matches only when its entire word sequence is one of these.
 FURNITURE_PHRASES = frozenset(
     {
         ("privacy", "policy"),
@@ -258,10 +208,8 @@ class Verdict:
     """
 
     kept: tuple[str, ...] = ()
-    #: Identifiers found on a redirector host, for the caller to queue as `doi`
-    #: tasks. Separate from `kept` because they are a different *kind* of work:
-    #: queued as a URL they fetch a redirect, and queued as a DOI they reach
-    #: the resolver that finds an open-access copy (`B-23`).
+    #: Identifiers found on a redirector host, for the caller to queue as `doi` tasks
+    #: rather than URLs (`B-23`).
     dois: tuple[str, ...] = ()
     dropped: dict[str, int] = dataclasses.field(default_factory=dict)
 
@@ -310,10 +258,8 @@ def identifier_for(url: str) -> str | None:
     only thing a request to `doi.org` adds is a redirect to somewhere the
     resolver would have reached better.
     """
-    # `removeprefix`, not `lstrip("www.")`: the second strips *characters*, so
-    # it would turn `wwwdoi.org` into `doi.org` and `dx.doi.org` into
-    # `x.doi.org`. Ruff catches this one (B005) and it is worth spelling out,
-    # because the wrong version looks right.
+    # `removeprefix`, not `lstrip("www.")`, which strips characters: `dx.doi.org`
+    # would become `x.doi.org` (ruff B005).
     host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
     if host not in IDENTIFIER_HOSTS:
         return None
@@ -350,10 +296,7 @@ def has_skipped_extension(url: str) -> bool:
 class Prefilter:
     """Decides which candidate URLs are worth a queue row.
 
-    Holds the seeded blocklist for the life of the worker. The blocklist is
-    config (§13.1) and changes when someone edits it in Admin, not between two
-    pages of one crawl; re-reading it per link would be one query per link for
-    an answer that does not move.
+    Holds the seeded blocklist for the life of the worker; it is config (§13.1).
     """
 
     def __init__(self, blocked_domains: Iterable[str] = ()) -> None:
@@ -366,11 +309,7 @@ class Prefilter:
     def is_blocked(self, url: str) -> bool:
         """True if this URL's host is on the seeded blocklist, or under one.
 
-        Suffix matching, not equality. `registrable_domain` keeps subdomains —
-        correctly, since a subdomain is a distinct source from its apex and
-        tiering depends on telling them apart — so an exact
-        match would block `facebook.com` and wave `m.facebook.com` through,
-        which is the same site and the whole reason the entry is there.
+        Suffix matching, because `registrable_domain` keeps subdomains.
         """
         host = registrable_domain(url)
         return any(host == blocked or host.endswith(f".{blocked}") for blocked in self._blocked)
@@ -445,14 +384,8 @@ class Prefilter:
     async def _robots_refused(self, sess: AsyncSession, urls: Sequence[str]) -> set[str]:
         """The URLs a fresh cached robots.txt refuses, under their domain's policy.
 
-        The crawler's own reading, not a second one: the same parser, the same
-        per-domain user agent, and a domain whose policy does not respect
-        robots.txt is never refused here. Only a file that was read counts —
-        ``missing`` permits everything, and ``unreachable`` is not the site's
-        answer, only the absence of one, which the fetch retries.
-
-        A cache is an optimisation (`robotscache`): any error here keeps every
-        URL, inside a savepoint so the caller's transaction survives it.
+        The crawler's own reading; only a file that was read counts. Any error keeps
+        every URL, inside a savepoint.
         """
         by_origin: dict[str, list[str]] = {}
         for url in urls:

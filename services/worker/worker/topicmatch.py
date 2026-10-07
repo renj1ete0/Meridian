@@ -1,33 +1,8 @@
 """Guessing a URL's topic from its path, mechanically (`P1-28`, §5.6, §10).
 
-Frontier expansion inherits the linking page's topic, and for a link that is a
-fair guess: a page about a subject tends to link to pages about that subject. A
-sitemap breaks the assumption completely. It is the site's whole index — a large
-institutional one runs to several thousand URLs spanning everything the
-organisation publishes — and tagging all of it with whichever topic the page
-that triggered discovery happened to carry would be wrong about nearly every
-row.
-
-Wrong in a way that spreads, too. Every URL that gets crawled runs frontier
-expansion of its own and passes its topic on, so a bad label is not a bad row —
-it is a bad subtree. And coverage scoring (§5.3) counts sources per topic to
-report where evidence is *thin*, which is the one thing this system promises to
-be honest about. Nine thousand mislabelled rows make a thin topic look
-comprehensively covered.
-
-So each URL is matched against the gazetteer instead, which already carries
-``topic_labels`` on every term precisely because §5.6 needs the association. A
-URL whose path names a term belonging to a topic is about that topic no matter
-which page led here, and a URL that matches nothing gets no topic at all rather
-than a borrowed one.
-
-**Ambiguous terms are excluded**, and that is the whole reason the gazetteer
-carries the flag. A short acronym routinely expands to two or three unrelated
-things, one of them from an entirely different field. §5.5 resolves those from
-document context — co-occurring entities, the document's topic, whether a full
-form appears nearby. A URL path has no context whatsoever, so the honest answer
-is not to guess: an unmatched URL stays unmatched and visible, which is §5.5's
-middle band applied to a path.
+A sitemap entry is matched against approved gazetteer terms and topic names rather
+than inheriting a topic. Ambiguous terms are excluded; a URL that matches nothing
+gets no topic. See docs/features/discovery.md#topic-from-path.
 """
 
 from __future__ import annotations
@@ -50,10 +25,8 @@ __all__ = [
     "normalise_path",
 ]
 
-#: Below this, a surface form is not matchable against a path. Short acronyms
-#: collide with ordinary path segments, and a path offers nothing to
-#: disambiguate them with. The `ambiguous` flag catches the ones a human
-#: noticed; this catches the rest by construction.
+#: Below this, a surface form is not matchable against a path: short acronyms
+#: collide with ordinary segments and a path cannot disambiguate them.
 MIN_MATCHABLE_LENGTH = 5
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
@@ -69,10 +42,7 @@ _STRUCTURAL_SEGMENTS = frozenset(
 def normalise_path(url: str) -> str:
     """A URL's path as a space-separated, lowercased token string.
 
-    Only the path. Query strings on government sites are almost entirely
-    pagination, session and tracking parameters, and matching against them
-    produces confident nonsense. Percent-escapes are decoded first so that a
-    path written as ``%2Dbus`` matches the same way ``-bus`` does.
+    Only the path, percent-decoded; query strings are mostly pagination and tracking.
     """
     path = urlsplit(url).path
     with contextlib.suppress(UnicodeDecodeError, ValueError):
@@ -89,10 +59,7 @@ def _normalise_term(term: str) -> str:
 class TopicVocabulary:
     """Matchable surface forms, each mapped to the topics it implies.
 
-    Built once per worker rather than per URL: the gazetteer is config (§13.1),
-    it changes when someone approves a term in Admin, and a sitemap of nine
-    thousand entries would otherwise be nine thousand queries for an answer that
-    does not move.
+    Built once per worker, not per URL: the gazetteer is config (§13.1).
     """
 
     #: Normalised phrase -> the topics it implies, in config order.
@@ -104,10 +71,7 @@ class TopicVocabulary:
     def topics_for(self, url: str) -> tuple[str, ...]:
         """Every topic this URL's path implies, most specific match first.
 
-        Matching is on whole tokens — ``" phrase "`` inside ``" path "`` — so
-        ``pub`` does not match ``public`` and ``bus`` does not match ``business``.
-        Substring matching without that boundary is the classic way a matcher
-        looks like it works and tags half the corpus.
+        On whole tokens, so ``pub`` does not match ``public``.
         """
         haystack = f" {normalise_path(url)} "
         if not haystack.strip():
@@ -148,17 +112,7 @@ class TopicVocabulary:
     ) -> TopicVocabulary:
         """Build from the gazetteer, plus the topic names themselves.
 
-        The topic names matter more than they look. A gazetteer starts thin and
-        grows — `P5-02` harvests it from text the crawl has already read — so a
-        vocabulary sourced only from it would assign nothing at all for a topic
-        nobody has hand-written terms for yet, and a newly added topic would sit
-        inert while every URL that mentions it by name went unmatched. A topic
-        name matching a path segment of the same name needs no curation and no
-        model, and it is right far more often than it is wrong.
-
-        Both sources are read from the database, so neither is hardcoded: topics
-        come from `topic_config` and terms from `gazetteer`, and both grow
-        through Admin and through harvesting without any code change.
+        The names let a topic with no curated terms yet match a path segment of its name.
         """
         phrases: dict[str, tuple[str, ...]] = {}
 
@@ -197,18 +151,8 @@ class TopicVocabulary:
 async def load_topic_vocabulary(sess: AsyncSession) -> TopicVocabulary:
     """Build the vocabulary from the database — active topics and the gazetteer.
 
-    Both sources are rows, not literals: topics come from `topic_config` and
-    terms from `gazetteer`, so adding a topic in Admin or approving a harvested
-    term changes what the crawler recognises with no code change and no
-    redeploy. Nothing about the vocabulary is written down in this file.
-
-    Approved terms only. An unapproved row is a model's proposal awaiting a
-    human (§5.6), and letting one steer what gets crawled would be the model
-    writing to the frontier through the back door.
-
-    Read once at startup rather than per URL. It is config (§13.1) — it changes
-    when someone edits it, not between two pages of one crawl — and a sitemap of
-    nine thousand entries would otherwise be nine thousand queries.
+    Approved terms only: an unapproved term is a model's proposal (§5.6). Read once at
+    startup.
     """
     topic_stmt = select(TopicConfig.topic).where(TopicConfig.status == "active")
     topics = list((await sess.scalars(topic_stmt)).all())

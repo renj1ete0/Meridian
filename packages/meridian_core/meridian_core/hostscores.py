@@ -1,41 +1,10 @@
 """Which hosts are worth following links into (task `B-48`).
 
-The frontier queued every link a fetched page carried, each inheriting the
-topic of the page that linked to it, ranked by the linked domain's tier. On a
-real crawl that turned a handful of on-topic seeds into a crawl of whatever
-large sites they happened to link to: a law school's statute library, a
-hospital's condition pages, a university's human-resources pages — each
-labelled with a transport topic and ranked at the top of the queue, because an
-academic domain ranked as scholarly. Measured by content (`P2-21`), 94% of what
-the crawl had fetched was about none of its topics.
-
-The fix uses what the corpus already knows. `P2-21` labels every source by its
-content; a host whose examined pages are almost never about any topic is a host
-whose *next* page is unlikely to be either. So:
-
-- **off-topic host** — at least :data:`MIN_EXAMINED` pages examined and under
-  :data:`OFFTOPIC_SHARE` of them on a topic. A link to it is not queued, and a
-  page *on* it does not have its links followed. A government host is the
-  exception: it is down-ranked, never dropped, because an official source is
-  the one most often served as landing pages that label poorly, and missing it
-  is worse than fetching a few pages too many.
-- **unknown host** — fewer pages examined than that. It is explored, but only
-  up to :data:`EXPLORE_PENDING` queued links, so a site nobody has judged yet
-  cannot fill the queue before anyone has.
-- **any host** — never more than :data:`MAX_PENDING` queued links, however
-  relevant. Diversity is a property of the queue, not only of each link.
-- **unknown host on an off-topic site** (`B-113`) — a subdomain nobody has
-  judged, whose registrable domain is off-topic across its judged siblings. A
-  site that serves every office, county or blog from its own subdomain would
-  otherwise be explored ten links at a time per subdomain, and a loop run found
-  dozens of such siblings taking a third of the followed-link fetches. It is
-  queued at :data:`DOWNRANKED_PRIORITY`, capped as unknown, and never dropped:
-  a hospital and a law school can share a registrable domain and nothing else,
-  so the sibling verdict orders the subdomain last rather than excluding it,
-  and its own verdict replaces the site's once it has one.
-
-Nothing here deletes, and nothing here calls a model: the scores are written by
-a scheduled pass from labels a separate pass wrote, and read here as numbers.
+From the share of a host's examined pages that are on a topic: off-topic hosts get no
+links followed (government hosts are down-ranked instead), unknown hosts are explored a
+few links at a time, unknown subdomains of an off-topic site go last (`B-113`), and no
+host holds more than :data:`MAX_PENDING` queued links. Nothing deletes or calls a
+model. See docs/features/discovery.md#host-scores.
 """
 
 from __future__ import annotations
@@ -59,28 +28,19 @@ log = get_logger(__name__)
 #: Below it, one landing page and one privacy notice would condemn a site.
 MIN_EXAMINED = 20
 
-#: Under this share of examined pages on a topic, a host is off-topic. Measured
-#: on a real crawl, the sites that dominated the drift sat at 0–1%, general
-#: university hosts at 0–5%, and the useful scholarly and research-centre hosts
-#: at 18–46%.
+#: Under this share of examined pages on a topic, a host is off-topic. Set from a
+#: measured crawl; see docs/features/discovery.md#host-scores.
 OFFTOPIC_SHARE = 0.05
 
-#: Queued links allowed to a host nobody has judged yet. Was 50: a 12-hour run
-#: showed that thousands of unjudged hosts at 50 links each is a breadth-first
-#: crawl of every large institutional website the crawl brushes against, long
-#: before labelling can judge any of them (`B-61`). Ten is enough to learn what a
-#: host is about.
+#: Queued links allowed to a host nobody has judged yet. Was 50 (`B-61`); ten is
+#: enough to learn what a host is about.
 EXPLORE_PENDING = 10
 
 #: Queued links allowed to any one host.
 MAX_PENDING = 500
 
-#: At or above this share an on-topic host's links keep the priority their
-#: tier gives them; below it the priority scales down with the share. A host
-#: just over :data:`OFFTOPIC_SHARE` — an institutional repository of
-#: everything, a preprint server's listings for every field — is not off-topic,
-#: but one page in twenty is not a reason to rank its links beside a research
-#: centre's one in four.
+#: At or above this share an on-topic host's links keep the priority their tier
+#: gives them; below it the priority scales down with the share.
 FULL_SHARE = 0.25
 
 #: The priority an off-topic *government* link is queued at: above nothing,
@@ -88,14 +48,8 @@ FULL_SHARE = 0.25
 DOWNRANKED_PRIORITY = 1
 
 #: Added to a *proven* host's links (`B-115`): judged on a topic at or above
-#: :data:`FULL_SHARE`. Larger than any tier priority, so every proven link
-#: ranks above every link to a host nobody has judged. The tier ranks a
-#: source's authority, not whether its next page is worth fetching: measured
-#: over three loop runs, a proven host's next page was on a topic about half the
-#: time and an unjudged host's about one time in seven, yet proven hosts in a
-#: low tier queued below unjudged government links and took a thirtieth of the
-#: fetches. Search keeps its reserved claims, so this orders followed links
-#: among themselves and never starves discovery.
+#: :data:`FULL_SHARE`. Larger than any tier priority, so proven links rank above
+#: unjudged ones; search keeps its reserved claims.
 PROVEN_BOOST = 65
 
 
