@@ -17,10 +17,29 @@
 | `make snapshot-corpus` / `restore-corpus` | Dump and restore the corpus |
 | `make backup` | Off-device backup |
 | `make bench-search` | Search recall, latency and arm agreement |
+| `make clock-check DAYS=400` | Every test today and `DAYS` ahead on every clock; prints what fails only ahead ([below](#clock-check)) |
 | `make build-push` / `promote SHA=…` | Build images, and move the `stable` channel (GHCR, operator only) |
 
 Running `uv run pytest` directly needs the dev environment exported:
 `set -a; . ./.env.dev; set +a`.
+
+### Clock check
+
+Tests that pin a date expire when the calendar passes it (`B-128`, `B-143`), and a grep for
+fixed dates cannot say which of them are compared with a clock. `make clock-check` answers by
+running: the Python and web suites once today and once `DAYS` ahead, against a throwaway
+Postgres (`scripts/clockshift/`, its own project on port 21121) whose clock is moved by
+libfaketime, so Python's and the database's `now()` agree. It prints the tests that fail only
+ahead. Python's clock is moved by `time-machine` (supplied with `uv run --with`, not a project
+dependency) and the web's `Date` by a Node preload.
+
+Moving only one clock is not a substitute: with the database left at today, any code comparing
+a row's `now()` with Python's clock fails, and those failures say nothing about the calendar.
+The liveness tests are filtered out because they compare the clock with a file's real
+modification time, which no shift moves. Tests marked `server_timer` are left out too:
+libfaketime moves Postgres's timers with its clock, so a statement timeout stops firing. A unit
+test fails if a test that waits on `pg_sleep` is not marked. Needs Docker and `web/node_modules`; takes about
+eight minutes.
 
 ## Worker passes
 
@@ -85,3 +104,4 @@ Run in the API container: `docker compose exec api python -m api.<name> …`.
 | `scripts/build_and_push.sh`, `promote.sh` | Image release |
 | `scripts/preflight.sh`, `quickstart.sh` | Server checks and local bootstrap |
 | `scripts/init-roles.sh` | Creates the database roles on first Postgres start |
+| `scripts/clockshift/` | The clock check (`make clock-check`) |

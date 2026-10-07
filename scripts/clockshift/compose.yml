@@ -1,0 +1,26 @@
+# A throwaway Postgres whose clock runs FAKETIME ahead (`make clock-check`). Its own project,
+# port and anonymous volume, so the dev database is never touched.
+name: meridian-clockshift
+
+services:
+  postgres:
+    build: .
+    image: meridian-clockshift/postgres
+    shm_size: 1g
+    # As postgres from the start: libfaketime's semaphore, created by a root entrypoint,
+    # cannot be opened after the drop to postgres, and the server exits.
+    user: postgres
+    command: ["postgres", "-c", "shared_preload_libraries=age"]
+    ports: ["21121:5432"]
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: dev
+      PG_RW_PASSWORD: dev
+      PG_RO_PASSWORD: dev
+      PG_GUEST_PASSWORD: dev
+      LD_PRELOAD: /usr/lib/x86_64-linux-gnu/faketime/libfaketimeMT.so.1
+      FAKETIME: "${FAKETIME:-+0d}"
+      FAKETIME_DONT_FAKE_MONOTONIC: "1"
+    volumes:
+      - ../init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro

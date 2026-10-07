@@ -13,7 +13,7 @@ export
 
 .PHONY: promote dev-up dev-down up down logs migrate seed quickstart preflight \
         local-up local-down local-logs \
-        snapshot-corpus restore-corpus backup lint test bench-search build-push build-worker
+        snapshot-corpus restore-corpus backup lint test clock-check bench-search build-push build-worker
 
 # --- Running it, rather than developing it (tasks B-05, B-06, B-08) ---------
 #
@@ -86,6 +86,10 @@ lint:
 
 test: lint
 	uv run pytest
+
+# Every test again with all clocks DAYS ahead; prints what fails only then (`B-147`).
+clock-check:
+	./scripts/clockshift/run.sh $(or $(DAYS),400)
 
 # --- Measurement (P2-04) ------------------------------------------------------
 # Index recall, latency and arm agreement. Reports whether the planner actually

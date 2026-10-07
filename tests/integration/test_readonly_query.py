@@ -12,15 +12,21 @@ that shares nothing — the tool is not registered there either.
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import AsyncIterator
+
 import pytest
+from sqlalchemy import delete
 
 from meridian_core.db import dispose_engines, guest_configured, session_guest
+from meridian_core.models import Source
 from meridian_core.readonly_query import (
     DEFAULT_MAX_ROWS,
     HARD_MAX_ROWS,
     QueryRefused,
     run_readonly_query,
 )
+from meridian_core.sources import upsert_source
 
 pytestmark = [
     pytest.mark.usefixtures("require_db"),
@@ -74,12 +80,38 @@ async def test_a_write_is_refused_even_if_it_reaches_the_database() -> None:
 # --------------------------------------------------------------------------
 
 
-async def test_a_real_question_gets_a_real_answer() -> None:
-    result = await run("SELECT source_tier, count(*) AS n FROM sources GROUP BY 1 ORDER BY 2 DESC")
+@pytest.fixture
+async def committed_sources(session_for) -> AsyncIterator[str]:
+    """Two committed sources the guest can see, removed afterwards.
+
+    Committed because the guest reads through its own connection; written here because an
+    answer that depends on rows other tests happened to leave fails on a fresh database.
+    """
+    marker = uuid.uuid4().hex[:10]
+    sess = await session_for("rw")
+    for index, tier in enumerate(["government", "press"]):
+        await upsert_source(
+            sess,
+            f"https://{marker}.test/doc-{index}",
+            checksum=f"sha256:{uuid.uuid4().hex}",
+            source_tier=tier,
+        )
+    await sess.commit()
+
+    yield marker
+
+    await sess.execute(delete(Source).where(Source.url.like(f"https://{marker}.test/%")))
+    await sess.commit()
+
+
+async def test_a_real_question_gets_a_real_answer(committed_sources: str) -> None:
+    result = await run(
+        "SELECT source_tier, count(*) AS n FROM sources "
+        f"WHERE url LIKE 'https://{committed_sources}.test/%' GROUP BY 1 ORDER BY 1"
+    )
 
     assert result.columns == ["source_tier", "n"]
-    assert result.row_count >= 1
-    assert all(isinstance(row, dict) for row in result.rows)
+    assert result.rows == [{"source_tier": "government", "n": 1}, {"source_tier": "press", "n": 1}]
 
 
 async def test_a_cte_is_allowed() -> None:
@@ -105,6 +137,7 @@ async def test_it_can_join_the_corpus_to_the_graph() -> None:
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.server_timer
 async def test_a_long_query_is_cancelled_rather_than_allowed_to_run() -> None:
     """The role stops a query reading what it must not. It does nothing about a
     query that reads what it may, forever — a cartesian join is a legal SELECT.
@@ -137,6 +170,7 @@ async def test_the_caller_cannot_raise_the_cap_past_the_hard_limit() -> None:
     assert result.row_count == HARD_MAX_ROWS
 
 
+@pytest.mark.server_timer
 async def test_the_timeout_does_not_leak_onto_the_next_query() -> None:
     """`SET LOCAL`, so it dies with the transaction. A session-level setting
     would ride a pooled connection to whoever borrowed it next."""

@@ -1645,6 +1645,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-147` **Which tests expire with the calendar** — test tooling, no bump. `make
+      clock-check DAYS=n` runs the Python and web suites today and `n` days ahead on every
+      clock (Python via `time-machine`, the web's `Date` via a Node preload, Postgres via
+      libfaketime in a throwaway container on its own port) and prints what fails only ahead.
+      Nothing does at +400 or +1500 days. Moving only Python's clock is misleading: five
+      tests failed that way, all from comparing a database `now()` with Python's. Found on
+      the way: a guest-query test that passed only on a database other tests had filled, and
+      the RUM planner test, which a small table can satisfy with a bitmap scan and a sort;
+      both fixed. Tests waiting on a Postgres timer are marked `server_timer` and left out
 - [x] `B-146` **Admin → Assistant access** — `v0.162.0`, ADRs 0003 and 0011, mock
       `docs/design/AdminAssistantAccess.dc.html`. Lists tokens (never secrets), issues one with
       a profile and an expiry (or none, flagged) and shows it once with setup for Claude Code,

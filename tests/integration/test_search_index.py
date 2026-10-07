@@ -270,9 +270,15 @@ async def test_a_rum_index_covers_the_search_vector_for_ranking(session_for) -> 
 async def test_the_planner_ranks_through_the_rum_index(session_for) -> None:
     """The index must serve the *ordering*, not only the match. An opclass
     without positions (`rum_tsvector_hash_ops` is one) would still be chosen
-    for `@@` and leave the sort to read every row."""
+    for `@@` and leave the sort to read every row.
+
+    Every other plan is switched off: on a small table a bitmap scan and a sort is cheaper,
+    and choosing it says nothing about the index. With sorting off, only an index that
+    orders by distance avoids a disabled sort.
+    """
     sess = await session_for("rw")
-    await sess.execute(text("SET LOCAL enable_seqscan = off"))
+    for setting in ("enable_seqscan", "enable_bitmapscan", "enable_sort"):
+        await sess.execute(text(f"SET LOCAL {setting} = off"))
     plan = await sess.execute(
         text(
             "EXPLAIN SELECT chunk_id FROM chunks "

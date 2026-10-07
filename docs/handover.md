@@ -56,8 +56,9 @@ add it here.
 > - **Postgres memory is in `.env` now** (`B-132`). `random_page_cost` went 4 → 1.1 for every
 >   deploy: recheck the watch and area plans after deploying.
 > - **Tests that pin a date expire** (`B-128`, as `P5-09`): the budget screen reads the real
->   clock. `grep -rn "datetime(2026" tests` lists 26 more fixed instants; most are pure-function
->   inputs, but any compared against `now()` will fail on some future date.
+>   clock. Since `B-147`, `make clock-check DAYS=…` runs every test with all clocks moved
+>   ahead and lists what fails only then; on 2026-10-07 nothing did, at +400 and +1500 days.
+>   Run it after adding a test with a fixed date.
 > - Operator decisions recorded: `B-133` (triage floor for huge documents, measured), `B-134`
 >   (seeded hosted models are the previous generation), `B-135` (a model on the server, live or
 >   scheduled), `B-136` (half-precision vector index).

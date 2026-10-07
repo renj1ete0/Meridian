@@ -76,3 +76,6 @@ pythonpath = ["tests"]
 # tests/unit and tests/integration collide at collection because there are no
 # __init__.py files to disambiguate them.
 addopts = "-p no:logging --import-mode=importlib"
+markers = [
+    "server_timer: relies on Postgres's own timers (statement_timeout), which the clock check cannot move",
+]
