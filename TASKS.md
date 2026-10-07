@@ -1651,6 +1651,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [ ] `B-159` **Near-tied Map names** — after `B-157`, an area of statute text still reads "Small
+      Animals": its centred similarities to the subfields are nearly tied (0.213 / 0.209 / 0.207 /
+      0.194 across Small Animals, Equine, History, Classics), so the winner is noise that clears
+      the 0.20 floor. On the local build 48 of 420 named areas have under 0.02 between first and
+      third. A plain margin rule would also drop plausible sibling names (Ecology vs Environmental
+      Engineering for an energy and climate area), and requiring the top candidates to share a
+      field keeps others wrong (Speech and Hearing for job statistics). Needs a rule measured on a
+      hand-judged sample of areas, not a threshold guessed from the margins
 - [x] `B-158` **A NUL in extracted text lost the page** — `v0.164.4`. Run 18's one worker error:
       a PDF text layer with 0x00, which Postgres refuses in text and JSONB; removed at the write
 - [x] `B-155` **Proven by following** — `v0.164.0`, ADR 0016. Run 17 spent ~900 of 2,300
