@@ -1,16 +1,8 @@
 """Rebuild the corpus's areas (task `P6-30`).
 
-``python -m worker.areas --once`` clusters every searchable, embedded passage
-into regions, areas and sub-areas (`meridian_core.areabuild`) and writes them
-as one build, which the map reads. Scheduled daily; derived data, so running
-it again is always safe and a missed run only means the map shows yesterday's.
-
-``--report`` builds, prints the areas, and writes nothing. ``--name-only``
-names the newest build by field of work (`B-74`) without rebuilding it.
-
-After every build each area is named from ``config/fields.yaml`` — the field or
-subfield nearest its centroid — so the map reads in fields of work rather than
-in whatever words the passages carried.
+``--once`` builds (`meridian_core.areabuild`) and names each area from
+``config/fields.yaml``; derived data, so rerunning is safe. ``--report`` prints a build
+without writing; ``--name-only`` renames the newest build (`B-74`).
 """
 
 from __future__ import annotations
@@ -73,11 +65,8 @@ def distinct_per_level(
 ) -> list[str | None]:
     """Names unique within each level (`B-74`).
 
-    Several clusters can land on one subfield — a subject the corpus holds a
-    lot of splits into several — and even their second choices can agree. Those
-    that still share a name carry their own best phrase: "Transportation (fares
-    and transit)". The phrase is from the area's cleaned terms, so furniture
-    cannot reach it.
+    Names still shared after the second choice carry the area's own best phrase from its
+    cleaned terms: "Transportation (fares and transit)".
     """
     seen: dict[tuple[int, str], list[int]] = {}
     for i, name in enumerate(names):
@@ -106,10 +95,7 @@ def distinct_per_level(
 def _shortened(levels: list[int], names: list[str | None]) -> list[str | None]:
     """Drop the second field from a name that also carries its own phrase (`B-102`).
 
-    "Transportation & Automotive Engineering (robotaxis)" is told apart by the
-    phrase already; the second field only made it long, and on the Map most of
-    a theme's name was cut off. Shortened only where the short form stays
-    unique within its level, so no two areas end up sharing a name again.
+    Only where the short form stays unique within its level.
     """
     short: list[str | None] = []
     for name in names:

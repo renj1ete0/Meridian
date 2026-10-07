@@ -1,21 +1,9 @@
 """Steering from the map (task P6-35), through the machinery that already exists.
 
-The map's right-click actions add no new kind of control. Each one is spelled
-in the steering the system already has — a topic boost with an expiry
-(`steering.set_boost`), a search seed on the queue (`queueing.enqueue`), a
-saved view — so every one is reversible where those already are (Admin's
-boosts table ends a boost, a pending seed can be dropped, a view deleted) and
-every one lands in `steering_log` with the area it came from in the reason.
-
-**An area is not a topic, so "more of this area" has to say which topic it
-means.** Attention is a weight vector over topics (§10); nothing draws seeds
-per cluster. An area whose passages are mostly (:data:`DOMINANT_SHARE`) about
-one topic is steered through that topic's boost; its own distinctive terms go
-on the queue as a search, so the crawl is also asked for the area itself
-rather than only for the topic around it. An area about no topic has no
-weight to boost, and "less" of it is refused with that reason rather than
-pretending: nothing draws it on purpose, and host scores (`B-48`) already keep
-the crawl out of off-topic sites.
+Each action is a topic boost (`steering.set_boost`), a search seed (`queueing.enqueue`)
+or a saved view, logged in `steering_log` with the area. An area steers through the topic
+holding :data:`DOMINANT_SHARE` of its passages; "less" of an area about no topic is
+refused. See docs/features/map.md#steering-from-an-area.
 """
 
 from __future__ import annotations
@@ -75,11 +63,7 @@ class SteerResult:
 def area_search(area, topic: str | None) -> str:
     """What "more of this area" searches for (`B-106`).
 
-    Its name — from the fixed list of fields, so nothing a document carried —
-    then the topic that holds it, then its first two-word term. The area's top
-    single words were the query before, and at the top level those are the
-    corpus's commonest ("shall public information"), which search answers with
-    anything. A two-word term is specific where a single word is not.
+    Its field name, then the topic that holds it, then its first two-word term.
     """
     from .areaview import usable_terms
     from .searchseeds import topic_words
@@ -128,10 +112,8 @@ def dominant(
 ) -> str | None:
     """The topic holding at least :data:`DOMINANT_SHARE` of the passages, or None.
 
-    With ``configured``, a label naming no configured topic counts as none: a
-    label can outlive its topic's row (renamed, or a snapshot from another
-    deployment), and a steer through it would find no weight to move. Found
-    by the first live click on a copied corpus.
+    With ``configured``, a label naming no configured topic counts as none: a label can
+    outlive its topic's row, and a steer through it would find no weight to move.
     """
     total = sum(n for _, n in topics)
     labelled = [(t, n) for t, n in topics if t and (configured is None or t in configured)]
@@ -345,10 +327,8 @@ PERSON_CHOSEN = ("user",)
 async def noise_candidates(sess: AsyncSession, area) -> list[int]:
     """Sources this area would mark: read, about none of the topics, mostly here.
 
-    Only sources the labeller read *whole* and found about no topic
-    (``topic_labels = {}`` and no sample label): the map says where the noise
-    is, the labels say which of it is noise. A labelled source in the field
-    stays whatever the field is called, and a source a person seeded stays.
+    Only sources the labeller read whole and found about no topic (``topic_labels = {}``
+    and no sample label); a labelled or person-seeded source stays.
     """
     from .areaview import _leaves_under
 

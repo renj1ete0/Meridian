@@ -1,23 +1,8 @@
 """Building areas: every searchable passage, clustered into one build (task P6-30).
 
-``worker.areas --once`` calls :func:`build_areas` daily. The arithmetic lives
-in :mod:`meridian_core.areas`; this module reads the corpus, runs it, and
-writes a build — three levels (region › area › sub-area), each area with its
-distinctive terms, its stats and a position.
-
-**The passages search would return.** Drawn through
-:func:`meridian_core.search._conditions`, as the corpus map is, so an area is
-never made of superseded, duplicate or junk text a reader cannot reach.
-
-**Fit on a sample, assign everything.** k-means runs on at most
-:data:`FIT_MAX` hash-sampled passages; every passage is then assigned to its
-nearest leaf in batches, with each leaf's stats gathered on the way. Memory
-stays bounded as the corpus grows, and the same corpus fits the same way.
-
-**Stable positions.** Each group of siblings is laid out from its centroids by
-the corpus map's own projection, and then any area whose centroid is close to
-one in the previous build (:data:`STABLE_MATCH`) takes that area's position —
-so the map moves where the corpus moved and nowhere else.
+Passages are drawn through :func:`meridian_core.search._conditions`, fitted on at most
+:data:`FIT_MAX` hash-sampled ones and all assigned in batches; an area matching one in the
+previous build (:data:`STABLE_MATCH`) keeps its position. See docs/features/map.md.
 """
 
 from __future__ import annotations

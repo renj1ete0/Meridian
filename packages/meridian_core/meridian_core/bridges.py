@@ -1,23 +1,8 @@
 """Bridges between areas (task P6-31).
 
-What connects two areas, in three kinds that are **never merged**, because
-they are different claims about the corpus:
-
-- **cited** — a claim in the graph (an edge) whose evidence spans the two:
-  the passages it cites fall in both, or it links a concept anchored in one
-  to a concept anchored in the other. A concept's anchor is the area most of
-  its own supporting passages sit in. This is the only kind that says a
-  source *states* a connection.
-- **similar** — the most similar pair of passages across the two, drawn from
-  the passages of each nearest the other's centre. Near in meaning, and
-  nothing more: two passages can be close and disagree, or be close because
-  they share boilerplate.
-- **shared terms** — distinctive terms both areas carry.
-
-Bridges are computed for siblings only (regions with regions, and areas under
-one parent with each other), since those are what the map draws together: for
-every pair with a cited claim, and for each area's :data:`NEIGHBOURS` most
-similar siblings. Written with the build, and pruned with it.
+Three kinds, never merged: cited (an edge whose evidence spans both), similar (the
+closest pair of passages) and shared terms. Computed for siblings only, with the build.
+See docs/features/map.md for what each kind claims.
 """
 
 from __future__ import annotations
@@ -42,13 +27,8 @@ SIMILAR_PAIRS = 3
 def exact_distance(column, vector):
     """Cosine distance the HNSW index cannot serve, for exact nearest-in-a-subset.
 
-    ``ORDER BY embedding <=> v LIMIT n`` is planned as an index scan whenever
-    the table is large enough, and that scan yields at most ``ef_search``
-    rows *before* the WHERE clause (see handover, "An HNSW scan returns at
-    most ef_search rows"). Asking for the passages of one area nearest a point
-    then returns the few that happen to be among the corpus-wide nearest —
-    often none. ``+ 0`` makes the sort key an expression the index does not
-    match, so the rows are filtered first and sorted exactly.
+    ``+ 0`` keeps the HNSW index from serving the sort, so rows are filtered first and
+    sorted exactly. See docs/features/map.md#exact-distance.
     """
     return column.cosine_distance(vector) + 0
 

@@ -1,17 +1,8 @@
 """Areas: the corpus as nested clusters of passages (task P6-30) — pure core.
 
-The arithmetic only: clustering passage embeddings into three nested levels
-and naming each cluster by its most distinctive terms.
-:mod:`meridian_core.areabuild` runs it over the corpus and writes a build.
-
-**An area is a cluster, not a topic.** Nothing here reads topic labels: a
-cluster is where passages sit close together in the embedding space, and its
-name is the words that set its passages apart from the rest of the corpus.
-Topics remain a filter over areas, never their boundaries.
-
-**Deterministic.** Seeded k-means with a k-means++ start, nested top down,
-so the same vectors give the same areas; a recomputation moves only when the
-corpus does.
+Seeded, nested k-means over passage embeddings and each cluster's distinctive terms.
+Nothing here reads topic labels. :mod:`meridian_core.areabuild` runs it over the corpus.
+See docs/features/map.md#clustering.
 """
 
 from __future__ import annotations
@@ -38,9 +29,7 @@ _STOP_TEXT = """a about above after again against all also am an and any are as 
     new use used using well however therefore thus page pages click here http https www com
     org html pdf"""
 #: What documents are made of rather than about (`B-71`): repository and
-#: citation furniture, table placeholders, section labels. Found naming live
-#: areas — "model · arxiv · title", "nan · arxiv · cross-list", "university ·
-#: doi · research", "volume number · virus · measles".
+#: citation furniture, table placeholders, section labels.
 _FURNITURE_TEXT = """nan null none arxiv doi isbn issn title abstract volume vol issue
     number pp preprint cross-list crossref pubmed pmc scholar google html pdf retrieved
     accessed available online copyright rights reserved license licence cookie cookies
@@ -116,16 +105,9 @@ def nest(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Three nested levels by k-means inside k-means, top down.
 
-    Regions first over every vector; then each region is cut into areas, and
-    each area into leaves, in proportion to its share of the vectors (at least
-    one each). Returns ``(leaf_of_vector, leaf_centroids, area_of_leaf,
-    region_of_area)``, numbered consecutively.
-
-    **Top down, not bottom up.** Grouping leaf centroids upward (centroid
-    linkage) was tried first and chained on a real corpus: one region took 97%
-    of the passages, because a dense mass merges with each neighbour in turn.
-    Splitting from the top asks each level the same question — where does this
-    set of passages divide — so every level is balanced by the same measure.
+    Each level is cut in proportion to its share of the vectors (at least one each).
+    Returns ``(leaf_of_vector, leaf_centroids, area_of_leaf, region_of_area)``, numbered
+    consecutively. Why top down: docs/features/map.md#clustering.
     """
     x = _normalise_rows(np.asarray(vectors, dtype=np.float32))
     n = len(x)
@@ -161,10 +143,8 @@ def nest(
     )
 
 
-#: Whitespace-delimited tokens that are addresses, not words: a host with a
-#: known suffix, or anything with a path in it. Chunk text carries links, and
-#: a cluster named by the sites it cites ("edu · cornell · arxiv") says where
-#: its passages came from, not what they are about.
+#: Whitespace-delimited tokens that are addresses, not words: a host with a known
+#: suffix, or anything with a path in it. A name from cited hosts says nothing.
 _ADDRESS = re.compile(
     r"\S*\w\.(?:com|org|edu|gov|net|int|io|ac|co|uk|sg|au|de|fr|jp|info)\b\S*|\S*\w/\S*",
     re.IGNORECASE,
@@ -203,15 +183,9 @@ def distinctive_terms(
     cluster and ``f(t)`` the term's count across all clusters: frequent here,
     rare elsewhere. Unigrams and bigrams both compete.
 
-    With ``sources_by_cluster`` (the source id of each text), a term must
-    appear in passages from ``min_sources`` different sources in the cluster —
-    otherwise one long document's own phrasing names the whole area. A
-    cluster with fewer sources than that is held to as many as it has, so it
-    still gets a name (and its source count says how much to trust it).
-
-    Source spread is counted as a document frequency — each source's text
-    contributes each term once — rather than a set of sources per term, which
-    on a real corpus held millions of sets and took gigabytes.
+    With ``sources_by_cluster`` (the source id of each text), a term must appear in
+    passages from ``min_sources`` different sources in the cluster, or as many as it has.
+    See docs/features/map.md#naming.
     """
     counts: list[Counter[str]] = []
     spread: list[Counter[str]] = []

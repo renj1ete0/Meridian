@@ -1,35 +1,8 @@
 """A three-dimensional picture of the embedding space (tasks P6-26, P6-29).
 
-The corpus is searchable by vector, and until this nothing let anyone *see* the
-vectors: whether topics separate, whether one source dominates a region, whether
-a crawl drifted somewhere nobody meant it to. This is the data behind that
-picture — a sample of searchable chunks, each placed by its embedding.
-
-**PCA, not UMAP or t-SNE.** Both of those draw prettier clusters, and both
-earn them with things a map someone reasons from should not have: a non-linear
-projection whose distances mean nothing globally, a random seed that moves every
-point on each refresh, and a dependency (``umap-learn`` pulls in numba and
-llvmlite) larger than the service it would sit in. PCA is linear and
-deterministic, so "these two regions are far apart" is true of the embeddings
-and not of the layout, and the same corpus draws the same map twice.
-
-**The cost is honesty about how much it shows.** Three components of a
-1024-dimensional text embedding typically carry a small share of its variance.
-That share is returned beside the points, one figure per axis, so a reader can
-see the map is a shadow and how thin a one, rather than trusting it as the space
-itself.
-
-**Three axes, not two** (``P6-29``). The first map was flat, and the reader it
-was for expected to look *into* the vectors, not at a plane through them. The
-third component costs one more column in the iteration and a dozen bytes a
-point, and it separates regions the first two stack on top of each other. A
-client that wants the flat picture drops ``z``; the first two axes are the same
-components they always were.
-
-**The same chunks search would return.** The sample is drawn through
-:func:`meridian_core.search._conditions`, so superseded passages, duplicates and
-junk are absent here for the reason they are absent from results — a map that
-drew what search hides would be a picture of a different corpus.
+A deterministic sample of the chunks search would return (through
+:func:`meridian_core.search._conditions`), placed by PCA with each axis's share of the
+variance alongside. See docs/features/map.md#the-3d-projection.
 """
 
 from __future__ import annotations
@@ -88,12 +61,8 @@ class CorpusMap:
 #: How many principal components the map is drawn on.
 COMPONENTS = 3
 
-#: Subspace iteration settings. Extra directions beyond the three wanted and a
-#: few passes are what make the top three converge: the error in component
-#: ``k`` shrinks each pass by the ratio of the first *unkept* eigenvalue to
-#: ``λ_k``, so the block is widened well past three, where a decaying spectrum
-#: has fallen far enough for that ratio to be small. The seed makes the result
-#: the same on every call, which the map's stability depends on.
+#: Subspace iteration settings: a block wider than three so the top three converge, and a
+#: fixed seed so every call agrees. See docs/features/map.md#the-3d-projection.
 _OVERSAMPLE = 10
 _PASSES = 8
 _SEED = 0
@@ -104,21 +73,9 @@ _ZERO = (0.0, 0.0, 0.0)
 def project(vectors: np.ndarray) -> tuple[np.ndarray, tuple[float, float, float]]:
     """The first three principal components of ``vectors``, scaled into [-1, 1].
 
-    By seeded subspace iteration, not a full eigendecomposition. The obvious
-    route — ``eigh`` of the ``d × d`` covariance — was measured at seven
-    seconds for a thousand dimensions, every time the map was opened, to
-    compute a thousand components of which three are drawn. Iterating on a
-    thirteen-column block costs a handful of thin matrix products instead, and with
-    a fixed seed it is as deterministic as the decomposition it replaces.
-
-    Each axis is scaled on its own, so each fills [-1, 1]. That stretches the
-    minor axes relative to the first — a reader told the share each axis
-    carries is better served by three legible axes than by a third one
-    flattened to a sliver.
-
-    Each component's sign is fixed so its largest loading is positive. An
-    eigenvector is only defined up to sign, and without this the same corpus
-    can draw as its own mirror image between one refresh and the next.
+    By seeded subspace iteration. Each axis is scaled on its own, and each component's
+    sign is fixed so its largest loading is positive. See
+    docs/features/map.md#the-3d-projection.
     """
     n, d = vectors.shape if vectors.ndim == 2 else (0, 0)
     if n < COMPONENTS + 1:
@@ -167,10 +124,7 @@ async def corpus_map(
 ) -> CorpusMap:
     """A deterministic sample of searchable, embedded chunks, projected to 3D.
 
-    Sampled by a hash of the chunk id rather than ``random()``: the same corpus
-    yields the same sample, so the map holds still between refreshes and moves
-    only when the corpus does. Ordering by id instead would draw the oldest
-    chunks, which is the first site the crawl reached and not the corpus.
+    Sampled by a hash of the chunk id, so the same corpus yields the same sample.
     """
     if not 1 <= sample <= MAX_SAMPLE:
         raise ValueError(f"sample must be between 1 and {MAX_SAMPLE}")

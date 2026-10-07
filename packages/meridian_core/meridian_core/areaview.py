@@ -1,14 +1,8 @@
 """Reading areas (task P6-30): the newest build, one level at a time.
 
-Read-only, for `/api/explore/areas*`. Every read is of the newest build: a
-build is written whole in one transaction, so the newest is always complete,
-and an area id from an earlier build is answered with a 404 that says the map
-was rebuilt rather than with a picture that no longer exists.
-
-**Weak and stale are measurements.** Weak is fewer than
-:data:`WEAK_BELOW_SOURCES` independent sources; stale is nothing new stored in
-:data:`STALE_AFTER_DAYS`. Each carries its reason in words, so the outline on
-the map can say why it is there — and neither is a judgement of the material.
+Read-only, for `/api/explore/areas*`. An area id from an earlier build is answered with
+a 404 that says the map was rebuilt. Weak is fewer than :data:`WEAK_BELOW_SOURCES`
+independent sources, stale nothing new in :data:`STALE_AFTER_DAYS`; each carries its reason.
 """
 
 from __future__ import annotations
@@ -61,11 +55,8 @@ def usable_terms(terms: list[str]) -> list[str]:
 def area_name(terms: list[str], field: str | None = None) -> str:
     """One short name, not a list of keywords (`B-71`, `B-74`).
 
-    The area's field of work when the build found one: a name from a fixed
-    list, so nothing a document happened to contain — a licence string, a
-    publisher's badge — can become it. The terms stay beside the name as
-    detail. Without a field, the best two-word phrase among the top few terms,
-    else the top term.
+    The area's field of work when the build found one; without one, the best two-word
+    phrase among the top few terms, else the top term. See docs/features/map.md#naming.
     """
     if field:
         return field

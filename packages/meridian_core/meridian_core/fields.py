@@ -1,20 +1,8 @@
 """Naming Map areas by field of work (task B-74).
 
-Areas were named by their most distinctive words, and words drawn from text
-let whatever the text carries through: licence strings ("bync", "dd"),
-publisher badges ("free article"), repository furniture ("arxiv", "doi"). A
-list of words to refuse never ends. So an area is named from a fixed list
-instead — ``config/fields.yaml``, the OpenAlex fields and subfields — by the
-entry nearest its centroid in the same embedding space as the passages. A name
-outside the list cannot appear.
-
-Level-1 areas (regions) take a field; deeper areas take a subfield, whose name
-says more ("Transportation" rather than "Social Sciences"). The best phrase of
-the area's own terms can follow, so siblings in one subfield stay tellable
-apart: "Transportation: road safety".
-
-Pure apart from reading the file: the embedding happens in the build job, which
-has the embedder, and passes the vectors in.
+Names come from ``config/fields.yaml`` (OpenAlex fields and subfields), by the entry
+nearest an area's centroid. Pure apart from reading the file: the build job embeds the
+labels and passes the vectors in. See docs/features/map.md#naming.
 """
 
 from __future__ import annotations
@@ -58,13 +46,7 @@ def load_fields(path: Path = FIELDS_PATH) -> tuple[list[FieldLabel], list[FieldL
 
 
 def _centred(vectors: np.ndarray) -> np.ndarray:
-    """Unit rows after subtracting the mean row.
-
-    Matching raw label vectors to centroids lets a few generic labels win
-    everything — measured on a live map, one clinical subfield named five of
-    twelve regions — because they sit near the middle of the whole space. With
-    the shared direction removed, what is left is what is particular to each.
-    """
+    """Unit rows after subtracting the mean row, so generic labels stop winning everything."""
     centred = vectors - vectors.mean(axis=0, keepdims=True)
     return centred / np.maximum(np.linalg.norm(centred, axis=1, keepdims=True), 1e-12)
 
@@ -104,17 +86,10 @@ def assign(
 ) -> list[str | None]:
     """The name for each area from the list, or None where nothing fits.
 
-    Deeper areas take the nearest subfield. A region takes the subfield that
-    most of its passages' areas were given (``parents`` gives each area's
-    parent's index in these lists): there are too few regions to centre on,
-    and a region named apart from its own contents reads as a contradiction one
-    click down. A field ("Social Sciences") was tried first and named five of
-    twelve live regions alike. A region with no named children falls back to
-    the nearest field.
-
-    Siblings that would share a name are told apart by their second choice:
-    "Transportation & Urban Studies" (an ampersand, because many subfield names
-    already contain "and"). Every word still comes from the list.
+    Deeper areas take the nearest subfield. A region takes the subfield most of its
+    areas were given, weighted by ``weights`` (``parents`` gives each area's parent's index
+    in these lists), else the nearest field. Names shared within a level take their second
+    choice ("A & B"). See docs/features/map.md#naming.
     """
     out: list[str | None] = [None] * len(levels)
     second: list[str | None] = [None] * len(levels)
@@ -164,9 +139,7 @@ def _told_apart(
     for i, name in enumerate(names):
         if name is None:
             continue
-        # Across the whole level, not only among siblings: the operator reads
-        # one level of the map at a time, so two "Transportation" anywhere on
-        # it are one name too many.
+        # Across the whole level, not only among siblings: the map is read a level at a time.
         key = (levels[i], None)
         groups.setdefault(key, {}).setdefault(name, []).append(i)
     out = list(names)
