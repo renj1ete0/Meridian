@@ -1,35 +1,9 @@
 """PDFs: native text, page boundaries, and knowing when it is a scan (P1-09).
 
-§6.6 draws this as a fork, and the fork is the whole module:
-
-```
-fetch PDF → pdftotext → chars/page
-  ├─ native  → extract → chunk → embed
-  └─ scanned → enqueue to ocr_queue; source stays metadata-only
-```
-
-**Both branches matter and they fail differently.** A scan run through a text
-extractor yields a handful of ligature artefacts, which clears no threshold and
-looks exactly like an empty page — so without the chars-per-page check a scanned
-planning report enters the corpus as "extracted, nothing found" and nobody ever
-looks at it again. With the check it enters as a source that *needs* something,
-and §6.6's OCR queue is where that something waits.
-
-**OCR never runs inline.** It would stall the 23-hour loop for one document. The
-source record enters the graph as metadata-only and is enriched later, so a scan
-never blocks ingestion (§6.6, `P1-13`).
-
-**Page numbers, not character offsets.** §5.3 makes `page_or_offset` mean one or
-the other, and for a PDF a citation that cannot be opened at the right page is
-barely a citation. `pdftotext` separates pages with a form feed, so the boundary
-is free and exact rather than reconstructed — which §6.6 warns is the thing OCR
-pipelines flatten first.
-
-**`pdftotext` is a system binary, and its absence must be loud.** §6.6 has this
-lesson already, about `markitdown-ocr` silently skipping OCR when no client is
-configured: "silent degradation is unacceptable in an unattended system". A
-worker that has quietly lost poppler would store PDFs and extract none of them,
-and the only symptom would be a corpus that stopped growing.
+`pdftotext` page by page; too few characters per page means a scan, which is queued
+for OCR and stored metadata-only, never processed inline. Citations are by page. A
+missing `pdftotext` raises; anything wrong with one document is returned. See
+docs/features/extraction.md#pdf.
 """
 
 from __future__ import annotations
@@ -51,20 +25,12 @@ log = get_logger(__name__)
 PDFTOTEXT = "pdftotext"
 PDFINFO = "pdfinfo"
 
-#: §6.6: "Below ~100 chars/page means it is a scan." A page of body prose runs
-#: to 1,500–3,000 characters, and a scanned page yields only whatever the
-#: producer left in the text layer — a header, a page number, a stray ligature.
-#: The gap between the two is wide enough that the exact threshold does not
-#: matter much, which is why a cheap check can carry this decision.
+#: §6.6: "Below ~100 chars/page means it is a scan." The gap to body prose is wide.
 SCAN_CHARS_PER_PAGE = 100
 
-#: A page whose text layer is more than this share control characters,
-#: private-use code points and replacement characters has no readable text. A
-#: PDF drawn with a custom font encoding and no Unicode map comes out of
-#: `pdftotext` as exactly that: a page-length run of `\x10\x13\x17…`, which is
-#: not blank, so the scanned-page check passes it, and it embeds as noise.
-#: Measured over a real crawl, garbled documents sat at 60–66% and the next
-#: highest ordinary document at 5%, so the exact value matters little.
+#: A page whose text layer is more than this share control characters, private-use
+#: code points and replacement characters has no readable text (a custom font
+#: encoding with no Unicode map). See docs/features/extraction.md#pdf.
 GARBLED_SHARE = 0.2
 
 #: Above this share of garbled pages the document is treated as a scan: its
@@ -150,14 +116,9 @@ async def extract_pdf(
 ) -> ExtractedDocument:
     """Extract one PDF's text, pages and metadata.
 
-    Raises :class:`PdftotextMissing` if poppler is absent — that is a
-    deployment fault affecting every PDF in the corpus, not a property of this
-    document, and it must not read as "this PDF had no text".
-
-    Everything else about a bad document is returned rather than raised: an
-    encrypted file, a truncated download, a PDF that is really a HTML error page
-    with the wrong `Content-Type`. Those are documents this crawler cannot read,
-    and §6.5 already has a resting state for them.
+    Raises :class:`PdftotextMissing` if poppler is absent, a deployment fault.
+    Everything wrong with one document (encrypted, truncated, really HTML) is
+    returned rather than raised.
     """
     if not available():
         raise PdftotextMissing(
@@ -209,10 +170,8 @@ async def extract_pdf(
                 "threshold": SCAN_CHARS_PER_PAGE,
             },
         )
-        # The text layer's few characters are deliberately dropped. Keeping them
-        # would put a page number and a running header into the corpus as if
-        # they were the document's content, and the novelty gate would then have
-        # to distinguish two scans by their headers.
+        # The text layer's few characters (a page number, a header) are dropped,
+        # not stored as if they were the document's content.
         return ExtractedDocument(
             pages=(),
             extractor="pdftotext",
@@ -236,10 +195,8 @@ async def extract_pdf(
 async def _run_pdftotext(content: bytes, *, timeout_s: int) -> PdfText | None:
     """Run the extractor over stdin and split the output into pages.
 
-    stdin rather than a temporary file: the bytes are already in memory, a temp
-    file is one more thing to leak on an interrupted fetch, and `-` means
-    nothing this crawler downloaded ever lands on disk under a name another
-    process could reach.
+    stdin rather than a temporary file, so nothing downloaded lands on disk under a
+    name another process could reach.
     """
     # `-q` silences the syntax warnings a real-world PDF corpus produces
     # constantly; `-enc UTF-8` because the default is locale-dependent and a
@@ -263,10 +220,7 @@ async def _run_pdftotext(content: bytes, *, timeout_s: int) -> PdfText | None:
 async def _metadata(content: bytes, timeout_s: int) -> dict[str, object]:
     """Title, author and date from `pdfinfo`, for the fields a citation needs.
 
-    A separate process from the text extraction, and worth it: a PDF with no
-    title in `sources` is a citation that renders as a URL, and government
-    reports set the field far more often than they are given credit for.
-    Failure here is not failure of the document — the text is what matters.
+    A separate process; failure here is not failure of the document.
     """
     output = await _capture([PDFINFO, "-enc", "UTF-8", "-"], content, timeout_s)
     if output is None:
@@ -332,10 +286,8 @@ async def _capture(argv: list[str], stdin: bytes, timeout_s: int) -> str | None:
 def _pdf_date(value: str | None) -> dt.date | None:
     """A date from the PDF's own format, or None. Never a guess.
 
-    `D:20260314090000+08'00'` is what the spec calls a date. Only the day is
-    taken, and only when all three components are there — `publication_date` is
-    a DATE that citations are built from, and a fabricated day is worse than a
-    missing one.
+    `D:20260314090000+08'00'`: only the day is taken, and only when all three
+    components are there.
     """
     if not value:
         return None

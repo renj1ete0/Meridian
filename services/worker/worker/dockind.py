@@ -1,22 +1,9 @@
 """Classify stored sources by what kind of document they are (task `B-59`).
 
-The fetch path classifies every page it chunks from now on
-(`worker.extract.dockind`); this pass does the same for what was stored
-before, and retires the chunks of the ones that turn out to be listings.
-
-**The same input as the fetch path.** The fetch path classifies the text it
-would chunk, with furniture left out; here that text is read back from the
-live chunks, which are exactly that. The page's head metadata — `og:type` and
-scholarly `citation_*` tags — comes from the raw file when one is kept and
-readable; without it those two signals are simply absent, as they would be
-for a page that declared nothing.
-
-**Report by default.** ``--apply`` writes each verdict and supersedes a
-listing's live chunks. It never deletes, and never retires the chunks of a
-source anything cites (`chunks.cited_source_ids`): such a listing gets its
-kind and keeps its chunks, and the report counts it. Sources already
-classified are skipped unless ``--all`` asks for a re-derivation, which is
-what a change to the rules needs.
+The fetch path's rules (`worker.extract.dockind`) over what was stored before, with the
+text read back from the live chunks and head metadata from the raw file when one is
+kept. Report by default; ``--apply`` writes each verdict and supersedes a listing's
+chunks, never for a source anything cites. ``--all`` re-derives classified sources too.
 """
 
 from __future__ import annotations

@@ -1,37 +1,10 @@
 """Writing chunks for a source (task P2-02, spec §5.3, §6.2, §6.3).
 
-Chunks are the unit three separate things are built on — retrieval, the slow
-loop's batch, and an edge's cited evidence — so how they are *written* matters
-as much as how they are cut.
-
-**A re-crawl replaces them.** A page that changed is a page whose old chunks
-describe text that is no longer there, and §2.4's rule is to re-derive from
-source rather than to patch. So a content change deletes the source's chunks and
-writes new ones, inside one transaction: a source with half its old chunks and
-half its new ones beside them is worse than either.
-
-**New chunks get new ids, and that is the point.** §6.3's high-water mark is the
-last `chunk_id` the slow loop consumed, so a replaced chunk is naturally picked
-up again on the next pass — which is exactly what should happen to a page whose
-content changed. Nothing has to notice the change or schedule the re-read.
-
-**Replacement supersedes; it does not delete (`P1-32`).**
-`edges.supporting_chunk_ids` is an array of ids with no foreign key behind it —
-Postgres cannot enforce one on array elements — so deleting a chunk left every
-edge citing it pointing at nothing. That failure is silent in the worst way:
-§2.3 makes provenance mandatory, and an orphaned edge still *has* provenance. It
-carries a list of ids, passes every check, and only following the citation
-reveals there is nothing there. Nothing in the system follows.
-
-So the old rows are stamped with `superseded_at` and stay. Citations keep
-resolving; an edge keeps the text it was actually derived from, which matters
-because the page has since changed and §2.4 re-derives from source chunks; and
-the sweep can reclaim the ones nothing cites, as a decision a person makes
-rather than one a crawl makes at write time.
-
-Everything that serves the corpus filters on ``superseded_at IS NULL``. A
-superseded chunk is text that is no longer on the page, and serving it would
-have the corpus quote a document as saying something it no longer says.
+A re-crawl replaces a source's chunks in one transaction; the new ones get new ids, so
+the slow loop re-reads them. Replaced chunks are superseded (`superseded_at`), never
+deleted, because edges cite them; everything that serves the corpus filters on
+``superseded_at IS NULL``. Also the embedding queue and its tiers. See
+docs/features/extraction.md#superseded-chunks.
 """
 
 from __future__ import annotations
@@ -70,10 +43,8 @@ async def replace_chunks(
 ) -> tuple[int, int]:
     """Make ``chunks`` the live set for ``source_id``. Returns (written, superseded).
 
-    Flushes; does not commit. The supersede and the insert belong to the
-    caller's transaction on purpose — they are one change, and a crash between
-    them leaves a source with no live chunks at all, which reads as "never
-    extracted" rather than as "half replaced".
+    Flushes; does not commit: the supersede and the insert are one change, in the
+    caller's transaction.
     """
     superseded = await supersede_chunks(sess, source_id, now=now)
 
@@ -105,10 +76,7 @@ async def replace_chunks(
 async def supersede_chunks(sess: AsyncSession, source_id: int, *, now=None) -> int:
     """Retire this source's live chunks without removing them. Flushes.
 
-    Only the live ones. A source re-crawled twice has two generations of
-    superseded chunks, and re-stamping the older set would move its timestamp
-    forward — which is the one thing the column is for, and would make the
-    sweep's "superseded more than N days ago" mean nothing.
+    Only the live ones, so an older generation keeps its timestamp.
     """
     stamp = now or dt.datetime.now(dt.UTC)
     result = await sess.execute(
@@ -162,11 +130,7 @@ async def superseded_uncited(sess: AsyncSession, *, before=None) -> int:
 async def purge_superseded(sess: AsyncSession, *, before=None) -> int:
     """Delete retired chunks that no edge cites. Returns how many. Commits.
 
-    Deliberately not called by anything on a timer. A superseded chunk is the
-    text an edge *would* have been derived from if one had been written, and a
-    crawl that reclaimed it automatically would be making a retention decision
-    at the moment it is least able to judge it. The sweep reports the number and
-    a person passes ``--apply``, exactly as for raw files.
+    Deliberately not on a timer: the sweep reports, and a person passes ``--apply``.
     """
     ids = select(_reclaimable(before).subquery().c.chunk_id)
     result = await sess.execute(delete(Chunk).where(Chunk.chunk_id.in_(ids)))
@@ -181,25 +145,15 @@ CITATION_COLUMN = "supporting_chunk_ids"
 def citing_tables() -> tuple[str, ...]:
     """Every table with a ``supporting_chunk_ids`` column, read from the models.
 
-    Derived rather than listed (`B-46`). The list was written out by hand with
-    edges, observations and attribute values, and entities — which carry the
-    same column — were left out, so a sweep could delete a retired chunk that
-    only an entity cited. A table that gains provenance later is covered the
-    moment its model declares the column.
+    Derived rather than listed (`B-46`): a hand-written list once missed entities.
     """
     return tuple(
         sorted(t.name for t in Chunk.metadata.tables.values() if CITATION_COLUMN in t.columns)
     )
 
 
-#: Every reason a retired chunk must stay: an edge's (or entity's, or
-#: observation's) evidence is not reclaimable space, it is the thing that makes
-#: the claim checkable.
-#:
-#: Written as SQL rather than built with `~exists()` because the clause is
-#: negated, and SQLAlchemy cannot negate a text fragment — which is how the
-#: first version of this failed, loudly and immediately, rather than by quietly
-#: matching everything. Table names come from the models, never from input.
+#: Every reason a retired chunk must stay: something cites it. SQL rather than
+#: `~exists()`, which cannot negate a text fragment. Table names come from the models.
 def _cited(chunk_ref: str) -> str:
     """SQL true when the chunk ``chunk_ref`` names is evidence for anything."""
     return " OR ".join(
@@ -235,10 +189,7 @@ def _reclaimable(before=None):
 def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
     """Adapt anything with ``text``, ``index`` and ``offset`` into writes.
 
-    The seam between the worker's chunker and this package. Duck-typed rather
-    than importing `worker.extract.chunk`, because `meridian_core` is what the
-    API and orchestrator depend on and it must not gain a dependency on a
-    service in order to describe its own table.
+    Duck-typed, because `meridian_core` must not import `worker.extract.chunk`.
     """
     return [
         ChunkWrite(

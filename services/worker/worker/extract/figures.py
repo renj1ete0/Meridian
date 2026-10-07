@@ -1,34 +1,8 @@
 """Figure captions (task P1-10, spec §6.6).
 
-§6.6 is unambiguous about where to start: **"Start with captions, not vision.
-Figure captions are text, usually extractable, and often the most
-information-dense sentence about the figure."** So this extracts captions and
-alt text at ingestion and nothing else — no image bytes, no bounding boxes, no
-model.
-
-That is not a stub. A caption plus a page number is already a citable claim
-about what a figure shows, and it is searchable through the ordinary chunk path
-the moment it is stored. Vision (`P7-07`) and the figures panel (`P6-14`) build
-on top of it; neither is a prerequisite for the value.
-
-**What it does keep is the way back to the image.** `figures.file_path` is a
-local raw path and nothing downloads figure images, so without the source URL a
-row would describe a picture nobody could ever look at. `image_url` is that
-handle, and it is why `P1-10` adds a column rather than only a module.
-
-Two inputs, and they are genuinely different problems:
-
-**HTML has semantics.** `<figure>`/`<figcaption>` says "this is a figure and
-this is its caption" outright, and `<img alt>` is a description someone wrote
-for exactly this purpose. Both are reliable when present.
-
-**A PDF has none.** `pdftotext` yields a page of text in which a caption is
-distinguishable only by convention — a line beginning "Figure 3:" or "Table 2.".
-That convention is near-universal in the document types this corpus collects,
-and matching it is worth doing precisely because the alternative is nothing.
-It is also why the PDF path carries a page and no bbox: the page is known
-exactly, the position on it is not known at all, and inventing a bbox would put
-a false precision on a citation.
+Captions and alt text at ingestion, with the image's URL: no image bytes, no bounding
+boxes, no model. HTML has `<figure>` semantics; a PDF has only the "Figure 3:" convention,
+so its figures carry an exact page and no bbox. See docs/features/extraction.md#figures.
 """
 
 from __future__ import annotations
@@ -79,11 +53,8 @@ def _clean(text: str | None) -> str | None:
 def figures_from_html(content: bytes | str, url: str) -> tuple[ExtractedFigure, ...]:
     """Figures a page marked up as figures, plus images that describe themselves.
 
-    Two passes, in that order, because they are different evidence. A
-    `<figure>` is an author saying "this is a figure"; a bare `<img alt>` is an
-    author describing an image that may be a diagram or may be a logo. Both are
-    kept, the marked-up ones first, and `MAX_FIGURES` therefore truncates the
-    weaker evidence rather than the stronger.
+    Marked-up `<figure>`s first, then bare `<img alt>`, so `MAX_FIGURES` truncates
+    the weaker evidence.
     """
     try:
         tree = lxml_html.fromstring(content)
@@ -129,10 +100,7 @@ def figures_from_html(content: bytes | str, url: str) -> tuple[ExtractedFigure, 
 def figures_from_pages(pages) -> tuple[ExtractedFigure, ...]:
     """Caption lines from a paginated document's text layer.
 
-    No image, no bbox, and a page number that is exact. §6.6 wants the caption
-    indexed; a reader following the citation opens the page and sees the figure
-    themselves, which is the same thing a page-accurate chunk citation already
-    asks of them.
+    No image, no bbox, and an exact page number.
     """
     found: list[ExtractedFigure] = []
     for page in pages:

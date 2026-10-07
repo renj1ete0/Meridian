@@ -1,15 +1,8 @@
 """Clean, then chunk: the one path from extracted text to chunk writes (task `B-43`).
 
-Two callers — the fetch path (`main._chunk`) and the re-chunk pass
-(`worker.rechunk`) — and one function, because a page cleaned one way when it
-is fetched and another way when it is re-chunked would give the same text two
-different sets of chunks depending on when it arrived.
-
-In order: the page's candidate-line hashes are recorded from the *uncleaned*
-text (`page_lines`, so repetition is always counted from what a site actually
-serves), the host's boilerplate set is read, the cleaners pick lines to drop,
-and the chunker cuts around them. Every chunk is still a verbatim slice of the
-text it was cut from.
+Shared by the fetch path (`main._chunk`) and `worker.rechunk`, so a page is cut the same
+way whenever it arrives. Records the page's line hashes from the *uncleaned* text, reads
+the host's boilerplate set, picks lines to drop and chunks around them.
 """
 
 from __future__ import annotations

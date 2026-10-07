@@ -1,23 +1,9 @@
 """Pages that say they are not there (task `B-45`).
 
-A missing page is supposed to answer 404. Many sites answer 200 with a page
-titled "Page not found" wrapped in the full site template — a menu, a footer, a
-search box, sometimes a list of popular links — and the fetch path, seeing a
-success, stored it, chunked it and followed its links. On a real crawl those
-pages were whole templates of navigation under an error title.
-
-**The title decides, one segment at a time.** A page title is usually
-``<page> | <site>`` or ``<page> - <site>``; the error is a whole segment, not a
-word in one. "Rule 404. Character Evidence" and "Harmless Error" are real
-documents, and a rule that matched the word would junk a court's rules of
-evidence. So a segment must *be* an error phrase — "Page not found", "404",
-"Error 404", "Not Found" — to count.
-
-**The body can confirm when the title is generic.** Some templates keep the
-site's own title on every page. For those, the opening of the text has to carry
-one of a few unmistakable sentences ("The page you are looking for could not be
-found"), and only in the first stretch of text, where an error template puts
-it — an article *about* broken links says it much further down, if at all.
+A site that answers 200 with "Page not found" in its template. The title decides, one
+segment at a time (a segment must *be* an error phrase); when the title is generic, one of
+a few unmistakable sentences in the opening text confirms. See
+docs/features/extraction.md#error-pages.
 """
 
 from __future__ import annotations

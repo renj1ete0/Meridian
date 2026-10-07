@@ -1,20 +1,8 @@
 """What a source is called, when what it says it is called is not a title (task B-69).
 
-A title is read off the document: the `<title>` element, `og:title`, a PDF's
-metadata. Measured on a live corpus, those are wrong in three recurring ways:
-
-- **A placeholder.** PDF exporters write "untitled", "Microsoft Word -
-  report.docx" or a bare file name; data pipelines write "nan" and "None".
-  Stored as the title, it is a citation that names nothing.
-- **The site, not the page.** "Home", "Results", "Main navigation", or the
-  site's own name on every page of it — hundreds of sources with one title.
-- **Nothing at all**, on thousands of PDFs.
-
-:func:`clean_title` turns the first two into None, and strips a site name off
-"Page | Site". :func:`title_from_text` is the fallback for None: the document's
-own first line, when that line looks like a heading and nothing else. The
-caller records which one it used, so a title guessed from text is never
-mistaken for one the document declared.
+:func:`clean_title` turns placeholders and site-wide titles into None and strips a site
+name off "Page | Site"; :func:`title_from_text` is the fallback, a heading-like first
+line. The caller records which was used. See docs/features/extraction.md#titles.
 """
 
 from __future__ import annotations

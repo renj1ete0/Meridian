@@ -1,31 +1,8 @@
 """Splitting extracted text into chunks (task P2-02, spec §5.3, §6.2).
 
-A chunk is the unit of three different things, and the split has to serve all
-three: it is what gets embedded and retrieved, what the slow loop reads to
-extract a relation from, and what an edge cites as its evidence. That last one
-is why §5.3 insists the offset is captured *here* — "reconstructing it later is
-painful and often impossible" — and it is also why a chunk has to make sense on
-its own. An edge whose supporting chunk is half a sentence is an edge nobody can
-check.
-
-**Split on structure, not on a character count.** The text arriving here is
-markdown, so it already carries its own boundaries: blank lines between
-paragraphs, headings between sections. Cutting at those gives chunks that are
-whole thoughts, which is the thing a fixed-width window is always approximating
-and never quite achieving. A paragraph too long to fit is split at sentence
-boundaries, and a sentence too long to fit is cut at the cap — each fallback
-only reached when the one above it cannot help.
-
-**No overlap, deliberately.** Overlap exists to compensate for blind splitting
-cutting through the middle of an idea. Splitting on paragraph boundaries is a
-direct fix for the same problem, and overlap on top of it would duplicate text
-in the table, in the embedding index, and in every batch the slow loop reads —
-paying three times to solve a problem already solved once.
-
-**Offsets index the extracted text, not the raw file.** Extraction is
-deterministic, so an offset plus the stored raw file locates the passage exactly
-(§11.12's reprocessing depends on the same property). An offset into the raw
-HTML would be meaningless the moment the extractor improved.
+Split on structure (paragraphs and headings), then sentences, then a hard cap. No
+overlap. Every chunk is a verbatim slice of the extracted text, and its offset indexes
+that text, not the raw file. See docs/features/extraction.md#chunking.
 """
 
 from __future__ import annotations
@@ -69,11 +46,7 @@ class TextChunk:
     not paginated (§5.3). ``index`` is its position in the document, which is
     what `chunks.chunk_index` and its uniqueness constraint hold.
 
-    The chunk is a verbatim **slice**: ``source[offset:offset + len(text)]`` is
-    the chunk, exactly. That is the whole point of carrying the offset at all —
-    a citation resolver has to be able to go back to the document and find the
-    passage, and a chunk assembled by rejoining pieces with separators of its
-    own choosing could only ever be searched for, not located.
+    The chunk is a verbatim **slice**: ``source[offset:offset + len(text)]``.
     """
 
     text: str
@@ -98,14 +71,9 @@ def chunk_text(
 ) -> list[TextChunk]:
     """Split ``text`` into chunks, each carrying its offset in the original.
 
-    ``drop`` is a list of ``(start, end)`` spans no chunk may contain — the
-    lines `clean.py` judged to be boilerplate (`B-43`). They are not cut out
-    and the rest re-joined: that would make a chunk that spans one something
-    other than a slice of ``text``, and the slice is what makes the offset a
-    citation. Instead the text is chunked in the stretches *between* dropped
-    spans, and a chunk never reaches across one. The cost is that a short
-    stretch between two dropped lines stands as a short chunk rather than
-    merging with its neighbour.
+    ``drop`` is a list of ``(start, end)`` spans no chunk may contain (`B-43`). The
+    text is chunked in the stretches between them, never re-joined, so every chunk
+    stays a slice.
 
     Returns an empty list for text with nothing in it. A document that yields no
     chunks is a metadata-only source (§6.5), not a failure.
@@ -200,11 +168,8 @@ def _split_sentences(
 ) -> list[tuple[int, int]]:
     """One oversized paragraph, split at sentence boundaries.
 
-    Reached only when a single paragraph exceeds the hard cap — a legal recital,
-    a table flattened into prose, a page with no paragraph breaks at all. A
-    single sentence still over the cap is cut at the cap, because at that point
-    there is no boundary left to respect and emitting it whole would overflow
-    the embedding window.
+    Reached only when one paragraph exceeds the hard cap. A sentence still over the
+    cap is cut at the cap.
     """
     body = text[start:end]
     boundaries = [start] + [start + m.end() for m in _SENTENCE_RE.finditer(body)] + [end]
@@ -239,15 +204,8 @@ def _absorb_runts(
 ) -> list[tuple[int, int]]:
     """Merge undersized chunks into their predecessor where there is room.
 
-    A heading with no body under it, or a caption stranded after a long section,
-    is a chunk that retrieves badly and proves nothing when cited. Merged
-    backwards so offsets stay monotonically increasing across the document, and
-    only when the two are actually adjacent — a runt separated from its
-    predecessor by a discarded oversized paragraph is not its continuation.
-
-    A runt in *first* position is merged forwards instead, because it has no
-    predecessor and a document that opens with a `# Title` line is the common
-    case rather than the odd one.
+    Backwards, and only when adjacent; a runt in *first* position (a `# Title`) is
+    merged forwards.
     """
     out: list[tuple[int, int]] = []
     for start, end in spans:
@@ -288,20 +246,9 @@ def chunk_pages(
     ``drop`` maps a page number to the spans on that page no chunk may contain
     (see :func:`chunk_text`).
 
-    §5.3 makes `page_or_offset` mean one or the other, and for a PDF a citation
-    that cannot be opened at the right page is barely a citation. So
-    ``TextChunk.offset`` holds the page number here — the field is overloaded by
-    the schema, and :attr:`ExtractedDocument.is_paginated` is what says which
-    reading applies.
-
-    **Chunks never span a page break.** A chunk covering pages 4 and 5 has to be
-    cited as one of them, and it would send a reader to the wrong page for half
-    its content. Short pages therefore make short chunks, which is the honest
-    trade: a citation that lands is worth more than a chunk that is the ideal
-    size. Runt-merging is per page for the same reason.
-
-    ``chunk_index`` still runs across the whole document, because it is unique
-    per source and orders the document for reading.
+    ``TextChunk.offset`` holds the page number here; :attr:`ExtractedDocument.is_paginated`
+    says which reading applies. Chunks never span a page break, and runts merge per
+    page. ``chunk_index`` runs across the whole document.
     """
     out: list[TextChunk] = []
     for page in pages:

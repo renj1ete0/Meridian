@@ -1,31 +1,9 @@
 """Re-chunk stored sources with their furniture left out (task `B-43`).
 
-The fetch path cleans every page it chunks from now on; this pass does the same
-for what was chunked before it. It works from the live chunks, not from the raw
-store, because a `background` source keeps no raw file (§5.4) — and the chunks
-are enough: every chunk is a verbatim slice at a known place, so the text can be
-rebuilt exactly where it matters.
-
-**Rebuilding the text.** Unpaginated: every chunk is laid back at its offset and
-the gaps between chunks — which the chunker only ever leaves as whitespace — are
-filled with newlines, so new chunks cut from the rebuilt text carry offsets into
-the *original* extraction and stay valid citations. Paginated: a page's chunks
-are joined with a blank line, and the page number is the citation.
-
-**Three phases**, because the per-host set needs every page's lines before any
-page can be cleaned against it:
-
-1. record `page_lines` for every source that has none — sources chunked before
-   this task, whose live chunks are therefore still uncleaned. A source that
-   already has lines is never re-recorded from its chunks, which may be cleaned.
-2. rebuild `boilerplate_lines`.
-3. re-cut each source and compare with what it holds.
-
-Phases 1 and 2 write derived tables in every mode. Phase 3 changes chunks only
-with ``--apply``, and never for a source anything cites
-(`chunks.cited_source_ids`): a claim's evidence is not re-cut under it.
-Re-chunked sources get new chunk ids, so they are embedded, novelty-checked and
-topic-labelled again by the passes that already watch for that.
+Rebuilds each source's text from its live chunks (a `background` source keeps no raw
+file), in three phases: record missing `page_lines`, rebuild `boilerplate_lines`, then
+re-cut and compare. Phase 3 writes only with ``--apply`` and never for a source anything
+cites. See docs/features/extraction.md#re-chunking.
 """
 
 from __future__ import annotations

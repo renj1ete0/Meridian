@@ -1,22 +1,8 @@
 """Lines a site repeats on page after page (task `B-43`).
 
-`worker.extract.clean` removes a line whose hash is in the host's boilerplate
-set, and computes each page's own hashes. This module is the half in between,
-which needs the database: it records each page's hashes, and derives from all
-of them which lines a host repeats often enough to be furniture — a banner, a
-footer, a cookie notice, the sidebar every article carries.
-
-**Counted from uncleaned text.** See `PageLine`: a count taken after cleaning
-switches the rule off by working.
-
-**Both a count and a share.** A line on five pages of a five-page site is its
-template; the same line on five pages of a thousand is a phrase a few articles
-share — a quotation, a standard disclaimer attached to one series. So a line
-must be on at least :data:`MIN_PAGES` pages *and* at least :data:`MIN_SHARE` of
-the host's pages. Measured over a real crawl: at these values 42 lines on 15
-hosts qualified, and every one read as template when checked by hand; at 10%
-share, article-series boilerplate that is part of each article's content
-started to qualify.
+Records each page's line hashes, counted from uncleaned text, and derives which lines a
+host repeats: on at least :data:`MIN_PAGES` pages *and* :data:`MIN_SHARE` of the host's
+pages. See docs/features/extraction.md#cleaning.
 """
 
 from __future__ import annotations
@@ -43,10 +29,8 @@ MIN_SHARE = 0.3
 def host_key(url: str | None) -> str | None:
     """The host a page belongs to, as boilerplate counts it.
 
-    Lower-cased, port dropped, and a leading ``www.`` folded, because a site
-    served on both is one template. Subdomains are *not* folded into their
-    parent: a university's hospital and its law school share a registrable
-    domain and nothing else.
+    Lower-cased, port dropped, a leading ``www.`` folded. Other subdomains are *not*
+    folded into their parent.
     """
     if not url:
         return None
@@ -95,10 +79,8 @@ async def recompute(
 ) -> Recomputed:
     """Rebuild `boilerplate_lines` from `page_lines`, wholesale. Does not commit.
 
-    Wholesale because the table is derived: a line that drops under the
-    threshold — the site changed its template — must stop being removed, and
-    a delete-then-insert in one transaction is the simplest thing that makes
-    that true. A reader in another transaction sees the old set or the new one.
+    Wholesale, delete-then-insert in one transaction, so a line that drops under the
+    threshold stops being removed.
     """
     if min_pages < 1 or not 0.0 < min_share <= 1.0:
         raise ValueError("min_pages must be at least 1 and min_share in (0, 1]")

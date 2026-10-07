@@ -1,42 +1,8 @@
 """What kind of document a source is, decided mechanically (task B-59).
 
-`source_tier` says who published a document; nothing said what the document
-*is*. That matters most for one kind: a **listing** — an index, a feed of new
-items, a search result or tag page, a directory. Its value is its links, and
-chunked as if it were a document it produces passages that splice unrelated
-summaries together with rows of author links, which are then embedded,
-labelled and offered to synthesis as if they said something.
-
-So every fetched document gets a kind from its own structure — no model, as
-the worker never calls one (§2.1) — and the rule that decided is recorded so a
-verdict can be audited. The rules run in a fixed order and the first to match
-wins:
-
-1. **paper** — the page names its own DOI or carries scholarly `citation_*`
-   head metadata; a PDF with an Abstract heading in its front matter. First,
-   because a paper's reference list is a long run of links and must never make
-   it a listing.
-2. **listing** — measured from the extracted text, where links survive as
-   markdown (see :func:`link_shape`): most of what a reader sees is link text;
-   or link rows recur evenly through the whole page, one per record; or the
-   URL says list, search, tag, category or archive and the text is link-dense.
-3. **legal** — a section-marked title, section-marked provisions, or a path
-   under legislation, regulations or a code. After listing, so a statute's
-   table of contents is a listing and a statute's text is legal.
-4. **news** — a press publisher's dated article, or a dated `og:type article`
-   under a news or press path.
-5. **report** — a PDF or office document from a government or institutional
-   publisher.
-6. **profile** — an organisation's own pages: its home page, about, contact,
-   people and programme pages.
-7. **other** — nothing above applied.
-
-The thresholds were calibrated against a live corpus of several thousand
-sources, with pages whose URL makes them known listings on one side and
-abstract pages and articles on the other; the task report has the numbers.
-They favour precision: a listing missed keeps the chunks every page had
-before, while a document wrongly called a listing loses its passages from
-search.
+paper, listing, legal, news, report, profile or other: rules in a fixed order, first
+match wins, and the deciding rule is recorded. A listing's chunks are retired. The
+thresholds favour precision. See docs/features/extraction.md#document-kinds.
 """
 
 from __future__ import annotations
@@ -64,9 +30,7 @@ _NOT_READ = re.compile(r"[\s\-*•|:;,.()\[\]]+")
 # --- Listing thresholds -----------------------------------------------------
 
 #: Share of visible characters inside link text above which a page is mostly
-#: links, and the fewest links for that to mean anything. Articles with dense
-#: inline linking stayed well below the share; a short page with two links
-#: says nothing either way.
+#: links, and the fewest links for that to mean anything.
 LINK_SHARE = 0.5
 LINK_SHARE_MIN_LINKS = 10
 
@@ -74,14 +38,9 @@ LINK_SHARE_MIN_LINKS = 10
 LINK_ROW_SHARE = 0.7
 #: Link rows closer than this many visible characters belong to one record.
 RECORD_GAP = 80
-#: A feed of records with a summary each: at least this many record groups,
-#: present in at least this many tenths of the page, spaced evenly (the
-#: coefficient of variation of the gaps at most this), with a summary's worth
-#: of text between one record's links and the next (the median gap at least
-#: this many visible characters). A paper's reference list is also many even
-#: rows — but a line of citation apart, not a summary apart, and on a short
-#: abstract page it can fill most of the page. An article's inline links are
-#: not rows at all.
+#: A feed of records with a summary each: at least this many record groups, in at
+#: least this many tenths of the page, evenly spaced (gap CV at most this), a
+#: summary apart (median gap at least this). See docs/features/extraction.md#document-kinds.
 RECORD_GROUPS = 10
 RECORD_SPREAD = 8
 RECORD_GAP_CV = 0.5

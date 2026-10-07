@@ -1,14 +1,8 @@
 """Writing figures (task P1-10, spec §6.6).
 
-The same shape as `chunks.replace_chunks`, and for the same reason: a source is
-re-crawled, its figures change, and the old set has to go with the old content.
-A figure whose caption describes a diagram the page no longer contains is worse
-than no figure at all — it is a citation that resolves to the wrong thing.
-
-Replaced wholesale rather than reconciled. Figures have no stable identity
-across a re-crawl: there is no id in the markup, captions get edited, and
-positions move. Matching them up would be guesswork dressed as bookkeeping, and
-the cost of being wrong is a caption attached to the wrong picture.
+Replaced wholesale on a re-crawl, like `chunks.replace_chunks`: figures have no stable
+identity across fetches, and a caption for a diagram the page no longer has is worse than
+none.
 """
 
 from __future__ import annotations
@@ -45,10 +39,8 @@ async def replace_figures(
 ) -> tuple[int, int]:
     """Make ``figures`` the complete set for ``source_id``. Returns (written, deleted).
 
-    Flushes; does not commit. It belongs to the caller's transaction alongside
-    the source row and the chunks, because they are one change — a source whose
-    text came from one fetch and whose figures came from another describes a
-    document that never existed.
+    Flushes; does not commit: it belongs in the caller's transaction with the source
+    row and the chunks.
     """
     deleted = await delete_figures(sess, source_id)
 

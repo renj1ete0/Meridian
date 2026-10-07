@@ -1,37 +1,10 @@
 """Line-level cleaning of extracted text before it is chunked (task `B-43`).
 
-trafilatura at ``favor_precision`` removes most of a page's chrome, and the
-browser path's markdown removes less. What survives is not random: it is the
-same few kinds of line on every site — a skip link, a menu the extractor took
-for a list, a banner every page of a site carries, a PDF's running header on
-every page. Each one costs three times: it is embedded, it answers searches,
-and it inflates the novelty gate's duplicate count because every page of a site
-now shares a passage.
-
-**Every rule removes whole lines, and says which lines.** A cleaner returns
-spans into the text it was given rather than a cleaned copy, so the chunker can
-keep every chunk a verbatim slice of the extracted text (`chunk.py`'s one
-promise) and simply never cut across a removed line. Nothing here rewrites a
-line it keeps.
-
-**Conservative on purpose.** A line lost from a page is text the corpus can no
-longer cite, and nothing downstream would notice. So each rule is aimed at a
-shape the corpus measurably contains, and each has a rejection it must honour:
-a bullet list of real content, a table row, a sentence that happens to contain
-a link, a short heading above prose. Where a rule and a rejection disagree the
-rejection wins, which is why a bare link-only line is *not* removed merely for
-being a link — see :func:`navigation_lines`.
-
-**A page that is all furniture is not the chunker's problem.** If cleaning
-would remove more than :data:`MAX_REMOVED_SHARE` of a document, the original is
-kept whole and the decision is logged: a page like that is junk, and junk is
-`worker.furniture`'s job, which demotes a page rather than hollowing it out.
-
-The per-site half of this — lines that recur across a host's pages — needs the
-database to know what "recurs" means, so this module only applies a set of
-hashes it is handed (:func:`repeated_lines`) and computes each page's own
-hashes (:func:`page_line_hashes`). The table that turns the second into the
-first is not built yet; until it is, callers pass an empty set.
+Every rule removes whole lines and returns spans rather than a cleaned copy, so each
+chunk stays a verbatim slice. Conservative: if cleaning would remove more than
+:data:`MAX_REMOVED_SHARE`, the document is kept whole. The per-site rule applies the
+host's line hashes, which `worker.boilerplate` builds from :func:`page_line_hashes`. See
+docs/features/extraction.md#cleaning for the rules and the measurements behind them.
 """
 
 from __future__ import annotations
@@ -48,48 +21,26 @@ from .base import Page
 
 # --- The thresholds, and what each was measured against ---------------------
 #
-# Measured over every live chunk of a real crawl (~4,100 pages across a few
-# dozen hosts, HTML from trafilatura and from a rendered browser, plus ~170
-# PDFs). The numbers in the comments are there so a later change can be argued
-# with, not just made.
+# Measured over a real crawl; see docs/features/extraction.md#cleaning before changing one.
 
-#: A document losing more than this share of its readable text to cleaning is
-#: kept whole. Measured on visible characters (link targets excluded): the
-#: median cleaned page lost about a tenth. Pages losing 60–80% were menu-heavy
-#: profile and landing pages whose real content — a name, a title, a sentence
-#: under a site-wide banner — is exactly what cleaning should leave; pages
-#: losing more than 80% were empty search results, access-error pages and
-#: listings with nothing but the banner. Those are junk for `worker.furniture`,
-#: not text for the chunker.
+#: A document losing more than this share of its visible text to cleaning is kept
+#: whole: such a page is junk for `worker.furniture`, not text for the chunker.
 MAX_REMOVED_SHARE = 0.8
 
-#: A run of short lines is a menu only when it is at least this long. Four-item
-#: runs of short links are common *inside* content (a "see also" pair, a
-#: document's own download links); navigation menus measured at five or more,
-#: and usually well over ten.
+#: A run of short lines is a menu only when it is at least this long.
 MENU_MIN_LINES = 5
 
-#: "Short" for a menu item: at most this many visible words. Navigation labels
-#: measured at one to three ("Our Work", "Leadership and Staff"); an index of
-#: titled documents runs to five and more ("Title 2 - GOVERNMENTAL
-#: ORGANIZATION"), and those are left alone.
+#: "Short" for a menu item: at most this many visible words.
 MENU_MAX_WORDS = 4
 
-#: Share of a run's items that must be links. Runs of short lines with *no*
-#: links were the largest class measured, and they are almost all content:
-#: side effects of a medicine, members of an organisation, units of a course.
-#: Menus measured at or near 1.0; the threshold leaves room for a label or two
-#: ("Main Menu", "Search") inside one.
+#: Share of a run's items that must be links, leaving room for a label or two.
 MENU_MIN_LINK_SHARE = 0.7
 
 #: A PDF line counts as a running header or footer when it sits at a page edge
 #: on at least this many pages...
 PDF_MIN_REPEATS = 4
 
-#: ...and on at least this share of the document's pages. Measured: journal
-#: running heads and page numbers sit on 80–100% of pages; the near misses were
-#: an institution's name at the foot of three pages of a five-page list, which
-#: is content, and which four-and-half keeps.
+#: ...and on at least this share of the document's pages.
 PDF_MIN_SHARE = 0.5
 
 #: How deep into a page's top and bottom a running header or footer may sit.
@@ -97,10 +48,8 @@ PDF_MIN_SHARE = 0.5
 #: leaves one line of slack without reaching into the body.
 PDF_EDGE_LINES = 3
 
-#: Lines considered by the per-site repetition rule, by visible length. Below
-#: the floor a line is a label ("References", "Share") whose recurrence says
-#: nothing; above the ceiling it is a paragraph, and a paragraph two pages
-#: share is quotation or syndication rather than chrome.
+#: Lines considered by the per-site repetition rule, by visible length: neither a
+#: label nor a paragraph.
 REPEAT_MIN_CHARS = 12
 REPEAT_MAX_CHARS = 200
 
@@ -272,24 +221,9 @@ def _lines(text: str) -> list[_Line]:
 def navigation_lines(text: str) -> list[Removal]:
     """Lines that exist to move a reader around the page, not to say anything.
 
-    Three shapes, all measured:
-
-    - **Affordances.** "Skip to content", "Skip over breadcrumbs…", "Back to
-      top", "Toggle navigation" — as a link or as plain text, but only when
-      that phrase is the *whole* line. The same words inside a sentence ("an
-      accessibility statement explains how to skip to content") are prose.
-    - **"Opens in new tab" links** standing alone on their line.
-    - **Links with nothing to read**: an image-only link, an empty anchor, and a
-      short in-page anchor (`[Figure 1](#f1)`) whose target is elsewhere on the
-      same page.
-
-    Deliberately *not* every link-only line. A bare `[text](url)` line was the
-    commonest shape in the measured corpus — some twenty-five thousand — and
-    most of them were content: an index of statutes, a listing of preprint
-    identifiers, a reference's DOI, a directory of an organisation's units.
-    Removing those would hollow out exactly the pages whose text *is* their
-    links. Link-only lines that really are navigation arrive in runs, and
-    :func:`menu_blocks` is the rule for runs.
+    Affordances ("Skip to content") that are the whole line, lone "opens in new tab"
+    links, and links with nothing to read. Deliberately *not* every link-only line;
+    see docs/features/extraction.md#cleaning.
     """
     out: list[Removal] = []
     for line in _lines(text):
@@ -329,14 +263,8 @@ DEBRIS_MAX_VISIBLE = 3
 def debris_lines(text: str) -> list[Removal]:
     """Lines that are extraction debris: invisible characters and a stray glyph.
 
-    A PDF's text layer leaves these where a decorative glyph, a form field or
-    a symbol font sat — a soft hyphen and an ordinal sign, a private-use
-    character and a space. They are not blank to ``str.strip``, so they reach
-    the chunker, and a chunk made mostly of them embeds as noise.
-
-    Narrow on purpose: the line must *contain* an invisible character, so a
-    horizontal rule, a lone page number or a one-letter heading is never
-    touched, however short.
+    Not blank to ``str.strip``, so they would reach the chunker. The line must
+    *contain* an invisible character, so a rule or lone page number is untouched.
     """
     out: list[Removal] = []
     for line in _lines(text):
@@ -368,10 +296,8 @@ def menu_blocks(text: str) -> list[Removal]:
     along inside a run without counting either way — a pager is digits and
     dashes between links.
 
-    What survives, by construction: a content list (no links, so the share is
-    zero however short its items are), a table (a table row ends a run), a
-    sentence containing a link (too long, or ends in a full stop), and a heading
-    above prose (the prose ends the run, and a lone heading is one line).
+    A content list, a table, a sentence containing a link and a heading above prose
+    all survive by construction.
     """
     out: list[Removal] = []
     run: list[_Line] = []
@@ -420,11 +346,8 @@ def _menu_item(line: _Line) -> bool:
 def repeated_lines(text: str, boilerplate: Collection[int]) -> list[Removal]:
     """Lines this page's site repeats on page after page.
 
-    ``boilerplate`` is the host's set of line hashes — whatever decides what
-    "page after page" means (measured: at least five pages and 30% of the
-    host's pages) hands this function its answer.
-    Matching is by :func:`line_hash`, so a banner whose whitespace or casing
-    varies between templates still matches itself.
+    ``boilerplate`` is the host's set of line hashes (`meridian_core.boilerplate`).
+    Matching is by :func:`line_hash`, so whitespace and casing do not matter.
     """
     if not boilerplate:
         return []
@@ -445,8 +368,7 @@ def running_headers(pages: Sequence[Page]) -> dict[int, list[Removal]]:
     "Page 3 of 20" and "Page 4 of 20" are one line — and so is a bare page
     number, which is the commonest footer there is.
 
-    Mid-page occurrences are never touched. A journal's name at the top of every
-    page is chrome; the same name in the body's first sentence is a citation.
+    Mid-page occurrences are never touched.
     """
     if len(pages) < PDF_MIN_REPEATS:
         return {}
@@ -518,10 +440,8 @@ def _hash_of(line: _Line) -> int | None:
 def page_line_hashes(texts: Sequence[str]) -> list[int]:
     """The distinct candidate-line hashes of one page, sorted.
 
-    Computed from the text *before* cleaning, always. The per-site counts are
-    what decide a line is boilerplate; counted from cleaned text, a line would
-    vanish from the pages it was removed from, fall below the threshold, stop
-    being removed, and come back — a rule that switches itself off by working.
+    Computed from the text *before* cleaning, always, or the rule would switch itself
+    off by working.
     """
     found: set[int] = set()
     for text in texts:
@@ -553,9 +473,8 @@ def clean_pages(pages: Sequence[Page], *, boilerplate: Collection[int] = ()) -> 
 
     The guard is applied to the document as a whole.
 
-    One guard for the document rather than one per page: a PDF's cover page is
-    often nothing but a running head and a number, and keeping that page whole
-    while cleaning the rest would be inconsistent for no benefit.
+    One guard for the document rather than per page, so a bare cover page is not
+    kept whole while the rest is cleaned.
     """
     headers = running_headers(pages)
     found: dict[int, list[Removal]] = {}
@@ -607,10 +526,8 @@ def _over_guard(removed: int, total: int) -> bool:
 def _readable(text: str) -> int:
     """How much a reader would read: visible, non-whitespace characters.
 
-    Visible rather than raw, because markdown link targets are most of the
-    characters on a linked line and none of what it says — measured raw, a
-    listing whose every entry carries three long URLs looked two-thirds
-    furniture when the furniture was three words per entry.
+    Visible rather than raw: link targets are most of a linked line's characters and
+    none of what it says.
     """
     return sum(_solid(line.visible) for line in _lines(text))
 
