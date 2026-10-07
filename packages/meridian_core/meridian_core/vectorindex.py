@@ -13,7 +13,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from pgvector.sqlalchemy import HALFVEC, VECTOR
-from sqlalchemy import ColumnElement, bindparam, cast
+from sqlalchemy import ColumnElement, bindparam, cast, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models.source import EMBEDDING_DIM
 
@@ -33,3 +34,14 @@ def indexed_distance(
 ) -> ColumnElement[float]:
     """Cosine distance in the form the passage index serves."""
     return as_indexed(column).cosine_distance(as_indexed(other))
+
+
+async def scan_past_filtered(sess: AsyncSession) -> None:
+    """Keep an index scan going until enough rows pass the query's filters (`B-151`).
+
+    For the rest of the transaction. Without it the HNSW index offers its nearest candidates,
+    the filters run afterwards, and a query whose nearest rows are all filtered out finds
+    nothing. Strict order, so a ``LIMIT 1`` is still the nearest. See
+    docs/features/embedding.md#filtered-scans.
+    """
+    await sess.execute(select(func.set_config("hnsw.iterative_scan", "strict_order", True)))

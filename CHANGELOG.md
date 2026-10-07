@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.1] — 2026-10-07
+
+### Fixed
+
+- `B-151`: the novelty gate missed a copy of a passage already copied many times. The vector
+  index offers its nearest candidates before the gate's filters run, and the nearest to a new
+  copy were all earlier copies, already marked and filtered out, so the gate found no
+  neighbour and kept the copy. Its query now uses pgvector's iterative scan in strict order,
+  which keeps going until a candidate passes the filters.
+
 ## [0.163.0] — 2026-10-07
 
 ### Added

@@ -69,6 +69,12 @@ it.
   excluded from the candidates, and a verdict that still lands on one, because both were judged
   in the same batch (B of A, A of an older Z), is followed through to its target in `judge`.
   Otherwise `duplicate_of` would be a chain every consumer has to walk.
+- **Excluded candidates must not hide the survivor** (`B-151`). The filters (earlier, not a
+  duplicate, not retired) apply after the vector index offers its nearest candidates. A
+  passage copied many times has its copies nearer to a new copy than the original is, so the
+  index offered only copies, the filter removed them all, and the gate found no neighbour and
+  kept the new copy. The query now scans on until a candidate passes; see
+  [filtered scans](embedding.md#filtered-scans).
 
 The threshold is strictly greater-than, as §6.1 writes it: a chunk exactly on the line is kept,
 because the cheap error is keeping a duplicate and the expensive one is dropping the only copy

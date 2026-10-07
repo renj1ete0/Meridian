@@ -65,6 +65,16 @@ every passage nearest-neighbour query goes through `vectorindex.indexed_distance
 fails if one orders by the plain column, which would silently become a full scan. Bridges
 deliberately avoid the index (`+ 0`) to get an exact answer within a subset.
 
+<a id="filtered-scans"></a>**Filtered scans** (`B-151`). An HNSW scan offers its nearest
+candidates and the query's `WHERE` runs afterwards, so when the nearest rows are all filtered
+out a query can return nothing or a far row. pgvector 0.8's iterative scan keeps going until
+enough rows pass; `vectorindex.scan_past_filtered` turns it on, in strict order, for the rest
+of the transaction. The novelty gate uses it. Search and the neighbourhood instead size
+`hnsw.ef_search` to cover their filters ([search](search.md)); whether they should switch is a
+benchmark question (`B-152`). A test that wants to see the index at work on the small dev
+table has to switch off sorting as well as sequential scans, or the planner sorts exactly and
+the miss never shows.
+
 ## Design choices
 
 - **One model, checked on every response.** A vector from a different model is meaningless

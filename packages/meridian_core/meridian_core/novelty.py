@@ -19,7 +19,7 @@ from sqlalchemy.orm import aliased
 
 from .logging import get_logger
 from .models import Chunk, Source
-from .vectorindex import indexed_distance
+from .vectorindex import indexed_distance, scan_past_filtered
 
 log = get_logger(__name__)
 
@@ -179,12 +179,12 @@ async def nearest_earlier_neighbours(
     """For each id, the closest chunk written before it. Missing = nothing to compare.
 
     One LATERAL-join statement for the batch. Candidates are earlier (``chunk_id <``)
-    and not themselves duplicates. The id filter applies after the index scan, so a
-    near-duplicate can be missed, never wrongly dropped; see
-    docs/features/duplicates.md#the-novelty-gate.
+    and not themselves duplicates. The index scan continues past filtered candidates
+    (`B-151`); see docs/features/duplicates.md#the-novelty-gate.
     """
     if not chunk_ids:
         return {}
+    await scan_past_filtered(sess)
 
     candidate = aliased(Chunk, name="candidate")
     subject = aliased(Chunk, name="subject")

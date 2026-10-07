@@ -20,7 +20,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text, update
 
 from meridian_core.chunks import ChunkWrite, replace_chunks, store_embeddings
 from meridian_core.models import Chunk, Source
@@ -223,6 +223,33 @@ async def test_the_nearest_neighbour_is_the_nearest_one(session_for, url, cleanu
     assert neighbours[subject.chunk_id].chunk_id == close.chunk_id
     assert neighbours[subject.chunk_id].similarity == pytest.approx(0.96, abs=1e-4)
     assert far.chunk_id != close.chunk_id
+
+
+async def test_the_nearest_survivor_is_found_behind_nearer_duplicates(
+    session_for, url, cleanup
+) -> None:
+    """The filter applies after the index picks its candidates. When every candidate the index
+    would offer is a known duplicate, a plain scan returns nothing and the gate misses a copy;
+    an iterative scan keeps going until a survivor turns up (`B-151`)."""
+    sess = await session_for("rw")
+    # A passage copied many times: the copies sit nearer the new text than the original does.
+    decoys = [at(0.97, axis) for axis in range(3, 103)]
+    _, chunks = await a_source(sess, url, [at(0.95, 2), *decoys, BASE])
+    survivor, copies, subject = chunks[0], chunks[1:-1], chunks[-1]
+    await sess.execute(
+        update(Chunk)
+        .where(Chunk.chunk_id.in_([c.chunk_id for c in copies]))
+        .values(duplicate_of=survivor.chunk_id)
+    )
+    # Make the planner use the index, as it does on a corpus of any size: on a table this small
+    # an exact sort is cheaper, and would hide the miss.
+    for setting in ("enable_seqscan", "enable_sort"):
+        await sess.execute(text(f"SET LOCAL {setting} = off"))
+
+    neighbours = await nearest_earlier_neighbours(sess, [subject.chunk_id])
+
+    assert neighbours[subject.chunk_id].chunk_id == survivor.chunk_id
+    assert neighbours[subject.chunk_id].similarity == pytest.approx(0.95, abs=1e-3)
 
 
 async def test_a_known_duplicate_is_not_offered_as_a_neighbour(session_for, url, cleanup) -> None:
