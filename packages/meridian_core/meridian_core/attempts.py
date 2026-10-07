@@ -1,26 +1,9 @@
 """The fetch attempt log (task P1-19, spec §12.5, §13.4).
 
-Every fetch writes one row here, successful or not. That sounds like logging and
-is not: `fetch_policy.consecutive_failures` is a counter that resets, and
-`queue.error` holds only the most recent message, so between them nothing can
-answer "what is the fetch success rate today" or "has this domain been serving
-nothing but 404s for a week". §12.5 asks for exactly those, for exactly this
-reason — *"without this the Pi can crawl 404s for a week unnoticed"*.
-
-Three functions, one per thing the log is for:
-
-- :func:`record_attempt` writes the row. Called on every path, including the
-  refusals that never touched the network — a robots denial or a blocked domain
-  is a thing the crawler *did*, and a log that only holds requests that went out
-  cannot distinguish a quiet crawler from a stuck one.
-- :func:`fetch_health` derives the health line's rate from it.
-- :func:`prune_attempts` keeps it bounded. One row per request is high volume by
-  design; after a few weeks the aggregate rates are what matter, not the rows.
-
-The caller owns the transaction. Nothing here commits: the attempt row and the
-policy consequence it triggers (:func:`meridian_core.policy.apply_fetch_outcome`)
-belong to the same commit, because a log saying a domain failed five times and a
-policy row that never counted them is worse than either alone.
+One row per fetch, refusals that never touched the network included.
+:func:`record_attempt` writes it, :func:`fetch_health` derives the health line's
+rate, :func:`prune_attempts` bounds it. The caller owns the transaction, so the row
+commits with its policy consequence. See docs/features/crawling.md#the-attempt-log.
 """
 
 from __future__ import annotations
@@ -48,10 +31,8 @@ DEFAULT_RETENTION_DAYS = 30
 # build one DELETE over a million rows.
 PRUNE_BATCH = 5_000
 
-# What counts as the crawler having got what it asked for. A 304 does: the
-# conditional request worked and the stored copy is current, which is the
-# outcome that feature exists to produce. Counting it as a failure would make
-# the success rate fall as caching got *better*.
+# What counts as the crawler having got what it asked for. A 304 does, or the
+# success rate would fall as caching got better.
 SUCCESS_OUTCOMES = frozenset({"success", "not_modified"})
 
 
@@ -75,10 +56,8 @@ async def record_attempt(
 ) -> FetchAttempt:
     """Write one ``fetch_attempts`` row. Flushes; does not commit.
 
-    ``domain`` is the registrable domain of the URL that was *requested*, not of
-    the one finally reached. A redirect off-site is still a thing this domain
-    did, and attributing it elsewhere would hide the domain that caused it from
-    its own per-domain rate.
+    ``domain`` is the registrable domain of the URL *requested*, not the one finally
+    reached, so an off-site redirect is charged to the domain that caused it.
     """
     row = FetchAttempt(
         task_id=task_id,
@@ -148,10 +127,7 @@ async def prune_attempts(
 ) -> int:
     """Delete attempts older than the retention window. Returns how many.
 
-    Deleted in batches so that a prune which has not run for a long time is
-    still a series of bounded statements rather than one that locks the table
-    for the duration. The transaction is the caller's: this flushes each batch
-    and commits none of them.
+    Deleted in bounded batches; flushes each and commits none.
     """
     if older_than_days < 0:
         raise ValueError("older_than_days must not be negative")

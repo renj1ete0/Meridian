@@ -1,15 +1,8 @@
 """Fetch policy resolution (spec §6.4).
 
-Resolution order is **per-domain row → global `'*'` row → file defaults**, with
-later layers only filling gaps. Per-domain overrides exist because one setting
-for a large API and a small municipal server is wrong in one direction or the
-other: two concurrent requests per second is nothing to `data.gov.sg` and rude to
-a council website.
-
-The file layer is a floor, not a source of truth. §13.1 makes the database
-authoritative once seeded — the YAML is read here only so a worker started
-against a database that has not been seeded yet fails predictably instead of
-with a KeyError halfway through a fetch.
+Per-domain row, then the global `'*'` row, then file defaults, each filling gaps. The
+file layer only keeps an unseeded database predictable (§13.1). See
+docs/features/crawling.md#fetch-policy.
 """
 
 from __future__ import annotations
@@ -36,31 +29,19 @@ log = get_logger(__name__)
 GLOBAL_DOMAIN = "*"
 
 #: How many consecutive escalations before a domain skips the static fetch
-#: (`P1-27`). Three, because two is a coincidence and ten is a day of paying
-#: double on a domain that already told you. The count is consecutive, so a
-#: single static success puts it back to zero.
+#: (`P1-27`). One static success resets the count.
 RENDER_JS_THRESHOLD = 3
 
-#: How long the conclusion holds before the domain is re-probed. A domain going
-#: straight to the browser produces no evidence about itself, so without an
-#: expiry the first correct conclusion becomes permanent and a redesign is
-#: invisible. Three double-fetches per domain per week is nothing against a
-#: crawl, and it buys the property that this cannot be permanently wrong.
+#: How long the conclusion holds before the domain is re-probed, since a domain
+#: going straight to the browser yields no evidence. See docs/features/crawling.md#rendering.
 RENDER_JS_TTL = dt.timedelta(days=7)
 
 
 #: Keys that ride in the global row's settings and are not fetch settings, so
-#: :func:`resolve_policy` strips them. One list, shared with Admin's resolved
-#: view, because two copies had already drifted: a key missing from one of
-#: them shows up as a "setting" on every domain in Admin.
-#:
-#: - ``source_tiers`` — the domain → tier map.
-#: - ``frontier`` — what enters the queue, not how a request is made; a policy
-#:   carrying it would invite treating "should this be crawled" as per-request.
-#: - ``search_languages`` — what search seeds are written in (`B-52`).
-#: - ``steering_proposal_window_hours`` — how long a steering proposal waits
-#:   for an objection before it applies itself (`P6-38`).
-#: - ``display_timezone`` — the zone times are shown in (`B-145`, ADR 0009).
+#: :func:`resolve_policy` strips them. Shared with Admin's resolved view.
+#: ``source_tiers`` (domain → tier), ``frontier`` (what enters the queue),
+#: ``search_languages`` (`B-52`), ``steering_proposal_window_hours`` (`P6-38`),
+#: ``display_timezone`` (`B-145`, ADR 0009).
 NOT_FETCH_SETTINGS = frozenset(
     {
         "source_tiers",
@@ -107,10 +88,8 @@ class ResolvedPolicy(BaseModel):
     revalidate_each_redirect: bool = True
     block_mixed_dns: bool = True
     allowed_content_types: list[str] = Field(default_factory=list)
-    # Seconds to hold a challenge interstitial open in the browser before
-    # giving up on it. The non-interactive kind clears in about five; the
-    # interactive kind never does, so this is bounded rather than generous.
-    # 0 disables the re-fetch entirely.
+    # Seconds to hold a challenge interstitial open in the browser; bounded, because
+    # the interactive kind never clears. 0 disables the re-fetch.
     challenge_wait_s: int = Field(default=15, ge=0)
     max_decompression_ratio: int = Field(default=100, gt=0)
 
@@ -177,14 +156,8 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
     # because blocking '*' would silently stop the entire crawl.
     status = specific.status if specific else "active"
 
-    # What the crawl learned about this domain (`P1-27`).
-    #
-    # Only ever `auto` → `always`, which is the whole rule and is what makes it
-    # safe: learning gives `auto` a memory, and it cannot overrule an operator
-    # who turned the browser off for a domain or demanded it for one. Keyed off
-    # the *merged* value rather than the row's own keys, because the global row
-    # carries `render_js: auto` as the shipped default — treating that as a
-    # decision about every domain would make this feature dead on arrival.
+    # What the crawl learned about this domain (`P1-27`): only ever `auto` → `always`,
+    # keyed off the merged value. See docs/features/crawling.md#rendering.
     unconfigured = settings.get("render_js", "auto") == "auto"
     if specific is not None and unconfigured and learned_render_js(specific):
         settings["render_js"] = "always"
@@ -195,16 +168,8 @@ async def resolve_policy(sess: AsyncSession, domain: str) -> ResolvedPolicy:
 def learned_render_js(row: FetchPolicyRow, *, now: dt.datetime | None = None) -> bool:
     """Whether this domain has earned going straight to the browser.
 
-    Two conditions, and the second is the one that keeps this honest. The count
-    says the domain has needed the browser every time recently; the timestamp
-    says that observation is still recent — because once a domain is skipping
-    the static fetch it can never produce evidence to the contrary, so without
-    an expiry the first correct conclusion becomes permanent and a redesign is
-    invisible.
-
-    The cost of expiry is three double-fetches per domain per window, which is
-    nothing against a crawl, and it buys the property that this cannot be
-    permanently wrong.
+    Needs both the consecutive count and a recent enough observation, so the
+    conclusion expires (:data:`RENDER_JS_TTL`).
     """
     if row.render_js_escalations < RENDER_JS_THRESHOLD:
         return False
@@ -217,11 +182,7 @@ def learned_render_js(row: FetchPolicyRow, *, now: dt.datetime | None = None) ->
 async def source_tier_map(sess: AsyncSession) -> dict[str, Any]:
     """The domain → tier mapping, from the global fetch policy row (§5.2, §13.1).
 
-    It rides in `fetch_policy['*'].settings` rather than in a table of its own —
-    one global blob of domain policy, seeded from `config/source_tiers.yaml` at
-    first boot and authoritative in the database thereafter. `resolve_policy`
-    strips it out because it is not a fetch setting; this is where it is read
-    back.
+    Stored in `fetch_policy['*'].settings`, seeded from `config/source_tiers.yaml`.
     """
     glob = await sess.scalar(select(FetchPolicyRow).where(FetchPolicyRow.domain == GLOBAL_DOMAIN))
     if glob is None or not glob.settings:
@@ -245,11 +206,8 @@ async def frontier_settings(sess: AsyncSession) -> dict[str, Any]:
 async def resolve_source_tier(sess: AsyncSession, domain: str) -> str:
     """The source tier for ``domain``, from the seeded mapping.
 
-    Mechanical and deterministic (§5.2) — never a model judgement — so this is a
-    lookup and nothing more. A separate query from :func:`resolve_policy` on
-    purpose: the tier is a property of a *source*, not of a request, and folding
-    a global mapping into a per-domain policy object to save one indexed read on
-    a tiny table would be paying in clarity for something free.
+    A lookup, never a model judgement (§5.2), and separate from
+    :func:`resolve_policy` because a tier belongs to a source, not a request.
     """
     return resolve_tier(domain, await source_tier_map(sess))
 
@@ -298,17 +256,10 @@ async def record_success(sess: AsyncSession, domain: str) -> None:
 # --------------------------------------------------------------------------
 # What a fetch outcome says about the domain (task P1-05)
 # --------------------------------------------------------------------------
-#
-# Consecutive-failure blocking asks one question — *is this domain still worth
-# spending crawl budget on* — and most fetch outcomes are not evidence either
-# way. Three answers, because two would force every outcome into a judgement it
-# does not support.
+# Three answers: alive, unreachable, or no evidence. See docs/features/crawling.md#refusals.
 
-#: The domain answered. Whatever went wrong was about this URL or its content,
-#: not about the host being gone — a 404, an oversized file, a media type the
-#: allowlist does not take. Evidence the domain is alive *resets* the counter,
-#: because only consecutive failures block. A domain serving nothing but 404s is
-#: a real problem and a different one; ``fetch_attempts`` is where it shows up.
+#: The domain answered; what went wrong was about the URL. Resets the counter,
+#: because only consecutive failures block.
 DOMAIN_ALIVE = frozenset(
     {
         "success",
@@ -319,10 +270,8 @@ DOMAIN_ALIVE = frozenset(
     }
 )
 
-#: Nothing usable came back and the domain is why. Timeouts and connection
-#: errors are the obvious members; a redirect loop is a server misconfiguration,
-#: and a decompression bomb or an address ``netguard`` refuses is a host it is
-#: affirmatively wrong to keep requesting from.
+#: Nothing usable came back and the domain is why, including hosts it is wrong to
+#: keep requesting from (a decompression bomb, an address ``netguard`` refuses).
 DOMAIN_UNREACHABLE = frozenset(
     {
         "timeout",
@@ -333,18 +282,12 @@ DOMAIN_UNREACHABLE = frozenset(
     }
 )
 
-#: No request went out, so there is nothing to conclude. Counting a robots
-#: denial as a failure would auto-block every well-behaved site with a
-#: restrictive robots.txt, and counting a refusal to fetch an already-blocked
-#: domain would make the block deepen itself. ``robots_unreachable`` is the same
-#: shape: one failed read of robots.txt is cached and served to every task on
-#: the origin, so counting each refusal would turn one failure into dozens.
+#: No request went out, so there is nothing to conclude. `robots_unreachable` is
+#: one cached failure served to every task on the origin.
 DOMAIN_NO_SIGNAL = frozenset({"robots_denied", "robots_unreachable", "blocked"})
 
-# `http_error` is deliberately in none of the three: the status code decides it.
-# 5xx is the server failing, and 429 is the server saying stop, which is a
-# reason to back off the domain rather than to keep asking. Every other 4xx is
-# the domain answering correctly about a URL that is not there.
+# `http_error` is in none of the three: 5xx and 429 count against the domain,
+# every other 4xx is the domain answering.
 BACKOFF_STATUS = 429
 
 
@@ -360,10 +303,8 @@ def domain_signal(outcome: str, status_code: int | None = None) -> str:
         if status_code is None or status_code >= 500 or status_code == BACKOFF_STATUS:
             return "unreachable"
         return "alive"
-    # An outcome nobody classified. Not fatal on purpose: the attempt row still
-    # records it, so it is visible on the health line rather than silent, and a
-    # worker that runs for weeks should not die over a string. The drift test
-    # over FETCH_OUTCOME is what keeps this branch unreachable in practice.
+    # An outcome nobody classified: logged, not fatal. The drift test over
+    # FETCH_OUTCOME keeps this branch unreachable.
     log.warning("unclassified fetch outcome; no policy consequence", extra={"outcome": outcome})
     return "none"
 
@@ -393,17 +334,8 @@ async def apply_fetch_outcome(
 # --------------------------------------------------------------------------
 # A domain that refuses every request (task B-114)
 # --------------------------------------------------------------------------
-#
-# A 403 is "alive" above, and rightly for one URL: the domain answered. But a
-# domain that has answered 403 to *every* request never accumulates failures,
-# so the counter never blocks it, and each search result or link to it costs a
-# politeness slot for nothing. Publishers that refuse crawlers outright are the
-# common case, and a scholarly search hands their URLs back constantly.
-#
-# Not a consecutive rule. Domains that do serve pages also return long unbroken
-# runs of 403s (a forbidden section, a bot check on some paths), so any run
-# length low enough to help would block sites the corpus reads. The rule is
-# instead "never once anything but a refusal": no answer of any other kind.
+# Not a consecutive rule: "never once anything but a refusal". See
+# docs/features/crawling.md#refusing-domains.
 
 #: The status a refusing domain answers with.
 REFUSED_STATUS = 403
@@ -423,11 +355,8 @@ async def refusing_domains(
 ) -> list[tuple[str, int]]:
     """Active domains that refused every request in the window, with the count.
 
-    Only requests that went out are counted: a robots denial or a refusal to
-    fetch an already-blocked domain says nothing about the domain. Where a
-    person last edited the domain's row, only attempts after that edit count,
-    so unblocking a domain in Admin gives it a fresh window rather than being
-    undone at the next pass.
+    Only requests that went out count, and only those after a person last edited the
+    domain's row, so an unblock gives a fresh window.
     """
     now = now or dt.datetime.now(dt.UTC)
     since = now - dt.timedelta(days=REFUSAL_WINDOW_DAYS)
@@ -479,16 +408,10 @@ async def block_refusing_domains(
 ) -> list[tuple[str, int]]:
     """Block every domain :func:`refusing_domains` finds. Does not commit.
 
-    ``blocked``, with a note naming the rule, so the verdict is visible and
-    reversible in Admin like any other block.
-
-    **The block expires.** A blocked domain is never requested, so no new
-    evidence can arrive to lift it; a site that stops refusing — a bot check
-    relaxed, a contact address configured for a service that asks for one —
-    would stay blocked forever. So a block this rule made lifts after
-    :data:`REFUSAL_WINDOW_DAYS`, and the domain is judged afresh on the next
-    :data:`REFUSAL_MIN_ATTEMPTS` requests. A block anyone else made is not
-    touched.
+    ``blocked``, with a note naming the rule, so it is visible and reversible in Admin.
+    A block this rule made lifts after :data:`REFUSAL_WINDOW_DAYS` and the domain is
+    judged afresh on the next :data:`REFUSAL_MIN_ATTEMPTS` requests; other blocks are
+    not touched.
     """
     stamp = now or dt.datetime.now(dt.UTC)
     expired = await sess.scalars(
@@ -532,16 +455,8 @@ async def record_render_outcome(
 ) -> None:
     """Record whether this domain needed the browser (task P1-27). Flushes.
 
-    **Only `auto` fetches are evidence.** A domain already skipping the static
-    attempt renders every time by construction, and counting that would be the
-    conclusion feeding itself — which is why the expiry in
-    :func:`learned_render_js` exists rather than a way of un-learning from
-    observations that can no longer be made.
-
-    Consecutive, like `consecutive_failures`: one static fetch that turned out to
-    be enough puts the domain back to zero. A domain that changes behaviour
-    should stop being treated as though it had not, and a running total never
-    lets it.
+    Only `auto` fetches are evidence. Consecutive: one static fetch that was enough
+    puts the domain back to zero.
     """
     host = registrable_domain(domain)
     row = await sess.get(FetchPolicyRow, host)

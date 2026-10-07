@@ -1,28 +1,8 @@
 """Claiming and releasing queue tasks (spec §5.1, §6.1, §13.4).
 
-The queue is the decoupling point between planes — the worker and the
-orchestrator never call each other, they only leave rows here (§2 principle 2) —
-so the claim has to be correct under concurrency without either side knowing the
-other exists.
-
-Three properties the implementation exists for:
-
-**No task is claimed twice.** ``FOR UPDATE SKIP LOCKED`` does the work: a
-competing claimer skips a locked row rather than blocking on it, so N workers
-drain the queue in parallel without coordination and without a queue server.
-
-**A dead worker does not strand its task.** Claiming takes a *lease* rather than
-flipping status. A crashed worker leaves a claim that simply expires; nothing has
-to notice the crash, which is the only design that survives "runs unattended for
-weeks".
-
-**A failing domain stops spinning the queue.** Failures set ``next_attempt_at``
-to an exponentially backed-off time, so a dead site costs one attempt per backoff
-window instead of one per loop iteration (§13.4).
-
-**A refusal is not a failure to retry.** :func:`queue_disposition` decides which
-of the two a fetch outcome is, so a robots denial is abandoned once rather than
-re-asked three times over an hour to be told the same thing.
+Claims use ``FOR UPDATE SKIP LOCKED`` and take an expiring lease; failures back off
+exponentially; :func:`queue_disposition` tells a refusal from a failure. See
+docs/features/crawling.md#claiming and #settling.
 """
 
 from __future__ import annotations
@@ -59,13 +39,7 @@ def backoff_delay_s(
     max_s: int = 3600,
     rng: random.Random | None = None,
 ) -> float:
-    """Exponential backoff with full jitter, capped.
-
-    Jittered because synchronised retries are how a transient outage turns into
-    a thundering herd the moment the domain recovers: without it every task that
-    failed together also retries together. Full jitter (a draw from ``[0, d]``
-    rather than ``d ± ε``) spreads them properly.
-    """
+    """Exponential backoff with full jitter (a draw from ``[0, d]``), capped."""
     if attempts < 0:
         raise ValueError("attempts must not be negative")
     ceiling = min(base_s * (2**attempts), max_s)
@@ -93,31 +67,12 @@ async def claim_next(
 ) -> QueueTask | None:
     """Claim the highest-priority eligible task, or return None if there is none.
 
-    ``skip_domains`` (`B-112`) leaves out page tasks on those domains or under
-    them: the worker's busy hosts. Priority order alone sent every lane to the
-    same few hosts at the top of the queue — one with a long crawl delay held
-    the whole worker to its pace. Lookups and queries are never skipped; they
-    do not wait on a host.
-
-    ``directed`` narrows the claim to work somebody or something *chose* rather
-    than followed (`B-61`): search results, queries, seeds and cited papers above
-    the priority floor. Frontier and sitemap links are excluded. A worker spends
-    a fixed share of its claims this way, because priority alone could not stop a
-    large frontier from out-ranking every search result the crawl produced.
-
-    Eligible means: pending, past its backoff time, and either unclaimed or
-    holding a lease that has expired. Ordered by priority then age, so
-    tier-upranked results (§5.2) are fetched first and nothing starves.
-
-    ``task_types`` narrows the claim to the kinds the caller can actually
-    handle. The queue holds ``query``, ``doi`` and ``sitemap`` tasks as well as
-    ``url`` ones, and a claimer that takes a row it cannot process has only two
-    ways out — fail a task that was never broken, or hand it back and claim it
-    again on the next pass forever. Filtering in the query is the third.
-
-    The row lock is held only for the duration of this statement — the claim is
-    committed before any fetching starts, because holding a transaction open
-    across a network fetch would pin a connection for the whole request.
+    Eligible: pending, past its backoff, and unclaimed or with an expired lease;
+    ordered by priority then age. ``skip_domains`` (`B-112`) leaves out page tasks on
+    those domains (lookups and queries are never skipped). ``directed`` (`B-61`) keeps
+    only search results, queries, seeds and cited papers above the floor.
+    ``task_types`` keeps the kinds the caller can handle. The row lock lasts only this
+    statement. See docs/features/crawling.md#claiming.
     """
     now = _now()
     lease_cutoff = now - dt.timedelta(seconds=lease_seconds)
@@ -198,12 +153,9 @@ async def fail(
 ) -> bool:
     """Record a failure. Returns True if the task will be retried.
 
-    Past ``max_retries`` the task is marked ``failed`` and left in place rather
-    than deleted — the error text is the only record of why a URL never made it
-    in, and §12.5's health line depends on being able to see it.
-
-    ``floor_s`` holds the retry back at least that long, for a failure whose
-    cause is cached (:func:`retry_floor_s`); the usual backoff comes on top.
+    Past ``max_retries`` the task is marked ``failed`` and kept with its error.
+    ``floor_s`` holds the retry back at least that long, for a failure whose cause is
+    cached (:func:`retry_floor_s`); the usual backoff comes on top.
     """
     task.attempts += 1
     task.error = error[:2000]
@@ -245,11 +197,8 @@ async def reclaim_expired(sess: AsyncSession, *, lease_seconds: int = DEFAULT_LE
 async def abandon(sess: AsyncSession, task: QueueTask, error: str) -> None:
     """Mark a task failed now, with no further attempts.
 
-    Distinct from :func:`fail`, which spends a retry. Some outcomes are refusals
-    rather than failures — robots.txt disallows the path, the domain is blocked,
-    the media type is not on the allowlist — and asking again in five seconds
-    gets the same answer for the same reason. The attempt is still counted, so
-    ``queue.attempts`` stays an honest record of how many requests a URL cost.
+    For refusals, which would answer the same on a retry. The attempt is still
+    counted in ``queue.attempts``.
     """
     task.attempts += 1
     task.error = error[:2000]
@@ -263,11 +212,8 @@ async def abandon(sess: AsyncSession, task: QueueTask, error: str) -> None:
 async def release_worker_claims(sess: AsyncSession, worker_id: str) -> int:
     """Drop every lease this worker still holds. Returns how many.
 
-    Called on the way out of a clean shutdown. Without it, a restart cannot
-    touch the tasks the previous process had claimed until their leases expire
-    — fifteen minutes of a queue that looks busy and is doing nothing, on every
-    deploy. Only ``pending`` rows are touched, so a task that finished and moved
-    on is not reopened.
+    Called on a clean shutdown, so a restart need not wait out the leases. Only
+    ``pending`` rows are touched.
     """
     result = await sess.execute(
         update(QueueTask)
@@ -292,20 +238,15 @@ async def queue_depth(sess: AsyncSession) -> dict[str, int]:
 #: The fetch succeeded and there are bytes to extract: the task moves on.
 TASK_FETCHED = frozenset({"success"})
 
-#: The conditional request paid off. There is nothing new to extract — the
-#: content is already in the corpus from the fetch that produced the validator —
-#: so the task is finished rather than passed down a pipeline with no body to
-#: work on.
+#: The conditional request paid off: the content is already in the corpus, so the
+#: task is finished.
 TASK_UNCHANGED = frozenset({"not_modified"})
 
 #: Nothing came back, but asking again later could plausibly change that.
 TASK_RETRY = frozenset({"timeout", "connection_error", "robots_unreachable"})
 
-#: The earliest a retry may come back, for outcomes whose cause is cached.
-#: An unreadable robots.txt refuses its origin for ``ERROR_TTL_S``, and the
-#: ordinary backoff (seconds) would spend every retry inside that window being
-#: told the cached "no" — so the URL would fail permanently over one blip, which
-#: is the `robots_denied` bug again with a different label.
+#: The earliest a retry may come back, for outcomes whose cause is cached: an
+#: unreadable robots.txt refuses its origin for ``ERROR_TTL_S``.
 RETRY_FLOOR_S: dict[str, float] = {"robots_unreachable": robotscache.ERROR_TTL_S}
 
 
@@ -314,17 +255,10 @@ def retry_floor_s(outcome: str) -> float:
     return RETRY_FLOOR_S.get(outcome, 0.0)
 
 
-#: A refusal, not a failure. Every member is deterministic in the retry window:
-#: robots.txt and the block list will say the same thing in five seconds, the
-#: page is still the size it is, the body still will not decompress, and the
-#: address is still the address ``netguard`` refused. Retrying spends the
-#: crawl's politeness budget to be told the same thing three times.
-#:
-#: ``too_many_redirects`` and ``decompression_bomb`` sit here while
-#: :data:`~meridian_core.policy.DOMAIN_UNREACHABLE` counts them against the
-#: domain — deliberately. "Should this domain be backed off" and "should this
-#: URL be asked again" are different questions, and a hostile or misconfigured
-#: response answers yes to the first and no to the second.
+#: A refusal, not a failure: each would answer the same within the retry window.
+#: ``too_many_redirects`` and ``decompression_bomb`` also count against the domain
+#: (:data:`~meridian_core.policy.DOMAIN_UNREACHABLE`). See
+#: docs/features/crawling.md#refusals.
 TASK_ABANDON = frozenset(
     {
         "robots_denied",
@@ -342,13 +276,9 @@ TASK_ABANDON = frozenset(
 def queue_disposition(outcome: str, status_code: int | None = None) -> str:
     """What one fetch outcome means for the task: the next status, or how to end it.
 
-    Returns ``"fetched"``, ``"done"``, ``"retry"`` or ``"abandon"``.
-
-    The question here is not the one :func:`~meridian_core.policy.domain_signal`
-    asks. That one decides whether a domain is worth continuing to fetch from;
-    this one decides whether *this URL* is worth asking for again. A 404 is the
-    domain working perfectly and the URL being permanently gone, and the two
-    functions disagree about it for that reason.
+    Returns ``"fetched"``, ``"done"``, ``"retry"`` or ``"abandon"``. Asks whether this
+    URL is worth asking for again, not whether the domain is
+    (:func:`~meridian_core.policy.domain_signal`); a 404 is the case they differ on.
     """
     if outcome in TASK_FETCHED:
         return "fetched"
@@ -421,11 +351,8 @@ async def enqueue(
 async def already_queued(sess: AsyncSession, urls: Sequence[str]) -> set[str]:
     """Which of ``urls`` already have a queue row, in any status.
 
-    Any status on purpose. A URL that failed is not worth immediately retrying
-    under a different task id — that is what `next_attempt_at` is for — and one
-    that is `done` is not worth re-fetching just because another page links to
-    it. Re-crawl scheduling is a separate decision from frontier expansion, and
-    conflating them would make every page's link list resurrect the whole corpus.
+    Any status, so a page's links never resurrect failed or finished URLs; re-crawling
+    is a separate decision.
     """
     if not urls:
         return set()

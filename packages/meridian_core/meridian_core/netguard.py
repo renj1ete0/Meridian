@@ -1,28 +1,8 @@
 """SSRF protection for the fetcher (spec §6.4, §11.8).
 
-Crawl targets come from untrusted pages. Frontier expansion follows links and
-citations out of documents the system did not write, so a page linking to
-``http://169.254.169.254/`` or ``http://192.168.1.1/`` is not hypothetical — it
-is the ordinary case this has to refuse.
-
-Three things make this harder than a substring check on the hostname, and each
-has caught real crawlers out:
-
-**A public name can resolve to a private address.** ``evil.example`` with an A
-record of ``127.0.0.1`` looks fine as a string. So the check happens *after* DNS
-resolution, on the addresses, never on the text.
-
-**A safe response can redirect into the network.** A 200 from a public host can
-302 to the metadata endpoint, so every hop is re-checked rather than only the
-first URL.
-
-**Addresses have many spellings.** ``::ffff:127.0.0.1`` is loopback wearing an
-IPv6 costume, and ``http://2130706433/`` is ``127.0.0.1`` in decimal. Both are
-normalised before judgement.
-
-The guard is deliberately allow-nothing-by-default: an address it cannot classify
-is refused, because a crawler that fails closed loses a page, and one that fails
-open loses the network.
+Judges addresses after DNS resolution, on every redirect hop, with every spelling of
+an address normalised first. Anything it cannot classify is refused. See
+docs/features/crawling.md#fetching-safely.
 """
 
 from __future__ import annotations
@@ -121,11 +101,8 @@ def address_verdict(ip: IPAddress) -> str | None:
 def _as_literal_address(host: str) -> IPAddress | None:
     """Parse a host that is already an address, in any of its spellings.
 
-    Dotted-quad and bracketed IPv6 are the obvious ones. The integer forms are
-    the interesting ones: ``http://2130706433/`` and ``http://0x7f000001/`` are
-    both 127.0.0.1, and ``getaddrinfo`` resolves them without complaint. The
-    post-resolution check would catch them anyway, but refusing here fails fast
-    and logs the honest reason rather than a DNS result.
+    Includes the integer forms (``2130706433``, ``0x7f000001``), refused here so the
+    log gives the honest reason rather than a DNS result.
     """
     bare = host.strip("[]")
     try:
@@ -171,10 +148,8 @@ def check_scheme(url: str, allowed_schemes: list[str]) -> None:
 def check_https_final(url: str, require_https_final: bool) -> None:
     """Refuse a final response still served in plaintext.
 
-    Separate from :func:`assert_redirect_allowed` because the fetcher only
-    learns which hop was the last one *after* the response arrives — by then
-    the chain is already resolved and re-running DNS to re-ask the question
-    would open a fresh rebinding window for no benefit.
+    Separate from :func:`assert_redirect_allowed` because the last hop is known only
+    once the response arrives, and resolving again would reopen a rebinding window.
     """
     if require_https_final and urlsplit(url).scheme.lower() != "https":
         raise BlockedTarget(PLAINTEXT_FINAL, url)
@@ -190,10 +165,8 @@ async def assert_url_allowed(
 ) -> list[IPAddress]:
     """Refuse ``url`` if it is unsafe to fetch; return its resolved addresses.
 
-    ``block_mixed_dns`` refuses a hostname when *any* of its addresses is
-    private, not merely when all of them are. That is the DNS-rebinding defence:
-    a name answering with one public and one private address would otherwise
-    pass the check and then connect to whichever the OS picked.
+    ``block_mixed_dns`` refuses a hostname when *any* of its addresses is private,
+    the DNS-rebinding defence.
     """
     check_scheme(url, allowed_schemes or ["http", "https"])
 
@@ -240,11 +213,8 @@ async def assert_redirect_allowed(
 ) -> list[IPAddress]:
     """Re-check a redirect target. A 200 can 302 into the LAN.
 
-    ``require_https_final`` is checked only on the last hop: an ``http://`` link
-    may be *followed*, since most sites simply redirect, but content still
-    served in plaintext at the end of the chain is refused — on plain HTTP
-    anyone on the path can rewrite the page, and for a crawler feeding a model
-    that holds write tools that needs no compromise of the origin.
+    ``require_https_final`` is checked only on the last hop: an ``http://`` link may be
+    followed, but content still in plaintext at the end of the chain is refused.
     """
     if is_final:
         check_https_final(location, require_https_final)

@@ -1,42 +1,9 @@
 """The worker loop: claim, fetch, record, repeat (task P1-15, spec §6.1, §13.4).
 
-Everything this module composes already existed and was unused. `queueing.py`
-knows how to hand out a task without handing it out twice; `Crawler.fetch` knows
-how to get one URL politely and leave a record of it; `attempts.py` knows what
-the last day of crawling looked like. What was missing is the thing that runs
-them without anybody watching, which is the only mode this system is ever in.
-
-**Lanes, not a loop.** Concurrency is N independent claim-fetch-settle lanes over
-one shared `Crawler`. There is no dispatcher and no in-process queue: the
-database is the queue, `FOR UPDATE SKIP LOCKED` is the dispatcher, and two lanes
-that both go looking at the same moment get different rows. That also means the
-unit of concurrency is the same whether it is four lanes in one process or two
-processes of two, so scaling out later needs no coordination to be invented.
-
-**Politeness is not the lane's business.** A lane claims whatever is next, which
-may be the fourth URL in a row from one domain. `DomainLimiter` is what stops
-that becoming four simultaneous requests to one host — per-domain, shared across
-lanes, and already enforced inside `Crawler.fetch`. A loop that tried to schedule
-around domains itself would be duplicating that, badly.
-
-**Nothing here raises to the top.** A worker that dies on an unexpected exception
-is a worker that stopped crawling on Saturday and gets noticed on Monday. Every
-lane catches, logs, settles the task it was holding, and goes back for the next
-one; a database that has gone away backs the lane off rather than ending it,
-because the outage that matters is the one that outlasts the retry. What is
-*not* caught is cancellation — that is the shutdown path, and swallowing it
-would turn `SIGTERM` into a process that has to be killed.
-
-**Shutdown is graceful once and immediate twice.** The first signal stops the
-lanes claiming and lets the fetches in flight finish, so a task is never
-abandoned mid-request. Held leases are dropped on the way out rather than left
-to expire, because fifteen minutes of a queue that looks busy and is doing
-nothing on every deploy is a bad way to learn about lease expiry. A second
-signal cancels, for the case where a fetch is wedged and the operator has
-stopped being patient.
-
-Restart supervision itself lives outside the process: `Restart=always` in the
-systemd unit (§13.4). Nothing in here tries to be its own supervisor.
+Concurrency is N independent claim-fetch-settle lanes over one shared `Crawler`; the
+database is the queue and `FOR UPDATE SKIP LOCKED` the dispatcher. Lanes catch and settle
+every error except cancellation, which is the shutdown path. See
+docs/features/crawling.md#the-loop.
 """
 
 from __future__ import annotations
@@ -138,22 +105,14 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 
 class NotKept(RuntimeError):
-    """A fetch succeeded and could not be persisted.
+    """A fetch succeeded and could not be persisted; the task is retried, not advanced.
 
-    Its own type so `_process` can tell it from any other failure and settle the
-    task as a retry rather than as a success — the fetch is not the thing that
-    went wrong, but advancing anyway would drop the URL out of the corpus with
-    the queue insisting it had been fetched.
+    See docs/features/crawling.md#keeping-a-fetch.
     """
 
 
-#: Task types this loop can actually process.
-#:
-#: `query` (`P1-34`) and `doi` (`P1-14`) are conditional at claim time rather
-#: than absent from this list: a worker with no search backend, or no way to
-#: reach the resolution APIs, must not claim rows it cannot answer, or a stack
-#: whose SearXNG is briefly down would fail every seed query once and abandon
-#: it. See `_claimable_task_types`.
+#: Task types this loop can actually process. `query` and `doi` are claimed only by
+#: a worker with a search backend or resolver; see `_claimable_task_types`.
 HANDLED_TASK_TYPES = ["url", "sitemap", "query", "doi"]
 
 #: Which dependency each conditional task type needs, by attribute name.
@@ -231,24 +190,15 @@ DEFAULT_CONCURRENCY = 4
 DEFAULT_IDLE_SLEEP_S = 5.0
 DEFAULT_HOUSEKEEPING_S = 3600.0
 
-#: `B-61`: a share of claims goes to directed work when any is pending. A
-#: 12-hour run without it fetched a few hundred times more followed links than
-#: search results, because a large frontier out-ranked them all by tier.
-#: `B-86`: one in two, from one in three. Measured over everything labelled
-#: since the crawl fixes, search results were on a topic about three times as
-#: often as followed links, and at one in three they were a sixth of fetches.
+#: One claim in this many goes to directed work when any is pending (`B-61`, `B-86`).
+#: See docs/features/crawling.md#directed-slots.
 DEFAULT_DIRECTED_EVERY = 2
 
-#: `B-86`: within the directed slots, cited-paper lookups go first in one of
-#: this many and search results, seeds and queries in the rest. Alternating
-#: evenly (`B-68`) gave lookups — about as often on a topic as a coin toss, and
-#: often deferred for want of an API key — as many slots as search results.
+#: Within the directed slots, cited-paper lookups go first in one of this many
+#: (`B-86`); search results, seeds and queries take the rest.
 LOOKUP_EVERY = 3
 
-#: `B-61`: the crawl pauses while this many live chunks wait for a vector. A
-#: CPU embedder falls behind a free-running crawl by an order of magnitude, and
-#: an unembedded page is unsearchable by meaning, unlabelled, and invisible to
-#: the host gate that is supposed to steer the crawl away from it.
+#: The crawl pauses while this many live chunks wait for a vector (`B-61`).
 DEFAULT_MAX_EMBED_BACKLOG = 20_000
 
 #: How often the backlog is re-counted while claiming.
@@ -352,10 +302,7 @@ class WorkerSettings:
 class Claim:
     """The claimed task's data, detached from the session that claimed it.
 
-    Carried as plain values rather than as the ORM instance because the claim
-    commits and its session closes before any fetching starts — holding a
-    connection open across a network request would pin one for the whole fetch,
-    and there are more lanes than there are pool slots to spare.
+    Plain values, because the claim's session closes before any fetching starts.
     """
 
     task_id: int
@@ -375,11 +322,8 @@ class Claim:
 class Kept:
     """What persisting one fetch produced.
 
-    ``changed`` is whether the checksum differs from the one already on the
-    source row. A 200 that returns byte-identical content is a page that has not
-    changed — a cheaper and more common fact than a 304, since most origins do
-    not implement conditional requests — and it is what lets extraction and
-    embedding be skipped on a re-crawl.
+    ``changed`` is whether the checksum differs from the one already on the source
+    row; an unchanged page skips extraction and embedding.
     """
 
     stored: StoredRaw
@@ -486,16 +430,9 @@ class Worker:
     def _crawled_for(self, claim: object) -> list[str]:
         """Why this URL was fetched: the claim's topic (tasks P2-14, P2-21).
 
-        Provenance, recorded here because this is the only moment the queue row
-        is in hand — after the fact a URL can have been enqueued under several
-        topics, and a redirect means the fetched URL is often not the queued
-        one. It says nothing about what the page turned out to be about: that
-        is `topic_labels`, written by the content labeller once the chunks have
-        vectors. The two used to be one column, and a crawl pursuing one topic
-        stamped it on every page a site's navigation led to.
-
-        A list, never None. An empty list means the claim carried no topic,
-        which is a fact about the fetch worth keeping.
+        Provenance only; what the page is about is `topic_labels`. A list, never
+        None: empty means the claim carried no topic. See
+        docs/features/crawling.md#keeping-a-fetch.
         """
         topic = getattr(claim, "topic", None)
         return [topic] if topic else []
@@ -540,11 +477,8 @@ class Worker:
         try:
             await asyncio.gather(*lanes)
         finally:
-            # `gather` returns the moment one lane raises, leaving the rest of
-            # them running — a caller that got an exception from `run()` would
-            # then have three lanes still claiming and fetching behind its back,
-            # and would release their leases out from under them. Cancelling is
-            # a no-op on the lanes that finished normally.
+            # `gather` returns when one lane raises and leaves the others running;
+            # cancel them so their leases are not released from under them.
             for lane in lanes:
                 lane.cancel()
             await asyncio.gather(*lanes, return_exceptions=True)
@@ -611,11 +545,8 @@ class Worker:
     def _claimable_task_types(self) -> list[str]:
         """What this particular worker can answer, not what the loop supports.
 
-        A `query` row needs a search backend, and a worker without one that
-        claimed it would fail a task that is not broken — the row is fine, this
-        process just cannot do it. Leaving it unclaimed hands it to a worker
-        that can, which on a single-worker stack means it waits for SearXNG to
-        come back rather than being abandoned while it is down.
+        A `query` row needs a search backend; leaving it unclaimed lets it wait
+        for one rather than fail.
         """
         return [
             name
@@ -627,11 +558,7 @@ class Worker:
     async def _shares(self, sess) -> dict[str, float]:
         """What fraction of claims each topic should get right now (§10).
 
-        Read per claim rather than cached: the topic table is a handful of rows
-        and this is one small query against a lane about to spend a second or
-        more on a network fetch. A cache would buy nothing and would mean a
-        steering change landing at a time nobody could predict, which is the
-        opposite of what §10 promises — "steer back later" has to mean now.
+        Read per claim, not cached, so a steering change applies at once.
         """
         try:
             return draw_shares(await steering_topics(sess), now=dt.datetime.now(dt.UTC))
@@ -669,18 +596,8 @@ class Worker:
     async def _claim(self) -> Claim | None:
         """One task, preferring the topics the attention vector prefers (§10).
 
-        **An empty topic is redrawn, not surrendered.** The first version fell
-        straight through to an unfiltered claim, and on a real frontier that
-        gave the share of every topic with nothing queued to whichever topic
-        had most queued — which is the concentration this exists to correct,
-        arriving by the back door. Measured on the live stack: three of six
-        active topics held no rows at all, so 45% of the weight was being
-        handed to the largest pile.
-
-        So a drawn topic that has nothing claimable is dropped from the pool
-        and another is drawn. Only when the pool is exhausted does the claim go
-        unfiltered, which is still the right last resort: a lane that idled
-        while the queue held work would trade the crawl for the shape of it.
+        A drawn topic with nothing claimable is dropped and another drawn; only an
+        exhausted pool claims unfiltered. See docs/features/crawling.md#claiming.
         """
         async with self._session_factory() as sess:
             if self._settings.topics:
@@ -693,15 +610,9 @@ class Worker:
             self._claims += 1
             every = self._settings.directed_every
             if every and self._claims % every == 0:
-                # `B-61`: the reserved slot, drawn through the same attention
-                # vector as any claim so it never spends a topic's share outside
-                # the pool. Falls through to the ordinary draw when nothing
-                # directed is waiting, so the slot is never idle.
-                #
-                # `B-68`: alternating between cited-paper lookups and the rest
-                # (search results, queries, seeds). Ranked together, a topic
-                # with thousands of well-cited DOIs spent every directed slot
-                # on lookups and never reached its search results.
+                # The directed slot (`B-61`), drawn through the same attention
+                # vector; lookups take their own turn (`B-68`). Falls through to
+                # the ordinary draw when nothing directed is waiting.
                 self._directed_claims += 1
                 first = self._directed_claims % LOOKUP_EVERY == 0
                 for lookups in (first, not first):
@@ -794,11 +705,7 @@ class Worker:
     async def _process(self, claim: Claim) -> None:
         """Fetch one claimed task and settle it.
 
-        ``attempt_number`` is ``attempts + 1`` and not ``attempts``: the counter
-        on the row is how many attempts have *finished*, so passing it straight
-        through would file every retry in the attempt log as a first try, and
-        the log's whole purpose is telling a URL that failed once from one that
-        has been failing all week.
+        ``attempt_number`` is ``attempts + 1``: the row counts finished attempts.
         """
         if claim.task_type == "sitemap":
             await self._process_sitemap(claim)
@@ -817,22 +724,15 @@ class Worker:
         disposition = queue_disposition(result.outcome, result.status_code)
         detail = f"{result.outcome}: {result.detail}" if result.detail else result.outcome
 
-        # Before the settle, because `result.content` lives only in memory and
-        # the settle is the last thing that happens to this fetch. The attempt
-        # log is written inside `Crawler.fetch` for the opposite reason — every
-        # caller wants an attempt recorded, and a log with holes in the paths
-        # nobody thought about is worthless — but the corpus is not something a
-        # liveness probe or an ad-hoc refetch should write to. So this lives in
-        # the loop, which is the caller whose job is keeping what it fetched.
+        # Kept before the settle, because `result.content` lives only in memory.
+        # The loop keeps; the crawler logs. See docs/features/crawling.md#keeping-a-fetch.
         kept = None
         if disposition == "fetched":
             try:
                 kept = await self._keep(claim, result)
             except NotKept as exc:
-                # The fetch worked; keeping it did not. Retrying is right — the
-                # cause is almost always local and transient (a full disk,
-                # Postgres restarting) and the alternative is a URL the queue
-                # believes was fetched and the corpus has never heard of.
+                # The fetch worked; keeping it did not. Retried: the cause is
+                # almost always local and transient.
                 disposition, detail = "retry", f"storage_error: {exc}"
         elif disposition == "done":
             await self._record_freshness(claim)
@@ -869,11 +769,8 @@ class Worker:
     ) -> None:
         """Apply one disposition to the queue row and drop the lease.
 
-        ``fetched_status`` is where a successful fetch leaves the task. A page
-        stops at ``fetched`` because extraction and embedding are still ahead of
-        it in the status flow; a sitemap goes straight to ``done``, because
-        reading it *is* the whole of its work and leaving it at ``fetched`` would
-        advertise a source row that will never exist.
+        ``fetched_status`` is where a successful fetch leaves the task: ``fetched``
+        for a page, ``done`` for a sitemap, whose reading is all its work.
         """
         async with self._session_factory() as sess:
             task = await sess.get(QueueTask, claim.task_id)
@@ -934,10 +831,7 @@ class Worker:
             try:
                 parsed = parse_sitemap(result.content, base_url=base)
             except SitemapError as exc:
-                # Unreadable is a refusal, not a failure: re-fetching an HTML
-                # error page or a document with a DTD three more times gets the
-                # same answer, and `queue_disposition` reserves retries for
-                # things that might succeed later.
+                # Unreadable is a refusal, not a failure: it reads the same next time.
                 disposition = "abandon"
                 detail = f"sitemap_unreadable: {exc}"
             else:
@@ -1275,15 +1169,8 @@ class Worker:
     ) -> Screening | None:
         """Look for prompt injection before any of this reaches a model (`P1-23`).
 
-        On the raw HTML *and* the extracted text, because they answer different
-        halves: hiddenness is a DOM property extraction has already discarded,
-        and what survived extraction is what a model would actually read.
-
-        The DOM half is HTML-only — a PDF or a .docx hides text by other means,
-        and the equivalents need a different screen than this one, worth having
-        and not worth pretending this is it. But the *text* half runs on
-        anything that extracted, because a tool directive in a spreadsheet
-        reaches a model exactly as well as one in a web page.
+        On the raw HTML (hidden text, HTML only) and on the extracted text (any
+        format). See docs/features/crawling.md#loop-stages.
         """
         is_html = result.media_type in HTML_MEDIA_TYPES
         text = document.text if document else ""
@@ -1336,13 +1223,8 @@ class Worker:
     async def _keep(self, claim: Claim, result: FetchResult) -> Kept:
         """Keep what came back: the bytes, the checksum, and the validators.
 
-        Raises :class:`NotKept` if it could not, and the raise is the point. A
-        full disk that let the task advance to `fetched` anyway would lose the
-        URL from the corpus permanently: the queue would say the page was
-        fetched, no source row would exist, and nothing would ever ask for it
-        again. Failing the task instead means a backoff, two more tries, and —
-        if the disk is still full — a `failed` row carrying the reason, which is
-        a problem somebody can see.
+        Raises :class:`NotKept` if it could not, so the task is retried rather than
+        advanced to `fetched` with no source row.
         """
         try:
             async with self._session_factory() as sess:
@@ -1379,10 +1261,7 @@ class Worker:
 
             async with self._session_factory() as sess:
                 # `P4-14`: fold this fetch into the domain's verdict before the
-                # page is written, so the page is stored under the state its
-                # domain is in *including* what this fetch just showed. Doing it
-                # afterwards would store the previous verdict and leave the
-                # first flagged page on a domain looking clean.
+                # page is written, so the page is stored under the updated verdict.
                 domain_trust = await record_screening(
                     sess,
                     result.domain,
@@ -1407,10 +1286,8 @@ class Worker:
                     **validators(result.headers),
                 )
                 if document is not None and document.needs_ocr:
-                    # After the upsert, so `text_available=False` and the OCR
-                    # columns survive `_bibliography`'s view that this document
-                    # simply had no text. It had none *because* it is a scan,
-                    # which is a different thing needing a different follow-up.
+                    # After the upsert, so a scan's OCR columns survive
+                    # `_bibliography`'s view that it simply had no text.
                     await mark_scanned(sess, source)
                     await enqueue_ocr(sess, source.source_id)
                     # `B-47` follow-up: a document that had text and is now a
@@ -1432,11 +1309,9 @@ class Worker:
                     return Kept(
                         stored=stored, changed=changed, document=document, chunks=0, queued=0
                     )
-                # In the same transaction as the source row. A source whose
-                # checksum says one thing and whose chunks were cut from another
-                # is a corpus that cites text it does not hold.
-                # `B-59`: what the document is, decided in `_chunk` from the text
-                # it would be chunked from. A listing is followed, not chunked.
+                # In the same transaction as the source row, so chunks always come
+                # from the bytes the checksum describes. `B-59`: a listing is
+                # followed, not chunked.
                 chunks_written = await self._chunk(
                     sess,
                     source,
@@ -1451,9 +1326,7 @@ class Worker:
                 )
                 if changed:
                     # `P4-12`: a domain earns its seeding allowance on *novel*
-                    # documents, so this is counted here rather than per fetch.
-                    # A site serving one page under a thousand URLs would
-                    # otherwise approve itself on volume alone.
+                    # documents, so a site cannot approve itself on volume.
                     await record_novel_fetch(sess, result.domain)
                 queued = await self._expand_frontier(sess, claim, document, source)
                 queued += await self._seed_citations(sess, claim, document, source)
@@ -1740,14 +1613,9 @@ class Worker:
     ) -> int:
         """Cut the extracted text into chunks and make them the source's set.
 
-        Skipped entirely when the checksum says the content did not change: the
-        chunks already stored were cut from these exact bytes, and rewriting
-        them would hand the slow loop a day of "new" material it has already
-        read (§6.3's high-water mark is a chunk id).
-
-        This has to happen here, in the fetch pass, and not in a later
-        re-extraction sweep — a `background` source keeps no raw file (§5.4), so
-        text not chunked now is text that needs the page fetched again.
+        Skipped when the checksum is unchanged. Done in the fetch pass because a
+        `background` source keeps no raw file (§5.4). See
+        docs/features/crawling.md#loop-stages.
         """
         if document is None or not document.has_text:
             if evidence is not None:
@@ -1763,37 +1631,26 @@ class Worker:
             )
             return 0
 
-        # §5.3: page number for a paginated document, character offset otherwise.
-        # The two are the same column, and `is_paginated` is what says which
-        # reading applies — not which extractor happened to run.
-        #
-        # `B-43`: menus, banners, running heads and extraction debris are left
-        # out of the chunks — never cut out of the text, so every chunk is
-        # still a slice of it. The host is the one the page was served from.
+        # §5.3: page number for a paginated document, character offset otherwise;
+        # `is_paginated` says which. `B-43`: furniture is left out of the chunks,
+        # never cut from the text. The host is the one the page was served from.
         host = host_key((source.extra or {}).get("final_url") or source.url)
         if document.is_paginated:
             cut = await clean_cut(sess, source.source_id, host, pages=document.pages)
         else:
             cut = await clean_cut(sess, source.source_id, host, text=document.text)
 
-        # `B-59`: classified from what would be chunked — the text with the
-        # site's furniture left out — so a footer of links cannot make an
-        # article look like an index, and so the fetch path reads the same
-        # text `worker.dockind` reads back from stored chunks.
+        # `B-59`: classified from the text that would be chunked, as
+        # `worker.dockind` reads it back from stored chunks.
         if evidence is not None:
             verdict = classify(
                 dataclasses.replace(evidence, text="\n".join(c.text for c in cut.chunks))
             )
             record_doc_kind(source, verdict)
             if verdict.kind == "listing":
-                # A listing's value is its links, which `_expand_frontier`
-                # follows. Its text is other documents' titles and summaries
-                # run together, and as chunks it would be searched, embedded,
-                # labelled and synthesised as if it said something. Not chunked
-                # at all, rather than chunked and filtered: every downstream
-                # pass reads chunks, so this is the one place the exclusion
-                # cannot be missed by a pass that forgot a filter. What an
-                # earlier fetch cut is superseded, never deleted.
+                # A listing's value is its links. Not chunked at all, so no
+                # downstream pass can forget to filter it; earlier chunks are
+                # superseded, never deleted.
                 _, retired = await replace_chunks(sess, source.source_id, [])
                 log.info(
                     "listing: links followed, text not chunked",
@@ -1807,10 +1664,8 @@ class Worker:
                 return 0
         written, deleted = await replace_chunks(sess, source.source_id, as_writes(cut.chunks))
 
-        # In the same transaction as the chunks and the source row (`P1-10`). A
-        # source whose text came from this fetch and whose figures came from the
-        # last one describes a document that never existed, and a caption
-        # attached to the wrong picture is a citation that resolves to a lie.
+        # In the same transaction as the chunks and the source row (`P1-10`), so
+        # text and figures come from the same fetch.
         figures_written, _ = await replace_figures(
             sess,
             source.source_id,
@@ -1843,14 +1698,9 @@ class Worker:
     async def _extract(self, claim: Claim, result: FetchResult) -> ExtractedDocument | None:
         """Turn the bytes into text, routed by media type (§6.6).
 
-        Returns None when the format has no extractor yet — `P1-08` brings
-        MarkItDown for Office documents — rather than raising. A source with no
-        extractor is metadata-only (§6.5), which is a resting state the schema
-        already has a word for, not a failure.
-
-        Extraction failing is not `NotKept`. The bytes are safely stored and can
-        be re-extracted whenever the extractor improves (§11.12); refetching the
-        page to try again would be spending a request to solve a local problem.
+        Returns None when the format has no extractor, rather than raising: the
+        source is metadata-only (§6.5). Extraction failing is not `NotKept`; the
+        bytes are stored and can be re-extracted.
         """
         url = result.final_url or claim.url
         try:
@@ -1870,10 +1720,8 @@ class Worker:
             else:
                 return None
         except PdftotextMissing:
-            # A deployment fault, not a property of this document: every PDF in
-            # the corpus is affected and none of them should read as "no text".
-            # Loud, and once per document, because a worker that has quietly
-            # lost poppler stops growing the corpus with no other symptom.
+            # A deployment fault, not a property of this document: logged loudly,
+            # once per document, so a worker that lost poppler is noticed.
             log.error(
                 "poppler is not installed; this PDF and every other one cannot be read",
                 extra={"url": claim.url, "task_id": claim.task_id},
@@ -1901,13 +1749,7 @@ class Worker:
         return document
 
     async def _settle_error(self, claim: Claim) -> None:
-        """Give a task back after an exception the loop did not expect.
-
-        Left claimed, it would sit out its whole lease before anyone could try
-        it again. Failed with a retry, it comes back after a backoff — which is
-        the right answer when nobody yet knows whether the bug was in the task
-        or in us.
-        """
+        """Give a task back after an exception the loop did not expect, as a retry."""
         try:
             async with self._session_factory() as sess:
                 task = await sess.get(QueueTask, claim.task_id)
@@ -1929,10 +1771,7 @@ class Worker:
     async def _housekeeping(self) -> None:
         """Prune the attempt log and log the health line, on a slow tick.
 
-        Runs here because there is nowhere else: `fetch_attempts` gains a row
-        per request and nothing else in the system is awake often enough to
-        bound it. Cancelled rather than stopped on shutdown — a prune half done
-        is a prune, and the next tick finishes it.
+        Cancelled rather than stopped on shutdown; the next tick finishes a prune.
         """
         interval = self._settings.housekeeping_interval_s
         if interval <= 0:
@@ -1949,11 +1788,8 @@ class Worker:
     async def search_health(self) -> str:
         """`configured` / `unreachable` / `absent` — for the health line (`P1-34`).
 
-        Three states for the reason `browser_health` has three. `absent` is a
-        deployment that never intended to search and is fine. `unreachable` is
-        the one worth waking up for: query rows stop being claimed, the frontier
-        stops widening, and the crawl winds down to an idle that reads as
-        success on every other number on this line.
+        `unreachable` is the one to act on: query rows stop being claimed and the
+        crawl winds down to an idle. See docs/features/crawling.md#loop-stages.
         """
         if self._search is None:
             return "absent"
@@ -1962,12 +1798,8 @@ class Worker:
     async def browser_health(self) -> str:
         """`configured` / `unreachable` / `absent` — for the health line (`P1-26`).
 
-        Three states, not two, because they need different responses. `absent`
-        means no `CRAWL4AI_URL`, which is a deployment that never intended to
-        render and is fine. `unreachable` means one was configured and is not
-        answering, which is the silent failure this exists to surface: the
-        fetcher degrades to static and keeps working, so nothing else in the
-        system ever notices that JS-dependent pages stopped being rendered.
+        `unreachable` is the silent failure: the fetcher degrades to static and
+        nothing else notices.
         """
         browser = self._crawler.fetcher.browser
         if browser is None:
@@ -2006,12 +1838,8 @@ class Worker:
         log.info(
             "health",
             extra={
-                # §12.5's daily health line, less `edges added` — that one
-                # belongs to the orchestrator and is not this process's to
-                # report. The novelty pass rate is, since `P2-03` made the gate
-                # a worker pass: a rate that collapses means the crawl has
-                # found a mirror or a site that serves one page under every
-                # URL, which looks healthy in every other number here.
+                # §12.5's daily health line, less `edges added` (the orchestrator's),
+                # plus the novelty pass rate. See docs/features/crawling.md#loop-stages.
                 "queue_depth": depth,
                 "pending": depth.get("pending", 0),
                 "fetch_attempts": health.attempts,
@@ -2069,13 +1897,8 @@ class Worker:
 def install_signal_handlers(worker: Worker) -> None:
     """Wire SIGINT/SIGTERM: first asks, second insists.
 
-    The second signal cancels every task in the loop, unwinding `run()` through
-    the cancellation path — deliberately harsher than the first, because by the
-    time an operator sends it they have already waited once.
-
-    `add_signal_handler` is POSIX-only and raises on Windows and inside a thread
-    that is not the main one; suppressed rather than required, since a worker
-    that cannot install handlers should still crawl.
+    The second signal cancels every task in the loop. Where signal handlers cannot
+    be installed (not POSIX, not the main thread) the worker runs without them.
     """
     loop = asyncio.get_running_loop()
     state = {"signalled": False}
@@ -2098,10 +1921,8 @@ def install_signal_handlers(worker: Worker) -> None:
 async def build_prefilter() -> Prefilter:
     """Read the seeded frontier blocklist once, at startup (§13.1).
 
-    Config, so it lives in the database and changes when someone edits it in
-    Admin — not between two pages of one crawl. A worker that could not read it
-    starts with an empty blocklist rather than refusing to run: crawling a few
-    social links is a waste, and not crawling at all is an outage.
+    A worker that cannot read it starts with an empty blocklist rather than
+    refusing to run.
     """
     try:
         async with session() as sess:
@@ -2118,10 +1939,8 @@ async def build_prefilter() -> Prefilter:
 async def build_topic_vocabulary() -> TopicVocabulary:
     """Read the topic vocabulary once, at startup (`P1-28`).
 
-    Degrades the same way the prefilter does, and for the same reason: a worker
-    that cannot read its vocabulary should crawl with none — every sitemap URL
-    lands unmatched and deprioritised — rather than refuse to start. Crawling
-    with worse topic labels is a bad day; not crawling is an outage.
+    A worker that cannot read it crawls with none (every sitemap URL lands
+    unmatched) rather than refusing to start.
     """
     try:
         async with session() as sess:
@@ -2150,10 +1969,8 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
 
     search = SearxClient.from_env()
     if search is None:
-        # Louder than the browser's equivalent, because the consequence is
-        # worse. Without a browser the crawl extracts JS-heavy pages badly;
-        # without search it drains its frontier and then idles, and an idle
-        # crawler looks exactly like a finished one (`P1-34`, §6.4).
+        # Louder than the browser's equivalent: without search the crawl drains
+        # its frontier and idles like a finished one (`P1-34`, §6.4).
         log.warning("no SEARXNG_URL; query rows will not be claimed and the frontier cannot widen")
 
     resolver_settings = ResolverSettings.from_env()
@@ -2193,11 +2010,8 @@ def main() -> None:
     """Entry point: `python -m worker.main`."""
     configure_logging("worker")
     settings = WorkerSettings.from_env()
-    # One run_id for the process, on every record it emits. A crawl that ran for
-    # six hours is one thing to grep for, not a timestamp range to guess at.
-    # Both endings of the shutdown path are ordinary here, not errors: Ctrl-C
-    # raises KeyboardInterrupt, and a second signal cancels the run. Neither
-    # should print a traceback on a worker that did what it was asked.
+    # One run_id for the process, on every record it emits. Ctrl-C and a second
+    # signal are ordinary endings and print no traceback.
     quiet_exits = (KeyboardInterrupt, asyncio.CancelledError)
     with bind_run_id(f"worker-{settings.worker_id}"), contextlib.suppress(*quiet_exits):
         asyncio.run(run_worker(settings))
@@ -2211,10 +2025,8 @@ def _bibliography(
 ) -> dict[str, object]:
     """The `sources` columns an extracted document can fill (§5.2).
 
-    Empty when there is no document, so a format with no extractor writes
-    nothing rather than writing nulls over what a previous fetch established.
-    Citations ride in `extra` — they are a list, `sources` has no column for
-    them, and `P1-14` is what turns them into queue rows.
+    Empty when there is no document, so nothing a previous fetch established is
+    overwritten with nulls. Citations ride in `extra` (`P1-14`).
     """
     extra: dict[str, object] = {}
     if screening is not None and screening.findings:
@@ -2242,10 +2054,8 @@ def _bibliography(
         "publication_date": document.publication_date,
         "language": document.language,
         "doi": document.doi,
-        # Which tool read this, including the failure names (`P1-44`). A source
-        # whose extractor says `pdftotext-failed` and whose `text_available` is
-        # False is a different problem from one that simply had no text, and
-        # only this column distinguishes them after the fact.
+        # Which tool read this, including the failure names (`P1-44`), so
+        # `pdftotext-failed` is distinguishable from a document with no text.
         "extractor": document.extractor,
         # A scan has no text and is not merely empty: `mark_scanned` records
         # why and what would fix it, and must not be undone by this.

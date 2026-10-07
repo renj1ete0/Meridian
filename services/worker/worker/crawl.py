@@ -1,27 +1,9 @@
 """One polite fetch: policy, robots, rate limit, conditional request (P1-04).
 
-:mod:`worker.fetch` knows how to get bytes from a URL safely. It deliberately
-does not know whether it *should*, how often, or what it already has — those are
-decisions about a domain rather than about a request, and they need the database.
-This module is the seam: it resolves the policy, asks robots.txt, waits its turn,
-attaches the validators from last time, and only then calls the fetcher.
-
-The order matters and is the cheapest-refusal-first order:
-
-1. **Is the domain blocked?** A policy row lookup. Costs no network at all.
-2. **Does robots.txt allow it?** One cached request per origin per day.
-3. **Wait for the domain's slot.** Only after the request is known to be one
-   worth making — queueing behind a delay for a URL that was going to be refused
-   anyway is time the crawl does not get back.
-4. **What do we already have?** ETag and Last-Modified from the previous fetch,
-   which turns an unchanged page into a 304 and no body.
-
-Every path through :meth:`Crawler.fetch` then ends in the same place: one
-``fetch_attempts`` row, and the policy consequence that outcome carries
-(`P1-19`, `P1-05`). Recording here rather than in the worker loop is deliberate
-— the loop is not the only caller a crawler ever grows, and a log that depends
-on each caller remembering to write it is a log with holes in exactly the paths
-nobody thought about.
+Refusals are checked cheapest first (blocked domain, robots.txt, the domain's slot),
+then the validators from last time are attached. Every path through
+:meth:`Crawler.fetch` writes one ``fetch_attempts`` row and the policy consequence of
+its outcome (`P1-19`, `P1-05`). See docs/features/crawling.md#one-polite-fetch.
 """
 
 from __future__ import annotations
@@ -90,16 +72,8 @@ class Crawler:
         self._session_factory = session_factory
         self._fetcher = fetcher
         self._limiter = limiter or DomainLimiter()
-        # robots.txt is fetched through the same limiter as everything else. A
-        # crawler that honours a domain's delay for its pages and then fetches
-        # robots.txt whenever it likes has misread which of the two is the
-        # courtesy.
-        #
-        # The session factory is handed on so the cache survives a restart
-        # (`P1-29`). Without it a restart re-fetches robots.txt for every origin
-        # the crawl touches, and each of those requests queues in the same
-        # per-domain slot the pages do — so the first minutes back are spent
-        # asking permission rather than crawling.
+        # robots.txt is fetched through the same limiter as pages. The session factory
+        # lets the cache survive a restart (`P1-29`). See docs/features/crawling.md#robots.
         self._robots = robots or RobotsCache(self._fetch_in_slot, store=session_factory)
 
     @property
@@ -134,16 +108,10 @@ class Crawler:
     ) -> FetchResult:
         """Fetch ``url`` under its domain's policy, or say why it was not.
 
-        Whatever happens, the attempt is recorded and its consequence applied
-        before the result is handed back.
-
-        ``policy_overrides`` narrows or widens the resolved policy for this one
-        request. It exists for fetches that are not corpus content — `P1-28`'s
-        sitemaps, the way ``RobotsCache`` already does it for robots.txt — where
-        the media allowlist is asking the wrong question. Everything that makes
-        a fetch *safe* rather than *selective* (robots, the rate limit, netguard,
-        the size and decompression caps) still comes from the resolved policy,
-        so an override cannot turn a fetch into one the policy would refuse.
+        Whatever happens, the attempt is recorded and its consequence applied before the
+        result is handed back. ``policy_overrides`` adjusts the resolved policy for a fetch
+        that is not corpus content (a sitemap); robots, the rate limit, netguard and the
+        size caps still apply.
         """
         domain = registrable_domain(url)
 
@@ -177,16 +145,12 @@ class Crawler:
 
         if policy.respect_robots:
             rules = await self._robots.rules_for(url, policy)
-            # Read whether or not this path is allowed, but only carried on a
-            # result the caller will act on. A domain that disallows one path
-            # still advertises its sitemap, and the file is the site's own
-            # statement of what it wants crawled.
+            # Advertised sitemaps are read whether or not this path is allowed, but
+            # carried only on a result the caller will act on.
             sitemaps = rules.sitemaps
             if rules.unreachable:
-                # Refused all the same (RFC 9309 §2.3.1.3), but not *denied*: the
-                # site has said nothing yet. Recorded as its own outcome so the
-                # URL is retried once robots.txt can be read, rather than
-                # abandoned as though the site had asked to be left alone.
+                # Refused all the same (RFC 9309 §2.3.1.3), but not *denied*: its own
+                # outcome, so the URL is retried once robots.txt can be read.
                 return _refused(
                     url,
                     "robots_unreachable",
@@ -265,14 +229,8 @@ class Crawler:
                 status_code=result.status_code,
                 blocked_after=policy.blocked_after_failures,
             )
-            # What this fetch taught us about the domain (`P1-27`). Only `auto`
-            # produces evidence: a domain already going straight to the browser
-            # renders every time by construction, and counting that would be the
-            # conclusion feeding itself.
-            #
-            # In the same transaction as the attempt row, for the same reason —
-            # a log saying a domain escalated five times beside a policy row
-            # that counted none of them is worse than either alone.
+            # What this fetch taught us about the domain (`P1-27`), in the attempt's
+            # transaction. Only `auto` produces evidence. See docs/features/crawling.md#rendering.
             if result.ok and (policy.render_js or "auto").lower() == "auto":
                 await record_render_outcome(
                     sess, policy.domain, escalated=result.render_mode != "http"

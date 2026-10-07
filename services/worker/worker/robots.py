@@ -1,29 +1,8 @@
 """robots.txt: parsing, matching, and caching (task P1-04, spec §6.4, §14.2).
 
-§14.2 makes respecting robots.txt a stated commitment, not a setting, so the
-question of *which* rules a path matches has to have one answer.
-
-**Why this is not `urllib.robotparser`.** The stdlib parser was rewritten for
-RFC 9309 in Python 3.13. Before that it had no wildcard support and returned the
-first matching rule rather than the longest. On the two most ordinary patterns in
-a real robots.txt it gives opposite answers across the versions this project
-supports (`requires-python = ">=3.12"`)::
-
-                            3.12    3.13+
-    Disallow: /*.pdf$       fetch   refuse     <- wildcard ignored entirely
-    Allow: /private/notice  refuse  fetch      <- shorter Disallow won instead
-
-A crawler whose conduct depends on which interpreter its container happened to
-ship is not respecting robots.txt; it is respecting robots.txt on some machines.
-The rules below are RFC 9309 §2.2: longest match wins, ``Allow`` breaks a tie,
-``*`` matches any run of characters and ``$`` anchors the end.
-
-The other half of conduct is what happens when robots.txt cannot be read.
-RFC 9309 §2.3.1.3 is deliberately asymmetric and this follows it: **4xx means
-allow everything** (the site has no rules to state), while a 5xx or a timeout
-means **refuse everything** until it can be read. Guessing "probably fine" about
-a server that is currently broken is how a crawler ends up banned. The refusal is
-cached for minutes rather than a day so the domain comes back quickly.
+Our own RFC 9309 parser rather than `urllib.robotparser`, whose answers changed
+between Python versions. 4xx allows everything; 5xx or a timeout refuses everything,
+cached briefly. See docs/features/crawling.md#robots.
 """
 
 from __future__ import annotations
@@ -50,10 +29,8 @@ log = get_logger(__name__)
 # would multiply the crawl's request count by two.
 ROBOTS_TTL_S = 86_400
 
-# A refusal caused by an unreachable server is cached far more briefly. The
-# alternative — caching "refuse everything" for a day because of one 503 — takes
-# a domain out of the crawl for a day over a blip. Owned by `robotscache` because
-# the queue's retry floor for `robots_unreachable` has to agree with it.
+# A refusal caused by an unreachable server is cached far more briefly. Owned by
+# `robotscache` because the queue's retry floor must agree with it.
 ROBOTS_ERROR_TTL_S = robotscache.ERROR_TTL_S
 
 # Google's documented parse limit, and a sane bound on a file that should be a
@@ -169,11 +146,8 @@ def _lines(text: str) -> Iterable[tuple[str, str]]:
 def parse(text: str, user_agent: str) -> RobotsRules:
     """Parse robots.txt and return the rules that apply to ``user_agent``.
 
-    Group selection is RFC 9309 §2.2.1: the group whose name is the longest
-    prefix of our product token wins, and ``*`` is the fallback used only when
-    no named group matches at all. That last part is easy to get wrong — a site
-    with a ``MeridianBot`` group and a stricter ``*`` group is telling us to
-    ignore the ``*`` group entirely, not to obey both.
+    Group selection is RFC 9309 §2.2.1: the longest group name that prefixes our
+    product token wins, and ``*`` applies only when no named group matches.
     """
     token = product_token(user_agent)
 
@@ -252,45 +226,23 @@ def robots_url(url: str) -> str:
 
 Fetch = Callable[[str, ResolvedPolicy], Awaitable[FetchResult]]
 
-#: A factory for a writable session, as `meridian_core.db.session` provides.
-#: Taken as a factory rather than a session because a robots entry is written on
-#: its own transaction: the caller is a crawl loop whose transaction spans a
-#: page fetch, and an entry held unwritten until that commits is lost every time
-#: the page fails.
+#: A factory for a writable session, as `meridian_core.db.session` provides. A
+#: robots entry is written on its own transaction, not the crawl loop's.
 Store = Callable[[], AbstractAsyncContextManager]
 
 
-#: How a persisted entry is turned back into rules (`P1-29`).
-#:
-#: `missing` and `unreachable` both stored no body and mean opposite things: a
-#: 404 permits the whole origin, an unreachable server refuses it until the file
-#: can be read (§2.3.1.3 — a crawler that cannot check must not assume
-#: permission). Collapsing them to "no body" would silently convert every
-#: outage into consent.
+#: How a persisted entry is turned back into rules (`P1-29`). `missing` permits the
+#: origin and `unreachable` refuses it, though both stored no body.
 _FROM_OUTCOME = {robotscache.MISSING: ALLOW_ALL, robotscache.UNREACHABLE: DENY_ALL}
 
 
 class RobotsCache:
     """Fetches and caches robots.txt, one entry per origin.
 
-    Takes the fetch callable rather than a :class:`~worker.fetch.Fetcher` so the
-    request goes out through the same rate limiter as everything else — a
-    crawler that respects a domain's delay for pages and hammers it for
-    robots.txt has missed the point — and through the same SSRF guard, because
-    ``/robots.txt`` on an attacker-supplied host is as much a fetch as any other.
-
-    **Two layers, on two different clocks (`P1-29`).** In memory, entries expire
-    on ``time.monotonic()``, which is right there: it cannot be moved by NTP
-    stepping the wall clock, so a correction mid-run cannot extend or void an
-    entry. Persisted, they expire on wall clock, because monotonic counts from
-    an arbitrary origin — usually boot — and a stored monotonic deadline would
-    be compared against a different clock after exactly the restart the row
-    exists to survive.
-
-    ``store`` is optional. Without it this is the in-process cache it has always
-    been, which is what the tests use and what any caller without a database
-    gets; the worker passes a session factory and the cache warms across
-    restarts.
+    Takes the fetch callable so the request goes through the same rate limiter and
+    SSRF guard as pages. In memory, entries expire on the monotonic clock; persisted
+    (``store``, optional), on the wall clock (`P1-29`). See
+    docs/features/crawling.md#robots.
     """
 
     def __init__(
@@ -306,11 +258,8 @@ class RobotsCache:
         self._cache: dict[str, tuple[float, RobotsRules]] = {}
         self._store_factory = store
         self._now = now
-        # One lock per origin. At the start of a crawl a lane claims many URLs
-        # from one domain at once, and without this every one of them misses the
-        # empty cache and fetches the same robots.txt — the thundering herd the
-        # cache exists to prevent, aimed at the file that asked to be treated
-        # gently.
+        # One lock per origin, so lanes claiming many URLs from one domain fetch its
+        # robots.txt once.
         self._locks: dict[str, asyncio.Lock] = {}
 
     def _cached(self, origin: str) -> RobotsRules | None:
@@ -394,10 +343,8 @@ class RobotsCache:
 
     async def _fetch_rules(self, target: str, policy: ResolvedPolicy) -> RobotsRules:
 
-        # robots.txt is plain text, small, and never worth a browser. The
-        # content-type allowlist is dropped for it specifically: servers label
-        # it text/plain, text/html and application/octet-stream about equally,
-        # and none of that changes what the file means.
+        # robots.txt is never worth a browser, and the content-type allowlist is dropped:
+        # servers label it text/plain, text/html and application/octet-stream alike.
         robots_policy = policy.model_copy(
             update={
                 "allowed_content_types": [],

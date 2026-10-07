@@ -1,36 +1,10 @@
 """Fetching a URL, safely (spec §6.4, §11.8; tasks P1-03, P1-21, P1-24).
 
-Two paths, one policy. Static content goes over plain HTTP with ``httpx``;
-genuinely JS-dependent pages go to Crawl4AI's browser. `render_js: auto` decides
-per page, because Playwright + Chromium against 16GB shared is the single
-heaviest thing this node can do, and most of the corpus — government PDFs,
-academic pages, statistical releases — needs none of it (§6.4).
-
-**The fetcher connects to the address it validated.** ``netguard`` resolves a
-hostname and judges the addresses, but a normal HTTP client then does its *own*
-DNS lookup when it opens the socket, and nothing says the second answer matches
-the first. That gap is not theoretical: it is precisely what DNS rebinding
-exploits, and a crawler following links out of untrusted pages is the ideal
-victim. So the request goes to the validated IP literal, with ``Host`` and TLS
-SNI set to the original hostname — the name is still what the certificate is
-checked against, but the socket cannot be steered elsewhere between the check
-and the connection.
-
-Redirects are followed by hand for the same reason. ``follow_redirects=False``
-is not caution about redirects as such; it is that a client-followed redirect
-resolves and connects without ever handing the new URL back for judgement. Each
-hop is re-validated, re-pinned, and re-connected here.
-
-What this still does not close, honestly: the browser path. Crawl4AI does its
-own DNS and its own connecting inside its own container, so a URL handed to it
-is validated but not pinned. 0.9.2 ships an egress pinning proxy of its own,
-which helps, but the defence that actually survives an application bug is
-`P1-25` — giving the fetching process no route to private address space at all.
-
-Every refusal returns a :class:`FetchResult` rather than raising, and every
-outcome is a ``fetch_attempts.outcome`` value. A crawler that runs unattended
-for weeks needs its refusals counted, not caught and swallowed at some call site
-that decided they were unremarkable.
+Static content over ``httpx``; JS-dependent pages through Crawl4AI's browser, chosen per
+page by `render_js: auto`. Static requests are pinned to the address ``netguard``
+validated and redirects are followed by hand, each hop re-validated; the browser path is
+validated but not pinned (`P1-25`). Every refusal returns a :class:`FetchResult` with a
+``fetch_attempts.outcome`` rather than raising. See docs/features/crawling.md#fetching-safely.
 """
 
 from __future__ import annotations
@@ -62,11 +36,8 @@ from meridian_core.tiering import registrable_domain
 
 log = get_logger(__name__)
 
-# A gzip of ordinary HTML lands around 5:1, and a repetitive page can reach 20:1
-# honestly, so the ratio only starts being evidence once there is real volume
-# behind it. Below this floor a 100:1 ratio is a 10KB file, not an attack, and
-# refusing it would drop legitimate pages. A decompression bomb clears the floor
-# in its first few chunks.
+# The ratio cap counts only above this much output: honest pages reach 20:1, and a
+# bomb clears the floor in its first few chunks. See docs/features/crawling.md#decompression.
 RATIO_FLOOR_BYTES = 1_048_576
 
 # Visible characters below which a page is treated as possibly JS-rendered. A
@@ -92,13 +63,8 @@ _KEPT_HEADERS = (
     "cf-mitigated",
 )
 
-#: Headers that say *why* a 4xx happened, when the status code does not.
-#:
-#: `P1-19` records every attempt so the health line can tell one failure from
-#: another, and "HTTP 403" defeats that: a bot challenge, a geo-block, a
-#: genuinely forbidden path and an expired credential are four different
-#: problems with four different responses, and they arrive as the same three
-#: digits. These headers are what separate them, and they cost nothing to read.
+#: Headers that say *why* a 4xx happened, when the status code does not: a bot
+#: challenge, a geo-block and a forbidden path all arrive as 403 (`P1-19`).
 _DIAGNOSTIC_HEADERS = (
     "cf-mitigated",
     "cf-ray",
@@ -126,14 +92,8 @@ def is_challenge(
 ) -> bool:
     """Does this response look like a bot-challenge interstitial?
 
-    Worth asking because a challenge is the one refusal a browser can sometimes
-    turn into a success. The common non-interactive kind runs a few seconds of
-    JavaScript and then serves the real page, so waiting is all that is needed —
-    no evasion, just being patient in the way an ordinary browser is.
-
-    The interactive kind never resolves however long it is given (§6.4 declines
-    to defeat those, and measurement says undetected browsing does not anyway),
-    so this is a cheap bounded attempt rather than a guarantee.
+    The non-interactive kind serves the real page after a few seconds in a browser;
+    the interactive kind never does. See docs/features/crawling.md#rendering.
     """
     if status_code not in _CHALLENGE_STATUSES:
         return False
@@ -148,15 +108,9 @@ def is_challenge(
 def describe_http_error(status_code: int, headers: Mapping[str, str] | None = None) -> str:
     """``HTTP 403`` plus whatever the response said about the reason.
 
-    Deliberately mechanical — it reports the headers the origin sent rather than
-    concluding anything from them. The one interpretation it does make is
-    naming Cloudflare's managed challenge, because ``cf-mitigated: challenge``
-    means exactly one thing and it is the single most common reason a public
-    page refuses a crawler that is behaving itself.
-
-    A challenge is worth distinguishing because the response to it is not
-    "retry later" — it will 403 forever until something renders JavaScript. An
-    operator reading a wall of `HTTP 403` has no way to know that.
+    Reports the headers the origin sent; the one interpretation is naming
+    Cloudflare's managed challenge (``cf-mitigated: challenge``), which will 403
+    until something renders JavaScript.
     """
     base = f"HTTP {status_code}"
     if not headers:
@@ -205,9 +159,7 @@ class FetchResult:
     # rather than crawling the page a second time to get them.
     browser_payload: dict[str, Any] | None = None
     # Whatever this domain's robots.txt advertised (P1-28, §6.4). Carried on the
-    # result rather than enqueued by the fetcher: `Crawler` reads robots.txt on
-    # the way past and the loop owns the queue, and a fetcher that wrote frontier
-    # rows would make every liveness probe and ad-hoc refetch expand the crawl.
+    # result; the loop, not the fetcher, owns the queue.
     sitemaps: tuple[str, ...] = ()
 
     @property
@@ -258,14 +210,8 @@ def media_type(content_type: str | None) -> str | None:
 def content_type_allowed(media: str | None, allowlist: list[str]) -> bool:
     """Is ``media`` fetchable under this policy?
 
-    An empty allowlist means no restriction — that is the shipped state of
-    ``ResolvedPolicy`` before the global row is seeded, and a worker started
-    against an unseeded database should be over-permissive about content types
-    rather than refuse every page on earth.
-
-    A response with no Content-Type at all is allowed through when the allowlist
-    is empty and refused when it is not. Guessing a type for it would defeat the
-    point of having an allowlist.
+    An empty allowlist means no restriction (an unseeded database). A response with
+    no Content-Type passes only an empty allowlist.
     """
     if not allowlist:
         return True
@@ -311,10 +257,8 @@ def visible_text(html: str) -> str:
 def looks_javascript_dependent(html: str, *, text_floor: int = JS_TEXT_FLOOR) -> bool:
     """Would a browser plausibly get materially more text than this?
 
-    The text floor is checked first and short-circuits: a page that already has
-    a paragraph of prose is not worth re-fetching through Chromium however many
-    scripts it also loads, and that ordering is what keeps `render_js: auto`
-    from quietly rendering the whole crawl (§6.4, operational constraint 1).
+    The text floor is checked first and short-circuits, so a page with prose is never
+    rendered however many scripts it loads.
     """
     if len(visible_text(html)) >= text_floor:
         return False
@@ -334,13 +278,8 @@ def looks_javascript_dependent(html: str, *, text_floor: int = JS_TEXT_FLOOR) ->
 class Crawl4aiClient:
     """Thin client over the Crawl4AI Docker API (§6.4).
 
-    Deliberately thin. Crawl4AI is used for clean markdown and citation
-    extraction and nothing else — no ``LLMExtractionStrategy`` (an LLM in the
-    fast loop breaks §2 principle 1), no stealth mode, no proxy escalation.
-
-    The token is not optional in practice: since 0.9.0 the server binds loopback
-    inside its own container unless ``CRAWL4AI_API_TOKEN`` is set, so an
-    unauthenticated deployment is also an unreachable one.
+    Markdown and citations only: no LLM extraction, stealth or proxies. Needs
+    ``CRAWL4AI_API_TOKEN``; without it the server binds loopback and is unreachable.
     """
 
     def __init__(
@@ -386,15 +325,7 @@ class Crawl4aiClient:
     async def healthy(self, timeout_s: float = 5.0) -> bool:
         """Is the browser service actually answering? (`P1-26`)
 
-        The fetcher degrades to static when the browser is missing, which is
-        correct and silent — and a worker that quietly lost its browser a week
-        ago is not obviously different from one that never needed it. §12.5's
-        health line is where that difference has to show up, so something has
-        to ask.
-
-        Never raises. An unreachable browser is the condition being reported,
-        not an error in reporting it, and a health probe that can take the
-        housekeeping tick down with it is worse than no probe.
+        Never raises: an unreachable browser is the condition reported, not an error.
         """
         headers = {}
         if self.token:
@@ -416,15 +347,8 @@ class Crawl4aiClient:
     ) -> dict[str, Any]:
         """Render one URL and return Crawl4AI's result dict.
 
-        The browser gets its own generous timeout on top of the policy's: page
-        load, JS execution and settling are all inside it, and reusing the
-        static timeout would report every heavy page as a failure.
-
-        ``settle_s`` holds the page open after load before reading the HTML. It
-        is zero for an ordinary render — waiting costs a browser slot and buys
-        nothing on a page that is already complete — and non-zero only when the
-        static fetch saw a challenge interstitial, which resolves itself a few
-        seconds later or not at all.
+        The browser gets its own timeout on top of the policy's. ``settle_s`` holds the
+        page open after load; non-zero only after a challenge interstitial.
         """
         headers = {"Content-Type": "application/json"}
         if self.token:
@@ -480,10 +404,7 @@ class Crawl4aiClient:
 class Fetcher:
     """Fetches URLs under a resolved policy, static or rendered.
 
-    Holds one connection pool across fetches. Because requests are addressed to
-    IP literals, httpx pools per address rather than per hostname — which is the
-    behaviour wanted anyway, since the pinned address is what the connection is
-    actually to.
+    One connection pool across fetches, pooled per pinned address.
     """
 
     def __init__(
@@ -552,10 +473,8 @@ class Fetcher:
     ) -> FetchResult:
         """Fetch ``url``, choosing the static or browser path per ``render_js``.
 
-        ``auto`` fetches statically first and re-fetches through the browser
-        only when the static HTML looks like a shell. That ordering costs one
-        cheap request on JS-dependent pages and saves a browser launch on
-        everything else, which is the right way round for this corpus.
+        ``auto`` fetches statically first and re-fetches through the browser only when
+        the static HTML looks like a shell.
         """
         mode = (policy.render_js or "auto").lower()
 
@@ -574,12 +493,8 @@ class Fetcher:
 
         static = await self.fetch_static(url, policy, extra_headers=extra_headers)
 
-        # A challenge is the one refusal a browser can sometimes turn into a
-        # success, so it is checked before `static.ok` sends the result back.
-        # The common non-interactive challenge runs a few seconds of JavaScript
-        # and then serves the real page; waiting it out is not evasion, it is
-        # what any browser does. The interactive kind never resolves, which is
-        # why this is bounded and tried once.
+        # A challenge is the one refusal a browser can sometimes turn into a success, so
+        # it is checked before `static.ok` returns. Bounded and tried once.
         if (
             not static.ok
             and mode != "never"
@@ -672,12 +587,8 @@ class Fetcher:
 
         try:
             for hop in range(policy.max_redirects + 1):
-                # Resolution happens on every hop whether or not the policy
-                # revalidates: pinning needs an address, and there is no way to
-                # pin without one. `revalidate_each_redirect: false` therefore
-                # relaxes only the *verdict* on later hops, never the lookup —
-                # a per-domain escape hatch for a site whose redirect chain
-                # trips the classifier, not a way to turn the guard off.
+                # Resolution happens on every hop, since pinning needs an address;
+                # `revalidate_each_redirect: false` relaxes only the verdict.
                 revalidate = hop == 0 or policy.revalidate_each_redirect
                 guard_kwargs = {
                     "allowed_schemes": policy.allowed_schemes,
@@ -787,11 +698,8 @@ class Fetcher:
     ) -> FetchResult:
         """The browser path, through Crawl4AI.
 
-        The URL is validated before it is handed over and the URL Crawl4AI
-        reports having *landed* on is validated afterwards — the browser follows
-        its own redirects, so the second check is the only thing standing
-        between a redirect chain and an internal address. Neither is pinning;
-        see the module docstring, and `P1-25`.
+        The URL is validated before it is handed over, and the URL Crawl4AI landed on is
+        validated afterwards, since the browser follows its own redirects. Not pinned.
         """
         started = time.monotonic()
 
@@ -857,10 +765,8 @@ class Fetcher:
             return refuse(outcome, str(exc), final=final)
 
         if not result.get("success"):
-            # The browser path gets the same diagnosis as the static one: a
-            # rendered page refused by a bot challenge looks identical to one
-            # refused for any other reason, and Crawl4AI's error_message says
-            # nothing about which.
+            # The same diagnosis as the static path: Crawl4AI's error_message does not say
+            # why a page was refused.
             detail = result.get("error_message") or "crawl4ai reported failure"
             if status and status >= 400:
                 headers = result.get("response_headers") or {}
@@ -900,15 +806,9 @@ class Fetcher:
 class _Inflater:
     """Decompresses a response body in bounded steps.
 
-    ``zlib.decompressobj().decompress(data, max_length)`` is the primitive that
-    makes a cap enforceable: it returns at most ``max_length`` bytes and parks
-    the rest of the input in ``unconsumed_tail``, so the caller gets control back
-    between steps instead of after the allocation.
-
-    Only gzip, deflate and identity are handled, which is complete rather than
-    partial: the fetcher sends ``Accept-Encoding: gzip, deflate``, so anything
-    else is a server ignoring what was asked for, and guessing at it would be
-    worse than refusing to read it.
+    ``decompress(data, max_length)`` parks input beyond the cap in ``unconsumed_tail``,
+    so the caller gets control between steps. Only gzip, deflate and identity, which
+    is what the fetcher asks for.
     """
 
     def __init__(self, encoding: str) -> None:
@@ -944,10 +844,8 @@ class _Inflater:
             self._may_retry_raw = False
 
             if not piece:
-                # No output means the input was fully consumed — zlib only
-                # leaves an unconsumed tail when max_length truncated the
-                # output, which implies a non-empty piece. Breaking here is
-                # what guarantees this loop terminates.
+                # No output means the input was fully consumed (a tail is left only when
+                # max_length truncated); breaking here guarantees termination.
                 return
             yield piece
             pending = self._obj.unconsumed_tail
@@ -994,20 +892,9 @@ async def _read_capped(
 ) -> tuple[bytes, str | None]:
     """Stream a body, aborting on size or compression ratio.
 
-    Returns ``(body, None)`` or ``(b"", outcome)``.
-
-    **The decompression is driven by hand, and that is the whole point.** Letting
-    httpx decode (``aiter_bytes``) hands back whatever one network read inflates
-    to, as a single object, before any cap can look at it: measured here, a 64KB
-    read of a gzip bomb arrived as one 67MB chunk. Checking a limit after the
-    allocation that the limit exists to prevent is not a limit. So the raw bytes
-    are read instead and pushed through ``zlib`` in bounded steps, with both caps
-    re-checked between steps — the abort happens while the bomb is inflating.
-
-    Both caps are wanted, not one. ``max_page_bytes`` bounds an honestly large
-    page; the ratio bounds a small one that is lying about how large it is, and
-    it fires roughly twenty times sooner, so the memory a hostile response can
-    cost is bounded by ``RATIO_FLOOR_BYTES`` rather than by ``max_page_bytes``.
+    Returns ``(body, None)`` or ``(b"", outcome)``. Decompression is driven by hand so
+    both caps are checked while a bomb inflates, not after. See
+    docs/features/crawling.md#decompression.
     """
     inflater, unsupported = _inflater_for(response.headers.get("content-encoding"))
     if unsupported is not None:

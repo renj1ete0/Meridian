@@ -1,14 +1,8 @@
 """Reading and writing the persisted robots.txt cache (task P1-29).
 
-Deliberately knows nothing about parsing. It moves three fields and two
-timestamps, so that the worker owns what a robots.txt *means* and this owns
-where it is kept — and the parser can change without a migration.
-
-**Every function here swallows database errors.** A cache is an optimisation,
-and an optimisation that can stop the crawl is worse than no cache: the failure
-mode of a strict version is a Postgres hiccup turning into "this worker refuses
-every origin", which is monitoring causing the outage it was meant to shorten.
-A failed load is a miss, and a failed save is a fetch that will happen again.
+Knows nothing about parsing. Every function swallows database errors, because a
+cache must never stop the crawl: a failed load is a miss, a failed save a fetch
+that happens again. See docs/features/crawling.md#robots.
 """
 
 from __future__ import annotations
@@ -26,18 +20,14 @@ from .models import RobotsCacheEntry
 
 log = get_logger(__name__)
 
-#: The three ways a read of robots.txt ends. `missing` and `unreachable` both
-#: store no body and mean opposite things — the first permits the origin, the
-#: second refuses it until the file can be read — which is why the outcome is a
-#: column rather than inferred from `body IS NULL`.
+#: The three ways a read of robots.txt ends. `missing` permits the origin and
+#: `unreachable` refuses it, so the outcome is a column, not `body IS NULL`.
 OK = "ok"
 MISSING = "missing"
 UNREACHABLE = "unreachable"
 
-#: How long an `unreachable` verdict stands before robots.txt is asked again.
-#: Here rather than in the worker because the queue needs it too: a task refused
-#: over an unreadable robots.txt must not come back before the refusal expires,
-#: or every retry is served the same cached "no" and the URL fails over one blip.
+#: How long an `unreachable` verdict stands before robots.txt is asked again. Here
+#: because the queue's retry floor for the refusal must not come back sooner.
 ERROR_TTL_S = 600
 
 
@@ -56,10 +46,7 @@ class CachedRobots:
 async def load(sess: AsyncSession, origin: str, *, now: dt.datetime) -> CachedRobots | None:
     """The entry for this origin, if there is a fresh one.
 
-    An expired row is left where it is rather than deleted. Deleting on read
-    would make this function write, which means a read-only session cannot call
-    it and a crawl cannot warm its cache from the read replica it will one day
-    have — and the row is about to be overwritten by the fetch that follows.
+    An expired row is left in place, so a read-only session can call this.
     """
     try:
         row = await sess.get(RobotsCacheEntry, origin)
@@ -81,11 +68,8 @@ async def load_many(
 ) -> dict[str, CachedRobots]:
     """The fresh entries for these origins, in one query (`B-90`).
 
-    For the prefilter, which asks about a page's worth of links at once. Fresh
-    only, as `load`; an origin with no fresh entry is simply absent. Errors are
-    a miss here too, but raised to the caller's savepoint rather than swallowed,
-    because a failed statement inside the caller's transaction must be rolled
-    back there before that transaction can be used again.
+    For the prefilter. An origin with no fresh entry is absent. Errors are raised to
+    the caller's savepoint, not swallowed, so its transaction can be rolled back.
     """
     if not origins:
         return {}
@@ -103,10 +87,7 @@ async def load_many(
 async def save(sess: AsyncSession, entry: CachedRobots) -> bool:
     """Write one entry, replacing whatever was there. Commits.
 
-    Commits on purpose, and it is the reason this takes a session rather than
-    joining the caller's transaction: the caller is a crawl loop whose
-    transaction spans a page fetch, and a robots entry held unwritten until that
-    commits is lost every time the page fails.
+    On its own session, so an entry is not lost when the crawl's page fetch fails.
     """
     try:
         row = await sess.get(RobotsCacheEntry, entry.origin)
@@ -130,11 +111,7 @@ async def save(sess: AsyncSession, entry: CachedRobots) -> bool:
 async def purge_expired(sess: AsyncSession, *, now: dt.datetime) -> int:
     """Drop entries that have expired. Returns how many.
 
-    Not scheduled anywhere, and not needed for size: rows are keyed by origin
-    and overwritten in place, so the table is bounded by the number of distinct
-    origins the crawl has ever touched — the same order as `fetch_policy`. It
-    exists for the other reason to want it, which is starting a crawl from a
-    clean slate without dropping the table.
+    Not scheduled: the table is bounded by distinct origins. For a clean start.
     """
     result = await sess.execute(delete(RobotsCacheEntry).where(RobotsCacheEntry.expires_at <= now))
     await sess.commit()
