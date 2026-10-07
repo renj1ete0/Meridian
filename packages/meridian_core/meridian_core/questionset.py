@@ -1,21 +1,9 @@
 """The held-out question set, as data a runner can use (task P2-22, spec §14.1).
 
-Loading `eval/questions.yaml`, saying whether it may be scored at all, asking
-each question through :func:`meridian_core.search.search` exactly as typed
-(:func:`run_set`), a heuristic *proposal* for each item's grade, the run-file
-shape, and a comparison between two runs. `scripts/run_question_set.py` is the
-command that writes `eval/runs/<date>.yaml`.
-
-Three rules shape it, all from `eval/README.md`:
-
-- **A proposal is not a score.** An agent (or this heuristic) may propose a
-  grade; the operator's grade is the score. The run record keeps them in two
-  separate fields, and :func:`compare` reads only the operator's — so a run
-  nobody has graded compares as "not graded", never as a number.
-- **An unreviewed set says so.** Items drafted with `reviewed: false` are a
-  draft, and a run against a draft is labelled as one rather than silently
-  treated as the go/no-go set.
-- **The questions are never edited here.** The loader reads; nothing writes.
+Loads `eval/questions.yaml`, says whether it may be scored, asks each question through
+:func:`meridian_core.search.search` as typed (:func:`run_set`), proposes a grade per item,
+and compares runs by operator grades only. Nothing here writes the questions.
+`scripts/run_question_set.py` writes the run file. See docs/features/question-set.md.
 """
 
 from __future__ import annotations
@@ -195,11 +183,8 @@ class Proposal:
 def propose(question: Question, hits: Sequence[HitView]) -> Proposal:
     """A 0–3 grade *proposal* from the top hits. Never the score.
 
-    It can only see presence, not whether an answer is assembled or right, so
-    it is deliberately capped at 2: a 3 needs a reader. Gap items are graded
-    inversely on topic presence and capped at 1 — the heuristic cannot tell
-    "absence is evident" from "the search failed", and a gap item that scores
-    well by accident is the failure `eval/README.md` warns about.
+    Capped at 2; gap items are graded inversely on topic presence and capped at 1.
+    See docs/features/question-set.md#the-proposed-grade.
     """
     joined = " ".join(h.text.lower() for h in hits)
     found = sum(
@@ -403,10 +388,8 @@ async def corpus_context(sess: AsyncSession) -> dict:
 async def graph_citing(sess: AsyncSession, chunk_ids: Sequence[int]) -> dict:
     """What the graph already says from the hits — where the graph applies.
 
-    The question text is not a node name, so asking the graph the question
-    directly would measure string matching. What the graph can honestly add is
-    whether the passages search found are already cited: by a claim (an edge,
-    where derived evidence lives) or by a node itself (a note).
+    Whether the hits are already cited, by an edge or by a node's note.
+    See docs/features/question-set.md#the-graphs-part.
     """
     if not chunk_ids:
         return {"claims_citing_hits": 0, "entities": []}
@@ -502,14 +485,9 @@ async def run_set(
 ) -> dict:
     """Ask every question as typed and return one run record.
 
-    Read-only: it runs `search()` and a few counts, nothing else. The query is
-    the question text verbatim — building queries from an item's concepts
-    would tune retrieval to the test, which `eval/README.md` forbids.
-
-    The vector arm runs when ``embed`` returns a vector; otherwise the run is
-    lexical-only and says so, per item and in `context.mode`. Lexical-only on a
-    whole question is close to useless (`websearch_to_tsquery` ANDs every
-    word), and a run that hid that would read as a corpus that knows nothing.
+    Read-only, and the query is the question text verbatim. The vector arm runs when
+    ``embed`` returns a vector; otherwise the run says it is lexical-only, per item and in
+    `context.mode`. See docs/features/question-set.md#lexical-only-runs.
     """
     now = now or dt.datetime.now(dt.UTC)
     items = []

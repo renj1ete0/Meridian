@@ -27,6 +27,31 @@ steer the corpus, the only action offered is to search for it in Find.
   fields.
 - **The loader never writes the questions.** Changing a question is a new version of the set.
 - **Never use a question as a seed, benchmark query, gazetteer prompt or steering reason.**
+- **An unreviewed set says so.** Items drafted with `reviewed: false` make a draft, and a run
+  against it is labelled as one rather than treated as the go/no-go set.
+- **Questions are asked verbatim.** Building queries from an item's concepts would tune
+  retrieval to the test.
+
+### The proposed grade
+
+The heuristic sees only whether relevant text is present, not whether an answer is assembled or
+right, so it is capped at 2: a 3 needs a reader. Gap items (questions whose honest answer is
+that the corpus lacks it) are graded inversely on topic presence and capped at 1, because the
+heuristic cannot tell "absence is evident" from "the search failed", and a gap item scoring well
+by accident is the failure `eval/README.md` warns about.
+
+### The graph's part
+
+The question text is not a node name, so asking the graph the question directly would measure
+string matching. What the graph can honestly add is whether the passages search found are
+already cited: by a claim (an edge, where derived evidence lives) or by a node (a note).
+
+### Lexical-only runs
+
+The vector arm runs when the embedding service answers. Otherwise the run says it is
+lexical-only, per item and in `context.mode`: on a whole question `websearch_to_tsquery` ANDs
+every word and returns almost nothing, and a run that hid that would read as a corpus that knows
+nothing.
 
 ## Operating it
 
