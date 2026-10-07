@@ -328,8 +328,10 @@ text extraction, and what a model returns is a suggestion the writes may refuse.
 
 ## Current state
 
-Every stage up to `tag` is built. Synthesis has run only through the relay, in one attended
-session. Unattended runs wait on a model (ADR 0002, `B-135`) and on enabling the
+Every stage up to `tag` is built. Synthesis has run only through the relay, in attended
+sessions: the second (2026-10-07) wrote 34 relations and 5 attribute values from 120 passages
+in three batches, every one citing its passage, and found `B-162`. What it showed about passage
+selection is `B-163`. Unattended runs wait on a model (ADR 0002, `B-135`) and on enabling the
 orchestrator.
 
 ## Tests

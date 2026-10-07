@@ -1651,6 +1651,15 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [ ] `B-163` **Which passages synthesis reads** — measured in the 2026-10-07 relay session
+      (3 batches, 120 passages, 34 relations, 5 attribute values). Synthesis reads a passage when
+      it *or its source* is labelled on a topic, so one borderline page reaches the model whole:
+      arXiv's category taxonomy (labelled at 0.555, 31 of its 37 passages labelled nothing) took
+      five passages of a batch. Requiring the passage's own label would cut batches by 60% and
+      lose about a third of the claims (10 of the 28 cited passages had no label of their own —
+      a study's methods and results inside a labelled paper): roughly 65% more claims per model
+      call. Decide with a paid model and more batches (`B-135`); a middle rule (own label, or a
+      labelled neighbour in the same source) is worth measuring
 - [x] `B-162` **A resumed synthesis run had no batch** — `v0.164.7`. Found running extraction and
       tagging through the relay (operator's go, 2026-10-07): a run deferred at `extract` or `tag`
       resumed with no batch, finished, and the next run re-asked the model for the stages already
