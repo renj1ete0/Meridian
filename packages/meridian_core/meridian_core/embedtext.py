@@ -1,19 +1,9 @@
 """What a chunk is embedded as: the text a reader reads (task `B-49`).
 
-A chunk's stored text is a verbatim slice of the extraction, markdown links and
-all, and it must stay one: the offset is a citation. But the embedding is not a
-citation, it is a representation of meaning — and a URL carries almost none.
-Measured over a real crawl, one character in eight of chunk text sat inside a
-link target, and one chunk in ten was more than 30% URL. Embedded as-is, pages
-cluster by the shape of their links (a listing page of one site sits beside
-every other listing page of that site whatever they say), and a search for a
-subject finds pages that merely link to it.
-
-So the embedder is handed a *view*: link and image syntax replaced by its
-visible text, bare URLs dropped, whitespace collapsed. The stored text, the
-lexical index and every citation are untouched. A chunk with no links has a
-view identical to its text, so changing this function only needs re-embedding
-the chunks it actually changes (:func:`view_differs`).
+The embedder is handed a *view*: link and image syntax replaced by its visible text, bare
+URLs dropped, whitespace collapsed. The stored text, the lexical index and every citation
+are untouched, and only chunks whose view differs need re-embedding
+(:func:`view_differs`). See docs/features/embedding.md#the-embedding-view.
 """
 
 from __future__ import annotations
@@ -70,19 +60,9 @@ def view_differs(text: str) -> bool:
 def link_text_share(text: str) -> float:
     """How much of what a reader sees in ``text`` is the visible text of links.
 
-    Measured on the view, not the raw text, so link *targets* never count
-    either way: a sentence with one long URL in it is still a sentence. A chunk
-    that is mostly link labels is a listing — a table of contents, a directory
-    of regulations, a publication list — and its vector is the average of the
-    things it links to, not a statement about any of them (`P2-24` reads this
-    to keep listings from being labelled as passages about a topic).
-
-    A link whose label is itself a URL — how extractors render most reference
-    lists — counts its label as link text although the view drops it, which
-    pushes such a list towards 1.0. That is deliberate: a bibliography is a
-    listing too, and it was measured that way.
-
-    0.0 for text with no links; 1.0 when nothing but link text remains.
+    Measured on the view, so link targets never count; a label that is itself a URL
+    counts as link text. 0.0 for text with no links; 1.0 when nothing but link text
+    remains. See docs/features/embedding.md#the-embedding-view.
     """
     labels = sum(len(m.group(1)) for m in _IMAGE.finditer(text))
     without_images = _IMAGE.sub(lambda m: m.group(1), text)

@@ -1,32 +1,9 @@
 """The embedding backfill (task P2-01, spec §6.1, §4).
 
-§6.1 draws embedding inside the fast loop — `chunk → embed → store` — and this
-runs it as a separate pass instead. The reason is the model: bge-m3 is 2.3GB of
-weights that the fetch path never touches, and putting it in the crawler means
-every lane carries it, the worker image quadruples, and a slow encode stalls a
-fetch that had nothing to do with it. The schema was already built for the
-split, since `chunks.embedding` is nullable and `P2-02` writes chunks without
-vectors by design.
-
-What that costs is a window where a chunk exists and is not yet searchable, and
-the honest answer is that it does not matter: nothing searches yet, and once
-something does, a backlog is a number on the health line rather than a silent
-gap.
-
-**Resumable by construction.** The queue is `embedding IS NULL`, so a pass that
-dies halfway leaves the rest of its work exactly where it was and the next pass
-picks it up. There is no cursor to corrupt and no state outside the table.
-
-**One batch, one transaction.** A crash between encoding and committing loses
-that batch's work and nothing else. Committing per batch rather than per pass is
-what makes a four-hour backfill survivable — an interrupted run keeps everything
-up to its last batch.
-
-Runs on demand (`python -m worker.embed`) or as a loop that watches the backlog.
-Deliberately not wired into `worker.main`'s housekeeping: the crawler must keep
-working on a machine with no model installed at all, which is the same
-fast-loop invariant (§2.1) that keeps ingestion independent of the reasoning
-plane.
+A separate pass from the crawl: `embedding IS NULL` is the whole queue, one batch is one
+transaction, and an interrupted pass keeps everything up to its last batch. Runs on
+demand (`python -m worker.embed`) or as a loop that watches the backlog; never inside
+`worker.main`. See docs/features/embedding.md#the-backfill.
 """
 
 from __future__ import annotations
@@ -112,10 +89,8 @@ class Backfill:
         self._batch_size = batch_size
         self._idle_sleep_s = idle_sleep_s
         self._max_batches = max_batches
-        # Where the queue scan begins. 0 means the whole table, which is what a
-        # backfill wants; an operator embedding only what a recent crawl added
-        # passes the id it wants to start past, and so does a test that must not
-        # pick up the corpus somebody else's chunks are sitting in.
+        # Where the queue scan begins; 0 is the whole table. An operator or a test
+        # passes the id to start past.
         self._start_after = start_after
         self._stopping = asyncio.Event()
 
@@ -125,10 +100,8 @@ class Backfill:
     async def run_once(self) -> EmbedStats:
         """Embed everything currently waiting, then return.
 
-        The cursor advances past each batch rather than re-querying from zero,
-        so a batch that failed does not become an infinite loop over the same
-        rows — it is skipped, counted, and left for a later pass to retry once
-        whatever broke has been fixed.
+        The cursor advances past each batch, so a failed batch is skipped, counted
+        and left for a later pass rather than retried for ever.
         """
         stats = EmbedStats()
         started = time.monotonic()
@@ -143,10 +116,8 @@ class Backfill:
         failed: set[int] = set()
 
         while not self._stopping.is_set():
-            # Before the batch, not after it (`B-28`). A batch is minutes of
-            # CPU on this hardware, so a heartbeat written only on completion
-            # goes stale *during normal work* — which is the probe firing at a
-            # healthy process, the failure `liveness.py` is explicit about.
+            # Before the batch, not after it (`B-28`): a batch can take minutes, and a
+            # heartbeat written on completion would go stale during normal work.
             beat()
             if self._max_batches is not None and stats.batches >= self._max_batches:
                 break
@@ -167,11 +138,8 @@ class Backfill:
                         break
                 if not chunks:
                     break
-                # Read out of the ORM before the model runs: encoding is slow,
-                # and holding a database connection across it would pin one for
-                # the whole batch.
-                # The view, not the stored text (`B-49`): link targets and bare
-                # URLs carry no meaning and were one character in eight.
+                # Read out of the ORM before the model runs, so no connection is held
+                # across encoding. The view, not the stored text (`B-49`).
                 batch = [(chunk.chunk_id, embedding_view(chunk.text)) for chunk in chunks]
 
             if tier == NEWEST_FIRST_TIER:
@@ -181,10 +149,8 @@ class Backfill:
             stats.batches += 1
 
             try:
-                # Async, because the embedder may be the sidecar rather than an
-                # in-process model (`P2-19`). `LocalEmbedder` is what keeps the
-                # loop free when it is in-process, so a signal still stops the
-                # pass promptly either way.
+                # Async: the embedder may be the sidecar (`P2-19`); `LocalEmbedder`
+                # keeps the loop free in-process, so a signal still stops the pass.
                 vectors = await self._embedder.embed([text for _, text in batch])
             except (EmbeddingError, ValueError):
                 stats.failed_batches += 1
@@ -196,10 +162,8 @@ class Backfill:
                 continue
 
             async with self._session_factory() as sess:
-                # `strict=True`: a model that returned a different number of
-                # vectors than it was given texts has silently misaligned every
-                # chunk in the batch with somebody else's meaning, which is a
-                # corruption no later check would catch.
+                # `strict=True`: a count mismatch would silently pair every chunk with
+                # another's vector.
                 written = await store_embeddings(
                     sess,
                     {
@@ -231,10 +195,7 @@ class Backfill:
             if self._stopping.is_set():
                 break
             if stats.embedded == 0:
-                # An idle pass is still a live one: with the backlog at zero
-                # `run_once` returns immediately and the loop sleeps, so
-                # without this the heartbeat would go stale precisely when
-                # there is nothing wrong.
+                # An idle pass is still a live one: beat while the backlog is empty too.
                 beat()
                 await self._sleep(self._idle_sleep_s)
         return total

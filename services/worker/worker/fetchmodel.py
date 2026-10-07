@@ -1,30 +1,9 @@
 """Put the weights where the sidecar can find them (task `B-14`).
 
-**The bug this exists for.** `embedder` sits on `internal`, which is
-`internal: true` — no gateway, no DNS, no route out. The weights are not in the
-image either, despite the compose comment that said they were: the worker image
-installs `sentence-transformers` and never downloads `BAAI/bge-m3`. So on a
-fresh stack the sidecar starts, answers `/health` with `loaded: false`, and
-fails every embed request after a 30-second timeout — for ever, because the
-download it is waiting on cannot happen from where it is standing.
-
-Nothing reports this as an outage until something asks for a vector. `/health`
-is truthful and reads as fine; the model is lazy, so an unloaded model is the
-normal state of a sidecar nobody has used yet.
-
-**Why a separate one-shot rather than giving the sidecar egress.** Its isolation
-is the point — it takes text derived from pages the crawler fetched, runs it
-through a model, and returns numbers. A route to the internet from there is a
-route out for anything that ever gets in. So the download happens once, in a
-container on `egress` that exits, writing into the volume the sidecar mounts.
-
-**Why not bake them into the image.** 2.3GB on every layer push, twice over for
-a multi-arch build (scaffold §5), for weights that do not change between
-releases and that a volume already keeps across recreates.
-
-Idempotent: `sentence-transformers` resolves from the cache when it is already
-populated, so a second run downloads nothing. Safe to put in front of every
-`make quickstart`, which is where it is.
+The sidecar has no route out and the weights are not in the image, so this one-shot
+container on `egress` downloads them into the volume the sidecar mounts, then loads the
+model and embeds one string to prove the set is complete. Idempotent. See
+docs/features/embedding.md#fetching-the-weights.
 
     python -m worker.fetchmodel
 """
@@ -44,11 +23,8 @@ log = get_logger(__name__)
 def fetch(settings: EmbedderSettings | None = None) -> int:
     """Download the weights into ``settings.cache_dir`` and report dimensions.
 
-    The model is *loaded*, not merely fetched, and then asked to embed one short
-    string. Downloading the files proves they arrived; encoding with them proves
-    the set is complete and the runtime can use it — and a half-downloaded cache
-    that fails at the first real batch is precisely the failure this step exists
-    to move forward in time.
+    The model is *loaded* and asked to embed one short string, so a half-downloaded
+    cache fails here rather than at the first real batch.
     """
     from .embeddings import BGEEmbedder
 
@@ -57,10 +33,8 @@ def fetch(settings: EmbedderSettings | None = None) -> int:
         "fetching embedding weights",
         extra={
             "model": settings.model_name,
-            # Absent means the library's default cache, which inside a
-            # container is a layer nothing mounted — worth saying out loud,
-            # because the symptom of getting it wrong is a re-download on every
-            # recreate and no error at all.
+            # Absent means the library's default cache, a container layer nothing
+            # mounts: a silent re-download on every recreate.
             "cache_dir": settings.cache_dir or "<library default>",
         },
     )

@@ -1,32 +1,8 @@
 """bge-m3 embeddings (task P2-01, spec §4, §6.1).
 
-§4 picks bge-m3 for one reason and it is worth restating, because it is the
-reason not to swap it for something smaller when the first arm64 build is slow:
-serious literature for the comparison set is substantially non-English (§14.1's
-language coverage note). An English-only embedding model would systematically
-bias the corpus toward Western sources while every measurement of it looked
-fine.
-
-**No model is loaded until something asks for a vector.** Importing this module
-must stay free: `worker.main` imports the package tree, the fetch loop never
-embeds, and a 2.3GB model load at import would put it in the crawler's memory
-budget for nothing. The load happens on the first `embed()` and is held after.
-
-**Batching is not an optimisation here, it is the whole cost model.** Encoding
-one chunk at a time on an RK3588 wastes almost all of the work: the model runs
-the same graph either way, and the per-call overhead dominates. Batches also
-bound memory, which is the constraint that actually bites on a 16GB board shared
-with Postgres.
-
-**The dimension is asserted, not assumed.** `chunks.embedding` is
-`Vector(1024)`, so a model returning 768 produces a database error somewhere far
-from the cause — or worse, silently succeeds against a table someone widened.
-The check is cheap and it fires at the point the wrong model was configured.
-
-**Normalised, always.** pgvector's cosine operator does not require unit vectors
-but `<=>` is cheapest and the novelty gate (`P2-03`) compares raw cosine
-similarity against a fixed 0.95 threshold. A threshold means nothing if the
-vectors behind it are sometimes normalised and sometimes not.
+No model is loaded until something asks for a vector, so importing this module stays
+free. The dimension is asserted and vectors are always normalised. See
+docs/features/embedding.md#the-model for why bge-m3, batching and precision.
 """
 
 from __future__ import annotations
@@ -47,34 +23,21 @@ log = get_logger(__name__)
 DEFAULT_MODEL = "BAAI/bge-m3"
 
 #: How many chunks go through the model at once when the memory cannot be read.
-#: Sized for the Pi rather than for a GPU: bge-m3 is memory-hungry, and a batch
-#: that swaps is far slower than two batches that do not.
+#: The batch when nothing else sizes it (memory unknown, no override).
 DEFAULT_BATCH_SIZE = 8
 
-#: bge-m3 accepts 8192 tokens, which is far more than `chunk_text` produces
-#: (§P2-02 caps a chunk at 2000 characters). Set below the model's ceiling
-#: anyway: a caller embedding something other than a chunk — a query, a node
-#: description — should be truncated deterministically rather than by whatever
-#: the tokeniser happens to do.
+#: Below bge-m3's 8192 so that anything other than a chunk (a query, a node
+#: description) is truncated deterministically.
 DEFAULT_MAX_TOKENS = 1024
 
 # -- sizing the batch at startup (`MERIDIAN_EMBED_BATCH_SIZE` still wins) --------
 
-#: On a CPU, one passage at a time. Measured on a 24-thread x86 machine, bge-m3
-#: at 1 → 119 passages/min, 2 → 113, 4 → 106, 8 → 99, 16 → 78, 32 → 67, 64 → 51:
-#: a batch pads every passage to its longest, and a CPU gains nothing from the
-#: grouping that would pay for the padding. Memory is not the constraint there.
+#: On a CPU, one passage at a time: measured, every larger batch was slower.
+#: See docs/features/embedding.md#the-model.
 CPU_BATCH_SIZE = 1
 
-#: The precision the model computes in. On a CPU with bf16 instructions
-#: (x86 ``avx512_bf16``/``amx_bf16``, arm64 ``bf16``) bfloat16 doubled bge-m3's
-#: throughput — 145 → 297 passages/min on a 24-thread x86 machine — and its
-#: vectors kept a cosine of at least 0.998 with float32's and 98% of the same
-#: five nearest neighbours, close enough to sit beside vectors already stored
-#: in float32. int8 dynamic quantisation was faster still (397/min) and was
-#: rejected: cosine fell to 0.905 and a fifth of the neighbours changed, which
-#: would quietly reorder search. Without the instructions bfloat16 is emulated
-#: and slower, so the default follows the hardware.
+#: The precision the model computes in: bfloat16 where the CPU has bf16
+#: instructions, else float32. See docs/features/embedding.md#the-model.
 DTYPES = ("float32", "bfloat16")
 CPUINFO = "/proc/cpuinfo"
 BF16_FLAGS = frozenset({"avx512_bf16", "amx_bf16", "bf16"})
@@ -113,10 +76,8 @@ MEMINFO = "/proc/meminfo"
 def visible_memory() -> int | None:
     """Bytes this process may use: a container's limit if it has one, else the machine's.
 
-    The lower of cgroup v2's ``memory.max``, cgroup v1's limit and ``MemTotal``,
-    because a container sees the host's ``/proc/meminfo`` and would otherwise
-    size itself for memory it will be killed for touching. None when nothing
-    could be read.
+    The lower of cgroup v2's ``memory.max``, cgroup v1's limit and ``MemTotal``, since
+    a container sees the host's ``/proc/meminfo``. None when nothing could be read.
     """
     found: list[int] = []
     for path in CGROUP_LIMITS:
@@ -158,11 +119,8 @@ def on_accelerator(device: str | None) -> bool:
 def device_memory(device: str | None) -> int | None:
     """Bytes on the CUDA device the model will run on; None for anything else.
 
-    A GPU's batch is bounded by the GPU's memory, not by the container's: the
-    embedder is held to a few GiB of RAM while the card beside it may have
-    tens, and sizing from RAM gave a GPU a batch of two (`B-129`). MPS shares
-    the machine's memory, so it, a CPU, and a CUDA device that cannot be read
-    fall back to :func:`visible_memory`.
+    A GPU's batch is bounded by its own memory, not the container's (`B-129`). MPS, a
+    CPU and an unreadable CUDA device fall back to :func:`visible_memory`.
     """
     kind, _, index = (device or "cuda").partition(":")
     if kind.lower() != "cuda":
@@ -182,7 +140,7 @@ def auto_batch_size(memory: int | None, *, max_tokens: int = DEFAULT_MAX_TOKENS)
     """On an accelerator, the largest power-of-two batch that fits, capped.
 
     Attention memory grows with the square of the sequence, so a lower token cap
-    fits more passages. Unknown memory gets the Pi's default rather than a guess.
+    fits more passages. Unknown memory gets `DEFAULT_BATCH_SIZE` rather than a guess.
     """
     if memory is None:
         return DEFAULT_BATCH_SIZE
@@ -200,9 +158,7 @@ class EmbeddingError(RuntimeError):
 class Embedder(Protocol):
     """What the rest of the system needs from an embedding model.
 
-    A protocol rather than the concrete class so the novelty gate (`P2-03`),
-    the search path (`P2-06`) and their tests can be built and run without a
-    2.3GB download — and so a different runtime (ONNX, a remote service) is a
+    A protocol, so callers and tests run without the model and another runtime is a
     substitution rather than a rewrite.
     """
 
@@ -274,10 +230,8 @@ class EmbedderSettings:
 class BGEEmbedder:
     """bge-m3 through sentence-transformers.
 
-    Import-safe: `sentence_transformers` is imported inside :meth:`_model`, not
-    at module scope, so a worker built without the `embed` extra can still
-    import this module and report the absence rather than failing at startup
-    with an ImportError from a dependency it was never given.
+    Import-safe: `sentence_transformers` is imported inside :meth:`_model`, so a
+    worker built without the `embed` extra can still import this module.
     """
 
     def __init__(self, settings: EmbedderSettings | None = None) -> None:
@@ -308,10 +262,8 @@ class BGEEmbedder:
         if not texts:
             return []
         if any(not text or not text.strip() for text in texts):
-            # An empty chunk embeds to whatever the model does with padding,
-            # which is a vector that will match other empty things and nothing
-            # meaningful. `replace_chunks` already drops these; a caller that
-            # got one past it should hear about it.
+            # An empty text embeds to padding, which matches only other empty
+            # things; `replace_chunks` drops these, so one here is a caller's bug.
             raise ValueError("cannot embed an empty string")
 
         model = self._model()
@@ -406,11 +358,8 @@ class BGEEmbedder:
 class FakeEmbedder:
     """Deterministic vectors with no model, for tests and for wiring.
 
-    Not a mock: it returns a real unit vector derived from the text, so
-    identical text embeds identically, different text embeds differently, and
-    cosine similarity behaves — which is what the novelty gate (`P2-03`) and the
-    search path (`P2-06`) need in order to be testable at all without a 2.3GB
-    download in CI.
+    Not a mock: a real unit vector derived from the text, so identical text embeds
+    identically and cosine similarity behaves.
     """
 
     def __init__(self, dimensions: int = EMBEDDING_DIM) -> None:
@@ -445,10 +394,8 @@ class FakeEmbedder:
 def _unit(vector: list[float]) -> list[float]:
     """``vector`` rescaled to unit length in float64.
 
-    The model normalises in its own precision, and in bfloat16 that leaves a
-    norm off by up to a few parts in a thousand — enough that a dot product
-    stops being a cosine. Rescaling here holds every stored vector to the same
-    length whatever precision computed it.
+    In bfloat16 the model's own normalising leaves a norm off by a few parts in a
+    thousand, enough that a dot product stops being a cosine.
     """
     norm = sum(value * value for value in vector) ** 0.5
     return [value / norm for value in vector] if norm > 0 else vector

@@ -250,24 +250,15 @@ def as_writes(chunks: Iterable[object]) -> list[ChunkWrite]:
     ]
 
 
-#: Embedding tiers, in the order the backfill serves them (`B-66`).
-#: ``first`` — passages of directed sources (a search result, a person's seed, a
-#: cited paper) or of hosts judged on-topic; ``then`` — everything else that is
-#: not junk; ``last`` — hosts judged off-topic, the rest of a long document
-#: whose sample has not earned it (`B-89`), and copies of an earlier source
-#: (`B-127`). Junk is in no tier.
+#: Embedding tiers, in the order the backfill serves them (`B-66`). Junk is in no
+#: tier. See docs/features/embedding.md#tiers.
 EMBED_TIERS = ("first", "then", "last")
 
 #: The tier served newest first (`B-75`); the others go oldest first.
 NEWEST_FIRST_TIER = "first"
 
-#: A long document is embedded from a sample first (`B-89`): its opening
-#: passages and then every SAMPLE_STRIDE-th, so the sample spans the whole
-#: text rather than its front matter. A source of up to SAMPLE_HEAD passages
-#: is all sample. Chosen on a live corpus by labelling fully embedded sources
-#: from the sample and from everything: at 16/16 the sample's best score was
-#: within about 0.015 of the whole text's at the median, for about a sixth of
-#: the embedding on sources of 40 passages or more.
+#: A long document is embedded from a sample first (`B-89`): its opening passages,
+#: then every SAMPLE_STRIDE-th. See docs/features/embedding.md#sampling.
 SAMPLE_HEAD = 16
 SAMPLE_STRIDE = 16
 
@@ -285,12 +276,8 @@ def in_sample(chunk=None):
 def _held():
     """The rest of a source whose sample has not earned it (`B-89`).
 
-    Past the sample, a passage waits in the last tier until the labeller has
-    read the sample — and stays there if the sample scored under
-    `topiclabels.TRIAGE_FLOOR`. The large documents a crawl brings back are
-    mostly off-topic (bills, data dictionaries, index pages of thousands of
-    passages), and without this each one costs hours of embedding before the
-    labeller may say so. Held is not dropped: the last tier is still served.
+    Past the sample, a passage waits in the last tier until the labeller has read the
+    sample, and stays there if it scored under `topiclabels.TRIAGE_FLOOR`.
     """
     from .topiclabels import LONG_DOCUMENT, LONG_TRIAGE_FLOOR, TRIAGE_FLOOR
 
@@ -346,11 +333,8 @@ def _directed():
 def _a_copy():
     """A source marked as a copy of an earlier one (`B-44`), whatever found it.
 
-    Search, the map, Gaps and synthesis all leave a copy out, so a vector for
-    the rest of one is spent on nothing a reader sees (`B-127`). Last rather
-    than no tier: the mark is re-judged daily and cleared when it no longer
-    holds, and the near rule compares mean vectors. See
-    docs/features/duplicates.md.
+    Last rather than no tier (`B-127`): the mark is re-judged daily, and the near
+    rule compares mean vectors. See docs/features/duplicates.md.
     """
     return Source.duplicate_of.is_not(None)
 
@@ -380,24 +364,10 @@ async def chunks_without_embeddings(
 ) -> list[Chunk]:
     """The next batch of chunks that have no vector yet (task `P2-01`).
 
-    Ordered by id and resumable through ``after_id`` rather than by offset. A
-    backfill that pages with OFFSET re-scans everything it has already read on
-    every page, and worse, shifts under its own feet as the crawl writes new
-    chunks in the middle of the run.
-
-    `embedding IS NULL` is the whole queue. `P2-02` writes chunks with no vector
-    by design — embedding is a separate pass so the fetch loop never waits on a
-    model — so a NULL here means "not embedded yet" and nothing else.
-
-    ``tier`` (`B-66`) narrows the queue to one of :data:`EMBED_TIERS`. The
-    embedder is the slowest stage on modest hardware, so under a free crawl its
-    backlog is permanent, and oldest-first spends it on whatever the crawl
-    happened to fetch first. Junk is in no tier and is never embedded.
-
-    ``newest_first`` (`B-75`) takes the highest ids, still above ``after_id``:
-    labels, host judgments and steering all wait on a vector, so the passages
-    a crawl just fetched are the ones whose embedding tells it something. With
-    no advancing cursor, ``exclude`` is how a failed batch is stepped past.
+    Ordered by id and resumable through ``after_id``, never by OFFSET. ``tier``
+    (`B-66`) narrows to one of :data:`EMBED_TIERS`; ``newest_first`` (`B-75`) takes
+    the highest ids, and ``exclude`` steps past a failed batch. See
+    docs/features/embedding.md#tiers.
     """
     stmt = (
         select(Chunk)
@@ -427,11 +397,8 @@ async def store_embeddings(
     ``view`` records which `embedtext.VIEW_VERSION` the vectors were computed
     from (`B-49`); a caller embedding raw text leaves it None.
 
-    Skips a chunk that has vanished rather than failing the batch: a source
-    re-crawled between the read and the write has had its chunks replaced
-    (`replace_chunks`), and the new ones are already in the queue behind this
-    batch. Losing the batch over one deleted row would make a long backfill
-    fragile in exactly the situation it is most likely to meet.
+    Skips a chunk that has vanished rather than failing the batch: a re-crawl replaced
+    it, and its successor is already queued.
     """
     if not vectors:
         return 0
@@ -455,13 +422,9 @@ async def store_embeddings(
 async def embedding_backlog(sess: AsyncSession, *, valuable_only: bool = False) -> int:
     """How many chunks are still waiting for a vector.
 
-    The number §12.5's health line wants: a backlog that only grows means the
-    embedder has stopped, which is otherwise invisible — the crawl keeps
-    working and the corpus keeps growing and none of it becomes searchable.
-
-    ``valuable_only`` (`B-66`) counts the ``first`` and ``then`` tiers only —
-    what backpressure should wait for. Passages of hosts judged off-topic are
-    embedded last, if ever; counting them would pause the crawl for good.
+    The number §12.5's health line wants. ``valuable_only`` (`B-66`) counts the
+    ``first`` and ``then`` tiers only, what backpressure waits for; see
+    docs/features/embedding.md#backpressure.
     """
     stmt = (
         select(func.count())

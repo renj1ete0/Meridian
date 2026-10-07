@@ -2,22 +2,10 @@
 
 `python -m worker.embedserver` — one model, held resident, answering HTTP.
 
-**It lives in the worker's image because that image already carries the model.**
-`worker.embed` loads bge-m3 for the backfill; a separate service would put a
-second 2.3GB download and a second resident copy on a machine that has one of
-each. Same image, different command, the way `worker.embed` and `worker.novelty`
-already are.
-
-**It holds no credentials and needs no egress.** It takes text and returns
-vectors; it has no database connection and nothing to reach on the internet
-once the weights are in the image. On the compose topology that puts it on
-`internal`, with no `env_file` — the same reasoning that keeps `crawl4ai` from
-holding database passwords (`P1-22`).
-
-**Loading is lazy and reported.** The first request after a cold start pays for
-the model; `/health` says whether the weights are resident yet, so an
-orchestrator can tell "starting" from "wedged" rather than inferring it from a
-slow response.
+Runs from the worker's image, which carries the model's libraries; the weights come from
+a volume `fetchmodel` fills. It holds no credentials and needs no egress. Loading is lazy,
+and `/health` reports whether the weights are resident. See
+docs/features/embedding.md#the-service.
 """
 
 from __future__ import annotations
@@ -44,9 +32,8 @@ MAX_TEXTS = 256
 
 
 #: Texts encoded per thread call (`B-82`). Between slices the server checks the
-#: client is still there: a batch is minutes of CPU, and a backfill restarted
-#: mid-batch — every deploy — used to leave it running to the end for nobody.
-#: No cost on a CPU, which encodes one text at a time anyway.
+#: client is still there, so a restarted backfill does not leave a batch running for
+#: nobody.
 SLICE = 32
 
 
@@ -87,20 +74,15 @@ def create_app(embedder: object | None = None) -> FastAPI:
     model = embedder or BGEEmbedder(settings)
 
     app = FastAPI(title="Meridian embedder", summary="Vectors for the corpus and its queries.")
-    # A shared secret, when the sidecar runs on another machine (`P3-12`): its
-    # port is then on the LAN, and anything there could use the CPU. Unset on a
-    # single machine, where only the compose network reaches it. `/health`
-    # stays open so a supervisor needs no secret.
+    # A shared secret when the sidecar runs on another machine (`P3-12`); unset on
+    # one machine. `/health` stays open so a supervisor needs no secret.
     token = os.environ.get("MERIDIAN_EMBEDDER_TOKEN", "").strip()
 
     @app.get("/health")
     async def health() -> dict[str, object]:
         """Liveness, and whether the weights are resident.
 
-        Two facts, because they mean different things to whoever is waiting: a
-        process that is up with no model loaded is starting, and the first
-        request will be slow; one that has been up for ten minutes and still
-        reports `loaded: false` has never been asked for anything.
+        Up with no model loaded means starting, or never asked for anything yet.
         """
         return {
             "status": "ok",
@@ -116,10 +98,7 @@ def create_app(embedder: object | None = None) -> FastAPI:
         ):
             raise HTTPException(status_code=401, detail="A valid embedder token is required.")
         try:
-            # In a thread: the model is CPU-bound and synchronous, and running
-            # it on the event loop would stall every other request behind it —
-            # including `/health`, which is what a supervisor uses to decide
-            # whether this process is alive.
+            # In a thread, so a synchronous encode does not stall `/health`.
             vectors = await embed_in_slices(model.embed, request.texts, raw.is_disconnected)
         except Abandoned as exc:
             # Nobody is reading the answer; 499 is for the log, not the client.

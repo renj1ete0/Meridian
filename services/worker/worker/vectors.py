@@ -1,22 +1,8 @@
 """Where the backfill's vectors come from (task P2-19, spec §4, §12.5).
 
-`P2-17` put one copy of the model resident in a sidecar for the query path, and
-`worker.embed` went on constructing a `BGEEmbedder` of its own — so a stack
-running both held two copies of 2.3GB of weights on a machine chosen for being
-small. That is the whole of this module: ask the sidecar first, and load locally
-only when there is no sidecar to ask.
-
-**Falling back is right, and falling back silently is not.** A backfill can
-afford to wait for a model to load; what it cannot afford is to appear to be
-using the sidecar while quietly loading a second copy, because the symptom is
-memory pressure with no line in the log that explains it. So the switch is
-logged once, loudly, with the reason.
-
-**A sidecar running a different model is refused, not used.** It is the one
-failure in this area that cannot be detected afterwards: `<=>` accepts any two
-vectors of the right width and returns a number, so a column holding two models'
-vectors ranks confident nonsense forever. The local model is the right one, so a
-mismatch falls back rather than failing — but it is reported as what it is.
+Ask the sidecar first, and load the model locally only when there is no sidecar to ask.
+The switch is logged once, with the reason, and a sidecar running a different model is
+refused. See docs/features/embedding.md#service-or-local-model.
 """
 
 from __future__ import annotations
@@ -49,10 +35,8 @@ class AsyncEmbedder(Protocol):
 class LocalEmbedder:
     """The in-process model, driven off the event loop.
 
-    The thread is not an optimisation. The model is synchronous and CPU-bound,
-    and running it on the loop would block the signal handler that stops the
-    pass — so a `SIGTERM` during a batch would be honoured whenever the batch
-    happened to finish, which on a Pi is not a short wait.
+    In a thread so that a `SIGTERM` during a batch is honoured promptly, not when the
+    batch finishes.
     """
 
     def __init__(self, embedder: Embedder | None = None) -> None:
@@ -67,10 +51,7 @@ class LocalEmbedder:
 class PreferRemote:
     """The sidecar while it answers; the local model once it does not.
 
-    **The switch is one-way within a process.** Once the local model is loaded
-    the memory is already spent, so going back to the sidecar mid-pass would buy
-    nothing and cost a reload's worth of uncertainty about which produced what.
-    The next pass starts by asking the sidecar again.
+    The switch is one-way within a process; the next pass asks the sidecar again.
     """
 
     def __init__(
@@ -87,10 +68,8 @@ class PreferRemote:
         #: batch, retried next pass, not a 2.3 GB load beside Postgres.
         self._remote_only = remote_only
         self._local = local
-        # A factory rather than an instance, because constructing the local
-        # embedder is what this class exists to avoid doing unnecessarily —
-        # `BGEEmbedder` is cheap to make and expensive on first use, and a test
-        # that passed one in eagerly would not be testing the avoidance.
+        # A factory rather than an instance: avoiding the local model is the point,
+        # and a test passing one in eagerly would not test the avoidance.
         self._local_factory = local_factory or LocalEmbedder
 
     @property
@@ -112,11 +91,8 @@ class PreferRemote:
     async def _ask_remote(self, texts: Sequence[str]) -> list[list[float]]:
         """The sidecar's vectors, asked for at most ``MAX_TEXTS`` at a time (`B-130`).
 
-        The backfill's batch is ``MERIDIAN_EMBED_CHUNK_BATCH`` and the sidecar takes
-        ``MAX_TEXTS`` per request. Asked for more in one call, the client raised
-        ValueError, which reads here as "the sidecar is unusable" — so raising the
-        batch for a GPU quietly moved embedding onto this process's CPU, or with
-        remote-only failed every batch.
+        The client raises ValueError above ``MAX_TEXTS``, which reads here as "unusable";
+        see docs/features/embedding.md#service-or-local-model.
         """
         assert self._remote is not None
         vectors: list[list[float]] = []
@@ -139,10 +115,8 @@ class PreferRemote:
             try:
                 return await self._ask_remote(texts)
             except EmbedderMismatch as exc:
-                # Distinct from "down", and worth its own line: somebody has
-                # pointed this at the wrong service, and the corpus is one
-                # successful batch away from being unsearchable in a way nothing
-                # reports.
+                # Distinct from "down": the wrong service is configured, and one
+                # successful batch would corrupt the corpus silently.
                 self._give_up_on_remote(f"model mismatch — {exc}")
             except (EmbeddingUnavailable, ValueError) as exc:
                 self._give_up_on_remote(str(exc))
@@ -151,9 +125,7 @@ class PreferRemote:
 
 
 #: How long to keep asking a configured sidecar before loading the model here
-#: (`B-76`). A joint restart brings both up at once, and the sidecar takes most
-#: of a minute to load its weights: asking once, the backfill gave up in seconds
-#: and loaded a second copy that then competed with the sidecar for the CPU.
+#: (`B-76`): after a joint restart the sidecar needs most of a minute to load.
 SIDECAR_WAIT_S = 180.0
 SIDECAR_POLL_S = 5.0
 
@@ -174,13 +146,9 @@ async def build_embedder(
 ) -> PreferRemote:
     """The backfill's embedder, with a probe to say which path it took.
 
-    The probe is for the log, not for correctness — `embed` falls back on its
-    own. It is here because "which model is this pass using" is the first
-    question asked of an unexpectedly slow or unexpectedly hungry backfill, and
-    without the line the answer is a guess.
-
-    A configured sidecar is asked until it answers or ``wait_s`` passes
-    (``MERIDIAN_EMBEDDER_WAIT_S``, default :data:`SIDECAR_WAIT_S`).
+    The probe is for the log, not for correctness. A configured sidecar is asked until
+    it answers or ``wait_s`` passes (``MERIDIAN_EMBEDDER_WAIT_S``, default
+    :data:`SIDECAR_WAIT_S`).
     """
     candidate = remote if remote is not None else RemoteEmbedder.from_env()
     remote_only = remote_only_from_env()

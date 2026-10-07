@@ -1,18 +1,9 @@
 """Re-embed chunks whose vectors predate the current embedding view (task `B-49`).
 
-`worker.embed` embeds new chunks through `embedtext.embedding_view` and records
-the view's version. Vectors computed before — or under an older view — are
-stale only where the view actually changes the text, so this pass walks the
-live chunks whose `embedding_view` is not current and, for each:
-
-- the view equals the stored text (no links, no URLs): the vector is already
-  what the current view would produce, so only the version is recorded;
-- otherwise: the view is embedded and the vector replaced in place.
-
-In place, never by clearing the vector first: a chunk keeps its old vector, and
-stays searchable, until the new one lands. Resumable with no state beyond the
-column: an interrupted pass leaves the unprocessed chunks exactly as stale as
-they were. Report by default; ``--apply`` writes.
+For each live chunk whose `embedding_view` is not current: if the view equals the stored
+text, only the version is recorded; otherwise the view is embedded and the vector replaced
+in place, so the chunk stays searchable meanwhile. Resumable with no state beyond the
+column. Report by default; ``--apply`` writes.
 """
 
 from __future__ import annotations

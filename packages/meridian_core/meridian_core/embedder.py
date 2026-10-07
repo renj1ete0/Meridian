@@ -1,29 +1,9 @@
-"""A remote embedder (task P2-17, spec §4, §12.5).
+"""A remote embedder: the client for the sidecar (task P2-17, spec §4, §12.5).
 
-`P2-07` left the API unable to embed a query, and the two obvious fixes were
-both wrong. Depending on `sentence-transformers` puts 2.3GB of weights and a
-cold start inside an HTTP request path. Accepting a vector from the caller is
-worse than it sounds: it is not mainly a security problem — pgvector's `<=>`
-takes a vector, not SQL — it is that **a vector from a different model is
-meaningless against this corpus**. Gemini's embedding of a phrase and bge-m3's
-are points in unrelated spaces, and comparing them computes without erroring.
-The result is plausible, ranked, confident nonsense, which is far worse than a
-refusal.
-
-So the vector has to be produced by the same model the corpus was embedded
-with, on this side of the boundary. That is a sidecar, and it is the pattern
-`docs/guides/connectors.md` §4 already describes: a container with no credentials, a
-client that returns None when it is absent, and a word on the health line.
-
-**This module holds only the client.** The model runs in the worker's image —
-the one place in this system that already carries it — started with a different
-command. `meridian_core` is imported by the API and the orchestrator, and
-neither should acquire a model dependency because a search function wanted one.
-
-**Absent is a supported state, not a failure.** The same shape as
-`Crawl4aiClient.from_env()`: no `MERIDIAN_EMBEDDER_URL` means lexical-only
-retrieval, reported honestly by `SearchResult.degraded`, rather than an
-exception at startup or a search that raises.
+A query vector must come from the model the corpus was embedded with, so the API asks
+the sidecar rather than loading a model or accepting a caller's vector. No
+`MERIDIAN_EMBEDDER_URL` is a supported state (lexical-only search, reported as
+`degraded`). See docs/features/embedding.md#the-service.
 """
 
 from __future__ import annotations
@@ -42,21 +22,8 @@ log = get_logger(__name__)
 #: worse than one that reports a degraded arm.
 DEFAULT_TIMEOUT_S = 30.0
 
-#: How long one text may take before the wait is considered exceeded, used to
-#: size the timeout for a batch (`B-27`).
-#:
-#: **This exists because the two defaults contradicted each other.** The
-#: backfill batches `MERIDIAN_EMBED_CHUNK_BATCH` chunks — 256 — into one
-#: request, and a real chunk of about a thousand characters takes the better
-#: part of half a second on CPU. So every batch call asked a thirty-second
-#: client to wait two minutes, timed out at exactly thirty seconds, and the
-#: caller fell back to loading the model in its own process (`P2-19`). It
-#: worked, which is why nobody noticed: the vectors were correct, and the only
-#: symptom was a second copy of 2.3 GB of weights on a machine chosen for being
-#: small — the precise thing the sidecar exists to prevent (`P2-17`, `B-14`).
-#:
-#: Generous rather than measured: over-waiting on a sidecar that is working
-#: costs nothing, and the failure this replaces was under-waiting.
+#: How long one text may take, used to size a batch's timeout (`B-27`). Generous
+#: on purpose; see docs/features/embedding.md#timeouts.
 SECONDS_PER_TEXT = 2.0
 
 #: A query is one short string. This cap is about batch calls from a backfill,
@@ -67,21 +34,15 @@ MAX_TEXTS = 256
 class EmbeddingUnavailable(RuntimeError):
     """The embedder is configured and did not answer.
 
-    Distinct from *absent* on purpose, and the distinction decides what a caller
-    should do. Absent is a deployment that never had one and degrades to lexical
-    search; unavailable is one that has an embedder which is down, and reporting
-    that as "no embedder configured" would hide an outage behind a feature flag.
+    Distinct from *absent* (never configured, lexical search): this is an outage.
     """
 
 
 class EmbedderMismatch(EmbeddingUnavailable):
     """The sidecar answered, with a different model than this corpus was built on.
 
-    A subclass of "unavailable" on purpose: every caller's correct response is
-    the same one — degrade, or fall back — and the danger in treating it as a
-    lesser problem is that the vectors *work*. `<=>` takes any two vectors of
-    the right width and returns a number, so a corpus with two models' vectors
-    in one column ranks confident nonsense and nothing downstream can detect it.
+    A subclass of "unavailable": callers degrade or fall back the same way. See
+    docs/features/embedding.md#design-choices.
     """
 
 
@@ -108,10 +69,8 @@ class RemoteEmbedder:
         self._timeout = timeout_s
         self._client = client
         self._owns_client = client is None
-        #: Which model this corpus was embedded with. When set, a sidecar naming
-        #: a different one is refused rather than used — the failure it prevents
-        #: is a column holding vectors from two models, which compare without
-        #: erroring and rank nonsense with complete confidence.
+        #: Which model this corpus was embedded with. When set, a sidecar naming a
+        #: different one is refused rather than used.
         self.expect_model = expect_model
 
     @classmethod
@@ -166,10 +125,8 @@ class RemoteEmbedder:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Vectors for ``texts``, in order.
 
-        Raises :class:`EmbeddingUnavailable` rather than returning None or an
-        empty list. A caller that got fewer vectors than texts and did not
-        notice would pair the wrong vector with the wrong chunk, and nothing
-        downstream can detect that — the numbers are all valid.
+        Raises :class:`EmbeddingUnavailable` rather than returning None or a short
+        list, which a caller could misalign without noticing.
         """
         if not texts:
             return []
@@ -181,10 +138,7 @@ class RemoteEmbedder:
                 f"{self.base_url}/embed",
                 json={"texts": list(texts)},
                 headers=self._headers,
-                # Sized to the request rather than fixed. A batch is not a
-                # query that got longer: it is N times the work, and a timeout
-                # that ignores N is a timeout that only fits the smallest call
-                # anybody makes.
+                # Sized to the request: a batch is N times the work of one text.
                 timeout=self._batch_timeout(len(texts)),
             )
             response.raise_for_status()
@@ -196,10 +150,8 @@ class RemoteEmbedder:
 
         named = body.get("model")
         if self.expect_model and named and named != self.expect_model:
-            # Checked on every response, not once at startup. A sidecar can be
-            # restarted with a different model under a running client, and the
-            # vectors it returns afterwards are valid floats of the right width
-            # — there is no later point at which this becomes visible.
+            # Every response, not once at startup: a sidecar can be restarted with a
+            # different model under a running client.
             raise EmbedderMismatch(
                 f"{self.base_url} is serving {named!r}; this corpus is embedded "
                 f"with {self.expect_model!r}. Mixed vectors rank nonsense."
