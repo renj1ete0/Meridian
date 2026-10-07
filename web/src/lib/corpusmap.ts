@@ -28,22 +28,13 @@ export function nameHash(name: string): number {
 }
 
 /**
- * Give each topic a colour by its *name*, never by its size or rank.
- *
- * Each name hashes to a preferred slot, and keeps it unless an earlier name
- * (alphabetically) already holds it, in which case it takes the next free one.
- * The first map assigned slots by alphabetical position, which is rank by
- * another name: a new topic sorting first moved every colour after it, and a
- * reader who learned "blue is that topic" found it orange the next morning.
- * Hashed, a newcomer can displace at most the topics it collides with.
- *
- * Hiding a topic in the legend does not call this again, so the survivors keep
- * their colours.
+ * Give each topic a colour by its *name*, never by its size or rank: each name hashes to
+ * a preferred slot, and an alphabetically earlier name holding it pushes it to the next
+ * free one. See docs/features/map.md#topic-colours.
  */
 export function assignSwatches(points: readonly MapPoint[]): Map<string | null, Swatch> {
-  // Every topic any point carries, not only the primaries: a topic that is only
-  // ever a second label still gets a legend entry, and giving it a colour now
-  // means it keeps the same one on the day it becomes somebody's first.
+  // Every topic any point carries, not only the primaries, so a second-only label keeps
+  // its colour on the day it becomes somebody's first.
   const topics = [...new Set(points.flatMap((p) => topicsOf(p)))]
   topics.sort((a, b) => a.localeCompare(b))
 
@@ -70,15 +61,9 @@ export function swatchVar(swatch: Swatch): string {
 }
 
 /**
- * One row of the legend and the table: a topic, how many points are drawn in
- * its colour, and how many carry it at all.
- *
- * Two numbers because a passage can be about several topics (`P2-21`) and is
- * drawn in one — its primary. Counting only the colour would say a topic that
- * is every other passage's second subject is barely present; counting every
- * label would make the rows sum past the number of passages drawn. `count`
- * sums to the total, `carrying` is the honest answer to "how much of this
- * picture is about X".
+ * One row of the legend and the table: a topic, how many points are drawn in its colour,
+ * and how many carry it at all (`P2-21`). `count` sums to the total drawn.
+ * See docs/features/map.md#topic-colours.
  */
 export interface TopicCount {
   topic: string | null

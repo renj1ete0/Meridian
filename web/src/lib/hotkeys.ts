@@ -1,11 +1,6 @@
 /**
- * ⌘K from anywhere (task P6-27) — the promise printed under the Explore search
- * field on the landing artboard.
- *
- * "From anywhere" means exactly that: on Admin, on a source page, on the map,
- * ⌘K (Ctrl+K off a Mac) goes to Explore and puts the cursor in the search
- * field. A shortcut that only worked where the field was already visible would
- * be a shortcut for pressing Tab.
+ * ⌘K from anywhere (task P6-27): on any page, ⌘K or Ctrl+K goes to Explore and focuses
+ * the search field.
  */
 import { navigate } from './route'
 
@@ -19,11 +14,8 @@ export function isCommandK(event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlK
 }
 
 /**
- * Focus the search field, navigating to Explore first if it is not on screen.
- *
- * The field appears a render after the navigation, so this waits for it for a
- * few frames rather than assuming one tick is enough — React batches, and a
- * page that loads its data first may take longer than a single frame.
+ * Focus the search field, navigating to Explore first if it is not on screen. Waits a
+ * few frames for the field, which appears a render or more after the navigation.
  */
 export function focusSearch(
   doc: Document = document,

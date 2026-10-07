@@ -1,19 +1,7 @@
 /**
- * What the top-right cluster says (task P6-27) — design-system.md §5, §8.
- *
- * Pure derivations, kept apart from the components so the rules can be tested
- * without rendering anything. Three questions, each with an honest "don't know":
- *
- * - **status pill** — queue depth and fetch health, and whether the last run
- *   failed. The dot is cyan, brass when a run failed, and *hollow* when run
- *   history could not be read. A hollow dot is the honest version of "no
- *   failure seen": on an instance where Admin is closed, `/api/admin/runs`
- *   answers 503, and a cyan dot there would claim a health check that never
- *   happened.
- * - **bell** — how many notifications arrived since this reader last opened
- *   the panel, and whether any of them is an alert.
- * - **notification kind** — §8's three types, jobs · approvals · alerts, over
- *   the six rows the database records.
+ * What the top-right cluster says (task P6-27) — design-system.md §5, §8: the status pill,
+ * the bell, and each notification's kind. Pure, so the rules test without rendering.
+ * See docs/features/web-app.md#the-status-pill-and-bell.
  */
 
 import type { CrawlProgress, Notification, RunRow } from './api'
@@ -31,11 +19,8 @@ export type RunHistory =
 export type RunHealth = 'ok' | 'failed' | 'unknown'
 
 /**
- * The most recent run that has finished, judged.
- *
- * A running run is skipped rather than counted as healthy: a failure an hour
- * ago followed by a run still in progress is still a failure nobody has seen
- * succeed past. `deferred` is not a failure — it is a run that chose to wait.
+ * The most recent run that has finished, judged. A running run is skipped, so an earlier
+ * failure still shows; `deferred` is not a failure.
  */
 export function runHealth(history: RunHistory | null): RunHealth {
   if (history === null || history.kind === 'unreadable') return 'unknown'
@@ -53,11 +38,8 @@ export function clock(iso: string): string {
 /**
  * The pill's one mono line: `queue 412 · fetch 96% · 07:14`.
  *
- * The fetch figure is last hour's success rate, and says `idle` rather than a
- * percentage when nothing was attempted — 0% would read as every fetch failing,
- * which is the opposite fact. The time is when the counts were taken, not the
- * wall clock: a pill that showed the current time over hour-old counts would be
- * vouching for them.
+ * The fetch figure is last hour's success rate, or `idle` when nothing was attempted; the
+ * time is when the counts were taken, not the wall clock.
  */
 export function statusLine(progress: CrawlProgress): string {
   const pending = progress.queue.pending ?? 0
@@ -102,11 +84,8 @@ export const NOTIFICATION_KINDS = ['jobs', 'approvals', 'alerts'] as const
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
 
 /**
- * Every recorded type, mapped to the kind a reader filters by.
- *
- * Mirrors `NOTIFICATION_TYPE` in `models/runs.py`, and `tests/shell.test.tsx`
- * compares the two: a type added there and not here would fall into no filter,
- * which is the one way a notification can be recorded and never seen.
+ * Every recorded type, mapped to the kind a reader filters by. Mirrors
+ * `NOTIFICATION_TYPE` in `models/runs.py`; `tests/shell.test.tsx` compares the two.
  */
 export const KIND_OF_TYPE: Record<string, NotificationKind> = {
   run_summary: 'jobs',
@@ -133,13 +112,8 @@ export function countsByKind(countsByType: Readonly<Record<string, number>>): Re
 }
 
 /**
- * The bell's count and tone.
- *
- * Counts what arrived after `seenAt` — the moment this reader last opened the
- * panel — rather than the server's `unread`, which nothing in the product ever
- * clears and so only grows. Opening the panel is the acknowledgement; §8 is
- * explicit that the panel itself filters by type, not by read state, so this
- * stamp only ever moves the badge.
+ * The bell's count and tone: what arrived after `seenAt`, the moment this reader last
+ * opened the panel, rather than the server's ever-growing `unread`.
  */
 export function bellState(
   notifications: readonly Notification[],

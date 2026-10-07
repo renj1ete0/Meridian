@@ -2,9 +2,6 @@
  * The steering-proposals client (task P6-38). Mirrors
  * `meridian_core/schemas/steering_proposals.py`; `tests/admin-proposals.test.tsx`
  * fails if a field is added on one side only.
- *
- * Its own module, like `gaps.ts`, and the same error shape (`ApiError`,
- * `describeDetail`), so a refusal reads the same as everywhere else in Admin.
  */
 import { ApiError, describeDetail } from './api'
 import { stampOf, zoneLabel } from './time'

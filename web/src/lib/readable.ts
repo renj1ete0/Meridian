@@ -1,12 +1,7 @@
 /**
- * Passage text as a reader should see it.
- *
- * Pages are converted to Markdown at ingestion, and about a quarter of stored
- * passages still carry its link syntax — `[text](https://…)`, footnote markers
- * like `[[30](https://…#ref-30)]`, images, `**bold**` and `#` headings. The
- * stored text stays as it is: it is the source everything is re-derived from
- * (§2.4), and embedding already reads a view without URLs (`B-49`). This is the
- * display's own view of it, and changes nothing but what is drawn.
+ * Passage text as a reader should see it: Markdown link syntax, images, emphasis and
+ * headings removed, and layout line breaks joined. Display only; the stored text is
+ * unchanged. See docs/features/web-app.md#readable-passages.
  */
 
 const IMAGE = /!\[[^\]\n]*\]\([^)\s]*(?:\s+"[^"]*")?\)/g
@@ -16,10 +11,8 @@ const AUTOLINK = /<(https?:\/\/[^>\s]+)>/g
 const BOLD = /(\*\*|__)(?=\S)([^*_\n]+?)(?<=\S)\1/g
 const HEADING = /^[ \t]{0,3}#{1,6}[ \t]+/gm
 const EMPTY_BRACKETS = /\[\s*\]/g
-// A short line ending in an ellipsis at the very start is a page's own prompt
-// ("I'm looking for…", "Search…"), a widget's label, not what the page says
-// (`B-98`). Only at the start and only short, so a sentence left unfinished
-// mid-passage is kept.
+// A short line ending in an ellipsis at the very start is a widget's prompt ("Search…"),
+// not what the page says (`B-98`); mid-passage ellipses are kept.
 const LEADING_PROMPTS = /^(?:[^\n]{1,40}(?:…|\.\.\.)[ \t]*\n+)+/
 
 // A Markdown table's separator row: pipes, dashes, colons and spaces only.
@@ -66,16 +59,9 @@ const STANDS_ALONE = /^\s*(?:[-*•▪◦]\s|\d{1,3}[.)]\s|[A-Z][A-Z0-9 &-]{2,}$
 /**
  * Join lines a PDF's layout broke, and keep the breaks an author meant.
  *
- * Text extracted from a PDF carries its column width: a line ends wherever the
- * page did, mid-sentence, three words in. Read as-is it is a ragged column; with
- * every newline kept it cannot even be skimmed. But web pages break lines on
- * purpose (a label, then its value), and joining those would run them together.
- * So a passage counts as wrapped only when most of its line breaks fall
- * mid-sentence, and then only breaks that plainly continue are joined — the
- * next line in lower case, or this one ending on a comma or on a word such as
- * "of" or "the" that no sentence ends with. One after a full
- * stop, before a capitalised line, a list item or a blank line stays. A word hyphenated across the
- * break is put back together.
+ * Only when most breaks fall mid-sentence, and then only breaks that plainly continue
+ * (next line lower case, or this one ending on a comma or a joining word) are joined;
+ * hyphenated words are rejoined. See docs/features/web-app.md#readable-passages.
  */
 export function unwrapLines(text: string): string {
   const lines = text.split('\n')

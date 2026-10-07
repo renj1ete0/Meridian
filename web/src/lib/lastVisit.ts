@@ -1,24 +1,7 @@
 /**
- * Since-last-visit (task P6-11, spec §12.5).
- *
- * §12.5 wants the landing state to carry a delta, because "what arrived while I
- * was away" is the question somebody opens this with and a total answers a
- * different one.
- *
- * **When the stamp advances is the whole design.** Writing it on render makes
- * the delta vanish the moment you look at it — you would see "12 new", blink,
- * and see "0 new" on the next render, which is worse than not offering it. So
- * the previous stamp is read *once* per session and the new one is written
- * immediately: the delta means "since you were last here", not "since a second
- * ago", and it stays stable while you read the page.
- *
- * **Per viewer, per browser, and that is correct.** This is not a fact about
- * the corpus — two people looking at the same Meridian have genuinely different
- * answers to "what is new to me". It belongs in `localStorage`, not in a table.
- *
- * Every access is guarded. `localStorage` does not merely return null in a
- * private window or with site data blocked — reading the property itself throws
- * — and this runs during the first render.
+ * Since-last-visit (task P6-11, spec §12.5): the previous visit's stamp, read once per
+ * session, per browser, in guarded `localStorage`.
+ * See docs/features/web-app.md#since-last-visit.
  */
 
 const KEY = 'meridian.lastVisit'
@@ -44,11 +27,8 @@ export function markVisited(at: Date = new Date()): void {
 }
 
 /**
- * Read the previous visit and record this one, in that order.
- *
- * One call, because doing it in two places is how the stamp ends up advanced
- * before it was read — and the symptom is a delta that is always zero, which
- * looks exactly like a corpus where nothing happened.
+ * Read the previous visit and record this one, in that order, in one call so the stamp
+ * cannot advance before it is read.
  */
 export function openSession(now: Date = new Date()): string | null {
   const previous = readLastVisit()

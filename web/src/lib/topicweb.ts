@@ -174,16 +174,9 @@ const LINES = 34
 const GAP = 44
 
 /**
- * Circles on a ring, largest at twelve o'clock and clockwise from there.
- *
- * Area proportional to sources (radius ∝ √sources), with a floor so a topic
- * holding one source is still something a finger can hit. A ring rather than a
- * force layout: it is stable between loads, and with a handful of topics every
- * pair is a visible chord.
- *
- * **Labels sit outside the ring** where there is width for them, so the
- * chords — which all run inside it — never cross a name. On a narrow screen
- * there is no room at the sides, and each name goes under its circle instead.
+ * Circles on a ring, largest at twelve o'clock and clockwise from there, area
+ * proportional to sources with a floor. Labels sit outside the ring, or under each
+ * circle on a narrow screen. See docs/features/map.md#the-topics-ring.
  */
 export function layoutTopics(
   totals: readonly TopicTotal[],

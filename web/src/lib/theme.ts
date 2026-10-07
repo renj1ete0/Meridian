@@ -1,14 +1,7 @@
 /**
- * Theme selection (task P6-17).
- *
- * Three states, not two. "No explicit choice" must mean *the system
- * preference*, not *dark* — a reader whose machine is in light mode and who has
- * never touched the toggle should get light. `system` is therefore the default
- * and is expressed by the **absence** of `data-theme`, which is what lets the
- * `prefers-color-scheme` block in tokens.css apply.
- *
- * All of the CSS lives in tokens.css. This module only decides which of the
- * three states is in effect and stamps the root element accordingly.
+ * Theme selection (task P6-17): `system`, `light` or `dark`, stamped on the root element.
+ * `system` is the default and is the *absence* of `data-theme`; the CSS is in tokens.css.
+ * See docs/features/web-app.md#theme.
  */
 
 export const THEMES = ['system', 'light', 'dark'] as const
@@ -23,13 +16,8 @@ function isTheme(value: unknown): value is Theme {
 }
 
 /**
- * The stored choice, or `system`.
- *
- * Every access is guarded. `localStorage` does not merely return null in a
- * private window or with site data blocked — reading the property itself
- * throws, and an uncaught throw here happens during the first render and takes
- * the whole page with it. A theme is a preference; it must never be able to
- * prevent the app from loading.
+ * The stored choice, or `system`. Guarded: reading `localStorage` can throw during the
+ * first render. See docs/features/web-app.md#browser-storage.
  */
 export function readTheme(): Theme {
   try {
@@ -50,12 +38,8 @@ export function writeTheme(theme: Theme): void {
 }
 
 /**
- * Stamp the root element.
- *
- * `system` **removes** the attribute rather than setting `data-theme="system"`.
- * The CSS keys off the attribute's absence, so a sentinel value would match
- * neither the light block nor the dark one and would silently leave the reader
- * on the flagship dark palette whatever their machine says.
+ * Stamp the root element. `system` *removes* the attribute: the CSS keys off its absence,
+ * and a sentinel value would match neither palette.
  */
 export function applyTheme(theme: Theme, root: HTMLElement = document.documentElement): void {
   if (theme === 'system') {

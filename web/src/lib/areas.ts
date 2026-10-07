@@ -257,10 +257,8 @@ export interface Placed {
 }
 
 /**
- * Circle radius per unit of √passages, so that *area* is proportional to
- * passages collected (the operator's decision: size = passages, with a key).
- * The scale is set so the largest circle on screen has radius `maxRadius`;
- * the size key is drawn with the same scale, so it stays true.
+ * Circle radius per unit of √passages, so that *area* is proportional to passages
+ * collected. The largest circle gets `maxRadius`; the size key uses the same scale.
  */
 export function radiusScale(passages: readonly number[], maxRadius: number): number {
   const largest = Math.max(0, ...passages)
@@ -792,11 +790,8 @@ export interface View {
 export const HOME: View = { k: 1, x: 0, y: 0 }
 
 /**
- * The magnification at which each level below the root takes over, by how
- * many levels below it. A finer level is laid out inside the coarser one's
- * circles, so the two share coordinates and zooming in simply reveals it —
- * the semantic zoom of a map, where more detail appears as there is room
- * for it.
+ * The magnification at which each level below the root takes over, by how many levels
+ * below it. See docs/features/map.md#semantic-zoom.
  */
 export const ZOOM_FOR_DEPTH = [1, 1.7, 3.4] as const
 
@@ -1257,10 +1252,8 @@ export function shareFill(share: number | null): number {
 export type Shade = 'topic' | 'research'
 
 /**
- * The share of an area's passages from peer-reviewed sources, or null with none
- * counted. Government is not counted with it: the corpus is mostly government
- * pages, so government-or-research shades almost every field alike, while the
- * research share alone runs from none to about a quarter.
+ * The share of an area's passages from peer-reviewed sources, or null with none counted.
+ * Government is left out on purpose; see docs/features/map.md#research-shading.
  */
 export function researchShare(area: Pick<Area, 'tier_mix'>): number | null {
   const total = Object.values(area.tier_mix ?? {}).reduce((a, b) => a + b, 0)

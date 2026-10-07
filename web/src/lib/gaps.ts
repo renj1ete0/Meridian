@@ -1,9 +1,6 @@
 /**
  * The Gaps client (task P6-36). Mirrors `meridian_core/schemas/gaps.py`;
  * `tests/gaps.test.tsx` fails if a field is added on one side only.
- *
- * Its own module rather than more of `api.ts`, and it uses the same error
- * shape (`ApiError`, `describeDetail`) so a refusal reads the same everywhere.
  */
 import { ApiError, describeDetail } from './api'
 

@@ -1,16 +1,6 @@
 /**
- * A very small path router (task P6-14/P6-15's screens).
- *
- * Deliberately not `react-router`. There are two routes, and a dependency for
- * two routes is a dependency whose upgrade path you inherit for the life of the
- * project. This is forty lines and does the one thing that actually matters
- * here: **URLs are real**, so a source page can be linked, bookmarked and
- * pasted into a citation — which is the whole point of a corpus that insists
- * everything be checkable.
- *
- * It will stop being the right answer. Phase 6 has fifteen more screens, and
- * when nested layouts or route-level data loading arrive this should be
- * replaced rather than grown — `P6-20`.
+ * A small hand-rolled path router (task P6-14/P6-15); URLs are real, so every page can be
+ * linked. Replace rather than grow it (`P6-20`). See docs/features/web-app.md#routing.
  */
 import { useEffect, useState } from 'react'
 
@@ -88,11 +78,8 @@ export function useRoute(): Route {
 }
 
 /**
- * Intercept a left-click on an internal link so it navigates in-app.
- *
- * Modified clicks are left alone: a reader holding ⌘ or the middle button is
- * asking for a new tab, and swallowing that is the most irritating thing a
- * hand-rolled router can do.
+ * Intercept a left-click on an internal link so it navigates in-app. Modified and
+ * middle clicks are left alone, so a new tab still opens.
  */
 export function onInternalClick(path: string) {
   return (event: React.MouseEvent<HTMLAnchorElement>) => {

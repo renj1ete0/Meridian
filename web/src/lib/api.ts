@@ -1,38 +1,10 @@
 /**
- * Typed client over `/api/explore/*` (task P2-13, spec §12.5, §12.6).
+ * Typed client over `/api/explore/*` and `/api/admin/*` (task P2-13, spec §12.5, §12.6).
  *
- * ## Relative URLs, and no base URL anywhere
- *
- * There is deliberately no `API_BASE` constant in this file, and nothing reads
- * an environment variable. Every request is `/api/...`, which the Vite proxy
- * forwards in development and which `cloudflared` fronts in production. A base
- * URL would be a value that has to be correct per environment, and the way that
- * fails is a build shipped pointing at someone's laptop.
- *
- * ## Keeping these types honest
- *
- * TypeScript types vanish at runtime, so nothing can compare them to the
- * pydantic DTOs directly. The chain here has two links, and both are enforced:
- *
- * 1. `tsc` ties each `interface` to its `*_FIELDS` runtime list, through the
- *    `Expect<Equal<...>>` assertions below. Add a field to the type and not the
- *    list and the build fails.
- * 2. `tests/api.test.ts` ties each `*_FIELDS` list to the pydantic model it
- *    mirrors, parsed out of `meridian_core/schemas/`. Add a field in Python and
- *    not here and the test fails.
- *
- * So the type follows the DTO transitively, and neither link can be removed
- * without something going red. This is the same device as the `SOURCE_TIER`
- * drift test in `tests/ui.test.tsx`, which exists because a tier added to
- * Postgres and not to the UI renders as a raw enum value and nobody notices.
- *
- * ## Dates stay strings
- *
- * `publication_date` arrives as `"2025-12-03"` and is kept as written. Calling
- * `new Date("2025-12-03")` parses it as UTC midnight, which in any negative
- * offset renders as the 2nd — a citation silently dated to the wrong day, on
- * some readers' machines only. A date this system publishes is a fact from a
- * document, not a moment in time, and formatting it is the display layer's job.
+ * Requests are relative (`/api/...`), with no base URL. Each interface is tied to a
+ * `*_FIELDS` list by `Expect<Equal<...>>`, and each list to its pydantic DTO by
+ * `tests/api.test.ts`. Calendar dates stay strings.
+ * See docs/features/web-app.md#the-api-client.
  */
 
 import type { SourceTier } from '../ui/Tier'
@@ -96,12 +68,9 @@ export interface SearchHit {
   places?: string[] | null
 
   /**
-   * What `page_or_offset` counts (`P2-18`). §5.3 makes it a page for paginated
-   * documents and a character offset otherwise; before this the hit carried
-   * nothing that said which, so a citation could only be labelled
-   * "page/offset". `null` means the source's media type was never recorded —
-   * genuinely unknown, rather than a default that mislabels one kind or the
-   * other.
+   * What `page_or_offset` counts (`P2-18`): a page for paginated documents, else a
+   * character offset. `null` means the media type was never recorded: unknown, not a
+   * default.
    */
   page_unit: PageUnit | null
   media_type: string | null
@@ -113,10 +82,9 @@ export interface SearchHit {
   lexical_rank: number | null
   vector_rank: number | null
   /**
-   * How old the document is, and what that did to its score (`P2-20`).
-   * Published rather than applied silently: a result quietly demoted is one
-   * the reader cannot audit. `age_days` is null for an undated document and
-   * `decay` is then 1 — not a guess in either direction.
+   * How old the document is, and what that did to its score (`P2-20`), published so a
+   * demotion can be audited. `age_days` is null for an undated document, and `decay` is
+   * then 1.
    */
   age_days: number | null
   decay: number
@@ -399,11 +367,8 @@ export type AssertSourceChunks = Expect<Equal<keyof SourceChunks, (typeof SOURCE
 /**
  * A request the API refused, carrying a sentence a reader can act on.
  *
- * FastAPI's `detail` is two different shapes: a string for a raised
- * `HTTPException`, and an array of per-field objects for a validation failure.
- * Rendering the second directly gives `[object Object]`, which §4 would call an
- * error that names neither its cause nor its remedy — so both are normalised
- * here, once, rather than at each call site.
+ * FastAPI's `detail` is a string or an array of per-field objects; both are normalised
+ * here, once, so no call site renders `[object Object]`.
  */
 export class ApiError extends Error {
   readonly status: number
@@ -491,14 +456,9 @@ export interface SearchParams {
 /**
  * Build the query string.
  *
- * Repeated keys for list filters, which is what FastAPI's `list[...] | None`
- * expects — `source_tier=government&source_tier=press`, not a comma-joined
- * value, which arrives as one tier named "government,press" and is rejected as
- * an unknown literal.
- *
- * Empty arrays are omitted rather than sent, because "no tier filter" and "a
- * filter matching no tiers" are different requests and only the first is what a
- * cleared filter control means.
+ * List filters repeat their key (`source_tier=a&source_tier=b`), as FastAPI's
+ * `list[...] | None` expects; empty arrays are omitted, meaning "no filter".
+ * See docs/features/web-app.md#query-strings.
  */
 export function searchQuery(params: SearchParams): string {
   const query = new URLSearchParams()
@@ -686,10 +646,8 @@ export interface FigureRef {
   source_title: string | null
   source_url: string | null
   /**
-   * Deep link into the stored raw file, with `#page=N` when the page is known.
-   * `null` when this deployment does not serve raw files — a caption with a
-   * dead link is worse than a caption alone, because the reader spends a click
-   * finding out.
+   * Deep link into the stored raw file, with `#page=N` when the page is known. `null`
+   * when this deployment does not serve raw files, so no caption carries a dead link.
    */
   raw_url: string | null
 }
@@ -763,13 +721,9 @@ export async function getNotifications(
 }
 
 // --------------------------------------------------------------------------
-// `/api/admin/*` — the control surface (task P6-13)
-//
-// Separate from the explore client above only by prefix, because that prefix is
-// the role boundary (§12.6): everything below writes through `meridian_rw`, and
-// the API refuses the lot unless callers are identified. A 503 here is not an
-// outage — it is an instance that has not been told who is allowed to change
-// things, and the message says so.
+// `/api/admin/*` — the control surface (task P6-13). The prefix is the role boundary;
+// a 503 means no admins are configured, not an outage.
+// See docs/features/web-app.md#explore-and-admin-prefixes.
 // --------------------------------------------------------------------------
 
 /** `GAZETTEER_ENTITY_TYPE` in `models/gazetteer.py`. */
@@ -1146,15 +1100,8 @@ export type AssertFetchPolicyPage = Expect<Equal<keyof FetchPolicyPage, (typeof 
 // Annotations (task P6-05, spec §12.5)
 // --------------------------------------------------------------------------
 //
-// Reads on `/api/explore`, writes on `/api/admin`, the same split saved views
-// take (§12.6 divides the prefixes by mutation) and for a sharper reason: a
-// note is the one thing here that reads as the owner's own thinking, so a
-// shared instance shows the owner's notes and offers no way to add to them.
-//
-// **No `produced_by` on the way out of this file.** `AnnotationCreate` has no
-// such field and the DTO forbids extra keys, so a client cannot claim
-// authorship — the server assigns it. Sending one would be refused, and a
-// helper that offered the argument would suggest otherwise.
+// Reads on `/api/explore`, writes on `/api/admin`. No `produced_by` is ever sent: the
+// server assigns authorship. See docs/features/web-app.md#explore-and-admin-prefixes.
 
 /** Mirrors `AnnotationTarget` — a node a note is about, named rather than numbered. */
 export interface AnnotationTarget {
@@ -1236,10 +1183,8 @@ export function writeAnnotation(draft: NoteDraft, init?: RequestInit): Promise<A
 }
 
 /**
- * Rewrite a note. Fields left out are left alone; `about` given is `about`
- * replaced, because re-reading changes what a note is about and a note that
- * accumulated every node it was pointed at would attach to a whole search
- * history.
+ * Rewrite a note. Fields left out are left alone; `about`, when given, replaces the
+ * note's nodes rather than adding to them.
  */
 export function rewriteAnnotation(
   entityId: number,
@@ -1355,11 +1300,8 @@ export type AssertNodeDetail = Expect<Equal<keyof NodeDetail, (typeof NODE_DETAI
 // Saved views (task P6-09, spec §12.5)
 // --------------------------------------------------------------------------
 //
-// Reads are on `/api/explore` and every write is on `/api/admin`. That is not an
-// inconsistency: §12.6 splits the prefixes by mutation, and for this table the
-// consequence is the right one — saved views are shared state with no
-// per-viewer scoping, so a guest on a shared instance can open the owner's views
-// and cannot add to them.
+// Reads on `/api/explore`, writes on `/api/admin`: shared state a guest can open but not
+// add to. See docs/features/web-app.md#explore-and-admin-prefixes.
 
 /** Mirrors `SavedViewRead`. */
 export interface SavedViewRecord {

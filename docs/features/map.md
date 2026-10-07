@@ -201,3 +201,54 @@ exactly.
 `tests/unit/test_areas_core.py`, `test_bridges_core.py`, `test_corpusmap_projection.py`,
 `test_fields.py`, `test_area_names.py`; `tests/integration/test_areas.py`,
 `test_bridges.py`, `test_area_fields.py`, `test_corpusmap.py`, `test_map_steering.py`.
+
+## In the web app
+
+The arithmetic behind the Map's screens lives in `web/src/lib/areas.ts`, `corpusmap.ts` and
+`topicweb.ts`, apart from the SVG and WebGL so it is tested without a browser.
+
+### Circle sizes
+
+A circle's *area* is proportional to the passages collected (radius ∝ √passages), the
+operator's decision: size means passages, with a key. The largest circle on screen gets the
+maximum radius, and the size key is drawn at the same scale, so it stays true.
+
+### Semantic zoom
+
+A finer level is laid out inside the coarser one's circles, so the two share coordinates and
+zooming in simply reveals it: the semantic zoom of a map, where detail appears as there is room
+for it. `ZOOM_FOR_DEPTH` gives the magnification at which each level below the root takes over.
+
+### Research shading
+
+The "research" shade is the share of a field's passages from peer-reviewed sources alone.
+Government is not counted with it: the corpus is mostly government pages, so a
+government-or-research share shades almost every field alike, while the research share alone
+runs from none to about a quarter.
+
+### Topic colours
+
+The corpus map gives each topic a colour by its *name*, never its size or rank. Each name
+hashes to a preferred slot among the eight series colours and keeps it unless an alphabetically
+earlier name holds it, in which case it takes the next free one; a ninth topic is "Other". The
+first map assigned slots by alphabetical position, which is rank by another name: a new topic
+sorting first moved every colour after it, and a reader who learned "blue is that topic" found
+it orange the next morning. Hashed, a newcomer can displace at most the topics it collides
+with. Every topic any point carries gets a slot, not only primaries, so a topic that is only
+ever a second label keeps the same colour on the day it becomes somebody's first. Hiding a
+topic in the legend does not reassign, so the others keep theirs.
+
+The legend and table give two numbers per topic, because a passage can be about several
+topics (`P2-21`) and is drawn in one, its primary. Counting only the colour would say a topic
+that is every other passage's second subject is barely present; counting every label would make
+the rows sum past the passages drawn. `count` sums to the total; `carrying` answers "how much
+of this picture is about X".
+
+### The topics ring
+
+The Topics view (`B-72`) places topic circles on a ring, largest at twelve o'clock and clockwise
+from there, area proportional to sources with a floor so a topic holding one source is still
+something a finger can hit. A ring rather than a force layout: it is stable between loads, and
+with a handful of topics every pair is a visible chord. Labels sit outside the ring where there
+is width, so the chords, which all run inside it, never cross a name; on a narrow screen there
+is no room at the sides, and each name goes under its circle.
