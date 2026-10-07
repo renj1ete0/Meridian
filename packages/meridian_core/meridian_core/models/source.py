@@ -459,8 +459,29 @@ class HostScore(Base):
     on_topic: Mapped[int] = mapped_column(Integer, nullable=False)
     #: URL tasks waiting for this host when the score was computed.
     pending: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Other hosts with an on-topic page linking here (`B-150`).
+    vouched: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     computed_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class LinkVouch(Base):
+    """A page linking to another host (task `B-150`).
+
+    One row per (linked host, linking page). Written as each page's links are read, before
+    any of them is dropped as already queued, so every page that links to a host counts, not
+    only the first. `worker.hostscore` reads it as how many on-topic sites vouch for a host.
+    """
+
+    __tablename__ = "link_vouches"
+
+    host: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("sources.source_id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
 
 

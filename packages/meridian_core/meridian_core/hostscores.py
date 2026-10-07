@@ -2,9 +2,10 @@
 
 From the share of a host's examined pages that are on a topic: off-topic hosts get no
 links followed (government hosts are down-ranked instead), unknown hosts are explored a
-few links at a time, unknown subdomains of an off-topic site go last (`B-113`), and no
-host holds more than :data:`MAX_PENDING` queued links. Nothing deletes or calls a
-model. See docs/features/discovery.md#host-scores.
+few links at a time, unknown subdomains of an off-topic site go last (`B-113`), unknown
+hosts that on-topic pages elsewhere link to are explored first (`B-150`), and no host holds
+more than :data:`MAX_PENDING` queued links. Nothing deletes or calls a model. See
+docs/features/discovery.md#host-scores and docs/features/discovery.md#vouched-hosts.
 """
 
 from __future__ import annotations
@@ -15,12 +16,13 @@ from collections import Counter
 from collections.abc import Mapping
 
 from sqlalchemy import delete, insert, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tld import get_fld
 
 from .boilerplate import host_key
 from .logging import get_logger
-from .models import HostScore, QueueTask, Source
+from .models import HostScore, LinkVouch, QueueTask, Source
 
 log = get_logger(__name__)
 
@@ -52,6 +54,20 @@ DOWNRANKED_PRIORITY = 1
 #: unjudged ones; search keeps its reserved claims.
 PROVEN_BOOST = 65
 
+#: Other hosts with an on-topic page linking to an unjudged host before it counts as
+#: vouched for (`B-150`). One: measured, a single such site already lifts the host's
+#: eventual on-topic share several-fold. See docs/features/discovery.md#vouched-hosts.
+VOUCHED_MIN = 1
+
+#: Added to a vouched-for unjudged host's links: above unjudged, below proven.
+VOUCHED_BOOST = 30
+
+#: Queued links allowed to a vouched-for host nobody has judged yet.
+VOUCHED_PENDING = 25
+
+#: Distinct linked hosts recorded per page; a link farm is not more evidence.
+MAX_VOUCHES_PER_PAGE = 200
+
 
 class Standing(enum.StrEnum):
     ON_TOPIC = "on_topic"
@@ -64,6 +80,7 @@ class Score:
     examined: int = 0
     on_topic: int = 0
     pending: int = 0
+    vouched: int = 0
 
     @property
     def share(self) -> float:
@@ -74,6 +91,11 @@ class Score:
         if self.examined < MIN_EXAMINED:
             return Standing.UNKNOWN
         return Standing.OFF_TOPIC if self.share < OFFTOPIC_SHARE else Standing.ON_TOPIC
+
+    @property
+    def is_vouched(self) -> bool:
+        """Unjudged, and linked from on-topic pages on enough other hosts (`B-150`)."""
+        return self.standing is Standing.UNKNOWN and self.vouched >= VOUCHED_MIN
 
 
 @dataclasses.dataclass(frozen=True)
@@ -109,6 +131,10 @@ def decide(score: Score, *, government: bool, pending: int) -> Decision:
                 return Decision(False, reason="off_topic_capped")
             return Decision(True, DOWNRANKED_PRIORITY, "off_topic_government")
         return Decision(False, reason="off_topic")
+    if score.is_vouched:
+        if pending >= VOUCHED_PENDING:
+            return Decision(False, reason="vouched_capped")
+        return Decision(True, reason="vouched", boost=VOUCHED_BOOST)
     cap = EXPLORE_PENDING if standing is Standing.UNKNOWN else MAX_PENDING
     if pending >= cap:
         return Decision(False, reason=f"{standing.value}_capped")
@@ -191,7 +217,9 @@ async def recompute(sess: AsyncSession) -> int:
         if host:
             pending[host] += 1
 
-    hosts = set(examined) | set(pending)
+    vouched = await vouches_by_host(sess)
+
+    hosts = set(examined) | set(pending) | set(vouched)
     await sess.execute(delete(HostScore))
     if hosts:
         await sess.execute(
@@ -202,6 +230,7 @@ async def recompute(sess: AsyncSession) -> int:
                     "examined": examined[h],
                     "on_topic": on_topic[h],
                     "pending": pending[h],
+                    "vouched": vouched.get(h, 0),
                 }
                 for h in sorted(hosts)
             ],
@@ -212,7 +241,44 @@ async def recompute(sess: AsyncSession) -> int:
 
 async def load(sess: AsyncSession) -> dict[str, Score]:
     rows = await sess.scalars(select(HostScore))
-    return {r.host: Score(r.examined, r.on_topic, r.pending) for r in rows}
+    return {r.host: Score(r.examined, r.on_topic, r.pending, r.vouched) for r in rows}
+
+
+async def vouches_by_host(sess: AsyncSession) -> dict[str, int]:
+    """Per linked host, the other hosts that have an on-topic page linking to it.
+
+    Hosts, not pages: one site's many pages linking to the same place are one voice.
+    """
+    rows = await sess.execute(
+        select(LinkVouch.host, Source.url, Source.extra["final_url"].astext)
+        .join(Source, Source.source_id == LinkVouch.source_id)
+        .where(Source.topic_labels.is_not(None), Source.topic_labels != [])
+    )
+    voices: dict[str, set[str]] = {}
+    for host, url, final_url in rows:
+        voucher = host_key(final_url or url)
+        if voucher and voucher != host:
+            voices.setdefault(host, set()).add(voucher)
+    return {host: len(v) for host, v in voices.items()}
+
+
+async def record_vouches(sess: AsyncSession, source_id: int, page_url: str, links) -> int:
+    """Record which other hosts a page links to. Flushes; does not commit.
+
+    Called with every link the page carries, before any is dropped as already queued, so
+    a host keeps the evidence of every page that links to it. Returns hosts recorded.
+    """
+    page_host = host_key(page_url)
+    hosts = sorted({h for h in map(host_key, links) if h and h != page_host})
+    hosts = hosts[:MAX_VOUCHES_PER_PAGE]
+    if not hosts:
+        return 0
+    await sess.execute(
+        pg_insert(LinkVouch)
+        .values([{"host": h, "source_id": source_id} for h in hosts])
+        .on_conflict_do_nothing()
+    )
+    return len(hosts)
 
 
 class HostPolicy:
@@ -258,7 +324,12 @@ class HostPolicy:
         score = self.score(host)
         pending = score.pending + self._queued[host]
         decision = None
-        if score.standing is Standing.UNKNOWN and site_of(host) is not None:
+        # A vouch is evidence about this host; a site's verdict only about its siblings.
+        if (
+            score.standing is Standing.UNKNOWN
+            and not score.is_vouched
+            and site_of(host) is not None
+        ):
             decision = decide_on_site(self.site_score(host), pending=pending)
         if decision is None:
             decision = decide(score, government=government, pending=pending)

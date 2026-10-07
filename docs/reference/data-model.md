@@ -170,7 +170,15 @@ fresh fetch.
 How much of what a host serves is about the topics (`B-48`). Derived wholesale by
 `worker.hostscore` from the content labels and the pending queue, and read by the fetch loop to
 decide whether a link is worth queueing. The loop never computes it, so no model or vector is
-anywhere near the crawl.
+anywhere near the crawl. `vouched` counts the other hosts with an on-topic page linking here
+(`B-150`).
+
+## Link vouches
+
+One row per (linked host, linking page) for every page's links to other hosts (`B-150`),
+written before the prefilter drops links already queued, so every page that links to a host
+counts. Cascades with its source. Read by `worker.hostscore`; see
+[discovery](../features/discovery.md#vouched-hosts).
 
 ## Translation lookups
 

@@ -33,7 +33,7 @@ from meridian_core.chunks import as_writes, chunk_count, embedding_backlog, repl
 from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
 from meridian_core.db import dispose_engines, session
 from meridian_core.figures import FigureWrite, replace_figures
-from meridian_core.hostscores import Decision, HostPolicy, Standing
+from meridian_core.hostscores import Decision, HostPolicy, Standing, record_vouches
 from meridian_core.hostscores import load as load_host_scores
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
@@ -1314,6 +1314,11 @@ class Worker:
         """
         if document is None or not document.links or self._prefilter is None:
             return 0
+        if source is not None:
+            # `B-150`: before the prefilter drops links already queued, which is where a
+            # host's second and later vouches used to be lost.
+            page_url = (source.extra or {}).get("final_url") or source.url or claim.url
+            await record_vouches(sess, source.source_id, page_url, document.links)
         if self._hosts is not None and not self._hosts.follows_links_from(claim.url):
             # `B-48`: what an off-topic site links to is, almost always, more
             # of itself — and a page's links inherit its topic, so following

@@ -299,6 +299,51 @@ previous hour's numbers. The same pass blocks domains that refuse every request 
   almost always more of the same. So its pending links (`queue.parent_source_id`, recorded since
   `B-91`) move down to the floor the host gate uses for off-topic government links. A link that
   an on-topic page also carries keeps its own row's rank. Idempotent, so hourly after `topics`.
+  Since `B-150` the same pass also raises links: see [vouched hosts](#vouched-hosts).
+
+### Vouched hosts
+
+`B-150`, [ADR 0015](../adr/0015-followed-links-follow-the-evidence.md).
+With general web search refusing this machine (`B-109`), the link graph is the cheapest
+discovery left, and it carries most of what search did. Measured on the live corpus
+(2026-10-07), before building:
+
+| Link | Lands on a topic |
+|---|---|
+| From an on-topic page, to another host | 51% |
+| From an on-topic page, same host | 44% |
+| From a page about none of the topics, same host | 12% |
+| From a page about none of the topics, to another host | 8% |
+
+| On-topic hosts linking to an unjudged host | Its eventual on-topic share |
+|---|---|
+| none | 6% |
+| one | 35% |
+| two to five | 23% |
+
+Three changes follow from it:
+
+- **Every link is a vouch.** `link_vouches` holds one row per page and other host it links to,
+  written in the fetch loop *before* the prefilter drops links already queued. That drop is
+  where the second and later pages linking to a host used to leave no trace. Capped at
+  `MAX_VOUCHES_PER_PAGE` hosts per page.
+- **Vouched hosts.** `worker.hostscore` counts, per host, the other hosts with an on-topic page
+  linking to it (`host_scores.vouched`; hosts, not pages, so one site's many pages are one
+  voice). An unjudged host with `VOUCHED_MIN` of them is vouched for: its links get
+  `VOUCHED_BOOST` (above unjudged, below proven) and up to `VOUCHED_PENDING` of them may wait
+  before it is judged, against `EXPLORE_PENDING` for an unjudged host. A vouch outweighs an
+  off-topic site's verdict on a subdomain, because it is evidence about that host; once the
+  host's own pages are judged, its record decides and vouches are ignored.
+- **Raising after labelling.** `requeue_links` now also raises pending links: those from a page
+  labelled on a topic to `PROMOTED_PRIORITY` (the bottom of the proven band, since they land as
+  often as a proven host's next page), and those into a vouched-for host to `VOUCHED_PRIORITY`
+  (where a newly queued one of the lowest tier would sit). It demotes first, so a vouch can lift
+  a link whose page was about nothing. Nothing is raised into a host the host gate holds down,
+  a raise never lowers, and a second pass moves nothing. Search results, lookups and seeds are
+  not re-ranked.
+
+The migration seeds `link_vouches` from the first parent of every queued link, the evidence
+that already existed.
 
 ### Sitemaps
 

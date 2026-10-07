@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.162.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.163.0`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1649,6 +1649,16 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-150` **Followed links follow the evidence** — `v0.163.0`, ADR 0015. The operator asked
+      for discovery that does not wait on one search method (`B-109`). Measured first on the
+      live corpus: a link from an on-topic page lands on a topic about half the time (as search
+      results did), from a page about nothing about one in ten; an unjudged host linked from an
+      on-topic page elsewhere turns out on a topic several times as often as one that is not.
+      But re-ranking only moved links down, and the queue kept only a link's first page. Now
+      every page's links to other hosts are recorded (`link_vouches`), unjudged hosts with an
+      on-topic voucher are explored first, and `requeue_links` raises the links of on-topic
+      pages and of vouched-for hosts. Next: a loop run to measure the on-topic share of fetched
+      followed links against run 15; graded vouches if one is too generous
 - [x] `B-149` **Queued queries made policy rows** — `v0.162.2`;
       found by `B-148`. `enqueue` recorded a first sighting for every task, so each queued
       search query became a `fetch_policy` row named after its words, and each DOI one named

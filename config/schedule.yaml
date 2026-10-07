@@ -197,8 +197,9 @@ jobs:
     module: worker.requeue_links
     args: ["--apply"]
     # `B-92`: a pending followed link whose page has since been read and found
-    # about none of the topics moves to the host gate's floor priority. Only
-    # down, never deleted, idempotent; hourly, after `topics`.
+    # about none of the topics moves to the host gate's floor priority; `B-150`:
+    # one whose page is on a topic, or whose host on-topic pages vouch for, moves
+    # up. Never deleted, idempotent; hourly, after `topics`.
     interval_seconds: 3600
     enabled: true
 

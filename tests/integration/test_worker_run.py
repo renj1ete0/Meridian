@@ -31,7 +31,15 @@ from meridian_core.hostscores import (
     HostPolicy,
     Score,
 )
-from meridian_core.models import Chunk, FetchAttempt, FetchPolicy, Figure, QueueTask, Source
+from meridian_core.models import (
+    Chunk,
+    FetchAttempt,
+    FetchPolicy,
+    Figure,
+    LinkVouch,
+    QueueTask,
+    Source,
+)
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier, source_tier_map
 from meridian_core.sources import get_source, upsert_source
 from worker.crawl import Crawler
@@ -1201,6 +1209,37 @@ async def test_a_queued_link_records_the_page_that_carried_it(
     parent = await sess.get(Source, child.parent_source_id)
     assert parent is not None, "the link was queued without its page"
     assert parent.url == seed.url_or_query
+
+
+async def test_a_page_vouches_for_hosts_it_links_to_even_when_the_link_is_already_queued(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """`B-150`: the second page linking somewhere used to leave no trace, because the
+    prefilter drops a link already queued. The vouch is recorded before that."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    elsewhere = f"elsewhere-{uuid.uuid4().hex[:8]}.test"
+    # Below the seed, so the one task the worker claims is the page, not this.
+    await enqueue(sess, elsewhere, run_topic, path="/known", seed_source="frontier", priority=-50)
+    body = linking_page("/child", external=f"https://{elsewhere}/known")
+
+    def html(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    worker, _ = with_frontier(sess, html, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+
+    page = await sess.scalar(select(Source).where(Source.url == f"https://{run_domain}/a"))
+    hosts = set(
+        await sess.scalars(select(LinkVouch.host).where(LinkVouch.source_id == page.source_id))
+    )
+    assert hosts == {elsewhere}, "its own host vouches for nothing; the other host once"
+    known = await sess.scalar(
+        select(func.count())
+        .select_from(QueueTask)
+        .where(QueueTask.url_or_query.like(f"%{elsewhere}/known"))
+    )
+    assert known == 1, "the vouch must not queue the link a second time"
 
 
 async def test_a_queued_link_inherits_the_topic_of_the_page_that_linked_it(

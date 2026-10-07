@@ -77,6 +77,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.0] — 2026-10-07
+
+### Added
+
+- `B-150`: followed links follow the evidence, upward as well as down (ADR 0015). Every page's
+  links to other hosts are recorded (`link_vouches`) before links already queued are dropped,
+  so each page linking to a host counts. An unjudged host that an on-topic page on another
+  host links to is *vouched for*: its links rank above unjudged hosts' and below proven
+  hosts', and more of them may wait before it is judged. `requeue_links` now also raises the
+  pending links of a page labelled on a topic to the bottom of the proven band, and those into
+  a vouched-for host; a host judged off-topic keeps its links down. Measured before building:
+  links from on-topic pages land on a topic about half the time, as search results did, and
+  vouched-for hosts turn out on a topic several times as often as unvouched ones. Migration
+  `b150c0ffee01` seeds the vouches from every queued link's first parent.
+
 ## [0.162.4] — 2026-10-07
 
 ### Changed
