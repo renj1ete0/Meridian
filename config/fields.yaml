@@ -2,11 +2,16 @@
 #
 # An area is named by the field nearest its centroid, never by free keywords:
 # keywords drawn from text let licence strings and publisher badges through
-# ("bync", "free article"). Level-1 areas take a field; deeper areas a subfield.
+# ("bync", "free article"). Deeper areas take a subfield; a region is named from its areas.
 # Edit to taste; a change applies on the next `worker.areas` build or
 # `worker.areas --name-only`.
+#
+# "Public Records" is not OpenAlex's (`B-157`): a research classification has no name for the
+# kinds of document a mostly public-sector corpus is made of, so statutes, appropriations,
+# forms and site furniture were named after whichever research subfield was least far away
+# ("Speech and Hearing" for a cluster of legislation). See docs/features/map.md#naming-floor.
 source: OpenAlex fields and subfields (ASJC-based), fetched 2026-09-25 from api.openalex.org/subfields;
-  "General …" and miscellaneous subfields left out as names that say nothing
+  "General …" and miscellaneous subfields left out as names that say nothing; plus Public Records
 fields:
   Agricultural and Biological Sciences:
   - Agronomy and Crop Science
@@ -275,3 +280,14 @@ fields:
   Veterinary:
   - Equine
   - Small Animals
+  Public Records:
+  - Legislation and Statutes
+  - Regulations and Rules
+  - Budgets and Appropriations
+  - Taxes and Benefits
+  - Public Services and Applications
+  - Official Statistics
+  - Government Reports
+  - News and Press Releases
+  - Publications and Bibliographic Records
+  - Website and Contact Pages

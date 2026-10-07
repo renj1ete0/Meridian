@@ -24,10 +24,11 @@ separate view shows passages as points in three dimensions.
 3. Lay out each group of siblings with the corpus map's projection. Any area whose centroid
    matches one in the previous build (cosine ≥ 0.9) keeps that area's position, so the map
    moves only where the corpus moved.
-4. Name each area from `config/fields.yaml` (OpenAlex fields and subfields): deeper levels
-   take the nearest subfield, and a region takes the subfield most of its areas were given
-   (the nearest field if none were), followed by the area's best distinctive phrase
-   ("Transportation: road safety"). See [Naming](#naming).
+4. Name each area from `config/fields.yaml` (OpenAlex fields and subfields, plus the kinds of
+   public record a research list has no name for): deeper levels take the nearest subfield
+   that fits well enough, and a region is named from what its areas were given: a subfield or
+   field holding a majority of its passages, else its two largest together, else its terms.
+   See [Naming](#naming).
 5. Compute bridges and write the whole build in one transaction. Older builds are removed,
    except the previous one, which the next build reads for positions.
 
@@ -112,11 +113,15 @@ has the embedder; `fields.py` is pure apart from reading the file.
   everything (on a live map, one subfield named five of twelve regions), because they sit near
   the middle of the whole space. With the mean row subtracted, what is left is what is
   particular to each.
-- **Regions take their areas' subfield.** There are too few regions to centre on, and a region
+- **Regions are named from their areas.** There are too few regions to centre on, and a region
   named apart from its own contents reads as a contradiction one click down. Naming regions
-  by field ("Social Sciences") was tried first and named most live regions alike. Each region
-  takes the subfield most of its areas were given, weighted by passages; a region with no
-  named areas falls back to the nearest field.
+  by field ("Social Sciences") was tried first and named most live regions alike. Since
+  `B-157`, weighted by passages, with areas named by nothing counting against every share: a
+  subfield holding a majority of the region's passages names it; else a field holding a
+  majority (its areas' subfields summed by field); else its two largest subfields, or else
+  its two largest fields, as "A & B" if together they hold `REGION_PAIR`; else its terms. A
+  region is never named from its own centroid: matched to the fields, live regions came out
+  as "Dentistry" or "Economics" for a cluster of legislation.
 - **Told apart.** Names must be unique across a whole level, not only among siblings, since
   the map is read one level at a time. Areas that would share a name take their second choice
   ("Transportation & Urban Studies"; an ampersand because many subfield names already contain
@@ -132,6 +137,30 @@ has the embedder; `fields.py` is pure apart from reading the file.
   which on a large corpus held millions of sets and took gigabytes.
 - **Without a field**, an area's name is its best two-word phrase among the top terms, else
   its top term (`B-71`).
+
+<a id="naming-floor"></a>**What a name must fit** (`B-157`, [ADR 0017](../adr/0017-map-names-must-fit.md)).
+On a live build the Fields level read "Speech and Hearing", "Algebra and Number Theory",
+"Geometry and Topology" and "Emergency Medical Services". Their terms told a different story:
+statutes ("shall", "subsection", "amended"), occupational statistics, a mixed science region,
+congressional documents. Three causes:
+
+- *The list had no names for most of the corpus.* A mostly public-sector corpus is largely
+  legislation, appropriations, regulations, forms, statistics and site furniture, and a
+  research classification names none of them, so each cluster took whichever subfield was
+  least far away. Even by plain cosine, "Law" ranked 10th to 90th for clusters of statute
+  text. `fields.yaml` now carries a "Public Records" field with ten such kinds; on the live
+  build all ten were used, and the legal, budget and forms clusters took them.
+- *Almost any fit was accepted.* `MIN_SIMILARITY` was 0.05 after centring, which nearly every
+  label clears. Read against each area's terms, names under 0.20 were mismatches ("Small
+  Animals" for a page of trading listings, "Genetics" for document-index furniture); above
+  it, mostly right. Raised to 0.20; on the live build 70 of 81 subfield-level areas and 350 of
+  401 below them keep a listed name, the rest their terms.
+- *A plurality named a mixed region.* "Geometry and Topology" named a 72,000-passage region
+  after one area holding a seventh of it. Regions now need a majority, or a named pair.
+
+Re-matching every area against its own terms, rather than its centroid, was also tried and was
+worse: as plain cosine it gave one generic subfield to most areas, and centred it gave
+oddities of its own. The terms stay a fallback, not a matcher.
 
 ### The 3D projection
 
@@ -215,6 +244,14 @@ exactly.
 
 The arithmetic behind the Map's screens lives in `web/src/lib/areas.ts`, `corpusmap.ts` and
 `topicweb.ts`, apart from the SVG and WebGL so it is tested without a browser.
+
+### Circles do not overlap; lines cross them
+
+Reported as overlapping fields (`B-157`): measured on the live build at 1440 and 390 px, every
+pair of field circles keeps the 14 px gap `placeAreas` gives it. What reads as overlap is the
+links drawn across the circles' translucent fills and the faint globe outline behind them.
+Drawing links behind opaque fills, or stopping them at the circles they pass, is a design
+question left open.
 
 ### Circle sizes
 

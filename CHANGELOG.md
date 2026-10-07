@@ -77,6 +77,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.3] — 2026-10-07
+
+### Fixed
+
+- `B-157`: the Map's fields were named after subjects they were not about ("Speech and
+  Hearing" over a cluster of legislation, "Algebra and Number Theory" over occupational
+  statistics) (ADR 0017). The naming list gains a "Public Records" group (legislation,
+  appropriations, regulations, forms, official statistics, site pages and others), since a
+  research classification has no names for most of a public-sector corpus; a subfield names an
+  area only above a measured similarity (0.20, was 0.05); and a region is named from its areas
+  by a majority, or by its two largest together, never by a plurality or its own centroid. An
+  area nothing fits keeps its terms. Takes effect on the next build or `worker.areas
+  --name-only`.
+
 ## [0.164.2] — 2026-10-07
 
 ### Fixed

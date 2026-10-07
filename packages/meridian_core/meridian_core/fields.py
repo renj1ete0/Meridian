@@ -16,8 +16,19 @@ import yaml
 FIELDS_PATH = Path(__file__).resolve().parents[3] / "config" / "fields.yaml"
 
 #: Below this cosine similarity *after centring*, no subfield fits well enough
-#: to name an area by; it keeps its term-based name.
-MIN_SIMILARITY = 0.05
+#: to name an area by; it keeps its term-based name. Was 0.05, which let almost any
+#: subfield name almost anything; measured on a live build (`B-157`), see
+#: docs/features/map.md#naming-floor.
+MIN_SIMILARITY = 0.20
+
+#: Share of a region's passages its areas must give one subfield, or one field, for the
+#: region to take that name (`B-157`). A plurality of a mixed region named it after a
+#: seventh of its contents.
+REGION_MAJORITY = 0.5
+
+#: Share the two largest subfields, or fields, must hold together to name a mixed region
+#: "A & B".
+REGION_PAIR = 0.4
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,8 +86,6 @@ def _top2(sims_row: np.ndarray) -> tuple[int, int]:
 def assign(
     levels: list[int],
     centroids: np.ndarray,
-    field_labels: list[FieldLabel],
-    field_vecs: np.ndarray,
     subfield_labels: list[FieldLabel],
     subfield_vecs: np.ndarray,
     *,
@@ -86,10 +95,11 @@ def assign(
 ) -> list[str | None]:
     """The name for each area from the list, or None where nothing fits.
 
-    Deeper areas take the nearest subfield. A region takes the subfield most of its
-    areas were given, weighted by ``weights`` (``parents`` gives each area's parent's index
-    in these lists), else the nearest field. Names shared within a level take their second
-    choice ("A & B"). See docs/features/map.md#naming.
+    Deeper areas take the nearest subfield above ``min_similarity``. A region is named
+    from what its areas were given, weighted by ``weights`` (``parents`` gives each area's
+    parent's index in these lists): a subfield or field holding a majority of its passages,
+    else its two largest subfields together, else nothing. Names shared within a level take
+    their second choice ("A & B"). See docs/features/map.md#naming.
     """
     out: list[str | None] = [None] * len(levels)
     second: list[str | None] = [None] * len(levels)
@@ -108,25 +118,52 @@ def assign(
                 if runner != first:
                     second[row] = subfield_labels[runner].name
 
+    field_of = {label.subfield: label.field for label in subfield_labels}
     regions = [i for i, level in enumerate(levels) if level == 1]
     votes: dict[int, dict[str, int]] = {i: {} for i in regions}
+    totals: dict[int, int] = dict.fromkeys(regions, 0)
     if parents is not None:
         for i, parent in enumerate(parents):
-            if parent in votes and out[i] and levels[i] == 2:
+            if parent in votes and levels[i] == 2:
                 weight = weights[i] if weights is not None else 1
-                votes[parent][out[i]] = votes[parent].get(out[i], 0) + weight
+                totals[parent] += weight
+                if out[i]:
+                    votes[parent][out[i]] = votes[parent].get(out[i], 0) + weight
     for i in regions:
-        if votes[i]:
-            ranked = sorted(votes[i].items(), key=lambda kv: (-kv[1], kv[0]))
-            out[i] = ranked[0][0]
-            second[i] = ranked[1][0] if len(ranked) > 1 else None
-    unvoted = [i for i in regions if not votes[i]]
-    if unvoted:
-        best, _ = nearest(centroids[unvoted], field_vecs, centre=len(unvoted) > 2)
-        for row, index in zip(unvoted, best, strict=True):
-            out[row] = field_labels[int(index)].name
+        out[i], second[i] = _region_name(votes[i], totals[i], field_of)
 
     return _told_apart(out, second, levels, parents)
+
+
+def _region_name(
+    votes: dict[str, int], total: int, field_of: dict[str | None, str]
+) -> tuple[str | None, str | None]:
+    """A region's name and second choice from its areas' names, weighted by passages.
+
+    Only what holds a majority of the region names it alone; a mixed region is named by its
+    two largest subfields, or else its two largest fields, if they hold enough together; and
+    otherwise by its terms. Areas named by nothing count against every share. See
+    docs/features/map.md#naming.
+    """
+    if not votes or total <= 0:
+        return None, None
+    ranked = sorted(votes.items(), key=lambda kv: (-kv[1], kv[0]))
+    runner = ranked[1][0] if len(ranked) > 1 else None
+    if ranked[0][1] >= REGION_MAJORITY * total:
+        return ranked[0][0], runner
+    by_field: dict[str, int] = {}
+    for name, weight in votes.items():
+        field = field_of.get(name)
+        if field:
+            by_field[field] = by_field.get(field, 0) + weight
+    fields = sorted(by_field.items(), key=lambda kv: (-kv[1], kv[0]))
+    if fields and fields[0][1] >= REGION_MAJORITY * total:
+        return fields[0][0], ranked[0][0]
+    if runner is not None and ranked[0][1] + ranked[1][1] >= REGION_PAIR * total:
+        return f"{ranked[0][0]} & {runner}", None
+    if len(fields) > 1 and fields[0][1] + fields[1][1] >= REGION_PAIR * total:
+        return f"{fields[0][0]} & {fields[1][0]}", None
+    return None, None
 
 
 def _told_apart(

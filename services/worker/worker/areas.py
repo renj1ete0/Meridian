@@ -36,8 +36,7 @@ async def name_build(sess, build_id: int, embedder) -> int:
     Flushes; the caller commits. An area nothing fits keeps ``field`` NULL and
     is named by its terms.
     """
-    fields, subfields = load_fields()
-    field_vecs = await _label_vectors(embedder, fields)
+    _, subfields = load_fields()
     subfield_vecs = await _label_vectors(embedder, subfields)
     areas = list(await sess.scalars(select(Area).where(Area.build_id == build_id)))
     if not areas:
@@ -46,8 +45,6 @@ async def name_build(sess, build_id: int, embedder) -> int:
     names = assign(
         [a.level for a in areas],
         np.asarray([a.centroid for a in areas], dtype=np.float64),
-        fields,
-        field_vecs,
         subfields,
         subfield_vecs,
         parents=[index.get(a.parent_id) for a in areas],

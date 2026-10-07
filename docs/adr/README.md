@@ -27,6 +27,7 @@ chosen.
 | [0014](0014-other-languages-scored-as-their-english-versions.md) | Pages in other languages are scored as their English versions would be | 2026-10-07 | Accepted |
 | [0015](0015-followed-links-follow-the-evidence.md) | Followed links follow the evidence, upward as well as down | 2026-10-07 | Accepted |
 | [0016](0016-proven-by-following.md) | A host is proven for following by what following found | 2026-10-07 | Accepted |
+| [0017](0017-map-names-must-fit.md) | A Map name must fit what it names | 2026-10-07 | Accepted |
 
 ## Template
 

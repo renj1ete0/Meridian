@@ -1,4 +1,4 @@
-"""Naming a real build's areas by field of work (task B-74), against Postgres.
+"""Naming a real build's areas by field of work (tasks B-74, B-157), against Postgres.
 
 The embedder is a fake that puts each label on its own axis, so which field an
 area gets is decided by its centroid alone — the thing under test.
@@ -88,10 +88,15 @@ async def test_a_build_is_named_from_the_list(sess) -> None:
         ],
     )
 
+    area.parent_id = lost.parent_id = region.area_id
+    await sess.flush()
+
     named = await name_build(sess, build.build_id, embedder)
 
+    # The region is named from its areas (`B-157`): half its passages are Transportation,
+    # though its own centroid points at the field above it.
     assert named == 2
-    assert (region.field, area.field, lost.field) == (social.field, "Transportation", None)
+    assert (region.field, area.field, lost.field) == ("Transportation", "Transportation", None)
 
 
 async def test_the_api_reads_the_field_as_the_name(sess) -> None:
