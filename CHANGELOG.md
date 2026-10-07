@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.163.6] — 2026-10-07
+
+### Changed
+
+- The 3D passage map draws its deterministic sample by a multiplicative hash of the chunk id
+  instead of `md5` of its text: a third of the sort's cost on a real corpus (about 0.7 s to
+  0.2 s). The sample is as stable as before, but a different one, so the 3D view's points
+  change once.
+
 ## [0.163.5] — 2026-10-07
 
 ### Fixed

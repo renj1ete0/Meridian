@@ -148,3 +148,14 @@ def test_the_fast_projection_agrees_with_the_exact_one() -> None:
     for axis in range(COMPONENTS):
         assert abs(np.corrcoef(coords[:, axis], exact[:, axis])[0, 1]) > 0.999
     assert np.allclose(explained, values[order] / values.sum(), rtol=1e-3)
+
+
+def test_the_sample_order_is_a_shuffle_with_no_ties() -> None:
+    """Ids map one-to-one (the multiplier is odd, so no two ids share a place) and the order
+    is not insertion order, or the 3D sample would be the oldest passages."""
+    ids = range(1, 50_001)
+    keys = [corpusmap._shuffled(i) for i in ids]
+    assert len(set(keys)) == len(keys)
+    assert all(0 <= k < 2**32 for k in keys)
+    first = sorted(ids, key=corpusmap._shuffled)[:3000]
+    assert max(first) > 40_000 and min(first) < 10_000, "drawn from across the id range"

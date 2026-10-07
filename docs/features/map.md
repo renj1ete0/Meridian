@@ -159,7 +159,8 @@ one source dominates a region, whether a crawl drifted.
   only up to sign, and the same corpus could otherwise draw as its own mirror image.
 - **Sampled by a hash of the chunk id**, not `random()`, so the map holds still between
   refreshes. Ordering by id instead would draw the oldest chunks: the first site the crawl
-  reached, not the corpus.
+  reached, not the corpus. The hash is Knuth's multiplicative one modulo 2³², a third of the
+  cost of `md5(chunk_id::text)` on a real corpus.
 
 ### Steering from an area
 
