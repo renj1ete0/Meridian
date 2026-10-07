@@ -39,7 +39,7 @@ export function TierChip({ tier }: { tier: SourceTier }) {
 /**
  * A chip for anything else the system measured — an extractor name, a chunk
  * id, the retrieval mode. The same hairline form as a tier chip because it is
- * the same kind of thing, but set in lower case: these are values (`hybrid`,
+ * the same kind of thing, but set in lower case: these are values (`words + meaning`,
  * `chunk 412`), and capitals would turn a value into a heading.
  */
 const DATA_CHIP =

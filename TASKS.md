@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.162.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.162.3`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1931,9 +1931,12 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-98` **Search snippets that are site navigation** — `v0.149.7`: the passage was prose; its first line was a widget prompt, now dropped from display. — a result's snippet can be a
       page's menu text ("I'm looking for…"). Prefer the best-matching non-boilerplate
       passage for the snippet
-- [ ] `B-99` ⚑ **Reader-surface jargon on Find** — "hybrid" badge in the search box and
-      "Filters apply before the vector search." read as operator language, but both are in
-      the approved mocks and defended in design-system §8. Operator: keep, or reword?
+- [x] `B-99` **Reader-surface jargon on Find** — `v0.162.3`, ADR 0013. The operator left the
+      call to the build: reworded, keeping both facts. The badge reads `words + meaning` (the
+      summary line's vocabulary) and the note "Filters narrow what is searched, not what is
+      shown."; mocks and design-system §8 changed with it, and tests keep both free of
+      `hybrid`/`vector`/`lexical`/`embedding`. Screenshot of the built landing checked against
+      the updated `ExploreLanding.dc.html`
 - [x] `B-100` **Neighbourhood graph names cut to a dozen characters** — `v0.149.6`, screenshot-checked. — the small ring
       graph truncates most node names; show full names on hover or wrap two lines
 - [x] `B-101` **Map on a phone** — `v0.149.4`, screenshot-checked at 390px. — the size key covers a fifth of the canvas at 390px;

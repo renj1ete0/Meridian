@@ -3,8 +3,8 @@ import { Icon } from '../ui/Icon'
 
 /**
  * The Explore search field — design-system.md §8, `ExploreLanding.dc.html` — with the
- * `hybrid` marker and the "filters apply before the vector search" note. Controlled; holds
- * no state. See docs/features/web-app.md#the-search-field.
+ * retrieval-mode marker and the note on filters, both in a reader's words (`B-99`, ADR 0013).
+ * Controlled; holds no state. See docs/features/web-app.md#the-search-field.
  */
 
 export interface SearchFieldProps {
@@ -25,8 +25,8 @@ export interface SearchFieldProps {
   id?: string
 }
 
-export const MODE_MARKER = 'hybrid'
-export const FILTER_NOTE = 'Filters apply before the vector search.'
+export const MODE_MARKER = 'words + meaning'
+export const FILTER_NOTE = 'Filters narrow what is searched, not what is shown.'
 export const SHORTCUT_NOTE = '⌘K from anywhere'
 
 export function SearchField({

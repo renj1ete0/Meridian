@@ -365,8 +365,9 @@ secondary weight for `concept`, `place`, `organisation`, `intervention`, `findin
 Opening Explore with no active query does **not** land on a focus+expand view, and never
 renders the whole graph (spec §12.2). The default state carries:
 
-- the search field, prominent and centred, with the `hybrid` marker and the
-  "filters apply before the vector search" note;
+- the search field, prominent and centred, with the `words + meaning` marker and the
+  "filters narrow what is searched, not what is shown" note (reworded from the implementation's
+  terms by ADR 0013);
 - four counts in the mono numeral style — documents, nodes, edges, contested†;
 - the three entry points from spec §12.5 as parallel cards — Search, Coverage, Contested;
 - a short "where you were" list of saved views and recent nodes.

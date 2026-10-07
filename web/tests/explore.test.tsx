@@ -38,20 +38,21 @@ function text(markup: string): string {
 
 describe('the search field', () => {
   it('names the retrieval mode', () => {
-    // Retrieval is two arms fused by rank (`P2-06`), and lexical-only results
-    // fail differently from fused ones. A search box that hid the mode would
-    // make a thin result set unreadable — you could not tell a narrow corpus
-    // from a missing vector arm.
+    // Retrieval matches words and meaning, fused by rank (`P2-06`); a search box
+    // that hid the mode would make a thin result set unreadable. Said in a
+    // reader's words, not the implementation's (`B-99`).
     const markup = renderToStaticMarkup(<SearchField value="" onChange={noop} />)
     expect(text(markup)).toContain(MODE_MARKER)
+    expect(MODE_MARKER).not.toMatch(/hybrid|vector|lexical/i)
   })
 
-  it('states that filters run before the vector search', () => {
+  it('states that filters narrow what is searched', () => {
     // §12.5's behaviour, said where the query is typed. It is the difference
     // between "twenty government sources" and "whatever survived filtering the
     // top twenty", and a reader who assumes the second mistrusts a correct
-    // result set.
+    // result set. Plain words on a reader surface (`B-99`).
     expect(text(renderToStaticMarkup(<SearchField value="" onChange={noop} />))).toContain(FILTER_NOTE)
+    expect(FILTER_NOTE).not.toMatch(/vector|lexical|embedding/i)
   })
 
   it('lets the note be replaced, so a degraded mode can say so', () => {

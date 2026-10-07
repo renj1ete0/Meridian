@@ -111,7 +111,7 @@ nowhere to put a verdict. It is metadata beside a quote, so it has no fill, sinc
 would outweigh the passage. Labels are not a ranking and are not abbreviated to initials. The
 tier list mirrors the database enum and `tests/tier.test.ts` compares them, because a tier added
 to Postgres and not to the list renders as an unstyled fallback nobody notices. Data chips
-(an extractor, a chunk id, `hybrid`) share the hairline form but are lower case: they are
+(an extractor, a chunk id, the search mode) share the hairline form but are lower case: they are
 values, and capitals would turn a value into a heading.
 
 ### Icons and the mark
@@ -345,13 +345,20 @@ words.
 
 ### The search field
 
-§8 puts two unusual things in the control. **The `hybrid` marker**: retrieval is two arms fused
-by reciprocal rank (`P2-06`), and a lexical-only result set and a fused one fail in different
-ways and want different follow-ups, so the mode is named, the same instinct as putting the tier
-on every hit. **"Filters apply before the vector search"**, an implementation note on the
-surface on purpose: it is the difference between "twenty government sources" and "whatever
+§8 puts two unusual things in the control. **The `words + meaning` marker**: retrieval is two
+arms fused by reciprocal rank (`P2-06`), one matching the words and one finding passages near in
+meaning, and a words-only result set and a fused one fail in different ways, so the mode is
+named, the same instinct as putting the tier on every hit. **"Filters narrow what is searched,
+not what is shown"**: it is the difference between "twenty government sources" and "whatever
 survived filtering the top twenty", and a reader who assumes the second will mistrust a correct
 result set. The field holds no state; the query belongs to the page.
+
+Both were first written in the implementation's terms (`hybrid`, "filters apply before the
+vector search") and are reworded in a reader's (`B-99`, [ADR 0013](../adr/0013-find-says-what-search-does-in-plain-words.md)),
+matching the summary line's "matched the words · near in meaning". They state what search does,
+not how; a search that ran on words alone still says so in the results, through the degraded
+notice, since the marker describes the design and the notice describes this answer. Tests hold
+both free of `hybrid`, `vector`, `lexical` and `embedding`.
 
 ### Search results
 

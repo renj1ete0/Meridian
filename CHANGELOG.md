@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.162.3] — 2026-10-07
+
+### Changed
+
+- `B-99`: Find's search field speaks a reader's language (ADR 0013). The mode badge reads
+  `words + meaning` instead of `hybrid`, and the note under the field reads "Filters narrow
+  what is searched, not what is shown." instead of naming the vector search. The mocks and
+  design-system §8 change with it.
+
 ## [0.162.2] — 2026-10-07
 
 ### Fixed
