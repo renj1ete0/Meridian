@@ -1,16 +1,8 @@
 """The gazetteer (spec §5.6).
 
-Generic NER does not know domain entities. "Land Transport Authority" may resolve
-as an ORG; "Electronic Road Pricing", "Silver Zone" and "ODD" will not. This table
-is loaded into spaCy's ``EntityRuler`` at worker startup so gazetteer matches take
-precedence over statistical NER.
-
-It is bootstrapped, not hand-written: ~50 seeded manually, then grown by
-auto-harvesting the ``Full Name Here (ACRONYM)`` pattern — extremely high-yield in
-government and academic documents, and one regex over already-extracted text.
-
-Its alias lists are exactly the alias matching entity resolution needs, so the two
-share one table rather than duplicating.
+Domain vocabulary loaded into spaCy's ``EntityRuler`` ahead of statistical NER, and
+the alias table entity resolution uses. Seeded by hand, grown by acronym harvest. See
+docs/features/places-and-terms.md#the-gazetteer.
 """
 
 from __future__ import annotations
@@ -47,19 +39,9 @@ class GazetteerTerm(Base, TimestampMixin):
     # in different countries.
     jurisdiction: Mapped[str | None] = mapped_column(Text, index=True)
 
-    # True when the surface form collides — with a common word, with another
-    # domain, or with another term in the SAME country. Jurisdiction alone does
-    # not settle it: within a single document a three-letter acronym can be a
-    # domain term or an unrelated piece of business vocabulary, and a two-letter
-    # one can have three readings at once.
-    #
-    # An ambiguous surface form therefore maps to SEVERAL rows here, and this
-    # table can only offer candidates — it cannot decide. The resolver picks
-    # using document context (co-occurring entities, the document's topic,
-    # whether a full form appears nearby), and where context is insufficient it
-    # must leave the mention UNRESOLVED rather than guess. That is §5.5's middle
-    # band: a wrong resolution corrupts the graph invisibly, an unresolved
-    # mention stays visible and fixable.
+    # True when the surface form collides (with a common word, another domain, or
+    # another term in the same country). The table then offers candidates only; the
+    # resolver decides from context or leaves the mention unresolved (§5.5).
     ambiguous: Mapped[bool] = mapped_column(
         default=False, server_default=text("false"), nullable=False
     )
@@ -77,16 +59,8 @@ class GazetteerTerm(Base, TimestampMixin):
         Integer, nullable=False, default=0, server_default=text("0")
     )
 
-    # The third state (`P6-13`). `approved` is a boolean and the queue has three
-    # answers: waiting, yes, and no. Without this, "no" can only mean deleting
-    # the row — and the next harvest reads the same documents, finds the same
-    # definition and files it again, so the queue refills with exactly the terms
-    # somebody already turned down.
-    #
-    # A timestamp rather than a second boolean, because "when was this decided"
-    # is the question asked of a rejection nobody remembers making. Clearing it
-    # returns the term to the queue: a judgement made on two occurrences is
-    # worth revisiting at twenty.
+    # The third state (`P6-13`): rejected, kept as a tombstone so the next harvest does
+    # not file it again. Clearing it returns the term to the queue.
     rejected_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (

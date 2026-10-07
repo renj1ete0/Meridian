@@ -1,30 +1,9 @@
 """Auto-harvesting acronym definitions (task P5-02, spec §5.6).
 
-``python -m worker.harvest`` — one pass over documents nobody has read yet.
-
-§5.6 is blunt about where the gazetteer comes from: **"do not hand-write it —
-bootstrap it."** Fifty terms are seeded by a person, and then the table grows
-from the observation that government and academic documents define their
-acronyms on first use. ``Full Name Here (ACRONYM)`` is one regex over text that
-has already been extracted, and §5.6 expects it to populate most of the list.
-
-**Nothing it finds is approved.** Terms land ``approved=false`` and stay there
-until a person confirms them or the same expansion turns up in enough separate
-documents. That is not caution for its own sake: an approved row loads into the
-``EntityRuler``, and the ruler *overrides* statistical NER — so a regex mistake
-promoted straight to approved does not merely add a wrong entity, it takes the
-model's say away on every document that mentions it.
-
-**Corroboration is counted in documents, not occurrences.** A report that
-defines a term in its glossary and again in each of forty sections has said one
-thing forty times, and counting hits would auto-approve on the strength of a
-single author's typo.
-
-**Two expansions for one acronym is the finding, not the failure.** It gets both
-rows flagged ambiguous, which keeps both out of the ruler and hands the mention
-to §5.5's resolver, which can see the rest of the document. The alternative —
-keeping whichever was inserted first — decides between two readings by row order
-and leaves no trace that there was a choice.
+``python -m worker.harvest`` — one pass over on-topic documents nobody has read yet.
+Terms land unapproved; corroboration is counted in documents, not occurrences; two
+expansions for one acronym flag both rows ambiguous. See
+docs/features/places-and-terms.md#harvest.
 """
 
 from __future__ import annotations
@@ -54,18 +33,11 @@ log = get_logger(__name__)
 BATCH = 50
 
 #: How many separate documents must define a term the same way before it is
-#: approved without anyone looking. §5.6 allows "auto-approve above a frequency
-#: threshold"; three independent documents agreeing on an expansion is a much
-#: stronger claim than thirty mentions in one.
+#: approved without anyone looking (§5.6's frequency threshold).
 APPROVAL_THRESHOLD = 3
 
-#: What a harvested term is when its name does not say, in §5.6's five types.
-#: `concept` is the one that claims least — a term filed here and later
-#: corrected costs a curator one dropdown, where a term wrongly filed as
-#: `agency` reads as a fact somebody established. A head word that says one
-#: thing ("…Authority", "…Scheme") does say (`B-70`): with every harvested term
-#: filed as a concept, the type told the ruler, the approval queue and search
-#: seeding nothing at all.
+#: What a harvested term is when its name does not say: `concept`, which claims
+#: least. A head word that says one thing does say (`B-70`).
 HARVEST_ENTITY_TYPE = "concept"
 
 HARVEST_SOURCE = "auto_acronym"
@@ -75,19 +47,14 @@ HARVEST_SOURCE = "auto_acronym"
 class HarvestStats:
     documents: int = 0
     definitions: int = 0
-    #: `terms_created`, not `created`. These fields are logged as an `extra`
-    #: mapping, and `logging` *raises* when a key shadows a `LogRecord`
-    #: attribute — `created` is the record's own timestamp. The nightly
-    #: harvest died on it every night, in a line whose only job was to say
-    #: what the pass had done (`B-21`).
+    #: `terms_created`, not `created`: `logging` raises when an `extra` key shadows a
+    #: `LogRecord` attribute (`B-21`).
     terms_created: int = 0
     corroborated: int = 0
     approved: int = 0
     ambiguous: int = 0
-    #: Definitions matching a term somebody already turned down (`P6-13`).
-    #: Counted rather than silent: a number that keeps climbing means a document
-    #: set keeps asserting something a curator keeps rejecting, and that is worth
-    #: seeing.
+    #: Definitions matching a term somebody already turned down (`P6-13`), counted so
+    #: a climbing number is seen.
     already_rejected: int = 0
 
     def as_dict(self) -> dict[str, int]:
@@ -97,22 +64,16 @@ class HarvestStats:
 async def sources_awaiting_harvest(sess: AsyncSession, limit: int) -> list[int]:
     """The queue: on-topic documents with text that nobody has read for acronyms.
 
-    ``acronyms_harvested_at IS NULL`` is the whole predicate, the same shape the
-    novelty gate uses — so a pass killed in hour three keeps everything it
-    committed and the next one starts where it stopped, with no cursor to store
-    and nothing to reconcile if two passes overlap.
+    ``acronyms_harvested_at IS NULL`` is the whole predicate, so a killed pass keeps
+    what it committed.
     """
     rows = await sess.scalars(
         select(Source.source_id)
         .where(
             Source.acronyms_harvested_at.is_(None),
             Source.text_available.is_(True),
-            # On a topic only (`B-123`). Every document with text was read, and
-            # the approval queue filled with tens of thousands of terms from
-            # pages about none of the topics — radio specifications, clinical
-            # codes — burying the few worth approving. A document not yet
-            # labelled waits for its label; one labelled off-topic is never
-            # read for terms. Nothing already queued is touched.
+            # On a topic only (`B-123`): unlabelled documents wait, off-topic ones are
+            # never read. See docs/features/places-and-terms.md#design-choices.
             func.cardinality(Source.topic_labels) > 0,
         )
         .order_by(Source.source_id)
@@ -124,11 +85,7 @@ async def sources_awaiting_harvest(sess: AsyncSession, limit: int) -> list[int]:
 async def document_text(sess: AsyncSession, source_id: int) -> str:
     """One document's chunks, rejoined in order.
 
-    Rejoined rather than scanned chunk by chunk because a definition split across
-    a chunk boundary is invisible to both halves — "…the Land Transport" ends one
-    chunk and "Authority (LTA) said…" begins the next, and each alone looks like
-    text with no definition in it. Chunking has no overlap (`P2-02`), so the join
-    reconstructs the document rather than duplicating it.
+    So a definition split across a chunk boundary is found; chunks do not overlap.
     """
     # Live chunks only (`B-85`): superseded ones are text the page no longer
     # holds, and the only index on source_id is the live one, so without this
@@ -144,10 +101,7 @@ async def document_text(sess: AsyncSession, source_id: int) -> str:
 def _canonical_match(rows: list[GazetteerTerm], expansion: str) -> GazetteerTerm | None:
     """An existing row for this expansion, compared case-insensitively.
 
-    Case-insensitively because a document that writes a term in a heading and the
-    curator who typed it in sentence case mean the same term, and a second row
-    that differs only in capitalisation is the fragmentation §5.5 exists to
-    prevent — arriving through the table that is supposed to fix it.
+    So capitalisation does not split one term into two rows (§5.5).
     """
     wanted = expansion.casefold()
     for row in rows:
@@ -168,10 +122,7 @@ async def record(
     row = _canonical_match(existing, expansion)
 
     if row is not None and row.rejected_at is not None:
-        # A rejected term is a tombstone, not a row to update. Bumping its count
-        # would let a later document push it over the auto-approval threshold —
-        # so the term somebody turned down would come back approved, which is
-        # worse than it never having been rejected at all.
+        # A rejected term is a tombstone: bumping its count could auto-approve it.
         stats.already_rejected += 1
         return row
 
@@ -190,11 +141,8 @@ async def record(
     else:
         row.occurrence_count = (row.occurrence_count or 0) + documents
         stats.corroborated += 1
-        # A regex may not edit curated data. An approved row is already loaded
-        # into the ruler, so an alias appended here would take effect with no
-        # one having agreed to it — which is the approval queue being bypassed by
-        # the one mechanism it exists to hold back. The count still rises, and
-        # that is the corroboration signal either way.
+        # A regex may not edit curated data: an approved row is loaded, so a new alias
+        # would take effect unagreed. The count still rises.
         if not row.approved and acronym not in (row.aliases or []):
             row.aliases = [*(row.aliases or []), acronym]
 
@@ -213,12 +161,7 @@ async def record(
 async def flag_ambiguous(sess: AsyncSession, acronym: str, stats: HarvestStats) -> None:
     """Two expansions for one acronym: flag every row that claims it.
 
-    Flagged, never resolved. The column's own comment is the rule — where context
-    is insufficient a mention must be left unresolved rather than guessed,
-    because a wrong resolution corrupts the graph invisibly and an unresolved
-    mention stays visible and fixable. This pass has no context: it has read two
-    documents that disagree, which is exactly the evidence that the surface form
-    cannot be decided from the surface form.
+    Flagged, never resolved: this pass has no context to decide with.
     """
     rows = list(
         await sess.scalars(
@@ -229,10 +172,7 @@ async def flag_ambiguous(sess: AsyncSession, acronym: str, stats: HarvestStats) 
             )
         )
     )
-    # Rejected rows are excluded deliberately. "This expansion is wrong" is the
-    # opposite of evidence that the acronym is ambiguous, and counting a
-    # tombstone as a competing reading would hold the correct term out of the
-    # matcher on the strength of the one that was thrown away.
+    # Rejected rows are excluded: a rejection is not a competing reading.
     if len({row.canonical.casefold() for row in rows}) < 2:
         return
     for row in rows:
@@ -308,23 +248,18 @@ class RetypeStats:
     collisions: int = 0
 
 
-#: A character that makes a harvested "name" a clause (`B-70`). Not the comma:
-#: "Agency for Science, Technology and Research" is one name. An author list
-#: that slips through is never corroborated by three documents, so it never
-#: reaches the ruler.
+#: A character that makes a harvested "name" a clause (`B-70`). Not the comma,
+#: which belongs in many names.
 _NOT_A_NAME = (";",)
 
 
 async def retype_harvested(sess: AsyncSession, *, apply: bool) -> RetypeStats:
     """Bring terms harvested before `B-70` up to what the harvest writes now.
 
-    Only ``auto_acronym`` rows that nobody rejected: a curated row is a person's
-    decision and a regex does not revise it. Three repairs — the type from the
-    head word; "multi - agent" and "Science , Technology" back to what the
-    document wrote; and a "name" holding a semicolon marked rejected, which
-    keeps it as a tombstone the next harvest respects rather than deleting it. A repair that
-    would collide with an existing row (the table is unique on name,
-    jurisdiction and type) is skipped and counted. Flushes; the caller commits.
+    Only unrejected ``auto_acronym`` rows. Sets the type from the head word, restores
+    the document's spelling, and marks a "name" holding a semicolon rejected. A repair
+    that would collide with an existing row is skipped and counted. Flushes; the
+    caller commits.
     """
     stats = RetypeStats()
     rows = list(

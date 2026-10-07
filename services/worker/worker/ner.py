@@ -1,25 +1,9 @@
 """The gazetteer, loaded into spaCy's ``EntityRuler`` (task P5-02, spec §5.6).
 
-§5.6 asks for this in one sentence — "loaded into spaCy's ``EntityRuler`` at
-worker startup, so gazetteer matches take precedence over statistical NER" — and
-the precedence is the whole point. A pretrained model resolves "Land Transport
-Authority" as an ORG if you are lucky and makes nothing at all of "Electronic
-Road Pricing" or "farebox recovery ratio". The ruler is what turns those into
-entities on day one.
-
-**Per process, not per machine.** "At worker startup" is the spec's shorthand for
-"not per document"; taken literally it would mean a term approved at ten in the
-morning does nothing until somebody restarts a container. Every consumer here is
-a ``python -m`` pass that exits, so each run reads the table as it stands, and
-:func:`build_pipeline` is cached only for the life of the process.
-
-**spaCy is optional.** It is an extra (``meridian-worker[ner]``) rather than a
-dependency because the fast loop does not yet run it: `P5-01` is the task that
-introduces NER, and until it lands, shipping thinc, blis and a model file into
-the image that fetches web pages costs the Pi disk and build minutes for
-something nothing calls. The patterns themselves are built by
-:mod:`meridian_core.gazetteer`, which has no such dependency, so what loads and
-what is withheld is testable without any of it.
+Ruler matches take precedence over statistical NER. The table is read per process, so
+each pass sees current approvals. spaCy is the optional ``meridian-worker[ner]`` extra;
+patterns come from :mod:`meridian_core.gazetteer`, which does not need it. See
+docs/features/places-and-terms.md#ruler.
 """
 
 from __future__ import annotations
@@ -39,10 +23,8 @@ log = get_logger(__name__)
 #: than stacking a second ruler whose patterns silently lose every race.
 RULER_NAME = "gazetteer_ruler"
 
-#: ``blank`` means an English tokenizer and the ruler, with no statistical model
-#: at all. Not a degraded mode — on a machine where the curated terms are the
-#: ones that matter it is the honest configuration, and it makes the gazetteer
-#: usable without downloading a model.
+#: ``blank`` means an English tokenizer and the ruler, with no statistical model:
+#: an honest configuration where the curated terms are what matter.
 DEFAULT_MODEL = os.environ.get("MERIDIAN_SPACY_MODEL", "en_core_web_sm")
 
 
@@ -69,11 +51,7 @@ def _spacy():
 async def approved_terms(sess: AsyncSession) -> list[GazetteerTerm]:
     """Every row the ruler is allowed to consider.
 
-    Approved only, filtered in SQL. :func:`compile_patterns` re-checks it, and
-    that duplication is deliberate: this is the query the index
-    ``ix_gazetteer_approved_type`` exists for, and the re-check is what keeps the
-    rule true for callers that build patterns from a list they assembled
-    themselves.
+    Approved only, in SQL; :func:`compile_patterns` re-checks for other callers.
     """
     rows = await sess.scalars(
         select(GazetteerTerm)
@@ -86,12 +64,8 @@ async def approved_terms(sess: AsyncSession) -> list[GazetteerTerm]:
 def attach_ruler(nlp, compiled: CompiledGazetteer):
     """Put the patterns in front of the statistical model.
 
-    ``before="ner"`` when there is an NER component, and appended when there is
-    not. Order is the precedence §5.6 asks for: a ruler placed *after* ``ner``
-    cannot override it, because spaCy's entity spans do not overlap and the
-    first component to claim a span keeps it. The two placements look identical
-    in a smoke test — every curated term still matches on text the model has no
-    opinion about — and differ on exactly the terms the gazetteer exists for.
+    ``before="ner"`` when there is an NER component, appended otherwise: a ruler after
+    ``ner`` cannot override it.
     """
     if nlp.has_pipe(RULER_NAME):
         nlp.remove_pipe(RULER_NAME)

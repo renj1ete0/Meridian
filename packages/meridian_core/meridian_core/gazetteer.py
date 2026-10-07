@@ -1,20 +1,10 @@
 """Turning gazetteer rows into matcher patterns, and text into gazetteer rows (§5.6).
 
-Two pure halves of task `P5-02`, both deliberately free of spaCy and of the
-database.
-
-:func:`compile_patterns` is the load: approved rows in, ``EntityRuler`` patterns
-out. §5.6 says ruler matches take precedence over statistical NER, which makes
-every pattern here an *override* — whatever it matches stops being a question the
-model gets to answer. A bad pattern therefore does not degrade extraction, it
-silently replaces it, and the corpus has no way to show that it happened.
-
-:func:`find_acronyms` is the growth: §5.6's step 2, "auto-harvest acronym
-definitions", which is one regex over text that has already been extracted and
-is by far the highest-yield way to fill this table. The regex is the easy part.
-Everything below it is the filter, because ``(PDF)``, ``(see Figure 3)`` and
-``(USD)`` also match ``Full Name Here (ACRONYM)`` and every one of them admitted
-is a permanent piece of noise in the thing entity resolution trusts.
+Two pure halves of task `P5-02`, free of spaCy and the database:
+:func:`compile_patterns` turns approved rows into ``EntityRuler`` patterns, which
+override statistical NER; :func:`find_acronyms` harvests ``Full Name (ACRONYM)``
+definitions, mostly a filter against bracketed noise. See
+docs/features/places-and-terms.md#ruler and #harvest.
 """
 
 from __future__ import annotations
@@ -45,15 +35,8 @@ MAX_ACRONYM_LETTERS = 8
 #: definition costs nothing — the next document that defines the term catches it.
 _WINDOW = 2
 
-#: Sentence-ish boundaries. An expansion may not cross one: text before a full
-#: stop is a different claim, and stitching across it invents a term that
-#: appeared nowhere.
-#:
-#: A *single* newline is not one. Extracted PDF text breaks lines mid-sentence
-#: constantly — "the Land Transport\nAuthority (LTA)" is the ordinary shape of a
-#: definition in a two-column report — and treating every line break as a
-#: sentence end would reject most real definitions in exactly the documents this
-#: pattern is high-yield in. A blank line is a paragraph break and does count.
+#: Sentence-ish boundaries an expansion may not cross. A single newline is not one
+#: (PDF text breaks lines mid-sentence); a blank line is.
 _BOUNDARY = re.compile(r"[.!?;:•]|\n[ \t]*\n|\s[-–—]\s")
 
 #: The bracketed candidate. Deliberately permissive — the initialism check below
@@ -86,10 +69,7 @@ def tokenise(text: str) -> list[str]:
 class Withheld:
     """One surface form that will *not* be force-labelled, and why.
 
-    Returned rather than logged and dropped. A term a curator added and that
-    never matches anything is the kind of failure nobody reports, because
-    nothing breaks: extraction still runs, the graph still fills, and the term
-    is simply absent from it.
+    Returned rather than logged, so an approved term that never matches is visible.
     """
 
     surface: str
@@ -109,11 +89,8 @@ class CompiledGazetteer:
 def label_for(entity_type: str) -> str:
     """The ``EntityRuler`` label for one of §5.6's five types.
 
-    Upper-cased, and deliberately *not* spaCy's own scheme. If a gazetteer match
-    were labelled ``ORG`` it would be indistinguishable downstream from a match
-    the statistical model guessed — and these two carry completely different
-    confidence. One was written by a person; the other is a model's opinion
-    about a capitalised word.
+    Upper-cased and not spaCy's scheme, so a curated match is never mistaken for a
+    model's guess.
     """
     return entity_type.upper()
 
@@ -121,12 +98,8 @@ def label_for(entity_type: str) -> str:
 def _token_pattern(surface: str) -> tuple[list[dict], bool]:
     """Token pattern plus whether it is case-sensitive.
 
-    The case rule is the single most consequential line in this module. Matching
-    a short all-caps form case-insensitively fires on the ordinary English word:
-    "ODD" matches *odd*, "ERP" matches nothing but "TOD" matches *tod*, and each
-    hit becomes a curated, high-precedence entity in a research corpus. Matching
-    a long form case-sensitively is the mirror failure and much cheaper — it
-    just misses "the land transport authority" in lower-cased prose.
+    Short all-caps forms match case-sensitively, or they fire on ordinary words. See
+    docs/features/places-and-terms.md#ruler.
     """
     tokens = tokenise(surface)
     cased = (
@@ -160,32 +133,9 @@ def surfaces_of(term) -> list[str]:
 def compile_patterns(terms) -> CompiledGazetteer:
     """Approved, unambiguous rows → ``EntityRuler`` patterns.
 
-    Three rules, each of which exists because the ruler *overrides* the model.
-
-    **Unapproved rows do not load.** ``approved=false`` is where auto-harvested
-    and model-proposed terms wait (§5.6 steps 2–4). Loading them would make the
-    approval queue decorative and let a regex's mistake become a curated entity.
-
-    **A row flagged ambiguous keeps its canonical and loses its aliases.** The
-    column's own comment is explicit: where context is insufficient a mention
-    must be left *unresolved* rather than guessed, because a wrong resolution
-    corrupts the graph invisibly and an unresolved mention stays visible and
-    fixable. That is an argument about the *short* ways of naming the thing —
-    "LTA", "the Authority" — and not about the full form a curator wrote down to
-    identify it. Withholding the canonical too costs the most reliable surface
-    form in the table and buys nothing: "Land Transport Authority" spelled out is
-    not a mention whose context is insufficient.
-
-    The flag therefore means "the short ways of saying this are not decidable",
-    not "this thing cannot be named". Where the canonical itself collides, the
-    collision rule below catches it — and does so from evidence rather than from
-    a flag somebody remembered to set.
-
-    **Surface forms that collide are withheld even when nothing is flagged.**
-    ``ambiguous`` is hand-maintained and will drift; two rows sharing a surface
-    is the same fact, observed rather than declared. Without this the ruler keeps
-    whichever pattern it saw first and the choice between two jurisdictions is
-    made by row order.
+    Unapproved rows do not load. An ambiguous row keeps its canonical form and loses its
+    aliases. Surface forms shared by two rows are withheld even when nothing is flagged.
+    See docs/features/places-and-terms.md#ruler.
     """
     by_key: dict[tuple[bool, str], list] = {}
     flagged: dict[tuple[bool, str], list] = {}
@@ -222,11 +172,7 @@ def compile_patterns(terms) -> CompiledGazetteer:
             {
                 "label": label_for(term.entity_type),
                 "pattern": tokens,
-                # What makes a match resolvable without matching the string
-                # again: spaCy surfaces this as ``ent.ent_id_``, so "the
-                # Authority" arrives already carrying the row it came from —
-                # which is exactly what §5.5 needs and cannot recover from the
-                # span alone.
+                # Surfaces as ``ent.ent_id_``, so an alias arrives carrying its row (§5.5).
                 "id": str(term.term_id),
             }
         )
@@ -244,23 +190,14 @@ class TermVerdict:
     """
 
     will_load: bool
-    #: `unapproved`, `rejected`, `ambiguous`, `collision`, `no_patterns` — or
-    #: None when nothing about this row was held back. Present even when
-    #: ``will_load`` is True, which is the partial case: a canonical that loads
-    #: while one of its aliases is withheld, where reporting only the verdict
-    #: would lose the alias silently.
+    #: `unapproved`, `rejected`, `ambiguous`, `collision`, `no_patterns` — or None when
+    #: nothing was held back. Present even when ``will_load`` is True, for a withheld alias.
     reason: str | None = None
     collides_with: tuple[int, ...] = ()
 
 
 def loading_report(terms) -> dict[int, TermVerdict]:
-    """Per-row verdicts for an approval screen.
-
-    Exists because approving a term that then never matches anything is the
-    failure this table's curation is most prone to and least able to notice: the
-    row says approved, extraction runs, and the term is simply absent from every
-    document. Nothing surfaces that except asking the compiler what it did.
-    """
+    """Per-row verdicts for an approval screen, so an approved term that will not load is seen."""
     compiled = compile_patterns(terms)
     loaded = {int(pattern["id"]) for pattern in compiled.patterns}
 
@@ -326,11 +263,8 @@ def _skippable(token: str) -> bool:
 def _expansion_start(words: list[str], letters: str) -> int | None:
     """Where in ``words`` an expansion of ``letters`` begins, or None.
 
-    Right to left, one word per letter, with connectives skippable in between.
-    The last word must carry the last letter and the first word the first: an
-    expansion that starts mid-word ("Annual Land Transport Authority" for LTA)
-    is how a plausible-looking wrong expansion gets in, and both anchors are
-    free to check.
+    Right to left, one word per letter, connectives skippable; the first word must
+    carry the first letter and the last word the last.
     """
     letter = len(letters) - 1
     word = len(words) - 1
@@ -348,10 +282,8 @@ def _expansion_start(words: list[str], letters: str) -> int | None:
 #: Tokens that end a name rather than sit inside one.
 _BREAKS = frozenset({";", ":", '"', "“", "”", "(", ")", "[", "]"})
 
-#: Joining tokens back with spaces writes "multi - agent" and "A / B"; the
-#: document said "multi-agent". Patterns are built from `tokenise`, which
-#: splits either spelling the same way, so this changes what a person reads
-#: and not what matches.
+#: Rejoins tokens as the document wrote them ("multi-agent"); display only, since
+#: `tokenise` splits either spelling the same way.
 _GLUED = re.compile(r"\s*([-/‐–’'])\s*")
 _BEFORE_COMMA = re.compile(r"\s+,")
 
@@ -371,10 +303,7 @@ _LOOKBACK = 2000
 def boundary_ends(text: str) -> list[int]:
     """Where each clause boundary in ``text`` ends, in order.
 
-    Found once per document (`B-85`). Scanning ``text[:end]`` again for every
-    bracket made a long report quadratic. The two agree: a scan of a prefix
-    makes the same match decisions as a scan of the whole, up to the one match
-    that straddles the prefix's end, which ends after it and so never counts.
+    Found once per document (`B-85`); same decisions as rescanning each prefix.
     """
     return [hit.end() for hit in _BOUNDARY.finditer(text)]
 
@@ -401,11 +330,7 @@ def clause_words(text: str, end: int, needed: int, ends: list[int] | None = None
 def find_acronyms(text: str) -> list[AcronymDefinition]:
     """Every ``Full Name Here (ACRONYM)`` this text defines.
 
-    Deduplicated, first definition wins, order preserved. The reverse form —
-    ``ACRONYM (Full Name Here)`` — is not read: it is far rarer in the documents
-    this corpus fetches, and the same bracket shape is also how those documents
-    gloss anything at all, so accepting it would mean accepting every
-    parenthetical as an expansion.
+    Deduplicated, first definition wins, order preserved. The reverse form is not read.
     """
     found: dict[tuple[str, str], AcronymDefinition] = {}
     ends = boundary_ends(text)
@@ -447,12 +372,8 @@ def find_acronyms(text: str) -> list[AcronymDefinition]:
 # What kind of thing a harvested name is
 # ---------------------------------------------------------------------------
 
-#: A name's head word, by the type it signals. English puts the head last
-#: ("National Science Foundation") or before the first preposition ("Ministry
-#: of Transport"). Only heads that say one thing: "Service", "Group", "System"
-#: and "Framework" name agencies, schemes and concepts alike, and stay concept;
-#: so do "Network" (usually a neural one in this corpus) and "Law" (of physics as
-#: often as of a legislature).
+#: A name's head word, by the type it signals. Only heads that say one thing; mixed
+#: ones ("Service", "System", "Network", "Law") stay concept.
 _AGENCY_HEADS = """
     academy agency alliance administration assembly association authority board bureau
     centre center coalition college commission committee company conference consortium

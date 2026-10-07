@@ -1,42 +1,11 @@
 """The names places go by, and the codes they are stored under (task P2-23).
 
-Reference data, not configuration: which country a name denotes is settled by
-ISO 3166-1, not by an operator, so this lives in code beside the matcher rather
-than in a seeded table that could drift from it. Changing anything here changes
-:func:`meridian_core.places.basis_fingerprint`, so every source is re-examined
-under the new vocabulary — the same rule `topiclabels.REFERENCE_TEXTS` follows.
-
-**The code scheme.** A place is stored as a short uppercase code:
-
-- a **country** is its ISO 3166-1 alpha-2 code — two letters. ``EU`` is the
-  code ISO reserves for the European Union, and is used for it; a document
-  about union-level regulation is about neither one member state nor none.
-- a **city** is its UN/LOCODE, written without the space — five characters,
-  the country's alpha-2 followed by three. The prefix *is* the country, so a
-  city code always implies its country code and a consumer can roll a city up
-  with ``code[:2]``. Length alone tells the two kinds apart, and neither can be
-  confused with an ISO 3166-2 subdivision code, which carries a hyphen.
-
-City-states (and territories ISO codes as countries) have no separate city
-code: the country code already names the city.
-
-**Names are matched case-sensitively, as proper nouns.** Lower-case forms are
-overwhelmingly common nouns and adjectives; an all-caps form is matched too,
-because headings and some PDFs set names in capitals.
-
-**What is left out, and why.** A surface form that is routinely something other
-than the place — a common first name or surname, a US state that is also a
-country, a word that is also a bird — is listed in :data:`AMBIGUOUS` and never
-matched. Precision is the point: a place tag that is wrong puts a document in
-the wrong column of a comparison, while a missing tag leaves it out of one and
-the pass's other signals may still supply it. Demonyms and adjectives are not
-matched at all: most of them are also the name of a language, and a document
-that quotes a foreign-language title is not about that country.
-
-:data:`NOT_PLACES` are phrases that *contain* a place name and are not about
-the place — a treaty named for the city it was signed in, a newspaper named
-for its city. The matcher consumes them first, so the name inside is never
-counted.
+Reference data, in code; any change re-examines every source through
+:func:`meridian_core.places.basis_fingerprint`. A country is its ISO 3166-1 alpha-2
+code (``EU`` for the union); a city its UN/LOCODE without the space, whose first two
+letters are its country. Names match case-sensitively; :data:`AMBIGUOUS` forms and
+demonyms never match, and :data:`NOT_PLACES` phrases are consumed first. See
+docs/features/places-and-terms.md#place-names.
 """
 
 from __future__ import annotations
@@ -264,10 +233,8 @@ COUNTRIES: dict[str, tuple[str, ...]] = {
     "ZW": ("Zimbabwe",),
 }
 
-#: UN/LOCODE (no space) → the names that denote the city. The first two letters
-#: are the country. Large metropolitan areas, not a hand-picked list: a city
-#: missing here is still tagged with its country when the country is named,
-#: and the list grows by adding a line, which re-examines the corpus.
+#: UN/LOCODE (no space) → the names that denote the city. Large metropolitan areas;
+#: a missing city is still tagged with its country when the country is named.
 CITIES: dict[str, tuple[str, ...]] = {
     # East Asia
     "JPTYO": ("Tokyo",),
@@ -390,12 +357,8 @@ CITIES: dict[str, tuple[str, ...]] = {
     "PELIM": ("Lima",),
 }
 
-#: Country → the names of its states, provinces and regions. Not stored as
-#: codes of their own — ISO 3166-2 would give them one, and nothing here asks
-#: questions at that level yet — but a document about a state's regulation is
-#: about the country, and without these it names the country too rarely to
-#: tag. Several contain another place's name, which is why they must be
-#: matched whole.
+#: Country → the names of its states, provinces and regions, counted as the country.
+#: Several contain another place's name, so they must be matched whole.
 SUBDIVISIONS: dict[str, tuple[str, ...]] = {
     "US": (
         "Alabama",

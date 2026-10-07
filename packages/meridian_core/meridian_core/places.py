@@ -1,46 +1,10 @@
 """Which places a source is about (task P2-23, spec §7.2, §5.5, §5.6).
 
-The project's questions compare places — the evidence in one city against
-another — and until this module no source recorded which places it concerns,
-so coverage could not be stated per place and nothing could be filtered by
-geography. ``sources.places`` is the answer, written by ``python -m
-worker.places`` and read by search, the explore API and Gaps.
-
-**Mechanical, from four signals.** The worker never calls a model (§2.1), and
-nothing here needs one:
-
-1. **Names in the text.** Country and city names (:mod:`.placenames`) and
-   approved gazetteer terms that carry a jurisdiction (§5.6), counted across
-   the source's live chunks, with a mention in the title counted
-   :data:`TITLE_WEIGHT` times. A place is tagged when it is named at least
-   :data:`MIN_MENTIONS` times *and* at least :data:`SHARE_OF_BEST` as often as
-   the most-named country — so a passing mention, an author's affiliation or
-   one comparison sentence does not tag a document, while a document that
-   compares several places evenly carries all of them.
-2. **Place entities cited from its chunks.** An edge touching a ``place`` node
-   whose supporting chunks are this source's is a claim, drawn from this text,
-   about that place. It tags on its own.
-3. **The publisher's domain.** A country-code or national-government suffix
-   says where the publisher is, which is not what the page is about — a
-   foreign publisher writing about another country is the case it gets wrong.
-   So it never overrides the text. It lowers the bar for its own country (to
-   :data:`DOMAIN_MIN_MENTIONS`, still subject to the share), and a
-   *government* domain whose page names no place that passes is taken to be
-   about its own jurisdiction.
-4. **The document's language**, as the weakest evidence: it can confirm a
-   country-code domain on a page that names no place, and never tags alone.
-
-**Which signals decided is recorded** in ``sources.place_evidence``, so a tag
-can be checked by reading it rather than by re-running the pass.
-
-**NULL and ``{}`` stay different**, as for topics: NULL is "no pass has read
-this", ``{}`` is "read, and about no place it could name". A source with no
-live text stays NULL.
-
-**Tags go stale, and the queue knows when**, by the rule `topiclabels` uses: a
-basis fingerprint (the method, the thresholds, the names, the gazetteer terms)
-that changes when any of them does, a live chunk newer than the examination,
-and — for the entity signal — a place edge written since.
+Four mechanical signals: names in the text, place entities cited from its chunks, the
+publisher's domain (which lowers the bar for its own country and never overrides the
+text), and the document's language (confirmation only). What decided is recorded in
+``sources.place_evidence``. NULL is unread, ``{}`` read and about no place. Tags go
+stale by a basis fingerprint, as topic labels do. See docs/features/places-and-terms.md#places.
 """
 
 from __future__ import annotations
@@ -78,18 +42,7 @@ log = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # The numbers
 # ---------------------------------------------------------------------------
-#
-# Calibrated on a real crawled corpus by reading random samples of tagged
-# sources beside their titles and URLs; `python -m worker.places` prints the
-# distribution and a sample, which is where the next calibration starts.
-#
-# Before the reference-list rules below, most wrong tags came from citations:
-# each cited publisher's or conference's city adds a mention, and a long paper
-# accumulates enough of them to tag a country it never discusses. What
-# remains wrong after them is mostly the publisher's own country on listing
-# pages — a journal issue's contents, a department's publications — that name
-# it a few times. Raising the domain bar did not separate those from real
-# pages about the country, so it is left as a known error rather than tuned.
+# Calibrated on a real corpus; see docs/features/places-and-terms.md#place-calibration.
 
 #: The fewest mentions that tag a place from the text alone. Three let a
 #: short biography through on one line naming a country and a city in it.
@@ -105,10 +58,8 @@ CHARS_PER_MENTION = 10_000
 #: one place that mentions another in passing names the second far less.
 SHARE_OF_BEST = 0.25
 
-#: Where a reference list starts: a heading line naming one. Everything after
-#: the first such heading past :data:`REFERENCES_FROM` is left out — a
-#: bibliography names the city of every publisher cited, which says where
-#: books are printed, not what this document is about.
+#: Where a reference list starts: a heading line naming one. Text after the first
+#: such heading past :data:`REFERENCES_FROM` is left out; it names publishers' cities.
 REFERENCES_HEADING = re.compile(
     r"(?im)^[#*\s\d.]*(?:references|bibliography|works cited|literature cited|reference list)"
     r"[\s:*]*$"
@@ -118,12 +69,8 @@ REFERENCES_HEADING = re.compile(
 #: is a table of contents or a section titled that way.
 REFERENCES_FROM = 0.4
 
-#: A line that reads as one entry of a reference list, wherever it sits: a
-#: year, and one of the words citations are made of. Many pages carry their
-#: references under no heading at all, or mid-text where a site rendered them,
-#: and a conference venue or a publisher's city in each would otherwise add up
-#: to a place. On a real corpus these lines were a few per cent of the text,
-#: and read as citations when sampled.
+#: A line that reads as one entry of a reference list, wherever it sits: a year,
+#: and one of the words citations are made of.
 CITATION_YEAR = re.compile(r"\b(?:19|20)\d\d\b")
 CITATION_WORDS = re.compile(
     r"et al\.|\bpp\.|\bdoi\b|doi\.org|\b[Vv]ol\.|Proceedings|Journal|Conference|Symposium"
@@ -135,10 +82,8 @@ CITATION_MAX_LINE = 600
 #: document says it is about, and it is one line.
 TITLE_WEIGHT = 3
 
-#: The publisher's own country needs only this many mentions, by how strongly
-#: the domain says where the publisher is. A national government's page that
-#: names its country once is about it. A university or company page that
-#: names its country once is usually giving its address, so two.
+#: The publisher's own country needs only this many mentions, by how strongly the
+#: domain says where the publisher is: once for a government, twice otherwise.
 DOMAIN_MIN_MENTIONS = {"government": 1, "country_code": 2}
 
 #: Gazetteer surface forms shorter than this are left out — mostly acronyms,
@@ -225,11 +170,8 @@ class Vocabulary:
             gaz[term.surface] = term.country
 
         surfaces = sorted({*codes, *gaz}, key=lambda s: (-len(s), s))
-        # Longest first, so at any position the longest name wins: a longer
-        # name that contains a shorter one is matched whole, and a phrase in
-        # NOT_PLACES swallows the place name inside it. Lookarounds rather
-        # than \b, because several names end in a full stop, and \b after a
-        # full stop needs a word character to follow.
+        # Longest first, so a containing name or a NOT_PLACES phrase wins. Lookarounds
+        # rather than \b, because several names end in a full stop.
         alternation = "|".join(re.escape(s) for s in surfaces) or r"(?!x)x"
         pattern = re.compile(rf"(?<![\w])(?:{alternation})(?![\w])")
         return cls(codes=codes, gazetteer=gaz, pattern=pattern)
@@ -504,10 +446,7 @@ def basis_fingerprint(vocab: Vocabulary) -> str:
 async def gazetteer_places(sess: AsyncSession) -> list[GazetteerPlace]:
     """Approved, unrejected, unambiguous gazetteer terms with a jurisdiction.
 
-    An ambiguous term is left out entirely — canonical form too. §5.6 marks a
-    term ambiguous when its surface collides with something else, and then the
-    table can only offer candidates; counting one as a vote for a country
-    would be deciding what the resolver deliberately leaves undecided.
+    An ambiguous term is left out entirely, canonical form too.
     """
     rows = await sess.scalars(
         select(GazetteerTerm).where(
@@ -561,13 +500,8 @@ def pattern_country(pattern: str) -> str | None:
 def comparison_places(tier_map: Mapping, jurisdictions: Iterable[str | None]) -> list[Place]:
     """The places the corpus is set up to compare. Pure.
 
-    §7.2's comparison set is not a table of its own; it is already written
-    down twice in configuration the database holds. The source-tier map's
-    *government* patterns name one national suffix per place compared — the
-    file says so, line by line — and the gazetteer's jurisdictions name the
-    places whose agencies and schemes someone took the trouble to seed. The
-    union is the set, sorted by name. No corpus scan, so the answer does not
-    depend on what the crawl happened to reach.
+    The union of the tier map's government suffixes and the gazetteer's
+    jurisdictions, sorted by name (§7.2). No corpus scan.
     """
     codes: set[str] = set()
     for pattern in ((tier_map or {}).get("patterns") or {}).get("government") or ():

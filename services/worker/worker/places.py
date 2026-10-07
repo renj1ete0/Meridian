@@ -1,18 +1,8 @@
 """Which places each source's content is about (task P2-23, §7.2).
 
-``python -m worker.places`` — reports by default, writes only with ``--apply``.
-
-The method, its thresholds and their calibration live in
-:mod:`meridian_core.places`; this is the loop around them, shaped like
-`worker.retopic`: a queue that is a predicate (unexamined, examined under
-another basis, rewritten since, or newly cited by a place edge), a cursor so a
-report-only pass still moves forward, and a batch per transaction so a pass
-killed halfway keeps what it committed.
-
-**No model and no vectors.** The worker never calls a model (§2.1), and this
-pass does not need the embedder either: it reads words. So it can run the
-moment a page is chunked, and a deployment without an embedder still gets
-places.
+``python -m worker.places`` — reports by default, writes only with ``--apply``. The
+loop around :mod:`meridian_core.places`, shaped like `worker.retopic`. Needs neither a
+model nor the embedder.
 """
 
 from __future__ import annotations
