@@ -1,28 +1,8 @@
 """A question answered as grouped evidence, with coverage stated per place.
 
-A search returns a ranked list of passages, and a reader asking how places
-compare has to do the grouping in their head: which country is this about, have
-I seen it already, is this the third page from the same publisher. This module
-does that grouping mechanically over one search's candidate pool, so the answer
-page shows *where the evidence is*, *how much of it there is*, and *where it is
-thin* — with nothing written by a model. No model is called, and nothing here
-summarises: every item on the page is a passage a source actually contains.
-
-**Grouping is by country.** A hit counts towards every country its source is
-tagged with (`sources.places`), and a city rolls up into its country, so a
-source about two cities in one country is one source for that country, not two.
-Hits whose source carries no place land in ``unplaced``, which is split into
-sources examined and found about no place, and sources never examined — two
-different facts a reader should not have to guess between.
-
-**One item per source.** A document's best-scoring passage stands for it; how
-many of its passages matched rides along. A group of five items is five
-documents, never one document five times.
-
-**Coverage is a count, not a verdict on credibility** (design-system.md §4:
-report structure, not verdicts). :data:`COVERAGE_RULE` is the sentence the
-interface shows, and it is built from the same constants the rule uses, so the
-words cannot drift from the arithmetic.
+One search's candidate pool, grouped by country with one item per source, and coverage
+stated as a count. No model is called and nothing is summarised. See
+docs/features/search.md#the-answer-page.
 """
 
 from __future__ import annotations

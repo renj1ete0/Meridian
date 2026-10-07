@@ -24,15 +24,8 @@ from .vectorindex import indexed_distance
 
 log = get_logger(__name__)
 
-#: The text-search configuration, which must match the one `chunks.search_vector`
-#: was generated under (`P2-05`). A query parsed under `simple` against a vector
-#: built under `english` does not error — it silently stops matching inflected
-#: forms, which reads as a corpus that does not discuss the subject.
-#:
-#: It has to reach Postgres as a `regconfig`, not as text. Bound as a plain
-#: string the call is `websearch_to_tsquery(varchar, varchar)`, which does not
-#: exist — there is no implicit cast from varchar to regconfig, and the error is
-#: an undefined function rather than a type mismatch.
+#: The text-search configuration `chunks.search_vector` was generated under (`P2-05`);
+#: bound as a `regconfig`, never text. See docs/features/search.md#text-search-configuration.
 TS_CONFIG = "english"
 
 #: RRF's damping constant. 60 is the value from the original formulation and is
@@ -40,20 +33,8 @@ TS_CONFIG = "english"
 #: tuning it against a corpus this small would be fitting to noise.
 RRF_K = 60
 
-#: How many neighbours the HNSW index is allowed to consider, as a multiple of
-#: the candidates asked for.
-#:
-#: **pgvector's default is 40, and it is a ceiling on rows returned, not a
-#: quality knob.** An index scan yields at most `hnsw.ef_search` tuples, so a
-#: `LIMIT 100` over this index returns 40 or fewer however large the corpus is
-#: — measured at 33 on a real one. The lexical arm meanwhile returns its full
-#: hundred, so fusion sees two arms of different depths and systematically
-#: under-weights the vector side, and a recall benchmark at k=100 is capped at
-#: 40% by arithmetic rather than by the index.
-#:
-#: Twice the candidate pool, because a filtered query spends candidates on rows
-#: the filter then discards: the index cannot see `_conditions()`, so
-#: `ef_search` has to cover the misses as well as the hits.
+#: `hnsw.ef_search` as a multiple of the candidates asked for. pgvector's default
+#: caps the rows an index scan returns; see docs/features/search.md#vector-arm-depth.
 EF_SEARCH_FACTOR = 2
 
 #: How deep each arm goes before fusion. Larger than any sane `limit` on
@@ -63,32 +44,17 @@ DEFAULT_CANDIDATES = 100
 
 DEFAULT_LIMIT = 20
 
-#: How many matches RUM's own order hands to ``ts_rank_cd`` (`B-65`). RUM's
-#: distance ignores how close the terms sit, which is what ``ts_rank_cd``
-#: rewards, so the pool must be deep enough that cover density's best are in
-#: it. Measured on a real corpus: at this depth the reranked top 50 was the
-#: one-step ranking, or within one or two rows of it for common two-word
-#: questions; at a fifth of it, less than half survived for some. Costs a few
-#: tens of milliseconds, against several hundred for ranking every match.
+#: How many matches RUM's own order hands to ``ts_rank_cd`` (`B-65`). The depth was
+#: measured; see docs/features/search.md#lexical-ranking.
 LEXICAL_POOL = 1000
 
-#: Media types whose extractor produces pages rather than flat text (§6.6).
-#:
-#: §5.3 defines `page_or_offset` as "page number for paginated documents,
-#: character offset otherwise" — a rule every consumer otherwise has to know and
-#: apply itself, from a media type that was not on the hit. `P2-18`: derived
-#: once, here, so a client can label the number instead of guessing.
+#: Media types whose extractor produces pages rather than flat text (§6.6), so a hit's
+#: `page_or_offset` is a page (`P2-18`). See docs/features/search.md#citations.
 PAGINATED_MEDIA_TYPES = frozenset({"application/pdf"})
 
 
 def page_unit_for(media_type: str | None) -> str | None:
-    """What a hit's ``page_or_offset`` counts, or None when it cannot be known.
-
-    None rather than a default. Guessing "offset" mislabels every PDF and
-    guessing "page" mislabels every web page, and a source whose media type was
-    never recorded is genuinely unknown — saying so is more useful than a
-    confident wrong label on a citation someone will try to follow.
-    """
+    """What a hit's ``page_or_offset`` counts, or None when the media type is unknown."""
     if media_type is None:
         return None
     return "page" if media_type in PAGINATED_MEDIA_TYPES else "offset"
@@ -98,27 +64,9 @@ def page_unit_for(media_type: str | None) -> str | None:
 class SearchFilters:
     """What to search within. Every field narrows; None or empty means no narrowing.
 
-    Deliberately not a free-form mapping. These become SQL predicates, and the
-    set of things it is safe to filter on is a decision this module owns rather
-    than one each caller makes.
-
-    **The topic filter is overlap, not equality** (`P2-14`). A source carries
-    every topic it belongs to, so naming two topics means "either", which is
-    what a reader narrowing a search expects — and an AND across topics would
-    return almost nothing, since a document rarely sits squarely in two.
-
-    A source whose `topic_labels` is NULL is *not* excluded by an empty filter
-    and *is* excluded by a topic filter: NULL means nothing has examined it, so
-    it cannot be claimed for a topic, and claiming it would silently assert
-    something no pass has established.
-
-    **A passage matches on its own labels too** (`P2-24`). A topic filter keeps
-    a chunk when its source carries the topic *or* the chunk itself does, so a
-    chapter about one topic inside a document about another is found — the
-    source label alone would hide it. The hit says which matched
-    (:attr:`SearchHit.passage_topics`). Every chunk of a source labelled with
-    the topic still matches, as before: a passage is not required to be about
-    the topic when its document is.
+    Topics match by overlap (`P2-14`), on the source's labels or the passage's own
+    (`P2-24`); a source never examined (NULL labels) is excluded by a topic filter only.
+    See docs/features/search.md#filters.
     """
 
     source_tiers: Sequence[str] | None = None
@@ -128,12 +76,8 @@ class SearchFilters:
     #: Every one of ``topics`` rather than any (`B-72`): where topics meet.
     #: Counted on a live corpus, several hundred sources carry two or more.
     topics_all: bool = False
-    #: Match a source about any of these places (`P2-23`) — codes as
-    #: `sources.places` stores them. Overlap, like topics, and for the same
-    #: reason; and a source never examined for places (NULL) is excluded by a
-    #: place filter, because nothing has established where it is about.
-    #: Naming a country finds its cities' sources too: a city is only ever
-    #: tagged beside its country.
+    #: Match a source about any of these places (`P2-23`), as `sources.places` codes.
+    #: Overlap, like topics; NULL (never examined) is excluded. A country finds its cities.
     places: Sequence[str] | None = None
     published_after: dt.date | None = None
     published_before: dt.date | None = None
@@ -142,23 +86,12 @@ class SearchFilters:
     #: §5.4's junk tier is material a sweep will eventually drop; it should not
     #: be answering questions in the meantime.
     include_junk: bool = False
-    #: Restrict to what screening has cleared (task `P4-14`, §2.5).
-    #:
-    #: **Off by default, and on for anything feeding a model.** The operator
-    #: reading their own corpus should see quarantined material — that is how a
-    #: false positive gets noticed — and the MCP surface sets it, because what
-    #: §11.8 is protecting is the path from a fetched page into a prompt.
-    #:
-    #: Expressed as "only cleared" rather than "not quarantined": a page nothing
-    #: has examined is `unscreened`, and admitting it would make screening
-    #: optional in exactly the case it exists for.
+    #: Only what screening has cleared, not merely "not quarantined" (`P4-14`, §2.5).
+    #: Off by default; on for anything feeding a model. See docs/features/search.md#filters.
     cleared_only: bool = False
 
-    #: Weight results by how fast their kind of document ages (`P2-20`, §9).
-    #:
-    #: **Off by default.** Ageing changes what a search returns, and switching
-    #: it on for every existing caller would silently move a baseline that
-    #: `P2-04`'s benchmark and `P2-09`'s go/no-go are measured against.
+    #: Weight results by how fast their kind of document ages (`P2-20`, §9). Off by
+    #: default; see docs/features/search.md#ageing-and-the-baseline.
     age_aware: bool = False
 
     #: Per-topic half-lives in days, overriding the per-tier table. `None` as a
@@ -168,13 +101,7 @@ class SearchFilters:
 
 @dataclasses.dataclass(frozen=True)
 class SearchHit:
-    """One chunk, with the provenance that makes it citable.
-
-    Carrying the source fields rather than an id is the point. A retrieval
-    surface that returns text and leaves the caller to look up where it came
-    from is a RAG endpoint, and §2 principle 3 is that nothing is assertable
-    without a citation you can follow back to a file.
-    """
+    """One chunk, with the source fields that make it citable (§2, principle 3)."""
 
     chunk_id: int
     source_id: int
@@ -187,16 +114,11 @@ class SearchHit:
     source_tier: str
     publication_date: dt.date | None
     language: str | None
-    #: Which topics the source belongs to (`P2-14`). Carried on the hit so a
-    #: result list can show why a document is in a filtered set — a hit whose
-    #: topic a reader cannot see is a filter they have to trust rather than
-    #: check, which is the opposite of what this corpus is for.
+    #: Which topics the source belongs to (`P2-14`), so a reader can check a filter.
     topic_labels: list[str] | None
 
-    #: Which topics this passage itself is about (`P2-24`), best first. None
-    #: when no pass has examined the passage, ``[]`` when one has and found
-    #: none. Beside the source's labels so a hit matched by its passage label
-    #: — in a document labelled with something else — shows why it is there.
+    #: Which topics this passage itself is about (`P2-24`), best first. None when no
+    #: pass has examined the passage, ``[]`` when one has and found none.
     passage_topics: list[str] | None
 
     #: What ``page_or_offset`` counts: ``page``, ``offset``, or None when the
@@ -219,11 +141,8 @@ class SearchHit:
     #: would need today's date to agree with the one the decay used.
     age_days: int | None = None
 
-    #: What the age did to the score. 1.0 is no adjustment, and an undated
-    #: document always gets 1.0 — neither old nor new.
-    #:
-    #: Shown rather than applied silently: a result quietly demoted is one the
-    #: reader cannot audit, which is the opposite of what this corpus is for.
+    #: What the age did to the score. 1.0 is no adjustment, and an undated document
+    #: always gets 1.0. Shown so a demotion can be audited.
     decay: float = 1.0
 
     #: The fused score before decay, so the adjustment can be undone by eye.
@@ -244,11 +163,8 @@ class SearchResult:
     arms: frozenset[str]
     lexical_candidates: int
     vector_candidates: int
-    #: How many hits the per-source cap displaced from this page (`B-30`).
-    #: Shown rather than applied silently, for the reason `P2-20`'s decay is
-    #: shown: a result that was demoted is one the reader cannot audit
-    #: otherwise, and "why is this paper not here" has no answer without it.
-    #: Zero when the cap is off, which is the default.
+    #: How many hits the per-source cap displaced from this page (`B-30`). Zero when
+    #: the cap is off, which is the default.
     held_back: int = 0
 
     @property
@@ -263,11 +179,7 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
     populations — and the arm that drifted would be the one silently returning
     material the caller excluded.
     """
-    # Superseded chunks are never searchable, and this is not a filter a caller
-    # may turn off (`P1-32`). They are the text a page used to carry: retrieving
-    # one would have the corpus quote a document as saying something it no
-    # longer says, with a citation that opens the current page and does not
-    # contain the passage.
+    # Superseded chunks are never searchable, whatever the caller asks (`P1-32`).
     where: list[ColumnElement[bool]] = [Chunk.superseded_at.is_(None)]
 
     if filters.source_tiers:
@@ -275,11 +187,8 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
     if filters.languages:
         where.append(Source.language.in_(list(filters.languages)))
     if filters.topics:
-        # `&&` is array overlap. `= ANY` would be the other way round and
-        # `IN` does not apply to an array column at all — both are easy to reach
-        # for and both would filter on something other than what was asked.
-        # The passage arm is an EXISTS by primary key, so it costs one index
-        # probe per candidate row and needs no join that could multiply rows.
+        # `&&` is array overlap; `= ANY` and `IN` would filter on something else.
+        # The passage arm is an EXISTS by primary key: one probe, no row-multiplying join.
         if filters.topics_all:
             where.append(carries_all_topics(filters.topics))
         else:
@@ -321,16 +230,8 @@ async def _lexical(
 ) -> list[int]:
     """Chunk ids by lexical relevance, best first.
 
-    ``ts_rank_cd`` rather than ``ts_rank``: cover density accounts for how close
-    the matched terms are to each other, which is most of what distinguishes a
-    passage about the subject from one that mentions every term once.
-
-    **Ranked in two steps** (`B-65`). The RUM index hands back the best
-    :data:`LEXICAL_POOL` matches by its own distance, reading the index only;
-    ``ts_rank_cd`` then orders just those. Ranking every match with
-    ``ts_rank_cd`` read each one's vector out of the heap, which a common word
-    made a few hundred milliseconds. When a query matches fewer passages than
-    the pool, the result is exactly the one-step ranking.
+    The RUM index picks the best :data:`LEXICAL_POOL` matches, and ``ts_rank_cd`` orders
+    them (`B-65`). See docs/features/search.md#lexical-ranking.
     """
     tsquery = func.websearch_to_tsquery(cast(TS_CONFIG, REGCONFIG), query)
     pool = (
@@ -352,18 +253,9 @@ async def _lexical(
 async def _vector(
     sess: AsyncSession, vector: Sequence[float], filters: SearchFilters, candidates: int
 ) -> list[int]:
-    """Chunk ids by cosine distance, nearest first.
-
-    The filter is inside this statement rather than applied to its output, which
-    is the whole of §12.5's "filters before vector search". Postgres may satisfy
-    it by a filtered index scan or by a sequential scan depending on selectivity;
-    what it will not do is hand back a top-k drawn from the unfiltered corpus.
-    """
-    # `set_config(..., is_local => true)` rather than `SET LOCAL`: `SET` takes
-    # no bind parameters in Postgres, so the literal spelling would mean
-    # interpolating a number into SQL for no reason. Local, so the setting
-    # lasts this transaction and cannot leak to the next caller on a pooled
-    # connection.
+    """Chunk ids by cosine distance, nearest first, filtered inside the statement (§12.5)."""
+    # `set_config` because `SET` takes no bind parameters; local, so it cannot leak to
+    # the next caller on a pooled connection.
     await sess.execute(
         select(func.set_config("hnsw.ef_search", str(max(candidates * EF_SEARCH_FACTOR, 40)), True))
     )
@@ -397,19 +289,9 @@ def cap_per_source(
 ) -> tuple[list[int], int]:
     """Take the best `limit` chunks, no more than `cap` from any one source.
 
-    Measured on the first real corpus: the vector arm drew 42% of its top ten
-    from the probe chunk's own document, and ten hits spanned about four
-    sources. That is not wrong — adjacent chunks of one document genuinely are
-    its nearest neighbours — but a reader searching a concept gets one paper
-    four times, and the spread has to come from somewhere.
-
-    **Held-back hits are backfilled rather than dropped.** A page of six
-    results where twenty exist is worse than one that repeats a source: the cap
-    is about what leads, not about withholding the corpus. So the walk keeps
-    rank order, sets aside what exceeds the cap, and puts those back at the end
-    only if the page would otherwise be short.
-
-    Returns the ids and how many the cap displaced, so a caller can say so.
+    Held-back hits are backfilled at the end if the page would otherwise be short.
+    Returns the ids and how many the cap displaced. See
+    docs/features/search.md#per-source-cap.
     """
     kept: list[int] = []
     seen: dict[int, int] = {}
@@ -445,17 +327,10 @@ async def search(
 ) -> SearchResult:
     """Hybrid retrieval over the chunk corpus.
 
-    ``max_per_source`` caps how many chunks one document may contribute, and is
-    **off by default** for the reason `P2-20`'s decay is: it changes what search
-    returns, and `P2-04`'s benchmark and `P2-09`'s go/no-go are measured against
-    the current baseline. Turning it on before those are judged would mean
-    judging something else (`B-30`).
-
-    ``query_vector`` is supplied by the caller rather than computed here on
-    purpose: `meridian_core` is imported by the API and the orchestrator, and
-    neither should acquire a 2.3GB model dependency because a search function
-    wanted one. Omitting it is lexical-only, and :attr:`SearchResult.degraded`
-    says so.
+    ``max_per_source`` caps how many chunks one document may contribute; off by
+    default (`B-30`). ``query_vector`` is the caller's to compute; omitting it is
+    lexical-only, and :attr:`SearchResult.degraded` says so. See
+    docs/features/search.md#ageing-and-the-baseline.
     """
     filters = filters or SearchFilters()
 
@@ -483,10 +358,7 @@ async def search(
     lexical_at = {chunk_id: i for i, chunk_id in enumerate(lexical, start=1)}
     vector_at = {chunk_id: i for i, chunk_id in enumerate(vectorial, start=1)}
 
-    # Ties broken by chunk_id so a repeated search returns a stable order. Two
-    # chunks found at the same rank by one arm and by neither the other is
-    # common in a small corpus, and a result set that reshuffles between
-    # identical queries is indistinguishable from one that changed.
+    # Ties broken by chunk_id so a repeated search returns a stable order.
     ranked = sorted(scores, key=lambda cid: (-scores[cid], cid))
     held_back = 0
     if max_per_source is None:
@@ -556,13 +428,7 @@ async def search(
 
 
 def _decay_for(source: Source, filters: SearchFilters) -> float:
-    """The age adjustment for one hit, or 1.0 when ageing is off.
-
-    Off by default (`SearchFilters.age_aware`). Ageing changes what a search
-    returns, and turning it on for every existing caller — the MCP surface, the
-    benchmark in `P2-04`, the novelty gate — would silently move a baseline
-    that other work is measured against.
-    """
+    """The age adjustment for one hit, or 1.0 when ageing is off (the default)."""
     if not filters.age_aware:
         return 1.0
     return decay_factor(

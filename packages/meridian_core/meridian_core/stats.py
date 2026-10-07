@@ -1,20 +1,6 @@
 """Corpus counts for the Explore landing state (task P2-07, spec §12.5, §8 design).
 
-The design system's Explore default state carries "four counts in the mono
-numeral style — documents, nodes, edges, contested†", and §12.5 makes the three
-entry points search, coverage and contested. These are the numbers behind that
-screen.
-
-Here rather than in the API because `meridian_core` owns anything that touches
-the database (AGENTS.md layout), and because the same counts are what §12.5's
-daily health line wants — a surface and a log line asking the same question
-should not be two queries that can disagree.
-
-**Counted, not estimated.** `count(*)` over a corpus this size is milliseconds,
-and a landing page that rounded or cached would make "nothing has been crawled
-since Tuesday" indistinguishable from "the count is stale". If the corpus ever
-grows past the point where these are cheap, the fix is a materialised view with
-a refresh time *displayed beside it*, not a silent approximation.
+Counted exactly, not estimated. See docs/features/search.md#corpus-counts.
 """
 
 from __future__ import annotations
@@ -33,11 +19,8 @@ from .places import Place, comparison_set
 class CorpusStats:
     """What the corpus holds, at one moment.
 
-    ``searchable`` is not ``chunks``. A chunk is searchable lexically as soon as
-    it exists, but the vector half needs an embedding and the novelty gate may
-    have marked it a duplicate — and §12.5's point is that a reader must be able
-    to tell "we have not collected this" from "we collected it and filtered it".
-    Reporting one number for both would erase exactly that distinction.
+    ``searchable`` is not ``chunks``: it leaves out what is unembedded or a duplicate,
+    so "not collected" and "collected and filtered" stay distinct (§12.5).
     """
 
     #: When these numbers were counted (`P2-18`).
@@ -51,34 +34,17 @@ class CorpusStats:
     edges: int
     contested_edges: int
 
-    #: Counted only when a caller asked "what is new since X" (`P6-11`). None
-    #: means nobody asked — deliberately not 0, which is the answer to a
-    #: question about a moment when nothing had changed, and a returning reader
-    #: shown "0 new" would believe that.
+    #: Counted only when a caller asked "what is new since X" (`P6-11`). None means
+    #: nobody asked, deliberately not 0.
     new_sources: int | None = None
     new_chunks: int | None = None
 
-    #: Every configured topic, most-attended first (`P6-24`). Here rather than
-    #: on a route of its own because Explore needs it at the same moment it
-    #: needs the counts, and a second request on first paint to populate one
-    #: dropdown is a request nobody would make twice.
-    #:
-    #: From `topic_config` rather than from the labels actually present on
-    #: sources: the second needs `DISTINCT unnest(topic_labels)` over the whole
-    #: corpus, which no GIN index answers, and it would make the landing page's
-    #: cost grow with the crawl. A topic with no sources yet filters to nothing,
-    #: which is a true answer.
+    #: Every configured topic from `topic_config`, most-attended first (`P6-24`), not
+    #: the labels present on sources. See docs/features/search.md#corpus-counts.
     topics: list[str] = dataclasses.field(default_factory=list)
 
-    #: Sources nothing has examined for topics — `topic_labels IS NULL` (`P6-24`).
-    #: A topic filter excludes them, correctly and invisibly: a reader narrowing
-    #: to a topic and seeing three results cannot otherwise tell that the corpus
-    #: holds three hundred documents nobody has looked at. This is what lets the
-    #: filter say so.
-    #:
-    #: A plain COUNT with no index behind it. Milliseconds at the scale this
-    #: corpus is built for; if `sources` ever reaches millions, this is the
-    #: number on the landing page that will be felt first.
+    #: Sources nothing has examined for topics, `topic_labels IS NULL` (`P6-24`), which a
+    #: topic filter excludes invisibly. An unindexed COUNT; the first to feel scale.
     sources_without_topics: int = 0
 
     #: The comparison set's places, for a place filter to offer (`P2-23`).

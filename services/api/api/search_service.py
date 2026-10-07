@@ -36,14 +36,8 @@ NO_EMBEDDER = (
 #: Why nothing ran at all.
 NO_QUERY = "No query text and no vector, so neither arm ran."
 
-#: Configured and not answering. Deliberately different wording from
-#: `NO_EMBEDDER`, because the two are different facts and the reader acts on
-#: them differently: "this deployment has no embedder" is a choice somebody
-#: made, and "the embedder is down" is an outage somebody should fix. Reporting
-#: an outage as a deployment choice is how a broken dependency goes unnoticed
-#: for a week — and it is the exact mistake this field exists to prevent one
-#: level up, where an empty result set is not allowed to look like an empty
-#: corpus.
+#: Configured and not answering. Worded unlike `NO_EMBEDDER`: an outage is not a
+#: deployment choice. See docs/features/search.md#degraded-mode.
 EMBEDDER_DOWN = (
     "The embedding service is configured but did not answer, so only the "
     "lexical arm ran. Results are matched on words rather than meaning. This is "
@@ -60,16 +54,10 @@ class WindowTooDeep(ValueError):
 
 
 def check_window(limit: int, offset: int, candidates: int) -> None:
-    """Refuse a page the fused ranking cannot honestly produce.
+    """Refuse a page beyond ``candidates``, which the fused ranking never saw.
 
-    RRF orders only what the two arms handed it, so a hit beyond ``candidates``
-    was never a candidate. Returning an empty page there would be
-    indistinguishable from "you have reached the end of the results", and the
-    caller would stop paging believing it had seen everything.
-
-    Refusing is the honest option and the useful one: a client that hits this
-    should widen the pool or narrow the query, and both are actions it can only
-    take if it is told.
+    An empty page there would read as the end of the results. See
+    docs/features/search.md#paging.
     """
     if offset + limit > candidates:
         raise WindowTooDeep(
@@ -96,17 +84,9 @@ def _degraded_reason(
 async def embed_query(query: str) -> Sequence[float] | None:
     """The query vector, or None when this deployment cannot produce one.
 
-    `P2-17` fills the seam: the vector comes from the embedding sidecar, which
-    runs the same model the corpus was embedded with. That sameness is the whole
-    requirement — a vector from a different model is not merely less accurate
-    against this corpus, it is meaningless, and comparing it computes without
-    erroring and ranks the result confidently.
-
-    None stays a supported state rather than becoming a failure. No sidecar
-    configured means lexical-only, reported through `degraded`; a sidecar that
-    is configured and *down* also returns None here, and the difference is in
-    the log rather than in a 500 — a search that still answers on one arm is
-    better for the caller than an error page, provided it says so.
+    From the embedding service, which runs the corpus's own model (`P2-17`). None when
+    no service is configured or it is down; the caller reports either through
+    `degraded`. See docs/features/search.md#degraded-mode.
     """
     embedder = RemoteEmbedder.from_env()
     if embedder is None:
@@ -135,11 +115,7 @@ async def paged_search(
 ) -> SearchResponse:
     """One page of fused hits, with an account of how they were found.
 
-    ``has_more`` comes from asking for one hit more than the page needs, not
-    from a second counting query. The fused ranking has no cheap total, and a
-    total computed a different way than the page would eventually disagree with
-    the page — at which point the number nobody can reproduce is the one people
-    stop trusting.
+    ``has_more`` comes from asking for one hit more than the page needs.
     """
     check_window(limit, offset, candidates)
     vector = await embed_query(query)

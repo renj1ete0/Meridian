@@ -1,17 +1,8 @@
 """Watched questions: what is new for a saved view since it was last opened (`P6-43`).
 
-A saved view is a question somebody asked and meant to come back to. What they
-want on return is not a generic "N sources arrived" but "N arrived that answer
-this". So each view is counted against its own words and topic filter, from
-the moment it was last opened (or saved, if never opened).
-
-Words match the way search's lexical arm matches them — the stored
-``search_vector`` against ``websearch_to_tsquery`` — so the count agrees with
-what opening the view will find by words. The vector arm is not run: a count on
-the landing page must be cheap for every view at once, and a vector query per
-view is not. Junk and duplicates are left out, as search leaves them out.
-
-Read-only, so it can run under the explore role (§12.6).
+Counted by the view's words (the lexical arm only) and topic filter, leaving out junk and
+duplicates. Read-only, so it runs under the explore role (§12.6). See
+docs/features/search.md#watched-questions.
 """
 
 from __future__ import annotations
