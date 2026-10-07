@@ -21,15 +21,18 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-07 (evening) — `v0.164.2`, pushed to GitHub (GHCR held).** Built today: `D-01`,
-> `B-147`–`B-149`, `B-53` (ADR 0014), `B-99` (ADR 0013), `B-150` link vouches (ADR 0015), `B-151`,
-> `B-153` languages from text, `B-154`, `B-155` proven by following (ADR 0016), `B-156` the site
-> review's reader fixes, `B-152` filtered searches no longer come back empty. Loop run 17
-> (v0.163.1): 589 on-topic pages in the hour against 356 / 310 for runs 15–16; ~40% of fetches
-> wasted on five search-proven hosts → `B-155`. Run 18 (v0.164.0, `B-155`): 590+ on-topic
-> pages with no search in the window; followed links 35% on a topic (run 17: 30%). Local DB at `b155f011ed00`. **Next:** write up run 18;
-> `B-157` map fields; on the server `B-131`, `B-135`. **By hand:** the dev-database cleanup SQL
-> in handover §0 (approved, but refused by the session's permission check).
+> **2026-10-07 (night) — `v0.164.7`, pushed to GitHub (GHCR held), all stacks stopped.** Built today:
+> `D-01`, `B-147`–`B-149`, `B-53` (ADR 0014), `B-99` (ADR 0013), `B-150` link vouches (ADR 0015),
+> `B-151`–`B-161`, `B-155` proven by following (ADR 0016), `B-156` the site review's reader fixes,
+> `B-157` map names (ADR 0017), `B-162` resumed synthesis runs. Loop runs 17–19
+> (`meridian-calibration/loop/run17`–`run19`): run 17 589 on-topic pages/h against 356 / 310 for
+> runs 15–16; run 18 590+ with no search in the window, followed links 35% on a topic; run 19
+> labelled 19% of its pages within the window (run 17: 4%). Synthesis ran through the relay
+> (operator's go): 34 relations, 5 attribute values from 120 passages; the relay agent row is
+> left enabled. Local DB at `b155f011ed00`. **Next:** run 19's yield once labelled; robots.txt
+> unreachable rising (443 in run 19); within-host drift (apad.gov.my, data.europa.eu);
+> `B-163`, `B-159`; on the server `B-131`, `B-135`. **By hand:** the dev-database cleanup SQL in
+> handover §0 (approved, but refused by the session's permission check).
 
 > **2026-10-04 (night) — `v0.162.1`, pushed to GitHub (GHCR held), all stacks stopped.**
 > Last: `B-142` web lint and format in `make lint` (oxlint + Prettier, ADR 0012); `make lint`
