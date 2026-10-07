@@ -1,28 +1,8 @@
 """Scoped credentials (task P3-03, spec §11.4).
 
-§11.4's model, made enforceable: every agent gets its own credential with an
-explicit tool scope, an expiry, and a revocation switch. "This is what makes it
-safe to point an ad-hoc chat session at the graph."
-
-**Secrets are never compared in this module.** The presented token is hashed and
-the hash is looked up; nothing holds a stored secret alongside a candidate one.
-That removes the whole class of timing and logging mistakes that comes from
-comparing them — there is no branch here whose duration depends on how much of a
-token was right, and a log line that accidentally included the row would include
-a hash.
-
-**SHA-256, not bcrypt, and that is deliberate.** Password hashes are slow to
-defend low-entropy human choices against offline guessing. These tokens are 256
-bits of `secrets.token_urlsafe` — an attacker with the hash cannot guess the
-preimage at any cost, and a slow hash would only add latency to every single
-request. The scheme is named in the stored value so a future change is a
-migration rather than an archaeology exercise.
-
-**An unscoped token grants nothing.** `allowed_tools` is nullable and NULL means
-*no tools*, not *all tools*. That is the same argument as `P3-07`'s refusal to
-give the guest role default privileges: forgetting to grant produces a caller
-who cannot do something and says so, which gets fixed; forgetting to restrict
-produces a caller who can do everything and does not mention it.
+Each credential has an explicit tool scope, an expiry and a revocation switch. Only a
+SHA-256 hash of the secret is stored and looked up, never compared, and a NULL
+`allowed_tools` grants no tools. See docs/features/mcp.md#tokens-design.
 """
 
 from __future__ import annotations
@@ -86,12 +66,7 @@ async def issue_token(
 ) -> tuple[str, AgentToken]:
     """Mint a credential. Returns the secret **once**; only its hash is stored.
 
-    ``allowed_tools`` has no default. An unscoped token is a real decision and
-    has to be spelled out, rather than being what you get by not thinking about
-    it — and a caller that genuinely wants one passes the list.
-
-    Flushes; does not commit. The caller owns the transaction, because issuing a
-    token is usually one step of a larger administrative action.
+    ``allowed_tools`` has no default. Flushes; does not commit.
     """
     secret = new_secret()
     row = AgentToken(
@@ -103,10 +78,8 @@ async def issue_token(
     )
     sess.add(row)
     await sess.flush()
-    # The agent, never the secret and never the hash. A log that carried either
-    # would put a working credential in the place credentials are least
-    # protected — and §11.11 keeps them out of the database's own reach for the
-    # same reason.
+    # The agent, never the secret and never the hash: logs are where credentials
+    # are least protected.
     log.info(
         "token issued",
         extra={
@@ -123,11 +96,8 @@ async def resolve_token(
 ) -> TokenScope | None:
     """The scope this secret carries, or None if it carries none.
 
-    None for every rejection — unknown, revoked, expired — and deliberately not
-    three distinct errors. The caller is unauthenticated by definition, and
-    telling it *which* of those applies confirms that a token exists, or existed,
-    which is information it has not earned. The reason is logged for the
-    operator instead.
+    None for every rejection (unknown, revoked, expired), so an unauthenticated caller
+    learns nothing about which; the reason is logged for the operator.
     """
     if not secret:
         return None

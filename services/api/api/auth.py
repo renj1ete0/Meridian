@@ -1,22 +1,9 @@
 """Authenticating the MCP surface (task P3-03, spec §11.4).
 
-`meridian_core.tokens` is the mechanism — issue, resolve, revoke, with a tool
-scope. This is the enforcement: the bridge between a bearer token on the wire
-and a refusal inside a tool.
-
-**Anonymous access is an explicit opt-out, not a default.** The surface refuses
-unauthenticated callers unless `MERIDIAN_MCP_ALLOW_ANONYMOUS` is set, because
-the alternative default — open unless configured — is one forgotten environment
-variable away from publishing the corpus, and the person who forgets will be
-deploying rather than reading this file. Development sets the opt-out in
-`.env.dev`, where it is visible and local.
-
-**Two checks, not one.** The transport verifies the token; each tool then checks
-that *this* token was scoped to *it*. §11.4 is specific that the point of a
-scope is that an interactive session holds read-only tools while only the
-orchestrator's profile carries write ones, and that distinction cannot live at
-the transport — by the time the request is authenticated, which tool was asked
-for is the only thing that separates them.
+The bridge between a bearer token on the wire and a refusal inside a tool. Anonymous
+access is an explicit opt-out (`MERIDIAN_MCP_ALLOW_ANONYMOUS`). The transport verifies
+the token, and each tool checks that the token was scoped to it.
+See docs/features/mcp.md#authentication.
 """
 
 from __future__ import annotations
@@ -51,17 +38,9 @@ def allows_anonymous() -> bool:
 class MeridianTokenVerifier(TokenVerifier):
     """Resolves a bearer token against `agent_tokens`.
 
-    The scopes it reports are the token's `allowed_tools`, so the SDK's own
-    machinery and :func:`require_tool` are reading one source rather than two
-    that can disagree.
-
-    It also stamps the resource these tokens are for. Meridian's own credentials
-    are rows in this database and are issued for this server and no other, so
-    naming it is simply true — and it lets `validate_token_resource` be turned
-    on, which refuses a token issued for a *different* resource. Without that
-    the surface would accept an otherwise-valid token minted for another service
-    on the same issuer, which is the same mistake as verifying an Access
-    assertion without checking its audience (`P3-08`).
+    Reports the token's `allowed_tools` as its scopes, and stamps this server as the
+    token's resource so `validate_token_resource` can refuse tokens for any other.
+    See docs/features/mcp.md#authentication.
     """
 
     def __init__(self, resource: str | None = None) -> None:
@@ -91,14 +70,8 @@ class MeridianTokenVerifier(TokenVerifier):
 def require_tool(name: str) -> None:
     """Refuse unless the caller's token was scoped to this tool.
 
-    Raises `ToolError`, not a bare exception: the SDK reports it to the client
-    as a tool failure with the message intact, where an unexpected exception
-    becomes "error executing tool" and tells the caller nothing it can act on.
-
-    The message deliberately names the tool and not the token. A caller that
-    presented a valid credential is entitled to know which capability it lacks —
-    that is a scope problem it can ask its operator to fix — and is not entitled
-    to anything about the credential itself.
+    Raises `ToolError`, which the client sees with its message intact. The message
+    names the tool, never the token.
     """
     token = get_access_token()
 

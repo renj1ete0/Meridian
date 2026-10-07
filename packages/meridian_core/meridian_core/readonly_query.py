@@ -1,32 +1,9 @@
-"""§12.4's escape hatch (task P3-04).
+"""§12.4's escape hatch (task P3-04): one bounded, read-only SELECT, logged.
 
-> "An escape hatch alongside the curated tools: `run_readonly_query(query,
-> limit)`, enforced by a read-only database role with a statement timeout and
-> row cap. **Watch which queries the agent writes there — those are the next
-> curated tools.**"
-
-That last sentence is why this exists at all. A curated tool surface can only
-answer questions somebody anticipated, and the queries an agent reaches for when
-it cannot find a tool are the most direct evidence there is about which tools to
-build. So every query is logged, whether it succeeds or not.
-
-**The enforcement is the role, not this module.** `meridian_guest` (`P3-07`) has
-SELECT on the corpus and the graph and nothing else — no `agent_tokens`, whose
-`token_hash` is the one secret in the schema, and no `fetch_policy`. Arbitrary
-SQL cannot talk its way past a privilege it does not hold, and every check here
-is a second line rather than the first.
-
-**What the second line is for.** The role stops a query reading what it must
-not. It does nothing about a query that reads what it may, slowly, forever: a
-cartesian join across the corpus is a perfectly legal SELECT. The statement
-timeout is what makes this safe to expose, and it is set per transaction rather
-than per deployment so that a badly shaped query costs seconds rather than the
-crawl's afternoon.
-
-**Refusing before running is a courtesy, not a defence.** The textual checks
-below reject the obvious — a write verb, several statements — because a clear
-refusal is more useful to a caller than a permission error from Postgres. They
-are not what makes this safe, and anything they miss is caught by the role.
+The guest role is the enforcement; the textual checks here only make refusals clearer.
+The statement timeout, set per transaction, is what makes it safe to expose. Every query
+is logged, because they show which curated tools to build next.
+See docs/features/mcp.md#read-only-sql-design.
 """
 
 from __future__ import annotations
@@ -81,10 +58,8 @@ def _check(query: str) -> str:
     if not stripped:
         raise QueryRefused("Empty query.")
 
-    # One statement. Semicolons inside string literals would make this a parser
-    # rather than a check, so the rule is simply "no semicolon except a trailing
-    # one" — blunt, and it refuses a legal query far less often than it refuses
-    # a stacked one.
+    # One statement: no semicolon except a trailing one. Blunt, but a parser for
+    # literals would be more than a check.
     if ";" in stripped:
         raise QueryRefused("One statement at a time; remove the semicolon.")
 
@@ -109,22 +84,16 @@ async def run_readonly_query(
 ) -> QueryResult:
     """Run one SELECT on a guest session, bounded.
 
-    ``sess`` must already be a guest session (`db.session_guest`). It is taken
-    rather than created so the caller owns the transaction — and so a test
-    cannot accidentally get a privileged one, which would make every assertion
-    here meaningless.
+    ``sess`` must already be a guest session (`db.session_guest`); the caller owns
+    the transaction.
     """
     statement = _check(query)
     capped = max(1, min(limit, HARD_MAX_ROWS))
 
     started = time.perf_counter()
     try:
-        # `DBAPIError`, not `DatabaseError`: a statement timeout surfaces as the
-        # former, which is its *parent*, so the narrower catch let exactly the
-        # failure this design creates on purpose escape as a stack trace.
-        #
-        # `SET LOCAL`, so the timeout lasts exactly as long as this transaction
-        # and cannot leak onto a pooled connection's next borrower.
+        # `DBAPIError`, not `DatabaseError`: a statement timeout surfaces as the parent.
+        # `SET LOCAL`, so the timeout cannot leak onto a pooled connection.
         await sess.execute(text(f"SET LOCAL statement_timeout = {int(timeout_ms)}"))
         # One row over the cap, so "there were more" is a fact rather than an
         # inference from having returned exactly the limit.
@@ -173,10 +142,8 @@ async def run_readonly_query(
 def _explain(exc: DBAPIError) -> str:
     """Turn a database error into something a model can act on.
 
-    Postgres's own message is usually the most useful thing available and is
-    passed through, but the two that need translating are the two this design
-    produces on purpose — a timeout and a missing privilege — because neither
-    reads as "you asked for something you may not have".
+    Postgres's message is passed through, except for a timeout and a missing
+    privilege, which are translated.
     """
     raw = str(getattr(exc, "orig", exc))
     lowered = raw.lower()

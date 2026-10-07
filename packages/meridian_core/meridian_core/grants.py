@@ -1,18 +1,8 @@
 """Access for somebody who is not the operator (tasks `P3-06`, `P3-10`, §3, §5).
 
-The unit is a **person**, not a credential. Somebody given access will hold
-several tokens — a browser session, an MCP client on a laptop, another on a
-server — and revoking their access has to revoke all of them at once. Chasing
-credentials one at a time is how the one you miss stays working.
-
-**A profile, never a tool list.** §3 is firm: a free-form set of tools per
-person is how somebody ends up holding a write tool nobody remembers granting.
-Profiles are named, small, and defined here rather than in the database, so
-adding a tool to `reader` is a code change somebody reviews.
-
-**Two things a guest does not get by default** (§5): raw files, and anything
-outside the topics named in the grant. Both are shaped so the restrictive
-answer is what an absent value means.
+The unit is a person, holding any number of tokens that are revoked together. A grant
+names a profile, never a tool list. Raw files and topics outside the grant are off by
+default. See docs/features/mcp.md#grants-design.
 """
 
 from __future__ import annotations
@@ -30,13 +20,6 @@ from .tiering import DEFAULT_TIER  # noqa: F401  (documents where tiers come fro
 
 log = get_logger(__name__)
 
-#: What each profile may call. Named sets, defined in code (§3).
-#:
-#: `reader` is the default and the one a person gets unless somebody decides
-#: otherwise. `analyst` adds the tools that cost real money or real time.
-#: `operator` is not "everything" — there is deliberately no write tool here,
-#: because writes belong to the orchestrator's own credential and a grant is
-#: for *reading* somebody else's corpus (§2.1).
 #: The read tools every profile carries: the corpus as the site shows it.
 READ_TOOLS: frozenset[str] = frozenset(
     {
@@ -57,8 +40,9 @@ READ_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-#: Held to the tools the MCP server defines by a drift test (`B-138`): the earlier lists named
-#: three tools that did not exist and missed two that did.
+#: What each profile may call, defined in code (§3). `reader` is the default; `analyst`
+#: and `operator` add read-only SQL; no profile carries a write tool (§2.1). Held to the
+#: tools the MCP server defines by a drift test (`B-138`).
 PROFILE_TOOLS: dict[str, frozenset[str]] = {
     "reader": READ_TOOLS,
     "analyst": READ_TOOLS | {"run_readonly_query"},
@@ -112,15 +96,8 @@ class ResolvedGrant:
     max_source_tier: str | None
     raw_files: bool
 
-    #: Whether this grant may see the operator's own annotations (§5).
-    #:
-    #: **False unless a grant says otherwise, and there is no column for it.**
-    #: §12.5 predicts annotations become the highest-quality layer in the
-    #: system precisely because they are the operator's own thinking — which
-    #: makes them the most personal thing in it. Sharing them should be a
-    #: deliberate act, and the deliberate act available today is the `operator`
-    #: profile. A per-grant flag would make it a checkbox somebody ticks while
-    #: setting up access for a colleague.
+    #: Whether this grant may see the operator's own annotations (§5): only with the
+    #: `operator` profile, and deliberately no column. See docs/features/mcp.md#grants-design.
     @property
     def annotations(self) -> bool:
         return self.profile == "operator"
@@ -156,13 +133,8 @@ def tiers_allowed(max_source_tier: str | None) -> tuple[str, ...]:
 def filters_for(grant: ResolvedGrant, base: SearchFilters | None = None) -> SearchFilters:
     """Narrow a search to what this grant may see (`P3-10`).
 
-    **Intersects rather than replaces.** A guest may narrow their own search
-    further — asking for one topic out of the three they hold — and that must
-    not widen anything. Taking the intersection means the grant is a ceiling
-    the caller cannot raise, whatever they send.
-
-    `cleared_only` is forced on for the same reason the MCP surface forces it
-    (`P4-14`): this is content going to somebody else's model.
+    Intersects with what the caller asked for, so the grant is a ceiling it cannot
+    raise. Forces `cleared_only` (`P4-14`).
     """
     base = base or SearchFilters()
 
@@ -195,15 +167,8 @@ def filters_for(grant: ResolvedGrant, base: SearchFilters | None = None) -> Sear
 def may_read_raw(grant: ResolvedGrant) -> bool:
     """Whether this grant may be served raw files (§5).
 
-    The raw store holds copies of third-party material kept as a research
-    archive (§14.2). Serving those files to somebody else is redistribution,
-    and it is a different act from sharing what the corpus *extracted* — a
-    guest gets chunks, metadata and the source URL, which is a citation and is
-    what a reader actually needs.
-
-    Two conditions, not one: the grant must allow it *and* the deployment must
-    serve raw files at all. `MERIDIAN_SERVE_RAW` is the operator's decision
-    about their own instance, and a grant cannot overrule it.
+    Only when the grant allows it and the deployment serves raw files at all
+    (`MERIDIAN_SERVE_RAW`). See docs/features/mcp.md#grants-design.
     """
     return grant.raw_files
 
@@ -241,14 +206,8 @@ async def resolve_grant(
 async def revoke_grant(sess: AsyncSession, grant_id: int) -> int:
     """Revoke a grant and every token beneath it. Returns how many tokens.
 
-    One statement, which is the whole reason grants exist. Revoking the grant
-    without the tokens would leave working credentials behind, and that is the
-    failure this model is shaped to prevent — so they move together or the
-    transaction does not commit.
-
-    The tokens are marked revoked rather than deleted: a token row is what an
-    audit log's entries point at, and deleting it would leave the history
-    unable to say whose credential made a call.
+    The grant and its tokens move together, in one transaction. Tokens are marked
+    revoked, not deleted, so the audit log can still name them.
     """
     grant = await sess.get(Grant, grant_id, with_for_update=True)
     if grant is None:
@@ -289,18 +248,8 @@ async def record_call(
 ) -> None:
     """Record one tool call against its grant.
 
-    Indexed by grant rather than token: "what has this person's model been
-    reading" is the question, and once they hold three clients a per-token log
-    cannot answer it.
-
-    **Refusals are recorded too.** A log of successful calls answers half the
-    question — a grant being repeatedly refused a tool is the more interesting
-    signal, and it is exactly the one that disappears if only successes land
-    here.
-
-    Never raises. An audit write that took a read surface down would be the
-    monitoring causing the outage, and a missing audit row is a smaller problem
-    than a guest's client failing on a query that worked.
+    Indexed by grant, and refusals are recorded too. Never raises: a failed audit
+    write must not fail the call. See docs/features/mcp.md#grants-design.
     """
     try:
         sess.add(
@@ -330,17 +279,8 @@ async def within_rate_limit(
 ) -> bool:
     """Whether this token may make another call.
 
-    **Per token, not per grant**, and that is deliberate even though everything
-    else here is per grant. The thing being limited is a client in a retry
-    loop, which §6 notes is otherwise indistinguishable from a crawl — and that
-    is a property of one client, not of the person. Limiting the grant would
-    mean one misbehaving laptop silences the same person's phone.
-
-    `limit=None` means no limit, which is the opposite of the convention
-    `budget.py` uses and is right here: a rate limit is a throttle on something
-    already authorised, not an authorisation in itself. A token with no limit
-    is a decision somebody made when they issued it; a *budget* with no cap is
-    a decision nobody made.
+    Per token, not per grant. `limit=None` means no limit, unlike a budget cap.
+    See docs/features/mcp.md#grants-design.
     """
     if limit is None:
         return True
@@ -356,10 +296,7 @@ async def within_rate_limit(
             .where(
                 GrantAudit.token_id == token_id,
                 GrantAudit.at >= since,
-                # Refused calls do not count against the limit. Rate-limiting
-                # somebody for calls they were not allowed to make turns one
-                # misconfiguration into two, and the refusals are already
-                # visible in the audit.
+                # Refused calls do not count against the limit; they are in the audit.
                 GrantAudit.refused.is_(None),
             )
         )

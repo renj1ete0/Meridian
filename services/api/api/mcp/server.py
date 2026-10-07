@@ -1,27 +1,9 @@
 """The MCP read surface (tasks P3-01, P3-02; spec §11.1, §11.6).
 
-§11.1's middle column: an external agent connects *inward* and pulls evidence.
-The model does the reasoning; Meridian holds the corpus and the provenance, and
-never generates anything.
-
-**The instructions are load-bearing, not documentation.** They are the only
-thing an external model reads before deciding how to treat what these tools
-return, and three of the mistakes it would otherwise make are ones this whole
-system exists to prevent:
-
-- concluding the corpus lacks a topic when the search was word-matching
-- treating `source_tier` as a credibility score, which §8 explicitly refuses
-  to compute
-- reporting a claim without the citation that justifies it
-
-So the guidance is written for a model to *act on*, and the same warnings ride
-on every individual result rather than only at connection time — an assistant
-summarising one tool call will not go back and re-read the server instructions.
-
-**Nothing here writes.** Every tool takes `session_ro()`, so the read-only
-guarantee is Postgres's rather than this module's (`P3-07` narrows it further
-for guests). Write tools are §11.6's second group and belong to the orchestrator
-scope; they arrive with the graph in phase 4.
+An external assistant connects inward and pulls evidence; Meridian generates nothing.
+The instructions and the warnings on every result are written for a model to act on.
+Every tool takes `session_ro()`, so the read-only guarantee is Postgres's. The tool
+docstrings are the descriptions clients see. See docs/features/mcp.md.
 """
 
 from __future__ import annotations
@@ -92,10 +74,8 @@ Rules for using it well:
    the corpus cannot answer yet, each with its reason in numbers.
 """
 
-#: Wording that travels with a degraded search. Phrased for a model to repeat,
-#: and to act on — a client told only that a flag is true will not think to try
-#: synonyms, which is the compensating behaviour that makes lexical-only
-#: retrieval usable at all.
+#: Wording that travels with a degraded search, phrased for a model to act on: a
+#: flag alone will not make it try synonyms.
 LEXICAL_ONLY = (
     "Matched on words only. Semantic search is unavailable on this deployment, "
     "so passages about this topic phrased in different words were NOT searched. "
@@ -146,10 +126,8 @@ def build_mcp(
         title="Meridian research corpus",
         instructions=INSTRUCTIONS,
         version=version,
-        # Transport-level verification, when this deployment has credentials.
-        # `require_tool` is the second half and runs regardless: with no
-        # verifier configured no token is ever populated, so it refuses
-        # everything unless anonymous access was explicitly opted into.
+        # Transport-level verification. `require_tool` runs regardless, and with no
+        # verifier it refuses everything unless anonymous access was opted into.
         token_verifier=token_verifier,
         auth=auth,
     )
@@ -182,11 +160,8 @@ def build_mcp(
             published_after=dt.date.fromisoformat(published_after) if published_after else None,
             published_before=dt.date.fromisoformat(published_before) if published_before else None,
             include_duplicates=include_duplicates,
-            # `P4-14`, §11.8. This is the path from a fetched page into a
-            # prompt, which is the one screening exists to guard — so the
-            # model gets cleared material only, and cannot ask otherwise.
-            # The operator's own search does not set this, deliberately: they
-            # should see what was quarantined, or a false positive is invisible.
+            # Cleared material only (`P4-14`, §11.8): this is the path into a prompt.
+            # See docs/features/mcp.md#what-reaches-a-model.
             cleared_only=True,
         )
         # The same query vector Find uses (`B-139`); None, and so word-matching only, when
@@ -200,15 +175,8 @@ def build_mcp(
             "arms": sorted(result.arms),
             "results": [_cite(hit) for hit in result.hits],
             "returned": len(result.hits),
-            # §11.8 mitigation 1, and this is the surface it is about: a model
-            # on the other end of this call holds tools, and every `text` above
-            # is arbitrary web content the crawler fetched (`P4-06`).
-            #
-            # Both shapes are returned deliberately. `results` stays structured
-            # because a client that wants to render citations needs fields, and
-            # `framed` is the block to paste into a prompt — a client that
-            # concatenated `results` itself would put scraped text in
-            # instruction position, which is the whole thing being avoided.
+            # Structured `results` for rendering citations, and `framed` (`P4-06`) to
+            # paste into a prompt. See docs/features/mcp.md#what-reaches-a-model.
             "framed": frame_passages(result.hits),
         }
 
@@ -254,10 +222,8 @@ def build_mcp(
         """
         require_tool("list_new_since")
 
-        # Built *inside* the session. ORM instances detach when it closes, and
-        # every attribute read afterwards raises `DetachedInstanceError` — which
-        # surfaces as "error executing tool" with nothing to say it was a
-        # lifetime problem rather than a query one.
+        # Built inside the session: a detached ORM instance raises on every attribute
+        # read, which the client sees only as "error executing tool".
         async with session_ro() as sess:
             rows = (
                 await sess.execute(
@@ -315,10 +281,8 @@ def build_mcp(
             stats = await corpus_stats(sess)
         return dataclasses.asdict(stats)
 
-    # §12.4's escape hatch (`P3-04`). Registered only when a guest connection
-    # exists: a tool that is always going to fail is worse than an absent one,
-    # because the tool list is the model's entire view of what it can do, and it
-    # will spend a turn discovering the answer.
+    # §12.4's escape hatch (`P3-04`). Registered only when a guest connection exists:
+    # a tool that always fails costs a model a turn to discover.
     if guest_configured():
 
         @mcp.tool()

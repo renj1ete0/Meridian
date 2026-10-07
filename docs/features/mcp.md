@@ -5,9 +5,9 @@ The API serves a read-only [Model Context Protocol](https://modelcontextprotocol
 connect to it and answer questions from the corpus with citations, using their own model.
 Meridian holds the corpus and its provenance; it generates nothing here.
 
-- **Code:** `services/api/api/mcp/server.py` (tools and instructions), `auth.py` (token
-  verification), `main.py` (mounting, transport security), `routes/tokens.py` (the Admin
-  screen's API), `web/src/admin/AssistantAccessPanel.tsx`;
+- **Code:** `services/api/api/mcp/server.py` (tools and instructions); in `services/api/api/`,
+  `auth.py` (token verification), `tokens.py` (the command), `main.py` (mounting, transport
+  security), `routes/tokens.py` (the Admin screen's API); `web/src/admin/AssistantAccessPanel.tsx`;
   `packages/meridian_core/meridian_core/tokens.py`, `grants.py`, `readonly_query.py`
 - **Tasks:** `P3-01`–`P3-10`, `B-138`, `B-139`, `B-146`
 - **Decisions:** [ADR 0003](../adr/0003-external-assistants-over-mcp.md),
@@ -90,6 +90,117 @@ In short:
   only at the transport, because which tool was asked for is the thing being authorised.
 - **DNS-rebinding protection** through `MERIDIAN_MCP_ALLOWED_HOSTS` and
   `MERIDIAN_MCP_ALLOWED_ORIGINS`.
+- **The warnings ride on every result**, not only in the connection-time instructions: an
+  assistant summarising one tool call will not go back and re-read them. A degraded search's
+  wording tells the model to retry with other words, since a flag alone will not.
+- **A tool that would always fail is not registered.** `run_readonly_query` exists only when
+  a guest connection is configured: the tool list is the model's whole view of what it can
+  do, and it would spend a turn finding out.
+- **The tool docstrings are the descriptions clients read**, so they are written to the
+  model, and changing one changes what assistants do.
+
+### What reaches a model
+
+`search_chunks` returns cleared material only (`P4-14`, §11.8): this is the path from a fetched
+page into someone's prompt, the one screening exists to guard, and the model cannot ask
+otherwise. The operator's own search does not set it, so they can see what was quarantined and
+a false positive stays visible.
+
+Results come back twice. `results` is structured, for a client that renders citations. `framed`
+is the same text inside a random fence (`P4-06`), to paste into a prompt: a model on the other
+end holds tools, and a client that concatenated `results` itself would put scraped text in
+instruction position.
+
+`list_new_since` walks the corpus by `chunk_id` (§6.3's mark, §11.1a): ids are monotonic, so
+"everything after N" cannot skip a row that arrived mid-read or return one twice, and the path
+needs no query and no embedder. `corpus_overview` is §12.5's "absence is visible" as the first
+thing an assistant can check: thirty passages and thirty thousand support very different claims.
+
+### Authentication
+
+- **Anonymous access is an opt-out, not a default.** "Open unless configured" is one forgotten
+  variable away from publishing the corpus, and the person who forgets is deploying, not reading
+  the code. Development sets the opt-out in `.env.dev`, where it is visible and local.
+- **Two checks.** §11.4's point of a scope is that a session holds read tools while only the
+  orchestrator's profile would carry writes; once a request is authenticated, which tool was
+  asked for is the only thing that separates them, so the tool checks.
+- The verifier reports `allowed_tools` as the SDK's scopes, so the SDK and `require_tool` read
+  one source. It stamps this server as each token's resource, which turns on
+  `validate_token_resource`: an otherwise valid token minted for another service on the same
+  issuer is refused, as an Access assertion is checked against its audience (`P3-08`).
+- A refusal is a `ToolError`, which the client receives with its message; any other exception
+  reads as "error executing tool". The message names the missing tool, which the caller may
+  ask its operator to grant, and says nothing about the credential.
+
+### Tokens: design
+
+<a id="tokens-design"></a>
+
+- **Secrets are never compared.** The presented token is hashed and the hash looked up, so no
+  branch's duration depends on how much of a token was right, and a log line that included a
+  row would include a hash. Issuing logs the agent, never the secret or the hash.
+- **SHA-256, not bcrypt.** Slow hashes defend low-entropy human choices. These are 256 bits of
+  `secrets.token_urlsafe`; a slow hash would add latency to every request and no protection.
+  The scheme is named in the stored value, so changing it is a migration.
+- **A NULL tool list grants nothing**, the same argument as the guest role's lack of default
+  privileges (`P3-07`): forgetting to grant gives a caller who says it cannot, which gets fixed;
+  forgetting to restrict gives one who can do everything and does not mention it. `issue_token`
+  takes `allowed_tools` with no default for the same reason.
+- **Every rejection is the same `None`.** Telling an unauthenticated caller whether a token is
+  unknown, revoked or expired confirms that it exists or existed. The reason is logged instead.
+
+### Grants: design
+
+<a id="grants-design"></a>
+
+- **The unit is a person.** Someone given access holds several tokens (a browser, a laptop
+  client, a server), and revoking access revokes them all in one transaction; chasing them one
+  at a time is how the missed one stays working. Revoked tokens are marked, not deleted, so the
+  audit log can still say whose credential made a call.
+- **A profile, never a tool list** (§3). A free-form list is how someone ends up holding a tool
+  nobody remembers granting. Profiles are defined in code, so adding a tool is reviewed.
+  `operator` is not "everything": a grant is for reading someone else's corpus (§2.1).
+- **Annotations only with `operator`, and no column for it.** Annotations are the operator's own
+  thinking, the most personal layer (§12.5). A per-grant flag would be a checkbox someone ticks
+  while setting up a colleague.
+- **Filters intersect.** A guest may narrow further, and nothing they send widens the grant.
+  `cleared_only` is forced on, as for the MCP surface.
+- **Raw files need the grant and the deployment** (`MERIDIAN_SERVE_RAW`). The raw store is a
+  research archive of third-party material (§14.2); serving it is redistribution, unlike sharing
+  passages, metadata and the URL, which is a citation. A grant cannot overrule the operator's
+  decision about their instance.
+- **The audit is per grant and records refusals.** "What has this person's model been reading"
+  cannot be answered per token once they hold three clients, and repeated refusals are the more
+  interesting signal. Writing it never raises: a failed audit row is a smaller problem than a
+  guest's working query failing.
+- **Rate limits are per token.** What is limited is a client in a retry loop, which looks like a
+  crawl (§6); limiting the grant would let one laptop silence the same person's phone.
+  `limit=None` means no limit, unlike a budget: a throttle on something already authorised is a
+  decision made at issue, while a budget with no cap is a decision nobody made. Refused calls do
+  not count against it, or one misconfiguration becomes two.
+
+### Read-only SQL: design
+
+<a id="read-only-sql-design"></a>
+
+§12.4: "Watch which queries the agent writes there — those are the next curated tools." That is
+why every query is logged, successful or not.
+
+- **The role is the enforcement.** `meridian_guest` (`P3-07`) cannot read `agent_tokens`, whose
+  hash is the schema's one secret, or `fetch_policy`; arbitrary SQL cannot talk past a privilege
+  it does not hold.
+- **The timeout is the second line**: the role does nothing about a legal cartesian join across
+  the corpus. It is `SET LOCAL` per transaction, so a bad query costs seconds and the setting
+  cannot leak onto a pooled connection. It surfaces as `DBAPIError`, the parent of
+  `DatabaseError`; catching the narrower type let the failure this design creates on purpose
+  escape as a stack trace.
+- **Textual checks are a courtesy**: a write verb or several statements are refused with a clear
+  message rather than a Postgres permission error. "No semicolon except a trailing one" is blunt,
+  since handling literals would make it a parser, and refuses a legal query far less often than a
+  stacked one. A timeout and a missing privilege are translated, since neither reads as "you
+  asked for something you may not have".
+- **The session is passed in**, a guest session the caller owns, so a test cannot accidentally
+  run on a privileged one.
 
 ## Tests
 
