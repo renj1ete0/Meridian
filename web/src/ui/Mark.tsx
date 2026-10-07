@@ -1,36 +1,16 @@
 /**
- * The mark and its lockups — docs/design/design-system.md §1.
- *
- * A globe outline crossed by one meridian. Three nodes sit on the meridian —
- * zenith, hub, base — and the arc between them *is* the edge. One straight edge
- * leaves the hub on a bearing and terminates on the rim: the graph continues
- * past the reference line.
- *
- * The meridian stroke is heavier than the globe's, and that is the whole idea
- * rather than a detail: the reference line is the subject and the sphere is
- * context. Equalise them and the drawing becomes a globe with a line on it.
- *
- * Until now the app had no mark at all — the README uses exported PNGs, which
- * cannot inherit the reader's theme, cannot be drawn at an arbitrary size
- * without resampling, and cannot honour §1's optical-size rule. A stroke drawing
- * that scales is the point of having published geometry.
- *
- * The numbers here are transcribed from §1's tables, not eyeballed from the
- * artboards, and `tests/mark.test.tsx` checks the resulting bounding box against
- * the one §1 publishes — which is how a fat-fingered coordinate gets caught.
+ * The mark and its lockups — docs/design/design-system.md §1: a globe crossed by one
+ * heavier meridian, three nodes on it and one edge to the rim. Coordinates are transcribed
+ * from §1's tables; `tests/mark.test.tsx` checks the bounding box.
+ * See docs/features/web-app.md#icons-and-the-mark.
  */
 
 /** §1: the drawing grid. Optical centre is the circle centre, (50, 50). */
 export const MARK_GRID = 100
 
 /**
- * §1's optical-size switch: the compact mark is used *below* 32px.
- *
- * Not a stylistic preference. At small sizes the bearing edge and its node
- * collapse into the globe's rim and the meridian closes up, so the compact
- * variant drops the edge entirely and widens the meridian rather than shrinking
- * a drawing that has stopped being legible. The same rule `Icon` follows for
- * interior detail.
+ * §1's optical-size switch: the compact mark (no bearing edge, wider meridian) is used
+ * *below* 32px, where the full drawing stops being legible.
  */
 export const COMPACT_BELOW = 32
 

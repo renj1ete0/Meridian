@@ -27,23 +27,9 @@ import { Icon } from './Icon'
 import { Mark, WORDMARK } from './Mark'
 
 /**
- * The top bar (task P6-27) — design-system.md §5, and the bar drawn identically
- * across `ExploreLanding`, `Explore`, `AdminLight` and `Notifications`.
- *
- * 54px. Lockup left, a divider, the nav as tab pills, then — pushed right — the
- * **top-right cluster**, "designed once, used on every screen, in this order":
- * status pill · divider · notifications · settings. No greeting anywhere (§5):
- * one person owns this system, and a welcome line would be addressing them on
- * behalf of nobody.
- *
- * **Translucent over Explore, opaque over Admin** (§5): "translucency means
- * floating above your work; opacity means this is the thing you are reading".
- * On Explore the bar overlays a canvas; on Admin it sits over a document.
- *
- * Pages that need controls *in* the bar — the graph view's search field and
- * view switcher, on the Explore artboard — render them through `<InTopBar>`,
- * which portals into the space between the nav and the cluster. The bar stays
- * one component that every screen gets from `App`, rather than a copy per page.
+ * The top bar (task P6-27) — design-system.md §5: lockup, nav pills, and the top-right
+ * cluster (status · notifications · settings). Translucent over Explore, opaque over Admin;
+ * pages add controls through `<InTopBar>`. See docs/features/web-app.md#the-shell.
  */
 
 export const NAV = [

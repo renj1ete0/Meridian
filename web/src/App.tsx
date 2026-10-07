@@ -18,11 +18,8 @@ import { displayZone, setDisplayZone } from './lib/time'
 import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
 
 /**
- * The section a route belongs to. A source page and a node page belong to
- * Explore: marking no destination while a reader is two clicks into the corpus
- * would say the bar does not know where they are. About belongs to none — it
- * is reached from Settings, not the nav, and marking a tab for it would claim
- * a section it is not in.
+ * The section a route belongs to: source and node pages are Explore's, and About belongs
+ * to none, since it is reached outside the nav.
  */
 export function sectionOf(route: Route): Section | null {
   if (route.name === 'about') return null
@@ -32,19 +29,9 @@ export function sectionOf(route: Route): Section | null {
 }
 
 /**
- * The application shell (tasks P2-11, P2-08, P6-13, P6-27).
- *
- * §12.6 splits the interface in two, Explore and Admin, and the split is the
- * same one the API draws: `/api/explore/*` reads through the read-only role,
- * `/api/admin/*` writes. Keeping the interface's seam in the same place means a
- * reader always knows whether the screen they are on can change anything —
- * which is also why the bar is opaque on Admin and translucent everywhere else
- * (§5).
- *
- * **Pages own their width** (`P6-27`). `main` used to force every screen into
- * a 48rem reading column, which drew the map and the graph at thumbnail size and
- * made a dense Explore surface impossible. Now `main` is the full width under
- * the bar and each page sets its own measure.
+ * The application shell (tasks P2-11, P2-08, P6-13, P6-27): the top bar and the page
+ * for the route. The Explore/Admin seam matches the API's; pages own their width.
+ * See docs/features/web-app.md#the-shell.
  */
 export function App() {
   const [theme, setTheme] = useState<Theme>(readTheme)

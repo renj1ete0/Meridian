@@ -1,24 +1,7 @@
 /**
- * The icon set (tasks P6-16, P6-27) — docs/design/design-system.md §7.
- *
- * Path data only. Every shared attribute — viewBox, stroke, linecap, linejoin —
- * is applied by `<Icon>` rather than repeated here, so the grid rules cannot be
- * violated one icon at a time. `tests/ui.test.tsx` checks the geometry against
- * the published values.
- *
- * Drawn in the mark's own language: circles and arcs before rectangles. Two
- * weights, and the ratio is the mark's own — its meridian is 2.8 against a 2.4
- * globe, which is the same relationship as 1.6 to 1.35. Silhouette is always
- * heavier than the detail inside it.
- *
- * `detail` is dropped below 20px (§7's optical-size rule, the same one the
- * compact mark follows), so an icon must remain recognisable from `silhouette`
- * alone. Where an icon has no interior detail, `detail` is simply absent.
- *
- * Transcribed from `docs/design/Icons.dc.html` rather than drawn here (`P6-27`):
- * the first pass was drawn to the grid but not to the artboard, and the
- * difference was visible beside every mock — a gauge where the design has
- * sliders, a plain square where it has a grid with one cell lit.
+ * The icon set (tasks P6-16, P6-27) — docs/design/design-system.md §7, transcribed from
+ * `docs/design/Icons.dc.html`. Path data only; `<Icon>` applies the shared attributes, and
+ * an icon must read from `silhouette` alone. See docs/features/web-app.md#icons-and-the-mark.
  */
 
 export interface IconGeometry {

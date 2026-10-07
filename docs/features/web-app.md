@@ -52,6 +52,101 @@ See [ask-the-graph.md](ask-the-graph.md).
 
 ## Design choices
 
+### The shell
+
+§12.6 splits the interface into Explore and Admin, the same split the API draws:
+`/api/explore/*` reads through the read-only role, `/api/admin/*` writes. Keeping the seam in
+the same place means a reader always knows whether the screen can change anything, which is also
+why the bar is opaque on Admin and translucent everywhere else (§5: "translucency means floating
+above your work; opacity means this is the thing you are reading").
+
+**Pages own their width** (`P6-27`). `main` used to force every screen into a 48rem reading
+column, which drew the map and graph at thumbnail size and made a dense Explore surface
+impossible; now `main` is the full width under the bar and each page sets its measure. A source
+or node page marks Explore in the nav, since marking nothing two clicks into the corpus would
+say the bar does not know where the reader is. About marks nothing: it is reached outside the
+nav, and a tab for it would claim a section it is not in.
+
+The top bar is 54px and drawn identically across `ExploreLanding`, `Explore`, `AdminLight` and
+`Notifications`: lockup, a divider, the nav as tab pills, then, pushed right, the **top-right
+cluster**, "designed once, used on every screen, in this order": status pill · divider ·
+notifications · settings. No greeting (§5): one person owns the system, and a welcome line would
+address them on behalf of nobody. Pages that need controls in the bar (the graph view's search
+and view switcher) render them through `<InTopBar>`, which portals into the space between nav and
+cluster, so the bar stays one component from `App` rather than a copy per page. The cluster's
+three reads fail independently: a closed Admin (503 on `/api/admin/runs`) still leaves queue
+depth and notifications worth showing.
+
+### About
+
+design-system.md §1: the tagline "appears on the About screen and nowhere else"; repeated, it
+becomes decoration. `AboutPage` is the one component holding it, and `tests/about.test.tsx`
+checks no other source file does. Everything on it that could go stale is read, not written:
+the build is the version the bundle was built at (`package.json`, mirroring `VERSION`), and the
+topics and counts come from `/api/explore/stats`. The two statements not read (public sources
+only, self-hosted) are properties of the design, not of a deployment.
+
+### The contested mark
+
+**†** (U+2020) is the typographic mark for "a qualifying note is attached to this", which is
+what contested means; it exists in both type families, so it needs no icon system and inherits
+weight and colour from the type around it. §6 states the rule and its test together: the dagger
+is always paired with the brass tint and the tint never appears without it, *"strip the colour
+and the reading must survive"*; `tests/contested.test.tsx` is that test. It matters beyond
+aesthetics: §9 makes contradiction a result, and contested nodes the highest-value ones, so a
+reader who cannot see them (colour-blind, printed page, sunlight) loses the finding, not the
+decoration. The dagger is rendered as text rather than a pseudo-element or background image, so
+it survives copying, printing, reading aloud and a page without CSS.
+
+### Tier chips
+
+Two rules from the design system meet in `ui/Tier.tsx`. **"A tier is a bordered mono chip, not a
+coloured dot" (§5)**: state is carried by form, since a dot says nothing to a reader who cannot
+tell its hue, and nothing in print. **"There is deliberately no green and no red in the palette.
+Nothing in this system is pass/fail, and colour must not imply a verdict" (§2)**: every tier chip
+is drawn alike and differs only in text. A palette ranking tiers (peer-reviewed green, informal
+red) would assert a credibility judgement the system refuses to make: §8 extracts funder, stance
+and hedging and scores nothing. So `TierChip` takes no variant, tone or colour prop; there is
+nowhere to put a verdict. It is metadata beside a quote, so it has no fill, since a filled chip
+would outweigh the passage. Labels are not a ranking and are not abbreviated to initials. The
+tier list mirrors the database enum and `tests/tier.test.ts` compares them, because a tier added
+to Postgres and not to the list renders as an unstyled fallback nobody notices. Data chips
+(an extractor, a chunk id, `hybrid`) share the hairline form but are lower case: they are
+values, and capitals would turn a value into a heading.
+
+### Icons and the mark
+
+**The mark** (§1) is a globe outline crossed by one meridian, with three nodes on it (zenith,
+hub, base) and the arc between them the edge; one straight edge leaves the hub on a bearing and
+ends on the rim: the graph continues past the reference line. The meridian stroke is heavier
+than the globe's, and that is the idea, not a detail: the reference line is the subject and the
+sphere is context; equalise them and it becomes a globe with a line on it. The app once had no
+mark; the README's exported PNGs cannot follow the reader's theme, scale without resampling, or
+honour §1's optical-size rule, which is why it is a stroke drawing from published geometry. The
+numbers are transcribed from §1's tables, not eyeballed from the artboards, and
+`tests/mark.test.tsx` checks the bounding box against the published one, which is how a
+fat-fingered coordinate is caught. Below 32px the compact mark is used: at small sizes the
+bearing edge and its node collapse into the rim and the meridian closes up, so the compact
+variant drops the edge and widens the meridian rather than shrinking an illegible drawing.
+`monochrome` drops the accent, a supported state rather than a degradation: §1 requires the mark
+to read without it ("a stroke drawing, not a colour composition") for print as 100% K and for a
+knockout over unpredictable ground. In the lockup, the hairline rule is the height of the
+wordmark's cap, not the mark's, which keeps the three elements reading as one line of type with a
+drawing at its head.
+
+**Icons** (§7) are path data only; `<Icon>` applies the 24-unit grid, both stroke weights and
+the round terminals, so no icon can quietly stop matching the others (a set whose strokes
+disagree reads as amateurish before anyone can say why), and `tests/ui.test.tsx` checks the
+geometry. They are drawn in the mark's language, circles and arcs before rectangles, with
+silhouette 1.6 against detail 1.35, the mark's own 2.8:2.4 meridian-to-globe ratio. Below 20px
+detail strokes are dropped, the same optical-size rule as the compact mark: 1.35 units on a
+24-unit grid is a third of a pixel at 16px and renders as a smudge, so every icon must read from
+its silhouette alone. The set is transcribed from `docs/design/Icons.dc.html` (`P6-27`): the first
+pass was drawn to the grid but not the artboard, and the difference showed beside every mock (a
+gauge where the design has sliders, a plain square where it has a grid with one cell lit). Node
+glyphs are glyphs, not icons: they appear at node scale and beside chips, never as controls, and
+must stay in step with the spec's node types.
+
 ### The API client
 
 `lib/api.ts` has **no base URL**: no `API_BASE` constant, and nothing reads an environment

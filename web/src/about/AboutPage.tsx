@@ -5,19 +5,9 @@ import { ApiError, corpusStats, type CorpusStats } from '../lib/api'
 import { Lockup } from '../ui/Mark'
 
 /**
- * The About screen (task P6-40; design `About`).
- *
- * design-system.md §1: the tagline "appears on the About screen and nowhere
- * else" — repeated, it stops being a statement and becomes decoration. So this
- * is the one component that holds it, and `tests/about.test.tsx` checks no
- * other source file does.
- *
- * Everything on it that could go stale is read, not written: the build is the
- * version the web bundle was built at (`package.json`, which mirrors the root
- * `VERSION`), and the topics and counts come from `/api/explore/stats`, the
- * read-only route the landing already uses. The two statements that are not
- * read — public sources only, self-hosted — are properties of the design, not
- * of a deployment.
+ * The About screen (task P6-40; design `About`), the one component that holds the
+ * tagline. Everything that could go stale (version, topics, counts) is read, not written.
+ * See docs/features/web-app.md#about.
  */
 
 export const TAGLINE = 'A line to measure everything else against.'

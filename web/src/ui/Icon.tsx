@@ -1,12 +1,8 @@
 import { ICONS, isNodeGlyph, type IconGeometry } from './icons'
 
 /**
- * One icon, drawn to §7's grid (task P6-16).
- *
- * Every shared attribute lives here rather than in the path data: the 24-unit
- * grid, the two stroke weights, the round terminals. An icon that carried its
- * own would be an icon that could quietly stop matching the others, and a set
- * whose strokes disagree reads as amateurish long before anyone can say why.
+ * One icon, drawn to §7's grid (task P6-16). The grid, both stroke weights and the round
+ * terminals are applied here, never in path data. See docs/features/web-app.md#icons-and-the-mark.
  */
 
 /** §7: silhouette 1.6, interior detail 1.35 — the mark's own 2.8:2.4 ratio. */
@@ -19,11 +15,8 @@ export const LIVE_INTERFACE = 20
 export const LIVE_GLYPH = 16
 
 /**
- * Below this, detail strokes are dropped and the silhouette carries alone.
- *
- * The same optical-size rule the compact mark follows. Interior detail at 1.35
- * units on a 24-unit grid is a third of a pixel at 16px: it does not render as
- * detail, it renders as a smudge that makes the silhouette look blurry.
+ * Below this, detail strokes are dropped and the silhouette carries alone: 1.35 units of
+ * detail is a third of a pixel at 16px.
  */
 export const DETAIL_FLOOR = 20
 
