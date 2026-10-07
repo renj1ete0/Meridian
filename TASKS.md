@@ -21,6 +21,10 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-07 — `D-01` done, on `main`, unpushed.** Narrative comments moved into the docs for
+> every feature and the web package (comments-only, verified; full suites pass). Next:
+> `B-131` and `B-135` on the server; the operator's open calls in the notes below.
+
 > **2026-10-04 (night) — `v0.162.1`, pushed to GitHub (GHCR held), all stacks stopped.**
 > Last: `B-142` web lint and format in `make lint` (oxlint + Prettier, ADR 0012); `make lint`
 > now needs `web/node_modules` (`cd web && npm ci`).
@@ -1609,13 +1613,17 @@ deploy runbook whose first two commands could not work (`B-17`).
       the server lacks and miss two it has (`B-138`); `search_service.py` still said the vector
       arm was unbuilt, long after `P2-17` built it (fixed under `D-01`); and the `B-127`
       reasoning about the translation rule was wrong (corrected)
-- [ ] `D-01` **Move narrative comments into the docs** — the convention since 2026-10-04
-      (AGENTS.md "Code and comment standards"): docstrings and comments stay short, and the
-      rationale, history and measurements move to `docs/features/`. About 30% of the Python is
-      comments and docstrings, so this is done per feature, as each one gets its doc, and
-      whenever a file is touched. Tick a feature here once its modules are trimmed.
-      Done: search (`search.py`, `search_service.py`), gaps (`gaps.py`, `routes/gaps.py`).
-      `tests/unit/test_doc_pointers.py` checks every `docs/…md#anchor` pointer in the code
+- [x] `D-01` **Move narrative comments into the docs** — every feature, the data model, the
+      scripts and the web package. Comment and docstring lines in the Python went from 30% to
+      21% of the code; rationale, history and measurements now sit in `docs/features/`,
+      `docs/reference/data-model.md` (new) and `docs/spec/external-acquisition.md` §3.3, and
+      the code points at them. Checked as comments-only: Python syntax trees and minified web
+      output compare equal before and after. `tests/unit/test_doc_pointers.py` resolves every
+      `docs/…md#anchor` pointer in the code. Found and corrected on the way: more than twenty
+      comments that had drifted from the code (wrong counts, the wrong constant, "not built
+      yet" for things built, the old single-board-computer target). Left on purpose: MCP tool
+      docstrings (assistants read them as instructions), argparse usage text, and short
+      caller contracts. New rule from here: when a file is touched, keep it to the standard
 - [x] `B-142` **Linting and formatting for the web package** — `v0.162.1`, ADR 0012. oxlint
       rather than ESLint: the package's TypeScript 7 has no compiler API for typescript-eslint.
       Hooks rules, unused vars, no `any`, TSDoc syntax, correctness; Prettier in its own

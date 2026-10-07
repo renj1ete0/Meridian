@@ -84,7 +84,8 @@ can, and runs as the first step of `make test`.
 - Task IDs (`B-127`) in a comment are fine as pointers; the story behind them goes in the
   docs.
 - When you change a file that still carries essay comments, move the narrative into its
-  feature doc in the same commit (`D-01` tracks what is left).
+  feature doc in the same commit. `D-01` cleared the backlog; a pointer into `docs/` must resolve
+  (`tests/unit/test_doc_pointers.py`).
 
 ## Testing
 

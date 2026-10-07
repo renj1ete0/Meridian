@@ -27,7 +27,7 @@ FENCE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
 
 def slug(heading: str) -> str:
     """The anchor GitHub gives a heading: lower case, punctuation dropped, spaces to hyphens."""
-    text = re.sub(r"[`*_]|\[([^\]]*)\]\([^)]*\)", r"\1", heading).strip().lower()
+    text = re.sub(r"[`*]|\[([^\]]*)\]\([^)]*\)", r"\1", heading).strip().lower()
     text = re.sub(r"[^\w\- ]", "", text)
     return text.replace(" ", "-")
 
@@ -71,6 +71,7 @@ def test_slug_matches_github() -> None:
     assert slug("The vector index") == "the-vector-index"
     assert slug("`B-97`: places, ranked last") == "b-97-places-ranked-last"
     assert slug("Display time zone") == "display-time-zone"
+    assert slug("`chunk_topics` and labels") == "chunk_topics-and-labels"
 
 
 def test_anchors_number_repeats(tmp_path: pathlib.Path) -> None:

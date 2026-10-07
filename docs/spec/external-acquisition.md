@@ -89,6 +89,8 @@ not interchangeable. Eligibility is an explicit allowlist and the default is
 | `blocked` | no | Policy said no. Consigning it is a way around the operator's own decision |
 | **`robots_denied`** | **never** | See below |
 | **`unsafe_target`** | **never** | See below |
+| **`robots_unreachable`** | **never** | Stands with `robots_denied`, below |
+| anything not listed | no | Unknown outcomes are refused; see §3.3 |
 
 ### 3.1 The two that are never eligible, and why the line is absolute
 
@@ -99,6 +101,10 @@ system to identifying itself and honouring robots; a consignment pipeline that
 can launder a robots refusal makes that commitment decorative. This must be
 unreachable in code, not merely absent from a config default — the eligibility
 check refuses it before anything else runs, and a test asserts the refusal.
+
+`robots_unreachable` stands with it: a robots.txt that could not be read is not
+permission, and a third party fetching the page would be answering for the site
+a question the site has not yet answered.
 
 **`unsafe_target`.** `netguard` refused this address because it resolved to a
 private range, a cloud metadata endpoint, or a scheme this crawler does not
@@ -121,6 +127,31 @@ API so the worker, Admin and any future surface answer the question identically.
   time, or a bad extractor becomes an infinite loop with an external bill.
 - **A ceiling on open consignments**, so a drained crawl cannot publish ten
   thousand URLs at once to a service that charges per fetch.
+
+### 3.3 How the check is built
+
+`meridian_core.consignment` is this section and deliberately nothing else: no table, no lease,
+no API. It is the part with a security argument behind it, it needs none of the rest to be
+correct, and it is tested before anything can call it.
+
+- **What the eligible outcomes share** is that the content exists and this fetcher cannot have
+  it: a bot wall on a public page, a login the operator legitimately holds, a format or size
+  this crawler refuses. Everything else abandoned is a correct answer about a URL, and asking a
+  third party to try harder produces nothing.
+- **Unknown outcomes are refused.** This is the opposite of `queue_disposition`, which retries
+  what it cannot classify because retrying is bounded and dropping a URL is not. Here the
+  forgiving default is the dangerous one: a new outcome nobody has thought about must not
+  become publishable by being new.
+- **One setting, and it cannot widen anything else.** `allow_oversize` is the operator's opt-in
+  for `too_large`. A single flag that became "consign more" generally is how the absolute
+  refusals would eventually become reachable.
+- **Every answer carries its reason.** An operator looking at a feed emptier than expected needs
+  to know whether URLs were refused on conduct grounds, on policy grounds, or because nobody
+  opted into their size, since those want three different responses.
+- **402 and 451 are eligible** because both describe content that exists and is withheld
+  (payment required; withheld for legal reasons in this jurisdiction), which a different
+  fetcher may resolve. 5xx and 429 are retried rather than abandoned, so they should never
+  reach the check, and must not become eligible if they ever do.
 
 ---
 
