@@ -121,6 +121,13 @@ side, and a recall benchmark at k=100 was capped at 40% by arithmetic. The multi
 because a filtered query spends candidates on rows the filter discards: the index cannot see
 `_conditions()`, so `ef_search` has to cover the misses as well as the hits.
 
+**Doubling was not enough** (`B-152`). Measured on a live corpus of about 850,000 passages, the
+arm returned on average 43 of 100 with an official-source filter, 27 with a peer-reviewed one,
+and about one with a single topic: a topic-filtered Find was running on words alone without
+saying so. The arm now also scans on past what its filters remove; see
+[filtered scans](embedding.md#filtered-scans) for the numbers. `ef_search` stays as it is, as
+the size of each batch the scan takes.
+
 It is set with `set_config(..., is_local => true)` rather than `SET LOCAL`, because `SET` takes
 no bind parameters; local, so it lasts the transaction and cannot leak to the next caller on a
 pooled connection.

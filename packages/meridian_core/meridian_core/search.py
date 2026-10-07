@@ -20,7 +20,7 @@ from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
 from .passagetopics import carries_all_topics, on_topic_passage
 from .trust import READABLE_STATES
-from .vectorindex import indexed_distance
+from .vectorindex import MAX_SCAN_TUPLES, indexed_distance, scan_past_filtered
 
 log = get_logger(__name__)
 
@@ -260,14 +260,20 @@ async def _vector(
         select(func.set_config("hnsw.ef_search", str(max(candidates * EF_SEARCH_FACTOR, 40)), True))
     )
 
+    # `B-152`: filters run after the index offers candidates, so a narrow filter used to leave
+    # this arm nearly empty. Relaxed order comes back almost sorted; sorted again here.
+    await scan_past_filtered(sess, relaxed=True, max_tuples=MAX_SCAN_TUPLES)
+
     distance = indexed_distance(Chunk.embedding, vector)
     stmt = (
         _arm(filters)
+        .add_columns(distance)
         .where(Chunk.embedding.is_not(None))
         .order_by(distance, Chunk.chunk_id)
         .limit(candidates)
     )
-    return list((await sess.execute(stmt)).scalars())
+    rows = (await sess.execute(stmt)).all()
+    return [chunk_id for chunk_id, _ in sorted(rows, key=lambda r: (float(r[1]), r[0]))]
 
 
 def fuse(*ranked: Sequence[int], k: int = RRF_K) -> dict[int, float]:

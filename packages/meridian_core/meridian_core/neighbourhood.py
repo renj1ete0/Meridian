@@ -27,7 +27,7 @@ from .schemas.neighbourhood import (
     TermRead,
 )
 from .search import EF_SEARCH_FACTOR, SearchFilters, _arm
-from .vectorindex import indexed_distance
+from .vectorindex import MAX_SCAN_TUPLES, indexed_distance, scan_past_filtered
 
 #: Cosine floor for the outer ring. Measured on a live graph's name vectors:
 #: pairs at or above 0.70 were near-synonyms or narrower forms of one another;
@@ -424,6 +424,8 @@ async def similar_passages(
     await sess.execute(
         select(func.set_config("hnsw.ef_search", str(max(pool * EF_SEARCH_FACTOR, 40)), True))
     )
+    # `B-152`: past search's default filters too; relaxed order, sorted again below.
+    await scan_past_filtered(sess, relaxed=True, max_tuples=MAX_SCAN_TUPLES)
     distance = indexed_distance(Chunk.embedding, vector)
     stmt = (
         _arm(SearchFilters())
@@ -432,9 +434,10 @@ async def similar_passages(
         .order_by(distance, Chunk.chunk_id)
         .limit(pool)
     )
+    rows = sorted((await sess.execute(stmt)).all(), key=lambda r: (float(r[2]), r[0]))
     out: list[tuple[int, float]] = []
     seen: set[int] = set()
-    for chunk_id, source_id, d in await sess.execute(stmt):
+    for chunk_id, source_id, d in rows:
         similarity = 1.0 - float(d)
         if similarity < floor or source_id in seen:
             continue

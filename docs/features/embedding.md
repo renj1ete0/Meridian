@@ -69,9 +69,24 @@ deliberately avoid the index (`+ 0`) to get an exact answer within a subset.
 candidates and the query's `WHERE` runs afterwards, so when the nearest rows are all filtered
 out a query can return nothing or a far row. pgvector 0.8's iterative scan keeps going until
 enough rows pass; `vectorindex.scan_past_filtered` turns it on, in strict order, for the rest
-of the transaction. The novelty gate uses it. Search and the neighbourhood instead size
-`hnsw.ef_search` to cover their filters ([search](search.md)); whether they should switch is a
-benchmark question (`B-152`). A test that wants to see the index at work on the small dev
+of the transaction. The novelty gate uses it in strict order, so its `LIMIT 1` is the nearest.
+
+Search's vector arm and the neighbourhood's similar passages use it in relaxed order, which is
+cheaper and comes back almost sorted, and sort what comes back (`B-152`). They also raise
+`hnsw.max_scan_tuples` to `MAX_SCAN_TUPLES` (100,000), because pgvector's default of 20,000
+stopped a one-topic scan with a third of its results. Measured on a live corpus of about
+850,000 passages, 20 sampled query vectors, 100 asked for, recall against an exact scan:
+
+| Filter | Before: returned / recall | After: returned / recall | After: p50 |
+|---|---|---|---|
+| none | 95 / 0.91 | 100 / 0.96 | 8 ms |
+| official sources | 43 / 0.41 | 100 / 0.94 | 14 ms |
+| peer-reviewed | 27 / 0.27 | 100 / 0.95 | 54 ms |
+| one topic (smaller) | 1 / 0.01 | 100 / 0.87 | 600 ms |
+| one topic (larger) | 1 / 0.01 | 100 / 0.91 | 300 ms |
+
+An exact scan of a topic's passages took about two seconds. The cost is the narrow filters'
+latency, up to about a second and a half at the worst, against an arm that returned nothing. A test that wants to see the index at work on the small dev
 table has to switch off sorting as well as sequential scans, or the planner sorts exactly and
 the miss never shows.
 

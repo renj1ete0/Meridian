@@ -16,7 +16,7 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.164.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.164.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
@@ -1685,9 +1685,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       copy were all marked copies the gate found nothing and kept it. `vectorindex.
       scan_past_filtered` turns on pgvector 0.8's iterative scan in strict order; a test with
       a hundred nearer copies fails without it
-- [ ] `B-152` **Iterative scan for search and the neighbourhood?** — both pad `hnsw.ef_search`
-      to cover their filters (`B-24`). Measure with `make bench-search` whether
-      `scan_past_filtered` gives the same recall at less cost, especially for narrow filters
+- [x] `B-152` **Filtered searches came back nearly empty** — `v0.164.2`. Measured on the
+      live corpus: with one topic as the filter the vector arm returned ~1 of 100 (official
+      sources 43, peer-reviewed 27), so topic-filtered Find was lexical-only. Iterative scan
+      (relaxed, sorted after) and `hnsw.max_scan_tuples` 100k: 100 of 100, recall 0.87–0.96,
+      p50 8 ms unfiltered to ~600 ms for the narrower topic. Neighbourhood too
 - [x] `B-150` **Followed links follow the evidence** — `v0.163.0`, ADR 0015. The operator asked
       for discovery that does not wait on one search method (`B-109`). Measured first on the
       live corpus: a link from an on-topic page lands on a topic about half the time (as search

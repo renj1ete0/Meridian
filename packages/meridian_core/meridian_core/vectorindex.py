@@ -36,12 +36,25 @@ def indexed_distance(
     return as_indexed(column).cosine_distance(as_indexed(other))
 
 
-async def scan_past_filtered(sess: AsyncSession) -> None:
+#: Index tuples an iterative scan may visit before it stops (`B-152`). pgvector's default of
+#: 20,000 left a one-topic search with a third of its results; this reaches nearly all of them
+#: at a few hundred milliseconds. See docs/features/embedding.md#filtered-scans.
+MAX_SCAN_TUPLES = 100_000
+
+
+async def scan_past_filtered(
+    sess: AsyncSession, *, relaxed: bool = False, max_tuples: int | None = None
+) -> None:
     """Keep an index scan going until enough rows pass the query's filters (`B-151`).
 
     For the rest of the transaction. Without it the HNSW index offers its nearest candidates,
     the filters run afterwards, and a query whose nearest rows are all filtered out finds
-    nothing. Strict order, so a ``LIMIT 1`` is still the nearest. See
-    docs/features/embedding.md#filtered-scans.
+    nothing. Strict order keeps a ``LIMIT 1`` the nearest; relaxed order is cheaper and needs
+    the caller to sort what comes back. See docs/features/embedding.md#filtered-scans.
     """
-    await sess.execute(select(func.set_config("hnsw.iterative_scan", "strict_order", True)))
+    order = "relaxed_order" if relaxed else "strict_order"
+    await sess.execute(select(func.set_config("hnsw.iterative_scan", order, True)))
+    if max_tuples is not None:
+        await sess.execute(
+            select(func.set_config("hnsw.max_scan_tuples", str(int(max_tuples)), True))
+        )

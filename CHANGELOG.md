@@ -77,6 +77,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.2] — 2026-10-07
+
+### Fixed
+
+- `B-152`: a filtered search's meaning arm came back nearly empty. The index offers its nearest
+  candidates and the filters run afterwards, so with one topic as the filter it returned about
+  one passage of the hundred asked for (official sources: 43, peer-reviewed: 27), and Find ran
+  on words alone without saying so. Search's vector arm and the neighbourhood now use pgvector's
+  iterative scan in relaxed order, with a higher scan limit, and sort what comes back: 100 of
+  100 at recall 0.87–0.96 against an exact scan, in milliseconds without a filter and up to
+  about a second with one topic.
+
 ## [0.164.1] — 2026-10-07
 
 ### Changed
