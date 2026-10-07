@@ -13,7 +13,7 @@ export
 
 .PHONY: promote dev-up dev-down up down logs migrate seed quickstart preflight \
         local-up local-down local-logs \
-        snapshot-corpus restore-corpus backup lint test clock-check leak-check bench-search build-push build-worker
+        snapshot-corpus restore-corpus backup lint test stale-dist-info clock-check leak-check bench-search build-push build-worker
 
 # --- Running it, rather than developing it (tasks B-05, B-06, B-08) ---------
 #
@@ -79,13 +79,20 @@ backup:
 
 # PEP 8 / PEP 257 via ruff, and the formatter, before the suite; the web package
 # through oxlint and Prettier (B-142): AGENTS.md "Code and comment standards".
-lint:
+lint: stale-dist-info
 	uv run ruff check .
 	uv run ruff format --check .
 	cd web && npm run --silent lint
 
 test: lint
 	uv run pytest
+
+# A version bump leaves the old workspace dist-info without a RECORD, and uv then warns on every
+# command and rebuilds; deleting them before running is what the handover used to say to do.
+stale-dist-info:
+	@for d in .venv/lib/python3*/site-packages/meridian_*.dist-info; do \
+	  [ -d "$$d" ] && [ ! -f "$$d/RECORD" ] && rm -rf "$$d"; true; \
+	done
 
 # Every test again with all clocks DAYS ahead; prints what fails only then (`B-147`).
 clock-check:

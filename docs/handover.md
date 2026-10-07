@@ -37,8 +37,9 @@ add it here.
 >   `chain_for`. A new seeded agent row needs an order, or a test fails.
 > - **Never format a time outside `lib/time.ts` / `timefmt`** (`B-145`); a web test fails.
 >   Tests that pin a date expire: compute dates from the test's own clock.
-> - **Every `uv run` after a version bump warns about stale `dist-info`**; delete the
->   `meridian_*.dist-info` folders that have no `RECORD`.
+> - **Every `uv run` after a version bump warns about stale `dist-info`**; `make lint` (and so
+>   `make test`) now deletes the `meridian_*.dist-info` folders that have no `RECORD` first
+>   (`make stale-dist-info`). A bare `uv run` still warns until then.
 
 > **2026-10-04 — production moves to a server; `B-127`–`B-132` (`v0.156.14`).** The operator
 > dropped the single-board-computer target: production is Docker on a server, possibly with an
