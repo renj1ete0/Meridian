@@ -1,28 +1,8 @@
 """The scheduler (task P5-06, spec §13.1, §13.4).
 
-`python -m worker.scheduler` — reads its timetable from the database, and there
-is no crontab anywhere.
-
-§13.1: *"no cron files. The scheduler reads its timetable from the DB so
-schedule changes are a UI action."* A crontab on the box is configuration nobody
-can see from the interface, cannot change without SSH, and does not travel with
-a snapshot — a corpus restored elsewhere arrives with no idea what was supposed
-to be running.
-
-**Jobs run as subprocesses, not in this process.** Each is already a `python -m`
-entry point that opens its own database connections and exits; importing and
-calling them here would mean one crash takes the scheduler with it, and one
-job's memory is the scheduler's memory for as long as it runs. A subprocess is
-also what makes a timeout enforceable — there is something to kill.
-
-**`python -m <module>`, never a shell.** The module comes from a database row a
-UI can edit (§13.2). Passing it to a shell would make the timetable a remote
-execution surface for anyone who could write to that table, which is a
-considerably larger promise than "you may change when the digest runs".
-
-**Nothing here is its own supervisor.** `restart: unless-stopped` in compose
-owns restarts (`P1-30`), the same as every other service — two supervisors
-racing to restart one process is how a crash loop goes invisible.
+`python -m worker.scheduler` reads its timetable from the database; there is no crontab.
+Each job runs as a `python -m <module>` subprocess, never through a shell, under a
+timeout. Restarts belong to compose. See docs/features/operations.md#the-scheduler.
 """
 
 from __future__ import annotations
@@ -100,11 +80,8 @@ class Scheduler:
         try:
             while not self._stopping:
                 claim = await self._claim()
-                # After the claim, not before it (`B-19`). `worker.main` beats
-                # *before* its work because a lane wedged inside a fetch should
-                # stop beating within the iteration; here the round trip to
-                # claim a job is the thing that can wedge, so the beat has to
-                # come out the other side of it to mean anything.
+                # After the claim, not before it (`B-19`): here the claim is what
+                # can wedge. See docs/features/operations.md#the-scheduler.
                 beat()
                 if claim is None:
                     if self._max_jobs is not None:
@@ -171,16 +148,8 @@ class Scheduler:
     async def _beating(self) -> AsyncIterator[None]:
         """Keep the heartbeat fresh for as long as a job is in flight.
 
-        A backfill can legitimately run for half an hour, and a scheduler that
-        stopped beating for the duration would be restarted in the middle of
-        its own work — killing the job to report that the job was running.
-
-        **What this beat proves is narrower than the one in the loop**, and
-        worth being plain about: it says a job is in flight and has not yet hit
-        `--timeout-seconds`, not that anything is making progress. The ceiling
-        is what makes it honest — the subprocess is killed at the timeout, so
-        this cannot keep a permanently hung job looking alive for longer than
-        that.
+        Proves only that a job is in flight and under `--timeout-seconds`, at which the
+        subprocess is killed.
         """
 
         async def keep_beating() -> None:

@@ -1,22 +1,7 @@
 """What a long crawl has been doing, and whether it still is (task P6-25, spec §12.5, §13.4).
 
-`/progress` answers "is anything happening" in one line, which is the right
-question for a fresh install's first hour. An unattended run of days asks a
-different one: *when did it stop, and why*. That needs a day of history rather
-than an hour, the outcome mix rather than a single rate, the queue and the
-embedding backlog side by side, and a verdict on liveness that says so in words.
-
-**The failure this exists for is silence.** §13.4's unattended system does not
-crash in the way that matters; it stops fetching while every process stays up,
-or it drains its frontier and idles, and both of those log exactly what a
-healthy crawl logs. `alerts` catches them hours later, on a window chosen to
-stay quiet. This is the screen somebody looks at in between.
-
-**Everything is as of one instant.** ``now`` bounds every window and the last
-attempt, and the verdict counts only queue rows that existed at ``now``. In
-production that is the present and the bounds cost nothing; in tests it is what
-lets a verdict be asserted against a database that holds a real crawl, by
-choosing an instant no real row is near.
+A day of attempts by outcome, the queue beside the embedding backlog, and a verdict in
+words, all as of one instant ``now``. See docs/features/operations.md#crawl-health.
 """
 
 from __future__ import annotations
@@ -40,15 +25,8 @@ HOURS = 24
 #: How many domains the last-hour list names.
 TOP_DOMAINS = 10
 
-#: No fetch attempt for this long, with work that is ready, is a stall.
-#:
-#: The claim lease, because it is already this codebase's statement of "longer
-#: than any single fetch should take". A gap shorter than one lease can be one
-#: slow render plus a politeness delay; a gap longer than one lease means no
-#: fetch has *finished* in the time any fetch is allowed, including a worker
-#: that died holding a claim and whose lease has only just expired. Any shorter
-#: and a slow site reads as an outage; much longer and a dead worker costs an
-#: afternoon before the screen admits it.
+#: No fetch attempt for this long, with work that is ready, is a stall: the claim
+#: lease, "longer than any fetch should take". See docs/features/operations.md#crawl-health.
 STALL_AFTER = dt.timedelta(seconds=DEFAULT_LEASE_SECONDS)
 
 
@@ -124,13 +102,8 @@ def judge(
 ) -> LivenessState:
     """The verdict, from the numbers alone.
 
-    Separate from the queries so every branch can be driven directly: the
-    database a test runs against holds a real crawl, and "the queue is empty"
-    is not a state a shared database can be put into.
-
-    Order matters. A recent fetch is ``crawling`` even with an empty queue —
-    the last few rows are still being worked — and emptiness is only reported
-    once the fetching has actually stopped.
+    Separate from the queries, so tests can drive every branch. A recent fetch is
+    ``crawling`` even with an empty queue.
     """
     if last_attempt_at is not None and now - last_attempt_at <= stall_after:
         return "crawling"
@@ -152,10 +125,7 @@ async def crawl_health(sess: AsyncSession, *, now: dt.datetime | None = None) ->
     succeeded = FetchAttempt.outcome.in_(list(SUCCESS_OUTCOMES))
     in_day = (FetchAttempt.attempted_at > day_ago, FetchAttempt.attempted_at <= now)
 
-    # Rolling hours ending at `now`, not clock hours. A clock-aligned chart
-    # always ends in a partial hour, and a partial hour is a short bar — which
-    # on a screen whose purpose is spotting a crawl that slowed down is a false
-    # alarm every time it is opened.
+    # Rolling hours ending at `now`: a clock-aligned chart ends in a short partial bar.
     hours_ago = func.floor(func.extract("epoch", at - FetchAttempt.attempted_at) / 3600).cast(
         Integer
     )

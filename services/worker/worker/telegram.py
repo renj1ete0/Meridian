@@ -1,25 +1,8 @@
 """Telegram, the transport (task P5-07, spec §13.3, §11.11).
 
-§13.3 chooses Telegram for a reason that matters later rather than now: inline
-keyboards make intervention possible from a phone. This is the outbound half —
-the digest and the alerts — and it is deliberately the half that can exist
-before there is anything to intervene in. The inbound half arrived later and
-is `worker/bot.py`; what lives here is the transport both directions share.
-
-**It is a control surface, not a notifier**, and §13.3 says so: the bot can
-trigger runs and change steering. That is why the chat id is configured rather
-than discovered — a bot that could be commanded by anyone would be a way to
-steer this system from outside it — and why `poll` reads updates but decides
-nothing about them.
-
-**The credential is environment, never database** (§11.11). The database is
-snapshotted off-device for backup, and a token in it would travel with every
-snapshot.
-
-**Absent is a supported state.** No token means the digest still runs, still
-evaluates conditions, and still records them — it simply has nowhere to send
-them. The in-app panel (`P6-08`) reads the same rows, so a deployment with no
-bot is not a deployment with no monitoring.
+What the digest, the alerts and the inbound bot (`worker/bot.py`) share. `poll` reads
+updates and decides nothing about them. The token comes from the environment, never the
+database, and no token is a supported state. See docs/features/operations.md#telegram.
 """
 
 from __future__ import annotations
@@ -95,20 +78,9 @@ class Telegram:
     async def poll(self, *, offset: int | None, timeout_s: int = LONG_POLL_S) -> list[dict] | None:
         """Wait for messages, and return them. Never raises.
 
-        **`None` and `[]` are different answers.** `[]` is "nothing was said";
-        `None` is "could not ask". They arrive at the same speed and look the
-        same to a caller that conflates them — which is how a polling loop
-        whose network is down turns into a hot loop hammering a dead host.
-
-        **Long polling rather than a webhook.** A webhook needs an inbound
-        port, a certificate and a public hostname; this needs none of them, so
-        the bot works from a machine with no ingress at all — which is the
-        deployment §13.3 is written for.
-
-        `offset` acknowledges: passing `last_update_id + 1` tells Telegram the
-        earlier updates were handled and stops it redelivering them. An offset
-        that never advanced would replay the same message forever, so the
-        caller advances it even for a command that failed.
+        `[]` is "nothing was said"; `None` is "could not ask", which a loop must not
+        treat as an empty answer. `offset` (`last_update_id + 1`) acknowledges earlier
+        updates. Long polling: no inbound port is needed.
         """
         try:
             response = await self._http().get(
@@ -145,10 +117,8 @@ class Telegram:
     async def send(self, text: str) -> bool:
         """Send one message. Returns whether it arrived.
 
-        Never raises. This is the channel that reports failures, and a reporter
-        that crashes on its own failure takes the report with it — the digest
-        has already written its findings to `notifications` by the time this is
-        called, so a send that fails loses the delivery and not the evidence.
+        Never raises: findings are already in `notifications`, so a failed send loses
+        only the delivery.
         """
         body = text if len(text) <= MAX_MESSAGE else text[: MAX_MESSAGE - 20].rstrip() + "\n…"
         try:
@@ -157,10 +127,8 @@ class Telegram:
                 json={
                     "chat_id": self._chat_id,
                     "text": body,
-                    # Markdown is off. A digest interpolates URLs, titles and
-                    # error strings from crawled pages, and an unbalanced
-                    # asterisk in one of them makes Telegram reject the whole
-                    # message — losing the alert to a formatting character.
+                    # Markdown is off: an unbalanced asterisk in a crawled title would
+                    # make Telegram reject the whole message.
                     "disable_web_page_preview": True,
                 },
             )

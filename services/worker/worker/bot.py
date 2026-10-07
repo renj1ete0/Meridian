@@ -1,30 +1,8 @@
 """Telegram, inbound (task `P5-07`, §13.3).
 
-The loop that turns a message into a command. `worker/commands.py` decides what
-a message means; this decides when to ask, what to do with the answer, and how
-to fail — and all three are about the same thing, which is that this process is
-a door into a system that can steer a crawl.
-
-**Long polling, not a webhook.** A webhook needs an inbound port, a certificate
-and a public hostname. This needs none of them, so the control surface works
-from a machine with no ingress at all — the same deployment `cloudflared`
-exists to avoid poking holes in.
-
-**The backlog is dropped at startup.** Telegram holds undelivered updates for
-24 hours and replays them on the next poll, so a bot restarted after a night
-down would execute every command sent while it was gone. A command is an
-instruction about *now*: `/run` typed at midnight is not a request to start a
-run at breakfast, and a `/boost` applied twice is a boost nobody asked for. The
-first poll therefore acknowledges the queue without reading it.
-
-**The offset advances before the work, not after.** An update that makes a
-handler raise is one Telegram will redeliver forever if it is never
-acknowledged — the loop would spend the rest of its life on the one message it
-cannot process, and no later command would ever be seen.
-
-**An unknown chat gets no reply at all.** Not "unauthorised": silence. §13.3
-restricts the bot to one chat because it can change steering, and a refusal
-that answers is a refusal that confirms the bot exists and is listening.
+The loop that turns a message into a command; `worker/commands.py` decides what it
+means. Long polling, the backlog dropped at start-up, the offset advanced before the
+work, and no reply to an unknown chat. See docs/features/operations.md#telegram.
 """
 
 from __future__ import annotations
@@ -59,10 +37,8 @@ IDLE_S = 60.0
 async def skip_backlog(bot: Telegram) -> int | None:
     """Acknowledge whatever is waiting, without running it.
 
-    `offset=-1` asks Telegram for the *last* update only. Its id plus one
-    acknowledges everything before it, which is the cheapest way to discard a
-    queue that may hold a hundred messages — and the id is all that is needed,
-    so nothing that was sent while the bot was down is even read.
+    `offset=-1` asks for the last update only; its id plus one acknowledges the rest
+    unread.
     """
     updates = await bot.poll(offset=-1, timeout_s=0)
     if not updates:
@@ -114,12 +90,8 @@ async def run_bot(*, poll_timeout_s: int = LONG_POLL_S, max_polls: int | None = 
         # state, and inbound is the same: no token means no control surface,
         # not a failed start. Admin and the MCP tools still work.
         log.warning("no telegram configured; inbound commands are unavailable")
-        # **Idle rather than exit.** `restart: unless-stopped` restarts a
-        # container that exits *cleanly* too, so returning here would turn "no
-        # bot configured" into a container restarting every second for as long
-        # as the stack is up — which is how a supported state becomes a page of
-        # logs. It keeps beating, so the healthcheck can still tell an idle bot
-        # from a dead one.
+        # Idle rather than exit: compose restarts a clean exit too. It keeps beating,
+        # so an idle bot is not a dead one.
         while max_polls is None:
             beat()
             await asyncio.sleep(IDLE_S)

@@ -1,26 +1,8 @@
 """Sustained conditions, not events (task P5-07, spec §13.3, §12.5).
 
-> "Alerts on *sustained* conditions only — fetch success below threshold for an
-> hour, no successful run in 48h, disk above 80%, agent failures repeated.
-> **Single-event alerting teaches me to ignore the channel, which is the real
-> failure mode.**"
-
-That last sentence is the design. A channel that cries about one timeout is a
-channel nobody reads, and an unread channel is worse than no channel — it is the
-appearance of monitoring without the fact of it. So every condition here is
-measured over a window, and every alert is suppressed for a cooldown after it
-fires.
-
-**Suppression is in the database, not in the process.** The digest runs on a
-timer and exits; anything it remembered in memory would be forgotten before the
-next run, and the same alert would arrive every time the timer fired — which is
-single-event alerting wearing a different hat. `notifications` already exists for
-this, and using it means the in-app panel (`P6-08`) shows exactly what was sent.
-
-**Everything is measured against the database or the disk.** No counters to keep
-in step, no state that can drift from reality: "what was the fetch success rate
-in the last hour" is a question `fetch_attempts` can already answer, and a rate
-derived from the rows is a rate that cannot lie about them.
+Every condition is measured over a window from rows or the disk, and every alert is
+suppressed for a cooldown, recorded in `notifications` rather than in memory.
+See docs/features/operations.md#alerts-and-the-digest.
 """
 
 from __future__ import annotations
@@ -53,20 +35,12 @@ MIN_ATTEMPTS_TO_JUDGE = 20
 #: §13.3's number.
 DISK_WARN_FRACTION = 0.8
 
-#: Chunks waiting for a vector before the backlog is worth reporting (`B-22`).
-#:
-#: Lag is normal and by design: §6.1 draws one pipeline and it is three passes,
-#: so a chunk that exists, is not yet searchable and is not yet known to be a
-#: duplicate is an accepted window rather than a fault. What is not normal is a
-#: window that only widens. The number is set where a CPU-only box needs the
-#: better part of an hour to catch up — far enough above a busy afternoon to
-#: stay quiet, low enough to fire long before the corpus is mostly unsearchable.
+#: Chunks waiting for a vector before the backlog is worth reporting (`B-22`): about
+#: an hour's catch-up on a CPU-only box.
 EMBED_BACKLOG_LIMIT = 5_000
 
 #: Fraction of the corpus that may be waiting before it is reported regardless
-#: of the absolute count. A small corpus with 90% of itself unembedded is in
-#: the same trouble as a large one with 5,000 waiting, and the absolute
-#: threshold alone would never notice it.
+#: of the absolute count, so a small corpus mostly unembedded is caught.
 EMBED_BACKLOG_FRACTION = 0.5
 
 
@@ -149,10 +123,7 @@ async def check_no_recent_success(
 async def check_queue_drained(sess: AsyncSession) -> Alert | None:
     """The frontier has nothing left to fetch.
 
-    The failure that cost `v0.26.0`: a crawl that drains its queue and idles
-    logs exactly what a healthy one logs, and reports the same numbers. Nothing
-    else here would notice, because there are no failures — there is simply no
-    work, and an unattended run keeps not doing it for two days.
+    A drained crawl logs what a healthy one does (`v0.26.0`).
     """
     pending = await sess.scalar(
         select(func.count()).select_from(QueueTask).where(QueueTask.status == "pending")
@@ -218,10 +189,8 @@ async def recently_alerted(
 async def record_alert(sess: AsyncSession, alert: Alert) -> Notification:
     """Write the alert down. Flushes; does not commit.
 
-    Recorded whether or not a channel is configured, because the in-app panel
-    (`P6-08`) and the Telegram digest are two views of one thing — and a
-    deployment with no bot token should still be able to see what would have
-    been sent.
+    Recorded whether or not a channel is configured; the in-app panel (`P6-08`) reads
+    the same rows.
     """
     row = Notification(
         notification_type="alert",
@@ -244,21 +213,8 @@ async def check_embedding_backlog(
 ) -> Alert | None:
     """Vectors are falling behind the crawl (`B-22`, §6.1, §12.5).
 
-    The failure this exists for was measured, not imagined. The embedding pass
-    ran as an hourly job inside a thirty-minute ceiling, was killed at the
-    ceiling every time, and left a backlog no later window could clear — and
-    the only trace was `last_status` in `scheduled_jobs`. Everything a person
-    looks at said the crawl was healthy, because it was: the corpus was growing
-    and simply becoming less searchable as it did.
-
-    **Search does not report this either**, which is why it needs an alert
-    rather than a screen. `SearchResult.degraded` means an arm is *absent*; an
-    arm that is present and covering a third of the corpus returns fewer, worse
-    results and says nothing at all. A reader would conclude the corpus is thin.
-
-    Two thresholds, because one of them misses a case. An absolute count
-    catches a large corpus falling behind; a share catches a small one that is
-    mostly unembedded, which the count alone would call fine.
+    Fires on an absolute count or a share of the corpus waiting. Search does not
+    report a partly covered vector arm. See docs/features/operations.md#alerts-and-the-digest.
     """
     waiting = int(
         await sess.scalar(

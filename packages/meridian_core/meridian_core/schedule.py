@@ -1,20 +1,8 @@
 """Claiming and settling scheduled jobs (task P5-06, spec §13.1).
 
-The queue's shape (`P1-01`), for the same reasons and with the same mechanism:
-`FOR UPDATE SKIP LOCKED` picks a due job, a **lease** holds it rather than a
-status flip, and the database is the dispatcher. Two schedulers running by
-accident — a systemd timer and a container, a deploy overlapping a restart — get
-different jobs rather than both running the same backup.
-
-**A lease, not a status.** A scheduler that dies mid-job leaves the claim to
-expire; a status flip would leave the job "running" forever, and the fix would
-be somebody editing a row at 2am.
-
-**Missed runs are run once, not caught up.** A machine that was off for a day
-leaves a daily job overdue by 24 hours. Rescheduling from *now* rather than from
-the old `next_run_at` means one run and then the normal cadence — the
-alternative is a burst of catch-up runs the moment the machine returns, which is
-the worst time for it.
+The queue's shape (`P1-01`): `FOR UPDATE SKIP LOCKED` picks a due job and a lease holds
+it, so two schedulers get different jobs and a dead one's claim expires. A missed run
+is run once, then rescheduled from now. See docs/features/operations.md#the-scheduler.
 """
 
 from __future__ import annotations

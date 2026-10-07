@@ -1,36 +1,9 @@
 """Inbound Telegram commands (task `P5-07`, §13.3).
 
-§13.3 chose Telegram for both directions because inline keyboards make
-intervention possible from a phone. The outbound half shipped in `v0.58.0`.
-This is inbound, and §13.3 is blunt about what that makes the bot: "it is a
-control surface, not just a notifier."
-
-**The task named two conditions and did not build this until they held.** Most
-commands needed steering (`P5-06`) or the orchestrator (phase 4). `P5-06` now
-runs, so the steering commands are reachable; the orchestrator ones are not,
-and they **refuse by name rather than being absent** — a command that silently
-does nothing is worse than one that says it cannot yet, especially on a surface
-somebody is using from a phone because they are not at a desk.
-
-`worker/bot.py` is the loop that feeds this module; what is here decides only
-what a message means and what doing it involves.
-
-Three properties, in the order they matter:
-
-**Authorisation before parsing.** A message from an unknown chat is discarded
-without looking at what it said. Parsing first would mean a stranger could
-probe the command surface by reading error messages, and §13.3's single-chat
-restriction exists precisely because this can change steering and trigger runs.
-
-**Parsing is pure and separate from doing.** `parse` returns a description of
-what was asked; `execute` performs it. That makes every refusal and every
-argument bound testable without a database or a bot token — which is most of
-what can go wrong here.
-
-**Nothing destructive is reachable.** There is no command that deletes, and
-§10.2's argument applies: archiving a topic is a status change that keeps every
-node, edge and tag. The most damaging thing a compromised chat could do is
-misweight the crawl, which is visible in `steering_log` and reversible.
+What a message means and what doing it involves; `worker/bot.py` feeds it. Authorisation
+comes before parsing, `parse` is pure and separate from `execute`, commands that need
+the orchestrator refuse by name, and nothing reachable deletes.
+See docs/features/operations.md#telegram.
 """
 
 from __future__ import annotations
@@ -82,13 +55,7 @@ class Command:
 def authorised(chat_id: str | int, allowed: str | int | None) -> bool:
     """Whether this chat may command the system at all (§13.3).
 
-    Checked **before** parsing. A stranger who can see error messages can map
-    the command surface; one whose messages are dropped unread cannot.
-
-    An unset `allowed` refuses everything. The alternative — treating "no chat
-    configured" as "any chat" — turns a missing environment variable into an
-    open control surface, and §11.11 keeps the bot token in the environment
-    precisely because that is where a misconfiguration is most likely.
+    Checked before parsing. An unset `allowed` refuses everything.
     """
     if allowed is None or str(allowed).strip() == "":
         return False
@@ -151,10 +118,7 @@ def parse(text: str) -> Command:
 async def execute(sess: AsyncSession, command: Command, *, actor: str = "telegram") -> str:
     """Do what was asked, and return what to say back.
 
-    Every steering change is recorded with `actor="telegram"`. §10.1 wants a
-    reason on every change, and "who" matters as much as "what": a weight that
-    moved from a phone at midnight is a different thing to review than one
-    changed in Admin.
+    Every steering change is recorded with `actor="telegram"` (§10.1).
     """
     if not command.ok:
         return command.error or "That did not work."

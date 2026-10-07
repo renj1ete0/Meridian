@@ -1,29 +1,8 @@
 """Structured JSON logging, shared by every Meridian service.
 
-The ingestion node runs unattended for weeks (§13.4: self-healing so absence is
-safe) and the only observability surface is the daily health line — queue depth,
-fetch success rate, novelty pass rate, edges added (§12.5). None of that is
-worth anything if the underlying log records aren't structured: "unattended
-systems fail silently" means every record has to be greppable/parseable from
-day one, not retrofitted after the first silent failure.
-
-Docker runs every service with the json-file logging driver plus rotation, so
-stdout is the collection point — there is no separate log shipper. That means
-the format decision is made here, once, rather than per-service: one JSON
-object per line on stdout.
-
-Standard library only (``logging`` + a custom ``Formatter``). The ingestion box
-is a memory-constrained arm64 node and the dependency list is deliberately
-short (AGENTS.md); structlog/loguru buy convenience this project has decided
-not to pay for.
-
-A synthesis run spans many modules and, under the API and orchestrator, many
-concurrent asyncio tasks. Threading a logger (or a run_id) through every call
-signature would leak the concern into unrelated code, and a plain global
-variable would bleed one request's run_id into another's concurrently-running
-task. ``contextvars.ContextVar`` is the one primitive that gets both:
-context.run() and asyncio tasks each get their own copy, isolated from
-siblings, while still being ambient rather than explicit.
+One JSON object per line on stdout, which Docker's json-file driver collects. Standard
+library only. `run_id` is carried by a ``contextvars.ContextVar``, so concurrent asyncio
+tasks keep their own. See docs/features/operations.md#logging.
 """
 
 from __future__ import annotations
@@ -45,18 +24,13 @@ _run_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "meridian_run_id", default=None
 )
 
-# Populated once by configure_logging(); read by JsonFormatter. Unlike run_id
-# this doesn't change per-task, but it's still a ContextVar (not a module
-# global) so it participates in the same copy-on-context-switch semantics and
-# there is exactly one mechanism to reason about, not two.
+# Populated once by configure_logging(); read by JsonFormatter. A ContextVar like
+# run_id, so there is one mechanism.
 _service: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "meridian_service", default=None
 )
 
-# Attributes stdlib LogRecord always carries. Anything a caller passes via
-# `extra={...}` shows up as an attribute NOT in this set, which is how we tell
-# "caller-supplied field" apart from "stdlib bookkeeping" without an allowlist
-# that would have to be kept in sync with logging internals by hand.
+# Attributes stdlib LogRecord always carries; anything else came from `extra={...}`.
 _STANDARD_RECORD_ATTRS: Final[frozenset[str]] = frozenset(
     logging.LogRecord(
         name="", level=0, pathname="", lineno=0, msg="", args=None, exc_info=None
@@ -65,10 +39,8 @@ _STANDARD_RECORD_ATTRS: Final[frozenset[str]] = frozenset(
 
 _DEFAULT_LEVEL: Final[str] = "INFO"
 
-# Third-party libraries log at INFO/DEBUG far more chattily than this project
-# wants on an unattended box (every SQL statement, every connection checkout).
-# Kept overridable per AGENTS.md's "structured logging" requirement not meaning
-# "no way to turn the noise back on" when actually debugging a connection issue.
+# Third-party libraries quietened (every SQL statement, every checkout), but
+# overridable for debugging.
 _NOISY_DEFAULTS: Final[dict[str, int]] = {
     "sqlalchemy.engine": logging.WARNING,
     "asyncpg": logging.WARNING,
@@ -116,10 +88,8 @@ class JsonFormatter(logging.Formatter):
             if key not in _STANDARD_RECORD_ATTRS and key not in payload:
                 payload[key] = value
 
-        # Formatted here (not left as exc_info on the record) because exc_info
-        # is a (type, value, traceback) tuple — not JSON-serialisable — and a
-        # health check grepping for "Traceback" needs the text inline, not a
-        # pointer to object state that's gone by the time anything reads it.
+        # Formatted inline: exc_info is not JSON-serialisable, and a grep for
+        # "Traceback" needs the text.
         if record.exc_info is not None:
             payload["exception"] = self.formatException(record.exc_info)
         if record.stack_info is not None:
@@ -132,10 +102,7 @@ class JsonFormatter(logging.Formatter):
 def bind_run_id(run_id: str) -> Iterator[None]:
     """Attach ``run_id`` to every log record emitted within this context.
 
-    A synthesis run (§13.4) crosses many function calls and, in the orchestrator and API, concurrent
-    asyncio tasks. Binding once here and reading it in JsonFormatter beats passing run_id as an
-    argument through every intermediate call — and beats a module-level global, which would leak
-    across concurrently-running tasks instead of following just this one.
+    A ContextVar, so it follows this task and not its concurrent siblings.
     """
     token = _run_id.set(run_id)
     try:
@@ -152,10 +119,8 @@ def _resolve_level(level: str | None) -> int:
     return resolved
 
 
-# Set on the root logger once configure_logging has installed our handler, so
-# a second call (a library re-importing a service module, a test harness
-# calling it per-test) is a level/service update rather than a second handler
-# stacking duplicate output onto every record — the classic doubled-log-lines bug.
+# Set on the root logger once our handler is installed, so a second call updates
+# the level and service instead of doubling every line.
 _CONFIGURED_MARKER: Final[str] = "_meridian_json_configured"
 
 

@@ -1,21 +1,9 @@
 """The digest and the alert pass (task P5-07, spec §13.3, §12.5).
 
-`python -m worker.digest` — run it on a timer.
-
-Two jobs that share one channel. The **digest** is §12.5's health line, sent
-rather than logged: queue depth, fetch success, novelty pass rate. The **alerts**
-are §13.3's sustained conditions, and they are the half that matters when nobody
-is looking.
-
-**Findings are recorded before they are sent.** An alert is written to
-`notifications` and only then handed to Telegram, so a send that fails loses the
-delivery and not the evidence — and the in-app panel (`P6-08`) reads the same
-rows. A deployment with no bot token is not a deployment with no monitoring.
-
-**The digest is not an alert and does not repeat as one.** It is sent on every
-run because "here is how it went" is worth a daily line even when it went fine;
-the alerts underneath it are suppressed by cooldown, so a condition lasting all
-night produces one message rather than a column of them.
+`python -m worker.digest`, run on a timer. The digest is §12.5's health line, sent every
+run; the alerts are §13.3's sustained conditions, suppressed by cooldown. Findings are
+recorded in `notifications` before they are sent.
+See docs/features/operations.md#alerts-and-the-digest.
 """
 
 from __future__ import annotations
@@ -42,12 +30,8 @@ log = get_logger(__name__)
 async def build_digest() -> str:
     """§12.5's health line, as something a person reads on a phone.
 
-    Every field is read directly rather than through `getattr(..., default)`.
-    That is not style: a defaulted lookup in a monitoring tool turns a renamed
-    attribute into a permanent zero, so the thing whose job is reporting
-    problems reports none. This module got that wrong once — `fetch.total` and
-    `novelty.duplicate_rate` are neither of them real, and the digest cheerfully
-    said "nothing attempted, 0% duplicate" on a corpus that had both.
+    Every field is read directly, never through `getattr(..., default)`.
+    See docs/features/operations.md#alerts-and-the-digest.
     """
     async with session_ro() as sess:
         depth = await queue_depth(sess)
