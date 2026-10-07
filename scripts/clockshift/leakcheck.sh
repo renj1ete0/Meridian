@@ -27,7 +27,10 @@ uv run alembic upgrade head >/dev/null 2>&1
 uv run python scripts/seed.py >/dev/null 2>&1
 
 snapshot > "$OUT/before"
-uv run pytest -q -p no:cacheprovider tests/integration 2>&1 | tail -1
+tests=0
+uv run pytest -q -p no:cacheprovider tests/integration > "$OUT/pytest" 2>&1 || tests=$?
+grep -E '^(FAILED|ERROR) ' "$OUT/pytest" || true
+tail -1 "$OUT/pytest"
 snapshot > "$OUT/after"
 docker compose -f "$HERE/compose.yml" down -v >/dev/null 2>&1
 
@@ -37,3 +40,5 @@ if ! python3 "$HERE/snapdiff.py" "$OUT/before" "$OUT/after" > "$OUT/diff"; then
   exit 1
 fi
 echo "The integration suite left the database as it found it."
+# A failing test is reported, but only after the comparison, which it does not invalidate.
+exit "$tests"
