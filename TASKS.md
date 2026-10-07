@@ -21,13 +21,16 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-07 — `v0.162.2`, on `main`, unpushed (GitHub push needs the operator).** `D-01` done:
-> narrative comments moved into the docs for every feature and the web package (comments-only,
-> verified). `B-147` `make clock-check`: nothing expires with the calendar through 2030.
-> `B-148` `make leak-check`: tests leave the database as they found it; the dev database still
-> holds earlier leaks (SQL in handover §0, the operator's call). `B-149` queued queries no
-> longer make fetch-policy rows; existing ones listed by SQL in handover §0. Next: `B-131`
-> and `B-135` on the server; the operator's open calls in the notes below.
+> **2026-10-07 (evening) — `v0.163.1`, pushed to GitHub (GHCR held); all stacks stopped except
+> the dev Postgres.** Built today: `D-01` (narrative into the docs), `B-147` clock check, `B-148`
+> leak check, `B-149` queries made no policy rows, `B-53` non-English scores rescaled (ADR 0014),
+> `B-99` Find in plain words (ADR 0013), `B-150` followed links follow the evidence (ADR 0015),
+> `B-151` the novelty gate finds originals behind marked copies. Local DB migrated to
+> `b150c0ffee01` and host scores rebuilt: 5,490 vouched hosts; the next `requeue_links` will
+> raise ~15.8k links from on-topic pages and ~4.9k into vouched hosts. **Next:** a loop run
+> to measure `B-150` (on-topic share of fetched followed links vs run 15); `B-152`; on the
+> server `B-131`, `B-135`. **By hand:** the dev-database cleanup SQL in handover §0 (approved,
+> but refused by the session's permission check).
 
 > **2026-10-04 (night) — `v0.162.1`, pushed to GitHub (GHCR held), all stacks stopped.**
 > Last: `B-142` web lint and format in `make lint` (oxlint + Prettier, ADR 0012); `make lint`

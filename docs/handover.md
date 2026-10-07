@@ -78,7 +78,14 @@ add it here.
 >   DELETE FROM area_build_history h
 >     WHERE NOT EXISTS (SELECT 1 FROM area_builds b WHERE b.build_id = h.build_id);
 >   DELETE FROM steering_log WHERE field = 'weight' AND reason = 'test';
+>   -- and put the topic weights back to config/topics.yaml's (they sum to 1)
+>   UPDATE topic_config t SET weight = v.w FROM (VALUES ('walkability', 0.22),
+>     ('on-demand-bus', 0.20), ('autonomous-vehicle', 0.13), ('robotics', 0.15),
+>     ('biology', 0.15), ('economics', 0.15)) AS v(topic, w) WHERE t.topic = v.topic;
 >   ```
+>   Dry-run in a rolled-back transaction on 2026-10-07: 2,510 / 29,169 / 0 / 222 / 42 / 184
+>   rows. The operator approved it, but the session's permission check refused the delete, so
+>   it is still to be run by hand.
 > - **Queued queries and DOIs made policy rows** (`B-149`, fixed): `enqueue` recorded a
 >   "domain" for every task, so a search query's words or a DOI prefix became a
 >   `fetch_policy` row. Every deployment that ran searches holds such rows (2026-10-07: 792
