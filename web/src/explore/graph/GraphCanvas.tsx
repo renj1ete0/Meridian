@@ -65,9 +65,10 @@ export interface LabelBox {
 }
 
 /**
- * Which labels fit this frame (`B-124`), greedily: a label overlapping one already drawn
- * is left out (its node still names itself on hover). The focus is always drawn. Reset
- * every frame.
+ * Which labels fit this frame (`B-124`), greedily: a label tries below its node, then above,
+ * then to the right and left (`B-169`), and is left out only when every place overlaps one
+ * already drawn (its node still names itself on hover). The focus is always drawn below.
+ * Reset every frame.
  */
 export class LabelPlacer {
   private boxes: LabelBox[] = []
@@ -100,7 +101,6 @@ export function makeLabelDrawer(
     if (!data.label) return
     const size = data.isFocus ? 14 : 12
     const weight = data.isFocus ? 600 : 400
-    const y = data.y + data.size + (data.isFocus ? 16 : 14)
 
     context.font = `${weight} ${size}px ${fonts.sans}`
     context.textAlign = 'left'
@@ -108,17 +108,37 @@ export function makeLabelDrawer(
     const labelWidth = context.measureText(data.label).width
     context.font = `400 10px ${fonts.mono}`
     const daggerWidth = data.dagger ? context.measureText(DAGGER).width + 1 : 0
-    const left = data.x - (labelWidth + daggerWidth) / 2
+    const width = labelWidth + daggerWidth
+    const below = data.y + data.size + (data.isFocus ? 16 : 14)
+    const centred = data.x - width / 2
 
-    if (placer) {
-      const box = {
-        x0: left - LABEL_GAP,
-        x1: left + labelWidth + daggerWidth + LABEL_GAP,
-        y0: y - size - LABEL_GAP,
-        y1: y + (data.caption ? 16 : 4) + LABEL_GAP,
+    // Where the text's left edge and baseline go: below first, as the artboard draws it.
+    // A caption hangs under its label, so a captioned label stays above or below its node.
+    const spots: Array<{ left: number; y: number }> = [{ left: centred, y: below }]
+    if (placer && !data.isFocus) {
+      spots.push({ left: centred, y: data.y - data.size - (data.caption ? 22 : 6) })
+      if (!data.caption) {
+        const middle = data.y + size / 3
+        spots.push({ left: data.x + data.size + 6, y: middle })
+        spots.push({ left: data.x - data.size - 6 - width, y: middle })
       }
-      if (!placer.place(box, data.isFocus)) return
     }
+
+    const spot = placer
+      ? spots.find(({ left, y }) =>
+          placer.place(
+            {
+              x0: left - LABEL_GAP,
+              x1: left + width + LABEL_GAP,
+              y0: y - size - LABEL_GAP,
+              y1: y + (data.caption ? 16 : 4) + LABEL_GAP,
+            },
+            data.isFocus,
+          ),
+        )
+      : spots[0]
+    if (!spot) return
+    const { left, y } = spot
 
     context.lineJoin = 'round'
     context.strokeStyle = halo

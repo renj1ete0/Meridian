@@ -77,6 +77,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.165.1] — 2026-10-08
+
+### Fixed
+
+- `B-169`: a graph label that collided with one already drawn was left out; it now tries above
+  its node, then right, then left first. A captioned label stays above or below. On a
+  fourteen-neighbour node every label is now drawn at desktop and phone widths
+
 ## [0.165.0] — 2026-10-08
 
 ### Changed

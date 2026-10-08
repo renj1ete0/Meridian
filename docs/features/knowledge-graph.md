@@ -425,8 +425,12 @@ frame, so it pans and zooms with the nodes. Labels are drawn by hand to design-s
 Archivo 12 under the node, a 3.5px halo in the canvas ground, and §6's dagger on a contested
 node's label; Sigma's default puts the label to the right with no halo, unreadable where edges
 cross text. On a dense neighbourhood labels ran into each other, worst on a phone (`B-124`), so
-a label overlapping one already drawn this frame is left out; its node still names itself on
-hover. Sigma is imported lazily: it needs WebGL at construction and jsdom has none, so tests
+a label overlapping one already drawn this frame moves above its node, then to its right, then
+its left (`B-169`), and is left out only when all four are taken; its node still names itself
+on hover. Below stays first because that is where the design puts it; a captioned label (a
+cross-topic node) stays above or below, where its caption can hang. On a fourteen-neighbour
+node one label in fourteen had been dropped at desktop width and about a third on a phone;
+after the change every one was drawn at both widths. Sigma is imported lazily: it needs WebGL at construction and jsdom has none, so tests
 stay off the GPU path, and a machine without WebGL gets a sentence instead of a blank rectangle.
 Colours are read from the tokens at runtime, because WebGL takes colour strings, not CSS
 classes, and `tests/tokens.test.ts` forbids a literal outside `tokens.css`. The brass tint never

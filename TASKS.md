@@ -1665,6 +1665,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       length; about 1% begin inside a link and 0.7% end inside one, and escaped footnote
       markers and wrapped link words were left as stored. `readable()` reads them as words
       when the address plainly is one; 275 → 34 of 20,000 sampled passages still show syntax
+- [x] `B-169` **A crowded graph label was dropped rather than moved** — `v0.165.1`. Labels
+      tried only below their node (`B-124`); now above, right and left too, before leaving
+      one out. Seen on a screenshot pass: a fourteen-neighbour node lost one label on desktop
+      and about a third on a phone; all drawn after
 - [x] `B-168` **The answer page filed passages under countries they never name** — `v0.165.0`.
       Seen 2026-10-08: a question about shuttles listed a market report, a German book chapter
       and a platooning paper as China's evidence, and called China strong. Places are per
