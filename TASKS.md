@@ -1665,6 +1665,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       length; about 1% begin inside a link and 0.7% end inside one, and escaped footnote
       markers and wrapped link words were left as stored. `readable()` reads them as words
       when the address plainly is one; 275 → 34 of 20,000 sampled passages still show syntax
+- [ ] `B-167` **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
+      ([search.md#reranking](docs/features/search.md)): `bge-reranker-v2-m3` over the fused top
+      30 brought answer-stating passages into the top ten on most of 18 test questions, but
+      took 20–35 s a question on CPU; small cross-encoders were fast and did not reproduce
+      the gain. Build with `B-131`: a `/rerank` route on the embedding sidecar, off unless the
+      sidecar is on a GPU, applied to Find, the answer view and `search_chunks`; measure
+      latency on the card first
 - [ ] `B-163` **Which passages synthesis reads** — measured in the 2026-10-07 relay session
       (3 batches, 120 passages, 34 relations, 5 attribute values). Synthesis reads a passage when
       it *or its source* is labelled on a topic, so one borderline page reaches the model whole:

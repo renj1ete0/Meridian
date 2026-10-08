@@ -125,6 +125,25 @@ fusion gives them the vector arm's weight; one question's list filled with six p
 one report. It also cost about 300 ms. A relaxation worth trying would weight words by rarity,
 which Postgres full-text search does not keep; measure it the same way before shipping it.
 
+### Reranking (measured, not built)
+
+A cross-encoder reads the question and each passage together, rather than comparing two
+vectors made apart, and is the usual next step in result quality. Measured on 2026-10-08 on the
+same 18 test questions as [the OR fallback](#questions), reranking the fused top 30 (`B-167`):
+
+- `BAAI/bge-reranker-v2-m3` (568M parameters, multilingual, bge-m3's companion) changed four
+  or five of each top ten. Read side by side, the passages it brought in more often stated the
+  answer: a pilot's ridership and its subsidy per ride, a congestion charge's measured traffic
+  fall, the factors older adults name, against overviews and title-only passages it dropped.
+  It rarely made a list worse. On this machine's CPU, sharing it with the crawl, it took 20 to
+  35 seconds a question.
+- Smaller cross-encoders (MiniLM L6 and L12, `bge-reranker-base`) took 1.3 to 10 seconds and
+  agreed with the large model's top ten barely more than the fused order did (about 6 of 10,
+  against 5.6): their speed did not come with its gain.
+
+So reranking is worth building where a GPU serves the embedder (`B-131`), where the large model
+should take well under a second for 30 passages, and not before.
+
 ### Vector arm depth
 
 `hnsw.ef_search` is set per query as a multiple of the candidates asked for. **pgvector's
