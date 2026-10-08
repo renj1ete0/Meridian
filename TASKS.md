@@ -2684,7 +2684,12 @@ Things worth doing that don't belong to a phase yet.
       adjustment is shown. The trade is a number now — a cap of 2 spans 77%
       distinct sources and displaces about four hits per page. **Stays `[~]`
       until `P0-15` exists**: which setting is better is only answerable
-      against questions somebody wrote down first
+      against questions somebody wrote down first. 2026-10-08, on 18 questions written
+      before any result was seen, with `bge-reranker-v2-m3` as the relevance judge (score ≥ 0.5):
+      relevant hits in a top ten were 5.33 uncapped, 5.17 at a cap of 2, 4.78 at 1, 5.33 at 3;
+      a cap of 2 was better on one question and worse on three. 8 of 18 tops had one source three or more
+      times, but those repeats were relevant. Stays off; diversity would have to be wanted for
+      its own sake
 - [x] `B-29` **Arm agreement was measuring two different questions** —
       `v0.105.4`. `scripts/benchmark_search.py` paired a sampled chunk's vector
       with an unrelated frequent word, so the arms could not agree and the
