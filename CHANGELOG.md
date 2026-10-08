@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.165.3] — 2026-10-08
+
+### Fixed
+
+- `B-171`: synthesis batches could be mostly reference lists (24 of 40 passages in one relay
+  batch), so the model read titles instead of claims. `pull` leaves out passages whose text is
+  mostly reference-list entries and reads on to fill the batch; the mark moves over what was
+  left out. About 1% of stored passages qualify
+
 ## [0.165.2] — 2026-10-08
 
 ### Fixed

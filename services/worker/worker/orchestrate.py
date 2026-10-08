@@ -47,6 +47,7 @@ from meridian_core.proposals import (
     tag_prompt,
 )
 from meridian_core.provider import Completion, NotConfigured, ProviderError, complete
+from meridian_core.references import is_reference_list
 from meridian_core.resolution import expansions_from_gazetteer
 from meridian_core.routing import NoAgentAvailable
 from meridian_core.runs import (
@@ -83,6 +84,10 @@ __all__ = [
 #: How many chunks one cycle reasons over; small so the whole batch is read and a
 #: failure costs one batch. More cycles drain the corpus.
 BATCH: Final[int] = 40
+
+#: How many passages one pull reads at most to fill a batch once reference lists are left
+#: out (`B-171`): a long paper's bibliography runs to a few dozen passages.
+PULL_SCAN: Final[int] = 10 * BATCH
 
 #: How many existing entity names the tagging prompt lists for spelling. A long
 #: list is expensive on every call and stops being read; this is enough to
@@ -198,10 +203,16 @@ class Batch:
     produced_by: str | None = None
     model: str | None = None
     quality_tier: int | None = None
+    #: The last chunk `pull` read, kept or left out (`B-171`), so the mark moves over a
+    #: reference list at the batch's end rather than reading it again next cycle.
+    read_through: int | None = None
 
     @property
     def last_chunk_id(self) -> int | None:
-        return max((passage.chunk_id for passage in self.passages), default=None)
+        kept = max((passage.chunk_id for passage in self.passages), default=None)
+        if kept is None:
+            return None
+        return max(kept, self.read_through or kept)
 
     def provenance(self, completion: Completion, quality_tier: int | None) -> None:
         self.reasoned = True
@@ -290,10 +301,7 @@ async def _pull(
             Source.retention_tier != "junk",
         )
         .order_by(Chunk.chunk_id)
-        .limit(BATCH)
     )
-    if run.last_chunk_id is not None:
-        stmt = stmt.where(Chunk.chunk_id > run.last_chunk_id)
     if on_topic_only():
         stmt = stmt.where(on_topic_chunk())
         # ...and never past a passage nobody has examined yet. The mark only
@@ -301,22 +309,41 @@ async def _pull(
         # would be skipped for good once labelling caught up.
         stmt = await _before_unexamined(sess, stmt, run)
 
-    rows = (await sess.execute(stmt)).all()
-    batch.passages = [
-        Passage(
-            chunk_id=chunk.chunk_id,
-            text=chunk.text,
-            url=source.url,
-            source_tier=source.source_tier,
-        )
-        for chunk, source in rows
-    ]
+    # Reference lists are left out (`B-171`): a model asked for claims reads titles. Read in
+    # pages until the batch is full, so a bibliography does not shrink it.
+    passages: list[Passage] = []
+    cursor = run.last_chunk_id
+    scanned = skipped = 0
+    while len(passages) < BATCH and scanned < PULL_SCAN:
+        page = stmt if cursor is None else stmt.where(Chunk.chunk_id > cursor)
+        rows = (await sess.execute(page.limit(BATCH))).all()
+        if not rows:
+            break
+        for chunk, source in rows:
+            scanned += 1
+            cursor = chunk.chunk_id
+            if is_reference_list(chunk.text):
+                skipped += 1
+            else:
+                passages.append(
+                    Passage(
+                        chunk_id=chunk.chunk_id,
+                        text=chunk.text,
+                        url=source.url,
+                        source_tier=source.source_tier,
+                    )
+                )
+            if len(passages) >= BATCH or scanned >= PULL_SCAN:
+                break
+    batch.passages = passages
+    batch.read_through = cursor if passages else None
 
+    left_out = f"; {skipped} reference-list passages left out" if skipped else ""
     if not batch.passages:
-        journal.note("pull", "nothing past the mark")
+        journal.note("pull", f"nothing past the mark{left_out}")
         return
     first, last = batch.passages[0].chunk_id, batch.passages[-1].chunk_id
-    journal.note("pull", f"{len(batch.passages)} chunks, {first}–{last}")
+    journal.note("pull", f"{len(batch.passages)} chunks, {first}–{last}{left_out}")
 
 
 async def _ask(

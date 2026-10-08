@@ -159,6 +159,22 @@ a run starts early once `DEFAULT_EARLY_AT` (500) chunks wait past the mark; belo
 spends a frontier model on a handful of passages. The daily run still happens on a quiet
 corpus, because the run that finds little is the one that reports the corpus is quiet.
 
+### Reference lists
+
+<a id="reference-lists"></a>`pull` leaves out passages that are reference lists (`B-171`,
+`meridian_core.references`), and reads on until the batch holds its 40. A paper's bibliography
+is many consecutive passages, and batches run in chunk order, so one paper could fill a batch:
+on 2026-10-08 a relay batch was 24 passages of two papers' references among 40, and the model
+was being paid to read titles. A passage counts as a reference list when at least three of its
+lines, and 60% of its characters, are entry lines: a citation as the place tagger reads one
+(`places.is_citation`), an author-year entry, a wrapped volume-and-pages tail, or a bare
+reference number left where the converter dropped the entry. Measured on 20,000 stored
+passages, about 1% qualify, and a sample of 25 of them were all bibliographies, publication
+lists or columns of bare numbers. Between 50% and 60% sit review passages that cite as they
+argue, which carry claims; hence the threshold. The mark still moves over what was left out
+(`Batch.read_through`), so a reference list at a batch's end is not read again, and the rule is
+a pure function of the text, so a resumed run re-pulls the same batch.
+
 ### Resuming
 
 A run that defers (no model answered) stays unfinished at that stage, and the next wake resumes

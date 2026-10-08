@@ -1665,6 +1665,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       length; about 1% begin inside a link and 0.7% end inside one, and escaped footnote
       markers and wrapped link words were left as stored. `readable()` reads them as words
       when the address plainly is one; 275 → 34 of 20,000 sampled passages still show syntax
+- [x] `B-171` **Synthesis read bibliographies** — `v0.165.3`. A relay batch was 24 reference-list
+      passages of 40. `pull` now leaves out passages mostly made of entry lines (`references.py`,
+      60% of characters, 3 entries) and reads on to fill the batch; the mark moves over what it
+      left out. 1% of a 20,000-passage sample qualify, all bibliographies or bare number columns
+      in a sample of 25
 - [x] `B-170` **The tagging prompt asked for consistent wording without showing it** —
       `v0.165.2`. After three relay batches the graph's 24 attribute values already had
       "road" beside "public road" and four wordings of autonomy. The prompt now lists each

@@ -19,7 +19,7 @@ import json
 import uuid
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.models import (
@@ -375,6 +375,31 @@ async def test_the_tagging_prompt_carries_the_wordings_already_in_use(corpus, mo
 
     await drive(sess, ids, Recording(), monkeypatch)
     assert any('in use: "high", "low"' in prompt for prompt in seen)
+
+
+REFERENCE_LIST = "\n".join(
+    f"Author{n}, A. B. ({2000 + n}). A study of things. Journal of Studies, {n}, 1–9."
+    for n in range(5)
+)
+
+
+@pytest.mark.parametrize("where", [1, 2], ids=["in the middle", "at the end"])
+async def test_a_reference_list_is_left_out_and_the_mark_moves_over_it(
+    corpus, monkeypatch, where
+) -> None:
+    """`B-171`: a model asked for claims was reading bibliographies, a batch at a time."""
+    sess, ids, marker = corpus
+    await sess.execute(
+        update(Chunk).where(Chunk.chunk_id == ids[where]).values(text=REFERENCE_LIST)
+    )
+    await sess.commit()
+
+    run, journal, batch = await drive(sess, ids, FakeModel(), monkeypatch)
+
+    kept = [p.chunk_id for p in batch.passages if p.chunk_id in ids]
+    assert kept == [i for n, i in enumerate(ids) if n != where]
+    assert "1 reference-list passages left out" in journal.render()
+    assert run.last_chunk_id >= ids[-1], "the mark covers what was left out, at the end too"
 
 
 # --------------------------------------------------------------------------
