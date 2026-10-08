@@ -16,6 +16,7 @@ decisions behind the design are kept as [decision records](adr/README.md).
 | Understand what the system is and how it fits together | [features/README.md](features/README.md), then the [architecture spec](spec/autonomous-research-system-spec.md) |
 | Run it on your machine | [guides/setup.md](guides/setup.md) |
 | Deploy it on a server | [guides/deployment.md](guides/deployment.md) |
+| Measure the test suite (coverage, mutation testing) | [guides/testing.md](guides/testing.md) |
 | Know why something was decided | [adr/](adr/README.md) |
 | Pick up where the last session stopped | [handover.md](handover.md) and [`TASKS.md`](../TASKS.md) |
 | Contribute code | [`AGENTS.md`](../AGENTS.md): conventions, standards, testing, commits |
@@ -25,7 +26,7 @@ decisions behind the design are kept as [decision records](adr/README.md).
 | Folder | What is in it | Kind |
 |---|---|---|
 | [`features/`](features/README.md) | One document per feature: what it does, how it works, how to configure, operate and debug it | Explanation and reference |
-| [`guides/`](guides/) | Step-by-step tasks: [setup](guides/setup.md), [deployment](guides/deployment.md), [two-board deployment](guides/deploy-sbc.md), [adding a source](guides/connectors.md), [connecting an assistant](guides/connecting-an-assistant.md) | How-to |
+| [`guides/`](guides/) | Step-by-step tasks: [setup](guides/setup.md), [deployment](guides/deployment.md), [two-board deployment](guides/deploy-sbc.md), [adding a source](guides/connectors.md), [connecting an assistant](guides/connecting-an-assistant.md), [measuring the tests](guides/testing.md) | How-to |
 | [`reference/`](reference/) | Exact facts: [environment variables](reference/environment.md), [scheduled jobs](reference/scheduled-jobs.md), [data model](reference/data-model.md), [commands](reference/commands.md), [licences](reference/licences.md) | Reference |
 | [`adr/`](adr/README.md) | Decisions the operator made, with context and consequences | Decision records |
 | [`spec/`](spec/) | The architecture as designed, the scaffold, and two focused specs | Design |

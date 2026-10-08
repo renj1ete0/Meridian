@@ -10,7 +10,9 @@
     "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
     "lint": "oxlint src tests && prettier --check src tests",
-    "format": "prettier --write src tests"
+    "format": "prettier --write src tests",
+    "coverage": "vitest run --coverage",
+    "mutate": "stryker run"
   },
   "dependencies": {
     "graphology": "^0.26.0",
@@ -20,6 +22,8 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
@@ -28,6 +32,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^5.0.3",
     "eslint-plugin-tsdoc": "^0.5.4",
     "jsdom": "^30.0.1",
     "oxlint": "^1.86.0",

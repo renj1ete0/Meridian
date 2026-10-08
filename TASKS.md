@@ -21,6 +21,19 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-08 (night) — `v0.165.5` + testing tooling, pushed; stacks left running.** Operator:
+> GPU later; use Claude (relay) for synthesis now; dev-DB cleanup approved but the session's
+> permission check refused it again, so it is still **to run by hand** (handover §0); GHCR not
+> needed. Done: 12 more relay batches by a helper agent (48 relations, 8 attribute values);
+> coverage measured (`Q-01`); mutation testing configured but not yet working (`Q-02`, see
+> docs/guides/testing.md). **Resume with:** fix `Q-02` (mutmut imports the installed package;
+> Stryker scores implausible), then `Q-03` (Hypothesis, CI), then from the relay agent's findings:
+> the reference filter misses "- Author (year) Title" lists, entries split across passages and
+> abbreviation glossaries; `pull` walks one long handbook in order (six batches of one book; cap
+> passages per source per batch, `B-163`); the tag call resends the extraction call's passages
+> (double tokens); "every agent … refused: waiting for …" reads like a failure. Then host drift,
+> dead hosts, `make rebuild svc=`, the embedder's reconnect, the frontend items.
+
 > **2026-10-08 (evening) — `v0.165.5`, pushed to GitHub (GHCR held); local stack left running.**
 > Built: `B-164` passages read as words where a link was cut, `B-165`, `B-166` GMT+7:59 labels,
 > `B-168` the answer page files a passage only under countries it names, `B-169` crowded graph
@@ -1703,6 +1716,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       placements, 24% of shown passages named the country, 18% more had another matching
       passage that did. Now a several-country source counts only where a matching passage
       names the country, shown by that passage; the rest go unplaced, counted
+- [x] `Q-01` **Coverage measured** — branch coverage for Python (`make coverage`) and V8 for
+      the web (`npm run coverage`); baseline Python 90.7%, web 78.8% statements. A dry-run test
+      for the sweep job, the one path that deletes. See docs/guides/testing.md
+- [ ] `Q-02` **Mutation testing** — mutmut and StrykerJS configured, neither trustworthy yet:
+      mutmut's tests import the installed package instead of its mutated copy; Stryker's scores
+      are implausibly low on well-tested modules. The guide says what to try next
+- [ ] `Q-03` **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,
+      group_hits, is_reference_list and readable() first; then a CI workflow for lint and tests
 - [ ] `B-167` **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
       ([search.md#reranking](docs/features/search.md)): `bge-reranker-v2-m3` over the fused top
       30 brought answer-stating passages into the top ten on most of 18 test questions, but

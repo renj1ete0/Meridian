@@ -31,6 +31,7 @@ from meridian_core.retention import (
     plan_sweep,
 )
 from meridian_core.sources import upsert_source
+from worker.sweep import run_sweep
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -338,3 +339,22 @@ async def test_nothing_under_another_root_is_ever_deleted(
 
     assert await sess.get(Source, source.source_id) is not None
     assert all(c.source_id != source.source_id for c in plan.droppable)
+
+
+async def test_the_sweep_job_without_apply_deletes_nothing(
+    session_for, marker, root, cleanup, capsys
+) -> None:
+    """The job is the only pass that destroys anything, and its report-by-default is the
+    guard (spec §5.4). An orphan the plan would remove is still on disk after a plain run,
+    and the run says how to apply it."""
+    sess = await session_for("rw")
+    await a_source(sess, marker, root, PROTECTED_TIER)
+    stray = root / "nobody.test" / "ff" / "stray.pdf"
+    stray.parent.mkdir(parents=True)
+    stray.write_bytes(b"orphan")
+
+    plan = await run_sweep(root=str(root))
+
+    assert "nobody.test/ff/stray.pdf" in [c.path for c in plan.orphaned]
+    assert stray.exists(), "a sweep without --apply removed a file"
+    assert "Pass --apply to delete" in capsys.readouterr().out

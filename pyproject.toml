@@ -29,8 +29,11 @@ meridian-api = { workspace = true }
 [dependency-groups]
 dev = [
     "alembic>=1.14",
+    "hypothesis>=6.100",
+    "mutmut>=3.3",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "pytest-cov>=6",
     "ruff>=0.8",
 ]
 
@@ -79,3 +82,37 @@ addopts = "-p no:logging --import-mode=importlib"
 markers = [
     "server_timer: relies on Postgres's own timers (statement_timeout), which the clock check cannot move",
 ]
+
+# Branch coverage over the three packages (`Q-01`); `make coverage` runs it. The floor in
+# `fail_under` is the measured baseline, so it fails on a drop, not on a target.
+# See docs/guides/testing.md.
+[tool.coverage.run]
+branch = true
+source = ["meridian_core", "worker", "api"]
+omit = ["*/migrations/*"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+# Mutation testing (`Q-02`): `make mutate`. Scoped to pure modules with unit tests, where a
+# surviving mutant is an assertion nobody wrote; see docs/guides/testing.md.
+[tool.mutmut]
+source_paths = ["packages/meridian_core"]
+only_mutate = [
+    "*meridian_core/references.py",
+    "*meridian_core/fields.py",
+    "*meridian_core/answer.py",
+    "*meridian_core/titles.py",
+    "*meridian_core/proposals.py",
+    "*meridian_core/timefmt.py",
+]
+tests_dir = ["tests/unit/test_answer.py","tests/unit/test_fields.py","tests/unit/test_proposals.py","tests/unit/test_references.py","tests/unit/test_timefmt.py","tests/unit/test_titles.py"]
+# Unit tests read these beside the code (drift tests); mutmut runs from its own copy.
+also_copy = ["config", "deploy", "docs", "eval", "scripts", "web/src", "web/tests", "web/package.json", "web/nginx.conf", "web/Dockerfile", "web/index.html", "web/tsconfig.json", "web/vite.config.ts", "docker-compose.yml", "docker-compose.dev.yml", "docker-compose.local.yml", ".env.example", "VERSION", "Makefile", "AGENTS.md", "CHANGELOG.md", "TASKS.md", "services", "migrations", "alembic.ini"]
+mutate_only_covered_lines = true

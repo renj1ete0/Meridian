@@ -13,7 +13,7 @@ export
 
 .PHONY: promote dev-up dev-down up down logs migrate seed quickstart preflight \
         local-up local-down local-logs \
-        snapshot-corpus restore-corpus backup lint test stale-dist-info clock-check leak-check bench-search build-push build-worker
+        snapshot-corpus restore-corpus backup lint test coverage mutate stale-dist-info clock-check leak-check bench-search build-push build-worker
 
 # --- Running it, rather than developing it (tasks B-05, B-06, B-08) ---------
 #
@@ -86,6 +86,14 @@ lint: stale-dist-info
 
 test: lint
 	uv run pytest
+
+# Branch coverage over the whole suite (`Q-01`); see docs/guides/testing.md.
+coverage:
+	uv run pytest --cov --cov-report=term --cov-report=html:.coverage-html
+
+# Mutation testing of the pure modules (`Q-02`); slow, and see the guide for its state.
+mutate:
+	rm -rf mutants && uv run mutmut run; uv run mutmut results
 
 # A version bump leaves the old workspace dist-info without a RECORD, and uv then warns on every
 # command and rebuilds; deleting them before running is what the handover used to say to do.

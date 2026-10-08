@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Mutation testing (Q-02): `npm run mutate`. Scoped to pure modules, where a surviving mutant is a missing assertion; see docs/guides/testing.md.",
+  "testRunner": "vitest",
+  "mutate": [
+    "src/lib/readable.ts",
+    "src/lib/time.ts",
+    "src/lib/answer.ts",
+    "src/lib/position.ts",
+    "src/lib/lastVisit.ts"
+  ],
+  "reporters": ["clear-text", "progress", "json"],
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  },
+  "coverageAnalysis": "perTest",
+  "thresholds": {
+    "high": 90,
+    "low": 75,
+    "break": null
+  },
+  "concurrency": 8,
+  "_comment_tsconfig": "TypeScript 7 has no JS API for Stryker's tsconfig rewrite, which only builds need; a missing path skips it. Vitest compiles the tests itself.",
+  "tsconfigFile": "stryker-skips-tsconfig.json",
+  "inPlace": true,
+  "_comment_inPlace": "Drift tests read the Python sources beside web/, which a sandbox copy lacks. Stryker restores each file when it finishes; check git status if a run is killed."
+}

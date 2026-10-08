@@ -8,6 +8,10 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Testing (`Q-01`, `Q-02`): `make coverage`, `npm run coverage`, and mutation testing set up
+  (`make mutate`, `npm run mutate`; not yet trustworthy, see `docs/guides/testing.md`).
+  Dev dependencies: pytest-cov, hypothesis, mutmut, @vitest/coverage-v8, StrykerJS
+
 - Deploy: Postgres's memory settings come from `.env` (`B-132`): `PG_SHARED_BUFFERS`,
   `PG_EFFECTIVE_CACHE_SIZE`, `PG_MAINTENANCE_WORK_MEM`, `PG_WORK_MEM`, `PG_RANDOM_PAGE_COST`,
   with sizing guidance in `.env.example`. Defaults keep `shared_buffers` and `work_mem`; three

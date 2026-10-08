@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
@@ -21,6 +22,18 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY ?? 'http://localhost:8000',
         changeOrigin: true,
       },
+    },
+  },
+  // Coverage (`Q-01`): `npm run coverage`. Thresholds are the measured baseline, so a drop
+  // fails and a target does not; see docs/guides/testing.md.
+  test: {
+    // Mutation tools leave copies of the tests behind (`mutants/`, `.stryker-tmp/`).
+    exclude: ['**/node_modules/**', '**/mutants/**', '**/.stryker-tmp/**'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/main.tsx', 'src/**/*.d.ts'],
+      reporter: ['text-summary', 'json-summary'],
     },
   },
 })
