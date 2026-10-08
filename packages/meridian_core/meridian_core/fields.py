@@ -16,10 +16,18 @@ import yaml
 FIELDS_PATH = Path(__file__).resolve().parents[3] / "config" / "fields.yaml"
 
 #: Below this cosine similarity *after centring*, no subfield fits well enough
-#: to name an area by; it keeps its term-based name. Was 0.05, which let almost any
-#: subfield name almost anything; measured on a live build (`B-157`), see
-#: docs/features/map.md#naming-floor.
-MIN_SIMILARITY = 0.20
+#: to name an area by; it keeps its term-based name. Was 0.05 and then 0.20 (`B-157`,
+#: `B-159`); see docs/features/map.md#naming-floor.
+MIN_SIMILARITY = 0.25
+
+#: At or above this, the nearest subfield names an area however close its rivals: near ties
+#: up here are siblings that both fit ("Ecology", "Nature and Landscape Conservation").
+CONFIDENT_SIMILARITY = 0.33
+
+#: Between the floor and the confident level, the nearest subfield must beat the third by
+#: this much (`B-159`): a near three-way tie low down is noise, and named statute text
+#: "Pharmacy". Measured on hand-judged areas, see docs/features/map.md#naming-floor.
+MIN_MARGIN = 0.03
 
 #: Share of a region's passages its areas must give one subfield, or one field, for the
 #: region to take that name (`B-157`). A plurality of a mixed region named it after a
@@ -83,6 +91,23 @@ def _top2(sims_row: np.ndarray) -> tuple[int, int]:
     return int(order[0]), int(order[1]) if len(order) > 1 else int(order[0])
 
 
+def fits(
+    sims_row: np.ndarray,
+    *,
+    min_similarity: float = MIN_SIMILARITY,
+    confident: float = CONFIDENT_SIMILARITY,
+    min_margin: float = MIN_MARGIN,
+) -> bool:
+    """Whether the nearest label fits well enough, and clearly enough, to name an area."""
+    ranked = np.sort(sims_row)[::-1]
+    best = float(ranked[0])
+    # A floor raised above the confident level is still a floor.
+    if best >= max(confident, min_similarity):
+        return True
+    third = float(ranked[min(2, len(ranked) - 1)])
+    return best >= min_similarity and best - third >= min_margin
+
+
 def assign(
     levels: list[int],
     centroids: np.ndarray,
@@ -92,10 +117,12 @@ def assign(
     parents: list[int | None] | None = None,
     weights: list[int] | None = None,
     min_similarity: float = MIN_SIMILARITY,
+    confident: float = CONFIDENT_SIMILARITY,
+    min_margin: float = MIN_MARGIN,
 ) -> list[str | None]:
     """The name for each area from the list, or None where nothing fits.
 
-    Deeper areas take the nearest subfield above ``min_similarity``. A region is named
+    Deeper areas take the nearest subfield when it fits (:func:`fits`). A region is named
     from what its areas were given, weighted by ``weights`` (``parents`` gives each area's
     parent's index in these lists): a subfield or field holding a majority of its passages,
     else its two largest subfields together, else nothing. Names shared within a level take
@@ -113,7 +140,9 @@ def assign(
         sims = a @ b.T
         for row, sims_row in zip(deep, sims, strict=True):
             first, runner = _top2(sims_row)
-            if sims_row[first] >= min_similarity:
+            if fits(
+                sims_row, min_similarity=min_similarity, confident=confident, min_margin=min_margin
+            ):
                 out[row] = subfield_labels[first].name
                 if runner != first:
                     second[row] = subfield_labels[runner].name

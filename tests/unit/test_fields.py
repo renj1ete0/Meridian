@@ -12,12 +12,15 @@ import pytest
 
 from meridian_core.areaview import area_name
 from meridian_core.fields import (
+    CONFIDENT_SIMILARITY,
     FIELDS_PATH,
+    MIN_MARGIN,
     MIN_SIMILARITY,
     REGION_MAJORITY,
     REGION_PAIR,
     FieldLabel,
     assign,
+    fits,
     load_fields,
     nearest,
 )
@@ -121,7 +124,37 @@ def test_areas_named_by_nothing_count_against_every_share() -> None:
 
 def test_the_floor_and_shares_are_the_measured_ones() -> None:
     """Moved only with a new measurement (docs/features/map.md#naming-floor)."""
-    assert (MIN_SIMILARITY, REGION_MAJORITY, REGION_PAIR) == (0.20, 0.5, 0.4)
+    assert (MIN_SIMILARITY, REGION_MAJORITY, REGION_PAIR) == (0.25, 0.5, 0.4)
+    assert (CONFIDENT_SIMILARITY, MIN_MARGIN) == (0.33, 0.03)
+    assert MIN_SIMILARITY < CONFIDENT_SIMILARITY, "the margin band must exist"
+
+
+@pytest.mark.parametrize(
+    ("sims", "named", "why"),
+    [
+        # Hand-judged live areas (`B-159`), similarities as built.
+        ([0.312, 0.310, 0.307, 0.27], False, "statute text, three medical names near-tied"),
+        ([0.254, 0.252, 0.248, 0.24], False, "criminology, three psychology names near-tied"),
+        ([0.480, 0.479, 0.462, 0.40], True, "siblings that both fit, high up"),
+        ([0.349, 0.333, 0.331, 0.31], True, "a confident fit is not second-guessed"),
+        ([0.263, 0.223, 0.194, 0.18], True, "budget text, clear of its rivals"),
+        ([0.248, 0.200, 0.190, 0.10], False, "clear, but under the floor"),
+        ([0.330, 0.329, 0.328, 0.32], True, "exactly at the confident level"),
+    ],
+)
+def test_a_name_must_fit_and_win_clearly(sims, named, why) -> None:
+    assert fits(np.array(sims)) is named, why
+
+
+def test_a_near_tie_low_down_keeps_its_terms_and_a_clear_win_does_not() -> None:
+    """End to end through `assign`, one area at a time so nothing is centred: equal best
+    fits, and only the margin differs."""
+    labels = [FieldLabel("F", f"S{i}") for i in range(3)]
+    vecs = np.eye(4)[:3]
+    tied = np.array([0.28, 0.27, 0.27, 0.88])
+    clear = np.array([0.28, 0.20, 0.18, 0.92])
+    assert assign([2], np.stack([tied]), labels, vecs) == [None]
+    assert assign([2], np.stack([clear]), labels, vecs) == ["S0"]
 
 
 def test_a_poor_fit_is_not_forced() -> None:
@@ -145,7 +178,7 @@ def test_a_label_near_everything_does_not_name_everything() -> None:
     vecs = np.stack([unit(1, 0.2, 0), unit(0, 1, 0.2), unit(0, 0, 1)])
     centroids = np.stack([unit(1, 0, 3), unit(0, 1, 3), unit(1, 1, 3)])
     raw_best, _ = nearest(centroids, vecs, centre=False)
-    names = assign([2, 2, 2], centroids, subs, vecs, min_similarity=-1)
+    names = assign([2, 2, 2], centroids, subs, vecs, min_similarity=-1, min_margin=-1)
     assert [subs[i].name for i in raw_best] == ["Nursing"] * 3
     assert not any(n.startswith("Nursing") for n in names)
     assert names[1] == "Oncology"
@@ -154,11 +187,11 @@ def test_a_label_near_everything_does_not_name_everything() -> None:
 def test_every_name_comes_from_the_list() -> None:
     rng = np.random.default_rng(0)
     centroids = rng.normal(size=(40, 3))
-    names = assign([1, 2] * 20, centroids, SUBS, SUB_VECS, min_similarity=-1)
+    names = assign([1, 2] * 20, centroids, SUBS, SUB_VECS, min_similarity=-1, min_margin=-1)
     allowed = {f.name for f in FIELDS + SUBS}
     pairs = {f"{a} & {b}" for a in allowed for b in allowed if a != b}
     assert set(names) <= allowed | pairs | {None}
-    assert all(names[i] for i in range(1, 40, 2)), "with no floor, every deeper area is named"
+    assert all(names[i] for i in range(1, 40, 2)), "with no floor or margin, every area is named"
 
 
 def test_nearest_is_by_direction_not_length() -> None:

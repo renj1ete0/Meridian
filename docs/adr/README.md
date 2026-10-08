@@ -28,6 +28,7 @@ chosen.
 | [0015](0015-followed-links-follow-the-evidence.md) | Followed links follow the evidence, upward as well as down | 2026-10-07 | Accepted |
 | [0016](0016-proven-by-following.md) | A host is proven for following by what following found | 2026-10-07 | Accepted |
 | [0017](0017-map-names-must-fit.md) | A Map name must fit what it names | 2026-10-07 | Accepted |
+| [0018](0018-a-map-name-must-win-clearly.md) | A Map name must win clearly, not only fit | 2026-10-08 | Accepted |
 
 ## Template
 

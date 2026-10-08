@@ -158,6 +158,16 @@ congressional documents. Three causes:
 - *A plurality named a mixed region.* "Geometry and Topology" named a 72,000-passage region
   after one area holding a seventh of it. Regions now need a majority, or a named pair.
 
+**A name must also win clearly** (`B-159`, [ADR 0018](../adr/0018-a-map-name-must-win-clearly.md)).
+Above the floor, near-ties still named areas wrongly: statute text took "Pharmacy" a few
+thousandths ahead of two other medical names. Judged by hand against their terms, about 41% of
+the live build's names did not fit, and only 6 of 25 near-tied ones did. A subfield now names an
+area at a centred similarity of 0.33 or more, or at 0.25 or more when it beats the third-nearest
+by 0.03 (`CONFIDENT_SIMILARITY`, `MIN_SIMILARITY`, `MIN_MARGIN`). Checked on 30 more areas judged
+before the rule was applied, wrong names fell from 9 to 3 and right ones from 21 to 19; a floor
+of 0.30 alone was as accurate but kept 9 of the 21 right names. High near-ties keep their name,
+because up there they are siblings that both fit.
+
 Re-matching every area against its own terms, rather than its centroid, was also tried and was
 worse: as plain cosine it gave one generic subfield to most areas, and centred it gave
 oddities of its own. The terms stay a fallback, not a matcher.

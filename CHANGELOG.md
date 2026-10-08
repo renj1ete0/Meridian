@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.165.4] — 2026-10-08
+
+### Changed
+
+- `B-159`: a Map area takes a subfield's name only when it fits at 0.33 or more, or at 0.25 or
+  more while beating the third-nearest subfield by 0.03 (was any fit above 0.20); otherwise it
+  keeps its terms. Judged by hand on the live build, about 41% of names did not fit their area;
+  on a fresh 30 areas the rule cut wrong names from 9 to 3 and kept 19 of 21 right ones
+  ([ADR 0018](docs/adr/0018-a-map-name-must-win-clearly.md))
+
 ## [0.165.3] — 2026-10-08
 
 ### Fixed

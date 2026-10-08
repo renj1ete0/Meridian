@@ -1719,7 +1719,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       run 18, 1,179 window pages on unjudged hosts had no passage embedded: the `then` tier is
       oldest first, behind a `first` tier the crawl refills as fast as it is embedded. Their
       samples are first-tier now, so vouched-for and promising hosts get judged within the hour
-- [ ] `B-159` **Near-tied Map names** — after `B-157`, an area of statute text still reads "Small
+- [x] `B-159` **Near-tied Map names** — `v0.165.4`, ADR 0018. Judged 80 live areas by hand: ~41% of
+      names did not fit; a name now needs 0.33, or 0.25 and a 0.03 lead over the third; on a
+      fresh 30, wrong 9 → 3, right 21 → 19. Was: — after `B-157`, an area of statute text still reads "Small
       Animals": its centred similarities to the subfields are nearly tied (0.213 / 0.209 / 0.207 /
       0.194 across Small Animals, Equine, History, Classics), so the winner is noise that clears
       the 0.20 floor. On the local build 48 of 420 named areas have under 0.02 between first and
