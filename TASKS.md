@@ -1691,7 +1691,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       lose about a third of the claims (10 of the 28 cited passages had no label of their own —
       a study's methods and results inside a labelled paper): roughly 65% more claims per model
       call. Decide with a paid model and more batches (`B-135`); a middle rule (own label, or a
-      labelled neighbour in the same source) is worth measuring
+      labelled neighbour in the same source) is worth measuring. 2026-10-08, three more relay
+      batches (29 relations, 12 attribute values): the third was 40 consecutive passages of one
+      essay, references and footnotes included, for 9 claims. Batches run in chunk order, so a
+      long document fills them; a cap on passages per source per batch is a second rule to
+      measure beside the label rule
 - [x] `B-162` **A resumed synthesis run had no batch** — `v0.164.7`. Found running extraction and
       tagging through the relay (operator's go, 2026-10-07): a run deferred at `extract` or `tag`
       resumed with no batch, finished, and the next run re-asked the model for the stages already
