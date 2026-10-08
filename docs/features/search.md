@@ -111,6 +111,20 @@ two-word questions; at a fifth of the depth, under half survived for some. The p
 few tens of milliseconds. When a query matches fewer passages than the pool, the result is
 exactly the one-step ranking.
 
+<a id="questions"></a>**A whole question finds nothing lexically, and that is left alone.**
+`websearch_to_tsquery` ANDs every word, so a question asked as a sentence (the Ask panel, an
+assistant over MCP, the held-out set) usually matches no passage: on 2026-10-08, 21 of the 41
+held-out questions had no lexical hit in their top ten, and search was the vector arm alone.
+An OR fallback was measured and rejected: the strict matches first, then passages matching
+*any* of the words, ranked by `ts_rank_cd`, whenever the strict query fell short of the
+candidate depth. On 18 questions written for the test (not the held-out set), it changed five
+to eight of each top ten, and of the passages only one variant returned, about four in five
+were relevant without the fallback against two in five with it. Without inverse document
+frequency, "any of the words" ranks passages that repeat the question's common words, and
+fusion gives them the vector arm's weight; one question's list filled with six passages from
+one report. It also cost about 300 ms. A relaxation worth trying would weight words by rarity,
+which Postgres full-text search does not keep; measure it the same way before shipping it.
+
 ### Vector arm depth
 
 `hnsw.ef_search` is set per query as a multiple of the candidates asked for. **pgvector's
