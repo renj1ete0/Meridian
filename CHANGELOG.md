@@ -77,6 +77,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.165.2] — 2026-10-08
+
+### Fixed
+
+- `B-170`: the tagging prompt told the model to use the same wording for the same value but
+  never showed it the wordings already in use, so they drifted ("road" and "public road").
+  Each attribute now lists up to eight of its values in use, most used first, numbers left
+  out, retired attributes left out
+
 ## [0.165.1] — 2026-10-08
 
 ### Fixed

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 from pydantic import BaseModel
@@ -217,7 +217,9 @@ useful it seems. Proposing new ones is a separate, gated process.
 Give `value` as a short phrase, or `value_numeric` for a number, and leave the
 other null. Use the same wording for the same value across items, or the
 attribute stops discriminating between entities, which is the only thing it is
-for.
+for. Where an attribute lists values "in use", they are the wordings this
+corpus already holds, most used first: reuse one when it says what the passage
+says, and write a new one only when none does.
 
 Only tag an entity the passages actually describe on that dimension. An
 attribute you had to infer from the entity's name is one to leave out.
@@ -255,15 +257,22 @@ def tag_prompt(
     *,
     attributes: Sequence[tuple[str, str | None]],
     entities: Sequence[str] = (),
+    values: Mapping[str, Sequence[str]] | None = None,
 ) -> Prompt:
     """The attribute-tagging prompt for one batch (§7.1, §7.3).
 
     `attributes` is the active set with definitions, read from the database (§7.3).
-    `entities` are names already in the graph, so the model uses their spellings.
+    `entities` are names already in the graph, so the model uses their spellings;
+    `values` are each attribute's wordings already in use (`B-170`), so it reuses them.
     """
-    catalogue = "\n".join(
-        f"- {name}: {definition}" if definition else f"- {name}" for name, definition in attributes
-    )
+    in_use = values or {}
+
+    def line(name: str, definition: str | None) -> str:
+        head = f"- {name}: {definition}" if definition else f"- {name}"
+        used = in_use.get(name)
+        return head + ("\n  in use: " + ", ".join(json.dumps(v) for v in used) if used else "")
+
+    catalogue = "\n".join(line(name, definition) for name, definition in attributes)
     known = ""
     if entities:
         known = (

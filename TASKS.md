@@ -1665,6 +1665,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       length; about 1% begin inside a link and 0.7% end inside one, and escaped footnote
       markers and wrapped link words were left as stored. `readable()` reads them as words
       when the address plainly is one; 275 → 34 of 20,000 sampled passages still show syntax
+- [x] `B-170` **The tagging prompt asked for consistent wording without showing it** —
+      `v0.165.2`. After three relay batches the graph's 24 attribute values already had
+      "road" beside "public road" and four wordings of autonomy. The prompt now lists each
+      attribute's wordings in use, most used first (8 at most); a test reads the prompt the
+      model received
 - [x] `B-169` **A crowded graph label was dropped rather than moved** — `v0.165.1`. Labels
       tried only below their node (`B-124`); now above, right and left too, before leaving
       one out. Seen on a screenshot pass: a fourteen-neighbour node lost one label on desktop

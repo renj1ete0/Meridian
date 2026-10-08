@@ -29,6 +29,7 @@ from meridian_core.mentions import embed_missing_entities, embed_names, resolve_
 from meridian_core.models import (
     Agent,
     AttributeDefinition,
+    AttributeValue,
     Chunk,
     ChunkTopics,
     Entity,
@@ -87,6 +88,10 @@ BATCH: Final[int] = 40
 #: list is expensive on every call and stops being read; this is enough to
 #: anchor the names a batch is actually about.
 NAMES_IN_PROMPT: Final[int] = 60
+
+#: How many of an attribute's wordings already in use the tagging prompt lists, most used
+#: first (`B-170`): enough to reuse the common ones without turning the list into a menu.
+VALUES_IN_PROMPT: Final[int] = 8
 
 #: Which task builds each unbuilt stage, so a log says "not built" rather than
 #: "found nothing". `done` is a state, not work.
@@ -490,6 +495,47 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
         journal.note("extract", f"{proposal.relation}: {result.detail}")
 
 
+async def values_in_use(
+    sess: AsyncSession, per_attribute: int = VALUES_IN_PROMPT
+) -> dict[str, list[str]]:
+    """Each active attribute's text values already in the graph, most used first (`B-170`).
+
+    Ties go alphabetically, so the prompt, and a relay answer keyed on it, is the same on
+    every read. Numeric values are left out: a number needs no wording.
+    """
+    counted = (
+        select(
+            AttributeDefinition.name.label("name"),
+            AttributeValue.value.label("value"),
+            func.count().label("n"),
+        )
+        .join(AttributeValue, AttributeValue.attribute_id == AttributeDefinition.attribute_id)
+        .where(
+            AttributeDefinition.status == "active",
+            AttributeValue.value.is_not(None),
+            func.btrim(AttributeValue.value) != "",
+        )
+        .group_by(AttributeDefinition.name, AttributeValue.value)
+        .subquery()
+    )
+    ranked = select(
+        counted.c.name,
+        counted.c.value,
+        func.row_number()
+        .over(partition_by=counted.c.name, order_by=(counted.c.n.desc(), counted.c.value))
+        .label("place"),
+    ).subquery()
+    rows = await sess.execute(
+        select(ranked.c.name, ranked.c.value)
+        .where(ranked.c.place <= per_attribute)
+        .order_by(ranked.c.name, ranked.c.place)
+    )
+    found: dict[str, list[str]] = {}
+    for name, value in rows:
+        found.setdefault(name, []).append(value)
+    return found
+
+
 async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, now) -> None:
     """Attribute values, onto entities the passages describe (§7.3).
 
@@ -524,7 +570,9 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
         )
     )
 
-    prompt = tag_prompt(batch.passages, attributes=attributes, entities=known)
+    prompt = tag_prompt(
+        batch.passages, attributes=attributes, entities=known, values=await values_in_use(sess)
+    )
     if journal.dry_run:
         journal.note(
             "tag",

@@ -324,6 +324,59 @@ async def test_a_tag_lands_on_the_entity_extraction_created(corpus, monkeypatch)
     assert run.tags_added == 1
 
 
+async def test_the_tagging_prompt_carries_the_wordings_already_in_use(corpus, monkeypatch) -> None:
+    """`B-170`: a value tagged once is offered back, most used first, numbers left out."""
+    sess, ids, marker = corpus
+    attribute = (
+        await sess.scalars(
+            select(AttributeDefinition).where(AttributeDefinition.name == f"{marker}-density")
+        )
+    ).one()
+    entities = [
+        Entity(
+            canonical_name=f"{marker} place {n}", node_type="place", supporting_chunk_ids=[ids[0]]
+        )
+        for n in range(4)
+    ]
+    sess.add_all(entities)
+    await sess.flush()
+    for entity, value, numeric in zip(
+        entities, ["high", "high", "low", None], [None, None, None, 4.5], strict=True
+    ):
+        sess.add(
+            AttributeValue(
+                entity_id=entity.entity_id,
+                attribute_id=attribute.attribute_id,
+                value=value,
+                value_numeric=numeric,
+                supporting_chunk_ids=[ids[0]],
+            )
+        )
+    await sess.commit()
+
+    found = await orchestrate.values_in_use(sess)
+    assert found[f"{marker}-density"] == ["high", "low"]
+    assert all(name != f"{marker}-density" or None not in v for name, v in found.items())
+
+    attribute.status = "retired"
+    await sess.commit()
+    assert f"{marker}-density" not in await orchestrate.values_in_use(sess), (
+        "a retired attribute is not offered"
+    )
+    attribute.status = "active"
+    await sess.commit()
+
+    seen: list[str] = []
+
+    class Recording(FakeModel):
+        async def __call__(self, sess, run, task_type, **kwargs):
+            seen.append(kwargs["system"])
+            return await super().__call__(sess, run, task_type, **kwargs)
+
+    await drive(sess, ids, Recording(), monkeypatch)
+    assert any('in use: "high", "low"' in prompt for prompt in seen)
+
+
 # --------------------------------------------------------------------------
 # The mark, which is what makes a run resumable
 # --------------------------------------------------------------------------

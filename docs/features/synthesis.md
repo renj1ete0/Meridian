@@ -25,7 +25,12 @@ at a time (a unique partial index). A heartbeat tells a crashed run from a live 
   passages labelled on a topic.
 - **extract** frames the batch, asks the model for entities and relations, parses the answer,
   resolves names to nodes and writes edges.
-- **tag** tags attributes, then advances the mark.
+- **tag** tags attributes, then advances the mark. Its prompt lists, under each active
+  attribute, up to `VALUES_IN_PROMPT` (8) wordings already in the graph, most used first
+  (`B-170`): the prompt asked for "the same wording for the same value" but never showed the
+  wording, and after a few dozen values `operating_environment` held both "road" and
+  "public road", `autonomy_level` both "driverless" and "unmanned". An attribute whose values
+  are all phrased differently discriminates nothing.
 - `score`, `analogies`, `gap` and `seed` are named stages that say which task builds them.
 
 `python -m worker.orchestrate` runs cycles until one makes no progress (`--max-cycles` caps

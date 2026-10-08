@@ -430,6 +430,30 @@ def test_the_tagging_prompt_offers_the_names_already_in_the_graph() -> None:
     assert "Regional Transit Board" in prompt
 
 
+def test_the_tagging_prompt_shows_each_attributes_wordings_in_use() -> None:
+    """`B-170`: told to reuse wording, a model that never sees the wording invents its own."""
+    prompt = tag_prompt(
+        passages(),
+        attributes=[("fare_level", "Fare relative to fixed route"), ("climate", None)],
+        values={"fare_level": ["same as fixed-route fare", 'free "trial"']},
+    ).system
+
+    block = prompt[prompt.index("- fare_level") : prompt.index("- climate")]
+    assert '"same as fixed-route fare"' in block
+    assert '"free \\"trial\\""' in block, (
+        "a value is quoted as JSON, so a quote inside cannot end it"
+    )
+    assert block.index("same as") < block.index("free"), "most used first, as given"
+    climate = prompt[prompt.index("- climate") :].splitlines()
+    assert not climate[1].strip().startswith("in use"), "no list for an attribute with none"
+
+
+def test_the_tagging_prompt_says_how_to_use_the_wordings_only_once() -> None:
+    plain = tag_prompt(passages(), attributes=[("climate", None)]).system
+    assert "in use:" not in plain
+    assert " ".join(plain.split()).count("reuse one when it says what the passage says") == 1
+
+
 def test_topics_are_named_only_when_there_are_any() -> None:
     """An empty topic list passed as prose is one more thing for the model to
     interpret; leaving it out says nothing, which is what is meant."""
