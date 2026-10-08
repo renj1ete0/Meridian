@@ -162,8 +162,8 @@ measurement of it looked fine.
 
 ### Titles in the embedding view (measured, not adopted)
 
-A passage is embedded alone: "3.2 Crash risk — like pedestrians, PMD users…" without the title
-that says the document is about e-scooters. Prefixing the document's title is a known way to
+A passage is embedded alone: a section that names its subject only as "these devices" is
+embedded without the title that says what the devices are. Prefixing the document's title is a known way to
 give a passage its context, and was measured on 2026-10-08 before paying for it (re-embedding
 the corpus is about sixty hours on this machine's CPU). For 18 test questions, the fused top 50
 was embedded both ways and ranked by similarity to the question:
@@ -171,10 +171,10 @@ was embedded both ways and ranked by similarity to the question:
 - it changed about three of each top ten;
 - against `bge-reranker-v2-m3`'s top ten over the same passages (see
   [search.md#reranking](search.md)), the plain view agreed slightly more (5.4 of 10 against 5.1);
-- read side by side, it helped where titles name the subject a passage leaves implicit (pilot
-  ridership figures surfaced from articles titled for microtransit), and hurt where one
+- read side by side, it helped where titles name the subject a passage leaves implicit (figures surfaced from
+  articles whose titles named the subject the passage left implicit), and hurt where one
   well-titled document's passages all rose together (six of a top ten from two documents on a
-  question about shuttles in mixed traffic).
+  question).
 
 No clear gain, and a real cost in concentration, so the view stays as it is. A per-source cap
 at retrieval would answer the concentration; revisit both together if a GPU makes re-embedding

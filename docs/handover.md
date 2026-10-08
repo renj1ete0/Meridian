@@ -13,6 +13,25 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-08 — `v0.164.8`–`v0.165.5`.** Traps and findings:
+> - **Rebuild one service with `--no-deps`.** `docker compose up -d --build orchestrator` rebuilt
+>   and recreated Postgres too, and the embedding backfill died mid-write (it restarts and
+>   resumes, so nothing was lost). `docker compose build <svc>` then `up -d --no-deps <svc>`.
+> - **robots.txt "unreachable" is cheap.** Run 19's 441 were cache refusals taking 0 ms, 206 URLs
+>   on 127 hosts tried three times each; 5 of those hosts ever served a page. Dead hosts, not the
+>   reason the run fetched less. Blocking them sooner would tidy the queue, not speed the crawl.
+> - **Lexical search finds nothing for a whole question** (ANDed words), so questions are
+>   answered by the vector arm alone; an OR fallback made results worse (search.md#questions).
+> - **The answer page needs the place vocabulary per request** (`B-168`, 70 ms): a passage from
+>   a several-country source counts only for the countries it names.
+> - **Synthesis skips reference lists** (`B-171`) and the tag prompt lists wordings in use
+>   (`B-170`); both change the relay prompt keys, so an answer filed under an old key is ignored.
+> - **Map names**: about 41% of names did not fit before `B-159`; more areas now show terms,
+>   and clashing term names are told apart on the level listing only (`B-172`).
+> - **Measuring retrieval without the held-out set**: write questions first, keep the judging
+>   scripts in the session scratchpad, and use `bge-reranker-v2-m3` (downloaded to a scratch
+>   `HF_HOME`, not `/models`) as a second opinion, never as the only judge.
+
 > **2026-10-04 (night) — `v0.159.0`–`v0.162.0`.** Traps:
 > - **The `/mcp` route needs nginx, a published port and default auth URLs together**
 >   (`B-138`); missing any one gives a web page or a refused tool rather than an error.

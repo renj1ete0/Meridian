@@ -7,8 +7,8 @@
 ## Context
 
 ADR 0017 set a floor: a subfield names an area only above a centred similarity of 0.20. Areas
-still read wrong where several subfields cleared it by about the same amount: statute text about
-health-care fraud took "Pharmacy" with "Family Practice" and "Medical Terminology" a few
+still read wrong where several subfields cleared it by about the same amount: statute text took
+"Pharmacy" with "Family Practice" and "Medical Terminology" a few
 thousandths behind, and programming terms took "Algebra and Number Theory". The winner among
 near-equals is noise. A plain margin was expected to drop good names too, because siblings that
 both fit ("Ecology" and "Nature and Landscape Conservation" for a conservation area) are also

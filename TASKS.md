@@ -21,6 +21,19 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-08 (evening) — `v0.165.5`, pushed to GitHub (GHCR held); local stack left running.**
+> Built: `B-164` passages read as words where a link was cut, `B-165`, `B-166` GMT+7:59 labels,
+> `B-168` the answer page files a passage only under countries it names, `B-169` crowded graph
+> labels move before they drop, `B-170` the tagging prompt shows wordings in use, `B-171`
+> synthesis leaves reference lists out, `B-159` Map names must win clearly (ADR 0018), `B-172`.
+> Measured and **not** adopted (docs say why): an OR fallback for whole-question lexical search,
+> a per-source cap (`B-30`), titles in the embedding view. Measured and **parked for a GPU**:
+> `B-167` cross-encoder reranking (clear gain, 20–35 s a question on CPU). Relay synthesis: 4
+> batches, 40 relations, 15 attribute values. robots.txt "unreachable" in run 19 was 441
+> zero-cost cache refusals on 127 hosts, 5 of which ever served a page: dead hosts, not what
+> slowed the run. **Next:** `B-163` (with `B-171` and a per-source cap per batch to measure),
+> run 19's yield, within-host drift, `B-131`/`B-135` on the server.
+
 > **2026-10-07 (night) — `v0.164.7`, pushed to GitHub (GHCR held), all stacks stopped.** Built today:
 > `D-01`, `B-147`–`B-149`, `B-53` (ADR 0014), `B-99` (ADR 0013), `B-150` link vouches (ADR 0015),
 > `B-151`–`B-161`, `B-155` proven by following (ADR 0016), `B-156` the site review's reader fixes,
@@ -1680,8 +1693,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       one out. Seen on a screenshot pass: a fourteen-neighbour node lost one label on desktop
       and about a third on a phone; all drawn after
 - [x] `B-168` **The answer page filed passages under countries they never name** — `v0.165.0`.
-      Seen 2026-10-08: a question about shuttles listed a market report, a German book chapter
-      and a platooning paper as China's evidence, and called China strong. Places are per
+      Seen 2026-10-08: a question listed a market report and two papers about other places as
+      one country's evidence, and called that country strong. Places are per
       document; a passage counted for every one. Measured on 8 questions: of several-country
       placements, 24% of shown passages named the country, 18% more had another matching
       passage that did. Now a several-country source counts only where a matching passage

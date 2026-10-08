@@ -133,8 +133,8 @@ same 18 test questions as [the OR fallback](#questions), reranking the fused top
 
 - `BAAI/bge-reranker-v2-m3` (568M parameters, multilingual, bge-m3's companion) changed four
   or five of each top ten. Read side by side, the passages it brought in more often stated the
-  answer: a pilot's ridership and its subsidy per ride, a congestion charge's measured traffic
-  fall, the factors older adults name, against overviews and title-only passages it dropped.
+  answer: a pilot's usage and its cost per user, a policy's measured effect, the factors a
+  study's participants named, against overviews and title-only passages it dropped.
   It rarely made a list worse. On this machine's CPU, sharing it with the crawl, it took 20 to
   35 seconds a question.
 - Smaller cross-encoders (MiniLM L6 and L12, `bge-reranker-base`) took 1.3 to 10 seconds and
