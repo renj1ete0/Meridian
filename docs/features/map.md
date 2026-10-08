@@ -168,6 +168,12 @@ before the rule was applied, wrong names fell from 9 to 3 and right ones from 21
 of 0.30 alone was as accurate but kept 9 of the 21 right names. High near-ties keep their name,
 because up there they are siblings that both fit.
 
+With more areas on their terms, two top-level regions both read "Data" (`B-172`). Areas listed
+together whose names come from terms and coincide are told apart on read by their next term of
+their own, as the build already does for listed names: "Data (health)", "Data (research)". Only
+clashing names are qualified; a single term's qualifier is often noise ("Sep-2026 (docs)"), so
+qualifying every one-word name was measured and left out.
+
 Re-matching every area against its own terms, rather than its centroid, was also tried and was
 worse: as plain cosine it gave one generic subfield to most areas, and centred it gave
 oddities of its own. The terms stay a fallback, not a matcher.

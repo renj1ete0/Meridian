@@ -1719,6 +1719,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       run 18, 1,179 window pages on unjudged hosts had no passage embedded: the `then` tier is
       oldest first, behind a `first` tier the crawl refills as fast as it is embedded. Their
       samples are first-tier now, so vouched-for and promising hosts get judged within the hour
+- [x] `B-172` **Two regions both named "Data"** — `v0.165.5`. After `B-159` more areas take
+      their terms, and names from terms were never told apart. Areas listed together whose
+      term names coincide now carry their next own term: "Data (health)", "Data (research)"
 - [x] `B-159` **Near-tied Map names** — `v0.165.4`, ADR 0018. Judged 80 live areas by hand: ~41% of
       names did not fit; a name now needs 0.33, or 0.25 and a 0.03 lead over the third; on a
       fresh 30, wrong 9 → 3, right 21 → 19. Was: — after `B-157`, an area of statute text still reads "Small

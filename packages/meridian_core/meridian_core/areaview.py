@@ -67,6 +67,36 @@ def area_name(terms: list[str], field: str | None = None) -> str:
     return phrase[:1].upper() + phrase[1:]
 
 
+def told_apart_by_terms(reads: list[AreaRead], areas: list[Area]) -> list[AreaRead]:
+    """Areas shown together that would read alike, named apart by a term of their own.
+
+    Only names from terms: the build already tells listed names apart (`B-74`). With more
+    areas on their terms (`B-159`), two regions both read "Data" (`B-172`).
+    """
+    clashes: dict[str, list[int]] = {}
+    for i, (read, area) in enumerate(zip(reads, areas, strict=True)):
+        if not area.field:
+            clashes.setdefault(read.name, []).append(i)
+    out = list(reads)
+    for name, members in clashes.items():
+        if len(members) < 2:
+            continue
+        used: set[str] = set()
+        for i in members:
+            own = next(
+                (
+                    t
+                    for t in usable_terms(list(areas[i].terms))[:TERMS_SHOWN]
+                    if t.lower() not in name.lower() and t not in used
+                ),
+                None,
+            )
+            if own:
+                used.add(own)
+                out[i] = reads[i].model_copy(update={"name": f"{name} ({own})"})
+    return out
+
+
 def flags(area: Area, *, now: dt.datetime) -> tuple[bool, bool, list[str]]:
     """``(weak, stale, reasons)`` for one area."""
     reasons: list[str] = []
@@ -190,12 +220,13 @@ async def areas_level(
         level = parent.level + 1
 
     rows = (await sess.execute(statement.order_by(Area.passages.desc(), Area.area_id))).all()
+    reads = [to_read(area, int(children), now=now) for area, children in rows]
     return AreasRead(
         build=build_read(build),
         level=level,
         parent=parent_read,
         path=path,
-        areas=[to_read(area, int(children), now=now) for area, children in rows],
+        areas=told_apart_by_terms(reads, [area for area, _ in rows]),
         links=await links_between(sess, [area.area_id for area, _ in rows]),
         **common,
     )

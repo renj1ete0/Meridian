@@ -77,6 +77,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.165.5] — 2026-10-08
+
+### Fixed
+
+- `B-172`: Map areas listed together could share a name taken from their terms (two regions both
+  "Data"); such names now carry each area's next own term, "Data (health)"
+
 ## [0.165.4] — 2026-10-08
 
 ### Changed
