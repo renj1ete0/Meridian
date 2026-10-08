@@ -15,8 +15,20 @@ export function plainLetters(text: string): string {
 }
 
 const IMAGE = /!\[[^\]\n]*\]\([^)\s]*(?:\s+"[^"]*")?\)/g
-// Innermost first, so a footnote `[[30](url)]` becomes `[30]`.
-const LINK = /\[([^[\]\n]*)\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)/g
+// Innermost first, so a footnote `[[30](url)]` becomes `[30]`. A link's words may hold
+// escaped brackets, as a footnote marker does: `[\[47\]](url)`.
+const LINK = /\[((?:\\[[\]]|[^[\]\n])*)\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)/g
+// Words wrapped onto a second line: a link only when the address is plainly one (a
+// scheme, `www.`, a path or a fragment), so a stray bracket a line up is not taken for one.
+const WRAPPED_LINK =
+  /\[((?:\\[[\]]|[^[\]\n])*\n(?:\\[[\]]|[^[\]\n])*)\]\((?:https?:\/\/|www\.|\/|#)(?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)/g
+// A passage is cut at a length, not at a link, so one can begin inside a link's words
+// (`… 2019)](https://…)`) or end inside its address (`[report](https://ex`). The address
+// must look like one, so an ordinary `]` followed by `(` is left alone.
+const LINK_TAIL = /^((?:\\[[\]]|[^[\]\n])*)\]\((?:https?:\/\/|www\.|\/|#)(?:[^()\s]|\([^()\s]*\))*\)/
+const LINK_HEAD = /\[((?:\\[[\]]|[^[\]\n])*)\]\((?:https?:\/\/|www\.|\/|#)[^()\s]*$/
+// Brackets the converter escaped so they would not read as link syntax.
+const ESCAPED_BRACKET = /\\([[\]])/g
 const AUTOLINK = /<(https?:\/\/[^>\s]+)>/g
 const BOLD = /(\*\*|__)(?=\S)([^*_\n]+?)(?<=\S)\1/g
 const HEADING = /^[ \t]{0,3}#{1,6}[ \t]+/gm
@@ -108,7 +120,9 @@ export function unwrapLines(text: string): string {
 export function readable(text: string): string {
   let out = plainLetters(text).replace(IMAGE, '')
   // Links nest one level in footnotes; two passes resolve `[[n](url)]`.
-  for (let i = 0; i < 2; i++) out = out.replace(LINK, (_, label: string) => label)
+  const words = (_: string, label: string) => label
+  for (let i = 0; i < 2; i++) out = out.replace(LINK, words).replace(WRAPPED_LINK, words)
+  out = out.replace(LINK_TAIL, words).replace(LINK_HEAD, words).replace(ESCAPED_BRACKET, '$1')
   out = unwrapLines(flattenTables(out))
   return out
     .replace(AUTOLINK, (_, url: string) => url)

@@ -330,6 +330,13 @@ and `#` headings. The stored text stays as it is, since everything is re-derived
 ellipsis at the very start is a widget's prompt ("Search…"), not what the page says (`B-98`);
 only there, and only short, so a sentence left unfinished mid-passage is kept.
 
+A passage is cut at a length, not at a link, so about one in a hundred begins inside a link's
+words (`… 2019)](https://…)`) and nearly as many end inside its address. Both keep the words
+(`B-164`), but only when the address plainly is one (a scheme, `www.`, a path or a fragment),
+so an ordinary `]` before a parenthesis is left alone. The same test admits link words wrapped
+onto one more line. Escaped brackets (`\[47\]`, the converter's footnote markers) read as
+brackets. Link "cards" whose words run over several lines are still shown as stored.
+
 Text extracted from a PDF carries its column width: a line ends wherever the page did. As-is it
 is a ragged column; with every newline kept it cannot be skimmed. But web pages break lines on
 purpose (a label, then its value), and joining those would run them together. So a passage

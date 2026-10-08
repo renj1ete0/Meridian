@@ -38,17 +38,52 @@ describe('readable', () => {
     expect(readable(plain)).toBe(plain)
   })
 
-  it('does not join a link across lines', () => {
-    const broken = 'a [label\nsplit](https://x.org) b'
-    expect(readable(broken)).toBe(broken)
+  it('takes a link whose words wrapped onto a second line only when the address is plainly one', () => {
+    expect(readable('implement [Regulatory\nReforms](https://x.org/tdm53.htm) to encourage')).toBe(
+      'implement Regulatory\nReforms to encourage',
+    )
+    const notAddress = 'a [label\nsplit](x) b'
+    expect(readable(notAddress)).toBe(notAddress)
+    const threeLines = 'a [one\ntwo\nthree](https://x.org) b'
+    expect(readable(threeLines)).toBe(threeLines)
+  })
+
+  it('reads a footnote whose marker the converter escaped', () => {
+    expect(readable('liabilities.[\\[47\\]](https://files.example.gov#_ftn47) For example')).toBe(
+      'liabilities.[47] For example',
+    )
+    expect(readable('[\\[4\\]](https://files.example.gov#fnref4)Over the past year')).toBe('[4]Over the past year')
+    expect(readable('a photograph \\[PDF, 10 KB\\] here')).toBe('a photograph [PDF, 10 KB] here')
   })
 
   it('removes a link whose words were empty, leaving no stray brackets', () => {
     expect(readable('text [](https://x.org/anchor) more')).toBe('text more')
   })
 
+  it('keeps the words of a link the passage begins inside, and drops its address', () => {
+    expect(readable('(2019)](https://arxiv.org#bib.bib41) modeled feeders')).toBe('(2019) modeled feeders')
+    expect(readable('Evidence from a survey](https://x.org/p/57.html)\nby A. Author')).toBe(
+      'Evidence from a survey\nby A. Author',
+    )
+  })
+
+  it('keeps the words of a link the passage ends inside', () => {
+    expect(readable('as the [annual report](https://example.org/rep')).toBe('as the annual report')
+  })
+
+  it('leaves a bracket and parenthesis that are not a cut link alone', () => {
+    for (const plain of ['a] (b) c', 'see 3](not a url) here', 'list [1](2', 'x [y](z) w']) {
+      expect(readable(plain)).toBe(plain === 'x [y](z) w' ? 'x y w' : plain)
+    }
+  })
+
+  it('does not take a cut link from the middle of a passage', () => {
+    const mid = 'first line\nsecond part](https://x.org) and more'
+    expect(readable(mid)).toBe(mid)
+  })
+
   it('never lengthens the text', () => {
-    for (const sample of ['[a](b)', '**x**', '# h', 'plain', '![i](j)', '<https://a.b>']) {
+    for (const sample of ['[a](b)', '**x**', '# h', 'plain', '![i](j)', '<https://a.b>', 'a](#b)', '[a](/b']) {
       expect(readable(sample).length).toBeLessThanOrEqual(sample.length)
     }
   })

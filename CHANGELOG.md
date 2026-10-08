@@ -77,6 +77,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.8] — 2026-10-08
+
+### Fixed
+
+- `B-164`: passages showed raw Markdown link syntax where a link was cut or escaped. A passage
+  is cut at a length, so it can begin inside a link's words (`… 2019)](https://…)`) or end
+  inside its address; the converter escapes brackets in footnote markers (`[\[47\]](…)`);
+  and link words wrap onto a second line. Each now reads as its words. On a sample of 20,000
+  stored passages, those still showing link syntax went from 275 to 34, and 5% read cleaner.
+  Display only; the stored text is unchanged
+
 ## [0.164.7] — 2026-10-07
 
 ### Fixed

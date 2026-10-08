@@ -1654,6 +1654,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-164` **Link syntax showed where a link was cut** — `v0.164.8`. Seen on a node page
+      (2026-10-08): a passage began `(2019)](https://…#bib41) modeled`. Passages are cut at a
+      length; about 1% begin inside a link and 0.7% end inside one, and escaped footnote
+      markers and wrapped link words were left as stored. `readable()` reads them as words
+      when the address plainly is one; 275 → 34 of 20,000 sampled passages still show syntax
 - [ ] `B-163` **Which passages synthesis reads** — measured in the 2026-10-07 relay session
       (3 batches, 120 passages, 34 relations, 5 attribute values). Synthesis reads a passage when
       it *or its source* is labelled on a topic, so one borderline page reaches the model whole:
