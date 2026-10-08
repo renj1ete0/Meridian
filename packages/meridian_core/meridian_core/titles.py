@@ -175,24 +175,3 @@ def title_from_text(text: str | None, *, lines: int = 5) -> str | None:
         if lines <= 0:
             break
     return None
-    for raw in text.splitlines()[: lines * 3]:
-        line = _norm(raw.strip("#*_ "))
-        if not line:
-            continue
-        lines -= 1
-        words = line.split()
-        if (
-            3 <= len(words) <= 25
-            and 15 <= len(line) <= 180
-            and (line[0].isupper() or line[0].isdigit())
-            and not line.endswith((":", ".", ",", "!", "?", ";"))
-            and not _NOT_A_HEADING.search(line)
-            and not _SENTENCE.search(line)
-            and not _author_line(line)
-        ):
-            cleaned = clean_title(line)
-            if cleaned:
-                return cleaned
-        if lines <= 0:
-            break
-    return None

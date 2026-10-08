@@ -77,6 +77,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.9] — 2026-10-08
+
+### Changed
+
+- `B-165`: `title_from_text` carried an unreachable copy of its own loop after its return, an
+  older version without the wrapped-line check; removed. No behaviour change
+
 ## [0.164.8] — 2026-10-08
 
 ### Fixed
