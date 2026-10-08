@@ -1665,6 +1665,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       length; about 1% begin inside a link and 0.7% end inside one, and escaped footnote
       markers and wrapped link words were left as stored. `readable()` reads them as words
       when the address plainly is one; 275 → 34 of 20,000 sampled passages still show syntax
+- [x] `B-168` **The answer page filed passages under countries they never name** — `v0.165.0`.
+      Seen 2026-10-08: a question about shuttles listed a market report, a German book chapter
+      and a platooning paper as China's evidence, and called China strong. Places are per
+      document; a passage counted for every one. Measured on 8 questions: of several-country
+      placements, 24% of shown passages named the country, 18% more had another matching
+      passage that did. Now a several-country source counts only where a matching passage
+      names the country, shown by that passage; the rest go unplaced, counted
 - [ ] `B-167` **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
       ([search.md#reranking](docs/features/search.md)): `bge-reranker-v2-m3` over the fused top
       30 brought answer-stating passages into the top ten on most of 18 test questions, but

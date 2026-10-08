@@ -20,6 +20,7 @@ from meridian_core.answer import (
 )
 from meridian_core.embedder import EmbeddingUnavailable, RemoteEmbedder
 from meridian_core.logging import get_logger
+from meridian_core.places import countries_named, load_vocabulary
 from meridian_core.schemas.answer import AnswerGroupRead, AnswerRead
 from meridian_core.schemas.search import SearchHitRead, SearchResponse
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, search
@@ -194,7 +195,11 @@ async def answer_search(
         limit=2 * candidates,
         candidates=candidates,
     )
-    groups, unplaced = group_hits(result.hits, top=top)
+    # Read per request: it is small, and an approved gazetteer term counts at once.
+    vocab = await load_vocabulary(sess)
+    groups, unplaced = group_hits(
+        result.hits, top=top, named=lambda text: countries_named(text, vocab)
+    )
     log.info(
         "explore answer",
         extra={

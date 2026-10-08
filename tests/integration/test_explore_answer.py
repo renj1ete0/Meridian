@@ -48,14 +48,17 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
     await dispose_engines()
 
 
-#: (publisher host, tier, places) per source.
+#: (publisher host, tier, places, what its passages add) per source.
 LAYOUT = [
-    ("a", "government", ["DE"]),
-    ("b", "press", ["DEBER"]),  # a city: counts for DE
-    ("c", "press", ["DE", "FR"]),
-    ("a", "press", ["FR"]),  # same publisher as the first
-    ("d", "institutional", []),  # examined, about no place
-    ("e", "press", None),  # never examined
+    ("a", "government", ["DE"], ""),
+    ("b", "press", ["DEBER"], ""),  # a city: counts for DE
+    # About two countries and naming both: counts for each (`B-168`).
+    ("c", "press", ["DE", "FR"], " Trials ran in Germany and in France."),
+    ("a", "press", ["FR"], ""),  # same publisher as the first
+    ("d", "institutional", [], ""),  # examined, about no place
+    ("e", "press", None, ""),  # never examined
+    # About two countries, but no matching passage names either: unplaced, and counted.
+    ("f", "press", ["DE", "FR"], ""),
 ]
 
 
@@ -63,7 +66,7 @@ LAYOUT = [
 async def corpus(session_for, marker: str, scope: str):
     sess = await session_for("rw")
     made = []
-    for index, (host, tier, places) in enumerate(LAYOUT):
+    for index, (host, tier, places, adds) in enumerate(LAYOUT):
         source, _ = await upsert_source(
             sess,
             f"https://{host}.{marker}.test/doc-{index}",
@@ -76,7 +79,9 @@ async def corpus(session_for, marker: str, scope: str):
             sess,
             source.source_id,
             [
-                ChunkWrite(text=f"{marker} rules paragraph {n} of document {index}.", chunk_index=n)
+                ChunkWrite(
+                    text=f"{marker} rules paragraph {n} of document {index}.{adds}", chunk_index=n
+                )
                 for n in range(2)
             ],
         )
@@ -122,8 +127,9 @@ async def test_groups_by_country_with_cities_rolled_up(client, corpus, marker, s
 
     rest = body["unplaced"]
     assert rest["code"] is None
-    assert rest["sources"] == 2
+    assert rest["sources"] == 3
     assert rest["unexamined"] == 1
+    assert rest["several_places"] == 1, "the two-country source whose passages name neither"
 
     assert body["coverage_rule"] == COVERAGE_RULE
     assert body["sources_considered"] == len(LAYOUT)

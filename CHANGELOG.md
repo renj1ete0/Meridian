@@ -77,6 +77,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.165.0] — 2026-10-08
+
+### Changed
+
+- `B-168`: the answer page counts a source about several countries towards one only through a
+  matching passage that names it, and shows that passage there. Places are tagged per document,
+  so a passage from a report naming six countries was filed under all six: on eight test
+  questions, three in five such placements were passages naming none of them, and a country
+  could read as strong on evidence that never mentioned it. A source whose matching passages
+  name none of its countries is listed with the unplaced, and `several_places` on that group
+  (API and page) counts them. Sources about one country are unchanged
+
 ## [0.164.10] — 2026-10-08
 
 ### Fixed

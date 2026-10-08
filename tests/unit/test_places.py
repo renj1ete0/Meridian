@@ -224,6 +224,16 @@ def test_a_gazetteer_term_that_is_a_place_name_is_counted_once() -> None:
     assert (found.names, found.gazetteer) == ({"SG": 1}, {})
 
 
+def test_countries_named_folds_cities_and_terms_into_countries(vocab: Vocabulary) -> None:
+    """What the answer page asks of a passage (`B-168`): which countries it names."""
+    text = "Trials ran in Berlin and Munich, then in Germany, and later in Singapore."
+    assert places.countries_named(text, vocab) == {"DE", "SG"}
+    terms = Vocabulary.build([GazetteerPlace("Harbour Transit Office", "SG")])
+    assert places.countries_named("The Harbour Transit Office said so.", terms) == {"SG"}
+    assert places.countries_named("Ridership rose by a fifth.", vocab) == frozenset()
+    assert places.countries_named("", vocab) == frozenset()
+
+
 # ---------------------------------------------------------------------------
 # Reference lists
 # ---------------------------------------------------------------------------

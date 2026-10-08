@@ -65,6 +65,7 @@ function group(over: Partial<AnswerGroup> = {}): AnswerGroup {
       }),
     ],
     unexamined: 0,
+    several_places: 0,
     ...over,
   }
 }
@@ -181,6 +182,22 @@ describe('the grouped answer', () => {
     const rest = screen.getByRole('region', { name: 'No place named' })
     expect(rest.textContent).toContain('2 sources not yet checked for places')
     expect(within(rest).queryByRole('button', { name: /Find more about/ })).toBeNull()
+  })
+
+  it('counts each kind of unplaced source, so several-country sources are not called placeless (B-168)', () => {
+    const unplaced = { ...answer().unplaced!, sources: 6, unexamined: 2, several_places: 3 }
+    render(<AnswerBody answer={answer({ unplaced })} question={QUESTION} topic="trading" />)
+    const rest = screen.getByRole('region', { name: 'No place named' })
+    expect(rest.textContent).toContain(
+      '1 source that names no country often enough to be about one, 3 sources about several countries, in passages that name none of them and 2 sources not yet checked for places.',
+    )
+  })
+
+  it('says nothing about several countries when there are none', () => {
+    render(<AnswerBody answer={answer()} question={QUESTION} topic="trading" />)
+    const rest = screen.getByRole('region', { name: 'No place named' })
+    expect(rest.textContent).not.toContain('several countries')
+    expect(rest.textContent).toContain('3 sources that name no country often enough to be about one')
   })
 
   it('uses plain words, not the system’s internal ones', () => {

@@ -216,6 +216,28 @@ function CoverageChip({ group }: { group: AnswerGroup }) {
   )
 }
 
+/**
+ * What the unplaced group holds, in a reader's words: sources about no country, sources about
+ * several whose matching passages name none of them (`B-168`), and sources not yet checked.
+ */
+function unplacedNote(group: AnswerGroup): string {
+  const several = group.several_places ?? 0
+  const unexamined = group.unexamined
+  const none = group.sources - several - unexamined
+  const parts: string[] = []
+  if (none > 0)
+    parts.push(
+      `${plural(none, 'source')} that ${none === 1 ? 'names' : 'name'} no country often enough to be about one`,
+    )
+  if (several > 0)
+    parts.push(`${plural(several, 'source')} about several countries, in passages that name none of them`)
+  if (unexamined > 0) parts.push(`${plural(unexamined, 'source')} not yet checked for places`)
+  if (parts.length === 0) return 'Sources that name no country often enough to be about one.'
+  const last = parts.pop()!
+  const text = parts.length ? `${parts.join(', ')} and ${last}` : last
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`
+}
+
 function GroupSection({
   group,
   answer,
@@ -247,12 +269,7 @@ function GroupSection({
         </div>
         <p className="font-mono text-[10.5px] text-text-faint">{countLine(group)}</p>
         {thin ? <p className="text-[12.5px] text-text-muted">{thinReason(group, answer)}</p> : null}
-        {!placed ? (
-          <p className="text-[12.5px] text-text-muted">
-            Sources that name no country often enough to be about one
-            {group.unexamined > 0 ? `, and ${plural(group.unexamined, 'source')} not yet checked for places` : ''}.
-          </p>
-        ) : null}
+        {!placed ? <p className="text-[12.5px] text-text-muted">{unplacedNote(group)}</p> : null}
       </header>
 
       <ol className="divide-y divide-line/60">

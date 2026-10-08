@@ -48,6 +48,9 @@ class AnswerGroupRead(BaseModel):
     items: list[AnswerItemRead]
     #: For the unplaced group: sources never examined for places.
     unexamined: int = 0
+    #: For the unplaced group: sources about several countries whose matching passages
+    #: name none of them.
+    several_places: int = 0
 
 
 class AnswerRead(BaseModel):

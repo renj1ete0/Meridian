@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from typing import Literal
 
 from .placenames import country_of, display_name
@@ -92,6 +92,8 @@ class AnswerGroup:
     items: list[AnswerItem]
     #: Unplaced only: how many of its sources were never examined for places.
     unexamined: int = 0
+    #: Unplaced only: sources about several countries whose matching passages name none.
+    several_places: int = 0
 
 
 def coverage_of(tiers_by_publisher: Mapping[str, Iterable[str]]) -> Coverage:
@@ -176,13 +178,13 @@ def lead_items(items: Sequence[AnswerItem], top: int) -> list[AnswerItem]:
 def _group(
     code: str | None,
     name: str,
-    source_ids: Iterable[int],
-    best: Mapping[int, SearchHit],
+    entries: Iterable[tuple[int, SearchHit]],
     counts: Mapping[int, int],
     top: int,
     unexamined: int = 0,
+    several_places: int = 0,
 ) -> AnswerGroup:
-    items = [_item(best[sid], counts[sid]) for sid in source_ids]
+    items = [_item(shown, counts[sid]) for sid, shown in entries]
     tiers_by_publisher: dict[str, set[str]] = {}
     tier_mix: dict[str, int] = {}
     for item in items:
@@ -199,6 +201,7 @@ def _group(
         coverage=coverage_of(tiers_by_publisher),
         items=lead_items(items, top),
         unexamined=unexamined,
+        several_places=several_places,
     )
 
 
@@ -220,39 +223,74 @@ def leading_topics(hits: Iterable[SearchHit], n: int = 3) -> list[str]:
 
 
 def group_hits(
-    hits: Sequence[SearchHit], *, top: int = DEFAULT_TOP
+    hits: Sequence[SearchHit],
+    *,
+    top: int = DEFAULT_TOP,
+    named: Callable[[str], Collection[str]] | None = None,
 ) -> tuple[list[AnswerGroup], AnswerGroup | None]:
     """Group one search's hits by country; return the groups and the unplaced.
 
-    Groups are ordered strong first, then by independent publishers, then by
-    sources, then by name — the order a reader scanning for where the evidence
-    is would want. ``unplaced`` is None when every hit's source has a place.
+    ``named`` gives the countries a passage's text names. With it, a source about several
+    countries counts towards one only through a matching passage that names it, which then
+    stands for the source there; a source none of whose passages names any goes unplaced.
+    Groups are ordered strong first, then by independent publishers, then by sources, then
+    by name. ``unplaced`` is None when every source has a place. See
+    docs/features/search.md#the-answer-page.
     """
     best, counts = _best_per_source(hits)
+    of_source: dict[int, list[SearchHit]] = {}
+    for hit in hits:
+        of_source.setdefault(hit.source_id, []).append(hit)
+    names: dict[int, Collection[str]] = {}
 
-    by_country: dict[str, list[int]] = {}
-    unplaced: list[int] = []
+    def names_in(hit: SearchHit) -> Collection[str]:
+        if hit.chunk_id not in names:
+            names[hit.chunk_id] = named(hit.text) if named is not None else ()
+        return names[hit.chunk_id]
+
+    by_country: dict[str, list[tuple[int, SearchHit]]] = {}
+    unplaced: list[tuple[int, SearchHit]] = []
     unexamined = 0
+    several = 0
     # Walk sources in best-score order, so each group's source list starts in
     # search order before `lead_items` re-weighs it.
     for sid in sorted(best, key=lambda s: (-best[s].score, s)):
         countries = countries_of(best[sid].places)
         if not countries:
-            unplaced.append(sid)
+            unplaced.append((sid, best[sid]))
             if best[sid].places is None:
                 unexamined += 1
             continue
+        if named is None or len(countries) == 1:
+            for country in countries:
+                by_country.setdefault(country, []).append((sid, best[sid]))
+            continue
+        placed = False
         for country in countries:
-            by_country.setdefault(country, []).append(sid)
+            naming = [h for h in of_source[sid] if country in names_in(h)]
+            if naming:
+                by_country.setdefault(country, []).append((sid, max(naming, key=_shown_key)))
+                placed = True
+        if not placed:
+            unplaced.append((sid, best[sid]))
+            several += 1
 
     groups = [
-        _group(code, display_name(code), sids, best, counts, top)
-        for code, sids in by_country.items()
+        _group(code, display_name(code), entries, counts, top)
+        for code, entries in by_country.items()
     ]
     groups.sort(key=lambda g: (g.coverage != "strong", -g.publishers, -g.sources, g.name))
 
     rest = (
-        _group(None, "No place named", unplaced, best, counts, top, unexamined=unexamined)
+        _group(
+            None,
+            "No place named",
+            unplaced,
+            counts,
+            top,
+            unexamined=unexamined,
+            several_places=several,
+        )
         if unplaced
         else None
     )

@@ -54,6 +54,8 @@ export interface AnswerGroup {
   coverage: Coverage
   items: AnswerItem[]
   unexamined: number
+  /** Unplaced only: sources about several countries whose matching passages name none. */
+  several_places: number
 }
 
 export const ANSWER_GROUP_FIELDS = [
@@ -66,6 +68,7 @@ export const ANSWER_GROUP_FIELDS = [
   'coverage',
   'items',
   'unexamined',
+  'several_places',
 ] as const
 
 /** Mirrors `AnswerRead`. */

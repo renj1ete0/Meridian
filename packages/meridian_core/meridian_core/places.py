@@ -253,6 +253,12 @@ def count_mentions(text: str, vocab: Vocabulary) -> Mentions:
     return out
 
 
+def countries_named(text: str, vocab: Vocabulary) -> frozenset[str]:
+    """The countries ``text`` names, by place name or jurisdictional term; cities fold in."""
+    found = count_mentions(text, vocab)
+    return frozenset(country_of(str(code)).upper() for code in (*found.names, *found.gazetteer))
+
+
 # ---------------------------------------------------------------------------
 # The other signals
 # ---------------------------------------------------------------------------

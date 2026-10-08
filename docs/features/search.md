@@ -242,10 +242,18 @@ their head. `answer.py` does that grouping mechanically over one search's candid
 the page shows where the evidence is, how much there is, and where it is thin. No model is
 called and nothing is summarised: every item is a passage a source actually contains.
 
-- **Grouping is by country.** A hit counts towards every country its source is tagged with,
-  and a city rolls up into its country, so a source about two cities in one country is one
-  source for it. Hits with no place are split into sources examined and found about no place,
-  and sources never examined, two different facts.
+- **Grouping is by country.** A source about one country counts towards it, whichever of its
+  passages matched, and a city rolls up into its country, so a source about two cities in one
+  country is one source for it. A source about **several** countries counts towards one only
+  through a matching passage that names it (a place name, or a gazetteer term with that
+  jurisdiction), and that passage stands for it there (`B-168`). Places are tagged per
+  document, so a market report naming six countries carries all six; on 2026-10-08, across
+  eight questions, the passage shown named the country it was filed under in only a quarter of
+  such placements, and three in five came from passages that named none of them. A source
+  whose matching passages name none of its countries goes to the unplaced group, counted as
+  about several places. The unplaced group so states three facts: sources examined and found
+  about no place, sources about several whose passages here name none, and sources never
+  examined.
 - **One item per source.** A document's best-scoring passage stands for it, with how many of
   its passages matched. A group of five items is five documents.
 - **Coverage is a count, not a verdict on credibility** (design-system.md §4).

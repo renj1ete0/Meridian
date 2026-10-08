@@ -116,6 +116,56 @@ def test_a_source_about_two_countries_counts_in_both() -> None:
     assert sorted(g.code for g in groups) == ["DE", "FR"]
 
 
+def names_from(text: str) -> frozenset[str]:
+    """A stand-in for the place vocabulary: upper-case words that are two letters long."""
+    return frozenset(
+        word for word in text.replace(".", " ").split() if len(word) == 2 and word.isupper()
+    )
+
+
+def test_a_source_about_several_countries_counts_only_where_a_passage_names_one() -> None:
+    """`B-168`: a market report tagged with six countries is not evidence about each."""
+    generic = hit(1, score=0.9, places=["DE", "FR", "JP"], text="Shuttles slowed in mixed traffic.")
+    about_de = hit(1, score=0.5, places=["DE", "FR", "JP"], text=BODY + " In DE they ran daily.")
+    groups, rest = group_hits([generic, about_de], named=names_from)
+    assert [g.code for g in groups] == ["DE"]
+    item = groups[0].items[0]
+    assert item.chunk_id == about_de.chunk_id, "the passage naming the country stands for it"
+    assert item.passages == 2
+    assert rest is None
+
+
+def test_each_country_shows_the_passage_that_names_it() -> None:
+    de = hit(1, score=0.7, places=["DE", "FR"], text=BODY + " DE")
+    fr = hit(1, score=0.6, places=["DE", "FR"], text=BODY + " FR")
+    groups, _ = group_hits([de, fr], named=names_from)
+    shown = {g.code: g.items[0].chunk_id for g in groups}
+    assert shown == {"DE": de.chunk_id, "FR": fr.chunk_id}
+
+
+def test_a_several_country_source_naming_none_goes_unplaced_and_is_counted() -> None:
+    generic = hit(1, places=["DE", "FR"], text=BODY)
+    nowhere = hit(2, places=[])
+    unexamined = hit(3, places=None)
+    groups, rest = group_hits([generic, nowhere, unexamined], named=names_from)
+    assert groups == []
+    assert rest is not None
+    assert rest.sources == 3
+    assert (rest.several_places, rest.unexamined) == (1, 1)
+
+
+def test_a_one_country_source_needs_no_naming_passage() -> None:
+    """A page about one country is evidence about it whether or not this passage says so."""
+    groups, _ = group_hits([hit(1, places=["DEBER", "DE"], text=BODY)], named=names_from)
+    assert [g.code for g in groups] == ["DE"]
+
+
+def test_without_a_vocabulary_every_tagged_country_counts() -> None:
+    groups, rest = group_hits([hit(1, places=["DE", "FR"], text=BODY)])
+    assert sorted(g.code for g in groups) == ["DE", "FR"]
+    assert rest is None
+
+
 def test_unplaced_separates_never_examined_from_about_nowhere() -> None:
     groups, rest = group_hits([hit(1, places=[]), hit(2, places=None), hit(3, places=None)])
     assert groups == []
