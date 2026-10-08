@@ -77,6 +77,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.164.10] — 2026-10-08
+
+### Fixed
+
+- `B-166`: an "as of" time could be labelled `GMT+7:59` in a GMT+8 zone. The web's zone offset
+  compared the wall clock, read to the minute, with the exact instant, so any time past 30
+  seconds lost a minute: seen on Gaps, and the same label is on Growth, Crawl health and
+  Assistant access. A test now compares every second of a minute, in six zones, with `Intl`'s
+  own offset name
+
 ## [0.164.9] — 2026-10-08
 
 ### Changed

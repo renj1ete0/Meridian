@@ -1654,6 +1654,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       that remain). `GET /api/explore/growth` (kept per window and filter), `corpus_growth`
       (MCP), and `/growth` in its own top-bar section, opening on 30 days, filterable by topic,
       with a table view. Checked against the mock with a built page and canned data
+- [x] `B-166` **A GMT+8 zone labelled GMT+7:59** — `v0.164.10`. Seen on Gaps' "Checked" line
+      in a screenshot pass. `zoneOffsetMinutes` rounded a seconds-long difference; every test
+      instant had been a whole minute. Now held against `Intl`'s `shortOffset` at every second
 - [x] `B-165` **Dead code in the title fallback** — `v0.164.9`. An unreachable older copy of
       `title_from_text`'s loop sat after its return; removed. Found checking whether untitled
       sources (9%) could be titled: their openings are mostly forms and fragments, so not

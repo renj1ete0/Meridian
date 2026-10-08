@@ -41,6 +41,35 @@ describe('the display zone (B-145, ADR 0009)', () => {
     expect(zoneLabel('2026-01-15T12:00:00Z', 'America/New_York')).toBe('GMT-5')
   })
 
+  it('labels an instant the way Intl does, whatever its seconds (B-166)', () => {
+    // Every earlier case was a whole minute; a real "as of" never is.
+    const zones = [
+      'Asia/Singapore',
+      'Asia/Kathmandu',
+      'UTC',
+      'America/New_York',
+      'America/St_Johns',
+      'Australia/Adelaide',
+    ]
+    const intl = (at: Date, inZone: string) =>
+      new Intl.DateTimeFormat('en-US', { timeZone: inZone, timeZoneName: 'shortOffset' })
+        .formatToParts(at)
+        .find((part) => part.type === 'timeZoneName')!
+        .value.replace(/^GMT\+0$/, 'GMT') // ours says plain GMT
+    for (const inZone of zones) {
+      for (let second = 0; second < 60; second += 1) {
+        const at = new Date(Date.UTC(2026, 9, 8, 12, 34, second, (second * 37) % 1000))
+        expect(zoneLabel(at, inZone), `${inZone} at :${second}`).toBe(intl(at, inZone))
+      }
+    }
+    expect(zoneLabel('2026-10-08T12:34:45.900Z', 'Asia/Singapore')).toBe('GMT+8')
+  })
+
+  it('finds the start of a day in the zone from an instant with seconds too', () => {
+    expect(dayOf('2026-10-04T15:59:59.999Z')).toBe('2026-10-04')
+    expect(dayOf('2026-10-04T16:00:00.000Z')).toBe('2026-10-05')
+  })
+
   it('puts the start of a picked day at midnight in the zone', () => {
     expect(startOfDayIso('2026-10-05', 'Asia/Singapore')).toBe('2026-10-04T16:00:00Z')
     expect(startOfDayIso('2026-10-05', 'UTC')).toBe('2026-10-05T00:00:00Z')

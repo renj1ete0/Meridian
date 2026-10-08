@@ -123,5 +123,8 @@ export function startOfDayIso(day: string, inZone: string = zone): string {
 
 function zoneOffsetMinutes(at: Date, inZone: string): number {
   const p = partsOf(at, inZone)
-  return Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - at.getTime()) / 60_000)
+  // The wall clock is read to the minute, so compare it with the instant cut to the minute:
+  // against the exact instant, any time past :30 seconds labelled GMT+8 as GMT+7:59.
+  const minute = Math.floor(at.getTime() / 60_000) * 60_000
+  return (Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - minute) / 60_000
 }
