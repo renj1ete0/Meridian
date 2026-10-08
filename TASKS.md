@@ -31,8 +31,12 @@ against a real Postgres, 1053 frontend.
 > `B-167` cross-encoder reranking (clear gain, 20–35 s a question on CPU). Relay synthesis: 4
 > batches, 40 relations, 15 attribute values. robots.txt "unreachable" in run 19 was 441
 > zero-cost cache refusals on 127 hosts, 5 of which ever served a page: dead hosts, not what
-> slowed the run. **Next:** `B-163` (with `B-171` and a per-source cap per batch to measure),
-> run 19's yield, within-host drift, `B-131`/`B-135` on the server.
+> slowed the run. Run 19's yield a day on: 230 on-topic new pages in the hour (23% of those
+> examined; runs 17–18: 607 at 30%, 593 at 35%), 28% still unexamined behind the CPU embedding
+> backlog; one proven host supplied 18% of its new pages at 21% on a topic, the within-host
+> drift `B-155` left open. **Next:** within-host drift (a recency window on a host's followed
+> record, measured by a loop run), `B-163` (with `B-171` and a per-source cap per batch),
+> `B-131`/`B-135` on the server.
 
 > **2026-10-07 (night) — `v0.164.7`, pushed to GitHub (GHCR held), all stacks stopped.** Built today:
 > `D-01`, `B-147`–`B-149`, `B-53` (ADR 0014), `B-99` (ADR 0013), `B-150` link vouches (ADR 0015),
