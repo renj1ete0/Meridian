@@ -175,6 +175,18 @@ argue, which carry claims; hence the threshold. The mark still moves over what w
 (`Batch.read_through`), so a reference list at a batch's end is not read again, and the rule is
 a pure function of the text, so a resumed run re-pulls the same batch.
 
+**Three more shapes** (`B-204`, from the relay agent's reading of real batches): a bulleted
+"- Surname (year) Title" list with no initials (only as a list item: in prose "Surname (year)
+found…" argues); a line that is only where an entry is found, a DOI, a bare link or "Retrieved
+from …", which is what an entry split across passages leaves at the top of the next one; and an
+abbreviation glossary ("ADS - Automated driving system"), which defines terms and states
+nothing. A glossary line needs an all-capitals term and a definition with lowercase words and
+no requirement's modal, so a column of codes and a list of "FSG1: the system must …" are read
+as what they are. Measured on two random samples of 20,000 stored passages, about 0.1% more
+qualify, nearly all bibliographies, endnote lists and abbreviation sections. Because the rule
+picks what `pull` puts in a batch, a run deferred on a relay prompt before this change can
+re-pull a different batch and write a new prompt; an answer filed under the old one is not used.
+
 ### Resuming
 
 A run that defers (no model answered) stays unfinished at that stage, and the next wake resumes

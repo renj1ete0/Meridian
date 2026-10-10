@@ -1803,6 +1803,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       for a note, while "Cite" on a node copies)
 - [x] `B-180` `v0.166.22`; editing notes is `B-201`. **Manage views and notes** — no rename/delete for views (the API has both), notes
       cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
+- [x] `B-204` `v0.167.4`. **Reference filter misses** (relay agent's finding) — bulleted
+      author-year lists without initials, entry tails split across passages, abbreviation glossaries
 - [x] `B-202` `v0.167.0`; a pair kept apart is not yet remembered by resolution. **Decide a possible duplicate** — most of the bell is `merge_adjudication`, and no
       screen decides one: show both nodes and their evidence side by side, merge or keep apart
       (a merge is reversible: the old id redirects)

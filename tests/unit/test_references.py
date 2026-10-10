@@ -71,3 +71,54 @@ def test_prose_lines_with_numbers_are_not_entries() -> None:
         "Fares were $2.50, the same as the fixed-route system.",
     ]:
         assert not is_entry(line), line
+
+
+# --------------------------------------------------------------------------
+# What the relay agent found the filter missing (`B-204`)
+# --------------------------------------------------------------------------
+
+LISTED = """- Banister (1997) Reducing the need to travel. Environment and Planning B.
+- Smith J and Doe K (2019) Streets for people. Urban Studies.
+- Wang et al. (2021). A study of how things are measured.
+- Brown & Jensen (2020) Walking and its correlates."""
+
+SPLIT_ENTRY = """Journal of Transport Geography, 33, 42-53.
+https://doi.org/10.1016/j.jtrangeo.2013.09.004
+Retrieved from https://example.org/report.pdf
+Huang, H. F., & Cynecki, M. J. (2001). The effects of calming measures on behaviour."""
+
+GLOSSARY_LIST = """9. Abbreviations
+AASHTO - American Association of State Highway and Transportation Officials
+ADS - Automated driving system
+ODD — Operational design domain
+V2X: vehicle-to-everything communication"""
+
+
+def test_a_bulleted_author_year_list_without_initials_is_a_reference_list() -> None:
+    assert is_reference_list(LISTED)
+
+
+def test_the_tail_of_an_entry_split_across_passages_is_part_of_the_list() -> None:
+    assert is_reference_list(SPLIT_ENTRY)
+
+
+def test_an_abbreviation_glossary_is_left_out_like_a_list() -> None:
+    assert is_reference_list(GLOSSARY_LIST)
+
+
+def test_prose_that_names_its_sources_is_not_a_list() -> None:
+    """The rejections: an author-year sentence argues, a requirement states, a code column
+    and a note are not definitions."""
+    prose = (
+        "Banister (1997) found that trips fell when services moved closer.\n"
+        "Smith and Doe (2019) reported the same effect in three cities.\n"
+        "Wang et al. (2021) measured it over a decade, with a smaller effect."
+    )
+    assert not is_reference_list(prose)
+    requirements = "\n".join(
+        f"FSG{i}: The system must avoid an unintended increase in torque." for i in range(5)
+    )
+    assert not is_reference_list(requirements)
+    codes = "\n".join(f"FY20{i} - FY20{i + 3}" for i in range(10, 20))
+    assert not is_reference_list(codes)
+    assert not is_entry("Note: the figures are provisional and may change.")

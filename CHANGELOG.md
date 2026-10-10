@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.167.4] — 2026-10-10
+
+### Fixed
+
+- `B-204`: synthesis leaves out three more kinds of non-claim passage: bulleted author-year
+  lists without initials, the tails of entries split across passages (DOIs, links, "Retrieved
+  from"), and abbreviation glossaries
+
 ## [0.167.3] — 2026-10-10
 
 ### Added
