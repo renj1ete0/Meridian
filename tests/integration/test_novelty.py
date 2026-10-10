@@ -16,6 +16,7 @@ threshold lives. So the vectors here are built at a chosen angle:
 from __future__ import annotations
 
 import math
+import random
 import uuid
 from contextlib import asynccontextmanager
 
@@ -57,6 +58,15 @@ def at(similarity: float, axis: int, *, base: int = 0) -> list[float]:
 
 
 BASE = at(1.0, 1)
+
+
+def a_subspace() -> int:
+    """A base axis of this test's own, so its vectors sit away from every other test's.
+
+    Tests that reuse one vector leave its deleted copies in the HNSW index until a vacuum; on
+    a small fresh database (CI) they can fill the scan, and a live twin is missed.
+    """
+    return random.randrange(600, EMBEDDING_DIM)
 
 
 @pytest.fixture
@@ -423,8 +433,11 @@ async def test_a_source_made_of_duplicates_becomes_junk(session_for, url, cleanu
     """§5.4's retention tier is the gate's only source-level act — and it is a
     mark, not a deletion. `P1-31`'s sweep is what spends it."""
     sess = await session_for("rw")
-    _, original = await a_source(sess, url, [BASE, at(0.5, 2)])
-    mirror_source, mirror = await a_source(sess, url + "b", [BASE, at(0.5, 2)])
+    own = a_subspace()
+    _, original = await a_source(sess, url, [at(1.0, 1, base=own), at(0.5, 2, base=own)])
+    mirror_source, mirror = await a_source(
+        sess, url + "b", [at(1.0, 1, base=own), at(0.5, 2, base=own)]
+    )
 
     await gate_for(sess, original + mirror).run_once()
     await sess.refresh(mirror_source)
@@ -435,8 +448,11 @@ async def test_a_source_made_of_duplicates_becomes_junk(session_for, url, cleanu
 
 async def test_the_original_keeps_its_retention_tier(session_for, url, cleanup) -> None:
     sess = await session_for("rw")
-    original_source, original = await a_source(sess, url, [BASE, at(0.5, 2)])
-    _, mirror = await a_source(sess, url + "b", [BASE, at(0.5, 2)])
+    own = a_subspace()
+    original_source, original = await a_source(
+        sess, url, [at(1.0, 1, base=own), at(0.5, 2, base=own)]
+    )
+    _, mirror = await a_source(sess, url + "b", [at(1.0, 1, base=own), at(0.5, 2, base=own)])
 
     await gate_for(sess, original + mirror).run_once()
     await sess.refresh(original_source)
@@ -454,9 +470,10 @@ async def test_a_primary_source_is_never_demoted(session_for, url, cleanup) -> N
     reorganised away is a citation nobody can ever check again.
     """
     sess = await session_for("rw")
-    _, original = await a_source(sess, url, [BASE, at(0.5, 2)])
+    own = a_subspace()
+    _, original = await a_source(sess, url, [at(1.0, 1, base=own), at(0.5, 2, base=own)])
     mirror_source, mirror = await a_source(
-        sess, url + "b", [BASE, at(0.5, 2)], retention_tier="primary"
+        sess, url + "b", [at(1.0, 1, base=own), at(0.5, 2, base=own)], retention_tier="primary"
     )
 
     await gate_for(sess, original + mirror).run_once()
