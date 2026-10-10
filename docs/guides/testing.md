@@ -77,8 +77,11 @@ depend on which arm came first, ranks an id first in every arm highest and never
 for another arm; the per-source cap fills the page from what it was given and lets no source
 past the cap while another's hits wait; the reference-list verdict does not depend on line
 order or blank lines. `tests/unit/test_chunking_tables.py` generates tables and unbroken runs
-for the chunker (`B-191`). `answer.group_hits` is not covered yet: its several-country rules
-need stating carefully first.
+for the chunker (`B-191`). `web/tests/readable-properties.test.ts` does the same for the
+display's `readable()` with fast-check: it never throws or makes a passage longer, leaves plain
+prose as it was, keeps a link's words and drops its address, and settles (reading its output
+again changes nothing). `answer.group_hits` is not covered yet: its several-country rules need
+stating carefully first.
 
 ## Continuous integration (`Q-03`)
 
@@ -90,5 +93,5 @@ running from this machine (no `gh` here): check the first run in the repository'
 
 ## Still to do
 
-- Property tests for `answer.group_hits`, and the web's `readable()` with fast-check.
+- Property tests for `answer.group_hits`.
 - Raise the coverage floors only after mutation scores say the covered code is actually checked.

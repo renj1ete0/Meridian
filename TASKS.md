@@ -1741,7 +1741,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `Q-02` 2026-10-10: Python ~78%, web 72%, first survivors turned into tests. **Mutation testing** — mutmut and StrykerJS configured, neither trustworthy yet:
       mutmut's tests import the installed package instead of its mutated copy; Stryker's scores
       are implausibly low on well-tested modules. The guide says what to try next
-- [~] `Q-03` 2026-10-10: property tests for fuse, the cap and the reference filter; CI written, first run not yet seen; `group_hits` and the web's `readable()` still to do. **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,
+- [~] `Q-03` 2026-10-10: property tests for fuse, the cap and the reference filter; CI written, first run not yet seen; the web's `readable()` with fast-check; `group_hits` still to do. **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,
       group_hits, is_reference_list and readable() first; then a CI workflow for lint and tests
 - [ ] `B-167` **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
       ([search.md#reranking](docs/features/search.md)): `bge-reranker-v2-m3` over the fused top
