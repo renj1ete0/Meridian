@@ -213,7 +213,31 @@ def _split_rows(
     # the target nearly doubled the passages a converted spreadsheet makes, each one to embed.
     # See docs/features/extraction.md#chunking.
     pieces = [r for r in (_trim(text, a, b) for a, b in rows) if r]
-    return _pack_pieces(text, pieces, maximum, maximum)
+    # A row of nothing but empty or `NaN` cells is a converted spreadsheet's padding (`B-195`):
+    # it is left out, and the rows either side are packed apart, so every passage stays a slice.
+    out: list[tuple[int, int]] = []
+    run: list[tuple[int, int]] = []
+    for piece in pieces:
+        if _empty_row(text[piece[0] : piece[1]]):
+            out.extend(_pack_pieces(text, run, maximum, maximum))
+            run = []
+        else:
+            run.append(piece)
+    out.extend(_pack_pieces(text, run, maximum, maximum))
+    return out
+
+
+#: A cell that holds nothing: empty, or how a spreadsheet converter writes a missing value.
+_EMPTY_CELL = {"", "nan", "none", "null", "-"}
+
+
+def _empty_row(line: str) -> bool:
+    """Whether a table row has two or more cells and every one is empty."""
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return False
+    cells = stripped.strip("|").split("|")
+    return len(cells) >= 2 and all(cell.strip().lower() in _EMPTY_CELL for cell in cells)
 
 
 def _pack_pieces(

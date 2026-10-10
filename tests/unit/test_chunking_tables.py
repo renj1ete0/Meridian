@@ -98,3 +98,30 @@ def test_prose_with_pipes_is_not_mistaken_for_a_table() -> None:
     chunks = chunk_text(text)
     assert_slices(text, chunks)
     assert all(c.text.rstrip().endswith(".") for c in chunks[:-1])
+
+
+def test_rows_of_nothing_are_left_out_and_the_rest_stays_a_slice() -> None:
+    """`B-195`: converted spreadsheets pad with rows of `NaN`; thousands of passages held runs
+    of them, which embed as noise and cite nothing."""
+    filled = [f"| r{i} | {i} | {i * 2} |" for i in range(80)]
+    padding = ["| NaN | NaN | nan |", "|  |  |  |"] * 60
+    text = "| a | b | c |\n|---|---|---|\n" + "\n".join(filled[:40] + padding + filled[40:])
+    chunks = chunk_text(text)
+    assert_slices(text, chunks)
+    assert not any("NaN" in c.text or "nan |" in c.text for c in chunks)
+    assert all(len(c) <= MAX_CHARS for c in chunks)
+    # Nothing that held a value was lost.
+    assert all(any(row in c.text for c in chunks) for row in filled)
+
+
+def test_a_continued_table_carries_its_header_into_the_embedding_view_only() -> None:
+    from meridian_core.embedtext import continues_table, table_head, with_table_head
+
+    first = "| Region | Trips |\n|---|---|\n| North | 12 |"
+    rest = "| South | 9 |\n| East | 4 |"
+    assert table_head(first) == "| Region | Trips |"
+    assert table_head(rest) is None
+    assert continues_table(rest) and not continues_table(first)
+    assert not continues_table("Prose, then | a pipe.")
+    assert with_table_head(rest, "| Region | Trips |").startswith("| Region | Trips |\n| South")
+    assert with_table_head(rest, None) == rest

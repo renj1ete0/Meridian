@@ -1853,7 +1853,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-191` `v0.166.14`: rows and whitespace; header carry and NaN rows left, see `B-195`. **Tables cut mid-row and headerless** — 4.6% of chunks sit at the 2,000-character cap
       (80% of spreadsheet chunks); a pipe table is one "paragraph" and is cut mid-number. Split at
       rows, carry the header into the embedding view, back the hard cut off to whitespace
-- [ ] `B-195` **Table passages without their header; NaN rows** — a continuation passage of a
+- [x] `B-195` `v0.167.2`; the re-cut of stored tables is still the operator's call. **Table passages without their header; NaN rows** — a continuation passage of a
       table has no header row, so its cells cannot be read as columns; carry the header (and the
       title) into the embedding view, not the stored text. Converted spreadsheets emit whole rows
       of `NaN`; leave them out as furniture spans. Then re-cut the table-heavy sources

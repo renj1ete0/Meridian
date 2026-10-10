@@ -73,3 +73,35 @@ def link_text_share(text: str) -> float:
     if not visible.strip():
         return 1.0
     return min(1.0, labels / len(visible))
+
+
+#: A Markdown table's separator row: `|---|:--:|`.
+_SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
+
+
+def table_head(text: str) -> str | None:
+    """The header row of a pipe table in ``text``, the row above its separator; or None."""
+    lines = text.split("\n")
+    for index, line in enumerate(lines[1:], start=1):
+        above = lines[index - 1].strip()
+        if _SEPARATOR.match(line) and above.startswith("|"):
+            return above
+    return None
+
+
+def continues_table(text: str) -> bool:
+    """Whether ``text`` is rows of a table whose header is in an earlier passage (`B-195`).
+
+    A table cut between rows (`B-191`) leaves every passage after the first without the row
+    that names its columns: the numbers are there and what they measure is not.
+    """
+    first = next((line.strip() for line in text.split("\n") if line.strip()), "")
+    return first.startswith("|") and table_head(text) is None
+
+
+def with_table_head(view: str, head: str | None) -> str:
+    """The view with its table's header row in front, when it continues a table.
+
+    The view only, never the stored text: a passage stays a slice of its source.
+    """
+    return f"{head}\n{view}" if head else view

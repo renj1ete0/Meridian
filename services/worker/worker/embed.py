@@ -26,9 +26,10 @@ from meridian_core.chunks import (
     chunks_without_embeddings,
     embedding_backlog,
     store_embeddings,
+    table_heads,
 )
 from meridian_core.db import dispose_engines, session
-from meridian_core.embedtext import VIEW_VERSION, embedding_view
+from meridian_core.embedtext import VIEW_VERSION, embedding_view, with_table_head
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .embeddings import EmbeddingError
@@ -139,8 +140,16 @@ class Backfill:
                 if not chunks:
                     break
                 # Read out of the ORM before the model runs, so no connection is held
-                # across encoding. The view, not the stored text (`B-49`).
-                batch = [(chunk.chunk_id, embedding_view(chunk.text)) for chunk in chunks]
+                # across encoding. The view, not the stored text (`B-49`), with a continued
+                # table's header row in front (`B-195`).
+                heads = await table_heads(sess, chunks)
+                batch = [
+                    (
+                        chunk.chunk_id,
+                        with_table_head(embedding_view(chunk.text), heads.get(chunk.chunk_id)),
+                    )
+                    for chunk in chunks
+                ]
 
             if tier == NEWEST_FIRST_TIER:
                 after_id = batch[0][0]

@@ -18,6 +18,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from .embedtext import continues_table, table_head
 from .logging import get_logger
 from .models import Chunk, Source
 from .storable import storable
@@ -394,3 +395,37 @@ async def embedding_backlog(sess: AsyncSession, *, valuable_only: bool = False) 
             or_(embed_tier("first"), embed_tier("then"))
         )
     return (await sess.scalar(stmt)) or 0
+
+
+#: How far back a continued table's header is looked for, in passages of the same source.
+TABLE_HEAD_LOOKBACK = 40
+
+
+async def table_heads(sess: AsyncSession, chunks: Sequence[Chunk]) -> dict[int, str]:
+    """For passages that continue a table, the header row from where the table began (`B-195`).
+
+    Walks back through the same source's live passages, newest first, and stops at the first
+    that holds the header, or at one that is not part of a table at all (the table ended).
+    """
+    heads: dict[int, str] = {}
+    for chunk in chunks:
+        if not continues_table(chunk.text):
+            continue
+        earlier = await sess.scalars(
+            select(Chunk.text)
+            .where(
+                Chunk.source_id == chunk.source_id,
+                Chunk.chunk_index < chunk.chunk_index,
+                Chunk.superseded_at.is_(None),
+            )
+            .order_by(Chunk.chunk_index.desc())
+            .limit(TABLE_HEAD_LOOKBACK)
+        )
+        for text in earlier:
+            head = table_head(text)
+            if head:
+                heads[chunk.chunk_id] = head
+                break
+            if "|" not in text:
+                break
+    return heads

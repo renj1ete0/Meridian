@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.167.2] — 2026-10-10
+
+### Fixed
+
+- `B-195`: a passage that continues a table is embedded with the table's header row (the
+  stored text is unchanged), and split tables leave out rows of only empty or `NaN` cells.
+  New embeddings and new text; stored passages change on a re-cut
+
 ## [0.167.1] — 2026-10-10
 
 ### Fixed
