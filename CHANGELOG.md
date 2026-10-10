@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.20] — 2026-10-10
+
+### Fixed
+
+- `B-187`: Growth's tiles say "all since <first day>" when the window holds every count, instead
+  of repeating the total as "+N"
+
 ## [0.166.19] — 2026-10-10
 
 ### Added

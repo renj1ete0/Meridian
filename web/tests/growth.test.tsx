@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { sectionOf } from '../src/App'
-import { DailyChart, GrowthBody } from '../src/explore/GrowthPage'
+import { DailyChart, GrowthBody, windowNote } from '../src/explore/GrowthPage'
 import { parseRoute } from '../src/lib/route'
 import {
   growthQuery,
@@ -140,5 +140,15 @@ describe('routing', () => {
     expect(parseRoute('/growth/').name).toBe('growth')
     expect(parseRoute('/growthx').name).toBe('explore')
     expect(sectionOf(parseRoute('/growth'))).toBe('growth')
+  })
+})
+
+describe('a window that holds everything (B-187)', () => {
+  it('says since when, instead of the total twice', () => {
+    expect(windowNote({ total: 91850, in_window: 91850 }, 'in 30 days', '2026-09-11')).toBe('all since 11 Sep')
+    expect(windowNote({ total: 91850, in_window: 1200 }, 'in 30 days', '2026-09-11')).toBe('+1,200 in 30 days')
+    // Nothing yet is not "all since": it is nothing.
+    expect(windowNote({ total: 0, in_window: 0 }, 'in 30 days', '2026-09-11')).toBe('+0 in 30 days')
+    expect(windowNote({ total: 5, in_window: 5 }, 'since the start', null)).toBe('+5 since the start')
   })
 })

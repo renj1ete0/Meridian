@@ -58,3 +58,10 @@ never repaints the others. Past eight topics, a topic is drawn in the neutral "o
 copies, gaps, the "as of" bound, new sites, passages, map history),
 `tests/integration/test_growth_api.py`, `tests/unit/test_api_cache.py`;
 `web/tests/growth.test.tsx`, and the drift checks in `web/tests/api.test.ts`.
+
+
+### A window that holds everything
+
+On a corpus younger than the chosen window every count is new, and the tiles read "+91,850 in
+30 days" beside 91,850. A tile whose window count equals its total now says "all since"
+the first day instead (`B-187`), formatted as a calendar date, not an instant.

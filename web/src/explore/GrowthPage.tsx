@@ -122,14 +122,18 @@ export function GrowthBody({
       <TopicFilter offered={offered} chosen={chosen} onToggle={onToggle} onClear={onClear} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label="Passages on a topic" count={growth.passages} note={span} />
-        <Tile label="Sources kept" count={growth.sources} note={span} />
-        <Tile label="Sites" count={growth.sites} note={`new ${span}`} />
+        <Tile
+          label="Passages on a topic"
+          count={growth.passages}
+          note={windowNote(growth.passages, span, growth.first_day)}
+        />
+        <Tile label="Sources kept" count={growth.sources} note={windowNote(growth.sources, span, growth.first_day)} />
+        <Tile label="Sites" count={growth.sites} note={windowNote(growth.sites, `new ${span}`, growth.first_day)} />
         <Tile
           label="Knowledge graph"
           count={growth.concepts}
           unit="concepts"
-          note={`${n(growth.links.total)} links · +${n(growth.concepts.in_window)} ${span}`}
+          note={`${n(growth.links.total)} links · ${windowNote(growth.concepts, span, growth.first_day)}`}
         />
       </div>
 
@@ -192,6 +196,16 @@ function TopicFilter({
   )
 }
 
+/**
+ * What a tile's window added (`B-187`). On a corpus younger than the window every count is new,
+ * and "+91,850 in 30 days" beside 91,850 says the same number twice; it says since when instead.
+ * The first day is a calendar date, formatted without converting it (`shortDateOf`).
+ */
+export function windowNote(count: GrowthCount, span: string, firstDay: string | null): string {
+  if (count.total > 0 && count.in_window === count.total && firstDay) return `all since ${shortDateOf(firstDay)}`
+  return `+${n(count.in_window)} ${span}`
+}
+
 function Tile({ label, count, note, unit }: { label: string; count: GrowthCount; note: string; unit?: string }) {
   return (
     <div className="flex flex-col gap-2 border border-line bg-surface px-[18px] py-4">
@@ -200,7 +214,7 @@ function Tile({ label, count, note, unit }: { label: string; count: GrowthCount;
         {n(count.total)}
         {unit ? <span className="ml-2 text-[15px] text-text-muted">{unit}</span> : null}
       </span>
-      <span className="font-mono text-[10.5px] text-text-muted">{unit ? note : `+${n(count.in_window)} ${note}`}</span>
+      <span className="font-mono text-[10.5px] text-text-muted">{note}</span>
     </div>
   )
 }
