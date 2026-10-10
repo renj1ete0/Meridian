@@ -90,8 +90,8 @@ are counted as "several places"; strong groups come first.
 `.github/workflows/ci.yml` runs on every push to main: it builds the project's Postgres image
 (pgvector and AGE) and runs it as the dev stack does, applies the migrations, then runs
 `make lint`, the whole Python suite and the web typecheck and tests. The environment is the
-development stack's throwaway values, inline in the workflow. Written 2026-10-10 and not yet seen
-running from this machine (no `gh` here): check the first run in the repository's Actions tab.
+development stack's throwaway values, inline in the workflow. First green run 2026-10-10. Failing
+test names are written as one annotation, readable through the public API without a token.
 
 ## Still to do
 

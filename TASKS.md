@@ -27,8 +27,8 @@ against a real Postgres, 1053 frontend.
 > still a decision), three more reference shapes kept out of synthesis (`B-204`), the answer as
 > a Markdown brief (`B-206`), copy all citations (`B-207`). `Q-02` done (mutation testing works;
 > Python ~78%, web 72%). `Q-03`: property tests (fusion, cap, reference filter, `group_hits`,
-> `readable()`) and CI (`.github/workflows/ci.yml`); the first CI run failed only because the
-> runner's database was not seeded, fixed; **check the latest run in the Actions tab**.
+> `readable()`) and CI (`.github/workflows/ci.yml`), green on GitHub after fixing an unseeded
+> database, two time-zone-dependent web tests and a vector fixture shared across tests.
 > Measured, not adopted: `B-205` (tag only cited passages: −¾ tag tokens, −¼ values).
 > **Resume with:** the CI result; `B-163`/`B-205` with a paid model; `B-192` suspects (PDF
 > `-layout` per page, captions, non-English lexical search); the re-cut of stored tables
@@ -1754,7 +1754,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `Q-02` 2026-10-10: Python ~78%, web 72%, first survivors turned into tests. **Mutation testing** — mutmut and StrykerJS configured, neither trustworthy yet:
       mutmut's tests import the installed package instead of its mutated copy; Stryker's scores
       are implausibly low on well-tested modules. The guide says what to try next
-- [~] `Q-03` 2026-10-10: property tests for fuse, the cap and the reference filter; CI written, first run not yet seen; the web's `readable()` with fast-check; `group_hits`. **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,
+- [x] `Q-03` 2026-10-10: property tests for fuse, the cap and the reference filter; CI green on GitHub (run 38037151019); the web's `readable()` with fast-check; `group_hits`. **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,
       group_hits, is_reference_list and readable() first; then a CI workflow for lint and tests
 - [ ] `B-167` **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
       ([search.md#reranking](docs/features/search.md)): `bge-reranker-v2-m3` over the fused top
