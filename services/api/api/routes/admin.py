@@ -81,6 +81,7 @@ from meridian_core.schemas.chat import ChatAsk, ChatExchangeRead, ChatMessageRea
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
+from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.schemas.queue import QueueTaskRead
 from meridian_core.schemas.settings import DisplaySettingsRead, DisplayZoneEdit
 from meridian_core.schemas.views import SavedViewCreate, SavedViewEdit, SavedViewRead
@@ -683,10 +684,11 @@ async def forget_render_learning(
 async def create_view(body: SavedViewCreate, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
     """Save a filter set under a name.
 
-    The filters are validated against `SearchFilters`, so a view cannot store one the
-    search cannot apply.
+    The filters are validated against what will apply them, so a view cannot store one
+    that would be dropped on reopening: a node view's against the graph's filters, a
+    search view's against `SearchFilters` (`B-193`).
     """
-    _validated_filters(body.filters)
+    _validated_filters(body.filters, node=body.focus_entity_id is not None)
 
     if await sess.scalar(select(SavedView).where(SavedView.name == body.name)):
         raise HTTPException(
@@ -708,13 +710,22 @@ async def create_view(body: SavedViewCreate, _: AdminAllowed, sess: WriteSession
     return SavedViewRead.model_validate(view)
 
 
-def _validated_filters(filters: dict) -> None:
-    """Refuse a filter set the search could not apply.
+def _validated_filters(filters: dict, *, node: bool) -> None:
+    """Refuse a filter set the view's own page could not apply.
 
-    `SearchFilters` is a frozen dataclass, so an unknown key raises `TypeError`
-    and a bad value raises on use — both become a 422 naming the field rather
-    than a view that reopens narrower or wider than it was saved.
+    A node view reopens the graph workspace, so its filters are `GraphFilters`; a search
+    view reopens Find, so its are `SearchFilters` (`B-193`: node views were checked against
+    the search's names and every filtered one was refused). Either way an unknown key is a
+    422 naming it, rather than a view that reopens narrower or wider than it was saved.
     """
+    if node:
+        try:
+            GraphFilters.model_validate(filters)
+        except PydanticValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"Unusable filter set for a node view: {_first_error(exc)}"
+            ) from exc
+        return
     try:
         SearchFilters(**filters)
     except TypeError as exc:
@@ -732,7 +743,8 @@ async def edit_view(
 
     changes = edit.model_dump(exclude_unset=True)
     if "filters" in changes and changes["filters"] is not None:
-        _validated_filters(changes["filters"])
+        focus = changes.get("focus_entity_id", view.focus_entity_id)
+        _validated_filters(changes["filters"], node=focus is not None)
     if "name" in changes:
         clash = await sess.scalar(
             select(SavedView).where(SavedView.name == changes["name"], SavedView.view_id != view_id)

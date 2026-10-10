@@ -419,13 +419,28 @@ export function saveGraphView(
     body: JSON.stringify({
       name,
       focus_entity_id: focus,
-      filters: filtersToRecord(filters),
+      filters: viewRecordOf(filters),
     }),
     ...init,
   })
 }
 
-/** The filters as a saved view stores them. Empty values are left out. */
+/**
+ * The filters as a node view stores them: under `GraphFilters`' names, which the server
+ * validates a node view against (`B-193`). Empty values are left out.
+ */
+export function viewRecordOf(filters: GraphFilterState): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (filters.topics.length) out.topics = filters.topics
+  if (filters.tiers.length) out.tiers = filters.tiers
+  if (filters.publishedFrom) out.published_from = filters.publishedFrom
+  if (filters.publishedTo) out.published_to = filters.publishedTo
+  if (filters.contestedOnly) out.contested_only = true
+  if (filters.attribute) out.attribute = filters.attribute
+  return out
+}
+
+/** The filters as the workspace's URL names them. Empty values are left out. */
 export function filtersToRecord(filters: GraphFilterState): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (filters.topics.length) out.topic = filters.topics

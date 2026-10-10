@@ -29,6 +29,7 @@ import {
   NODE_SEARCH_FIELDS,
   NO_FILTERS,
   filtersToRecord,
+  viewRecordOf,
   getNeighbourhood,
   getPath,
   neighbourhoodQuery,
@@ -36,6 +37,7 @@ import {
   searchNodes,
 } from '../src/explore/graph/api'
 import { ApiError } from '../src/lib/api'
+import { filtersFromRecord } from '../src/explore/graph/filters'
 
 const REPO = join(fileURLToPath(new URL('..', import.meta.url)), '..')
 const SCHEMAS = join(REPO, 'packages/meridian_core/meridian_core/schemas')
@@ -134,10 +136,30 @@ describe('the neighbourhood query', () => {
     }
   })
 
-  it('stores a saved view with the same keys it sends', () => {
+  it('keeps the URL in the keys it sends', () => {
     const filters = { ...NO_FILTERS, tiers: ['press' as const], contestedOnly: true }
     const sent = new Set(new URLSearchParams(neighbourhoodQuery(filters)).keys())
     expect(new Set(Object.keys(filtersToRecord(filters)))).toEqual(sent)
+  })
+
+  it('stores a node view under GraphFilters’ names, which the server checks it against (B-193)', () => {
+    // Read from the model: the URL's names (`topic`, `tier`) were stored once, and the
+    // server refused every filtered node view.
+    const source = readFileSync(join(SCHEMAS, 'graphview.py'), 'utf8')
+    const body = source.slice(source.indexOf('class GraphFilters('), source.indexOf('def narrows_evidence'))
+    const fields = [...body.matchAll(/^ {4}([a-z_]+):/gm)].map((m) => m[1]!).sort()
+    const everything = {
+      topics: ['t'],
+      tiers: ['press' as const],
+      publishedFrom: '2020-01-01',
+      publishedTo: '2021-01-01',
+      contestedOnly: true,
+      attribute: 'a',
+    }
+    expect(Object.keys(viewRecordOf(everything)).sort()).toEqual(fields)
+    // And it reads back unchanged, as views saved before (URL names) still do.
+    expect(filtersFromRecord(viewRecordOf(everything))).toEqual(everything)
+    expect(filtersFromRecord(filtersToRecord(everything))).toEqual(everything)
   })
 })
 
@@ -177,7 +199,7 @@ describe('requests', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       name: 'mine',
       focus_entity_id: 9,
-      filters: { topic: ['t'] },
+      filters: { topics: ['t'] },
     })
   })
 })

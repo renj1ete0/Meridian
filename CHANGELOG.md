@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.8] — 2026-10-10
+
+### Fixed
+
+- `B-193`: a node view saved with any filter was refused (422); node views are now checked
+  against the graph's filters and stored under their names
+
 ## [0.166.7] — 2026-10-10
 
 ### Fixed

@@ -1769,9 +1769,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       cities …?”" and concepts matched on single common words. Quiet unless a concept is named
 - [x] `B-177` `v0.166.7`. **Where you were** — recent nodes never listed (`recentNodes={[]}` though
       `graph/recent.ts` records them); a saved node view on the landing is a dead click
-- [ ] `B-193` **A node view with a filter cannot be saved** — the node workspace stores
+- [x] `B-193` `v0.166.8`. **A node view with a filter cannot be saved** — the node workspace stores
       `topic`/`tier`/`published_from`, which the server's `SearchFilters` check refuses (422,
       verified on the live API). Validate a node view against the graph's own filter model
+- [ ] `B-194` **Watched counts ignore a view's filters** — `watch.py` reads `topic`, but views
+      have stored `topics` since `B-73`, so "N new" on a saved search ignores its topics, and
+      places, source types and years were never applied. Count with the search's own predicate
 - [ ] `B-178` **Open a source at the passage** — a hit links to the top of its source, and the
       source page loads 20 passages, so a hit on page 24 is often not on the page at all. Link
       `?chunk=`, load the window around it, mark it; earlier/later at both ends. Same for node

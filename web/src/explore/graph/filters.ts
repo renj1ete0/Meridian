@@ -41,8 +41,9 @@ export function filtersFromRecord(record: Record<string, unknown>): GraphFilterS
   const from = isDate(record.published_from) ? record.published_from : null
   const to = isDate(record.published_to) ? record.published_to : null
   return {
-    topics: [...new Set(strings(record.topic))],
-    tiers: [...new Set(strings(record.tier).filter(isTier))],
+    // `topics`/`tiers` as a node view stores them (`B-193`), `topic`/`tier` as the URL does.
+    topics: [...new Set(strings(record.topics ?? record.topic))],
+    tiers: [...new Set(strings(record.tiers ?? record.tier).filter(isTier))],
     // A reversed range would be refused by the API; drop the bound that
     // makes it reversed rather than the whole filter set.
     publishedFrom: from && to && from > to ? null : from,

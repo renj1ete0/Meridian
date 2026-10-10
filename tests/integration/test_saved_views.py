@@ -23,7 +23,7 @@ import uuid
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from api.main import create_app
 from meridian_core.db import dispose_engines
@@ -240,3 +240,60 @@ async def test_deleting_removes_it(client, open_admin, clean, name, session_for)
 
 async def test_deleting_something_that_is_not_there_is_a_404(client, open_admin, clean) -> None:
     assert (await client.delete("/api/admin/views/99999999")).status_code == 404
+
+
+# --------------------------------------------------------------------------
+# A node view's filters are the graph's (`B-193`)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def some_node(session_for) -> int:
+    sess = await session_for("rw")
+    found = await sess.scalar(text("SELECT min(entity_id) FROM entities"))
+    if found is None:
+        pytest.skip("no entity to focus a view on")
+    return int(found)
+
+
+async def test_a_node_view_keeps_the_graph_filters(
+    client, open_admin, clean, name, some_node
+) -> None:
+    """Every filtered node view was refused while they were checked against the search's
+    names; the graph workspace's filters are a different set and reopen a different page."""
+    filters = {
+        "topics": ["walkability"],
+        "tiers": ["government"],
+        "published_from": "2015-01-01",
+        "contested_only": True,
+    }
+    response = await client.post(
+        "/api/admin/views", json={"name": name, "focus_entity_id": some_node, "filters": filters}
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["filters"] == filters
+
+
+@pytest.mark.parametrize("filters", [{"source_tiers": ["government"]}, {"tier": ["press"]}])
+async def test_a_node_view_refuses_what_the_graph_cannot_apply(
+    client, open_admin, clean, name, some_node, filters
+) -> None:
+    response = await client.post(
+        "/api/admin/views", json={"name": name, "focus_entity_id": some_node, "filters": filters}
+    )
+    assert response.status_code == 422
+    assert next(iter(filters)) in response.json()["detail"]
+
+
+async def test_editing_a_node_view_checks_against_the_graph(
+    client, open_admin, clean, name, some_node
+) -> None:
+    view = await save(client, name, focus_entity_id=some_node)
+    ok = await client.patch(
+        f"/api/admin/views/{view['view_id']}", json={"filters": {"tiers": ["press"]}}
+    )
+    assert ok.status_code == 200, ok.text
+    bad = await client.patch(
+        f"/api/admin/views/{view['view_id']}", json={"filters": {"source_tiers": ["press"]}}
+    )
+    assert bad.status_code == 422

@@ -580,6 +580,14 @@ because a disabled control always on screen teaches the reader to stop seeing it
 write, so it is refused while Admin is closed, and the API's message is shown as written
 (`P6-13`): views are shared state with no per-viewer scoping.
 
+
+**A view is checked against the page that reopens it** (`B-193`). A search view's filters are
+validated against `SearchFilters` and a node view's against `GraphFilters`, the graph
+workspace's own model. Until `v0.166.8` both were checked against `SearchFilters`, while the
+node workspace stored its filters under its URL's names (`topic`, `tier`), so every node view
+saved with a filter was refused with a 422 and only unfiltered ones could be kept. A node view
+now stores `GraphFilters`' names (`viewRecordOf`); the workspace reads either spelling, and a
+web test reads `GraphFilters` from the Python so the two cannot drift again.
 ### Source pages
 
 The first screen where the corpus reads as documents rather than results (`P6-14`, `P6-15`):
