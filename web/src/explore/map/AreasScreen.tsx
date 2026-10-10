@@ -92,6 +92,53 @@ function messageOf(cause: unknown, fallback: string): string {
 }
 
 /** `?area=` in the URL, so a level can be linked and Back walks up. */
+/** How long a touch is held before it is a long-press, as the platforms use. */
+export const LONG_PRESS_MS = 550
+
+/**
+ * A touch held still opens the right-click menu (`B-200`): "Research something new here" was
+ * reachable by right-click only, which a phone does not have (iOS sends no `contextmenu`).
+ * Returns pointer handlers, and whether the click that ends a long-press should be ignored.
+ */
+export function useLongPress(onLong: (point: { clientX: number; clientY: number }) => void) {
+  const timer = useRef<number | null>(null)
+  const fired = useRef(false)
+  const cancel = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+  }
+  return {
+    onPointerDown: (event: React.PointerEvent) => {
+      if (event.pointerType !== 'touch') return
+      fired.current = false
+      const point = { clientX: event.clientX, clientY: event.clientY }
+      cancel()
+      timer.current = window.setTimeout(() => {
+        fired.current = true
+        onLong(point)
+      }, LONG_PRESS_MS)
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onPointerMove: (event: React.PointerEvent) => {
+      if (event.pointerType === 'touch' && (Math.abs(event.movementX) > 4 || Math.abs(event.movementY) > 4)) cancel()
+    },
+    /** True once, for the click that ends a long-press. */
+    consumeClick: () => {
+      const was = fired.current
+      fired.current = false
+      return was
+    },
+  }
+}
+
+/** The theme open in the side panel (`?pick=`), so a link opens on it (`B-200`). */
+export function pickFromSearch(search: string): number | null {
+  const value = new URLSearchParams(search).get('pick')
+  const n = value ? Number(value) : NaN
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
 export function areaFromSearch(search: string): number | null {
   const value = new URLSearchParams(search).get('area')
   const n = value ? Number(value) : NaN
@@ -318,7 +365,7 @@ export function AreasView({
 
   // A sub-area picked from the jump box on another level: opened once that
   // level has arrived, rather than closed by it.
-  const opening = useRef<number | null>(null)
+  const opening = useRef<number | null>(pickFromSearch(window.location.search))
 
   // A new level closes whatever was open on the last one.
   useEffect(() => {
@@ -327,6 +374,17 @@ export function AreasView({
     setPanel(areaId === null ? { kind: 'none' } : { kind: 'area', areaId })
     setMenu(null)
   }, [level.parent?.area_id, level.build?.build_id])
+
+  // The open theme in the link (`B-200`), replaced rather than pushed: opening a panel is
+  // not a step of Back.
+  const picked = panel.kind === 'area' ? panel.areaId : null
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (picked === null) params.delete('pick')
+    else params.set('pick', String(picked))
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`
+    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState({}, '', next)
+  }, [picked])
 
   // Panels fetch their own detail.
   useEffect(() => {
@@ -1042,10 +1100,17 @@ const AreaCircle = memo(function AreaCircle({
     area.children > 0
       ? `${area.children} ${childNoun}${area.children === 1 ? '' : 's'} inside`
       : `${area.passages.toLocaleString('en')} passages`
+  const press = useLongPress((point) =>
+    onMenu({ ...point, preventDefault() {}, stopPropagation() {} } as unknown as React.MouseEvent, area),
+  )
   return (
     <g
       role="button"
       tabIndex={0}
+      onPointerDown={press.onPointerDown}
+      onPointerUp={press.onPointerUp}
+      onPointerCancel={press.onPointerCancel}
+      onPointerMove={press.onPointerMove}
       aria-label={`${area.name}: ${area.passages.toLocaleString('en')} passages from ${area.sources.toLocaleString('en')} sources${
         shareText(area) ? `, ${shareText(area)}` : ''
       }${flagged ? ` — ${area.reasons.join('; ')}` : ''}${area.children > 0 ? '. Open to zoom in.' : ''}`}
@@ -1054,7 +1119,9 @@ const AreaCircle = memo(function AreaCircle({
       onMouseLeave={() => onHover(null)}
       onFocus={() => onHover(area.area_id)}
       onBlur={() => onHover(null)}
-      onClick={() => onOpen(area)}
+      onClick={() => {
+        if (!press.consumeClick()) onOpen(area)
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()

@@ -8,12 +8,12 @@
  * opens; right-click offers only what exists, with route disabled and saying
  * why.
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { modeFromSearch } from '../src/explore/MapPage'
-import { AreasView, areaFromSearch } from '../src/explore/map/AreasScreen'
+import { AreasView, LONG_PRESS_MS, areaFromSearch, pickFromSearch } from '../src/explore/map/AreasScreen'
 import { nameWithin } from '../src/lib/areas'
 import type { AreaLink, AreasLevel, Bridge } from '../src/lib/areas'
 import { area } from './areas-fixtures'
@@ -21,6 +21,8 @@ import { area } from './areas-fixtures'
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  // The open theme is written into the link (`B-200`); left there, the next test opens on it.
+  window.history.pushState({}, '', '/')
 })
 
 function level(over: Partial<AreasLevel> = {}): AreasLevel {
@@ -552,5 +554,65 @@ describe('the Map leads somewhere (B-186)', () => {
     fireEvent.submit(screen.getByRole('search'))
     const concept = await screen.findByRole('link', { name: /lidar sensors/ })
     expect(concept.getAttribute('href')).toBe('/nodes/254')
+  })
+})
+
+describe('a theme in the link, and a menu on touch (B-200)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    window.history.pushState({}, '', '/')
+  })
+
+  it('reads the theme from the link and opens it when its level arrives', async () => {
+    expect(pickFromSearch('?area=3&pick=9')).toBe(9)
+    expect(pickFromSearch('?pick=x')).toBeNull()
+    const leaf = area({ area_id: 9, level: 3, children: 0, name: 'leaf' })
+    vi.stubGlobal('fetch', respond({ area: leaf, path: [], passages: [] }))
+    window.history.pushState({}, '', '/map?area=7&pick=9')
+    render(<AreasView level={level({ level: 3, parent: area({ level: 2 }), areas: [leaf] })} onLevel={() => {}} />)
+    expect(await screen.findByRole('complementary', { name: 'Field' })).toBeTruthy()
+  })
+
+  it('writes the open theme into the link, and takes it out on close', async () => {
+    const leaf = area({ area_id: 9, level: 3, children: 0, name: 'leaf' })
+    vi.stubGlobal('fetch', respond({ area: leaf, path: [], passages: [] }))
+    window.history.pushState({}, '', '/map?area=7')
+    const { container } = render(
+      <AreasView level={level({ level: 3, parent: area({ level: 2 }), areas: [leaf] })} onLevel={() => {}} />,
+    )
+    fireEvent.click(container.querySelector('[data-area="9"]')!)
+    await screen.findByRole('complementary', { name: 'Field' })
+    expect(new URLSearchParams(window.location.search).get('pick')).toBe('9')
+    expect(new URLSearchParams(window.location.search).get('area')).toBe('7')
+  })
+
+  it('opens the menu on a held touch, and the touch does not also open the circle', () => {
+    vi.useFakeTimers()
+    const onLevel = vi.fn()
+    const { container } = render(<AreasView level={level()} onLevel={onLevel} />)
+    const circle = container.querySelector('[data-area="1"]')!
+    fireEvent.pointerDown(circle, { pointerType: 'touch', clientX: 100, clientY: 100 })
+    act(() => {
+      vi.advanceTimersByTime(LONG_PRESS_MS + 10)
+    })
+    expect(screen.getByRole('menu')).toBeTruthy()
+    fireEvent.pointerUp(circle, { pointerType: 'touch' })
+    fireEvent.click(circle)
+    expect(onLevel).not.toHaveBeenCalled()
+  })
+
+  it('leaves a quick tap a tap', () => {
+    vi.useFakeTimers()
+    const onLevel = vi.fn()
+    const { container } = render(<AreasView level={level()} onLevel={onLevel} />)
+    const circle = container.querySelector('[data-area="1"]')!
+    fireEvent.pointerDown(circle, { pointerType: 'touch' })
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
+    fireEvent.pointerUp(circle, { pointerType: 'touch' })
+    fireEvent.click(circle)
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(onLevel).toHaveBeenCalledWith(1)
   })
 })

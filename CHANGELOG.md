@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.24] — 2026-10-10
+
+### Added
+
+- `B-200`: the Map's open theme is in the link (`?pick=`); a held touch opens the right-click
+  menu on phones
+
 ## [0.166.23] — 2026-10-10
 
 ### Fixed

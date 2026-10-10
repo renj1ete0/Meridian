@@ -381,8 +381,12 @@ coarser level left.
 - **The hover card sits below the level controls** and is not drawn for the area the side
   panel already shows; at the deepest level it covered the Fields/Subfields/Themes switch.
 
-Not yet: the chosen theme in the link (`?pick=`), and a long-press for the right-click menu on
-touch screens.
+**The open theme is in the link, and the menu opens on touch** (`B-200`). `?pick=<area>` names
+the theme in the side panel, replaced rather than pushed (opening a panel is not a step of Back),
+and a link carrying it opens on that theme once its level arrives. The right-click menu, the only
+way to "Research something new here", also opens on a touch held for 550 ms: iOS sends no
+`contextmenu`, so a phone had no way in. A quick tap is still a tap, and the touch that opened the
+menu does not also open the circle.
 ### Steering from the map
 
 Right-click an area for more, less, make a topic, or watch; right-click empty canvas to suggest

@@ -1816,7 +1816,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-186` `v0.166.21`; the chosen theme in the link and long-press on touch remain, as `B-200`. **Map small fixes** — theme card terms inert (make them Find links); child names
       repeat the parent; hover card over the level controls; the jump box finds no concepts and
       gives no hint that it needs Enter
-- [ ] `B-200` **Map: theme in the link, long-press on touch** — the selected theme is not in the
+- [x] `B-200` `v0.166.24`. **Map: theme in the link, long-press on touch** — the selected theme is not in the
       URL (`?pick=`), so it cannot be shared; the right-click menu has no touch equivalent
 - [x] `B-187` `v0.166.20`. **Growth "+N in 30 days" equals the total** on a young corpus — say "all since …"
 - [x] `B-188` **`list_new_since` returns quarantined and unscreened passages to assistants** — `v0.166.1`. the
