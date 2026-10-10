@@ -115,7 +115,15 @@ class NotificationRead(BaseModel):
     surface: str | None
     read_at: dt.datetime | None
     created_at: dt.datetime
-    #: What became of what it asks for, read when the bell is opened (`B-182`): a proposal's
-    #: status once it is no longer pending, "merged" once a possible duplicate was merged.
-    #: None while it still waits, or for a notification that asks nothing.
+
+
+class NotificationItemRead(NotificationRead):
+    """A notification as the bell lists it: its row, and what became of what it asks.
+
+    Separate from :class:`NotificationRead`, which mirrors the table column for column;
+    `settled` is read from other tables when the list is (`B-182`).
+    """
+
+    #: A proposal's status once it is no longer pending, "merged" once a possible duplicate
+    #: was merged. None while it still waits, or for a notification that asks nothing.
     settled: str | None = None

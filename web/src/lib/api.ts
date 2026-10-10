@@ -712,9 +712,15 @@ export interface Notification {
   surface: string | null
   read_at: string | null
   created_at: string
-  /** What became of what it asks, once settled: a proposal's status, or "merged" (`B-182`). */
+}
+
+/** Mirrors `NotificationItemRead`: a notification as the bell lists it (`B-182`). */
+export interface NotificationItem extends Notification {
+  /** What became of what it asks, once settled: a proposal's status, or "merged". */
   settled: string | null
 }
+
+export const NOTIFICATION_ITEM_FIELDS = ['settled'] as const
 
 export const NOTIFICATION_FIELDS = [
   'notification_id',
@@ -725,12 +731,11 @@ export const NOTIFICATION_FIELDS = [
   'surface',
   'read_at',
   'created_at',
-  'settled',
 ] as const
 
 /** Mirrors `NotificationsRead`. */
 export interface Notifications {
-  notifications: Notification[]
+  notifications: NotificationItem[]
   counts_by_type: Record<string, number>
   unread: number
 }

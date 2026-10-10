@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.25] — 2026-10-10
+
+### Fixed
+
+- `B-182`: `settled` moves to `NotificationItemRead`, which the list route returns, so
+  `NotificationRead` mirrors the table again (the drift test that holds every read DTO to its
+  columns caught it)
+
 ## [0.166.24] — 2026-10-10
 
 ### Added

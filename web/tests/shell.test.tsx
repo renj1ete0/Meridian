@@ -24,7 +24,7 @@ import {
   type RunHistory,
 } from '../src/lib/status'
 import { NAV, TopBar, type ClusterData } from '../src/ui/TopBar'
-import type { CrawlProgress, Notification, RunRow } from '../src/lib/api'
+import type { CrawlProgress, NotificationItem as Notification, RunRow } from '../src/lib/api'
 
 afterEach(() => {
   cleanup()

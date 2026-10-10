@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .annotations import AnnotationRead
 from .enums import FetchOutcome, LivenessState, PageUnit, SearchArm, SourceTier, TaskStatus
 from .graph import EntityRead
-from .runs import NotificationRead
+from .runs import NotificationItemRead
 from .source import ChunkRead
 
 
@@ -206,7 +206,7 @@ class SourceFiguresRead(BaseModel):
 class NotificationsRead(BaseModel):
     """The notifications panel's payload (task P6-08, spec §12.5)."""
 
-    notifications: list[NotificationRead]
+    notifications: list[NotificationItemRead]
     #: Across every type, not only the filtered ones — a panel reading
     #: "alerts (0)" while three seed proposals wait is the filter hiding the
     #: thing the reader came for.

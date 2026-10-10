@@ -65,7 +65,7 @@ from meridian_core.schemas.chat import (
 from meridian_core.schemas.corpusmap import CorpusMapRead
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graph import EntityRead
-from meridian_core.schemas.runs import NotificationRead
+from meridian_core.schemas.runs import NotificationItemRead
 from meridian_core.schemas.search import (
     CorpusStatsRead,
     CrawlHealthRead,
@@ -690,7 +690,7 @@ async def explore_notifications(
     settled = await _settled(sess, rows)
     return NotificationsRead(
         notifications=[
-            NotificationRead.model_validate(row).model_copy(
+            NotificationItemRead.model_validate(row).model_copy(
                 update={"settled": settled.get(row.notification_id)}
             )
             for row in rows

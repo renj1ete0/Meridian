@@ -18,7 +18,7 @@ import { ACTION_FOR_TYPE, ALERT_SECTION, NotificationsPanel } from '../src/explo
 import { KIND_OF_TYPE, countsByKind, dayHeading } from '../src/lib/status'
 import { DAGGER } from '../src/ui/Contested'
 import { StatusPill } from '../src/ui/TopBar'
-import type { Notification } from '../src/lib/api'
+import type { NotificationItem as Notification } from '../src/lib/api'
 
 const REPO = join(fileURLToPath(new URL('..', import.meta.url)), '..')
 

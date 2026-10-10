@@ -1,7 +1,7 @@
 import { onInternalClick } from '../lib/route'
 import { NOTIFICATION_KINDS, clock, countsByKind, dayHeading, kindOf, type NotificationKind } from '../lib/status'
 import { DAGGER } from '../ui/Contested'
-import type { Notification } from '../lib/api'
+import type { NotificationItem } from '../lib/api'
 
 /**
  * What happened while nobody was looking (tasks P6-08, P6-27; spec §12.5, §13.3;
@@ -10,7 +10,7 @@ import type { Notification } from '../lib/api'
  */
 
 export interface NotificationsPanelProps {
-  notifications: readonly Notification[]
+  notifications: readonly NotificationItem[]
   countsByType: Readonly<Record<string, number>>
   /** The kind shown, or null for all of them. */
   active?: NotificationKind | null
@@ -61,7 +61,7 @@ export const ALERT_SECTION: Record<string, string | null> = {
  * action rather than a link to nowhere. Every type the database allows is listed, so a new
  * one fails a test until it is given a place.
  */
-export const ACTION_FOR_TYPE: Record<string, (item: Notification) => { label: string; href: string } | null> = {
+export const ACTION_FOR_TYPE: Record<string, (item: NotificationItem) => { label: string; href: string } | null> = {
   // `P6-38`: straight to the list where it can be accepted or rejected.
   steering_proposal: () => ({ label: 'Review', href: '/admin/proposals' }),
   seed_proposal: () => ({ label: 'Review', href: '/admin/seeds' }),
@@ -80,7 +80,7 @@ export const ACTION_FOR_TYPE: Record<string, (item: Notification) => { label: st
   job_complete: () => null,
 }
 
-function actionFor(item: Notification): { label: string; href: string } | null {
+function actionFor(item: NotificationItem): { label: string; href: string } | null {
   // Settled already (`B-182`): "Review" on a superseded proposal led to a list it was not in.
   if (item.settled) return null
   return ACTION_FOR_TYPE[item.notification_type]?.(item) ?? null
@@ -99,7 +99,7 @@ export function NotificationsPanel({
     active === null ? notifications : notifications.filter((item) => kindOf(item.notification_type) === active)
 
   // Grouped by local day, in the order the API returns them (newest first).
-  const days: Array<{ heading: string; items: Notification[] }> = []
+  const days: Array<{ heading: string; items: NotificationItem[] }> = []
   for (const item of shown) {
     const heading = dayHeading(item.created_at, now)
     const last = days[days.length - 1]
@@ -194,7 +194,7 @@ function FilterButton({
   )
 }
 
-function Row({ item }: { item: Notification }) {
+function Row({ item }: { item: NotificationItem }) {
   const kind = kindOf(item.notification_type)
   const alert = kind === 'alerts'
   const action = actionFor(item)
