@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "_comment": "Mutation testing (Q-02): `npm run mutate`. Scoped to pure modules, where a surviving mutant is a missing assertion; see docs/guides/testing.md.",
-  "testRunner": "vitest",
+  "testRunner": "command",
   "mutate": [
     "src/lib/readable.ts",
     "src/lib/time.ts",
@@ -13,7 +13,7 @@
   "jsonReporter": {
     "fileName": "reports/mutation/mutation.json"
   },
-  "coverageAnalysis": "perTest",
+  "coverageAnalysis": "off",
   "thresholds": {
     "high": 90,
     "low": 75,
@@ -23,5 +23,9 @@
   "_comment_tsconfig": "TypeScript 7 has no JS API for Stryker's tsconfig rewrite, which only builds need; a missing path skips it. Vitest compiles the tests itself.",
   "tsconfigFile": "stryker-skips-tsconfig.json",
   "inPlace": true,
-  "_comment_inPlace": "Drift tests read the Python sources beside web/, which a sandbox copy lacks. Stryker restores each file when it finishes; check git status if a run is killed."
+  "_comment_inPlace": "Drift tests read the Python sources beside web/, which a sandbox copy lacks. Stryker restores each file when it finishes; check git status if a run is killed.",
+  "_comment_testRunner": "The vitest runner activates no mutant under vitest 5: every test reported covering nothing and none was killed. The command runner selects each mutant through the environment and runs the tests that import these modules.",
+  "commandRunner": {
+    "command": "npx vitest run tests/readable.test.ts tests/time.test.ts tests/answer.test.tsx tests/since-last-visit.test.tsx tests/source-page.test.tsx tests/explore-page.test.tsx"
+  }
 }

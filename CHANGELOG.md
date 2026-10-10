@@ -8,6 +8,10 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Testing (`Q-02`): mutation testing works. Python runs in a staging tree laid out as mutmut
+  expects (`scripts/mutate.sh`, `make mutate`); the web uses Stryker's command runner, since its
+  vitest runner activated no mutant under vitest 5. Baselines in `docs/guides/testing.md`
+
 - Testing (`Q-01`, `Q-02`): `make coverage`, `npm run coverage`, and mutation testing set up
   (`make mutate`, `npm run mutate`; not yet trustworthy, see `docs/guides/testing.md`).
   Dev dependencies: pytest-cov, hypothesis, mutmut, @vitest/coverage-v8, StrykerJS

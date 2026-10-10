@@ -1738,7 +1738,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `Q-01` **Coverage measured** — branch coverage for Python (`make coverage`) and V8 for
       the web (`npm run coverage`); baseline Python 90.7%, web 78.8% statements. A dry-run test
       for the sweep job, the one path that deletes. See docs/guides/testing.md
-- [ ] `Q-02` **Mutation testing** — mutmut and StrykerJS configured, neither trustworthy yet:
+- [x] `Q-02` 2026-10-10: Python ~78%, web 72%, first survivors turned into tests. **Mutation testing** — mutmut and StrykerJS configured, neither trustworthy yet:
       mutmut's tests import the installed package instead of its mutated copy; Stryker's scores
       are implausibly low on well-tested modules. The guide says what to try next
 - [ ] `Q-03` **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,

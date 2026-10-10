@@ -13,6 +13,7 @@ import ipaddress
 import os
 from collections.abc import AsyncIterator, Callable
 
+import _mutation_path  # noqa: F401  (first: see its docstring)
 import pytest
 import pytest_asyncio
 from http_doubles import RecordingTransport, streamed

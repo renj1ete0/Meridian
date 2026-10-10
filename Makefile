@@ -91,9 +91,10 @@ test: lint
 coverage:
 	uv run pytest --cov --cov-report=term --cov-report=html:.coverage-html
 
-# Mutation testing of the pure modules (`Q-02`); slow, and see the guide for its state.
+# Mutation testing of the pure modules (`Q-02`), in a staging tree laid out as mutmut expects;
+# slow. See docs/guides/testing.md.
 mutate:
-	rm -rf mutants && uv run mutmut run; uv run mutmut results
+	scripts/mutate.sh
 
 # A version bump leaves the old workspace dist-info without a RECORD, and uv then warns on every
 # command and rebuilds; deleting them before running is what the handover used to say to do.

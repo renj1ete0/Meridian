@@ -122,3 +122,17 @@ def test_prose_that_names_its_sources_is_not_a_list() -> None:
     codes = "\n".join(f"FY20{i} - FY20{i + 3}" for i in range(10, 20))
     assert not is_reference_list(codes)
     assert not is_entry("Note: the figures are provisional and may change.")
+
+
+def test_the_thresholds_are_inclusive() -> None:
+    """Exactly the minimum entries, and exactly the minimum share, qualify. Found by mutation
+    testing (`Q-02`): `>=` could be `>` and every other test still passed."""
+    entries = ["- 55", "- 56", "- 57"]
+    assert all(is_entry(line) for line in entries)
+    assert len(entries) == MIN_ENTRIES
+    assert is_reference_list("\n".join(entries))
+    # 12 entry characters of 20 is exactly the minimum share.
+    filler = "Hello yo"
+    assert not is_entry(filler)
+    assert sum(map(len, entries)) / (sum(map(len, entries)) + len(filler)) == references.MIN_SHARE
+    assert is_reference_list("\n".join([*entries, filler]))

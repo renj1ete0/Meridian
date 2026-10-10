@@ -38,5 +38,6 @@ fixtures/
 *.log
 .claude/worktrees/
 mutants/
+.mutate/
 .coverage-html/
 .coverage

@@ -22,25 +22,52 @@ the only path that deletes. The least covered web files draw with WebGL (`GraphC
 A percentage is a floor to hold, not a target to chase: a test written to raise it tends to
 execute code without asserting anything, which is exactly what mutation testing catches.
 
-## Mutation testing (`Q-02`) — set up, not yet trustworthy
+## Mutation testing (`Q-02`)
 
 Mutation testing changes the code (a `<` to `<=`, a constant, a dropped line) and runs the
 tests; a change no test notices is a *surviving mutant*, an assertion nobody wrote. It is slow,
-so it is scoped to pure modules with unit tests.
+so it is scoped to pure modules with unit tests. Read survivors, not the score: some are
+equivalent (the change cannot alter behaviour) and need no test.
 
-- **Web** (`cd web && npm run mutate`, StrykerJS, `web/stryker.config.json`). Runs in place,
-  because the drift tests read the Python sources beside `web/`; Stryker restores each file at
-  the end, so check `git status` if a run is killed. TypeScript 7 has no JavaScript API, so the
-  tsconfig rewrite is skipped by pointing `tsconfigFile` at a path that does not exist. First
-  run, 2026-10-08: 34% overall, but `time.ts` scored 13% and `answer.ts` 0% despite dense
-  tests, which points at the setup (per-test coverage attribution) rather than the tests.
-  Verify with `"coverageAnalysis": "all"` before reading anything into the scores.
-- **Python** (`make mutate`, mutmut 3, `[tool.mutmut]` in `pyproject.toml`). Configured for six
-  pure modules and their unit tests, but **not working yet**: mutmut runs from a copy under
-  `mutants/`, and the tests import the installed `meridian_core` (a workspace editable install)
-  rather than the mutated copy, so mutmut reports that no test covers any mutant. Next step:
-  make the copy win on `sys.path` (for example `PYTHONPATH=mutants/packages/meridian_core` via
-  `pytest_add_cli_args`, or running mutmut inside the package directory).
+- **Python** (`make mutate`, mutmut 3, `scripts/mutate.sh`). mutmut names a mutant by its
+  file's path and expects the tests inside the directory it runs in, and this repo has neither:
+  the package is at `packages/meridian_core/meridian_core`, and the editable install put the
+  real package ahead of mutmut's copy on `sys.path`. Every test ran unmutated code, and mutmut
+  reported that no test covered any mutant. The script builds a staging tree (`.mutate/`,
+  ignored) with the package at the top and the tests and the files they read beside it, writes
+  the mutmut config there, and runs it. `tests/_mutation_path.py` puts the mutated copy first
+  when pytest runs inside `mutants/`. `fields.py` is left out: it finds its data file by
+  counting directories up from itself. Pass mutant names to narrow a run
+  (`scripts/mutate.sh "meridian_core.references*"`). Baseline, 2026-10-10:
+
+  | module | killed | survived | score |
+  |---|---|---|---|
+  | references | 32 | 1 | 97% |
+  | answer | 244 | 32 | 88% |
+  | timefmt | 50 | 15 | 77% |
+  | titles | 109 | 45 | 71% |
+  | proposals | 154 | 77 | 67% |
+
+  The first survivors read were real: no test pinned the reference filter's thresholds as
+  inclusive (`>=` could become `>`); the one left is equivalent.
+- **Web** (`cd web && npm run mutate`, StrykerJS, `web/stryker.config.json`). The vitest runner
+  activates no mutant under vitest 5: in the dry run every test reported covering nothing, and
+  with `coverageAnalysis: "all"` not one mutant of `answer.ts` was killed, which is why the first
+  scores were implausible. The config uses Stryker's command runner instead, which selects each
+  mutant through the environment and runs the test files that import the mutated modules (keep
+  that list in `commandRunner.command` in step with `mutate`). Baseline, 2026-10-10 (timeouts
+  count as killed):
+
+  | module | killed | survived | score |
+  |---|---|---|---|
+  | position | 9 | 1 | 90% |
+  | lastVisit | 11 | 2 | 85% |
+  | time | 78 | 19 | 80% |
+  | readable | 183 | 84 | 69% |
+  | answer | 31 | 13 | 70% |
+
+  `time.ts` scored 13% under the vitest runner, so those first scores were the setup. Runs in place, because the drift tests read the Python sources beside `web/`;
+  Stryker restores each file at the end, so check `git status` if a run is killed.
 
 ## Still to do
 
@@ -48,4 +75,4 @@ so it is scoped to pure modules with unit tests.
   `references.is_reference_list`, `search.fuse` / `cap_per_source`, `answer.group_hits`, and
   the web's `readable()` (with fast-check).
 - A CI workflow running lint, the unit tests and the web tests on every push.
-- Raise the floors only after mutation scores say the covered code is actually checked.
+- Raise the coverage floors only after mutation scores say the covered code is actually checked.
