@@ -33,6 +33,7 @@ import {
   getSavedViews,
   markViewOpened,
   renameView,
+  rewriteAnnotation,
   saveView,
   searchCorpus,
   type Annotation,
@@ -625,6 +626,10 @@ export function ExplorePage() {
             getAnnotations({ limit: ALL_NOTES })
               .then((body) => setNotes(body.annotations))
               .catch(() => {})
+          }}
+          onEdit={async (note, change) => {
+            const rewritten = await rewriteAnnotation(note.entity_id, change)
+            setNotes((current) => current.map((n) => (n.entity_id === note.entity_id ? rewritten : n)))
           }}
         />
       </div>

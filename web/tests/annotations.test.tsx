@@ -20,11 +20,11 @@
  *    one would be asking to be trusted about the one thing it cannot be.
  */
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { NoteComposer, NoteList, NotesPanel, describeAttachment } from '../src/explore/Annotations'
-import type { Annotation, AnnotationTarget } from '../src/lib/api'
+import { ApiError, type Annotation, type AnnotationTarget } from '../src/lib/api'
 
 afterEach(cleanup)
 
@@ -281,5 +281,42 @@ describe('a refusal', () => {
     fireEvent.change(screen.getByLabelText(/title for this note/i), { target: { value: 'x' } })
 
     expect(screen.getByRole('button', { name: /keep it/i }).hasAttribute('disabled')).toBe(true)
+  })
+})
+
+describe('a note can be rewritten where it is read (B-201)', () => {
+  it('opens in place, sends the new title and text, and closes once saved', async () => {
+    const onEdit = vi.fn(async () => {})
+    render(<NotesPanel notes={[note()]} total={1} onEdit={onEdit} />)
+    fireEvent.click(screen.getByRole('button', { name: 'edit' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Note title' }), { target: { value: '  A better title ' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Note text' }), { target: { value: '   ' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'save' }))
+    })
+    // Trimmed, and an emptied text is no text rather than whitespace.
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ entity_id: 101 }), {
+      title: 'A better title',
+      body: null,
+    })
+    expect(screen.queryByRole('textbox', { name: 'Note title' })).toBeNull()
+  })
+
+  it('keeps the editor open with the reason when saving is refused', async () => {
+    const onEdit = vi.fn(async () => {
+      throw new ApiError(503, 'Admin is closed on this instance.')
+    })
+    render(<NotesPanel notes={[note()]} total={1} onEdit={onEdit} />)
+    fireEvent.click(screen.getByRole('button', { name: 'edit' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'save' }))
+    })
+    expect(screen.getByText('Admin is closed on this instance.')).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Note title' })).toBeTruthy()
+  })
+
+  it('offers no edit where nothing can save it', () => {
+    render(<NotesPanel notes={[note()]} total={1} />)
+    expect(screen.queryByRole('button', { name: 'edit' })).toBeNull()
   })
 })

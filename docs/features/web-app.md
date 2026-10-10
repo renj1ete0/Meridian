@@ -601,8 +601,10 @@ were" now carries the design's heading link: "All N saved views →" when some a
 since a view's name and filters are the reader's own work, though deleting one touches nothing in
 the corpus. Notes gain "show all" while some are not shown, up to the route's ceiling of 100;
 past that the Markdown export is the notebook. The API client now treats a 204 as an answer
-with no body. Editing or removing a note is not built: a note is a node in the graph, and
-removing one needs a decision about its links (`B-201`).
+with no body. A note can be rewritten in place from the landing (`B-201`): "edit"
+opens its title and text, saved through the existing edit route, and a refusal keeps the editor
+open with the reason. Removing a note is not built: a note is a node in the graph, and removing
+one needs a decision about its links.
 ### Source pages
 
 The first screen where the corpus reads as documents rather than results (`P6-14`, `P6-15`):

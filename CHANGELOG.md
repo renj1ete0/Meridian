@@ -81,6 +81,12 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.167.3] — 2026-10-10
+
+### Added
+
+- `B-201`: a note can be rewritten in place from the landing
+
 ## [0.167.2] — 2026-10-10
 
 ### Fixed
