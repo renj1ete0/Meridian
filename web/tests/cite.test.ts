@@ -84,3 +84,13 @@ describe('the way back to the results', () => {
     expect(lastFind()).toBeNull()
   })
 })
+
+describe('an untitled source (B-206)', () => {
+  it('is named by its publisher, or its host, and its address is written once', () => {
+    const untitled = { ...PDF, title: null, url: 'https://www.example.gov/a/long/report.pdf' }
+    const text = passageCitation(untitled, { chunk_id: 1, text: 'x', page_or_offset: 2 }, '')
+    expect(text.split('\n')[1]).toBe('— Example Authority, 2026-04-02, p. 2. https://www.example.gov/a/long/report.pdf')
+    const bare = passageCitation({ ...untitled, publisher: null }, { chunk_id: 1, text: 'x', page_or_offset: 2 }, '')
+    expect(bare.split('\n')[1]).toBe('— example.gov, 2026-04-02, p. 2. https://www.example.gov/a/long/report.pdf')
+  })
+})

@@ -10,8 +10,10 @@ import {
   type AnswerItem,
   type AnswerParams,
 } from '../lib/answer'
+import { answerBrief } from '../lib/brief'
 import { searchFilters, type FindFilters } from '../lib/find'
 import { readable } from '../lib/readable'
+import { dayOf } from '../lib/time'
 import { hrefForSource, onInternalClick } from '../lib/route'
 import { TierChip, type SourceTier } from '../ui/Tier'
 
@@ -154,7 +156,10 @@ export function AnswerBody({
       {nothing ? (
         <p className="text-[13.5px] text-text-muted">No source matched {`"${question}"`}.</p>
       ) : (
-        <CoverageStrip answer={answer} />
+        <>
+          <CoverageStrip answer={answer} />
+          <BriefLink answer={answer} question={question} />
+        </>
       )}
 
       {answer.groups.map((group) => (
@@ -178,6 +183,40 @@ export function AnswerBody({
 }
 
 const LABEL = 'font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint'
+
+/**
+ * The answer as a Markdown brief to take away (`B-206`): one link, under the coverage, so it
+ * is there when wanted and costs one line when not.
+ */
+export function BriefLink({ answer, question }: { answer: Answer; question: string }) {
+  const [href, setHref] = useState<string | null>(null)
+  useEffect(() => {
+    const text = answerBrief(answer, question, window.location.origin, dayOf(new Date().toISOString()))
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }))
+    setHref(url)
+    return () => URL.revokeObjectURL(url)
+  }, [answer, question])
+  if (!href) return null
+  return (
+    <p className="-mt-3 font-mono text-[10.5px] text-text-faint">
+      <a href={href} download={`${briefName(question)}.md`} className="text-accent-graph hover:underline">
+        download as a brief (.md)
+      </a>{' '}
+      · every source quoted and cited, nothing generated
+    </p>
+  )
+}
+
+/** A file name from the question: its words, lower case, hyphenated, cut short. */
+export function briefName(question: string): string {
+  const slug = question
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '')
+  return slug ? `meridian-${slug}` : 'meridian-brief'
+}
 
 export function CoverageStrip({ answer }: { answer: Answer }) {
   const strong = answer.groups.filter((g) => g.coverage === 'strong').length

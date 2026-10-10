@@ -1809,6 +1809,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
+- [x] `B-206` `v0.168.0`. **The answer as a brief** — a Markdown download of the answer page,
+      every source quoted and cited, nothing generated
 - [x] `B-204` `v0.167.4`. **Reference filter misses** (relay agent's finding) — bulleted
       author-year lists without initials, entry tails split across passages, abbreviation glossaries
 - [x] `B-202` `v0.167.0`; a pair kept apart is not yet remembered by resolution. **Decide a possible duplicate** — most of the bell is `merge_adjudication`, and no

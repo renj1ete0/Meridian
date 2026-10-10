@@ -23,6 +23,14 @@ export interface CitedPassage {
   page_or_offset: number | null
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
 function quote(text: string): string {
   const plain = readable(text).replace(/\s+/g, ' ').trim()
   if (plain.length <= QUOTE_MAX) return plain
@@ -37,9 +45,12 @@ function quote(text: string): string {
  * "n.d." when it gives none.
  */
 export function passageCitation(source: CitedSource, passage: CitedPassage, origin: string): string {
+  // Untitled, the source is named by its publisher or host: the URL follows anyway, and naming
+  // it by its URL wrote the address twice.
+  const name = source.title ?? (source.publisher || hostOf(source.url))
   const where = [
-    source.title ?? source.url,
-    source.publisher || null,
+    name,
+    source.publisher && source.publisher !== name ? source.publisher : null,
     source.publication_date ?? 'n.d.',
     source.page_unit === 'page' && passage.page_or_offset !== null ? `p. ${passage.page_or_offset}` : null,
   ].filter(Boolean)

@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.0] — 2026-10-10
+
+### Added
+
+- `B-206`: the answer page downloads as a Markdown brief: the question, where the evidence is
+  and how strong, and every source quoted with its citation and a link back. An untitled
+  source is now cited by its publisher or host rather than its address twice
+
 ## [0.167.5] — 2026-10-10
 
 ### Fixed

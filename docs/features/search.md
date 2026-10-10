@@ -280,6 +280,12 @@ called and nothing is summarised: every item is a passage a source actually cont
   examined.
 - **One item per source.** A document's best-scoring passage stands for it, with how many of
   its passages matched. A group of five items is five documents.
+- **The answer can be taken away as a brief** (`B-206`). "download as a brief (.md)" under the
+  coverage writes the question, the coverage rule, and each country with its strength and
+  counts, each source quoted with its citation and the link back to that passage
+  (`lib/brief.ts`). Nothing is generated: every line is the page's own, and the brief says so.
+  It is the nearest thing to a report the system makes without a model, and what an assistant
+  or a reader can paste into their own writing.
 - **The rest of a country is one click away** (`B-175`). A group shows its top five sources;
   "N more sources: read all M as passages" opens Find's Passages tab with the same words
   narrowed to that country, as a new history entry so Back returns to the answer. The

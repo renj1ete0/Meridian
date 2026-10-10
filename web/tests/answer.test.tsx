@@ -9,7 +9,8 @@ import { join } from 'node:path'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AnswerBody, AnswerView, countLine, mixLine, thinReason } from '../src/explore/AnswerView'
+import { AnswerBody, AnswerView, briefName, countLine, mixLine, thinReason } from '../src/explore/AnswerView'
+import { answerBrief } from '../src/lib/brief'
 import { ExplorePage, ModeSwitch } from '../src/explore/ExplorePage'
 import { NO_FILTERS } from '../src/lib/find'
 import {
@@ -436,5 +437,36 @@ describe('the rest of a country (B-175)', () => {
     })
     expect(screen.getByRole('tab', { name: 'Answer' }).getAttribute('aria-selected')).toBe('true')
     window.history.pushState({}, '', '/')
+  })
+})
+
+describe('the answer as a brief (B-206)', () => {
+  it('quotes and cites every item, by country with its strength, and says nothing is generated', () => {
+    const brief = answerBrief(answer(), QUESTION, 'https://m.example', '2026-10-10')
+    expect(brief.startsWith(`# ${QUESTION}\n`)).toBe(true)
+    expect(brief).toContain('nothing is generated')
+    expect(brief).toContain(`> ${answer().coverage_rule}`)
+    expect(brief).toContain('## Germany: strong')
+    expect(brief).toContain('## France: thin')
+    expect(brief).toContain('## No place named')
+    expect(brief).toContain('4 sources from 3 publishers, 2 shown.')
+    // Each item: the words, where from, and the way back to that passage.
+    expect(brief).toContain('Passage in Meridian: https://m.example/sources/11?passage=101')
+    expect(brief).toContain('Trading licence guidance')
+    expect(brief).toContain(`https://m.example/?q=${encodeURIComponent(QUESTION)}&view=answer`)
+  })
+
+  it('names the file from the question', () => {
+    expect(briefName('How do licences compare?')).toBe('meridian-how-do-licences-compare')
+    expect(briefName('???')).toBe('meridian-brief')
+    expect(briefName('a '.repeat(80)).length).toBeLessThanOrEqual(69)
+  })
+
+  it('offers the brief as a download under the coverage', () => {
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:brief', revokeObjectURL: () => {} }))
+    render(<AnswerBody answer={answer()} question={QUESTION} topic={null} />)
+    const link = screen.getByRole('link', { name: 'download as a brief (.md)' })
+    expect(link.getAttribute('href')).toBe('blob:brief')
+    expect(link.getAttribute('download')).toMatch(/^meridian-.*\.md$/)
   })
 })
