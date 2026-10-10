@@ -44,18 +44,44 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 /**
- * Where a row leads, when somewhere exists to act on it. Every decision a
- * notification asks for is made in Admin; a finished job has no page of its
- * own yet, so it has no action rather than a link to nowhere.
+ * Where an alert is acted on, by its condition (`B-181`). A condition with no page to act
+ * on (the disk) has no action rather than a link to a section that cannot help.
  */
-function actionFor(item: Notification): { label: string; href: string } | null {
-  const kind = kindOf(item.notification_type)
+export const ALERT_SECTION: Record<string, string | null> = {
+  fetch_success_low: '/admin/crawl',
+  no_recent_success: '/admin/crawl',
+  queue_drained: '/admin/seeds',
+  embedding_backlog: '/admin/crawl',
+  disk_low: null,
+}
+
+/**
+ * Where a row leads, when somewhere exists to act on it: the section that decides it, not
+ * Admin's front page (`B-181`). A finished job has no page of its own yet, so it has no
+ * action rather than a link to nowhere. Every type the database allows is listed, so a new
+ * one fails a test until it is given a place.
+ */
+export const ACTION_FOR_TYPE: Record<string, (item: Notification) => { label: string; href: string } | null> = {
   // `P6-38`: straight to the list where it can be accepted or rejected.
-  if (item.notification_type === 'steering_proposal') return { label: 'Review', href: '/admin/proposals' }
-  if (kind === 'approvals') return { label: 'Review', href: '/admin' }
-  if (kind === 'alerts') return { label: 'Admin', href: '/admin' }
-  if (item.notification_type === 'run_summary') return { label: 'Run log', href: '/admin' }
-  return null
+  steering_proposal: () => ({ label: 'Review', href: '/admin/proposals' }),
+  seed_proposal: () => ({ label: 'Review', href: '/admin/seeds' }),
+  gazetteer_proposal: () => ({ label: 'Review', href: '/admin/gazetteer' }),
+  // No screen decides a merge yet (`B-182`); the node that was created is where to look.
+  merge_adjudication: (item) => {
+    const created = item.payload?.created
+    return typeof created === 'number' ? { label: 'Open node', href: `/nodes/${created}` } : null
+  },
+  alert: (item) => {
+    const condition = item.payload?.condition
+    const href = typeof condition === 'string' ? ALERT_SECTION[condition] : undefined
+    return href ? { label: 'Look', href } : null
+  },
+  run_summary: () => ({ label: 'Run log', href: '/admin/runs' }),
+  job_complete: () => null,
+}
+
+function actionFor(item: Notification): { label: string; href: string } | null {
+  return ACTION_FOR_TYPE[item.notification_type]?.(item) ?? null
 }
 
 export function NotificationsPanel({

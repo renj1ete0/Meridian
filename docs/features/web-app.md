@@ -319,6 +319,15 @@ honest "don't know".
   compares them, because a type in one and not the other would fall into no filter: the one
   way a notification can be recorded and never seen. Unknown types show as jobs rather than
   being dropped.
+- **Each row and the pill lead where the thing is decided** (`B-181`). Every approval, alert
+  and run summary once linked to `/admin`, which opens on Topic weights, so the bell's commonest
+  click landed on an unrelated screen. Now: seed and gazetteer proposals open their sections, a
+  run summary the run log, an alert the section for its condition (`ALERT_SECTION`, read against
+  the keys `alerts.py` raises; the disk has no page and gets no action), and a possible
+  duplicate the node it created, since no screen decides a merge yet (`B-182`). Every type the
+  database allows has an entry in `ACTION_FOR_TYPE`, and a test fails until a new one is given
+  a place. The pill asks "is the crawl all right?", so it opens Crawl health, or the run log
+  when the last run failed.
 
 ### Readable passages
 

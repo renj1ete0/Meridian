@@ -1778,7 +1778,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       for a note, while "Cite" on a node copies)
 - [ ] `B-180` **Manage views and notes** — no rename/delete for views (the API has both), notes
       cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
-- [ ] `B-181` **Notification links go to the right place** — approvals, run summaries and
+- [x] `B-181` **Notification links go to the right place** — `v0.166.2`. approvals, run summaries and
       alerts all open `/admin` (Topic weights); the status pill too. Map type → section
 - [ ] `B-182` **Possible-duplicate approvals have nowhere to go** — most of the bell is
       `merge_adjudication`, and nothing can decide one. Until a merge screen exists, "Compare"

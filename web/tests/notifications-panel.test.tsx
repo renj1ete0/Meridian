@@ -14,9 +14,10 @@ import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { NotificationsPanel } from '../src/explore/NotificationsPanel'
+import { ACTION_FOR_TYPE, ALERT_SECTION, NotificationsPanel } from '../src/explore/NotificationsPanel'
 import { KIND_OF_TYPE, countsByKind, dayHeading } from '../src/lib/status'
 import { DAGGER } from '../src/ui/Contested'
+import { StatusPill } from '../src/ui/TopBar'
 import type { Notification } from '../src/lib/api'
 
 const REPO = join(fileURLToPath(new URL('..', import.meta.url)), '..')
@@ -226,7 +227,79 @@ describe('an alert reads differently from a job', () => {
       />,
     )
 
-    expect(approval).toContain('href="/admin"')
+    // The section that decides it, not Admin's front page (`B-181`).
+    expect(approval).toContain('href="/admin/gazetteer"')
     expect(job).not.toContain('href=')
+  })
+})
+
+describe('every notification leads where it can be acted on (B-181)', () => {
+  function hrefOf(over: Partial<Notification>): string | null {
+    const markup = renderToStaticMarkup(
+      <NotificationsPanel
+        notifications={[item(over)]}
+        countsByType={{ [over.notification_type ?? 'alert']: 1 }}
+        now={NOW}
+      />,
+    )
+    return /href="([^"]+)"/.exec(markup)?.[1] ?? null
+  }
+
+  it('gives every type the database allows a deliberate destination', () => {
+    // Read from the model, as the kinds are: a new type must be given a place, even if
+    // that place is "no action", rather than falling back to Admin's front page.
+    const model = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/runs.py'), 'utf8')
+    const declaration = /NOTIFICATION_TYPE = constrained\(([\s\S]*?)name="notification_type"/.exec(model)!
+    const inDatabase = [...declaration[1]!.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]!)
+    expect(Object.keys(ACTION_FOR_TYPE).sort()).toEqual(inDatabase.sort())
+  })
+
+  it('never sends anything to the bare Admin page', () => {
+    for (const type of Object.keys(ACTION_FOR_TYPE)) {
+      expect(hrefOf({ notification_type: type, payload: { created: 95, condition: 'fetch_success_low' } })).not.toBe(
+        '/admin',
+      )
+    }
+  })
+
+  it('maps every alert condition the server raises', () => {
+    // Read from alerts.py, so a new condition is placed or deliberately left without an action.
+    const alerts = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/alerts.py'), 'utf8')
+    const keys = [...alerts.matchAll(/key="([a-z_]+)"/g)].map((m) => m[1]!)
+    expect(keys.length).toBeGreaterThan(2)
+    expect(Object.keys(ALERT_SECTION).sort()).toEqual([...new Set(keys)].sort())
+  })
+
+  it('opens a possible duplicate on the node it created, and nothing when that is missing', () => {
+    expect(hrefOf({ notification_type: 'merge_adjudication', payload: { created: 95, candidate: 46 } })).toBe(
+      '/nodes/95',
+    )
+    expect(hrefOf({ notification_type: 'merge_adjudication', payload: null })).toBeNull()
+  })
+
+  it('sends an alert to its section, and one with no page to none', () => {
+    expect(hrefOf({ payload: { condition: 'queue_drained' } })).toBe('/admin/seeds')
+    expect(hrefOf({ payload: { condition: 'disk_low' } })).toBeNull()
+    expect(hrefOf({ payload: { condition: 'something_new' } })).toBeNull()
+  })
+})
+
+describe('the status pill opens where its question is answered (B-181)', () => {
+  const progress = {
+    as_of: '2026-09-15T12:40:00Z',
+    queue: { pending: 4 },
+    recent_domains: [],
+    attempts_last_hour: 10,
+    successes_last_hour: 9,
+    liveness: null,
+  }
+  const run = (status: string) =>
+    ({ kind: 'read', rows: [{ status }] }) as unknown as Parameters<typeof StatusPill>[0]['runs']
+
+  it('opens crawl health while runs are fine, and the run log when one failed', () => {
+    expect(renderToStaticMarkup(<StatusPill progress={progress} runs={run('done')} />)).toContain('href="/admin/crawl"')
+    expect(renderToStaticMarkup(<StatusPill progress={progress} runs={run('failed')} />)).toContain(
+      'href="/admin/runs"',
+    )
   })
 })

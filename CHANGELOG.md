@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.2] — 2026-10-10
+
+### Fixed
+
+- `B-181`: notifications open the section that decides them (seeds, gazetteer, run log, the
+  alert's own section, the node a possible duplicate created) instead of Admin's front page; the
+  status pill opens Crawl health, or the run log after a failed run
+
 ## [0.166.1] — 2026-10-10
 
 ### Fixed

@@ -217,10 +217,14 @@ export function StatusPill({ progress, runs }: { progress: CrawlProgress | null;
   const detail = statusDetail(progress, health, runs)
   const shown = pillHealth(progress, health)
 
+  // The pill answers "is the crawl all right?", so it opens where that is answered: the run
+  // log when a run failed, crawl health otherwise (`B-181`).
+  const href = health === 'failed' ? '/admin/runs' : '/admin/crawl'
+
   return (
     <a
-      href="/admin"
-      onClick={onInternalClick('/admin')}
+      href={href}
+      onClick={onInternalClick(href)}
       title={detail}
       data-health={shown}
       className="hidden items-center gap-[7px] border border-line px-2.5 py-[5px] font-mono text-[10.5px] leading-none whitespace-nowrap text-text-muted hover:border-line-strong md:flex"
