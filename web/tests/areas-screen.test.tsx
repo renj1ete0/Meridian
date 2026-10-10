@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { modeFromSearch } from '../src/explore/MapPage'
 import { AreasView, areaFromSearch } from '../src/explore/map/AreasScreen'
+import { nameWithin } from '../src/lib/areas'
 import type { AreaLink, AreasLevel, Bridge } from '../src/lib/areas'
 import { area } from './areas-fixtures'
 
@@ -496,5 +497,60 @@ describe('the fill control (P6-42)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Research' }))
     expect(shaded()).toBe('0.000')
     expect(container.textContent).toContain('share peer-reviewed')
+  })
+})
+
+describe('the Map leads somewhere (B-186)', () => {
+  it('reads a child by its term inside a parent named alike, and keeps the full name otherwise', () => {
+    expect(nameWithin('Transportation (fare)', 'Transportation (time)')).toBe('fare')
+    expect(nameWithin('Transportation (fare)', 'Transportation')).toBe('fare')
+    expect(nameWithin('Transportation & Mechanics of Materials', 'Transportation (time)')).toBe(
+      'Transportation & Mechanics of Materials',
+    )
+    expect(nameWithin('Transport (fare)', 'Transportation')).toBe('Transport (fare)')
+    expect(nameWithin('Ecology', null)).toBe('Ecology')
+  })
+
+  it('makes a field’s distinctive terms searches on Find', async () => {
+    const leaf = area({ area_id: 9, level: 3, children: 0, name: 'leaf', terms: ['fare', 'ridership'] })
+    vi.stubGlobal('fetch', respond({ area: leaf, path: [], passages: [] }))
+    const { container } = render(
+      <AreasView level={level({ level: 3, parent: area({ level: 2 }), areas: [leaf] })} onLevel={() => {}} />,
+    )
+    fireEvent.click(container.querySelector('[data-area="9"]')!)
+    const panel = await screen.findByRole('complementary', { name: 'Field' })
+    const link = await within(panel).findByRole('link', { name: 'fare' })
+    expect(link.getAttribute('href')).toBe('/?q=fare')
+  })
+
+  it('offers the concept a jump names, beside the fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).includes('/api/explore/graph/search'))
+          return new Response(
+            JSON.stringify({
+              query: 'lidar',
+              matches: [
+                {
+                  entity_id: 254,
+                  canonical_name: 'lidar sensors',
+                  node_type: 'concept',
+                  jurisdiction: null,
+                  is_annotation: false,
+                  matched_alias: null,
+                  degree: 3,
+                },
+              ],
+            }),
+          )
+        return new Response(JSON.stringify({ query: 'lidar', hits: [] }))
+      }),
+    )
+    render(<AreasView level={level()} onLevel={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Jump to a field or a term'), { target: { value: 'lidar' } })
+    fireEvent.submit(screen.getByRole('search'))
+    const concept = await screen.findByRole('link', { name: /lidar sensors/ })
+    expect(concept.getAttribute('href')).toBe('/nodes/254')
   })
 })

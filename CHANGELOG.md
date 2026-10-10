@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.21] — 2026-10-10
+
+### Fixed
+
+- `B-186`: on the Map, a field's terms open Find; children named alike their parent are read by
+  their term inside it; the jump box offers the concept a term names; the hover card no longer
+  covers the level controls or repeats the side panel
+
 ## [0.166.20] — 2026-10-10
 
 ### Fixed

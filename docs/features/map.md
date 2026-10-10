@@ -365,6 +365,24 @@ Each level's circles together hold the same passages as the level above, so at a
 of 1 they cover the same area; the per-level spacing lets them spread into the room the
 coarser level left.
 
+
+**Ways on from a field** (`B-186`), from walking the Map as a reader:
+
+- **Terms are searches.** A theme's distinctive terms were inert chips; each now opens Find on
+  that term, the way into its passages across the corpus.
+- **A child is read by its term inside a parent named alike.** Names told apart by a term
+  (`B-172`) repeat their parent's base: under "Transportation (time)" the list read
+  "Transportation (fare)", "Transportation (bus)" and so on, eight times. Inside that parent
+  the list and the circles show "fare", "bus" (`nameWithin`); the breadcrumb, the hover card and
+  the row's title keep the full name.
+- **The jump box finds concepts too.** Typing a term found fields only, though a concept node of
+  that name might be what was wanted; the first concept it names now heads the list and opens
+  its node. The placeholder ends in ↵, since nothing happens until Enter.
+- **The hover card sits below the level controls** and is not drawn for the area the side
+  panel already shows; at the deepest level it covered the Fields/Subfields/Themes switch.
+
+Not yet: the chosen theme in the link (`?pick=`), and a long-press for the right-click menu on
+touch screens.
 ### Steering from the map
 
 Right-click an area for more, less, make a topic, or watch; right-click empty canvas to suggest

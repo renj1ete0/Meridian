@@ -39,6 +39,7 @@ import {
   zoomForDepth,
   shadeOf,
   type Shade,
+  nameWithin,
   type View,
   type Area,
   type AreaDetail,
@@ -53,7 +54,9 @@ import {
   type Rect,
 } from '../../lib/areas'
 import { readable } from '../../lib/readable'
-import { hrefForSource, navigate, onInternalClick } from '../../lib/route'
+import { hrefForNode, hrefForSource, navigate, onInternalClick } from '../../lib/route'
+import { findLink } from '../../lib/find'
+import { searchNodes, type NodeMatch } from '../graph/api'
 import { LevelControl, MorphLayer, useZoomGestures } from './Zoom'
 import { dayOf } from '../../lib/time'
 
@@ -483,7 +486,10 @@ export function AreasView({
           drag to move, 0 for all · right-click for more
         </p>
 
-        {hover !== null && byId.get(hover) ? <AreaTip area={byId.get(hover)!} /> : null}
+        {/* Not for the area the side panel already shows: the same numbers twice (`B-186`). */}
+        {hover !== null && byId.get(hover) && !(panel.kind === 'area' && panel.areaId === hover) ? (
+          <AreaTip area={byId.get(hover)!} />
+        ) : null}
 
         {menu ? (
           <ContextMenu
@@ -985,7 +991,7 @@ function Canvas({
                       stroke="var(--ground-deep)"
                       strokeWidth={4}
                     >
-                      {o.name}
+                      {nameWithin(o.name, level.path.at(-1)?.name)}
                     </text>
                   ))}
               </g>
@@ -1208,7 +1214,7 @@ function AreaTip({ area }: { area: Area }) {
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute right-5 top-28 z-10 flex w-[280px] max-w-[calc(100%-40px)] sm:top-16 flex-col gap-1.5 border border-text/16 bg-surface/90 px-[13px] py-[11px] backdrop-blur-[10px]"
+      className="pointer-events-none absolute right-5 top-28 z-10 flex w-[280px] max-w-[calc(100%-40px)] flex-col gap-1.5 border border-text/16 bg-surface/90 px-[13px] py-[11px] backdrop-blur-[10px]"
     >
       <span className="text-[13px] font-semibold leading-snug text-text">{area.name}</span>
       <span className="font-mono text-[10.5px] text-text-faint">
@@ -1330,6 +1336,7 @@ function LevelAside({
             <button
               type="button"
               onClick={() => onPick(area)}
+              title={area.name}
               className="flex w-full items-baseline justify-between gap-3 py-2 text-left text-[13px] text-text hover:text-accent-graph"
             >
               <span
@@ -1339,7 +1346,7 @@ function LevelAside({
                     : undefined
                 }
               >
-                {area.name}
+                {nameWithin(area.name, level.path.at(-1)?.name)}
               </span>
               <span className="font-mono text-[11.5px] text-text-faint">{area.passages.toLocaleString('en')}</span>
             </button>
@@ -1395,6 +1402,9 @@ function LevelAside({
 function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
   const [text, setText] = useState('')
   const [hits, setHits] = useState<AreaJumpHit[] | null>(null)
+  // A concept of that name, when there is one (`B-186`): the Map finds fields, and a reader
+  // typing "lidar" may want the node, not the area its passages fall in.
+  const [concept, setConcept] = useState<NodeMatch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef<AbortController | null>(null)
 
@@ -1406,6 +1416,10 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
     const controller = new AbortController()
     inFlight.current = controller
     setError(null)
+    setConcept(null)
+    searchNodes(query, 3, { signal: controller.signal })
+      .then((found) => setConcept(found.matches.find((m) => !m.is_annotation) ?? null))
+      .catch(() => setConcept(null))
     jumpToArea(query, { signal: controller.signal })
       .then((body) => setHits(body.hits))
       .catch((cause: unknown) => {
@@ -1422,7 +1436,7 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
           setText(event.target.value)
           if (!event.target.value) setHits(null)
         }}
-        placeholder="Jump to a field or a term"
+        placeholder="Jump to a field or a term ↵"
         aria-label="Jump to a field or a term"
         className="h-9 w-[340px] max-w-full border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-faint"
       />
@@ -1436,6 +1450,20 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
           aria-label="Fields found"
           className="absolute left-0 top-10 z-20 max-h-[360px] w-[420px] overflow-y-auto border border-line-strong bg-surface py-1"
         >
+          {concept ? (
+            <li>
+              <a
+                href={hrefForNode(concept.entity_id)}
+                onClick={onInternalClick(hrefForNode(concept.entity_id))}
+                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left no-underline hover:bg-surface-raised"
+              >
+                <span className="text-[13px] text-text">{concept.canonical_name}</span>
+                <span className="font-mono text-[10.5px] text-text-faint">
+                  concept · {concept.node_type.replaceAll('_', ' ')} · open its node
+                </span>
+              </a>
+            </li>
+          ) : null}
           {hits.length === 0 ? (
             <li className="px-3 py-2 text-[12.5px] text-text-muted">
               No field is named by it, and no passage in the map contains it.
@@ -1868,7 +1896,16 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
           <SectionLabel>Its distinctive terms</SectionLabel>
           <div className="flex flex-wrap gap-1.5">
             {detail.area.terms.map((term) => (
-              <Chip key={term}>{term}</Chip>
+              // A term is a way in: its passages across the corpus, on Find (`B-186`).
+              <a
+                key={term}
+                href={findLink(term)}
+                onClick={onInternalClick(findLink(term))}
+                title={`Search the corpus for “${term}”`}
+                className="no-underline"
+              >
+                <Chip>{term}</Chip>
+              </a>
             ))}
           </div>
           <SectionLabel>Passages nearest its centre</SectionLabel>
