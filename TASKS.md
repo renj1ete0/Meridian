@@ -1794,11 +1794,20 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-184` `v0.166.15`. **Gaps: reader gaps first** — search-yield diagnostics fill the first eleven rows;
       the off-topic gap's action contradicts its advice; `!bang` syntax in prefills; the tab is
       lost on Back
-- [ ] `B-185` **Admin small fixes** — add-topic dialog has no description (which drives seed
+- [-] `B-185` split into `B-196`–`B-199`. **Admin small fixes** — add-topic dialog has no description (which drives seed
       searches) and no next step; weight drafts dropped silently on section change; crawl health
       has no links and raw enums; runs list has no paging, "1 edges", "done · done"; agent models
       shown as `${…}`; fetch policy "Not being crawled. 0 failures in a row"; nested `<main>`;
       boost undo text names the wrong section; phone tab strip hides 8 of 12 sections
+- [ ] `B-196` **Add a topic, then what** — the dialog has no description (which drives seed
+      searches) and no next step; add both
+- [x] `B-197` `v0.166.16`. **Crawl health leads somewhere** — words for outcomes and states,
+      empty states left out, domains link to their policy row
+- [ ] `B-198` **Run history** — no paging past 25 of 422; "1 edges"; "done · done"; a deferred
+      relay run reads as a failure
+- [ ] `B-199` **Admin wording and shell** — agent models shown as `${…}`; "Not being crawled. 0
+      failures in a row"; nested `<main>`; weight drafts dropped silently on section change; the
+      phone tab strip hides 8 of 12 sections
 - [ ] `B-186` **Map small fixes** — theme card terms inert (make them Find links); child names
       repeat the parent; hover card over the level controls; the jump box finds no concepts and
       gives no hint that it needs Enter

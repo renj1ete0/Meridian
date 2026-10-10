@@ -963,6 +963,14 @@ drawn**: what is looked for is a gap, the hour fetching stopped, and a chart ski
 hours would close exactly that gap. No chart library: twenty-four stacked bars are a few
 rectangles, and the package keeps its dependencies to React.
 
+
+**The evidence in words, and a way on** (`B-197`). Outcomes and queue states were shown as the
+database stores them (`robots_unreachable`, `rejected_duplicate`); they are now words, with the
+stored value as the row's title, and `OUTCOME_WORDS` and `STATUS_WORDS` are read against the
+model's enums by a test, so a new value must be given words. Queue states with nothing in them
+are left out: `extracted` and `embedded` read 0 every day. Each of the busiest domains links to
+its Fetch policy row (`/admin/fetch-policy?q=<domain>`), since "0 of 7 succeeded" is answered
+there and the page had no links at all.
 ### The first run
 
 §16 lists cold-start seed quality as a real risk, "worth spending an evening on", and that

@@ -106,8 +106,9 @@ export function AdminPage() {
 
   const [policy, setPolicy] = useState<FetchPolicyPage | null>(null)
   const [domainStatus, setDomainStatus] = useState<DomainStatus | null>(null)
-  const [domainQuery, setDomainQuery] = useState('')
-  const [domainSearch, setDomainSearch] = useState('')
+  // `?q=` opens Fetch policy on one domain, as Crawl health links to it (`B-197`).
+  const [domainQuery, setDomainQuery] = useState(() => new URLSearchParams(window.location.search).get('q') ?? '')
+  const [domainSearch, setDomainSearch] = useState(() => new URLSearchParams(window.location.search).get('q') ?? '')
   const [domainOffset, setDomainOffset] = useState(0)
 
   const [agents, setAgents] = useState<Agents | null>(null)

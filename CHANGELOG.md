@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.16] — 2026-10-10
+
+### Fixed
+
+- `B-197`: Crawl health shows fetch outcomes and queue states in words, leaves empty states out,
+  and links each busy domain to its Fetch policy row (`/admin/fetch-policy?q=`)
+
 ## [0.166.15] — 2026-10-10
 
 ### Fixed

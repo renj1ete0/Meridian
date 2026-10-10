@@ -1,5 +1,6 @@
 import type { CrawlHealth, HourBucket, Liveness, LivenessState } from '../lib/api'
 import { Card, LABEL, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
+import { onInternalClick } from '../lib/route'
 import { clockOf, zoneLabel } from '../lib/time'
 
 /**
@@ -20,6 +21,38 @@ export function duration(seconds: number): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 48) return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`
   return `${Math.floor(hours / 24)} days`
+}
+
+/**
+ * Fetch outcomes in words (`B-197`), keyed by the database's values: the raw enum
+ * (`robots_unreachable`) is the corpus's bookkeeping, and stays in the row's title.
+ */
+export const OUTCOME_WORDS: Record<string, string> = {
+  success: 'fetched',
+  not_modified: 'unchanged since last fetch',
+  http_error: 'the site answered with an error',
+  timeout: 'timed out',
+  too_large: 'too large to fetch',
+  robots_denied: 'refused by the site’s robots.txt',
+  robots_unreachable: 'robots.txt could not be read',
+  blocked: 'domain blocked by policy',
+  connection_error: 'could not connect',
+  parse_error: 'fetched but could not be read',
+  unsafe_target: 'refused: unsafe address',
+  content_type_rejected: 'not a kind of document kept',
+  decompression_bomb: 'refused: expands too far',
+  too_many_redirects: 'too many redirects',
+}
+
+/** Queue states in words, keyed by the database's values. */
+export const STATUS_WORDS: Record<string, string> = {
+  pending: 'waiting to be fetched',
+  fetched: 'fetched, being read',
+  extracted: 'read, being stored',
+  embedded: 'stored',
+  done: 'done',
+  failed: 'failed',
+  rejected_duplicate: 'skipped as copies',
 }
 
 function pages(n: number): string {
@@ -212,8 +245,8 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
             ) : (
               outcomes.map((row) => (
                 <tr key={row.outcome} className={ROW}>
-                  <td className={TDM}>
-                    {row.outcome}
+                  <td className={TDM} title={row.outcome}>
+                    {OUTCOME_WORDS[row.outcome] ?? row.outcome}
                     {/* Share of the day, drawn. One hue: the outcome is named
                         beside it, so colour carries no verdict. */}
                     <div className="mt-1 h-1 w-full bg-surface-raised">
@@ -235,12 +268,17 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
             </tr>
           </thead>
           <tbody>
-            {Object.entries(health.queue).map(([status, count]) => (
-              <tr key={status} className={ROW}>
-                <td className={TDM}>{status}</td>
-                <td className={`${TDM} text-right text-text-muted`}>{count.toLocaleString()}</td>
-              </tr>
-            ))}
+            {/* States with nothing in them are left out: rows that read 0 every day are noise. */}
+            {Object.entries(health.queue)
+              .filter(([, count]) => count > 0)
+              .map(([status, count]) => (
+                <tr key={status} className={ROW}>
+                  <td className={TDM} title={status}>
+                    {STATUS_WORDS[status] ?? status}
+                  </td>
+                  <td className={`${TDM} text-right text-text-muted`}>{count.toLocaleString()}</td>
+                </tr>
+              ))}
             {/* Beside the queue because it is one: the crawl can be healthy
                 while none of what it fetches becomes searchable. */}
             <tr className="border-t border-line">
@@ -268,7 +306,16 @@ export function CrawlHealthPanel({ health }: CrawlHealthPanelProps) {
           ) : (
             health.top_domains.map((row) => (
               <tr key={row.domain} className={ROW}>
-                <td className={TDM}>{row.domain}</td>
+                <td className={TDM}>
+                  {/* To the domain's own policy row: what to change when it keeps failing (`B-197`). */}
+                  <a
+                    href={`/admin/fetch-policy?q=${encodeURIComponent(row.domain)}`}
+                    onClick={onInternalClick(`/admin/fetch-policy?q=${encodeURIComponent(row.domain)}`)}
+                    className="hover:text-accent-graph hover:underline"
+                  >
+                    {row.domain}
+                  </a>
+                </td>
                 <td className={`${TDM} whitespace-nowrap text-right text-text-muted`}>
                   {row.succeeded.toLocaleString()} of {row.attempts.toLocaleString()} succeeded
                 </td>

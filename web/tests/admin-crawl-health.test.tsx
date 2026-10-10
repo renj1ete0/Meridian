@@ -8,12 +8,23 @@
  * a gap as a gap.
  */
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AdminPage, HEALTH_REFRESH_MS } from '../src/admin/AdminPage'
-import { CrawlHealthPanel, HourlyChart, bucketLabel, duration, verdict } from '../src/admin/CrawlHealthPanel'
+import {
+  CrawlHealthPanel,
+  HourlyChart,
+  OUTCOME_WORDS,
+  STATUS_WORDS,
+  bucketLabel,
+  duration,
+  verdict,
+} from '../src/admin/CrawlHealthPanel'
 import type { CrawlHealth, HourBucket, Liveness } from '../src/lib/api'
 
 function text(markup: string): string {
@@ -219,15 +230,16 @@ describe('the panel', () => {
   it('shows the outcome mix without the outcomes that did not happen', () => {
     const body = text(renderToStaticMarkup(<CrawlHealthPanel health={health()} />))
 
-    expect(body).toContain('success 240')
-    expect(body).toContain('timeout 48')
+    // In words (`B-197`).
+    expect(body).toContain('fetched 240')
+    expect(body).toContain('timed out 48')
     expect(body).not.toContain('blocked')
   })
 
   it('shows the queue by status and the embedding backlog beside it', () => {
     const body = text(renderToStaticMarkup(<CrawlHealthPanel health={health()} />))
 
-    expect(body).toContain('pending 42')
+    expect(body).toContain('waiting to be fetched 42')
     expect(body).toContain('failed 7')
     expect(body).toContain('awaiting embedding 1,234')
   })
@@ -333,5 +345,64 @@ describe('refreshing while open', () => {
     const before = healthCalls()
     await act(() => vi.advanceTimersByTimeAsync(HEALTH_REFRESH_MS * 3))
     expect(healthCalls()).toBe(before)
+  })
+})
+
+describe('the evidence in words, and a way to act on it (B-197)', () => {
+  function enumOf(name: string): string[] {
+    // Read from the model, so a value added to the database must be given words here.
+    const model = readFileSync(
+      join(__dirname, '..', '..', 'packages', 'meridian_core', 'meridian_core', 'models', 'queue.py'),
+      'utf8',
+    )
+    const body = new RegExp(`${name} = constrained\\(([\\s\\S]*?)name=`).exec(model)![1]!
+    return [...body.matchAll(/^\s*"([a-z_]+)"/gm)].map((m) => m[1]!).sort()
+  }
+
+  it('words every outcome and queue state the database allows', () => {
+    expect(Object.keys(OUTCOME_WORDS).sort()).toEqual(enumOf('FETCH_OUTCOME'))
+    expect(Object.keys(STATUS_WORDS).sort()).toEqual(enumOf('TASK_STATUS'))
+  })
+
+  it('shows an outcome in words with the stored value in reach, and leaves empty states out', () => {
+    const markup = renderToStaticMarkup(
+      <CrawlHealthPanel
+        health={health({
+          outcomes: [{ outcome: 'robots_unreachable', count: 3 }],
+          queue: { pending: 42, extracted: 0, failed: 7 },
+        })}
+      />,
+    )
+    expect(markup).toContain('robots.txt could not be read')
+    expect(markup).toContain('title="robots_unreachable"')
+    expect(markup).toContain('waiting to be fetched')
+    expect(markup).not.toContain('read, being stored')
+  })
+
+  it('links a busy domain to its fetch policy row', () => {
+    const markup = renderToStaticMarkup(<CrawlHealthPanel health={health()} />)
+    expect(markup).toContain('href="/admin/fetch-policy?q=docs.example"')
+  })
+})
+
+describe('Fetch policy opened from a domain link (B-197)', () => {
+  afterEach(() => window.history.pushState({}, '', '/'))
+
+  it('asks for that domain first', async () => {
+    const urls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        urls.push(String(url))
+        return new Promise<Response>(() => {})
+      }),
+    )
+    window.history.pushState({}, '', '/admin/fetch-policy?q=docs.example')
+    await act(async () => {
+      render(<AdminPage />)
+    })
+    const policy = urls.filter((u) => u.includes('/api/admin/fetch-policy'))
+    expect(policy.length).toBeGreaterThan(0)
+    expect(new URL(policy[0]!, 'http://x').searchParams.get('q')).toBe('docs.example')
   })
 })
