@@ -63,8 +63,12 @@ jobs:
       - name: Python dependencies
         run: uv sync --all-packages
 
-      - name: Migrations
-        run: uv run alembic upgrade head
+      - name: Migrations and seed
+        # Seeded as the dev database is (`make seed`): the steering and policy tests expect the
+        # configured topics and the global fetch-policy row.
+        run: |
+          uv run alembic upgrade head
+          uv run python scripts/seed.py
 
       - name: Lint
         run: make lint
