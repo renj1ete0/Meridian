@@ -21,6 +21,14 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-10 (evening) — `v0.168.3`–`v0.169.0`, pushed; local stack rebuilt.** Built: find a
+> gazetteer term, with the pager counting matches (`B-209`); time zones by city or offset, and a
+> stored `UTC` shown as UTC (`B-210`); expired boosts run again or cleared (`B-211`); node page
+> on a phone and beside the question toggle (`B-212`); Admin on a phone (`B-213`); **PDF tables
+> keep their rows** (`B-214`). Measured: figure captions are searchable (`B-192` suspect
+> refuted). **Resume with:** `B-215` (re-extract stored PDFs: operator's call); `B-163`/`B-205`
+> with a paid model; non-English lexical search (`B-192`); `B-201` note removal (decision).
+
 > **2026-10-10 (later) — `v0.167.0`–`v0.168.1`, pushed; local stack rebuilt.** Built: deciding
 > possible duplicates in Admin (`B-202`), a paused crawl named as paused (`B-203`), table headers
 > in the embedding view and padding rows left out (`B-195`), notes editable (`B-201`, removal

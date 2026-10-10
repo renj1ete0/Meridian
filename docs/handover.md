@@ -13,6 +13,18 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-10 (evening) — `v0.168.3`–`v0.169.0`.** Traps and findings:
+> - **PDF tables are found in a second `-layout` pass** (`B-214`) and placed into reading-order
+>   text only when the words going out and coming in match; a placement that fails a check
+>   leaves the page as it was, so a missing table is never an error. Stored PDFs keep their old
+>   text until re-extracted (`B-215`, operator's call): the re-cut rebuilds from passages.
+> - **`Intl.supportedValuesOf('timeZone')` omits `UTC`** (`B-210`): a select built from it
+>   showed a stored `UTC` as its first zone.
+> - **The bell's server `unread` grows forever**; the badge counts since the reader last opened
+>   the panel (a browser stamp), so a fresh headless browser always shows 50.
+> - **A Python heredoc that edits several files stops at the first failed `assert`**, and a
+>   commit made after it carries only the edits before it. Check its output before committing.
+
 > **2026-10-10 (later) — `v0.167.0`–`v0.168.1`.** Traps and findings:
 > - **Mutation testing runs in `.mutate/`** (`scripts/mutate.sh`): mutmut cannot run from the
 >   repo root (package path ≠ module name, tests outside its directory). Stryker uses the command
