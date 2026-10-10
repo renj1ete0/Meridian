@@ -8,6 +8,10 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Testing (`Q-03`): property-based tests (Hypothesis) for rank fusion, the per-source cap and
+  the reference-list filter; a CI workflow (`.github/workflows/ci.yml`) running lint and every
+  test against the project's own Postgres image on each push to main
+
 - Testing (`Q-02`): mutation testing works. Python runs in a staging tree laid out as mutmut
   expects (`scripts/mutate.sh`, `make mutate`); the web uses Stryker's command runner, since its
   vitest runner activated no mutant under vitest 5. Baselines in `docs/guides/testing.md`

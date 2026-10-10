@@ -69,10 +69,26 @@ equivalent (the change cannot alter behaviour) and need no test.
   `time.ts` scored 13% under the vitest runner, so those first scores were the setup. Runs in place, because the drift tests read the Python sources beside `web/`;
   Stryker restores each file at the end, so check `git status` if a run is killed.
 
+## Property-based tests (`Q-03`)
+
+`tests/unit/test_properties.py` states what must hold for any input, and Hypothesis looks for
+the input that breaks it: reciprocal rank fusion scores exactly the ids it was given, does not
+depend on which arm came first, ranks an id first in every arm highest and never lowers a score
+for another arm; the per-source cap fills the page from what it was given and lets no source
+past the cap while another's hits wait; the reference-list verdict does not depend on line
+order or blank lines. `tests/unit/test_chunking_tables.py` generates tables and unbroken runs
+for the chunker (`B-191`). `answer.group_hits` is not covered yet: its several-country rules
+need stating carefully first.
+
+## Continuous integration (`Q-03`)
+
+`.github/workflows/ci.yml` runs on every push to main: it builds the project's Postgres image
+(pgvector and AGE) and runs it as the dev stack does, applies the migrations, then runs
+`make lint`, the whole Python suite and the web typecheck and tests. The environment is the
+development stack's throwaway values, inline in the workflow. Written 2026-10-10 and not yet seen
+running from this machine (no `gh` here): check the first run in the repository's Actions tab.
+
 ## Still to do
 
-- Property-based tests (Hypothesis is installed) for the pure functions whose invariants matter:
-  `references.is_reference_list`, `search.fuse` / `cap_per_source`, `answer.group_hits`, and
-  the web's `readable()` (with fast-check).
-- A CI workflow running lint, the unit tests and the web tests on every push.
+- Property tests for `answer.group_hits`, and the web's `readable()` with fast-check.
 - Raise the coverage floors only after mutation scores say the covered code is actually checked.

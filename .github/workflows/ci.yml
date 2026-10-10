@@ -1,0 +1,71 @@
+# Lint and every test on each push to main (`Q-03`). See docs/guides/testing.md.
+#
+# The database is the project's own image (Postgres 17 with pgvector and AGE, built from
+# deploy/postgres), run the way the dev stack runs it, because integration tests run against a
+# real Postgres and never a stand-in (AGENTS.md, Testing).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # The development stack's values: a throwaway database on the runner, nothing secret.
+    env:
+      PG_USER: meridian
+      PG_PASSWORD: dev
+      PG_RW_PASSWORD: dev
+      PG_RO_PASSWORD: dev
+      PG_RW_URL: postgresql://meridian_rw:dev@localhost:21111/meridian
+      PG_RO_URL: postgresql://meridian_ro:dev@localhost:21111/meridian
+      PG_GUEST_URL: postgresql://meridian_guest:dev@localhost:21111/meridian
+      PG_MIGRATION_URL: postgresql://meridian:dev@localhost:21111/meridian
+      MERIDIAN_MCP_ALLOW_ANONYMOUS: "true"
+      MERIDIAN_ADMIN_ALLOW_ANONYMOUS: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+      - name: Python
+        run: uv python install 3.14
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Web dependencies
+        run: cd web && npm ci
+
+      - name: Postgres image
+        run: docker build -t meridian/postgres:ci deploy/postgres
+      - name: Postgres
+        run: |
+          docker run -d --name pg --shm-size 1g -p 21111:5432 \
+            -e POSTGRES_DB=meridian -e POSTGRES_USER=meridian -e POSTGRES_PASSWORD=dev \
+            -e PG_RW_PASSWORD=dev -e PG_RO_PASSWORD=dev -e PG_GUEST_PASSWORD=dev \
+            -v "$PWD/scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro" \
+            meridian/postgres:ci postgres -c shared_preload_libraries=age
+          for _ in $(seq 60); do
+            docker exec pg pg_isready -U meridian -d meridian && break
+            sleep 2
+          done
+
+      - name: Python dependencies
+        run: uv sync --all-packages
+
+      - name: Migrations
+        run: uv run alembic upgrade head
+
+      - name: Lint
+        run: make lint
+
+      - name: Python tests
+        run: uv run pytest -q
+
+      - name: Web tests
+        run: cd web && npm run typecheck && npx vitest run
