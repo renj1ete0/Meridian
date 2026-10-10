@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.6] — 2026-10-10
+
+### Fixed
+
+- `B-176`: on a whole question that names no concept, the neighbourhood panel no longer says
+  "No concept is called …" or offers concepts matched on single common words; it shows only
+  what is stated or near in meaning
+
 ## [0.166.5] — 2026-10-10
 
 ### Fixed

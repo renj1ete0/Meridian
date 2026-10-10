@@ -16,7 +16,7 @@ import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
 import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
-import { getTermNeighbourhood, hasNeighbourhood } from './neighbourhood/api'
+import { getTermNeighbourhood, worthShowing } from './neighbourhood/api'
 import { FiltersButton, FindRail } from './FindRail'
 import { topicWords } from '../lib/growth'
 import { WhereYouWere } from './WhereYouWere'
@@ -171,7 +171,7 @@ export function ExplorePage() {
     return () => controller.abort()
   }, [asked, picked])
 
-  const showHood = hood !== null && (hood.phase === 'failed' || (hood.phase === 'done' && hasNeighbourhood(hood.data)))
+  const showHood = hood !== null && (hood.phase === 'failed' || (hood.phase === 'done' && worthShowing(hood.data)))
 
   // Read once, and the stamp advances immediately. Writing it later — on
   // unmount, or after the fetch — is how the delta ends up always zero: the

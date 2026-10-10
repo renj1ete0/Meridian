@@ -1,6 +1,14 @@
 import { hrefForNode, hrefForSource, onInternalClick } from '../../lib/route'
 import { TierChip } from '../../ui/Tier'
-import type { CitedTerm, Relation, SimilarBasis, SimilarTerm, Term, TermNeighbourhood } from './api'
+import {
+  isUnnamedQuestion,
+  type CitedTerm,
+  type Relation,
+  type SimilarBasis,
+  type SimilarTerm,
+  type Term,
+  type TermNeighbourhood,
+} from './api'
 
 /**
  * The neighbourhood panel beside Find's results (task P6-33; design canvas, "Find · Term
@@ -371,6 +379,7 @@ function Body({
 }) {
   const passages = data.passages.filter((p) => !shownChunkIds?.has(p.hit.chunk_id))
   const measured = data.similar_basis !== 'none'
+  const quiet = isUnnamedQuestion(data)
   return (
     <>
       <div className="flex flex-col gap-1">
@@ -382,14 +391,14 @@ function Body({
             />
             <span className={META}>{data.anchor.node_type.replace(/_/g, ' ')}</span>
           </>
-        ) : (
+        ) : quiet ? null : (
           <p className="text-[13px] leading-[1.55] text-text-muted">
             No concept is called “{data.term}” yet, so no passage has been read as linking it to anything.
           </p>
         )}
       </div>
 
-      {!data.anchor && data.candidates.length > 0 ? (
+      {!data.anchor && !quiet && data.candidates.length > 0 ? (
         <div className="flex flex-col gap-2">
           <span className={LABEL}>
             {/\s/.test(data.term.trim()) ? 'Concepts its words name' : 'Concepts with that in their name'}

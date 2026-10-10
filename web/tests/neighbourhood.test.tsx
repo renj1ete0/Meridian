@@ -35,7 +35,9 @@ import {
   TERM_NEIGHBOURHOOD_FIELDS,
   getTermNeighbourhood,
   hasNeighbourhood,
+  isUnnamedQuestion,
   neighbourhoodQuery,
+  worthShowing,
   type TermNeighbourhood,
 } from '../src/explore/neighbourhood/api'
 import { ApiError, type SearchHit } from '../src/lib/api'
@@ -388,5 +390,48 @@ describe('names in the ring diagram (B-100)', () => {
     const lines = labelLines('Supercalifragilisticexpialidocious', 16)
     expect(lines).toHaveLength(1)
     expect(lines[0]!.length).toBeLessThanOrEqual(16)
+  })
+})
+
+describe('a whole question that names no concept (B-176)', () => {
+  const question = (over: Partial<TermNeighbourhood> = {}) =>
+    data({
+      term: 'how do cities make streets near schools safer?',
+      anchor: null,
+      candidates: [{ entity_id: 9, canonical_name: 'Pakistani cities', node_type: 'place' }],
+      cited: [],
+      cited_total: 0,
+      similar: [],
+      similar_total: 0,
+      ...over,
+    })
+
+  it('stays out of the way when nothing is stated or near, even with word matches and passages', () => {
+    expect(hasNeighbourhood(question())).toBe(true)
+    expect(isUnnamedQuestion(question())).toBe(true)
+    expect(worthShowing(question())).toBe(false)
+  })
+
+  it('shows what is near in meaning, without the word matches or the sentence about the wording', () => {
+    const near = question({
+      similar: [{ entity_id: 5, canonical_name: 'school zones', node_type: 'intervention', similarity: 0.8 }],
+      similar_total: 1,
+    })
+    expect(worthShowing(near)).toBe(true)
+    render(<NeighbourhoodPanel state={{ phase: 'done', data: near }} />)
+    expect(screen.queryByText(/No concept is called/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Pakistani cities' })).toBeNull()
+    expect(screen.getAllByText('school zones').length).toBeGreaterThan(0)
+  })
+
+  it('is unchanged for a few search words, and for a question that does name a concept', () => {
+    const words = question({ term: 'school streets' })
+    expect(isUnnamedQuestion(words)).toBe(false)
+    expect(worthShowing(words)).toBe(true)
+    render(<NeighbourhoodPanel state={{ phase: 'done', data: words }} />)
+    expect(screen.getByText(/No concept is called/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pakistani cities' })).toBeTruthy()
+
+    expect(isUnnamedQuestion(data({ term: 'what are covered walkways?' }))).toBe(false)
   })
 })

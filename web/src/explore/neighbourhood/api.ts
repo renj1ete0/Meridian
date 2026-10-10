@@ -4,6 +4,7 @@
  * separate lists of separate types.
  */
 
+import { looksLikeQuestion } from '../../lib/answer'
 import { ApiError, describeDetail, type SearchHit } from '../../lib/api'
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
@@ -67,6 +68,24 @@ export interface TermNeighbourhood {
  * rarely names a node and often has nothing near it; a panel saying so
  * beside every such search takes a quarter of the page to report an absence.
  */
+/**
+ * Whether the term was a whole question that names no concept (`B-176`). Its "concepts its
+ * words name" are then matches on single common words, and "no concept is called …" a
+ * sentence about the question's wording, so neither is shown.
+ */
+export function isUnnamedQuestion(data: TermNeighbourhood): boolean {
+  return data.anchor === null && looksLikeQuestion(data.term)
+}
+
+/**
+ * Whether the panel earns its place beside the results. For an unnamed question, only when
+ * something is stated or near in meaning; otherwise whenever anything is there.
+ */
+export function worthShowing(data: TermNeighbourhood): boolean {
+  if (isUnnamedQuestion(data)) return data.cited.length + data.similar.length > 0
+  return hasNeighbourhood(data)
+}
+
 export function hasNeighbourhood(data: TermNeighbourhood): boolean {
   return (
     data.anchor !== null ||
