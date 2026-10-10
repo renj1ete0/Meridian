@@ -16,10 +16,29 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.164.7`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.166.25`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
+
+> **2026-10-10 — `v0.166.0`–`v0.166.25`, pushed; local stack running the new web, api, worker
+> and orchestrator.** Operator asked for an exhaustive audit of every reader and operator flow,
+> what an intermediate–advanced user needs without clutter, edge cases through ingest (tables,
+> figures), and whether MCP output works. Four audits (reading surfaces; Map, Gaps, Growth, Ask,
+> bell; Admin; ingest and MCP), findings filed as `B-173`–`B-202`. Built: Find's filter rail
+> with source type and years and every filter in the link and in saved views (`B-173`), more
+> passages (`B-174`), answer → passages per country (`B-175`), quiet neighbourhood on questions
+> (`B-176`), recent nodes and working saved views (`B-177`, `B-193` node views could not be saved
+> with a filter, `B-194` watched counts ignored filters), open a source at the passage (`B-178`),
+> copy citation (`B-179`), manage views (`B-180`), bell links and settled state (`B-181`,
+> `B-182`), Ask without a model (`B-183`), Gaps reader-first (`B-184`), Map (`B-186`, `B-200`),
+> Growth (`B-187`), Admin (`B-196`–`B-199`), MCP: quarantined text leaked through
+> `list_new_since` (`B-188`), citations and typed arguments (`B-189`); fragments out of the
+> vector arm (`B-190`); tables chunked by row (`B-191`, new text only). **Resume with:**
+> `B-202` deciding possible duplicates (most of the bell), `B-195` table header in the embedding
+> view and NaN rows, then a re-cut of table-heavy sources (operator's call: `worker.rechunk
+> --apply` writes and re-embeds), `B-201` notes, `B-192` suspects; then the earlier queue: `Q-02`,
+> `Q-03` (Hypothesis now used in `tests/unit/test_chunking_tables.py`), the relay findings below.
 
 > **2026-10-08 (night) — `v0.165.5` + testing tooling, pushed; stacks left running.** Operator:
 > GPU later; use Claude (relay) for synthesis now; dev-DB cleanup approved but the session's

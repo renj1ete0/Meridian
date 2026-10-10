@@ -13,6 +13,26 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-10 — `v0.166.0`–`v0.166.25`.** Traps and findings:
+> - **Filters have one model** (`web/src/lib/find.ts`): link, request and saved view. A new
+>   filter goes there, in `SearchFilters` (Python), and in `/answer` as well as `/search`; tests
+>   compare the two routes' signatures and the view keys with the dataclass.
+> - **A node view is checked against `GraphFilters`, a search view against `SearchFilters`**
+>   (`B-193`). Every filtered node view had been refused with a 422.
+> - **Anything handing passages to a model uses `readable_passage_conditions()`** (`B-188`); a
+>   test reads the MCP server's source for `select(Chunk` without it.
+> - **The vector arm ignores passages under 40 characters** (`B-190`). Synthetic test passages
+>   must be longer than that or the vector arm will not return them (three tests were).
+> - **Table chunking applies to new text only** (`B-191`). `worker.rechunk` writes in its first
+>   two phases even without `--apply`; measure with a read-only script in a one-off container
+>   (`docker compose run --rm --no-deps -v <dir>:/probe --entrypoint python worker …`), since
+>   the worker's filesystem is read-only.
+> - **`frame_passages(..., detailed=True)` is for MCP only**: synthesis prompts keep the plain
+>   form, because their text is the key relay answers are filed under.
+> - **Read DTOs mirror their table exactly** (`tests/unit/test_drift.py`); a computed field
+>   goes on a subclass (`NotificationItemRead`), and the web mirrors only the subclass's fields.
+> - **Do not `git stash` while a background test run is going**: it swaps files under it.
+
 > **2026-10-08 — `v0.164.8`–`v0.165.5`.** Traps and findings:
 > - **Rebuild one service with `--no-deps`.** `docker compose up -d --build orchestrator` rebuilt
 >   and recreated Postgres too, and the embedding backfill died mid-write (it restarts and
