@@ -115,3 +115,7 @@ class NotificationRead(BaseModel):
     surface: str | None
     read_at: dt.datetime | None
     created_at: dt.datetime
+    #: What became of what it asks for, read when the bell is opened (`B-182`): a proposal's
+    #: status once it is no longer pending, "merged" once a possible duplicate was merged.
+    #: None while it still waits, or for a notification that asks nothing.
+    settled: str | None = None

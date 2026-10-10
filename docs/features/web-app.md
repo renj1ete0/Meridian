@@ -319,6 +319,11 @@ honest "don't know".
   compares them, because a type in one and not the other would fall into no filter: the one
   way a notification can be recorded and never seen. Unknown types show as jobs rather than
   being dropped.
+- **A row says what became of it** (`B-182`). A notification's body is written when it arrives,
+  so a superseded proposal still read "applies by itself unless rejected", and its "Review" led
+  to a list it was no longer in. The route adds `settled` when the bell is read: a proposal's
+  status once it is not pending, "merged" once a possible duplicate's node redirects. A settled
+  row says "since superseded" and offers no action.
 - **Each row and the pill lead where the thing is decided** (`B-181`). Every approval, alert
   and run summary once linked to `/admin`, which opens on Topic weights, so the bell's commonest
   click landed on an unrelated screen. Now: seed and gazetteer proposals open their sections, a

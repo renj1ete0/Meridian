@@ -77,6 +77,7 @@ function note(over: Partial<Notification> = {}): Notification {
     payload: null,
     surface: 'admin',
     read_at: null,
+    settled: null,
     created_at: '2026-09-23T06:48:00Z',
     ...over,
   }

@@ -779,3 +779,50 @@ async def test_an_oversized_notification_limit_is_refused(client) -> None:
     assert (
         await client.get("/api/explore/notifications", params={"limit": 10_000})
     ).status_code == 422
+
+
+async def test_a_notification_says_what_became_of_what_it_asked(client, session_for) -> None:
+    """`B-182`: a notification's body is written when it arrives, so a superseded proposal still
+    read "applies by itself unless rejected", and its "Review" led to a list it was not in."""
+    import datetime as dt
+
+    from meridian_core.models import Notification, SteeringProposal, TopicConfig
+
+    sess = await session_for("rw")
+    topic = await sess.scalar(select(TopicConfig.topic).limit(1))
+    if topic is None:
+        pytest.skip("no topic to propose against")
+    now = dt.datetime.now(dt.UTC)
+    made = []
+    for status in ("superseded", "pending"):
+        proposal = SteeringProposal(
+            actor="test",
+            topic=topic,
+            kind="weight",
+            current_value=0.1,
+            proposed_value=0.2,
+            reason="test",
+            evidence={},
+            apply_after=now,
+            status=status,
+        )
+        sess.add(proposal)
+        await sess.flush()
+        note = Notification(
+            notification_type="steering_proposal",
+            title=f"b182 {status}",
+            payload={"proposal_id": proposal.proposal_id},
+        )
+        sess.add(note)
+        made.append((proposal, note))
+    await sess.commit()
+    try:
+        body = (await client.get("/api/explore/notifications", params={"limit": 200})).json()
+        by_title = {n["title"]: n for n in body["notifications"]}
+        assert by_title["b182 superseded"]["settled"] == "superseded"
+        assert by_title["b182 pending"]["settled"] is None
+    finally:
+        for proposal, note in made:
+            await sess.delete(note)
+            await sess.delete(proposal)
+        await sess.commit()

@@ -81,6 +81,8 @@ export const ACTION_FOR_TYPE: Record<string, (item: Notification) => { label: st
 }
 
 function actionFor(item: Notification): { label: string; href: string } | null {
+  // Settled already (`B-182`): "Review" on a superseded proposal led to a list it was not in.
+  if (item.settled) return null
   return ACTION_FOR_TYPE[item.notification_type]?.(item) ?? null
 }
 
@@ -225,6 +227,8 @@ function Row({ item }: { item: Notification }) {
         <p className={`font-mono text-[10px] ${alert ? 'text-accent-attention' : 'text-text-faint'}`}>
           {KIND_SINGULAR[kind]} · {TYPE_LABEL[item.notification_type] ?? item.notification_type} ·{' '}
           <time dateTime={item.created_at}>{clock(item.created_at)}</time>
+          {/* Its body was written when it arrived; this is what became of it since. */}
+          {item.settled ? <span className="text-text-muted"> · since {item.settled}</span> : null}
         </p>
       </div>
 

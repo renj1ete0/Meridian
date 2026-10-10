@@ -712,6 +712,8 @@ export interface Notification {
   surface: string | null
   read_at: string | null
   created_at: string
+  /** What became of what it asks, once settled: a proposal's status, or "merged" (`B-182`). */
+  settled: string | null
 }
 
 export const NOTIFICATION_FIELDS = [
@@ -723,6 +725,7 @@ export const NOTIFICATION_FIELDS = [
   'surface',
   'read_at',
   'created_at',
+  'settled',
 ] as const
 
 /** Mirrors `NotificationsRead`. */

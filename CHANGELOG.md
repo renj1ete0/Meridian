@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.23] — 2026-10-10
+
+### Fixed
+
+- `B-182`: a notification says what became of what it asked ("since superseded", "since
+  merged") and offers no action once settled; `/api/explore/notifications` carries `settled`
+
 ## [0.166.22] — 2026-10-10
 
 ### Added

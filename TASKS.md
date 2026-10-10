@@ -1784,11 +1784,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       for a note, while "Cite" on a node copies)
 - [x] `B-180` `v0.166.22`; editing notes is `B-201`. **Manage views and notes** — no rename/delete for views (the API has both), notes
       cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
+- [ ] `B-202` **Decide a possible duplicate** — most of the bell is `merge_adjudication`, and no
+      screen decides one: show both nodes and their evidence side by side, merge or keep apart
+      (a merge is reversible: the old id redirects)
 - [ ] `B-201` **Edit or remove a note** — a note is a node; PATCH exists with no interface, and
       removing one needs a decision about its links (soft delete, as §2.5 does for steering?)
 - [x] `B-181` **Notification links go to the right place** — `v0.166.2`. approvals, run summaries and
       alerts all open `/admin` (Topic weights); the status pill too. Map type → section
-- [ ] `B-182` **Possible-duplicate approvals have nowhere to go** — most of the bell is
+- [x] `B-182` `v0.166.23`: settled rows say so; deciding a merge is `B-202`. **Possible-duplicate approvals have nowhere to go** — most of the bell is
       `merge_adjudication`, and nothing can decide one. Until a merge screen exists, "Compare"
       opens the two nodes; a superseded proposal still reads as pending
 - [x] `B-183` **Ask panel with no model** — `v0.166.3`. the composer offers "citations checked" and fails only

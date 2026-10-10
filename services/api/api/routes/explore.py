@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core import annotations, chat, watch
 from meridian_core.answer import DEFAULT_ANSWER_CANDIDATES, DEFAULT_TOP, MAX_TOP
@@ -40,6 +41,7 @@ from meridian_core.models import (
     Notification,
     SavedView,
     Source,
+    SteeringProposal,
 )
 from meridian_core.passagetopics import passage_topics_for
 from meridian_core.provider import answerable
@@ -605,6 +607,55 @@ async def explore_source_raw(source_id: int, sess: ReadSession) -> FileResponse:
     return FileResponse(target, media_type=(source.extra or {}).get("media_type"))
 
 
+async def _settled(sess: AsyncSession, rows: list[Notification]) -> dict[int, str]:
+    """What became of what each notification asks (`B-182`), by notification id.
+
+    The body is written when the notification is, so a superseded proposal still read "applies
+    by itself unless rejected". Read now: a proposal no longer pending, a duplicate merged.
+    """
+    proposals: dict[int, int] = {}
+    created: dict[int, int] = {}
+    for row in rows:
+        payload = row.payload or {}
+        if row.notification_type == "steering_proposal" and isinstance(
+            payload.get("proposal_id"), int
+        ):
+            proposals[row.notification_id] = payload["proposal_id"]
+        elif row.notification_type == "merge_adjudication" and isinstance(
+            payload.get("created"), int
+        ):
+            created[row.notification_id] = payload["created"]
+    out: dict[int, str] = {}
+    if proposals:
+        status = dict(
+            (
+                await sess.execute(
+                    select(SteeringProposal.proposal_id, SteeringProposal.status).where(
+                        SteeringProposal.proposal_id.in_(set(proposals.values()))
+                    )
+                )
+            ).all()
+        )
+        for nid, pid in proposals.items():
+            if status.get(pid) not in (None, "pending"):
+                out[nid] = status[pid]
+    if created:
+        merged = set(
+            (
+                await sess.execute(
+                    select(Entity.entity_id).where(
+                        Entity.entity_id.in_(set(created.values())),
+                        Entity.redirects_to.is_not(None),
+                    )
+                )
+            ).scalars()
+        )
+        for nid, eid in created.items():
+            if eid in merged:
+                out[nid] = "merged"
+    return out
+
+
 @router.get("/notifications", response_model=NotificationsRead)
 async def explore_notifications(
     sess: ReadSession,
@@ -636,8 +687,14 @@ async def explore_notifications(
         ).all()
     )
 
+    settled = await _settled(sess, rows)
     return NotificationsRead(
-        notifications=[NotificationRead.model_validate(row) for row in rows],
+        notifications=[
+            NotificationRead.model_validate(row).model_copy(
+                update={"settled": settled.get(row.notification_id)}
+            )
+            for row in rows
+        ],
         counts_by_type=counts,
         unread=sum(1 for row in rows if row.read_at is None),
     )

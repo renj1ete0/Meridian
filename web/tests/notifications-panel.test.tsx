@@ -31,6 +31,7 @@ function item(over: Partial<Notification> = {}): Notification {
     payload: { condition: 'fetch_success_low' },
     surface: 'admin',
     read_at: null,
+    settled: null,
     created_at: '2026-09-15T12:40:00Z',
     ...over,
   }
@@ -301,5 +302,19 @@ describe('the status pill opens where its question is answered (B-181)', () => {
     expect(renderToStaticMarkup(<StatusPill progress={progress} runs={run('failed')} />)).toContain(
       'href="/admin/runs"',
     )
+  })
+})
+
+describe('a notification whose question was settled since (B-182)', () => {
+  it('says what became of it, and offers nothing to review', () => {
+    const markup = renderToStaticMarkup(
+      <NotificationsPanel
+        notifications={[item({ notification_type: 'steering_proposal', settled: 'superseded' })]}
+        countsByType={{ steering_proposal: 1 }}
+        now={NOW}
+      />,
+    )
+    expect(text(markup)).toContain('since superseded')
+    expect(markup).not.toContain('href=')
   })
 })
