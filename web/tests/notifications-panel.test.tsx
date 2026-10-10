@@ -136,22 +136,24 @@ describe('what it shows', () => {
 })
 
 describe('grouped by day', () => {
+  // Instants written in the display zone (GMT+8, ADR 0009), so the days do not move with the
+  // machine's own zone: a UTC runner put 09:00 local on a different display day.
   it('heads today and yesterday by name, older days by date', () => {
-    const now = new Date(2026, 8, 15, 18, 0)
-    expect(dayHeading(new Date(2026, 8, 15, 9, 0).toISOString(), now)).toBe('Today')
-    expect(dayHeading(new Date(2026, 8, 14, 23, 0).toISOString(), now)).toBe('Yesterday')
-    expect(dayHeading(new Date(2026, 8, 10, 9, 0).toISOString(), now)).toBe('2026-09-10')
+    const now = new Date('2026-09-15T18:00:00+08:00')
+    expect(dayHeading(new Date('2026-09-15T09:00:00+08:00').toISOString(), now)).toBe('Today')
+    expect(dayHeading(new Date('2026-09-14T23:00:00+08:00').toISOString(), now)).toBe('Yesterday')
+    expect(dayHeading(new Date('2026-09-10T09:00:00+08:00').toISOString(), now)).toBe('2026-09-10')
   })
 
   it('puts each row under its own day, once', () => {
-    const now = new Date(2026, 8, 15, 18, 0)
+    const now = new Date('2026-09-15T18:00:00+08:00')
     const rendered = text(
       renderToStaticMarkup(
         <NotificationsPanel
           notifications={[
-            item({ notification_id: 1, title: 'A', created_at: new Date(2026, 8, 15, 9).toISOString() }),
-            item({ notification_id: 2, title: 'B', created_at: new Date(2026, 8, 15, 8).toISOString() }),
-            item({ notification_id: 3, title: 'C', created_at: new Date(2026, 8, 14, 8).toISOString() }),
+            item({ notification_id: 1, title: 'A', created_at: new Date('2026-09-15T09:00:00+08:00').toISOString() }),
+            item({ notification_id: 2, title: 'B', created_at: new Date('2026-09-15T08:00:00+08:00').toISOString() }),
+            item({ notification_id: 3, title: 'C', created_at: new Date('2026-09-14T08:00:00+08:00').toISOString() }),
           ]}
           countsByType={{ alert: 3 }}
           now={now}

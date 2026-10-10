@@ -23,6 +23,9 @@ add it here.
 > - **The crawl pauses for embedding** above `MERIDIAN_WORKER_MAX_EMBED_BACKLOG`; on CPU the
 >   backlog drains at roughly 20,000 passages an hour, so the pause lasts about that long.
 > - **Possible duplicates are decided in Admin**; a merge is reversible from the same row.
+> - **CI runs in UTC; this machine is GMT+8.** A web test that builds an instant with
+>   `new Date(y, m, d, h)` means a different display-zone day there. Write instants with an offset
+>   (`'2026-09-15T09:00:00+08:00'`), and check with `TZ=UTC npx vitest run`.
 
 > **2026-10-10 — `v0.166.0`–`v0.166.25`.** Traps and findings:
 > - **Filters have one model** (`web/src/lib/find.ts`): link, request and saved view. A new
