@@ -10,6 +10,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A newer push makes an older run's answer moot: cancel it rather than queue behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

@@ -80,8 +80,10 @@ order or blank lines. `tests/unit/test_chunking_tables.py` generates tables and 
 for the chunker (`B-191`). `web/tests/readable-properties.test.ts` does the same for the
 display's `readable()` with fast-check: it never throws or makes a passage longer, leaves plain
 prose as it was, keeps a link's words and drops its address, and settles (reading its output
-again changes nothing). `answer.group_hits` is not covered yet: its several-country rules need
-stating carefully first.
+again changes nothing). The answer page's `group_hits` is covered too: without a naming
+function every source counts once in each of its countries, or once unplaced; with one, a
+several-country source counts only under countries a passage of it names, and those naming none
+are counted as "several places"; strong groups come first.
 
 ## Continuous integration (`Q-03`)
 
@@ -93,5 +95,4 @@ running from this machine (no `gh` here): check the first run in the repository'
 
 ## Still to do
 
-- Property tests for `answer.group_hits`.
 - Raise the coverage floors only after mutation scores say the covered code is actually checked.

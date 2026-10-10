@@ -135,3 +135,102 @@ def test_the_verdict_does_not_depend_on_line_order_or_blank_lines(
 @given(st.lists(line, max_size=MIN_ENTRIES - 1))
 def test_fewer_lines_than_the_minimum_is_never_a_list(lines) -> None:
     assert not is_reference_list("\n".join(lines))
+
+
+# --------------------------------------------------------------------------
+# The answer page's grouping by country
+# --------------------------------------------------------------------------
+
+COUNTRIES = ["DE", "FR", "JP", "SG"]
+
+
+@st.composite
+def answer_hits(draw):
+    """Several passages for each of several sources, each source about zero to three countries."""
+    from itertools import count
+
+    from meridian_core.search import SearchHit
+
+    ids = count(1)
+    hits = []
+    for source_id in range(1, draw(st.integers(1, 12)) + 1):
+        places = draw(
+            st.one_of(st.none(), st.lists(st.sampled_from(COUNTRIES), unique=True, max_size=3))
+        )
+        for _ in range(draw(st.integers(1, 3))):
+            names = draw(st.lists(st.sampled_from(COUNTRIES), unique=True, max_size=2))
+            hits.append(
+                SearchHit(
+                    chunk_id=next(ids),
+                    source_id=source_id,
+                    text=" ".join(names) or "nothing named",
+                    page_or_offset=None,
+                    chunk_index=0,
+                    url=f"https://pub{source_id}.example/doc",
+                    title=None,
+                    source_tier="press",
+                    publication_date=None,
+                    language="en",
+                    topic_labels=None,
+                    passage_topics=None,
+                    page_unit=None,
+                    media_type=None,
+                    duplicate_of=None,
+                    score=draw(st.floats(0.001, 1)),
+                    lexical_rank=1,
+                    vector_rank=None,
+                    places=places,
+                )
+            )
+    return hits
+
+
+def _named(text: str) -> set[str]:
+    return {code for code in COUNTRIES if code in text.split()}
+
+
+@settings(max_examples=200)
+@given(answer_hits())
+def test_without_names_a_source_counts_once_in_each_of_its_countries(hits) -> None:
+    from meridian_core.answer import group_hits
+
+    groups, rest = group_hits(hits, named=None)
+    places = {h.source_id: h.places for h in hits}
+    expected = sum(max(1, len(set(p or []))) for p in places.values())
+    assert sum(g.sources for g in groups) + (rest.sources if rest else 0) == expected
+    assert all(g.sources > 0 for g in groups)
+    assert (rest is None) == all(places[s] for s in places)
+
+
+@settings(max_examples=200)
+@given(answer_hits())
+def test_a_several_country_source_counts_only_where_a_passage_names_the_country(hits) -> None:
+    """`B-168`: with names, a source about several countries is filed under a country only
+    through a matching passage that names it; one naming none of them is unplaced."""
+    from meridian_core.answer import group_hits
+
+    groups, rest = group_hits(hits, named=_named)
+    by_source: dict[int, list] = {}
+    for h in hits:
+        by_source.setdefault(h.source_id, []).append(h)
+    for group in groups:
+        for item in group.items:
+            source_places = set(by_source[item.source_id][0].places or [])
+            if len(source_places) > 1:
+                assert group.code in _named(item.text), (group.code, item.text)
+    several = sum(
+        1
+        for passages in by_source.values()
+        if len(set(passages[0].places or [])) > 1
+        and not any(set(passages[0].places) & _named(p.text) for p in passages)
+    )
+    assert (rest.several_places if rest else 0) == several
+
+
+@given(answer_hits())
+def test_strong_groups_come_first(hits) -> None:
+    from meridian_core.answer import group_hits
+
+    groups, _ = group_hits(hits, named=_named)
+    strong = [g.coverage == "strong" for g in groups]
+    assert strong == sorted(strong, reverse=True)
