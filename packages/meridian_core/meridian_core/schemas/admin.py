@@ -52,6 +52,8 @@ class GazetteerQueueRead(BaseModel):
     pending: int
     approved: int
     rejected: int
+    # `B-209`: how many terms in this state the search matched; None when nothing is searched.
+    matched: int | None = None
 
 
 class GazetteerTermEdit(BaseModel):

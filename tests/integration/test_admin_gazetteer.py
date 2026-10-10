@@ -461,6 +461,31 @@ async def test_a_term_can_be_found_among_thousands(client, open_admin, terms, ma
     # The counts stay the whole queue's, so a search does not read as an empty queue.
     whole = (await client.get("/api/admin/gazetteer", params={"state": "all"})).json()
     assert body["pending"] == whole["pending"]
+    # The pager counts what the search found, and nothing when nothing is searched.
+    assert body["matched"] == 1
+    assert whole["matched"] is None
+
+
+async def test_the_search_counts_past_the_page_and_within_the_state(
+    client, open_admin, terms, marker
+) -> None:
+    every = (
+        await client.get("/api/admin/gazetteer", params={"state": "all", "q": marker, "limit": 200})
+    ).json()
+    assert len(every["rows"]) >= 2, "the fixture must give the marker several terms"
+    one = (
+        await client.get("/api/admin/gazetteer", params={"state": "all", "q": marker, "limit": 1})
+    ).json()
+    assert len(one["rows"]) == 1
+    assert one["matched"] == len(every["rows"])
+    # A state narrows the match as it narrows the rows.
+    for state in ("pending", "approved", "rejected"):
+        body = (
+            await client.get(
+                "/api/admin/gazetteer", params={"state": state, "q": marker, "limit": 200}
+            )
+        ).json()
+        assert body["matched"] == len(body["rows"]), state
 
 
 async def test_a_wildcard_in_the_search_is_a_character(client, open_admin, terms, marker) -> None:

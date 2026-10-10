@@ -1826,7 +1826,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       filled form, clear it, running ones first, and a warning before replacing a running boost
 - [x] `B-210` `v0.168.4`. **Reaching a time zone** (audit) — the Display select held four
       hundred zones with prefix type-ahead only, and showed a stored `UTC` as the first zone
-- [x] `B-209` `v0.168.3`. **Find a term in the gazetteer queue** (audit) — thousands of
+- [x] `B-209` `v0.168.3`, pager count `v0.168.6`. **Find a term in the gazetteer queue** (audit) — thousands of
       pending terms paged twenty-odd at a time, with no way to reach one by name
 - [x] `B-208` `v0.168.2`. **Node page reading** (audit): summary line, table scopes named,
       save placeholder

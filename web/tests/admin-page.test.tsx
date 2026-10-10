@@ -113,6 +113,7 @@ function stubApi(over: { firstRun?: boolean; closed?: boolean } = {}) {
           pending: 2,
           approved: 0,
           rejected: 0,
+          matched: null,
         })
       }
       return json({})

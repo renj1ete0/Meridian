@@ -209,3 +209,22 @@ describe('finding a term (B-209)', () => {
     expect(onDecide).not.toHaveBeenCalled()
   })
 })
+
+describe('the pager over a search (B-209)', () => {
+  it('counts what the search matched, not the whole state', () => {
+    render(<GazetteerQueue rows={[row(1), row(2)]} state="pending" counts={COUNTS} matched={2} search="bureau" />)
+    expect(screen.getByText('1–2 of 2 matching')).toBeTruthy()
+    cleanup()
+
+    render(<GazetteerQueue rows={[row(1), row(2)]} state="pending" counts={COUNTS} />)
+    expect(screen.getByText(`1–2 of ${COUNTS.pending.toLocaleString()}`)).toBeTruthy()
+  })
+
+  it('says a search found nothing in the same terms', () => {
+    render(<GazetteerQueue rows={[]} state="pending" counts={COUNTS} matched={0} search="zzz" />)
+    expect(screen.getByText('0 of 0 matching')).toBeTruthy()
+    // Not the empty-queue line, which would claim every term had been decided.
+    expect(screen.getByText(/No term under this tab contains “zzz”/)).toBeTruthy()
+    expect(screen.queryByText(/has been decided/)).toBeNull()
+  })
+})

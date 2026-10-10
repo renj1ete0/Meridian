@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.6] — 2026-10-10
+
+### Fixed
+
+- `B-209`: over a gazetteer search, the pager counts the matches rather than the whole tab,
+  and a search that finds nothing no longer says every term has been decided
+
 ## [0.168.5] — 2026-10-10
 
 ### Added

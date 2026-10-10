@@ -791,6 +791,7 @@ export function AdminPage() {
               bulkBusy={bulkBusy}
               offset={queue.offset}
               hasMore={queue.has_more}
+              matched={queue.matched}
               search={termQuery}
               onSearch={setTermQuery}
               onState={(next) => {

@@ -180,7 +180,8 @@ async def gazetteer_queue(
     """The approval queue, most corroborated first.
 
     Ordered by `occurrence_count`, with `term_id` breaking ties so paging is stable. `q`
-    narrows to terms containing it; the counts stay the whole queue's.
+    narrows to terms containing it; the counts stay the whole queue's, and `matched`
+    says how many in this state it found.
     """
     narrowed = []
     if q and q.strip():
@@ -197,6 +198,15 @@ async def gazetteer_queue(
     found = list(await sess.scalars(statement))
     has_more = len(found) > limit
     pending, approved, rejected = await _counts(sess)
+    # A pager reading "1–100 of 31,699" over a search that matched 400 sends the reader
+    # paging through what is not there.
+    matched = (
+        await sess.scalar(
+            select(func.count()).select_from(GazetteerTerm).where(*_state_filter(state), *narrowed)
+        )
+        if narrowed
+        else None
+    )
 
     return GazetteerQueueRead(
         rows=await _rows_for(sess, found[:limit]),
@@ -206,6 +216,7 @@ async def gazetteer_queue(
         pending=pending,
         approved=approved,
         rejected=rejected,
+        matched=matched,
     )
 
 

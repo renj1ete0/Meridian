@@ -815,6 +815,8 @@ export interface GazetteerQueue {
   pending: number
   approved: number
   rejected: number
+  /** How many in this state the search matched; null when nothing is searched (`B-209`). */
+  matched: number | null
 }
 
 export const GAZETTEER_QUEUE_FIELDS = [
@@ -825,6 +827,7 @@ export const GAZETTEER_QUEUE_FIELDS = [
   'pending',
   'approved',
   'rejected',
+  'matched',
 ] as const
 
 export type GazetteerState = 'pending' | 'approved' | 'rejected' | 'all'

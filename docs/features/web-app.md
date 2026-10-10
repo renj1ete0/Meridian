@@ -1004,7 +1004,10 @@ not coloured: the palette has no green or red, and colour must not imply a verdi
 known term is reached: someone who saw a wrong match in a passage wants that one row. The box
 matches any part of the canonical form, and `%` and `_` are matched as characters, since terms
 contain them. The tab counts stay the whole queue's, so a narrowed list never reads as an
-emptied one. Typing in the box never decides a row: the keys belong to nobody who is typing.
+emptied one, while the pager counts the matches (`of 412 matching`): paging toward the tab's
+total over a search would page through rows that are not there. A search that finds nothing
+says so and points at the other tabs, rather than the empty-queue line, which would claim
+every term had been decided. Typing in the box never decides a row: the keys belong to nobody who is typing.
 
 ### Fetch policy
 

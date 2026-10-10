@@ -25,6 +25,8 @@ export interface GazetteerQueueProps {
   onPage?: (offset: number) => void
   /** Find a term among thousands (`B-209`). */
   search?: string
+  /** How many terms the search matched, when there is one: the pager counts these. */
+  matched?: number | null
   onSearch?: (text: string) => void
 }
 
@@ -122,6 +124,7 @@ export function GazetteerQueue({
   onBulk,
   onPage,
   search,
+  matched = null,
   onSearch,
 }: GazetteerQueueProps) {
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
@@ -152,7 +155,8 @@ export function GazetteerQueue({
     rejected: counts.rejected,
     all: counts.pending + counts.approved + counts.rejected,
   }
-  const total = shown[state]
+  const total = matched ?? shown[state]
+  const of = matched === null ? total.toLocaleString() : `${total.toLocaleString()} matching`
   const chosen = rows.filter((r) => selected.has(r.term.term_id))
   const allChosen = rows.length > 0 && chosen.length === rows.length
   const anyRejected = chosen.some((r) => r.term.rejected_at !== null)
@@ -235,8 +239,8 @@ export function GazetteerQueue({
         <div className="flex items-center gap-2 font-mono text-[11px] text-text-faint">
           <span>
             {rows.length === 0
-              ? `0 of ${total.toLocaleString()}`
-              : `${(offset + 1).toLocaleString()}–${(offset + rows.length).toLocaleString()} of ${total.toLocaleString()}`}
+              ? `0 of ${of}`
+              : `${(offset + 1).toLocaleString()}–${(offset + rows.length).toLocaleString()} of ${of}`}
           </span>
           <button
             type="button"
@@ -259,8 +263,9 @@ export function GazetteerQueue({
 
       {rows.length === 0 ? (
         <p className="border border-line bg-surface px-[18px] py-4 text-[12.5px] text-text-muted">
-          Nothing here. The harvest files terms as it reads documents, so an empty queue means every definition found so
-          far has been decided.
+          {matched !== null && search?.trim()
+            ? `No term under this tab contains “${search.trim()}”. Another tab may hold it.`
+            : 'Nothing here. The harvest files terms as it reads documents, so an empty queue means every definition found so far has been decided.'}
         </p>
       ) : (
         <>
