@@ -1470,7 +1470,7 @@ function JumpBox({ onPick }: { onPick: (hit: AreaJumpHit) => void }) {
   const [text, setText] = useState('')
   const [hits, setHits] = useState<AreaJumpHit[] | null>(null)
   // A concept of that name, when there is one (`B-186`): the Map finds fields, and a reader
-  // typing "lidar" may want the node, not the area its passages fall in.
+  // typing a term may want its node, not the area its passages fall in.
   const [concept, setConcept] = useState<NodeMatch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef<AbortController | null>(null)

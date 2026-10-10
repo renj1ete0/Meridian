@@ -765,10 +765,10 @@ cosine to two decimals (0.85 and 0.75 are the lines), with the number on hover f
 "no concept is close enough in meaning to list" rather than the floor.
 
 
-**A whole question that names no concept keeps the panel quiet** (`B-176`). Asked "how do cities
-make streets near schools safer for walking?", the panel opened with "No concept is called
-'how do cities …?'" and offered concepts matched on single common words ("Pakistani cities",
-"asymmetric price elasticities"). Both are about the question's wording, not its subject. For a
+**A whole question that names no concept keeps the panel quiet** (`B-176`). Asked a full
+question, the panel opened with "No concept is called '<the whole question>'" and offered
+concepts that shared one common word with it. Both are about the question's wording, not its
+subject. For a
 question (by `looksLikeQuestion`, the rule that picks the Answer tab) with no concept of that
 name, the panel shows only when something is stated or near in meaning, and then without the
 sentence and the word matches. A few search words keep the panel as it was: there, a concept

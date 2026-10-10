@@ -210,8 +210,8 @@ def _split_rows(
         cursor = start + match.end()
     rows.append((cursor, end))
     # Packed to the cap, not the target: rows are dense and seldom the answer, and packing to
-    # the target nearly doubled the passages a converted spreadsheet makes (measured: 21,095
-    # → 38,738 over 26 sources), each one to embed.
+    # the target nearly doubled the passages a converted spreadsheet makes, each one to embed.
+    # See docs/features/extraction.md#chunking.
     pieces = [r for r in (_trim(text, a, b) for a, b in rows) if r]
     return _pack_pieces(text, pieces, maximum, maximum)
 

@@ -47,8 +47,8 @@ describe('the shell', () => {
 describe('after adding a topic (B-196)', () => {
   it('says what it needs next and links there', () => {
     const onDismiss = vi.fn()
-    render(<AddedTopic topic="kerbside" onDismiss={onDismiss} />)
-    expect(screen.getByText('Added “kerbside”.')).toBeTruthy()
+    render(<AddedTopic topic="topic-x" onDismiss={onDismiss} />)
+    expect(screen.getByText('Added “topic-x”.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Seed it →' }).getAttribute('href')).toBe('/admin/seeds')
     expect(screen.getByRole('link', { name: 'Watch the first fetches →' }).getAttribute('href')).toBe('/admin/crawl')
     screen.getByRole('button', { name: 'dismiss' }).click()

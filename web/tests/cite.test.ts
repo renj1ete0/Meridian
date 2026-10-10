@@ -63,8 +63,8 @@ describe('the citation', () => {
 describe('the way back to the results', () => {
   it('keeps the last search with words, and nothing else', () => {
     expect(lastFind()).toBeNull()
-    rememberFind('/?q=bus+lanes&place=JP')
-    expect(lastFind()).toEqual({ href: '/?q=bus+lanes&place=JP', q: 'bus lanes' })
+    rememberFind('/?q=some+words&place=JP')
+    expect(lastFind()).toEqual({ href: '/?q=some+words&place=JP', q: 'some words' })
     rememberFind('/?topic=a')
     expect(lastFind()).toBeNull()
     rememberFind('/map')

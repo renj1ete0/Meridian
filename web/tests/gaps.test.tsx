@@ -346,7 +346,7 @@ describe('what a reader can ask comes first (B-184)', () => {
         kind: 'seed_query',
         label: 'Seed a search',
         topic: 'robotics',
-        query: '!news !science gripper torque',
+        query: '!news !science narrower words',
         factor: null,
         days: null,
       },
@@ -385,13 +385,13 @@ describe('what a reader can ask comes first (B-184)', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Seed a search' }))
     const input = screen.getByRole('textbox') as HTMLInputElement
-    expect(input.value).toBe('gripper torque')
+    expect(input.value).toBe('narrower words')
     expect(screen.getByText('as a news, science search')).toBeTruthy()
     void fetchMock
   })
 
   it('splits engine syntax from words, and puts it back on what is queued', () => {
-    expect(splitBangs('!news !science gripper torque')).toEqual({ bangs: '!news !science', words: 'gripper torque' })
+    expect(splitBangs('!news !science narrower words')).toEqual({ bangs: '!news !science', words: 'narrower words' })
     expect(splitBangs('gripper !news')).toEqual({ bangs: '', words: 'gripper !news' })
   })
 })

@@ -1290,8 +1290,8 @@ export function topicShares(area: Pick<Area, 'examined' | 'topic_mix'>, limit = 
 
 /**
  * An area's name inside its parent (`B-186`). Names told apart by a term (`B-172`) share their
- * parent's base: under "Transportation (time)" the children read "Transportation (fare)",
- * "Transportation (bus)", eight times over. Inside that parent the term alone says it; the full
+ * parent's base: under "Field (one)" the children read "Field (two)", "Field (three)", eight
+ * times over. Inside that parent the term alone says it; the full
  * name stays for the breadcrumb, the hover card and the title.
  */
 export function nameWithin(name: string, parent: string | null | undefined): string {

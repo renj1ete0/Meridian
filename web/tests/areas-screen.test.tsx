@@ -504,25 +504,23 @@ describe('the fill control (P6-42)', () => {
 
 describe('the Map leads somewhere (B-186)', () => {
   it('reads a child by its term inside a parent named alike, and keeps the full name otherwise', () => {
-    expect(nameWithin('Transportation (fare)', 'Transportation (time)')).toBe('fare')
-    expect(nameWithin('Transportation (fare)', 'Transportation')).toBe('fare')
-    expect(nameWithin('Transportation & Mechanics of Materials', 'Transportation (time)')).toBe(
-      'Transportation & Mechanics of Materials',
-    )
-    expect(nameWithin('Transport (fare)', 'Transportation')).toBe('Transport (fare)')
+    expect(nameWithin('Field (two)', 'Field (one)')).toBe('two')
+    expect(nameWithin('Field (two)', 'Field')).toBe('two')
+    expect(nameWithin('Field & Another Thing', 'Field (one)')).toBe('Field & Another Thing')
+    expect(nameWithin('Fiel (two)', 'Field')).toBe('Fiel (two)')
     expect(nameWithin('Ecology', null)).toBe('Ecology')
   })
 
   it('makes a field’s distinctive terms searches on Find', async () => {
-    const leaf = area({ area_id: 9, level: 3, children: 0, name: 'leaf', terms: ['fare', 'ridership'] })
+    const leaf = area({ area_id: 9, level: 3, children: 0, name: 'leaf', terms: ['alpha', 'beta'] })
     vi.stubGlobal('fetch', respond({ area: leaf, path: [], passages: [] }))
     const { container } = render(
       <AreasView level={level({ level: 3, parent: area({ level: 2 }), areas: [leaf] })} onLevel={() => {}} />,
     )
     fireEvent.click(container.querySelector('[data-area="9"]')!)
     const panel = await screen.findByRole('complementary', { name: 'Field' })
-    const link = await within(panel).findByRole('link', { name: 'fare' })
-    expect(link.getAttribute('href')).toBe('/?q=fare')
+    const link = await within(panel).findByRole('link', { name: 'alpha' })
+    expect(link.getAttribute('href')).toBe('/?q=alpha')
   })
 
   it('offers the concept a jump names, beside the fields', async () => {
@@ -532,11 +530,11 @@ describe('the Map leads somewhere (B-186)', () => {
         if (String(url).includes('/api/explore/graph/search'))
           return new Response(
             JSON.stringify({
-              query: 'lidar',
+              query: 'a term',
               matches: [
                 {
                   entity_id: 254,
-                  canonical_name: 'lidar sensors',
+                  canonical_name: 'a named concept',
                   node_type: 'concept',
                   jurisdiction: null,
                   is_annotation: false,
@@ -546,13 +544,13 @@ describe('the Map leads somewhere (B-186)', () => {
               ],
             }),
           )
-        return new Response(JSON.stringify({ query: 'lidar', hits: [] }))
+        return new Response(JSON.stringify({ query: 'a term', hits: [] }))
       }),
     )
     render(<AreasView level={level()} onLevel={() => {}} />)
-    fireEvent.change(screen.getByLabelText('Jump to a field or a term'), { target: { value: 'lidar' } })
+    fireEvent.change(screen.getByLabelText('Jump to a field or a term'), { target: { value: 'a term' } })
     fireEvent.submit(screen.getByRole('search'))
-    const concept = await screen.findByRole('link', { name: /lidar sensors/ })
+    const concept = await screen.findByRole('link', { name: /a named concept/ })
     expect(concept.getAttribute('href')).toBe('/nodes/254')
   })
 })

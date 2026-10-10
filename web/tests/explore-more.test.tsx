@@ -93,11 +93,11 @@ async function more() {
 describe('the next page', () => {
   it('is the same search, from where the list ends, appended', async () => {
     const searches = stub([page(0, 20), page(20, 20)])
-    await open('/?q=bus+lanes&view=passages&tier=government&from=2015&place=JP')
+    await open('/?q=some+words&view=passages&tier=government&from=2015&place=JP')
     await more()
 
     const second = searches[1]!
-    expect(second.get('q')).toBe('bus lanes')
+    expect(second.get('q')).toBe('some words')
     expect(second.get('offset')).toBe('20')
     expect(second.getAll('source_tier')).toEqual(['government'])
     expect(second.getAll('place')).toEqual(['JP'])

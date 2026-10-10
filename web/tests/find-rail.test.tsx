@@ -22,7 +22,7 @@ function rail(filters: FindFilters = NO_FILTERS, more: Partial<FindRailProps> = 
   const onChange = vi.fn<(next: FindFilters) => void>()
   render(
     <FindRail
-      topics={['walkability', 'on-demand-bus']}
+      topics={['alpha', 'beta-gamma']}
       places={PLACES}
       filters={filters}
       onChange={onChange}
@@ -41,8 +41,8 @@ function box(name: string): HTMLInputElement {
 describe('what it offers', () => {
   it('offers every topic in words and every source type, unticked', () => {
     rail()
-    expect(box('walkability').checked).toBe(false)
-    expect(box('on demand bus').checked).toBe(false)
+    expect(box('alpha').checked).toBe(false)
+    expect(box('beta gamma').checked).toBe(false)
     for (const tier of SOURCE_TIERS) expect(box(TIER_LABEL[tier]).checked).toBe(false)
   })
 
@@ -55,10 +55,10 @@ describe('what it offers', () => {
   })
 
   it('offers all-at-once only when two topics are chosen', () => {
-    rail({ ...NO_FILTERS, topics: ['walkability'] })
+    rail({ ...NO_FILTERS, topics: ['alpha'] })
     expect(screen.queryByRole('checkbox', { name: 'all at once' })).toBeNull()
     cleanup()
-    rail({ ...NO_FILTERS, topics: ['walkability', 'on-demand-bus'] })
+    rail({ ...NO_FILTERS, topics: ['alpha', 'beta-gamma'] })
     expect(screen.getByRole('checkbox', { name: 'all at once' })).toBeTruthy()
   })
 
@@ -74,11 +74,11 @@ describe('what it offers', () => {
 
 describe('what a click changes', () => {
   it('ticks and unticks a value without touching the others', () => {
-    const start = { ...NO_FILTERS, topics: ['walkability'], places: ['XA'] }
+    const start = { ...NO_FILTERS, topics: ['alpha'], places: ['XA'] }
     const onChange = rail(start)
     fireEvent.click(box(TIER_LABEL.government))
     expect(onChange).toHaveBeenLastCalledWith({ ...start, tiers: ['government'] })
-    fireEvent.click(box('walkability'))
+    fireEvent.click(box('alpha'))
     expect(onChange).toHaveBeenLastCalledWith({ ...start, topics: [] })
   })
 
@@ -118,10 +118,10 @@ describe('the caveats, said while narrowing and only then', () => {
     rail(NO_FILTERS, { unexaminedTopics: true })
     expect(screen.queryByText(/not yet examined for topics/)).toBeNull()
     cleanup()
-    rail({ ...NO_FILTERS, topics: ['walkability'] }, { unexaminedTopics: false })
+    rail({ ...NO_FILTERS, topics: ['alpha'] }, { unexaminedTopics: false })
     expect(screen.queryByText(/not yet examined for topics/)).toBeNull()
     cleanup()
-    rail({ ...NO_FILTERS, topics: ['walkability'] }, { unexaminedTopics: true })
+    rail({ ...NO_FILTERS, topics: ['alpha'] }, { unexaminedTopics: true })
     expect(screen.getByText(/not yet examined for topics/)).toBeTruthy()
   })
 

@@ -1784,8 +1784,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       `offset` up to the candidate pool. A "more" row at the foot of the list
 - [x] `B-175` `v0.166.5`. **The answer's "N more sources not shown" is a dead end** — make it open Passages
       narrowed to that country
-- [x] `B-176` `v0.166.6`. **The neighbourhood panel on a whole question** — "No concept is called “how do
-      cities …?”" and concepts matched on single common words. Quiet unless a concept is named
+- [x] `B-176` `v0.166.6`. **The neighbourhood panel on a whole question** — "No concept is called “<the whole
+      question>”" and concepts matched on single common words. Quiet unless a concept is named
 - [x] `B-177` `v0.166.7`. **Where you were** — recent nodes never listed (`recentNodes={[]}` though
       `graph/recent.ts` records them); a saved node view on the landing is a dead click
 - [x] `B-193` `v0.166.8`. **A node view with a filter cannot be saved** — the node workspace stores

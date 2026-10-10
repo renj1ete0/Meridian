@@ -251,7 +251,7 @@ describe('the add-topic dialog', () => {
     const asked = preview.mock.calls.length
 
     fireEvent.change(screen.getByLabelText('What the topic is about'), {
-      target: { value: '  Kerbside space: loading bays, parking and pick-up.  ' },
+      target: { value: '  What the topic covers, in its sources’ words.  ' },
     })
     await act(() => vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS))
     expect(preview.mock.calls.length).toBe(asked)
@@ -261,7 +261,7 @@ describe('the add-topic dialog', () => {
       topic: 'kerbside',
       floor: 0.05,
       ceiling: 0.6,
-      description: 'Kerbside space: loading bays, parking and pick-up.',
+      description: 'What the topic covers, in its sources’ words.',
     })
   })
 

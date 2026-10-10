@@ -371,9 +371,9 @@ coarser level left.
 - **Terms are searches.** A theme's distinctive terms were inert chips; each now opens Find on
   that term, the way into its passages across the corpus.
 - **A child is read by its term inside a parent named alike.** Names told apart by a term
-  (`B-172`) repeat their parent's base: under "Transportation (time)" the list read
-  "Transportation (fare)", "Transportation (bus)" and so on, eight times. Inside that parent
-  the list and the circles show "fare", "bus" (`nameWithin`); the breadcrumb, the hover card and
+  (`B-172`) repeat their parent's base: under "Field (one)" the list read "Field (two)",
+  "Field (three)" and so on, eight times. Inside that parent the list and the circles show
+  "two", "three" (`nameWithin`); the breadcrumb, the hover card and
   the row's title keep the full name.
 - **The jump box finds concepts too.** Typing a term found fields only, though a concept node of
   that name might be what was wanted; the first concept it names now heads the list and opens
