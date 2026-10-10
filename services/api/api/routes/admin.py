@@ -912,6 +912,33 @@ async def rewrite_annotation(
     return (await annotations.hydrate(sess, [note]))[0]
 
 
+@router.post("/annotations/{entity_id}/withdraw", response_model=AnnotationRead)
+async def withdraw_annotation(
+    entity_id: int, _: AdminAllowed, sess: WriteSession
+) -> AnnotationRead:
+    """Withdraw a note (`B-201`): it leaves every list and the graph, and is kept.
+
+    Undone by `/restore`. 404 for anything that is not one of the reader's notes.
+    """
+    try:
+        note = await annotations.withdraw(sess, entity_id)
+    except LookupError as exc:
+        await sess.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return (await annotations.hydrate(sess, [note]))[0]
+
+
+@router.post("/annotations/{entity_id}/restore", response_model=AnnotationRead)
+async def restore_annotation(entity_id: int, _: AdminAllowed, sess: WriteSession) -> AnnotationRead:
+    """Put a withdrawn note back where it was (`B-201`)."""
+    try:
+        note = await annotations.withdraw(sess, entity_id, withdrawn=False)
+    except LookupError as exc:
+        await sess.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return (await annotations.hydrate(sess, [note]))[0]
+
+
 # ---------------------------------------------------------------------------
 # The budget (tasks `P4-10`, `P4-13`, §16)
 # ---------------------------------------------------------------------------

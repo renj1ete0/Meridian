@@ -59,6 +59,8 @@ class EntityRead(BaseModel):
     merged_from: list[int] | None
     redirects_to: int | None
     is_annotation: bool
+    #: Set on a note the reader withdrew (`B-201`); None otherwise.
+    withdrawn_at: dt.datetime | None = None
     supporting_chunk_ids: list[int]
     produced_by: str | None
     model: str | None

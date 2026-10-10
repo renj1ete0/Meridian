@@ -400,6 +400,14 @@ the graph cannot see.
 - **Editing `about` replaces it**: a note accumulating every node it was pointed at would end up
   attached to the reader's search history. Only the reader's own notes are editable; a hand-edit
   surviving in a derived node could not be re-derived (§2.4).
+- **A note is withdrawn, not deleted** (`B-201`, [ADR 0020](../adr/0020-a-note-is-withdrawn-not-deleted.md)).
+  `withdraw` stamps `entities.withdrawn_at` and keeps the row and its `annotates` edges, so it
+  is undone by clearing the stamp (`POST /api/admin/annotations/{id}/withdraw` and
+  `/restore`) and nothing that names the note breaks. A withdrawn note leaves the listing, the
+  node panels, the export, node search and every graph walk that already leaves out a merged
+  node (the neighbourhood, its expansion, path mode); `?withdrawn=true` lists them. It is put
+  back before it is edited, since a rewrite of something not shown is a change nobody sees.
+  Withdrawing twice keeps the first time.
 - **Listed by `produced_at`**, so a rewritten note returns to the top. `about` matches attachment,
   not text, so the panel does not depend on wording. Targets are named, not numbered (`P6-04`),
   in one query per page.

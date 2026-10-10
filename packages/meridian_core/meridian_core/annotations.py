@@ -38,6 +38,7 @@ __all__ = [
     "hydrate",
     "listing",
     "to_markdown",
+    "withdraw",
 ]
 
 #: The reserved `produced_by`, deliberately not shaped like an agent id;
@@ -147,8 +148,35 @@ def _attach(sess: AsyncSession, note: Entity, about: Sequence[int], cited: Seque
         )
 
 
-async def _own_note(sess: AsyncSession, entity_id: int) -> Entity:
+async def withdraw(sess: AsyncSession, entity_id: int, *, withdrawn: bool = True) -> Entity:
+    """Withdraw a note, or put a withdrawn one back (`B-201`, ADR 0020).
+
+    The row and its `annotates` edges are kept: a withdrawal is undone by clearing the
+    stamp, and nothing that names the note loses it. Withdrawn, it leaves every list, node
+    panel, export and graph walk. Raises `LookupError` for anything that is not a note.
+    Withdrawing twice keeps the first stamp.
+    """
+    note = await _own_note(sess, entity_id, withdrawn=None)
+    if withdrawn and note.withdrawn_at is None:
+        note.withdrawn_at = func.now()
+    elif not withdrawn:
+        note.withdrawn_at = None
+    await sess.commit()
+    await sess.refresh(note)
+    log.info(
+        "annotation withdrawn" if withdrawn else "annotation restored",
+        extra={"entity_id": entity_id},
+    )
+    return note
+
+
+async def _own_note(
+    sess: AsyncSession, entity_id: int, *, withdrawn: bool | None = False
+) -> Entity:
     """The note, or `LookupError` — including when the row exists and is not one.
+
+    ``withdrawn=False`` (an edit) refuses a withdrawn note too: it is put back before it
+    is rewritten. None takes it either way.
 
     Not found rather than forbidden. "This is a corpus node, not yours" would
     answer a question the caller did not ask and tell an unidentified caller
@@ -157,6 +185,8 @@ async def _own_note(sess: AsyncSession, entity_id: int) -> Entity:
     note = await sess.get(Entity, entity_id)
     if note is None or not note.is_annotation:
         raise LookupError(f"No annotation {entity_id}.")
+    if withdrawn is False and note.withdrawn_at is not None:
+        raise LookupError(f"Annotation {entity_id} is withdrawn; restore it to edit it.")
     return note
 
 
@@ -203,13 +233,22 @@ async def _current_targets(sess: AsyncSession, entity_id: int) -> list[int]:
 
 
 async def listing(
-    sess: AsyncSession, *, about: int | None = None, limit: int = 50, offset: int = 0
+    sess: AsyncSession,
+    *,
+    about: int | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    withdrawn: bool = False,
 ) -> AnnotationsRead:
     """The reader's notes, most recently *written* first.
 
     ``about`` narrows to the notes attached to one node, by attachment, not by text.
+    ``withdrawn`` lists the withdrawn ones instead of those that stand (`B-201`).
     """
-    where = [Entity.is_annotation.is_(True)]
+    where = [
+        Entity.is_annotation.is_(True),
+        Entity.withdrawn_at.is_not(None) if withdrawn else Entity.withdrawn_at.is_(None),
+    ]
     query = select(Entity)
     counted = select(func.count()).select_from(Entity)
     if about is not None:
@@ -267,6 +306,7 @@ async def hydrate(sess: AsyncSession, notes: Sequence[Entity]) -> list[Annotatio
             produced_by=note.produced_by or HUMAN,
             produced_at=note.produced_at,
             created_at=note.created_at,
+            withdrawn_at=note.withdrawn_at,
         )
         for note in notes
     ]

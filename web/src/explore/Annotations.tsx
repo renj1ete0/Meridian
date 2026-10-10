@@ -120,6 +120,8 @@ export interface NoteListProps {
   inContextOf?: number
   /** Rewrite a note in place (`B-201`); absent where nothing can save it. */
   onEdit?: (note: Annotation, change: { title: string; body: string | null }) => Promise<void>
+  /** Withdraw a note (`B-201`), after one confirmation; absent where nothing can. */
+  onWithdraw?: (note: Annotation) => Promise<void>
 }
 
 /** One note's rewrite, in place: title and body, saved through the edit route. */
@@ -178,8 +180,10 @@ function NoteEditor({
   )
 }
 
-export function NoteList({ notes, inContextOf, onEdit }: NoteListProps) {
+export function NoteList({ notes, inContextOf, onEdit, onWithdraw }: NoteListProps) {
   const [editing, setEditing] = useState<number | null>(null)
+  const [confirming, setConfirming] = useState<number | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
   if (notes.length === 0) {
     return (
       <p className="mt-2 text-[length:var(--text-small)] text-text-muted">
@@ -241,7 +245,47 @@ export function NoteList({ notes, inContextOf, onEdit }: NoteListProps) {
                       edit
                     </button>
                   ) : null}
+                  {onWithdraw && confirming !== note.entity_id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFailed(null)
+                        setConfirming(note.entity_id)
+                      }}
+                      className="font-mono text-[10.5px] text-text-faint hover:text-text"
+                    >
+                      withdraw
+                    </button>
+                  ) : null}
                 </p>
+                {onWithdraw && confirming === note.entity_id ? (
+                  // Asked once, in place: the note is kept and can be put back, so a
+                  // second dialog would weigh more than the act does.
+                  <p className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-text-muted">
+                    Withdraw this note? It leaves your notes and the graph, and can be put back.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onWithdraw(note)
+                          .then(() => setConfirming(null))
+                          .catch((cause: unknown) =>
+                            setFailed(cause instanceof ApiError ? cause.message : 'It was not withdrawn.'),
+                          )
+                      }}
+                      className="text-accent-attention hover:underline"
+                    >
+                      withdraw it
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(null)}
+                      className="text-text-faint hover:text-text"
+                    >
+                      keep it
+                    </button>
+                    {failed ? <span className="text-text-muted">{failed}</span> : null}
+                  </p>
+                ) : null}
               </>
             )}
           </li>
@@ -258,13 +302,17 @@ export interface NotesPanelProps {
   /** Read the rest (`B-180`); offered only while some are not shown. */
   onShowAll?: () => void
   onEdit?: NoteListProps['onEdit']
+  onWithdraw?: NoteListProps['onWithdraw']
+  /** Put back the note just withdrawn (`B-201`). */
+  onRestore?: (note: Annotation) => Promise<void>
 }
 
 /**
  * The reader's own layer, on the landing screen (§12.5), with a plain Markdown export
  * link. See docs/features/web-app.md#notes.
  */
-export function NotesPanel({ notes, total, onShowAll, onEdit }: NotesPanelProps) {
+export function NotesPanel({ notes, total, onShowAll, onEdit, onWithdraw, onRestore }: NotesPanelProps) {
+  const [withdrawn, setWithdrawn] = useState<Annotation | null>(null)
   return (
     <section aria-labelledby="your-notes" className="flex flex-col gap-3.5">
       <div className="flex items-baseline justify-between gap-4">
@@ -297,7 +345,39 @@ export function NotesPanel({ notes, total, onShowAll, onEdit }: NotesPanelProps)
         ) : null}
       </p>
 
-      {notes.length > 0 ? <NoteList notes={notes} onEdit={onEdit} /> : null}
+      {withdrawn ? (
+        <p role="status" className="font-mono text-[10.5px] text-text-muted">
+          Withdrawn “{withdrawn.title}”.{' '}
+          {onRestore ? (
+            <button
+              type="button"
+              onClick={() => {
+                onRestore(withdrawn)
+                  .then(() => setWithdrawn(null))
+                  .catch(() => {})
+              }}
+              className="text-accent-graph hover:underline"
+            >
+              put it back
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+
+      {notes.length > 0 ? (
+        <NoteList
+          notes={notes}
+          onEdit={onEdit}
+          onWithdraw={
+            onWithdraw
+              ? async (note) => {
+                  await onWithdraw(note)
+                  setWithdrawn(note)
+                }
+              : undefined
+          }
+        />
+      ) : null}
     </section>
   )
 }

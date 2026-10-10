@@ -54,6 +54,10 @@ class AnnotationRead(BaseModel):
     produced_at: dt.datetime | None
     created_at: dt.datetime
 
+    #: When the reader withdrew it (`B-201`); None while it stands. Only a listing of
+    #: withdrawn notes returns one that is set.
+    withdrawn_at: dt.datetime | None = None
+
 
 class AnnotationCreate(BaseModel):
     """What a reader writes. See the module docstring for the absent fields."""

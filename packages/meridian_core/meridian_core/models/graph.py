@@ -104,6 +104,11 @@ class Entity(Base, TimestampMixin, ProvenanceMixin):
         default=False, server_default=text("false"), nullable=False
     )
 
+    # When the reader withdrew this note (`B-201`, ADR 0020); NULL while it stands. The
+    # row and its edges are kept, so a withdrawal can be undone and nothing citing it
+    # breaks; every reader of notes and of the graph's neighbours leaves it out.
+    withdrawn_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
     # What a hand-written note was drawn from (`P6-05`); empty for derived entities.
     # See docs/features/knowledge-graph.md#annotations.
     supporting_chunk_ids: Mapped[list[int]] = mapped_column(

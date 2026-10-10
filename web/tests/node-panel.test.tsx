@@ -167,6 +167,7 @@ describe('the panel', () => {
       produced_by: 'human',
       produced_at: at,
       created_at: at,
+      withdrawn_at: null,
     })
     render(
       <NodePanel

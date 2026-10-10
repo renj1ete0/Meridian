@@ -37,6 +37,7 @@ import {
   rewriteAnnotation,
   saveView,
   searchCorpus,
+  withdrawAnnotation,
   type Annotation,
   type CorpusStats,
   type CrawlProgress,
@@ -635,6 +636,21 @@ export function ExplorePage() {
           onEdit={async (note, change) => {
             const rewritten = await rewriteAnnotation(note.entity_id, change)
             setNotes((current) => current.map((n) => (n.entity_id === note.entity_id ? rewritten : n)))
+          }}
+          onWithdraw={async (note) => {
+            await withdrawAnnotation(note.entity_id)
+            setNotes((current) => current.filter((n) => n.entity_id !== note.entity_id))
+            setNoteCount((count) => Math.max(0, count - 1))
+          }}
+          onRestore={async (note) => {
+            const back = await withdrawAnnotation(note.entity_id, true)
+            // Back where it was by the time it was written, which is how the list is ordered.
+            setNotes((current) =>
+              [...current, back].sort((a, b) =>
+                (b.produced_at ?? b.created_at).localeCompare(a.produced_at ?? a.created_at),
+              ),
+            )
+            setNoteCount((count) => count + 1)
           }}
         />
       </div>

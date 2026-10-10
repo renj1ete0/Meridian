@@ -528,6 +528,8 @@ the rules.
   claim to be the reader's own thinking. A note may be about no node yet (a thought that has not
   found its node is worth keeping) and about at most a few: two or three is the interesting case,
   fifty is a tag, and the cap stops one request writing fifty edges.
+- **A withdrawn note keeps its row** (`B-201`): `entities.withdrawn_at` is set, NULL while it
+  stands. Readers of notes and graph walks filter on it as they filter on `redirects_to`.
 - **Routes label every hop** as `cited` (a passage states the link) or `similar` (the ends only
   read alike), count them apart, and carry the claims-only answer beside the mixed one, so "no
   cited route within N hops" is a value Gaps (`P6-36`) can read rather than infer (`P6-32`).

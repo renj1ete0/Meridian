@@ -111,6 +111,7 @@ export function entity(over: Partial<Entity> = {}): Entity {
     produced_at: null,
     schema_version: 1,
     created_at: '2026-09-15T00:00:00Z',
+    withdrawn_at: null,
     ...over,
   }
 }

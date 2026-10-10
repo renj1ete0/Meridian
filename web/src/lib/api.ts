@@ -1163,6 +1163,8 @@ export interface Annotation {
   /** When the text was last the author's — moved by a rewrite, unlike `created_at`. */
   produced_at: string | null
   created_at: string
+  /** When the reader withdrew it (`B-201`); null while it stands. */
+  withdrawn_at: string | null
 }
 
 export const ANNOTATION_FIELDS = [
@@ -1175,6 +1177,7 @@ export const ANNOTATION_FIELDS = [
   'produced_by',
   'produced_at',
   'created_at',
+  'withdrawn_at',
 ] as const
 
 /** Mirrors `AnnotationsRead`. */
@@ -1191,6 +1194,8 @@ export interface AnnotationParams {
   about?: number
   limit?: number
   offset?: number
+  /** List the withdrawn notes instead of those that stand (`B-201`). */
+  withdrawn?: boolean
 }
 
 export function getAnnotations(params: AnnotationParams = {}, init?: RequestInit): Promise<Annotations> {
@@ -1233,6 +1238,17 @@ export function rewriteAnnotation(
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(change),
+    ...init,
+  })
+}
+
+/**
+ * Withdraw a note (`B-201`), or with `restore` put it back. A withdrawn note leaves every
+ * list and the graph; it is kept, with its links, so nothing is lost.
+ */
+export function withdrawAnnotation(entityId: number, restore = false, init?: RequestInit): Promise<Annotation> {
+  return request<Annotation>(`/api/admin/annotations/${entityId}/${restore ? 'restore' : 'withdraw'}`, {
+    method: 'POST',
     ...init,
   })
 }
@@ -1283,6 +1299,8 @@ export interface Entity {
   merged_from: number[] | null
   redirects_to: number | null
   is_annotation: boolean
+  /** Set on a note the reader withdrew (`B-201`). */
+  withdrawn_at: string | null
   /** What a hand-written node was drawn from; empty for everything derived (`P6-05`). */
   supporting_chunk_ids: number[]
   produced_by: string | null
@@ -1305,6 +1323,7 @@ export const ENTITY_FIELDS = [
   'merged_from',
   'redirects_to',
   'is_annotation',
+  'withdrawn_at',
   'supporting_chunk_ids',
   'produced_by',
   'model',

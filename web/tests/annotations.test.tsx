@@ -29,7 +29,7 @@ import { ApiError, type Annotation, type AnnotationTarget } from '../src/lib/api
 afterEach(cleanup)
 
 function target(over: Partial<AnnotationTarget> = {}): AnnotationTarget {
-  return { entity_id: 7, canonical_name: 'Silver Zone', node_type: 'scheme', ...over }
+  return { entity_id: 7, canonical_name: 'A scheme', node_type: 'scheme', ...over }
 }
 
 function note(over: Partial<Annotation> = {}): Annotation {
@@ -43,6 +43,7 @@ function note(over: Partial<Annotation> = {}): Annotation {
     produced_by: 'human',
     produced_at: '2026-09-18T09:00:00Z',
     created_at: '2026-03-01T09:00:00Z',
+    withdrawn_at: null,
     ...over,
   }
 }
@@ -150,7 +151,7 @@ describe('what the note carries', () => {
 
 describe('the composer says what it will carry before it is written', () => {
   it('names the node and counts the passages', () => {
-    expect(describeAttachment([target()], [12, 13])).toBe('About Silver Zone, citing 2 passages.')
+    expect(describeAttachment([target()], [12, 13])).toBe('About A scheme, citing 2 passages.')
   })
 
   it('says so when a note is attached to nothing', () => {
@@ -168,7 +169,7 @@ describe('the composer says what it will carry before it is written', () => {
     render(<NoteComposer about={[target()]} citing={[12]} />)
     open()
 
-    expect(screen.getByText(/About Silver Zone, citing 1 passage\./)).toBeTruthy()
+    expect(screen.getByText(/About A scheme, citing 1 passage\./)).toBeTruthy()
   })
 })
 
@@ -177,7 +178,7 @@ describe('reading notes back', () => {
     render(<NoteList notes={[note()]} />)
 
     expect(screen.getByText(/pilot count does not match/i)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Silver Zone' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'A scheme' })).toBeTruthy()
   })
 
   it('dates a note by when it was written, not when the row appeared', () => {
@@ -198,7 +199,7 @@ describe('reading notes back', () => {
   it('does not repeat the node a reader is already looking at', () => {
     render(<NoteList notes={[note()]} inContextOf={7} />)
 
-    expect(screen.queryByRole('link', { name: 'Silver Zone' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'A scheme' })).toBeNull()
   })
 
   it('still links the other nodes a note spans', () => {
@@ -318,5 +319,61 @@ describe('a note can be rewritten where it is read (B-201)', () => {
   it('offers no edit where nothing can save it', () => {
     render(<NotesPanel notes={[note()]} total={1} />)
     expect(screen.queryByRole('button', { name: 'edit' })).toBeNull()
+  })
+})
+
+describe('a note can be withdrawn and put back (B-201)', () => {
+  it('asks once, in place, and withdraws only on the second click', async () => {
+    const onWithdraw = vi.fn(async () => {})
+    render(<NotesPanel notes={[note()]} total={1} onWithdraw={onWithdraw} />)
+    fireEvent.click(screen.getByRole('button', { name: 'withdraw' }))
+    expect(onWithdraw).not.toHaveBeenCalled()
+    expect(screen.getByText(/can be put back/)).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'withdraw it' }))
+    })
+    expect(onWithdraw).toHaveBeenCalledWith(expect.objectContaining({ entity_id: 101 }))
+  })
+
+  it('keeping it closes the question and withdraws nothing', () => {
+    const onWithdraw = vi.fn(async () => {})
+    render(<NotesPanel notes={[note()]} total={1} onWithdraw={onWithdraw} />)
+    fireEvent.click(screen.getByRole('button', { name: 'withdraw' }))
+    fireEvent.click(screen.getByRole('button', { name: 'keep it' }))
+    expect(onWithdraw).not.toHaveBeenCalled()
+    expect(screen.queryByText(/can be put back/)).toBeNull()
+  })
+
+  it('names what was withdrawn and puts it back from there', async () => {
+    const onRestore = vi.fn(async () => {})
+    render(<NotesPanel notes={[note()]} total={1} onWithdraw={vi.fn(async () => {})} onRestore={onRestore} />)
+    fireEvent.click(screen.getByRole('button', { name: 'withdraw' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'withdraw it' }))
+    })
+    expect(screen.getByRole('status').textContent).toContain('The pilot count does not match')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'put it back' }))
+    })
+    expect(onRestore).toHaveBeenCalledWith(expect.objectContaining({ entity_id: 101 }))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('keeps the question open with the reason when withdrawing is refused', async () => {
+    const onWithdraw = vi.fn(async () => {
+      throw new ApiError(503, 'Admin is closed on this instance.')
+    })
+    render(<NotesPanel notes={[note()]} total={1} onWithdraw={onWithdraw} />)
+    fireEvent.click(screen.getByRole('button', { name: 'withdraw' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'withdraw it' }))
+    })
+    expect(screen.getByText('Admin is closed on this instance.')).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('offers no withdraw where nothing can do it', () => {
+    render(<NotesPanel notes={[note()]} total={1} />)
+    expect(screen.queryByRole('button', { name: 'withdraw' })).toBeNull()
   })
 })

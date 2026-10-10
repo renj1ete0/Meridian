@@ -361,8 +361,9 @@ async def neighbourhood(
             for e in (
                 await sess.scalars(select(Entity).where(Entity.entity_id.in_(other_ids)))
             ).all()
-            # A node merged into another is a redirect, not a neighbour (§5.5).
-            if e.redirects_to is None
+            # A node merged into another is a redirect, not a neighbour (§5.5); a withdrawn
+            # note is not one either (`B-201`).
+            if e.redirects_to is None and e.withdrawn_at is None
         }
 
     evidence = await _evidence_for(
@@ -540,6 +541,7 @@ async def _hints(
                 ) AS rn
                 FROM candidate c
                 JOIN entities en ON en.entity_id = c.other AND en.redirects_to IS NULL
+                    AND en.withdrawn_at IS NULL
                 WHERE NOT (c.other = ANY(CAST(:excluded AS bigint[])))
             )
             SELECT edge_id, other FROM ranked
@@ -879,7 +881,7 @@ async def search_nodes(
                    (SELECT count(*) FROM edges d
                     WHERE d.from_node = e.entity_id OR d.to_node = e.entity_id) AS degree
             FROM entities e
-            WHERE e.redirects_to IS NULL
+            WHERE e.redirects_to IS NULL AND e.withdrawn_at IS NULL
               AND (e.canonical_name ILIKE :contains ESCAPE '\'
                    OR EXISTS (SELECT 1 FROM unnest(e.aliases) a
                               WHERE a ILIKE :contains ESCAPE '\'))
@@ -983,7 +985,8 @@ async def shortest_path(
                 (
                     await sess.scalars(
                         select(Entity.entity_id).where(
-                            Entity.entity_id.in_(list(reached)), Entity.redirects_to.is_not(None)
+                            Entity.entity_id.in_(list(reached)),
+                            Entity.redirects_to.is_not(None) | Entity.withdrawn_at.is_not(None),
                         )
                     )
                 ).all()

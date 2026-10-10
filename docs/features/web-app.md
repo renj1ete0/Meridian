@@ -581,6 +581,12 @@ highest-quality layer in the system, and a layer nobody passes is one nobody add
 is a plain link, not a fetch-and-blob: §12.5 asks for Markdown so material is not trapped in a
 bespoke store, and a link can be copied, opened in a tab or fetched with curl.
 
+**A note can be edited and withdrawn where it is listed** (`B-201`). "withdraw" asks once, in
+place, saying that the note leaves the notes and the graph and can be put back; the panel then
+names what was withdrawn with "put it back" beside it. A note is kept when withdrawn
+([ADR 0020](../adr/0020-a-note-is-withdrawn-not-deleted.md)), so the question is not a dialog:
+it weighs what the act weighs.
+
 ### Saved views
 
 §12.5 asks for "a filter set plus focus node, named and re-openable". The affordance must be

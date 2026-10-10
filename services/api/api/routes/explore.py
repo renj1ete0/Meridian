@@ -853,6 +853,9 @@ async def list_annotations(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
+    withdrawn: Annotated[
+        bool, Query(description="List the withdrawn notes instead of those that stand.")
+    ] = False,
 ) -> AnnotationsRead:
     """The reader's own notes, most recently written first (§12.5).
 
@@ -860,7 +863,9 @@ async def list_annotations(
     four hundred notes is owed the number, and a page that only ever reports its
     own length cannot tell them.
     """
-    return await annotations.listing(sess, about=about, limit=limit, offset=offset)
+    return await annotations.listing(
+        sess, about=about, limit=limit, offset=offset, withdrawn=withdrawn
+    )
 
 
 @router.get("/export/annotations", response_class=PlainTextResponse)

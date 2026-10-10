@@ -1771,7 +1771,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       the gain. Build with `B-131`: a `/rerank` route on the embedding sidecar, off unless the
       sidecar is on a GPU, applied to Find, the answer view and `search_chunks`; measure
       latency on the card first
-- [ ] `B-163` **Which passages synthesis reads** — measured in the 2026-10-07 relay session
+- [ ] `B-163` (parked 2026-10-11: no paid model to test with; remind the operator) **Which passages synthesis reads** — measured in the 2026-10-07 relay session
       (3 batches, 120 passages, 34 relations, 5 attribute values). Synthesis reads a passage when
       it *or its source* is labelled on a topic, so one borderline page reaches the model whole:
       arXiv's category taxonomy (labelled at 0.555, 31 of its 37 passages labelled nothing) took
@@ -1824,7 +1824,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       for a note, while "Cite" on a node copies)
 - [x] `B-180` `v0.166.22`; editing notes is `B-201`. **Manage views and notes** — no rename/delete for views (the API has both), notes
       cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
-- [ ] `B-205` **The tag call re-sends the batch** (relay agent's finding) — extraction and
+- [ ] `B-205` (parked 2026-10-11 with `B-163`) **The tag call re-sends the batch** (relay agent's finding) — extraction and
       tagging each send all 40 passages. Measured 2026-10-10: of 37 attribute values the relay
       wrote, 28 (76%) cite a passage that extraction also cited; tagging only cited passages would
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
@@ -1860,8 +1860,8 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-203` `v0.167.1`. **A deliberate pause shown as a stall** — the worker stops claiming
       over the embedding ceiling; the pill said "crawl stalled" and Crawl health told the
       operator to check the worker. Liveness now says `paused`, with backlog and ceiling
-- [~] `B-201` `v0.167.3`: editing built; removing still needs a decision. **Edit or remove a note** — a note is a node; PATCH exists with no interface, and
-      removing one needs a decision about its links (soft delete, as §2.5 does for steering?)
+- [x] `B-201` `v0.167.3` editing; `v0.170.0` withdrawing ([ADR 0020](docs/adr/0020-a-note-is-withdrawn-not-deleted.md)). **Edit or remove a note** — a note is withdrawn, not deleted: it leaves
+      every list, panel, export and graph walk, keeps its row and links, and can be put back
 - [x] `B-181` **Notification links go to the right place** — `v0.166.2`. approvals, run summaries and
       alerts all open `/admin` (Topic weights); the status pill too. Map type → section
 - [x] `B-182` `v0.166.23`: settled rows say so; deciding a merge is `B-202`. **Possible-duplicate approvals have nowhere to go** — most of the bell is

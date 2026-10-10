@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.170.0] — 2026-10-11
+
+### Added
+
+- `B-201`: a note can be withdrawn, from the notes panel, after one question asked in place; the
+  panel names it with "put it back". Withdrawn, it leaves every list, node panel, export, node
+  search and graph walk, and keeps its row and links (ADR 0020).
+  `POST /api/admin/annotations/{id}/withdraw` and `/restore`; `?withdrawn=true` lists them.
+  Migration `b201a1d4a300` adds `entities.withdrawn_at`
+
 ## [0.169.0] — 2026-10-10
 
 ### Added

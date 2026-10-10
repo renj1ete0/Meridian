@@ -527,3 +527,134 @@ async def test_reading_notes_needs_no_gate(client, corpus, monkeypatch) -> None:
     monkeypatch.delenv("MERIDIAN_ADMIN_ALLOW_ANONYMOUS", raising=False)
 
     assert (await client.get("/api/explore/annotations")).status_code == 200
+
+
+# --------------------------------------------------------------------------
+# Withdrawing a note (`B-201`, ADR 0020)
+# --------------------------------------------------------------------------
+
+
+async def withdraw(client, entity_id: int, action: str = "withdraw") -> httpx.Response:
+    return await client.post(f"/api/admin/annotations/{entity_id}/{action}")
+
+
+async def test_a_withdrawn_note_leaves_the_lists_and_the_panel(
+    client, open_admin, corpus, marker
+) -> None:
+    _, subject, _, _ = corpus
+    kept = (await note(client, marker, about=[subject.entity_id], body="kept")).json()
+    gone = (await note(client, marker, about=[subject.entity_id], body="gone")).json()
+
+    response = await withdraw(client, gone["entity_id"])
+
+    assert response.status_code == 200
+    assert response.json()["withdrawn_at"] is not None
+    listed = (
+        await client.get("/api/explore/annotations", params={"about": subject.entity_id})
+    ).json()
+    assert [n["entity_id"] for n in listed["annotations"]] == [kept["entity_id"]]
+    assert listed["total"] == 1
+    panel = (await client.get(f"/api/explore/nodes/{subject.entity_id}")).json()
+    assert [n["entity_id"] for n in panel["annotations"]] == [kept["entity_id"]]
+    graph = (await client.get(f"/api/explore/graph/nodes/{subject.entity_id}")).json()
+    assert [n["entity_id"] for n in graph["annotations"]] == [kept["entity_id"]]
+    exported = (
+        await client.get("/api/explore/export/annotations", params={"about": subject.entity_id})
+    ).text
+    assert "gone" not in exported and "kept" in exported
+
+
+async def test_a_withdrawn_note_is_kept_with_its_links_and_can_be_put_back(
+    client, open_admin, corpus, marker, session_for
+) -> None:
+    _, subject, _, _ = corpus
+    written = (await note(client, marker, about=[subject.entity_id])).json()
+    await withdraw(client, written["entity_id"])
+
+    # The record stands: the row and its edge are still there.
+    assert [e.to_node for e in await edges_from(session_for, written["entity_id"])] == [
+        subject.entity_id
+    ]
+    withdrawn = (
+        await client.get(
+            "/api/explore/annotations", params={"withdrawn": "true", "about": subject.entity_id}
+        )
+    ).json()
+    assert [n["entity_id"] for n in withdrawn["annotations"]] == [written["entity_id"]]
+
+    restored = await withdraw(client, written["entity_id"], "restore")
+
+    assert restored.json()["withdrawn_at"] is None
+    listed = (
+        await client.get("/api/explore/annotations", params={"about": subject.entity_id})
+    ).json()
+    assert [n["entity_id"] for n in listed["annotations"]] == [written["entity_id"]]
+
+
+async def test_withdrawing_twice_keeps_the_first_time(client, open_admin, corpus, marker) -> None:
+    _, subject, _, _ = corpus
+    written = (await note(client, marker, about=[subject.entity_id])).json()
+
+    first = (await withdraw(client, written["entity_id"])).json()
+    second = (await withdraw(client, written["entity_id"])).json()
+
+    assert second["withdrawn_at"] == first["withdrawn_at"]
+
+
+async def test_a_withdrawn_note_is_restored_before_it_is_rewritten(
+    client, open_admin, corpus, marker
+) -> None:
+    _, subject, _, _ = corpus
+    written = (await note(client, marker, about=[subject.entity_id])).json()
+    await withdraw(client, written["entity_id"])
+
+    response = await client.patch(
+        f"/api/admin/annotations/{written['entity_id']}", json={"body": "rewritten"}
+    )
+
+    assert response.status_code == 404
+    assert "restore" in response.json()["detail"]
+
+
+async def test_a_corpus_node_cannot_be_withdrawn(client, open_admin, corpus) -> None:
+    # The same refusal as rewriting: this surface acts on the reader's own nodes only.
+    _, subject, _, _ = corpus
+
+    assert (await withdraw(client, subject.entity_id)).status_code == 404
+    assert (await withdraw(client, subject.entity_id, "restore")).status_code == 404
+
+
+async def test_withdrawing_is_refused_on_an_unidentified_instance(
+    client, corpus, marker, monkeypatch
+) -> None:
+    # The same gate as writing: withdrawing someone's thinking is as much a write.
+    _, subject, _, _ = corpus
+    monkeypatch.setenv("MERIDIAN_ADMIN_ALLOW_ANONYMOUS", "true")
+    written = (await note(client, marker, about=[subject.entity_id])).json()
+    monkeypatch.delenv("MERIDIAN_ADMIN_ALLOW_ANONYMOUS")
+    monkeypatch.delenv("CF_ACCESS_TEAM_DOMAIN", raising=False)
+    monkeypatch.delenv("CF_ACCESS_AUD", raising=False)
+
+    assert (await withdraw(client, written["entity_id"])).status_code == 503
+
+
+async def test_a_withdrawn_note_is_not_a_neighbour_or_a_search_hit(
+    client, open_admin, corpus, marker
+) -> None:
+    _, subject, _, _ = corpus
+    written = (await note(client, marker, about=[subject.entity_id])).json()
+    await withdraw(client, written["entity_id"])
+
+    hood = await client.get(f"/api/explore/graph/nodes/{subject.entity_id}/neighbourhood")
+    found = await client.get("/api/explore/graph/search", params={"q": f"{marker} note"})
+
+    assert hood.status_code == found.status_code == 200
+    assert written["entity_id"] not in {n["entity_id"] for n in hood.json()["nodes"]}
+    assert written["entity_id"] not in {m["entity_id"] for m in found.json()["matches"]}
+
+    # And both see it while it stands, so the absence above is the withdrawal's doing.
+    await withdraw(client, written["entity_id"], "restore")
+    hood = await client.get(f"/api/explore/graph/nodes/{subject.entity_id}/neighbourhood")
+    found = await client.get("/api/explore/graph/search", params={"q": f"{marker} note"})
+    assert written["entity_id"] in {n["entity_id"] for n in hood.json()["nodes"]}
+    assert written["entity_id"] in {m["entity_id"] for m in found.json()["matches"]}
