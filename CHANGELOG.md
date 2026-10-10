@@ -81,6 +81,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.18] — 2026-10-10
+
+### Fixed
+
+- `B-199`: Admin on a phone picks sections from one list instead of a sideways strip; no nested
+  `<main>`; a staged weight change survives visiting another section and is marked there; agent
+  model variables and placeholders are explained beside the string; a domain blocked for
+  refusals says so
+
 ## [0.166.17] — 2026-10-10
 
 ### Fixed

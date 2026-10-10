@@ -18,6 +18,20 @@ export interface AgentsPanelProps {
   onModel?: (agentId: string, model: string) => Promise<boolean>
 }
 
+/**
+ * What a model string means, beside it as written (`B-199`): `${HOSTED_LLM_MODEL}` is a
+ * variable the server reads at call time, and `<fill in …>` is a placeholder nobody replaced.
+ * The string itself stays on screen, since `P4-15` found a placeholder recognisable only as
+ * written. Null when the string is a model name and needs no note.
+ */
+export function modelNote(model: string | null): string | null {
+  if (model === null || !model.trim()) return null
+  const variable = /^\$\{([A-Z0-9_]+)\}$/.exec(model.trim())
+  if (variable) return `read from ${variable[1]} in the environment`
+  if (model.trim().startsWith('<')) return 'a placeholder: set a model before enabling'
+  return null
+}
+
 /** The model as typed, or why it cannot be saved: the server's rule, early. */
 export function modelProblem(value: string): string | null {
   if (value.trim() === '') return 'A model string is required.'
@@ -40,10 +54,12 @@ function ModelField({
   // placeholder — and a placeholder is only recognisable if it is shown as
   // written.
   const shown = row.model ?? 'no model string'
+  const note = modelNote(row.model)
   if (draft === null) {
     return (
-      <div className="flex items-baseline gap-2 text-[11px] text-text-faint">
+      <div className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-text-faint">
         <span data-model>{shown}</span>
+        {note ? <span className="font-sans text-text-muted">{note}</span> : null}
         {onModel ? (
           <button
             type="button"

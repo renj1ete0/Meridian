@@ -52,7 +52,7 @@ import {
   type Topics,
 } from '../lib/api'
 import { acceptProposal, getProposals, rejectProposal, type Proposals } from '../lib/proposals'
-import { onInternalClick } from '../lib/route'
+import { navigate, onInternalClick } from '../lib/route'
 
 /**
  * Admin (tasks P6-13, P6-28; spec §12.6; `AdminLight` mock): one plain, dense language
@@ -262,12 +262,20 @@ export function AdminPage() {
     return () => window.clearTimeout(timer)
   }, [domainQuery])
 
-  // Leaving a section drops anything staged on it and any sentence about it.
+  // Leaving a section drops any sentence about it. A staged weight change is kept: it was
+  // dropped silently, and nothing about another section moves the base it was previewed
+  // against (`B-199`); the page asks before it is closed with one staged.
   useEffect(() => {
     setError(null)
     setNotice(null)
-    setDraft(null)
   }, [section])
+
+  useEffect(() => {
+    if (!draft) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [draft])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -448,9 +456,31 @@ export function AdminPage() {
       data-admin-section={section}
       className="flex min-h-[calc(100vh-54px)] flex-col bg-ground text-text lg:flex-row"
     >
+      {/* Below lg, one picker: a strip that scrolled sideways hid eight of twelve sections
+          with no sign they were there (`B-199`). */}
+      <label className="flex items-center gap-2 border-b border-line px-4 py-2.5 lg:hidden">
+        <span className={LABEL}>Section</span>
+        <select
+          aria-label="Admin section"
+          value={section}
+          onChange={(e) => navigate(hrefForSection(e.target.value as Section))}
+          className="h-8 min-w-0 flex-1 border border-line-strong bg-surface-raised px-2 text-[13px] text-text"
+        >
+          {(['steering', 'system'] as const).map((group) => (
+            <optgroup key={group} label={group}>
+              {SECTIONS.filter((s) => s.group === group).map((def) => (
+                <option key={def.key} value={def.key}>
+                  {def.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+
       <nav
         aria-label="Admin sections"
-        className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-2 py-2 lg:w-[196px] lg:flex-col lg:gap-[3px] lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-[18px]"
+        className="hidden shrink-0 lg:flex lg:w-[196px] lg:flex-col lg:gap-[3px] lg:border-r lg:border-line lg:py-[18px]"
       >
         {(['steering', 'system'] as const).map((group) => (
           <div key={group} className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch lg:gap-[3px]">
@@ -476,6 +506,10 @@ export function AdminPage() {
                   }`}
                 >
                   {def.label}
+                  {def.key === 'topics' && draft && !on ? (
+                    // Kept while elsewhere, so it says it is there.
+                    <span className="ml-1.5 font-mono text-[10px] text-accent-attention">· staged</span>
+                  ) : null}
                 </a>
               )
             })}
@@ -483,7 +517,8 @@ export function AdminPage() {
         ))}
       </nav>
 
-      <main className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 sm:px-8 sm:py-7">
+      {/* Not a second <main>: the app's shell already is one (`B-199`). */}
+      <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 sm:px-8 sm:py-7">
         {error ? (
           // The API's own sentence, shown as written. For a closed Admin it
           // names the variables that open it, and replacing it with a generic
@@ -722,7 +757,7 @@ export function AdminPage() {
             <Loading what="the gazetteer queue" />
           )
         ) : null}
-      </main>
+      </div>
 
       {steeringPage ? (
         <div className="shrink-0 border-t border-line bg-surface px-[22px] py-7 lg:w-[300px] lg:border-l lg:border-t-0">

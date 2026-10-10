@@ -34,6 +34,20 @@ const FILTERS: { key: DomainStatus | null; label: string }[] = [
 /** The settings worth showing at a glance; the rest are behind the resolved blob. */
 export const SUMMARY_KEYS = ['delay_per_domain_ms', 'concurrency_per_domain', 'timeout_s', 'render_js'] as const
 
+/**
+ * Why a blocked domain is not crawled, in words (`B-199`). Blocked for refusing every request,
+ * it has no failure streak, and "0 failures in a row" contradicted the block.
+ */
+export function blockedReason(
+  policy: Pick<FetchPolicyRow['policy'], 'updated_by' | 'note' | 'consecutive_failures'>,
+): string {
+  if (policy.updated_by === 'refusals') return 'Not being crawled: the site refused every request.'
+  if (policy.consecutive_failures > 0)
+    return `Not being crawled: ${policy.consecutive_failures} failed fetches in a row.`
+  if (policy.updated_by === 'worker') return 'Not being crawled: blocked after repeated failures.'
+  return 'Not being crawled: blocked by hand.'
+}
+
 export function isLearnedRender(row: FetchPolicyRow): boolean {
   // Resolved says `always` and nothing on this row says so: the crawl worked it
   // out. Without this distinction an operator sees a setting they cannot find
@@ -146,9 +160,7 @@ export function FetchPolicyPanel({
                       // can appear without anybody choosing it — and a blocked
                       // domain produces no sources and no errors, which is why
                       // it is said rather than left to the status column.
-                      <div className="font-sans text-[12px] text-accent-attention">
-                        Not being crawled. {row.policy.consecutive_failures} failures in a row.
-                      </div>
+                      <div className="font-sans text-[12px] text-accent-attention">{blockedReason(row.policy)}</div>
                     ) : null}
                     {learned ? (
                       <div className="font-sans text-[12px] text-text-muted">

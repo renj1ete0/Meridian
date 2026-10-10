@@ -14,7 +14,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { FetchPolicyPanel, SUMMARY_KEYS, isLearnedRender } from '../src/admin/FetchPolicyPanel'
+import { FetchPolicyPanel, SUMMARY_KEYS, blockedReason, isLearnedRender } from '../src/admin/FetchPolicyPanel'
 import type { FetchPolicy, FetchPolicyRow } from '../src/lib/api'
 
 function text(markup: string): string {
@@ -165,7 +165,18 @@ describe('a blocked domain says so in words', () => {
     const rendered = text(render([row({ policy: policy({ status: 'blocked', consecutive_failures: 7 }) })]))
 
     expect(rendered).toContain('Not being crawled')
-    expect(rendered).toContain('7 failures')
+    expect(rendered).toContain('7 failed fetches in a row')
+  })
+
+  it('says why a domain blocked for refusals is blocked, without a streak of zero (B-199)', () => {
+    const rendered = text(
+      render([row({ policy: policy({ status: 'blocked', consecutive_failures: 0, updated_by: 'refusals' }) })]),
+    )
+    expect(rendered).toContain('the site refused every request')
+    expect(rendered).not.toContain('0 failed')
+    expect(blockedReason({ updated_by: 'operator', note: null, consecutive_failures: 0 })).toBe(
+      'Not being crawled: blocked by hand.',
+    )
   })
 
   it('offers to put it back', () => {

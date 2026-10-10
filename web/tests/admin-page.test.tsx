@@ -10,6 +10,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { navigate } from '../src/lib/route'
 import { AdminPage } from '../src/admin/AdminPage'
 import { DEFAULT_SECTION, SECTIONS, adminTheme, hrefForSection, sectionFromPath } from '../src/admin/sections'
 import { PREVIEW_DEBOUNCE_MS } from '../src/admin/TopicDialogs'
@@ -307,6 +308,30 @@ describe('a staged weight', () => {
     expect(writes).toHaveLength(1)
     expect(writes[0]!.url).toContain('/api/admin/topics/walkability')
     expect(writes[0]!.body).toEqual({ weight: 0.3 })
+  })
+
+  it('is kept while the operator looks at another section, and marked there (B-199)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    stubApi()
+    at('/admin/topics')
+    render(<AdminPage />)
+    await settle()
+
+    fireEvent.change(screen.getByLabelText('Weight for walkability'), { target: { value: '30' } })
+    await act(() => vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS + 10))
+    await settle()
+
+    await act(async () => {
+      navigate('/admin/runs')
+    })
+    await settle()
+    expect(screen.getAllByText('· staged').length).toBeGreaterThan(0)
+
+    await act(async () => {
+      navigate('/admin/topics')
+    })
+    await settle()
+    expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('is dropped by Revert, and nothing is written', async () => {

@@ -23,7 +23,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { AgentsPanel, rowState, tierLabel } from '../src/admin/AgentsPanel'
+import { AgentsPanel, modelNote, rowState, tierLabel } from '../src/admin/AgentsPanel'
 import { RunsPanel, spent, STATUS_NOTES, statusLine, written } from '../src/admin/RunsPanel'
 import type { AgentRow, RunRow } from '../src/lib/api'
 
@@ -232,5 +232,18 @@ describe('run history reads cleanly and goes back past the first page (B-198)', 
     expect(statusLine(run({ status: 'done', stage: 'done' }))).toBe('done')
     expect(statusLine(run({ status: 'deferred', stage: 'extract' }))).toBe('deferred · extract')
     expect(statusLine(run({ status: 'running', stage: null }))).toBe('running')
+  })
+})
+
+describe('a model string with what it means beside it (B-199)', () => {
+  it('names the variable a model is read from, and a placeholder as one, keeping the string', () => {
+    expect(modelNote('${HOSTED_LLM_MODEL}')).toBe('read from HOSTED_LLM_MODEL in the environment')
+    expect(modelNote('<fill in — a model>')).toBe('a placeholder: set a model before enabling')
+    expect(modelNote('claude-opus-5-5')).toBeNull()
+    const markup = text(
+      renderToStaticMarkup(<AgentsPanel rows={[agent({ model: '${HOSTED_LLM_MODEL}' })]} unserved={[]} />),
+    )
+    expect(markup).toContain('${HOSTED_LLM_MODEL}')
+    expect(markup).toContain('read from HOSTED_LLM_MODEL')
   })
 })

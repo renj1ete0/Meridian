@@ -1805,7 +1805,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       empty states left out, domains link to their policy row
 - [x] `B-198` `v0.166.17`. **Run history** — no paging past 25 of 422; "1 edges"; "done · done"; a deferred
       relay run reads as a failure
-- [ ] `B-199` **Admin wording and shell** — agent models shown as `${…}`; "Not being crawled. 0
+- [x] `B-199` `v0.166.18`. **Admin wording and shell** — agent models shown as `${…}`; "Not being crawled. 0
       failures in a row"; nested `<main>`; weight drafts dropped silently on section change; the
       phone tab strip hides 8 of 12 sections
 - [ ] `B-186` **Map small fixes** — theme card terms inert (make them Find links); child names

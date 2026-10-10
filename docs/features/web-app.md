@@ -825,6 +825,22 @@ colour is a token role, so the same markup reads on paper and on the dark palett
   topic, so those lines are shown too. Last runs show what the weights were steering, in
   counters rather than a verdict.
 
+
+**Shell fixes from the operator walk** (`B-199`):
+
+- **On a phone, one picker.** The section list became a strip that scrolled sideways, showing
+  four of twelve sections with nothing to say the rest existed. Below `lg` it is a native
+  `<select>` grouped as steering and system; above, the rail as drawn.
+- **One landmark.** Admin rendered its own `<main>` inside the app's, two main landmarks for a
+  screen reader; it is a `<div>` now.
+- **A staged weight change survives looking elsewhere.** Leaving Topic weights dropped the
+  draft without a word. Nothing in another section moves the base it was previewed against, so
+  it is kept, the rail marks Topic weights "· staged" meanwhile, and closing the page with one
+  staged asks first.
+- **Words beside raw values.** An agent's model `${HOSTED_LLM_MODEL}` gets "read from
+  HOSTED_LLM_MODEL in the environment" beside it, and a placeholder "a placeholder: set a model
+  before enabling"; the string itself stays on screen (`P4-15`). A domain blocked for refusing
+  every request said "Not being crawled. 0 failures in a row"; it now says why it was blocked.
 ### Topic weights
 
 §10's model in one line: attention is a weight vector over topics, and seeds are drawn in
