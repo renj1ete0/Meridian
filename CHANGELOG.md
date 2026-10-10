@@ -81,6 +81,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.167.0] — 2026-10-10
+
+### Added
+
+- `B-202`: Admin › Possible duplicates decides what resolution could not: both nodes side by
+  side with their evidence, merge (reversible) or keep apart, and undo.
+  `GET /api/admin/duplicates`, `POST /api/admin/duplicates/{id}` and `…/undo`; the bell links
+  there and shows a decided pair as settled
+
 ## [0.166.25] — 2026-10-10
 
 ### Fixed

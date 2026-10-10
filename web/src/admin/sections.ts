@@ -18,6 +18,7 @@ export type Section =
   | 'health'
   | 'display'
   | 'access'
+  | 'duplicates'
 
 export interface SectionDef {
   key: Section
@@ -42,6 +43,8 @@ export const SECTIONS: readonly SectionDef[] = [
   // row that made it defer are one question asked twice.
   { key: 'agents', label: 'Agent registry', path: 'agents', group: 'system' },
   { key: 'gazetteer', label: 'Gazetteer approvals', path: 'gazetteer', group: 'system' },
+  // `B-202`. Beside the other approvals: a pair resolution could not decide.
+  { key: 'duplicates', label: 'Possible duplicates', path: 'duplicates', group: 'system' },
   {
     key: 'enrichment',
     label: 'Enrichment queue',

@@ -20,6 +20,13 @@
  * `ui.test.tsx`.
  */
 import {
+  DUPLICATE_DECIDED_FIELDS,
+  DUPLICATE_PAIR_FIELDS,
+  DUPLICATE_PASSAGE_FIELDS,
+  DUPLICATE_SIDE_FIELDS,
+  DUPLICATES_FIELDS,
+} from '../src/lib/duplicates'
+import {
   CHAT_CITATION_FIELDS,
   CHAT_EXCHANGE_FIELDS,
   CHAT_MESSAGE_FIELDS,
@@ -164,6 +171,11 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['TokenIssued', 'tokens.py', TOKEN_ISSUED_FIELDS],
     ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],
     ['NotificationItemRead', 'runs.py', NOTIFICATION_ITEM_FIELDS],
+    ['DuplicatePassageRead', 'duplicates.py', DUPLICATE_PASSAGE_FIELDS],
+    ['DuplicateSideRead', 'duplicates.py', DUPLICATE_SIDE_FIELDS],
+    ['DuplicatePairRead', 'duplicates.py', DUPLICATE_PAIR_FIELDS],
+    ['DuplicatesRead', 'duplicates.py', DUPLICATES_FIELDS],
+    ['DuplicateDecisionRead', 'duplicates.py', DUPLICATE_DECIDED_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
     ['SourcePageRead', 'source.py', SOURCE_PAGE_FIELDS],
     ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],

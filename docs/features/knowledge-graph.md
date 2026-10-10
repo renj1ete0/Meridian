@@ -309,6 +309,33 @@ already redirects, and into one that redirects (no chains to follow).
 attribute (`name`, for one). `logging` raises rather than dropping it, and only once logging is
 configured, so it passes in isolation and fails in the suite. Hence `entity_name`.
 
+### Deciding a possible duplicate
+
+Resolution queues the uncertain middle band for a person as a `merge_adjudication`
+notification: a run read a name it could not place, created a separate node, and named the
+existing one it might be (a duplicate is recoverable and a bad merge is not). Until `B-202`
+nothing could decide one, and they became most of the bell.
+
+`meridian_core.duplicates` lists the undecided pairs (`GET /api/admin/duplicates`), each with
+both nodes as they stand: type, place, aliases, description, how many stated links touch it,
+and two passages behind it, so the call is made on evidence rather than on two names. A pair
+either side of which is gone or already redirects is left off the page, since `merge` would
+refuse it. `POST /api/admin/duplicates/{id}` takes `merge` or `keep`:
+
+- **Merge** goes through `resolution.merge` (created into candidate), the same reversible path a
+  run uses: the created node becomes a redirect and the log records what moved. Refusals
+  (across node types, into a redirect) come back as a 409 in the resolver's own words, and the
+  pair stays open.
+- **Keep apart** changes no node.
+- **Undo** (`POST …/undo`) reverses the merge exactly (`resolution.reverse`) or reopens a pair
+  kept apart.
+
+The decision is written onto the notification (`payload.decision`), which is where the bell
+reads it as settled ("since merged", "since kept apart"), and the bell's row links here. Not yet:
+a pair kept apart is not remembered by resolution, so the same two names can be queued again.
+
+The page is Admin › Possible duplicates (`DuplicatesPanel`).
+
 ### Reading the graph
 
 `graphview.py` returns at most one node's neighbourhood, one node's evidence, or one route.

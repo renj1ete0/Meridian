@@ -11,6 +11,8 @@ import { GazetteerQueue, PAGE_SIZE } from './GazetteerQueue'
 import { PinsPanel } from './PinsPanel'
 import { ProposalsPanel } from './ProposalsPanel'
 import { RunsPanel } from './RunsPanel'
+import { DuplicatesPanel } from './DuplicatesPanel'
+import { decideDuplicate, getDuplicates, undoDuplicate, type Duplicates } from '../lib/duplicates'
 import { DEFAULT_SECTION, SECTIONS, hrefForSection, useAdminTheme, usePathSection, type Section } from './sections'
 import { SteeringRail } from './SteeringRail'
 import { AddTopicDialog, ArchiveDialog, PREVIEW_DEBOUNCE_MS } from './TopicDialogs'
@@ -116,6 +118,7 @@ export function AdminPage() {
   const [agents, setAgents] = useState<Agents | null>(null)
   const [runs, setRuns] = useState<Runs | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [dupes, setDupes] = useState<Duplicates | null>(null)
   const [health, setHealth] = useState<CrawlHealth | null>(null)
   const [proposals, setProposals] = useState<Proposals | null>(null)
   const [proposalBusy, setProposalBusy] = useState<number | null>(null)
@@ -192,6 +195,18 @@ export function AdminPage() {
       })
       .catch((cause: unknown) => {
         const text = message(cause, 'Run history could not be loaded.')
+        if (text) setError(text)
+      })
+  }, [])
+
+  const loadDuplicates = useCallback((signal?: AbortSignal) => {
+    return getDuplicates(20, { signal })
+      .then((body) => {
+        setDupes(body)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        const text = message(cause, 'Possible duplicates could not be loaded.')
         if (text) setError(text)
       })
   }, [])
@@ -292,6 +307,7 @@ export function AdminPage() {
     } else if (section === 'seeds') void loadRun(signal)
     else if (section === 'agents') void loadAgents(signal)
     else if (section === 'runs') void loadRuns(signal)
+    else if (section === 'duplicates') void loadDuplicates(signal)
     else if (section === 'health') void loadHealth(signal)
     else if (section === 'domains') void loadPolicy(domainStatus, domainSearch, domainOffset, signal)
     return () => controller.abort()
@@ -301,6 +317,7 @@ export function AdminPage() {
     domainStatus,
     load,
     loadAgents,
+    loadDuplicates,
     loadHealth,
     loadPolicy,
     loadProposals,
@@ -699,6 +716,19 @@ export function AdminPage() {
         {section === 'display' ? <DisplayPanel /> : null}
 
         {section === 'health' ? health ? <CrawlHealthPanel health={health} /> : <Loading what="crawl health" /> : null}
+
+        {section === 'duplicates' ? (
+          dupes ? (
+            <DuplicatesPanel
+              pairs={dupes.pairs}
+              total={dupes.total}
+              onDecide={(pair, decision) => decideDuplicate(pair.notification_id, decision)}
+              onUndo={(pair) => undoDuplicate(pair.notification_id)}
+            />
+          ) : (
+            <Loading what="possible duplicates" />
+          )
+        ) : null}
 
         {section === 'runs' ? (
           runs ? (

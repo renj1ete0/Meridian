@@ -615,8 +615,13 @@ async def _settled(sess: AsyncSession, rows: list[Notification]) -> dict[int, st
     """
     proposals: dict[int, int] = {}
     created: dict[int, int] = {}
+    out: dict[int, str] = {}
     for row in rows:
         payload = row.payload or {}
+        # Decided where it is decided (`B-202`): the decision is written onto the notification.
+        if isinstance(payload.get("decision"), str):
+            out[row.notification_id] = payload["decision"]
+            continue
         if row.notification_type == "steering_proposal" and isinstance(
             payload.get("proposal_id"), int
         ):
@@ -625,7 +630,6 @@ async def _settled(sess: AsyncSession, rows: list[Notification]) -> dict[int, st
             payload.get("created"), int
         ):
             created[row.notification_id] = payload["created"]
-    out: dict[int, str] = {}
     if proposals:
         status = dict(
             (

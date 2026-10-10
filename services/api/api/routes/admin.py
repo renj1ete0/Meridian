@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
-from meridian_core import annotations, chat, mapsteer, steering
+from meridian_core import annotations, chat, duplicates, mapsteer, steering
 from meridian_core.areaview import AreaNotFound
 from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.gazetteer import loading_report
@@ -79,6 +79,11 @@ from meridian_core.schemas.areas import (
 )
 from meridian_core.schemas.chat import ChatAsk, ChatExchangeRead, ChatMessageRead, ChatThreadRead
 from meridian_core.schemas.config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
+from meridian_core.schemas.duplicates import (
+    DuplicateDecision,
+    DuplicateDecisionRead,
+    DuplicatesRead,
+)
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
 from meridian_core.schemas.graphview import GraphFilters
@@ -786,6 +791,54 @@ async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None
     await sess.delete(view)
     await sess.commit()
     log.info("view deleted", extra={"view_id": view_id})
+
+
+# ---------------------------------------------------------------------------
+# Possible duplicates (task B-202, spec §5.5)
+# ---------------------------------------------------------------------------
+#
+# Resolution queues the middle band for a person; these decide it. A merge is reversible
+# (`resolution.reverse`), so "undo" splits it exactly. See
+# docs/features/knowledge-graph.md#deciding-a-possible-duplicate.
+
+
+@router.get("/duplicates", response_model=DuplicatesRead)
+async def list_duplicates(
+    _: AdminAllowed, sess: WriteSession, limit: Annotated[int, Query(ge=1, le=50)] = 20
+) -> DuplicatesRead:
+    """Undecided possible duplicates, newest first, with both nodes and their evidence."""
+    return await duplicates.open_pairs(sess, limit=limit)
+
+
+@router.post("/duplicates/{notification_id}", response_model=DuplicateDecisionRead)
+async def decide_duplicate(
+    notification_id: int, body: DuplicateDecision, _: AdminAllowed, sess: WriteSession
+) -> DuplicateDecisionRead:
+    """Merge the created node into the one it might be, or keep them apart."""
+    try:
+        decided = await duplicates.decide(sess, notification_id, body.decision, decided_by=ACTOR)
+    except duplicates.DuplicateRefused as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from refused
+    await sess.commit()
+    log.info(
+        "duplicate decided",
+        extra={"notification_id": notification_id, "decision": decided.decision},
+    )
+    return decided
+
+
+@router.post("/duplicates/{notification_id}/undo", response_model=DuplicateDecisionRead)
+async def undo_duplicate(
+    notification_id: int, _: AdminAllowed, sess: WriteSession
+) -> DuplicateDecisionRead:
+    """Reverse a decision: split the merge exactly, or reopen a pair kept apart."""
+    try:
+        undone = await duplicates.undo(sess, notification_id, decided_by=ACTOR)
+    except duplicates.DuplicateRefused as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from refused
+    await sess.commit()
+    log.info("duplicate decision undone", extra={"notification_id": notification_id})
+    return undone
 
 
 # ---------------------------------------------------------------------------

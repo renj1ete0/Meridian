@@ -66,11 +66,8 @@ export const ACTION_FOR_TYPE: Record<string, (item: NotificationItem) => { label
   steering_proposal: () => ({ label: 'Review', href: '/admin/proposals' }),
   seed_proposal: () => ({ label: 'Review', href: '/admin/seeds' }),
   gazetteer_proposal: () => ({ label: 'Review', href: '/admin/gazetteer' }),
-  // No screen decides a merge yet (`B-182`); the node that was created is where to look.
-  merge_adjudication: (item) => {
-    const created = item.payload?.created
-    return typeof created === 'number' ? { label: 'Open node', href: `/nodes/${created}` } : null
-  },
+  // Decided in Admin › Possible duplicates (`B-202`).
+  merge_adjudication: () => ({ label: 'Decide', href: '/admin/duplicates' }),
   alert: (item) => {
     const condition = item.payload?.condition
     const href = typeof condition === 'string' ? ALERT_SECTION[condition] : undefined

@@ -271,11 +271,10 @@ describe('every notification leads where it can be acted on (B-181)', () => {
     expect(Object.keys(ALERT_SECTION).sort()).toEqual([...new Set(keys)].sort())
   })
 
-  it('opens a possible duplicate on the node it created, and nothing when that is missing', () => {
+  it('sends a possible duplicate to where it is decided (B-202)', () => {
     expect(hrefOf({ notification_type: 'merge_adjudication', payload: { created: 95, candidate: 46 } })).toBe(
-      '/nodes/95',
+      '/admin/duplicates',
     )
-    expect(hrefOf({ notification_type: 'merge_adjudication', payload: null })).toBeNull()
   })
 
   it('sends an alert to its section, and one with no page to none', () => {
