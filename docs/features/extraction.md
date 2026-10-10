@@ -171,6 +171,42 @@ queued for OCR and stays metadata-only.
   without one cites as a URL); its failure does not fail the document. A date is taken only when
   all of year, month and day are present.
 
+<a id="pdf-tables"></a>**Tables keep their rows** (`B-214`). Reading order writes a table column
+by column: every row label, then each column's values as a list of their own, so a passage holds
+a figure with nothing to say what it measures. `-layout` keeps the columns aligned but
+interleaves two-column prose line by line, so it cannot replace a page. A second `-layout` pass
+finds the tables instead (`worker/extract/pdftables.py`), and each becomes a Markdown pipe
+table put where its cells were in the reading-order text, which the chunker already keeps whole
+and cuts between rows (`B-191`) and whose header the embedder carries forward (`B-195`). The
+rest of the page is untouched.
+
+- **Finding a table.** A line split on runs of three or more spaces is a table line when it
+  has three or more short cells, or a label and one value. A block is three or more table lines,
+  one other line allowed inside it, mostly values or a text table of short cells; two blank
+  lines end it. A page whose lines are largely two columns of running words is prose, and has
+  no tables.
+- **Columns are found down the whole block**, at blank bands every line shares, not by
+  splitting each line, so an empty cell leaves its row's values in their columns. A band may be
+  crossed by one line in five (a crowded row with one space where the others have a gap), and
+  the cut is made at a column blank in every line. A lower-case line inside a block ends the
+  label above it.
+- **A table is placed only when it is clean.** The run of reading-order lines that is the
+  table's cells must hold most of its words; few may be left elsewhere on the page (a line
+  another table could hold does not count); and the words going out and coming in must match,
+  both ways, within a tenth. Otherwise the page is left in reading order: a table found only in
+  part would be stored twice, and one placed over another table's cells would lose those.
+- **Measured** on 100 stored PDFs (1,912 non-blank pages): about a third of pages flagged, at
+  about 87% precision on 60 hand-labelled pages with every two-column prose page left alone;
+  on flagged pages reading order has a median 3.6 times the lines layout has. The final rule
+  placed 624 tables on 364 pages; no placed page gained or lost more than 8% of its words, and
+  across them 0.1% of words were lost and 0.7% read twice. Refused: mostly form-like pages,
+  where each record is laid out on its own.
+- **Stored documents keep their old text.** The re-cut (`worker.rechunk`) rebuilds from stored
+  passages, not from the file, so tables reach only documents extracted from now on; re-extracting
+  stored PDFs rewrites and re-embeds their passages and is the operator's call.
+- If the `-layout` pass fails or its pages do not line up with the first pass, the document is
+  extracted as before. The pass costs a second `pdftotext` run per PDF.
+
 ### Office documents
 
 Office formats arrive far more often than expected from official and consultancy sources, so a
@@ -489,6 +525,6 @@ One row per URL, created on first fetch and updated on every fetch.
 ## Tests
 
 `tests/unit/test_chunk*.py`, `test_clean*.py`, `test_extract_html.py`,
-`test_extract_pdf.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
+`test_extract_pdf.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
 `test_injection_screen.py`, `test_rawstore*.py`; `tests/integration/test_chunks*.py`,
 `test_rechunk*.py`.

@@ -332,3 +332,53 @@ def test_a_blank_page_contributes_nothing(tmp_path: Path) -> None:
     chunks = chunk_pages([Page(number=1, text=BODY * 3), Page(number=2, text="   ")])
 
     assert {c.offset for c in chunks} == {1}
+
+
+def table_pdf(tmp_path: Path, rows: list[tuple[str, ...]]) -> bytes:
+    """A page of prose with a table whose columns sit far enough apart that reading order
+    takes each column as a block of its own, as it does in published reports."""
+    lines = ["/Helvetica findfont 11 scalefont setfont"]
+    y = 720
+    for _ in range(2):
+        lines.append(f"72 {y} moveto ({BODY}) show")
+        y -= 16
+    y -= 24
+    for row in rows:
+        for x, cell in zip((72, 300, 420), row, strict=False):
+            lines.append(f"{x} {y} moveto ({cell}) show")
+        y -= 16
+    y -= 24
+    lines.append(f"72 {y} moveto ({BODY}) show")
+    source = tmp_path / "table.ps"
+    source.write_text(
+        "%!PS-Adobe-3.0\n%%Pages: 1\n%%Page: 1 1\n" + "\n".join(lines) + "\nshowpage\n%%EOF\n"
+    )
+    out = tmp_path / "table.pdf"
+    subprocess.run(["ps2pdf", str(source), str(out)], check=True, capture_output=True)
+    return out.read_bytes()
+
+
+TABLE_ROWS = [
+    ("Measure", "Before", "After"),
+    ("Morning trips", "1204", "1388"),
+    ("Evening trips", "986", "1101"),
+    ("Weekend trips", "412", "530"),
+]
+
+
+async def test_a_table_keeps_its_rows(tmp_path: Path) -> None:
+    """`B-214`: reading order alone lists the labels, then each column's values."""
+    document = await extract_pdf(table_pdf(tmp_path, TABLE_ROWS), with_metadata=False)
+
+    text = document.pages[0].text
+    assert "| Measure | Before | After |" in text
+    assert "| Morning trips | 1204 | 1388 |" in text
+    # The prose around it is as reading order had it.
+    # (The sentence runs past the page edge, so only its start is on the page.)
+    assert text.startswith(BODY[:40])
+    assert text.rsplit("\n\n", 1)[-1].startswith(BODY[:40])
+    # And the chunker keeps the table whole, as one passage of rows.
+    chunks = chunk_pages(document.pages)
+    assert any(
+        "| Evening trips | 986 | 1101 |" in c.text and "| Measure |" in c.text for c in chunks
+    )

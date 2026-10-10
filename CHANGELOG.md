@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.169.0] — 2026-10-10
+
+### Added
+
+- `B-214`: PDF tables keep their rows. A second `pdftotext -layout` pass finds a page's tables
+  and puts each, as a pipe table, where reading order had listed its cells column by column;
+  the rest of the page is unchanged, and a table that cannot be placed cleanly is left as it was.
+  Applies to documents extracted from now on
+
 ## [0.168.8] — 2026-10-10
 
 ### Fixed

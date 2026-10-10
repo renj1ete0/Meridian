@@ -20,6 +20,7 @@ from meridian_core.titles import plain_letters
 
 from .base import ExtractedDocument, Page
 from .figures import figures_from_pages
+from .pdftables import with_tables
 
 log = get_logger(__name__)
 
@@ -180,6 +181,7 @@ async def extract_pdf(
             **(await _metadata(content, timeout_s) if with_metadata else {}),
         )
 
+    extracted = await _with_tables(content, extracted, timeout_s=timeout_s)
     metadata = await _metadata(content, timeout_s) if with_metadata else {}
     return ExtractedDocument(
         text="\n\n".join(page.text for page in extracted.pages),
@@ -219,6 +221,44 @@ async def _run_pdftotext(content: bytes, *, timeout_s: int) -> PdfText | None:
         for index, piece in enumerate(pieces, start=1)
     )
     return PdfText(pages=pages, page_count=len(pages))
+
+
+async def _with_tables(content: bytes, extracted: PdfText, *, timeout_s: int) -> PdfText:
+    """The pages with their tables as rows, where a table can be placed (`B-214`).
+
+    A second pass in `-layout` mode finds the tables; reading order stays the page's text
+    everywhere else. If that pass fails or its pages do not line up with the first, the
+    pages are returned as they were: a table kept as rows is worth having, not worth a
+    document.
+    """
+    layout = await _capture(
+        [PDFTOTEXT, "-q", "-layout", "-enc", "UTF-8", "-", "-"], content, timeout_s
+    )
+    if layout is None:
+        return extracted
+    pieces = layout.split(FORM_FEED)
+    if pieces and not pieces[-1].strip():
+        pieces.pop()
+    if len(pieces) != extracted.page_count:
+        log.info(
+            "pdf layout pass does not line up; tables left in reading order",
+            extra={"pages": extracted.page_count, "layout_pages": len(pieces)},
+        )
+        return extracted
+
+    pages = []
+    tables = 0
+    for page, piece in zip(extracted.pages, pieces, strict=True):
+        # A blanked (garbled) page stays blank.
+        if not page.text:
+            pages.append(page)
+            continue
+        text, placed = with_tables(page.text, plain_letters(piece))
+        tables += placed
+        pages.append(Page(number=page.number, text=text) if placed else page)
+    if tables:
+        log.info("pdf tables kept as rows", extra={"tables": tables})
+    return dataclasses.replace(extracted, pages=tuple(pages))
 
 
 async def _metadata(content: bytes, timeout_s: int) -> dict[str, object]:

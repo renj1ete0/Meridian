@@ -1822,6 +1822,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
+- [ ] `B-215` **Re-extract stored PDFs for their tables** (operator's call) — `B-214` reaches
+      only documents extracted from now on; the re-cut rebuilds from passages, not files. A
+      re-extract from the raw file rewrites and re-embeds passages of about 7k PDFs, a third
+      of whose pages hold tables. Needs a tool that skips cited sources, as the re-cut does
+- [x] `B-214` `v0.169.0`. **PDF tables keep their rows** — a `-layout` pass finds tables and
+      puts them, as pipe tables, where reading order had their cells column by column; placed
+      only when clean (measured: 624 tables on 364 of 1,912 sample pages, 0.1% of words lost)
 - [x] `B-213` `v0.168.8`. **Admin on a phone** (audit sweep) — boost actions ran off the card;
       the gazetteer's key hint showed on touch screens
 - [x] `B-212` `v0.168.7`. **Node page at the edges** (audit) — the canvas status squeezed
@@ -1898,7 +1905,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       without `-layout` (suspect); lexical search is English-only for ~30k chunks (suspect).
       Captions measured 2026-10-10, refuted: about 16k passages carry a numbered caption in their
       text, only 57 are a caption alone (short of the vector arm's 40 characters, still found
-      lexically), and their unembedded share is the general backlog's. Tables: being measured
+      lexically), and their unembedded share is the general backlog's. Tables: confirmed and
+      built as `B-214`. Left: non-English lexical search
 - [x] `B-172` **Two regions both named "Data"** — `v0.165.5`. After `B-159` more areas take
       their terms, and names from terms were never told apart. Areas listed together whose
       term names coincide now carry their next own term: "Data (health)", "Data (research)"
