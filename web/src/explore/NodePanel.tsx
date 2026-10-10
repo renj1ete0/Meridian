@@ -49,8 +49,8 @@ export function excerpt(text: string, max = 240): string {
 }
 
 /**
- * How much stands behind a node (`B-208`, design `Explore`): `41 links · 12 sources · newest
- * 2026-07`. What a reader judges a node's weight by before reading its evidence.
+ * How much stands behind a node (`B-208`, design `Explore`), such as
+ * "41 links · 12 sources · newest 2026-07". A node's weight, before its evidence is read.
  */
 export function standingLine(s: Pick<GraphNode, 'degree' | 'sources' | 'newest'>): string {
   const n = (count: number, one: string) => `${count.toLocaleString('en')} ${count === 1 ? one : `${one}s`}`
