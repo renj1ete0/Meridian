@@ -258,3 +258,45 @@ describe('the button steps aside on a phone while the reader scrolls down (B-156
     expect(screen.getByRole('button', { name: 'Ask the graph' }).getAttribute('data-tucked')).toBe('false')
   })
 })
+
+describe('with no model set up (B-183)', () => {
+  it('says so before a question is written, and sends the question to Find instead', async () => {
+    const calls = api({ '/api/explore/chat/status': { available: false } })
+    window.history.pushState({}, '', '/map')
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the graph' }))
+    expect(await screen.findByText(/No model is set up here to answer in prose/)).toBeTruthy()
+    expect(screen.queryByText(/citations checked/)).toBeNull()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your question' }), {
+      target: { value: 'what slows buses?' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Find it' }))
+    })
+    // Nothing was asked of a model that is not there.
+    expect(calls.some((c) => c.url.includes('/api/admin/chat/ask'))).toBe(false)
+    expect(window.location.pathname).toBe('/')
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('q')).toBe('what slows buses?')
+    expect(params.get('view')).toBe('answer')
+    window.history.pushState({}, '', '/')
+  })
+
+  it('asks as before when a model is set up, or when the status cannot be read', async () => {
+    // An answer without the field is a status that could not be read: ask as before, and let
+    // the server's own refusal speak if it comes to that.
+    for (const status of [{ available: true }, {}]) {
+      cleanup()
+      const calls = api({
+        '/api/explore/chat/status': status,
+        '/api/admin/chat/ask': exchange({ text: 'It cut speeds.' }),
+      })
+      renderPanel()
+      fireEvent.click(screen.getByRole('button', { name: 'Ask the graph' }))
+      await waitFor(() => expect(calls.some((c) => c.url.includes('/chat/status'))).toBe(true))
+      expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy()
+      expect(screen.queryByText(/No model is set up here/)).toBeNull()
+    }
+  })
+})

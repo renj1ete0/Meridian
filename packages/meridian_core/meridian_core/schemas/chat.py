@@ -63,6 +63,12 @@ class ChatThreadRead(BaseModel):
     updated_at: dt.datetime
 
 
+class ChatStatusRead(BaseModel):
+    """Whether a question can be answered in prose here at all (`B-183`)."""
+
+    available: bool
+
+
 class ChatThreadsRead(BaseModel):
     threads: list[ChatThreadRead]
     total: int

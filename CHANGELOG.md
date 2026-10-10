@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.3] — 2026-10-10
+
+### Fixed
+
+- `B-183`: the Ask panel says no model is set up before a question is written, and sends the
+  question to Find's Answer tab instead; `GET /api/explore/chat/status`
+
 ## [0.166.2] — 2026-10-10
 
 ### Fixed

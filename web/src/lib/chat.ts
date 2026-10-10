@@ -53,6 +53,11 @@ export interface ChatThread {
   updated_at: string
 }
 
+/** Mirrors `ChatStatusRead`: whether any agent could be asked at all (`B-183`). */
+export interface ChatStatus {
+  available: boolean
+}
+
 /** Mirrors `ChatThreadsRead`. */
 export interface ChatThreads {
   threads: ChatThread[]
@@ -91,6 +96,7 @@ export const CHAT_MESSAGE_FIELDS = [
 ] as const
 export const CHAT_THREAD_FIELDS = ['thread_id', 'title', 'created_at', 'updated_at'] as const
 export const CHAT_THREADS_FIELDS = ['threads', 'total'] as const
+export const CHAT_STATUS_FIELDS = ['available'] as const
 export const CHAT_THREAD_DETAIL_FIELDS = ['thread', 'messages'] as const
 export const CHAT_EXCHANGE_FIELDS = ['thread', 'question', 'answer'] as const
 
@@ -98,6 +104,7 @@ export type AssertChatCitation = Expect<Equal<keyof ChatCitation, (typeof CHAT_C
 export type AssertChatNode = Expect<Equal<keyof ChatNode, (typeof CHAT_NODE_FIELDS)[number]>>
 export type AssertChatMessage = Expect<Equal<keyof ChatMessage, (typeof CHAT_MESSAGE_FIELDS)[number]>>
 export type AssertChatThread = Expect<Equal<keyof ChatThread, (typeof CHAT_THREAD_FIELDS)[number]>>
+export type AssertChatStatus = Expect<Equal<keyof ChatStatus, (typeof CHAT_STATUS_FIELDS)[number]>>
 export type AssertChatThreads = Expect<Equal<keyof ChatThreads, (typeof CHAT_THREADS_FIELDS)[number]>>
 export type AssertChatThreadDetail = Expect<Equal<keyof ChatThreadDetail, (typeof CHAT_THREAD_DETAIL_FIELDS)[number]>>
 export type AssertChatExchange = Expect<Equal<keyof ChatExchange, (typeof CHAT_EXCHANGE_FIELDS)[number]>>
@@ -117,6 +124,10 @@ export function askGraph(
     }),
     ...init,
   })
+}
+
+export function getChatStatus(init?: RequestInit): Promise<ChatStatus> {
+  return request<ChatStatus>('/api/explore/chat/status', init)
 }
 
 export function getChatThreads(limit = 20, init?: RequestInit): Promise<ChatThreads> {

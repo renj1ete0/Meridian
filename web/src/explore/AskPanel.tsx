@@ -1,8 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ApiError } from '../lib/api'
-import { answerParts, askGraph, getChatThread, getChatThreads, type ChatMessage, type ChatThread } from '../lib/chat'
-import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
+import {
+  answerParts,
+  askGraph,
+  getChatStatus,
+  getChatThread,
+  getChatThreads,
+  type ChatMessage,
+  type ChatThread,
+} from '../lib/chat'
+import { findLink, NO_FILTERS } from '../lib/find'
+import { hrefForNode, hrefForSource, navigate, onInternalClick } from '../lib/route'
 import { clockOf, dayOf, shortDayOf } from '../lib/time'
 
 /**
@@ -130,6 +139,9 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [removed, setRemoved] = useState<Set<number>>(new Set())
+  // Whether a model could answer (`B-183`). Null until known, and on a failed read: the
+  // composer then behaves as it always did, and the server's own refusal still speaks.
+  const [available, setAvailable] = useState<boolean | null>(null)
   const thread = useRef<HTMLDivElement>(null)
 
   const context = subjects.filter((s) => !removed.has(s.entityId))
@@ -150,6 +162,17 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
   useEffect(() => {
     if (open) loadThreads()
   }, [open, loadThreads])
+
+  useEffect(() => {
+    if (!open) return
+    const controller = new AbortController()
+    getChatStatus({ signal: controller.signal })
+      .then((status) => setAvailable(typeof status.available === 'boolean' ? status.available : null))
+      .catch(() => setAvailable(null))
+    return () => controller.abort()
+  }, [open])
+
+  const noModel = available === false
 
   useEffect(() => {
     thread.current?.scrollTo?.({ top: thread.current.scrollHeight })
@@ -175,6 +198,13 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
   function submit() {
     const question = draft.trim()
     if (!question || asking) return
+    if (noModel) {
+      // Nothing could answer in prose, so the question goes where the evidence is grouped
+      // without a model: Find's Answer tab.
+      setOpen(false)
+      navigate(findLink(question, NO_FILTERS, 'answer'))
+      return
+    }
     setAsking(true)
     setError(null)
     askGraph(question, { threadId, contextEntityIds: context.map((s) => s.entityId) })
@@ -275,10 +305,17 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
 
       <div ref={thread} className="flex min-h-0 grow flex-col gap-4 overflow-y-auto px-[18px] py-4">
         {messages.length === 0 && !asking ? (
-          <p className="text-[13px] leading-[1.55] text-text-muted">
-            Ask about what you are looking at, or anything in the graph. Answers come only from passages the corpus
-            holds, and cite them.
-          </p>
+          noModel ? (
+            <p className="text-[13px] leading-[1.55] text-text-muted">
+              No model is set up here to answer in prose. A question typed below opens on Find's Answer tab instead,
+              which groups the evidence by country in the sources' own words and needs no model.
+            </p>
+          ) : (
+            <p className="text-[13px] leading-[1.55] text-text-muted">
+              Ask about what you are looking at, or anything in the graph. Answers come only from passages the corpus
+              holds, and cite them.
+            </p>
+          )
         ) : null}
         {messages.map((m) =>
           m.role === 'user' ? <Question key={m.message_id} message={m} /> : <Answer key={m.message_id} message={m} />,
@@ -340,14 +377,14 @@ export function AskPanel({ initiallyOpen = false }: { initiallyOpen?: boolean })
           />
           <div className="mt-1 flex items-center justify-between gap-3">
             <span className="font-mono text-[10px] text-text-faint">
-              answers from retrieved passages · citations checked
+              {noModel ? 'no model set up · opens Find' : 'answers from retrieved passages · citations checked'}
             </span>
             <button
               type="submit"
               disabled={asking || draft.trim().length === 0}
               className="bg-accent-graph px-3 py-1 font-mono text-[11px] text-ground-deep disabled:opacity-40"
             >
-              Ask
+              {noModel ? 'Find it' : 'Ask'}
             </button>
           </div>
         </div>

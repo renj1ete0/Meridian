@@ -44,6 +44,16 @@ every reading surface except Admin.
   at all (empty, too long, over the cap, an unknown thread). An unanswered question is stored
   with its reason in `error`, so the thread shows what happened.
 
+- **"No model" is said before the question, not after** (`B-183`). The panel asks
+  `/api/explore/chat/status` when it opens. With nothing that could answer, it says so, the
+  footer drops "citations checked", and the button reads "Find it": a typed question opens on
+  Find's Answer tab, which groups the evidence without a model. Before, the full composer was
+  offered and the reader learned only after asking, in operator terms (environment variables).
+  `provider.answerable` walks the same chain with the same refusals as `ask` (one helper,
+  `_cannot_answer`), and also checks that settings read from the environment are set, so the
+  panel cannot offer what `ask` would refuse. A status that cannot be read leaves the composer
+  as it was, and the server's stored reason still speaks.
+
 ### Threads
 
 Threads and messages are kept in the database rather than the browser, for the reason saved

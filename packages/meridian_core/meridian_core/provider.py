@@ -296,6 +296,42 @@ _SHAPES = {
 }
 
 
+def _cannot_answer(agent: Any) -> str | None:
+    """Why this row could not be asked at all, before any call; None when it could."""
+    if agent.provider not in _SHAPES:
+        return f"{agent.agent_id}: unknown provider {agent.provider!r}"
+    if not (agent.model or "").strip() or (agent.model or "").startswith("<"):
+        return f"{agent.agent_id}: no model string is configured"
+    return None
+
+
+async def answerable(sess: AsyncSession, task_type: str) -> bool:
+    """Whether `ask` has any row it would try for this task (`B-183`).
+
+    The same chain and the same refusals, without calling anything, so a surface can say
+    "no model is set up" before a reader writes a question rather than after.
+    """
+    return any(
+        _cannot_answer(agent) is None and _settings_resolve(agent)
+        for agent in await chain_for(sess, task_type)
+    )
+
+
+def _settings_resolve(agent: Any) -> bool:
+    """Whether the settings a row reads from the environment are set.
+
+    `${LOCAL_CHAT_MODEL}` with nothing behind it is a row that will refuse, however enabled.
+    """
+    try:
+        if (agent.model or "").startswith("${"):
+            resolved(agent, agent.model, "model")
+        if agent.provider == "openai_compatible":
+            resolved(agent, agent.endpoint, "endpoint")
+    except NotConfigured:
+        return False
+    return True
+
+
 async def complete(
     sess: AsyncSession,
     run: Run,
@@ -321,16 +357,13 @@ async def complete(
     failures: list[str] = []
 
     for agent in chain:
-        shape = _SHAPES.get(agent.provider)
-        if shape is None:
-            failures.append(f"{agent.agent_id}: unknown provider {agent.provider!r}")
+        # The seeded rows ship with a placeholder model string. Saying so is the
+        # difference between "fill this in" and a provider error nobody can act on.
+        refusal = _cannot_answer(agent)
+        if refusal is not None:
+            failures.append(refusal)
             continue
-        if not (agent.model or "").strip() or (agent.model or "").startswith("<"):
-            # The seeded rows ship with a placeholder model string. Saying so
-            # is the difference between "fill this in" and a provider error
-            # nobody can act on.
-            failures.append(f"{agent.agent_id}: no model string is configured")
-            continue
+        shape = _SHAPES[agent.provider]
 
         # Reserved per agent, because a failed call on one agent costs nothing
         # and must not eat the allowance the next one needs.
@@ -382,13 +415,11 @@ async def ask(
 
     failures: list[str] = []
     for agent in chain:
-        shape = _SHAPES.get(agent.provider)
-        if shape is None:
-            failures.append(f"{agent.agent_id}: unknown provider {agent.provider!r}")
+        refusal = _cannot_answer(agent)
+        if refusal is not None:
+            failures.append(refusal)
             continue
-        if not (agent.model or "").strip() or (agent.model or "").startswith("<"):
-            failures.append(f"{agent.agent_id}: no model string is configured")
-            continue
+        shape = _SHAPES[agent.provider]
         try:
             text, input_tokens, output_tokens = await shape(
                 agent, prompt=prompt, system=system, max_tokens=max_tokens, timeout_s=timeout_s

@@ -42,6 +42,7 @@ from meridian_core.models import (
     Source,
 )
 from meridian_core.passagetopics import passage_topics_for
+from meridian_core.provider import answerable
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
 from meridian_core.schemas.answer import AnswerRead
@@ -54,6 +55,7 @@ from meridian_core.schemas.areas import (
 )
 from meridian_core.schemas.chat import (
     ChatMessageRead,
+    ChatStatusRead,
     ChatThreadDetailRead,
     ChatThreadRead,
     ChatThreadsRead,
@@ -849,6 +851,15 @@ async def explore_crawl_health(sess: ReadSession) -> CrawlHealthRead:
 # ---------------------------------------------------------------------------
 # Ask the graph: the conversations (tasks P6-06, P6-07)
 # ---------------------------------------------------------------------------
+
+
+@router.get("/chat/status", response_model=ChatStatusRead)
+async def chat_status(sess: ReadSession) -> ChatStatusRead:
+    """Whether any agent could be asked a question (`B-183`); nothing is called.
+
+    So the panel can say no model is set up before a question is written, not after.
+    """
+    return ChatStatusRead(available=await answerable(sess, chat.TASK_TYPE))
 
 
 @router.get("/chat/threads", response_model=ChatThreadsRead)

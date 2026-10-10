@@ -259,3 +259,50 @@ async def test_a_refused_question_is_a_422_in_words(client, model) -> None:
     model()
     response = await client.post("/api/admin/chat/ask", json={"question": "ab"})
     assert response.status_code == 422 and "characters" in response.json()["detail"]
+
+
+# --------------------------------------------------------------------------
+# Saying "no model" before the question, not after (`B-183`)
+# --------------------------------------------------------------------------
+
+
+async def test_answerable_follows_the_registry_and_the_environment(sess, monkeypatch) -> None:
+    """Disabled, enabled without its settings, enabled with them: only the last can answer.
+
+    Uses `ask`'s own refusals, so the panel cannot offer a composer `ask` would refuse.
+    """
+    from sqlalchemy import select, update
+
+    from meridian_core.models import Agent
+    from meridian_core.provider import answerable
+
+    # Every row that could take `chat` off, so the test sees only the one it sets up.
+    await sess.execute(update(Agent).values(enabled=False))
+    assert await answerable(sess, chat.TASK_TYPE) is False
+
+    await sess.execute(
+        update(Agent)
+        .where(Agent.agent_id == "local-chat")
+        .values(enabled=True, model="${LOCAL_CHAT_MODEL}", endpoint="${LOCAL_CHAT_LLM_URL}")
+    )
+    row = await sess.scalar(select(Agent).where(Agent.agent_id == "local-chat"))
+    assert row is not None and chat.TASK_TYPE in (row.task_types or [])
+    monkeypatch.delenv("LOCAL_CHAT_MODEL", raising=False)
+    monkeypatch.delenv("LOCAL_CHAT_LLM_URL", raising=False)
+    assert await answerable(sess, chat.TASK_TYPE) is False, "settings nobody set"
+
+    monkeypatch.setenv("LOCAL_CHAT_MODEL", "some-model")
+    monkeypatch.setenv("LOCAL_CHAT_LLM_URL", "http://127.0.0.1:9/v1")
+    assert await answerable(sess, chat.TASK_TYPE) is True
+
+    await sess.execute(
+        update(Agent).where(Agent.agent_id == "local-chat").values(model="<fill in a model>")
+    )
+    assert await answerable(sess, chat.TASK_TYPE) is False, "a placeholder is not a model"
+
+
+async def test_the_status_route_reads_through_the_read_only_role(client) -> None:
+    response = await client.get("/api/explore/chat/status")
+    assert response.status_code == 200
+    assert set(response.json()) == {"available"}
+    assert isinstance(response.json()["available"], bool)

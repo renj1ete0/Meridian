@@ -1783,7 +1783,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-182` **Possible-duplicate approvals have nowhere to go** — most of the bell is
       `merge_adjudication`, and nothing can decide one. Until a merge screen exists, "Compare"
       opens the two nodes; a superseded proposal still reads as pending
-- [ ] `B-183` **Ask panel with no model** — the composer offers "citations checked" and fails only
+- [x] `B-183` **Ask panel with no model** — `v0.166.3`. the composer offers "citations checked" and fails only
       after asking, in operator words. Say so first, and point to the Answer tab
 - [ ] `B-184` **Gaps: reader gaps first** — search-yield diagnostics fill the first eleven rows;
       the off-topic gap's action contradicts its advice; `!bang` syntax in prefills; the tab is
