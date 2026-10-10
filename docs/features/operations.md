@@ -60,6 +60,12 @@ and confirmation text through `meridian_core.timefmt`, labelled with the offset
 and the Ask panel's daily cap still reset at UTC midnight, where provider billing resets. A
 web test fails if any file but `time.ts` formats a time.
 
+The zone list holds every zone the browser knows, over four hundred, so **Admin → Display**
+narrows it by any part of a name (a space for the underscore) or by an offset (`GMT+8`), and a
+text that leaves one zone selects it (`B-210`). The stored zone is always in the list, even
+when the browser's is not: `Intl.supportedValuesOf` omits `UTC`, and a stored `UTC` used to
+read as the list's first zone.
+
 ## Design choices
 
 - **No cron files** (§13.1). The timetable is data, editable from a UI, and travels with a

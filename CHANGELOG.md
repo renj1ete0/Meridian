@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.4] — 2026-10-10
+
+### Fixed
+
+- `B-210`: Admin › Display narrows the time zones by a city, a spaced name or an offset, and
+  a stored `UTC` no longer reads as the list's first zone, since browsers do not list it
+
 ## [0.168.3] — 2026-10-10
 
 ### Added

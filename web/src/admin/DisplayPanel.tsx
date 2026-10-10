@@ -10,6 +10,25 @@ export function knownZones(): string[] {
   return supported ? supported('timeZone') : ['Asia/Singapore', 'UTC', 'Europe/London']
 }
 
+/**
+ * The zones a typed text could mean (`B-210`). Over four hundred zones sit in one list, and a
+ * select's type-ahead matches only from the start, so "singapore" never reaches
+ * `Asia/Singapore`. Any part of the name matches, a space stands for the underscore the names
+ * use, and an offset such as `GMT+8` matches every zone at it now. The zone already chosen is
+ * always kept, so narrowing never silently changes the choice, and kept even when the browser's
+ * list lacks it: `supportedValuesOf` omits `UTC`, which a select would then show as its first
+ * option.
+ */
+export function zonesMatching(zones: readonly string[], text: string, chosen: string, now: Date): string[] {
+  const needle = text.trim().toLowerCase().replace(/\s+/g, '_')
+  if (!needle) return chosen && !zones.includes(chosen) ? [chosen, ...zones] : [...zones]
+  const offset = needle.toUpperCase()
+  const found = zones.filter(
+    (zone) => zone.toLowerCase().includes(needle) || zoneLabel(now, zone).toUpperCase() === offset,
+  )
+  return chosen && !found.includes(chosen) ? [chosen, ...found] : found
+}
+
 export interface DisplayPanelProps {
   /** Injected in tests; the page passes nothing and the panel loads and saves itself. */
   initial?: DisplaySettings
@@ -24,6 +43,7 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
   const [settings, setSettings] = useState<DisplaySettings | null>(initial ?? null)
   const [choice, setChoice] = useState(initial?.display_timezone ?? '')
   const [message, setMessage] = useState<string | null>(null)
+  const [narrow, setNarrow] = useState('')
 
   useEffect(() => {
     if (initial) return
@@ -50,6 +70,13 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
   }
 
   const now = new Date()
+  const zones = zonesMatching(knownZones(), narrow, choice, now)
+  function narrowTo(text: string) {
+    setNarrow(text)
+    // One match is the zone meant; picking it saves a second step.
+    const found = zonesMatching(knownZones(), text, '', now)
+    if (found.length === 1) setChoice(found[0]!)
+  }
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Display">
@@ -59,6 +86,17 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
       <Card>
         <form className="flex flex-wrap items-end gap-4" onSubmit={submit}>
           <label className="flex flex-col gap-1.5">
+            <span className={LABEL}>Find a zone</span>
+            <input
+              type="search"
+              aria-label="Find a zone"
+              placeholder="City or GMT+8"
+              className="h-[26px] w-44 border border-line-strong bg-surface px-2 font-mono text-[11.5px] text-text placeholder:text-text-faint"
+              value={narrow}
+              onChange={(e) => narrowTo(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
             <span className={LABEL}>Time zone</span>
             <select
               aria-label="Time zone"
@@ -66,7 +104,8 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
               value={choice}
               onChange={(e) => setChoice(e.target.value)}
             >
-              {knownZones().map((zone) => (
+              {zones.length === 0 ? <option value="">No zone matches</option> : null}
+              {zones.map((zone) => (
                 <option key={zone} value={zone}>
                   {zone} · {zoneLabel(now, zone)}
                 </option>
