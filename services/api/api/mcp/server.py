@@ -27,7 +27,7 @@ from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
 from meridian_core.readonly_query import run_readonly_query as execute_readonly
 from meridian_core.schemas.graphview import GraphFilters
-from meridian_core.search import SearchFilters, search
+from meridian_core.search import SearchFilters, readable_passage_conditions, search
 from meridian_core.stats import corpus_stats
 
 from ..auth import require_tool
@@ -231,11 +231,9 @@ def build_mcp(
                     .join(Source, Source.source_id == Chunk.source_id)
                     .where(
                         Chunk.chunk_id > mark,
-                        Chunk.duplicate_of.is_(None),
-                        # Live only (`P1-32`). An agent walking the corpus
-                        # forward must not be handed text a page no longer
-                        # carries and then cite it.
-                        Chunk.superseded_at.is_(None),
+                        # What search_chunks applies, from the same definition: live,
+                        # not a copy, not junk, and cleared by screening (`B-188`).
+                        *readable_passage_conditions(),
                     )
                     .order_by(Chunk.chunk_id)
                     .limit(min(limit, 200))

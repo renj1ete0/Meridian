@@ -113,7 +113,19 @@ instruction position.
 
 `list_new_since` walks the corpus by `chunk_id` (§6.3's mark, §11.1a): ids are monotonic, so
 "everything after N" cannot skip a row that arrived mid-read or return one twice, and the path
-needs no query and no embedder. `corpus_overview` is §12.5's "absence is visible" as the first
+needs no query and no embedder.
+
+**It hands over what search would, and nothing else** (`B-188`). Until `v0.166.1` it filtered only
+copies and superseded passages, so an assistant walking forward was given quarantined and
+unscreened text that `search_chunks` refused (§2.5: only `cleared` reaches a model), plus
+junk-tier passages. Measured on the live corpus: 7,005 quarantined and about 78,900 unscreened
+passages were reachable. Both paths now take their predicate from one definition,
+`readable_passage_conditions()` in `meridian_core.search`, and a test reads the server's source
+and fails if a tool selects passages without it. One consequence of walking by id: a passage
+still unscreened when the walker passes it is not handed over later, when its source clears.
+The walker sees what was readable as it went by; a search finds the rest.
+
+`corpus_overview` is §12.5's "absence is visible" as the first
 thing an assistant can check: thirty passages and thirty thousand support very different claims.
 
 ### Authentication

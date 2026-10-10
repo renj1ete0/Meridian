@@ -1797,7 +1797,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       repeat the parent; hover card over the level controls; the jump box finds no concepts and
       gives no hint that it needs Enter
 - [ ] `B-187` **Growth "+N in 30 days" equals the total** on a young corpus — say "all since …"
-- [ ] `B-188` **`list_new_since` returns quarantined and unscreened passages to assistants** — the
+- [x] `B-188` **`list_new_since` returns quarantined and unscreened passages to assistants** — `v0.166.1`. the
       one MCP passage path without the cleared-only filter search applies (§2.5). Verified on the
       live corpus. Highest priority of this batch
 - [ ] `B-189` **MCP citations and arguments** — `page_unit` dropped from citations, `framed` has

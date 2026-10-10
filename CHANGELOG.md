@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.1] — 2026-10-10
+
+### Fixed
+
+- `B-188`: the MCP tool `list_new_since` handed assistants quarantined, unscreened and junk-tier
+  passages that `search_chunks` refused. Both now take one predicate,
+  `readable_passage_conditions()`, and a test fails if a tool selects passages without it
+
 ## [0.166.0] — 2026-10-10
 
 ### Added

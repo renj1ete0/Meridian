@@ -218,6 +218,15 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
     return where
 
 
+def readable_passage_conditions() -> list[ColumnElement[bool]]:
+    """What any path handing passages to a model must apply: search's own defaults, cleared only.
+
+    One definition, so a tool that walks the corpus rather than searching it cannot drift
+    from search on what a model may read (`B-188`, §2.5).
+    """
+    return _conditions(SearchFilters(cleared_only=True))
+
+
 def _arm(filters: SearchFilters) -> Select:
     """A chunk-and-source join carrying the filter, ready for an arm's ordering."""
     stmt = select(Chunk.chunk_id).join(Source, Source.source_id == Chunk.source_id)

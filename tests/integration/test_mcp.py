@@ -341,3 +341,81 @@ async def test_search_asks_for_a_query_vector(mcp, monkeypatch) -> None:
     monkeypatch.setattr(server, "embed_query", embed)
     await call(mcp, "search_chunks", query="anything at all")
     assert asked == ["anything at all"]
+
+
+# --------------------------------------------------------------------------
+# Only what screening cleared reaches a model, on every path (`B-188`, §2.5)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def three_trust_states(session_for):
+    """One source per trust state, one passage each, committed and removed afterwards."""
+    import uuid
+
+    from sqlalchemy import delete, update
+
+    from meridian_core.chunks import ChunkWrite, replace_chunks
+    from meridian_core.models import Chunk, Source
+    from meridian_core.sources import upsert_source
+
+    marker = f"qxt{uuid.uuid4().hex[:10]}"
+    sess = await session_for("rw")
+    made: dict[str, int] = {}
+    for state in ("cleared", "quarantined", "unscreened"):
+        source, _ = await upsert_source(
+            sess,
+            f"https://{state}.{marker}.test/doc",
+            checksum=f"sha256:{uuid.uuid4().hex}",
+            source_tier="government",
+            title=f"{state} {marker}",
+        )
+        await replace_chunks(
+            sess,
+            source.source_id,
+            [ChunkWrite(text=f"{marker} a passage long enough to be a passage.", chunk_index=0)],
+        )
+        await sess.execute(
+            update(Source).where(Source.source_id == source.source_id).values(trust_state=state)
+        )
+        made[state] = source.source_id
+    await sess.commit()
+    first = await sess.scalar(
+        text("SELECT min(chunk_id) FROM chunks WHERE source_id = ANY(:ids)").bindparams(
+            ids=list(made.values())
+        )
+    )
+    yield made, first - 1
+
+    await sess.execute(delete(Chunk).where(Chunk.source_id.in_(list(made.values()))))
+    await sess.execute(delete(Source).where(Source.url.like(f"https://%.{marker}.test/%")))
+    await sess.commit()
+
+
+async def test_walking_the_corpus_hands_over_cleared_passages_only(mcp, three_trust_states) -> None:
+    """§2.5: quarantined content is kept, never handed to a model; unscreened is not yet
+    cleared. `search_chunks` applied this and `list_new_since` did not, so an assistant
+    walking forward was given what one searching was refused."""
+    made, mark = three_trust_states
+    body = await call(mcp, "list_new_since", mark=mark, limit=200)
+    ours = {p["source_id"] for p in body["passages"]} & set(made.values())
+    assert ours == {made["cleared"]}
+
+
+def test_every_passage_query_on_the_mcp_surface_uses_the_shared_predicate() -> None:
+    """Read from the source: a tool that selects passages itself must narrow them with
+    `readable_passage_conditions`, or with `search(..., cleared_only=True)`. A new tool
+    that forgets fails here rather than on a live corpus."""
+    import inspect
+    import re
+
+    import api.mcp.server as server
+
+    source = inspect.getsource(server)
+    selects = [m.start() for m in re.finditer(r"select\(Chunk\b", source)]
+    for at in selects:
+        window = source[at : at + 1200]
+        assert "readable_passage_conditions()" in window, source[at : at + 200]
+    for call_at in [m.start() for m in re.finditer(r"await search\(", source)]:
+        # The filters are built just before the call.
+        assert "cleared_only=True" in source[max(0, call_at - 1500) : call_at]
