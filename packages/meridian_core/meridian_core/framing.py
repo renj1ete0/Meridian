@@ -88,20 +88,38 @@ def frame(content: str, *, delimiter: str | None = None) -> str:
     )
 
 
+def _located(passage: Any) -> str:
+    """Title, page and passage id for a reader's citation; empty parts left out (`B-189`)."""
+    parts = []
+    if getattr(passage, "title", None):
+        parts.append(f'"{passage.title}"')
+    if getattr(passage, "page_unit", None) == "page" and getattr(passage, "page_or_offset", None):
+        parts.append(f"p. {passage.page_or_offset}")
+    if getattr(passage, "chunk_id", None) is not None:
+        parts.append(f"passage {passage.chunk_id}")
+    return f" {', '.join(parts)}" if parts else ""
+
+
 def frame_passages(
-    passages: Sequence[Passage] | Iterable[Any], *, delimiter: str | None = None
+    passages: Sequence[Passage] | Iterable[Any],
+    *,
+    delimiter: str | None = None,
+    detailed: bool = False,
 ) -> str:
     """Search hits, fenced and each one attributed.
 
     Each passage's URL and tier go inside the fence beside it, so a citation is read
-    rather than reconstructed.
+    rather than reconstructed. `detailed` adds the title, the page where the source counts
+    pages, and the passage id, for an assistant citing to a person (`B-189`); synthesis
+    prompts leave it off, since their wording is the key relay answers are filed under.
     """
     fence = delimiter or new_delimiter()
 
     blocks: list[str] = []
     for index, passage in enumerate(passages, start=1):
+        where = _located(passage) if detailed else ""
         blocks.append(
-            f"[{index}] source: {passage.url} (tier: {passage.source_tier})\n{passage.text}"
+            f"[{index}]{where} source: {passage.url} (tier: {passage.source_tier})\n{passage.text}"
         )
 
     # An empty result is said out loud: handed an empty fence, a model infers

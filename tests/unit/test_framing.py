@@ -142,6 +142,6 @@ def test_the_mcp_search_tool_returns_a_framed_block() -> None:
         pathlib.Path(__file__).resolve().parents[2] / "services/api/api/mcp/server.py"
     ).read_text()
 
-    assert "frame_passages(result.hits)" in body, (
+    assert "frame_passages(result.hits" in body, (
         "the MCP search tool no longer frames what it returns"
     )

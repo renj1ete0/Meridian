@@ -81,6 +81,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.12] — 2026-10-10
+
+### Fixed
+
+- `B-189`: MCP `search_chunks` citations carry `page_unit`, `language` and `places`; `framed`
+  names title, page and passage; arguments are typed and described (source kinds as the
+  database's enum, `YYYY-MM-DD` dates, at most 50 results) and a bad one is refused naming it;
+  empty `find_route` and `list_contested` answers say what empty means
+
 ## [0.166.11] — 2026-10-10
 
 ### Added

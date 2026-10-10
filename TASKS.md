@@ -1806,7 +1806,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-188` **`list_new_since` returns quarantined and unscreened passages to assistants** — `v0.166.1`. the
       one MCP passage path without the cleared-only filter search applies (§2.5). Verified on the
       live corpus. Highest priority of this batch
-- [ ] `B-189` **MCP citations and arguments** — `page_unit` dropped from citations, `framed` has
+- [x] `B-189` `v0.166.12`. **MCP citations and arguments** — `page_unit` dropped from citations, `framed` has
       no title or page; a bad date or tier gives "Error executing tool"; `limit` unbounded
       (444 KB at 500); parameters undescribed; empty results without a note
 - [ ] `B-190` **Runt passages** — 23.5k live chunks under 40 characters, most embedded; a nonsense

@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
+from pydantic import Field
 from sqlalchemy import select
 
 from meridian_core import areaview, graphview, neighbourhood
@@ -26,6 +27,7 @@ from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
 from meridian_core.readonly_query import run_readonly_query as execute_readonly
+from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.search import SearchFilters, readable_passage_conditions, search
 from meridian_core.stats import corpus_stats
@@ -83,6 +85,10 @@ LEXICAL_ONLY = (
     "wordings, synonyms, and narrower or broader terms before saying so."
 )
 
+#: The most passages one search returns: a thousand passages is megabytes of context and
+#: no reader's citation list (`B-189`).
+MAX_RESULTS = 50
+
 HYBRID = (
     "Matched on both wording and meaning, then fused by reciprocal rank. "
     "Passages using different vocabulary were searched."
@@ -103,6 +109,12 @@ def _cite(chunk: Any) -> dict[str, Any]:
         "source_tier": chunk.source_tier,
         "published": chunk.publication_date.isoformat() if chunk.publication_date else None,
         "page_or_offset": chunk.page_or_offset,
+        # Whether `page_or_offset` is a page a reader can cite or a character offset
+        # (`B-189`): without it 30223 and 22 look alike.
+        "page_unit": chunk.page_unit,
+        "language": chunk.language,
+        # Country codes the source is about, so an assistant comparing places need not guess.
+        "places": chunk.places,
         "source_id": chunk.source_id,
         "chunk_id": chunk.chunk_id,
         "duplicate_of": chunk.duplicate_of,
@@ -134,13 +146,33 @@ def build_mcp(
 
     @mcp.tool()
     async def search_chunks(
-        query: str,
-        limit: int = 10,
-        source_tier: list[str] | None = None,
-        topic: list[str] | None = None,
-        published_after: str | None = None,
-        published_before: str | None = None,
-        include_duplicates: bool = False,
+        query: Annotated[
+            str, Field(description="Words or a whole question; matched on wording and meaning.")
+        ],
+        limit: Annotated[
+            int, Field(ge=1, le=MAX_RESULTS, description="Passages to return, at most 50.")
+        ] = 10,
+        source_tier: Annotated[
+            list[SourceTier] | None,
+            Field(description="Keep only these kinds of source. A kind, not a credibility score."),
+        ] = None,
+        topic: Annotated[
+            list[str] | None,
+            Field(
+                description="Keep sources with any of these topics, as corpus_overview names them."
+            ),
+        ] = None,
+        published_after: Annotated[
+            dt.date | None,
+            Field(description="YYYY-MM-DD. Undated documents are left out while a date is set."),
+        ] = None,
+        published_before: Annotated[
+            dt.date | None,
+            Field(description="YYYY-MM-DD. Undated documents are left out while a date is set."),
+        ] = None,
+        include_duplicates: Annotated[
+            bool, Field(description="Include passages the corpus marked as copies of others.")
+        ] = False,
     ) -> dict[str, Any]:
         """Search the corpus for passages, with the source of each.
 
@@ -157,8 +189,8 @@ def build_mcp(
         filters = SearchFilters(
             source_tiers=source_tier or None,
             topics=topic or None,
-            published_after=dt.date.fromisoformat(published_after) if published_after else None,
-            published_before=dt.date.fromisoformat(published_before) if published_before else None,
+            published_after=published_after,
+            published_before=published_before,
             include_duplicates=include_duplicates,
             # Cleared material only (`P4-14`, §11.8): this is the path into a prompt.
             # See docs/features/mcp.md#what-reaches-a-model.
@@ -177,7 +209,7 @@ def build_mcp(
             "returned": len(result.hits),
             # Structured `results` for rendering citations, and `framed` (`P4-06`) to
             # paste into a prompt. See docs/features/mcp.md#what-reaches-a-model.
-            "framed": frame_passages(result.hits),
+            "framed": frame_passages(result.hits, detailed=True),
         }
 
     @mcp.tool()
@@ -389,7 +421,20 @@ def build_mcp(
                 )
             except graphview.NodeNotFound as missing:
                 return {"error": str(missing)}
-        return found.model_dump(mode="json")
+        body = found.model_dump(mode="json")
+        if not found.found:
+            # Said in words (`B-189`): a bare `found: false` is read as "unrelated".
+            body["note"] = (
+                f"No route within {depth} hops, stated or by similarity. "
+                + (
+                    "The search stopped at its work bound, so this is weaker than it looks. "
+                    if found.truncated
+                    else ""
+                )
+                + "The graph holds only what passages have been read as stating; an absent "
+                "route is not evidence that the subjects are unrelated."
+            )
+        return body
 
     @mcp.tool()
     async def term_neighbourhood(term: str) -> dict[str, Any]:
@@ -442,7 +487,13 @@ def build_mcp(
             found = await graphview.contested_pairs(
                 sess, limit=max(1, min(limit, graphview.MAX_CONTESTED))
             )
-        return found.model_dump(mode="json")
+        body = found.model_dump(mode="json")
+        if not found.pairs:
+            body["note"] = (
+                "No two stated links disagree yet. Disagreement is recorded only between links "
+                "passages state, so an empty list is not evidence that the sources agree."
+            )
+        return body
 
     @mcp.tool()
     async def corpus_growth(range: str = "30d", topic: list[str] | None = None) -> dict[str, Any]:  # noqa: A002

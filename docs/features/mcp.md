@@ -111,6 +111,25 @@ is the same text inside a random fence (`P4-06`), to paste into a prompt: a mode
 end holds tools, and a client that concatenated `results` itself would put scraped text in
 instruction position.
 
+**What an assistant needs to cite and to recover** (`B-189`, measured on the live corpus by
+calling every tool in-process):
+
+- Each result carries `page_unit` beside `page_or_offset`. It was computed and dropped, so 30223
+  on a web page and 22 in a PDF looked alike. `language` and `places` came with it. A test reads
+  the hit's fields from the dataclass, and a new one fails until it is passed on or named as
+  left out.
+- `framed` names the title, the page where the source counts pages, and the passage id beside
+  each URL (`frame_passages(..., detailed=True)`), so a citation can be produced from the
+  framed text alone. Synthesis prompts keep the plain form: their wording is the key relay
+  answers are filed under, and changing it would orphan answers already filed.
+- Arguments are typed. `source_tier` is the database's enum, dates are `YYYY-MM-DD`, `limit`
+  is at most 50, and every parameter has a description in the input schema. A bad value is
+  refused before any search, with the argument named in the message; before, a date in another
+  form surfaced as "Error executing tool search_chunks". At 500 results a call returned 444 KB;
+  each passage still appears twice (`results` and `framed`), about 3 KB a passage.
+- An empty `find_route` or `list_contested` carries a `note` saying what empty means: not
+  evidence that subjects are unrelated, or that sources agree.
+
 `list_new_since` walks the corpus by `chunk_id` (§6.3's mark, §11.1a): ids are monotonic, so
 "everything after N" cannot skip a row that arrived mid-read or return one twice, and the path
 needs no query and no embedder.

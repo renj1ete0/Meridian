@@ -314,7 +314,10 @@ async def test_the_contested_tool_answers_what_the_page_answers(mcp, session_for
 
     sess = await session_for("ro")
     expected = (await graphview.contested_pairs(sess, limit=20)).model_dump(mode="json")
-    assert await call(mcp, "list_contested", limit=20) == expected
+    answered = await call(mcp, "list_contested", limit=20)
+    # The tool adds a `note` when the list is empty (`B-189`); the rest is the page's answer.
+    answered.pop("note", None)
+    assert answered == expected
 
 
 async def test_a_missing_node_is_an_answer_not_a_crash(mcp) -> None:
@@ -419,3 +422,89 @@ def test_every_passage_query_on_the_mcp_surface_uses_the_shared_predicate() -> N
     for call_at in [m.start() for m in re.finditer(r"await search\(", source)]:
         # The filters are built just before the call.
         assert "cleared_only=True" in source[max(0, call_at - 1500) : call_at]
+
+
+# --------------------------------------------------------------------------
+# What an assistant needs to cite, and to recover from a bad call (`B-189`)
+# --------------------------------------------------------------------------
+
+
+def test_every_citation_field_of_a_hit_reaches_the_assistant_or_is_left_out_on_purpose() -> None:
+    """Read from the dataclass: a field added to a hit must be passed on or named here.
+
+    `page_unit` was computed and dropped, so an assistant saw 30223 for a web page and 22 for a
+    PDF with no way to tell which was a page."""
+    import dataclasses
+
+    from api.mcp.server import _cite
+    from meridian_core.search import SearchHit
+
+    # Ranking internals, and what the passage text already carries.
+    left_out = {
+        "score",
+        "lexical_rank",
+        "vector_rank",
+        "age_days",
+        "decay",
+        "score_before_decay",
+        "chunk_index",
+        "media_type",
+        "topic_labels",
+        "passage_topics",
+        "text",
+    }
+    renamed = {"publication_date": "published"}
+    fields = {f.name for f in dataclasses.fields(SearchHit)} - left_out
+    hit = SearchHit(**{f.name: None for f in dataclasses.fields(SearchHit)})
+    cited = set(_cite(hit))
+    assert {renamed.get(name, name) for name in fields} <= cited
+
+
+async def test_a_bad_argument_is_refused_naming_the_argument(mcp) -> None:
+    """A date in the wrong form, a kind of source that does not exist, a page past the cap:
+    each refused before searching, with the argument named, so the assistant can correct it."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    for arguments, named in (
+        ({"query": "x", "published_after": "2024/01/01"}, "published_after"),
+        ({"query": "x", "source_tier": ["bogus"]}, "source_tier"),
+        ({"query": "x", "limit": 500}, "limit"),
+    ):
+        try:
+            result = await mcp.call_tool("search_chunks", arguments)
+        except ToolError as refused:
+            message = str(refused)
+        else:
+            assert result.is_error
+            message = result.content[0].text
+        assert named in message, message
+
+
+async def test_the_input_schema_offers_the_kinds_and_says_the_date_form(mcp) -> None:
+    """Drift: the kinds offered are the database's, read from the CHECK the column carries."""
+    from meridian_core.schemas.enums import SOURCE_TIER
+
+    tools = {t.name: t for t in await mcp.list_tools()}
+    schema = json.dumps(tools["search_chunks"].input_schema)
+    for tier in SOURCE_TIER.enums:
+        assert f'"{tier}"' in schema
+    assert "YYYY-MM-DD" in schema
+
+
+async def test_the_framed_text_carries_what_a_citation_needs(mcp) -> None:
+    body = await call(mcp, "search_chunks", query="transport", limit=3)
+    if body["returned"] == 0:
+        pytest.skip("dev corpus has nothing to frame")
+    first = body["results"][0]
+    assert "page_unit" in first
+    assert f"passage {first['chunk_id']}" in body["framed"]
+    if first["page_unit"] == "page" and first["page_or_offset"]:
+        assert f"p. {first['page_or_offset']}" in body["framed"]
+
+
+async def test_an_empty_answer_says_what_empty_means(mcp) -> None:
+    route = await call(mcp, "find_route", source="qzxv-nothing-1", target="qzxv-nothing-2")
+    if not route.get("found", True):
+        assert "not evidence" in route["note"]
+    contested = await call(mcp, "list_contested")
+    assert ("note" in contested) == (contested["pairs"] == [])
