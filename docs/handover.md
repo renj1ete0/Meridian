@@ -13,6 +13,17 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-10 (later) — `v0.167.0`–`v0.168.1`.** Traps and findings:
+> - **Mutation testing runs in `.mutate/`** (`scripts/mutate.sh`): mutmut cannot run from the
+>   repo root (package path ≠ module name, tests outside its directory). Stryker uses the command
+>   runner; its vitest runner activates no mutant under vitest 5. Stryker edits `web/src` in place:
+>   never commit while it runs.
+> - **CI reads without a token through annotations only**: failing test names are written as one
+>   `::error` annotation. Unauthenticated API polling hits 60 requests an hour quickly; poll once.
+> - **The crawl pauses for embedding** above `MERIDIAN_WORKER_MAX_EMBED_BACKLOG`; on CPU the
+>   backlog drains at roughly 20,000 passages an hour, so the pause lasts about that long.
+> - **Possible duplicates are decided in Admin**; a merge is reversible from the same row.
+
 > **2026-10-10 — `v0.166.0`–`v0.166.25`.** Traps and findings:
 > - **Filters have one model** (`web/src/lib/find.ts`): link, request and saved view. A new
 >   filter goes there, in `SearchFilters` (Python), and in `/answer` as well as `/search`; tests

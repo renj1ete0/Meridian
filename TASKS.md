@@ -16,10 +16,23 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.166.25`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.168.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
+
+> **2026-10-10 (later) — `v0.167.0`–`v0.168.1`, pushed; local stack rebuilt.** Built: deciding
+> possible duplicates in Admin (`B-202`), a paused crawl named as paused (`B-203`), table headers
+> in the embedding view and padding rows left out (`B-195`), notes editable (`B-201`, removal
+> still a decision), three more reference shapes kept out of synthesis (`B-204`), the answer as
+> a Markdown brief (`B-206`), copy all citations (`B-207`). `Q-02` done (mutation testing works;
+> Python ~78%, web 72%). `Q-03`: property tests (fusion, cap, reference filter, `group_hits`,
+> `readable()`) and CI (`.github/workflows/ci.yml`); the first CI run failed only because the
+> runner's database was not seeded, fixed; **check the latest run in the Actions tab**.
+> Measured, not adopted: `B-205` (tag only cited passages: −¾ tag tokens, −¼ values).
+> **Resume with:** the CI result; `B-163`/`B-205` with a paid model; `B-192` suspects (PDF
+> `-layout` per page, captions, non-English lexical search); the re-cut of stored tables
+> (operator's call).
 
 > **2026-10-10 — `v0.166.0`–`v0.166.25`, pushed; local stack running the new web, api, worker
 > and orchestrator.** Operator asked for an exhaustive audit of every reader and operator flow,
