@@ -363,7 +363,11 @@ is re-cut (`worker.rechunk --apply`, which also re-embeds what changed); that is
 call, since its first phases write even without `--apply`. Not done yet: a continuation passage
 still lacks its table's header row, so a value's column cannot be read from it alone (carrying
 the header into the embedding view, not the stored text, keeps the passage a slice), and
-spreadsheets still emit rows of `NaN` cells.
+spreadsheets emitted rows of `NaN` cells. Both are handled now (`B-195`): a split table leaves
+out rows whose every cell is empty or `NaN` (padding; several thousand stored passages held runs
+of them), packing the rows either side apart so each passage stays a slice; and a continuation
+passage is embedded with its table's header (see
+[the embedding view](embedding.md#the-embedding-view)).
 ### Document kinds
 
 `source_tier` says who published a document; the kind says what it *is* (`B-59`). It matters most

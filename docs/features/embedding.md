@@ -58,6 +58,17 @@ bare URLs are dropped, so pages do not cluster by the shape of their links. The 
 the lexical index and every citation are untouched. `reembed` updates vectors whose view
 changed.
 
+**A continued table is embedded with its header** (`B-195`). A table cut between rows (`B-191`)
+leaves every passage after the first without the row that names its columns, so its vector is
+numbers with no meaning attached. When the backfill embeds a passage whose first line is a table
+row and which holds no separator row of its own, it walks back through the same source's
+passages (up to 40, stopping at one with no table in it) for the header row and puts it in front
+of the view (`chunks.table_heads`, `embedtext.with_table_head`). The stored text is untouched,
+so the passage is still a slice and its citation still exact. `VIEW_VERSION` is not bumped:
+that would queue every stored table passage for re-embedding on an embedder that is already the
+crawl's bottleneck, and those passages were cut mid-row anyway; a re-cut (`worker.rechunk
+--apply`) re-embeds them with headers.
+
 <a id="backpressure"></a>**Backpressure** (`B-61`). The crawl pauses while more than
 `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` passages in the `first` and `then` tiers wait. The `last`
 tier does not count, or the crawl would pause for good behind off-topic text.
