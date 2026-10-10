@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.167.5] — 2026-10-10
+
+### Fixed
+
+- `B-203`: a paused crawl whose backlog has fallen back under the ceiling no longer reads as
+  "over" it; the sentence says when it stopped and where it resumes
+
 ## [0.167.4] — 2026-10-10
 
 ### Fixed

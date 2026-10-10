@@ -85,14 +85,21 @@ export function verdict(live: Liveness, stallAfterSeconds: number): string {
         ? `Stalled — nothing has ever been fetched, with ${pages(live.ready)} ready. Check that the worker is running.`
         : `Stalled — no fetch in ${duration(live.quiet_seconds)} with ${pages(live.ready)} ready. ` +
             `A fetch is expected at least every ${duration(stallAfterSeconds)} while work is ready; check that the worker is running.`
-    case 'paused':
+    case 'paused': {
       // The worker's own brake (`B-61`), named as one (`B-203`): it was shown as a stall and
-      // the operator told to check the worker, which was running and waiting by design.
-      return (
-        `Paused for embedding — ${(live.embed_backlog ?? 0).toLocaleString()} passages wait for a vector, over the ` +
-        `${(live.embed_ceiling ?? 0).toLocaleString()} the crawl stops at. It resumes by itself under ` +
-        `${Math.floor((live.embed_ceiling ?? 0) * 0.8).toLocaleString()}${since ? `; ${since}` : ''}.`
-      )
+      // the operator told to check the worker, which was running and waiting by design. Between
+      // the resume point and the ceiling the backlog is under the line it stopped at, so the
+      // sentence says when it stopped rather than that it is over.
+      const backlog = live.embed_backlog ?? 0
+      const ceiling = live.embed_ceiling ?? 0
+      const resume = Math.floor(ceiling * 0.8).toLocaleString()
+      const waiting = `${backlog.toLocaleString()} passages wait for a vector`
+      const where =
+        backlog > ceiling
+          ? `${waiting}, over the ${ceiling.toLocaleString()} the crawl stops at`
+          : `${waiting}; the crawl stopped when they passed ${ceiling.toLocaleString()}`
+      return `Paused for embedding — ${where}. It resumes by itself under ${resume}${since ? `; ${since}` : ''}.`
+    }
     case 'waiting':
       // Not a stall, and says why: every pending row is inside its backoff,
       // which is the queue doing its job.
