@@ -8,6 +8,8 @@ design-only changes do not require a version bump, but may be listed under Unrel
 
 ## [Unreleased]
 
+- Tooling: `make rebuild svc="api web"` rebuilds and restarts named local services with `--no-deps`
+
 - Testing (`Q-03`): property-based tests (Hypothesis) for rank fusion, the per-source cap and
   the reference-list filter; a CI workflow (`.github/workflows/ci.yml`) running lint and every
   test against the project's own Postgres image on each push to main

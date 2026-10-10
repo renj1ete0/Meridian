@@ -51,7 +51,7 @@ against a real Postgres, 1053 frontend.
 > abbreviation glossaries; `pull` walks one long handbook in order (six batches of one book; cap
 > passages per source per batch, `B-163`); the tag call resends the extraction call's passages
 > (double tokens); "every agent … refused: waiting for …" reads like a failure. Then host drift,
-> dead hosts, `make rebuild svc=`, the embedder's reconnect, the frontend items.
+> dead hosts, `make rebuild svc=` (done 2026-10-10), the embedder's reconnect, the frontend items.
 
 > **2026-10-08 (evening) — `v0.165.5`, pushed to GitHub (GHCR held); local stack left running.**
 > Built: `B-164` passages read as words where a link was cut, `B-165`, `B-166` GMT+7:59 labels,

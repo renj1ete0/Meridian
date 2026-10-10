@@ -35,6 +35,13 @@ local-down:
 local-logs:
 	docker compose -f docker-compose.local.yml logs -f
 
+# Rebuild and restart named services only, leaving the rest running: `make rebuild svc="api web"`.
+# `--no-deps` matters: `up --build <svc>` also recreated Postgres, mid-write (handover, 2026-10-08).
+rebuild:
+	@test -n "$(svc)" || { echo 'usage: make rebuild svc="api web"'; exit 2; }
+	docker compose -f docker-compose.local.yml build $(svc)
+	docker compose -f docker-compose.local.yml up -d --no-deps $(svc)
+
 # --- Local development (infra only) -----------------------------------------
 dev-up:
 	docker compose -f docker-compose.dev.yml up -d
