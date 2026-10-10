@@ -363,6 +363,49 @@ describe('boosts', () => {
     })
   })
 
+  it('lists a running boost before an expired one (B-211)', () => {
+    render(<BoostsTable rows={[...rows].reverse()} includeExpired />)
+    const order = [...document.querySelectorAll('tr[data-topic]')].map((tr) => tr.getAttribute('data-topic'))
+    expect(order).toEqual(['walkability', 'robotics'])
+  })
+
+  it('runs an expired boost again from a form already filled in (B-211)', () => {
+    const onBoost = vi.fn()
+    render(<BoostsTable rows={rows} includeExpired onBoost={onBoost} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run again' }))
+    expect((screen.getByLabelText('Boost topic') as HTMLSelectElement).value).toBe('robotics')
+    expect((screen.getByLabelText('Boost multiplier') as HTMLInputElement).value).toBe('1.4')
+    fireEvent.click(screen.getByRole('button', { name: 'Add boost' }))
+
+    const sent = onBoost.mock.calls[0]!
+    expect(sent[0]).toBe('robotics')
+    expect(sent[1].boost_factor).toBe(1.4)
+    // A fresh fortnight, not the date that already passed.
+    expect(Date.parse(sent[1].boost_expires_at)).toBeGreaterThan(Date.now())
+  })
+
+  it('clears an expired boost by both halves, and offers no End now for it (B-211)', () => {
+    const onBoost = vi.fn()
+    render(<BoostsTable rows={[rows[1]!]} includeExpired onBoost={onBoost} />)
+
+    expect(screen.queryByRole('button', { name: 'End now' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(onBoost).toHaveBeenCalledWith('robotics', { boost_factor: null, boost_expires_at: null })
+  })
+
+  it('says when a new boost replaces a running one (B-211)', () => {
+    render(<BoostsTable rows={rows} />)
+    fireEvent.click(screen.getByRole('button', { name: '+ Add boost' }))
+
+    fireEvent.change(screen.getByLabelText('Boost topic'), { target: { value: 'walkability' } })
+    expect(screen.getByText(/Replaces its running 1\.8× boost until/)).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Boost topic'), { target: { value: 'robotics' } })
+    expect(screen.queryByText(/Replaces its running/)).toBeNull()
+  })
+
   it('refuses a multiplier that is not a positive number', () => {
     expect(factorOf('0')).toBeNull()
     expect(factorOf('-2')).toBeNull()

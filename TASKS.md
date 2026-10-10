@@ -1822,6 +1822,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
+- [x] `B-211` `v0.168.5`. **Expired boosts were dead rows** (audit) — run one again from a
+      filled form, clear it, running ones first, and a warning before replacing a running boost
 - [x] `B-210` `v0.168.4`. **Reaching a time zone** (audit) — the Display select held four
       hundred zones with prefix type-ahead only, and showed a stored `UTC` as the first zone
 - [x] `B-209` `v0.168.3`. **Find a term in the gazetteer queue** (audit) — thousands of

@@ -926,6 +926,13 @@ twice, which would suggest a finer control than exists. **A factor and an expiry
 form cannot submit a factor without a date, and the server refuses one anyway. Ending a boost
 early clears both.
 
+**An expired boost can be acted on** (`B-211`). Kept in view, it used to be a row with no
+action, so the common next step, boosting the same topic again, meant retyping it. Now
+**Run again** opens the form on its topic and multiplier with a fresh fortnight, and **Clear**
+removes the row; the steering log keeps the record, so clearing loses nothing. Running boosts
+are listed first, and the form says when a new boost would replace one that is still running,
+since a topic has one boost and the second silently overwrote the first.
+
 ### Proposals
 
 The operator's rule (`P6-38`): the system proposes what to steer, and if nobody objects it is

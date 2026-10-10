@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.5] — 2026-10-10
+
+### Added
+
+- `B-211`: an expired boost can be run again from a filled-in form or cleared; running boosts
+  are listed first; adding a boost says when it replaces one still running
+
 ## [0.168.4] — 2026-10-10
 
 ### Fixed

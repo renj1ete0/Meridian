@@ -49,9 +49,21 @@ export function BoostsTable({
   const [factor, setFactor] = useState('1.5')
   const [expires, setExpires] = useState(() => dayFromNow(14))
 
-  const shown = rows.filter((row) => row.boost_active || (includeExpired && boostExpired(row)))
+  // Running boosts first: they are what is acting on the crawl now.
+  const shown = rows
+    .filter((row) => row.boost_active || (includeExpired && boostExpired(row)))
+    .sort((a, b) => Number(b.boost_active) - Number(a.boost_active))
   const chosen = topic || candidates[0]?.topic.topic || ''
   const multiplier = factorOf(factor)
+  const replacing = rows.find((row) => row.topic.topic === chosen && row.boost_active)
+
+  /** An expired boost run again: the form opens on its topic and multiplier (`B-211`). */
+  function runAgain(row: TopicRow) {
+    setTopic(row.topic.topic)
+    setFactor(String(row.topic.boost_factor ?? 1.5))
+    setExpires(dayFromNow(14))
+    setAdding(true)
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -136,6 +148,11 @@ export function BoostsTable({
             Add boost
           </button>
           <span className="basis-full text-[12px] text-text-faint">
+            {replacing
+              ? `Replaces its running ${replacing.topic.boost_factor}× boost until ${
+                  replacing.topic.boost_expires_at ? dayOf(replacing.topic.boost_expires_at) : '—'
+                }. `
+              : null}
             Multiplies the topic’s weight until the date, then stops counting on its own. The stored weight is
             untouched.
           </span>
@@ -179,7 +196,28 @@ export function BoostsTable({
                     >
                       End now
                     </button>
-                  ) : null}
+                  ) : (
+                    // The steering log keeps the record, so clearing loses nothing.
+                    <span className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className={BUTTON_ROW}
+                        disabled={busy !== null || row.topic.status === 'archived'}
+                        onClick={() => runAgain(row)}
+                      >
+                        Run again
+                      </button>
+                      <button
+                        type="button"
+                        className={BUTTON_ROW}
+                        disabled={busy === row.topic.topic}
+                        title="Remove the expired boost. The steering log keeps the record."
+                        onClick={() => onBoost?.(row.topic.topic, { boost_factor: null, boost_expires_at: null })}
+                      >
+                        Clear
+                      </button>
+                    </span>
+                  )}
                 </td>
               </tr>
             ))
