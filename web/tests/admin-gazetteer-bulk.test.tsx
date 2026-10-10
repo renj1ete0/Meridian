@@ -177,3 +177,35 @@ describe('the keys', () => {
     expect(screen.getByText(hint)).toBeTruthy()
   })
 })
+
+describe('finding a term (B-209)', () => {
+  it('passes what is typed to the search, and offers no box without one', () => {
+    const onSearch = vi.fn()
+    render(<GazetteerQueue rows={[row(1)]} state="pending" counts={COUNTS} search="" onSearch={onSearch} />)
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Find a term' }), { target: { value: 'bureau' } })
+    expect(onSearch).toHaveBeenCalledWith('bureau')
+    cleanup()
+
+    render(<GazetteerQueue rows={[row(1)]} state="pending" counts={COUNTS} />)
+    expect(screen.queryByRole('searchbox')).toBeNull()
+  })
+
+  it('typing a key letter in the box decides nothing', () => {
+    const onDecide = vi.fn()
+    render(
+      <GazetteerQueue
+        rows={[row(1)]}
+        state="pending"
+        counts={COUNTS}
+        onDecide={onDecide}
+        search=""
+        onSearch={vi.fn()}
+      />,
+    )
+
+    fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Find a term' }), { key: 'a' })
+
+    expect(onDecide).not.toHaveBeenCalled()
+  })
+})

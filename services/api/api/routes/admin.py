@@ -172,14 +172,24 @@ async def gazetteer_queue(
     state: Annotated[QueueState, Query()] = "pending",
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
+    q: Annotated[
+        str | None,
+        Query(max_length=120, description="Terms containing this, any case (`B-209`)."),
+    ] = None,
 ) -> GazetteerQueueRead:
     """The approval queue, most corroborated first.
 
-    Ordered by `occurrence_count`, with `term_id` breaking ties so paging is stable.
+    Ordered by `occurrence_count`, with `term_id` breaking ties so paging is stable. `q`
+    narrows to terms containing it; the counts stay the whole queue's.
     """
+    narrowed = []
+    if q and q.strip():
+        # Escaped, so a reader's "%" or "_" is a character, not a wildcard.
+        needle = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        narrowed.append(GazetteerTerm.canonical.ilike(f"%{needle}%", escape="\\"))
     statement = (
         select(GazetteerTerm)
-        .where(*_state_filter(state))
+        .where(*_state_filter(state), *narrowed)
         .order_by(GazetteerTerm.occurrence_count.desc(), GazetteerTerm.term_id)
         .limit(limit + 1)
         .offset(offset)

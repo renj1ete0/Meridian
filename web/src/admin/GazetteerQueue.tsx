@@ -23,6 +23,9 @@ export interface GazetteerQueueProps {
   onEdit?: (termId: number, entityType: GazetteerEntityType) => void
   onBulk?: (termIds: number[], decision: 'approve' | 'reject' | 'restore') => void
   onPage?: (offset: number) => void
+  /** Find a term among thousands (`B-209`). */
+  search?: string
+  onSearch?: (text: string) => void
 }
 
 /** How many rows a page holds. Well inside `GAZETTEER_BULK_MAX`, so a whole
@@ -118,6 +121,8 @@ export function GazetteerQueue({
   onEdit,
   onBulk,
   onPage,
+  search,
+  onSearch,
 }: GazetteerQueueProps) {
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [cursor, setCursor] = useState(0)
@@ -210,11 +215,23 @@ export function GazetteerQueue({
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Counts are unfiltered, so a queue reading "waiting (0)" while forty
             sit under another tab cannot happen. */}
-        <Filters
-          options={STATES.map(({ key, label }) => ({ key, label, count: shown[key] }))}
-          value={state}
-          onChange={onState}
-        />
+        <span className="flex flex-wrap items-center gap-3">
+          <Filters
+            options={STATES.map(({ key, label }) => ({ key, label, count: shown[key] }))}
+            value={state}
+            onChange={onState}
+          />
+          {onSearch ? (
+            <input
+              type="search"
+              aria-label="Find a term"
+              placeholder="Find a term"
+              value={search ?? ''}
+              onChange={(event) => onSearch(event.target.value)}
+              className="h-8 w-48 border border-line-strong bg-surface px-2 text-[12.5px] text-text placeholder:text-text-faint"
+            />
+          ) : null}
+        </span>
         <div className="flex items-center gap-2 font-mono text-[11px] text-text-faint">
           <span>
             {rows.length === 0

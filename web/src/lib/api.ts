@@ -839,11 +839,13 @@ export interface GazetteerTermEdit {
 }
 
 export function getGazetteerQueue(
-  params: { state?: GazetteerState; limit?: number; offset?: number } = {},
+  params: { state?: GazetteerState; limit?: number; offset?: number; q?: string } = {},
   init?: RequestInit,
 ): Promise<GazetteerQueue> {
   const query = new URLSearchParams()
   if (params.state) query.set('state', params.state)
+  // Terms containing these letters (`B-209`); the counts stay the whole queue's.
+  if (params.q?.trim()) query.set('q', params.q.trim())
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
   const suffix = query.toString()

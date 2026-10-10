@@ -448,3 +448,24 @@ async def test_every_admin_route_is_behind_the_gate(client, monkeypatch) -> None
                 served.append((method, path, response.status_code))
 
     assert served == []
+
+
+async def test_a_term_can_be_found_among_thousands(client, open_admin, terms, marker) -> None:
+    """`B-209`: tens of thousands waited, a hundred a page, and nothing could find one."""
+    body = (
+        await client.get(
+            "/api/admin/gazetteer", params={"state": "all", "q": f"{marker} coordination"}
+        )
+    ).json()
+    assert [row["term"]["canonical"] for row in body["rows"]] == [f"{marker} Coordination Bureau"]
+    # The counts stay the whole queue's, so a search does not read as an empty queue.
+    whole = (await client.get("/api/admin/gazetteer", params={"state": "all"})).json()
+    assert body["pending"] == whole["pending"]
+
+
+async def test_a_wildcard_in_the_search_is_a_character(client, open_admin, terms, marker) -> None:
+    for q in (f"{marker}%", f"{marker}_", "%"):
+        body = (await client.get("/api/admin/gazetteer", params={"state": "all", "q": q})).json()
+        assert not [r for r in body["rows"] if r["term"]["canonical"].startswith(marker)], q
+    long = await client.get("/api/admin/gazetteer", params={"q": "x" * 121})
+    assert long.status_code == 422

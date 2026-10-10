@@ -993,6 +993,12 @@ different fix: a collision needs one of the two rows changed, ambiguity leaves t
 resolver, and the other two are just where the row is in the queue. Approve and turn down are
 not coloured: the palette has no green or red, and colour must not imply a verdict.
 
+**A term can be found by name** (`B-209`). Paging is how a queue is worked through, not how a
+known term is reached: someone who saw a wrong match in a passage wants that one row. The box
+matches any part of the canonical form, and `%` and `_` are matched as characters, since terms
+contain them. The tab counts stay the whole queue's, so a narrowed list never reads as an
+emptied one. Typing in the box never decides a row: the keys belong to nobody who is typing.
+
 ### Fetch policy
 
 The one Admin screen whose changes reach somebody else's server (`P6-22`), and the copy is

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { AgentsPanel } from './AgentsPanel'
 import type { BoostChange } from './BoostsTable'
@@ -127,8 +127,14 @@ export function AdminPage() {
   const [seedBusy, setSeedBusy] = useState<number | null>(null)
   const [seedAdding, setSeedAdding] = useState(false)
 
+  // The term searched for in the gazetteer queue (`B-209`): typed, then settled.
+  const [termQuery, setTermQuery] = useState('')
+  const [termSearch, setTermSearch] = useState('')
+  const termSearchRef = useRef('')
+  termSearchRef.current = termSearch
+
   const load = useCallback((next: GazetteerState, from: number, signal?: AbortSignal) => {
-    return getGazetteerQueue({ state: next, limit: PAGE_SIZE, offset: from }, { signal })
+    return getGazetteerQueue({ state: next, limit: PAGE_SIZE, offset: from, q: termSearchRef.current }, { signal })
       .then((body) => {
         setQueue(body)
         setError(null)
@@ -270,6 +276,15 @@ export function AdminPage() {
     return () => controller.abort()
   }, [])
 
+  // A term search, like a domain search, is sent once typing settles, from the first page.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setTermSearch(termQuery.trim())
+      setOffset(0)
+    }, PREVIEW_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [termQuery])
+
   // A domain search is sent once typing settles, and starts from the first page.
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -328,6 +343,7 @@ export function AdminPage() {
     offset,
     section,
     state,
+    termSearch,
   ])
 
   // Crawl health refreshes itself, and only while it can be seen: the panel is
@@ -775,6 +791,8 @@ export function AdminPage() {
               bulkBusy={bulkBusy}
               offset={queue.offset}
               hasMore={queue.has_more}
+              search={termQuery}
+              onSearch={setTermQuery}
               onState={(next) => {
                 setState(next)
                 setOffset(0)

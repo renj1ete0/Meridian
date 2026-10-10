@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.3] — 2026-10-10
+
+### Added
+
+- `B-209`: the gazetteer queue has a search box; a term is found by any part of its name,
+  and the tab counts stay the whole queue's
+
 ## [0.168.2] — 2026-10-10
 
 ### Fixed
