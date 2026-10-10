@@ -1772,7 +1772,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-193` `v0.166.8`. **A node view with a filter cannot be saved** — the node workspace stores
       `topic`/`tier`/`published_from`, which the server's `SearchFilters` check refuses (422,
       verified on the live API). Validate a node view against the graph's own filter model
-- [ ] `B-194` **Watched counts ignore a view's filters** — `watch.py` reads `topic`, but views
+- [x] `B-194` `v0.166.9`. **Watched counts ignore a view's filters** — `watch.py` reads `topic`, but views
       have stored `topics` since `B-73`, so "N new" on a saved search ignores its topics, and
       places, source types and years were never applied. Count with the search's own predicate
 - [ ] `B-178` **Open a source at the passage** — a hit links to the top of its source, and the

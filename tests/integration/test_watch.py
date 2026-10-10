@@ -36,7 +36,17 @@ def word() -> str:
     return f"zq{uuid.uuid4().hex[:10]}"
 
 
-async def source(sess, text: str, *, at: dt.datetime, topics=None, junk=False) -> Source:
+async def source(
+    sess,
+    text: str,
+    *,
+    at: dt.datetime,
+    topics=None,
+    junk=False,
+    places=None,
+    tier=None,
+    published=None,
+) -> Source:
     row, _ = await upsert_source(
         sess, f"https://w{uuid.uuid4().hex[:10]}.test/p", checksum=f"sha256:{uuid.uuid4().hex}"
     )
@@ -48,17 +58,25 @@ async def source(sess, text: str, *, at: dt.datetime, topics=None, junk=False) -
             created_at=at,
             topic_labels=topics,
             retention_tier="junk" if junk else row.retention_tier,
+            places=places,
+            source_tier=tier or row.source_tier,
+            publication_date=published,
         )
     )
     await sess.flush()
     return row
 
 
-def view(query=None, topics=None, opened=None) -> SavedView:
+def view(query=None, topics=None, opened=None, filters=None, focus=None) -> SavedView:
+    """A view stored as the interface stores it: `SearchFilters`' names (`B-73`, `B-194`)."""
+    stored = dict(filters or {})
+    if topics:
+        stored["topics"] = topics
     return SavedView(
         name=f"v{uuid.uuid4().hex[:8]}",
         query=query,
-        filters={"topic": topics} if topics else {},
+        filters=stored,
+        focus_entity_id=focus,
         last_opened_at=opened,
         created_at=T0,
     )
@@ -114,3 +132,69 @@ async def test_the_count_stops_at_the_cap(sess, word, monkeypatch) -> None:
     for _ in range(5):
         await source(sess, f"about {word}", at=T0 + dt.timedelta(days=1))
     assert await watch.new_for_view(sess, view(query=word)) == 3
+
+
+async def test_every_stored_filter_narrows_as_find_would(sess, word) -> None:
+    """`B-194`: the count read `topic`, which no view had stored since `B-73`, and never
+    applied places, source types or years, so "3 new" on a narrowed view counted the corpus."""
+    after = T0 + dt.timedelta(days=1)
+    await source(
+        sess,
+        f"about {word}",
+        at=after,
+        places=["JP"],
+        tier="government",
+        published=dt.date(2021, 5, 1),
+    )
+    await source(
+        sess,
+        f"about {word}",
+        at=after,
+        places=["FR"],
+        tier="government",
+        published=dt.date(2021, 5, 1),
+    )
+    await source(
+        sess, f"about {word}", at=after, places=["JP"], tier="press", published=dt.date(2021, 5, 1)
+    )
+    await source(
+        sess,
+        f"about {word}",
+        at=after,
+        places=["JP"],
+        tier="government",
+        published=dt.date(2010, 5, 1),
+    )
+
+    assert await watch.new_for_view(sess, view(query=word)) == 4
+    narrowed = view(
+        query=word,
+        filters={
+            "places": ["JP"],
+            "source_tiers": ["government"],
+            "published_after": "2020-01-01",
+            "published_before": "2022-12-31",
+        },
+    )
+    assert await watch.new_for_view(sess, narrowed) == 1
+
+
+async def test_a_view_saved_before_b73_still_counts_its_topic(sess, word) -> None:
+    topic = f"t{uuid.uuid4().hex[:6]}"
+    after = T0 + dt.timedelta(days=1)
+    await source(sess, f"about {word}", at=after, topics=[topic])
+    await source(sess, f"about {word}", at=after, topics=["other"])
+    legacy = view(query=word, filters={"topic": [topic]})
+    assert await watch.new_for_view(sess, legacy) == 1
+
+
+async def test_a_node_view_or_an_unusable_filter_counts_nothing(sess, word) -> None:
+    """None, never a count wider than the view: a node view asks about a neighbourhood,
+    and a filter the search cannot apply would be dropped."""
+    await source(sess, f"about {word}", at=T0 + dt.timedelta(days=1))
+    assert await watch.new_for_view(sess, view(query=word, focus=1)) is None
+    assert await watch.new_for_view(sess, view(query=word, filters={"not_a_filter": 1})) is None
+    assert (
+        await watch.new_for_view(sess, view(query=word, filters={"published_after": "soon"}))
+        is None
+    )

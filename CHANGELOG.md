@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.9] — 2026-10-10
+
+### Fixed
+
+- `B-194`: a saved view's "N new" ignored its topics (read under a key renamed in `B-73`) and
+  never applied places, source types or years; it now counts with the search's own predicate
+
 ## [0.166.8] — 2026-10-10
 
 ### Fixed

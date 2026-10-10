@@ -267,12 +267,20 @@ called and nothing is summarised: every item is a passage a source actually cont
 ### Watched questions
 
 What a returning reader wants is not "N sources arrived" but "N arrived that answer this", so
-each saved view is counted against its own words and topic filter from the moment it was last
-opened (or saved, if never opened). Words match as the lexical arm matches them, the stored
+each saved view is counted against its own words and every filter it stores from the moment
+it was last opened (or saved, if never opened). Words match as the lexical arm matches them, the stored
 `search_vector` against `websearch_to_tsquery`, so the count agrees with what opening the view
 finds by words. The vector arm is not run: a count on the landing page must be cheap for every
 view at once. Junk and duplicates are left out, as search leaves them out. It is read-only, so
 it runs under the explore role (§12.6).
+
+The filters go through the search's own predicate (`passage_conditions`, `B-194`). Before
+`v0.166.9` the count read a `topic` key that no view had stored since `B-73` renamed it to
+`topics`, and never applied places, source types or years, so "3 new" on a narrowed view
+counted the whole corpus's new sources for its words. Its test built views with the old key,
+the same assumption as the code, which is why nothing failed; the fixture now stores views as
+the interface does. A node view, or a filter set the search cannot apply, counts nothing (None)
+rather than counting wider than the view.
 
 ### Corpus counts
 

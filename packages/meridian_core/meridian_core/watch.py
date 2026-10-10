@@ -1,7 +1,8 @@
 """Watched questions: what is new for a saved view since it was last opened (`P6-43`).
 
-Counted by the view's words (the lexical arm only) and topic filter, leaving out junk and
-duplicates. Read-only, so it runs under the explore role (§12.6). See
+Counted by the view's words (the lexical arm only) and every filter it stores, through the
+search's own predicate, so junk, copies and superseded passages are left out as Find leaves
+them. Read-only, so it runs under the explore role (§12.6). See
 docs/features/search.md#watched-questions.
 """
 
@@ -13,6 +14,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Chunk, SavedView, Source
+from .search import SearchFilters, passage_conditions
 
 #: Past this the landing says "200+": a count exact to the unit costs a scan
 #: for a number nobody reads beyond "a lot".
@@ -24,33 +26,57 @@ def watched_since(view: SavedView) -> dt.datetime:
     return view.last_opened_at or view.created_at
 
 
+def filters_of(view: SavedView) -> SearchFilters | None:
+    """A search view's stored filters as the search applies them; None for a node view.
+
+    Stored under `SearchFilters`' names (`B-73`); `topic` is the spelling from before it. Dates
+    are stored as ISO strings and become dates here. A set the search cannot apply is None,
+    which counts nothing rather than counting wider than the view.
+    """
+    if view.focus_entity_id is not None:
+        return None
+    stored = dict(view.filters or {})
+    legacy = stored.pop("topic", None)
+    if legacy and "topics" not in stored:
+        stored["topics"] = legacy
+    for key in ("published_after", "published_before"):
+        if isinstance(stored.get(key), str):
+            try:
+                stored[key] = dt.date.fromisoformat(stored[key])
+            except ValueError:
+                return None
+    try:
+        return SearchFilters(**stored)
+    except TypeError:
+        return None
+
+
+def _narrows(filters: SearchFilters) -> bool:
+    return bool(
+        filters.topics
+        or filters.places
+        or filters.source_tiers
+        or filters.published_after
+        or filters.published_before
+    )
+
+
 async def new_for_view(sess: AsyncSession, view: SavedView) -> int | None:
     """Sources new since the view was last opened that match it, capped at :data:`COUNT_CAP`.
 
-    None when the view asks nothing a count can answer — no words and no topic (a view of one node's
-    neighbourhood, say).
+    Matched as Find would match them (`B-194`): the view's words on the lexical arm and every
+    filter it stores, through the search's own predicate. None when the view asks nothing a
+    count can answer: a node view, or no words and no filter.
     """
+    filters = filters_of(view)
     query = (view.query or "").strip()
-    topics = [t for t in (view.filters or {}).get("topic") or [] if t]
-    if not query and not topics:
+    if filters is None or (not query and not _narrows(filters)):
         return None
 
     since = watched_since(view)
-    conditions = [
-        Source.created_at > since,
-        Source.retention_tier != "junk",
-        Source.duplicate_of.is_(None),
-    ]
-    if topics:
-        conditions.append(Source.topic_labels.overlap(topics))
+    passage = [Chunk.source_id == Source.source_id, *passage_conditions(filters)]
     if query:
-        tsquery = func.websearch_to_tsquery("english", query)
-        conditions.append(
-            exists().where(
-                Chunk.source_id == Source.source_id,
-                Chunk.superseded_at.is_(None),
-                Chunk.search_vector.op("@@")(tsquery),
-            )
-        )
+        passage.append(Chunk.search_vector.op("@@")(func.websearch_to_tsquery("english", query)))
+    conditions = [Source.created_at > since, exists().where(*passage)]
     capped = select(Source.source_id).where(*conditions).limit(COUNT_CAP + 1).subquery()
     return int(await sess.scalar(select(func.count()).select_from(capped)) or 0)

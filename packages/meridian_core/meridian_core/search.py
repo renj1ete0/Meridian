@@ -218,6 +218,14 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
     return where
 
 
+def passage_conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
+    """The search's own predicate over a chunk and its source, for counting or walking.
+
+    For a path that does not rank (`B-194`): the same definition, so the two cannot drift.
+    """
+    return _conditions(filters)
+
+
 def readable_passage_conditions() -> list[ColumnElement[bool]]:
     """What any path handing passages to a model must apply: search's own defaults, cleared only.
 
