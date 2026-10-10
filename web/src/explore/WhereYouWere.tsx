@@ -42,6 +42,8 @@ export interface WhereYouWereProps {
   onOpenNode?: (id: string) => void
   /** The since-last-visit line, rendered at the head of the list. */
   delta?: React.ReactNode
+  /** At the right of the heading, as the design draws "All saved views →" (`B-180`). */
+  action?: React.ReactNode
   now?: Date
 }
 
@@ -52,14 +54,25 @@ const ROW = 'flex w-full items-baseline gap-3.5 py-[9px] text-left'
 const KIND = 'font-mono text-[10px] uppercase tracking-[0.1em] text-text-faint'
 const WHEN = 'w-[76px] shrink-0 text-right font-mono text-[10.5px] text-text-faint'
 
-export function WhereYouWere({ savedViews, recentNodes, onOpenView, onOpenNode, delta, now }: WhereYouWereProps) {
+export function WhereYouWere({
+  savedViews,
+  recentNodes,
+  onOpenView,
+  onOpenNode,
+  delta,
+  action,
+  now,
+}: WhereYouWereProps) {
   const empty = savedViews.length === 0 && recentNodes.length === 0
 
   return (
     <section aria-labelledby="where-you-were" className="flex flex-col gap-3.5">
-      <h2 id="where-you-were" className={LABEL}>
-        Where you were
-      </h2>
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 id="where-you-were" className={LABEL}>
+          Where you were
+        </h2>
+        {action}
+      </div>
 
       {delta}
 

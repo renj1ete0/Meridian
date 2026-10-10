@@ -174,13 +174,15 @@ export interface NotesPanelProps {
   notes: readonly Annotation[]
   /** How many exist, which is not how many came back. */
   total: number
+  /** Read the rest (`B-180`); offered only while some are not shown. */
+  onShowAll?: () => void
 }
 
 /**
  * The reader's own layer, on the landing screen (§12.5), with a plain Markdown export
  * link. See docs/features/web-app.md#notes.
  */
-export function NotesPanel({ notes, total }: NotesPanelProps) {
+export function NotesPanel({ notes, total, onShowAll }: NotesPanelProps) {
   return (
     <section aria-labelledby="your-notes" className="flex flex-col gap-3.5">
       <div className="flex items-baseline justify-between gap-4">
@@ -203,6 +205,14 @@ export function NotesPanel({ notes, total }: NotesPanelProps) {
         {total === 0
           ? 'Nothing yet. A note is the only thing here that cannot be recovered by crawling again.'
           : `${total} note${total === 1 ? '' : 's'}${notes.length < total ? `, ${notes.length} shown` : ''}.`}
+        {onShowAll && notes.length < total ? (
+          <>
+            {' '}
+            <button type="button" onClick={onShowAll} className="text-accent-graph hover:underline">
+              show all
+            </button>
+          </>
+        ) : null}
       </p>
 
       {notes.length > 0 ? <NoteList notes={notes} /> : null}

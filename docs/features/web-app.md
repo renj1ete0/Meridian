@@ -588,6 +588,16 @@ node workspace stored its filters under its URL's names (`topic`, `tier`), so ev
 saved with a filter was refused with a 422 and only unfiltered ones could be kept. A node view
 now stores `GraphFilters`' names (`viewRecordOf`); the workspace reads either spelling, and a
 web test reads `GraphFilters` from the Python so the two cannot drift again.
+
+**Every view can be found, renamed and deleted** (`B-180`). The landing lists six; past them
+there was no list, and no way to rename or delete one, though both routes existed. "Where you
+were" now carries the design's heading link: "All N saved views →" when some are hidden,
+"manage views" otherwise. It opens every view with rename and delete in place. Delete asks once,
+since a view's name and filters are the reader's own work, though deleting one touches nothing in
+the corpus. Notes gain "show all" while some are not shown, up to the route's ceiling of 100;
+past that the Markdown export is the notebook. The API client now treats a 204 as an answer
+with no body. Editing or removing a note is not built: a note is a node in the graph, and
+removing one needs a decision about its links (`B-201`).
 ### Source pages
 
 The first screen where the corpus reads as documents rather than results (`P6-14`, `P6-15`):

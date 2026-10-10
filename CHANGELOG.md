@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.22] — 2026-10-10
+
+### Added
+
+- `B-180`: every saved view can be listed, renamed and deleted from the landing ("All N saved
+  views →"); notes offer "show all"
+
 ## [0.166.21] — 2026-10-10
 
 ### Fixed

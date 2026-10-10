@@ -436,6 +436,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, describeDetail(detail, response.status))
   }
 
+  // No content is an answer, not a malformed one: a DELETE says 204 and nothing else.
+  if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
 
@@ -1373,6 +1375,21 @@ export function saveView(
     body: JSON.stringify(body),
     ...init,
   })
+}
+
+/** Rename a saved view (`B-180`); a name another view holds is refused (409). */
+export function renameView(viewId: number, name: string, init?: RequestInit): Promise<SavedViewRecord> {
+  return request<SavedViewRecord>(`/api/admin/views/${viewId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+    ...init,
+  })
+}
+
+/** Delete a saved view (`B-180`). A view is a bookmark: the corpus is untouched. */
+export function deleteView(viewId: number, init?: RequestInit): Promise<void> {
+  return request<void>(`/api/admin/views/${viewId}`, { method: 'DELETE', ...init })
 }
 
 export function markViewOpened(viewId: number, init?: RequestInit): Promise<SavedViewRecord> {

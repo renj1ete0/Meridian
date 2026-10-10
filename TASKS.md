@@ -1782,8 +1782,10 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-179` `v0.166.11`. **Source page for citing** — per-passage copy-citation, original URL in a new tab,
       "Explore" breadcrumb returns to the results; rename the passage "cite" checkbox (it selects
       for a note, while "Cite" on a node copies)
-- [ ] `B-180` **Manage views and notes** — no rename/delete for views (the API has both), notes
+- [x] `B-180` `v0.166.22`; editing notes is `B-201`. **Manage views and notes** — no rename/delete for views (the API has both), notes
       cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
+- [ ] `B-201` **Edit or remove a note** — a note is a node; PATCH exists with no interface, and
+      removing one needs a decision about its links (soft delete, as §2.5 does for steering?)
 - [x] `B-181` **Notification links go to the right place** — `v0.166.2`. approvals, run summaries and
       alerts all open `/admin` (Topic weights); the status pill too. Map type → section
 - [ ] `B-182` **Possible-duplicate approvals have nowhere to go** — most of the bell is

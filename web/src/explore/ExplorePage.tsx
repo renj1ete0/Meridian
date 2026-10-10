@@ -19,6 +19,7 @@ import { SinceLastVisit } from './SinceLastVisit'
 import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
 import { getTermNeighbourhood, worthShowing } from './neighbourhood/api'
 import { FiltersButton, FindRail } from './FindRail'
+import { ManageViews } from './ManageViews'
 import { topicWords } from '../lib/growth'
 import { WhereYouWere } from './WhereYouWere'
 import { readRecentNodes } from './graph/recent'
@@ -26,10 +27,12 @@ import { hrefForView } from './views'
 import {
   ApiError,
   corpusStats,
+  deleteView,
   getAnnotations,
   getCrawlProgress,
   getSavedViews,
   markViewOpened,
+  renameView,
   saveView,
   searchCorpus,
   type Annotation,
@@ -75,6 +78,9 @@ type Phase = 'idle' | 'searching' | 'done' | 'failed'
  * landing page that opened with fifty of anything is one nobody reads.
  */
 const NOTES_ON_LANDING = 5
+
+/** Notes read by "show all": the route's ceiling (100); past it, the Markdown export is the notebook. */
+const ALL_NOTES = 100
 
 /** How many saved views "where you were" lists. §8: a *short* list. */
 const VIEWS_ON_LANDING = 6
@@ -122,6 +128,8 @@ export function ExplorePage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedCount, setSavedCount] = useState(0)
+  // Every view, renamed or deleted in place (`B-180`).
+  const [managing, setManaging] = useState(false)
   // Nodes this browser opened (`B-177`), recorded by the node page.
   const [recent] = useState(() => readRecentNodes().slice(0, NODES_ON_LANDING))
   const [phase, setPhase] = useState<Phase>('idle')
@@ -565,7 +573,34 @@ export function ExplorePage() {
           />
         )}
 
+        {managing ? (
+          <ManageViews
+            views={views}
+            onOpen={openView}
+            onRename={async (view, name) => {
+              const renamed = await renameView(view.view_id, name)
+              setViews((current) => current.map((v) => (v.view_id === view.view_id ? renamed : v)))
+            }}
+            onDelete={async (view) => {
+              await deleteView(view.view_id)
+              setViews((current) => current.filter((v) => v.view_id !== view.view_id))
+            }}
+            onDone={() => setManaging(false)}
+          />
+        ) : null}
+
         <WhereYouWere
+          action={
+            views.length > 0 && !managing ? (
+              <button
+                type="button"
+                onClick={() => setManaging(true)}
+                className="font-mono text-[10.5px] text-accent-graph hover:underline"
+              >
+                {views.length > VIEWS_ON_LANDING ? `All ${views.length} saved views →` : 'manage views'}
+              </button>
+            ) : null
+          }
           delta={
             stats ? <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} since={since} /> : null
           }
@@ -583,7 +618,15 @@ export function ExplorePage() {
           }}
         />
 
-        <NotesPanel notes={notes} total={noteCount} />
+        <NotesPanel
+          notes={notes}
+          total={noteCount}
+          onShowAll={() => {
+            getAnnotations({ limit: ALL_NOTES })
+              .then((body) => setNotes(body.annotations))
+              .catch(() => {})
+          }}
+        />
       </div>
     </>
   )
