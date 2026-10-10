@@ -69,7 +69,7 @@ tier-imbalance counter-seeding (§7.4), where a node evidenced entirely by one t
 aimed at the missing ones.
 
 A domain resolves by exact match, then the **longest** matching suffix pattern, then the
-default. Longest-wins matters: `*.gov.sg` and `*.sg` can both match, and the specific one has
+default. Longest-wins matters: `*.gov.xx` and `*.xx` can both match, and the specific one has
 to win or every domain under the broader suffix collapses into one tier.
 
 <a id="scholarly-evidence"></a>**Scholarly evidence** (`B-50`). An academic institution's
@@ -283,8 +283,10 @@ built on.
 
 - The `sweep` job runs daily in report mode. Read its report, then run
   `python -m worker.sweep --apply` by hand.
-- Quarantined domains appear in Admin. Until a model can judge them, a person clears a
-  quarantine.
+- Until a model can judge them, a person clears a quarantine. Admin does not show or edit
+  trust yet: the verdict is on the domain's `fetch_policy` row (`trust_state`, `trust_reason`,
+  `trust_decided_by`), which `GET /api/admin/fetch-policy` returns but the Fetch policy screen
+  does not display, so a quarantine is read and cleared on that row directly.
 
 ## Tests
 

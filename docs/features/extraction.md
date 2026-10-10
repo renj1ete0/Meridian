@@ -6,18 +6,22 @@ an edge cites as evidence, so every passage must make sense on its own. It must 
 location (page or character offset) that a reader can follow back into the stored file.
 
 - **Code:** `services/worker/worker/extract/` (`html.py`, `pdf.py`, `document.py`,
-  `figures.py`, `clean.py`, `chunk.py`, `dockind.py`, `errorpage.py`, `injection.py`),
-  `cleancut.py`, `rawstore.py`, `ocr_queue.py`, `boilerplate.py`, `rechunk.py`, `retable.py`, `dockind.py`,
-  `retitle.py`; `packages/meridian_core/meridian_core/chunks.py`, `sources.py`,
-  `boilerplate.py`, `titles.py`, `figures.py`
-- **Tasks:** `P1-07`–`P1-13`, `P2-02`, `B-42`–`B-45`, `B-59`, `B-69`
+  `pdftables.py`, `figures.py`, `clean.py`, `chunk.py`, `dockind.py`, `errorpage.py`,
+  `injection.py`, `language.py`), `cleancut.py`, `rawstore.py`, `ocr_queue.py`, `boilerplate.py`,
+  `rechunk.py`, `retable.py`, `dockind.py`, `retitle.py`, `relanguage.py`;
+  `packages/meridian_core/meridian_core/chunks.py`, `sources.py`, `boilerplate.py`, `titles.py`,
+  `figures.py`
+- **Tasks:** `P1-07`–`P1-13`, `P2-02`, `B-42`–`B-45`, `B-59`, `B-69`, `B-153`, `B-191`, `B-195`,
+  `B-214`, `B-215`
+- **Decisions:** [ADR 0019](../adr/0019-stored-pdfs-re-extracted-for-their-tables.md)
 
 ## How it works
 
 ```
 bytes ──► route by media type
-           ├─ HTML  ── browser markdown if the browser ran, else trafilatura (precision)
-           ├─ PDF   ── pdftotext, page by page; too few chars per page ─► OCR queue
+           ├─ HTML  ── trafilatura (precision), on the rendered HTML if the browser ran
+           ├─ PDF   ── pdftotext, page by page; a -layout pass places tables;
+           │          too few chars per page ─► OCR queue
            └─ Office ─ MarkItDown convert_stream, four converters only
        ──► metadata: title (cleaned), DOI and other identifiers, language, date
        ──► document kind: paper, listing, legal, news, report, profile, other
@@ -523,6 +527,8 @@ One row per URL, created on first fetch and updated on every fetch.
 - `boilerplate` runs daily. `rechunk`, `retable`, `dockind`, `retitle` and `furniture` are one-off
   passes for what was stored before a rule existed. Each reports by default, needs `--apply`
   to write, and never touches a source that anything cites.
+- `relanguage` is a one-off pass too, reporting by default and writing with `--apply`; it
+  changes only a source's language and marks labels for relabelling ([Language](#language)).
 - `pdftotext` (poppler) is required in the worker image. Without it every PDF fails loudly,
   by design.
 
@@ -541,5 +547,7 @@ One row per URL, created on first fetch and updated on every fetch.
 
 `tests/unit/test_chunk*.py`, `test_clean*.py`, `test_extract_html.py`,
 `test_extract_pdf.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
-`test_injection_screen.py`, `test_rawstore*.py`; `tests/integration/test_chunks*.py`,
-`test_rechunk*.py`, `test_retable.py`.
+`test_injection_screen.py`, `test_rawstore*.py`, `test_pdf_garbled.py`, `test_language_detection.py`,
+`test_storable.py`; `tests/integration/test_chunks*.py`, `test_rechunk*.py`, `test_retable.py`,
+`test_relanguage.py`, `test_retitle.py`, `test_dockind_backfill.py`, `test_boilerplate.py`,
+`test_nul_bytes.py`.

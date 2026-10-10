@@ -9,7 +9,8 @@ sites, and to make a stalled crawl visible rather than silent.
   `fetch.py` (bytes from a URL), `robots.py`, `ratelimit.py`;
   `packages/meridian_core/meridian_core/queueing.py`, `policy.py`, `netguard.py`,
   `attempts.py`, `robotscache.py`
-- **Tasks:** `P1-01`–`P1-06`, `P1-15`, `P1-18`–`P1-30`, `B-107`, `B-112`, `B-114`, `B-115`
+- **Tasks:** `P1-01`–`P1-06`, `P1-15`, `P1-18`–`P1-30`, `B-61`, `B-107`, `B-112`, `B-114`, `B-115`,
+  `B-203`
 - **Decisions:** [ADR 0001](../adr/0001-production-runs-on-a-server.md)
 
 ## How it works
@@ -44,7 +45,8 @@ crashed worker strands nothing. On shutdown, held leases are released rather tha
 expire.
 
 **Backpressure.** While more than `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` valuable passages wait
-for a vector, the loop stops claiming ("crawl paused for embedding"). A page that is not
+for a vector, the loop stops claiming ("crawl paused for embedding"), and resumes only once the
+backlog is below 80% of that ceiling, so it does not flap on the line. A page that is not
 embedded is unsearchable and unlabelled, and the host scores that steer the crawl cannot see
 it. See [embedding.md](embedding.md#backpressure).
 
@@ -473,8 +475,9 @@ table.
 
 ## Operating it
 
-- **Admin → Crawl health** gives a verdict in words (fetching, idle, stalled), with 24 hours
-  of attempts by outcome and the queue beside the embedding backlog.
+- **Admin → Crawl health** gives a verdict in words (crawling, waiting, idle, stalled, or
+  paused for embedding, with how far the backlog is from resuming; `B-203`), with 24 hours of attempts by
+  outcome and the queue beside the embedding backlog.
 - Logs: `docker compose logs -f worker`. "crawl paused for embedding" is normal while the
   backlog drains.
 - The healthcheck reads a heartbeat file the loop touches every iteration (`worker.liveness`),
@@ -493,6 +496,9 @@ table.
 ## Tests
 
 `tests/integration/test_queueing.py`, `test_queue.py`, `test_crawl.py`, `test_worker_run.py`,
-`test_refusing_domains.py`; `tests/unit/test_netguard.py`, `test_fetch_pinning.py`,
-`test_robots.py`, `test_ratelimit.py`, `test_queue_disposition.py`, `test_worker_loop.py`,
-`test_liveness.py`.
+`test_refusing_domains.py`, `test_render_learning.py`, `test_robots_cache.py`,
+`test_fetch_outcomes.py`, `test_attempts.py`, `test_policy.py`, `test_crawl_health.py`;
+`tests/unit/test_netguard.py`, `test_fetch_pinning.py`, `test_fetch_render.py`,
+`test_fetch_safeguards.py`, `test_fetch_signals.py`, `test_challenge_wait.py`, `test_robots.py`,
+`test_ratelimit.py`, `test_queue_disposition.py`, `test_queueing_backoff.py`,
+`test_queue_address_types.py`, `test_worker_loop.py`, `test_liveness.py`, `test_crawlhealth.py`.

@@ -9,8 +9,8 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.74" src="https://img.shields.io/badge/version-0.74-0D6F7C">
-  <img alt="Status: phase 3 of 7" src="https://img.shields.io/badge/status-phase%203%20of%207-805A28">
+  <img alt="Version 0.171" src="https://img.shields.io/badge/version-0.171-0D6F7C">
+  <img alt="Status: running, pre-acceptance" src="https://img.shields.io/badge/status-running%2C%20pre--acceptance-805A28">
 </p>
 
 ---
@@ -22,22 +22,25 @@ and relationships into a knowledge graph, and records where every single claim c
 from. You explore that graph, annotate it, and ask questions of it — and it tells you
 not just what it knows, but where the evidence is thin, stale, or contradictory.
 
-> **Status: phase 3 of 7, with one checkpoint outstanding.** The crawler runs
-> unattended — fetching politely, keeping what it fetched, reading it, chunking it and
-> widening its own frontier from links, sitemaps, search and citations. The corpus is
-> **searchable**: hybrid retrieval over pgvector and `tsvector`, fused by reciprocal
-> rank, behind an HTTP API, a web interface and an MCP surface an external assistant
-> can read through. Admin steers it — topics, per-domain fetch policy, the gazetteer.
+> **Status: every plane runs; the acceptance checkpoints are still owed.** The crawler runs
+> unattended: fetching politely, keeping what it fetched, reading HTML, PDFs (tables kept as
+> rows) and office documents, chunking, embedding, and widening its own frontier from links,
+> sitemaps, search and citations. The corpus is **searchable** (hybrid retrieval over pgvector
+> and `tsvector`, fused by reciprocal rank) through a web interface, an HTTP API and an MCP
+> server. A batched **synthesis pass** reads on-topic passages and writes the graph: typed
+> nodes and edges, each citing its passages, with entity resolution, contested pairs and
+> attribute values. The web interface reads that graph (node pages, the Map, Gaps, Growth,
+> contested pairs, an Ask panel) and keeps your own notes and saved views beside it; Admin
+> steers the crawl and decides what needs a person.
 >
-> Two things are not done, and they are the honest headline. **The 48-hour acceptance
-> run has not happened** (`P1-16`), so nothing here has been measured against a real
-> corpus. And **no run has written an edge yet**: phase 4's spine is built — the graph
-> store, entity resolution, the write tools, the orchestrator's state machine and the
-> model client — but the stages that reason over documents still lack their prompt and
-> parse, so today this reads documents rather than the relationships between them.
+> What is not done, and is the honest headline: **the long unattended acceptance run has not
+> happened** (`P1-16`), **remote access waits on a Cloudflare account**, and **synthesis at
+> corpus scale needs a model**: with no hosted key or local endpoint configured, the graph
+> grows only as fast as a relay agent answers batches by hand.
 >
 > See [docs/guides/setup.md](docs/guides/setup.md) to run it, the [roadmap](docs/roadmap.md)
-> for where it is going, and [TASKS.md](TASKS.md) for what is next.
+> for where it is going, [TASKS.md](TASKS.md) for what is next, and
+> [docs/README.md](docs/README.md) for a map of every feature document.
 
 ## Why it exists
 
@@ -71,14 +74,13 @@ Three decoupled planes sharing one Postgres database. No plane blocks another.
   crawl · extract · embed      │
   novelty gate · frontier      ▼
                         ┌──────────────┐
-                        │   POSTGRES   │        REASONING ── ~1h/day
+                        │   POSTGRES   │        REASONING ── batched
                         │ queue·graph  │◄────── extract relations · tag
-                        │   vectors    │        coverage · gap analysis
-                        └──────┬───────┘        ── not built (phase 4) ──
+                        │   vectors    │        resolve · contest · gaps
+                        └──────┬───────┘        (hosted, local or relay model)
                                ▼
                           INTERFACE
-                 search · graph · steering · export
-                 search, steering and export work; graph waits on phase 4
+          find · answer · graph · map · gaps · notes · admin · MCP
 ```
 
 The ingestion loop never calls a language model, so it keeps working whether or not any
@@ -87,25 +89,27 @@ material at once and therefore produces better gap analysis than trickled infere
 
 | Layer | Choice |
 |---|---|
-| Queue, metadata, graph | Postgres + Apache AGE |
-| Vectors | pgvector (HNSW) |
-| Embeddings | bge-m3 (multilingual) |
+| Queue, metadata, graph | Postgres (graph as relational adjacency tables) |
+| Vectors | pgvector (HNSW, half-precision index) |
+| Embeddings | bge-m3 (multilingual), in a sidecar that can use a GPU |
 | Entity extraction | spaCy + curated gazetteer |
 | Backend | FastAPI — serves UI and MCP |
 | Frontend | React + TypeScript + Tailwind, with Sigma.js v3 + graphology |
 | Search | SearXNG, self-hosted, with a paid API fallback |
-| Fetch and extract | Crawl4AI (version-pinned) |
+| Fetch and extract | Crawl4AI (version-pinned), trafilatura, poppler `pdftotext` |
 | Document conversion | MarkItDown |
-| Reasoning | Any frontier model over MCP, or a local OpenAI-compatible endpoint |
+| Reasoning | A hosted model, a local OpenAI-compatible endpoint, or a relay agent, routed by task ([ADR 0002](docs/adr/0002-model-routing.md)) |
 | Remote access | Cloudflare Tunnel — the only exposed service |
+| Control from a phone | A Telegram bot (status, weights, pause, boost, seed) |
 
 Rationale for each choice, and the alternatives rejected, are in the
 [architecture spec](docs/spec/autonomous-research-system-spec.md) §4.
 
 ## Minimum requirements
 
-Meridian is designed to run unattended on one modest always-on machine. It is not
-picky about which one.
+Meridian runs unattended on one always-on machine. Production targets a server, with an
+optional GPU for embedding and local models ([ADR 0001](docs/adr/0001-production-runs-on-a-server.md));
+a modest machine still runs it, more slowly.
 
 | | Minimum | Recommended |
 |---|---|---|
@@ -191,9 +195,11 @@ Production runs the whole stack in containers behind `cloudflared`
 > ```
 >
 > Each queue is a predicate on a column, so every pass is resumable with no state
-> outside the table and any of them can lag the others safely. Three more run on
-> demand: `worker.sweep` (retention, reports before it deletes), `worker.harvest`
-> (acronym definitions into the gazetteer) and `worker.retopic`.
+> outside the table and any of them can lag the others safely. Beside them run the
+> orchestrator (the synthesis pass, `worker.orchestrate`), the Telegram bot and the
+> embedding sidecar. One-off passes for what was stored before a rule existed
+> (`worker.rechunk`, `worker.retable`, `worker.retitle`, `worker.retopic` and others)
+> report by default, write only with `--apply`, and never touch a source anything cites.
 >
 > The loop is configured entirely from the environment — `MERIDIAN_WORKER_CONCURRENCY`,
 > `MERIDIAN_WORKER_TOPICS`, `MERIDIAN_WORKER_MAX_TASKS` and friends, all listed in
@@ -222,19 +228,17 @@ editing the files has no effect.
 ```
 config/       first-boot seed values (YAML → DB, then the DB is authoritative)
 packages/     meridian_core — shared models and schemas, imported by every service
-services/     worker (ingestion) · api (Explore, Admin, MCP) · orchestrator (phase 4, empty)
+services/     worker (ingestion, synthesis passes) · api (Explore, Admin, MCP) · orchestrator image
 web/          Explore and Admin frontend
 migrations/   alembic
 deploy/       systemd units for the stack and the off-device backup
 scripts/      seed, role bootstrap, corpus snapshot/restore, backup, search benchmark
-docs/         specs, setup and deployment runbooks, roadmap, design system, handover
+docs/         feature docs, decision records, specs, runbooks, roadmap, design system, handover
 ```
 
-`services/orchestrator/` holds three empty directories and no code: phase 4's spine
-lives in `meridian_core` and `worker/orchestrate.py` for now, and gets a service of its
-own when the stages that reason land. The model client exists and is tested against
-fakes — **no real call to a text-generating model has been made from this repository**,
-because nothing has had a key or a reason to make one yet.
+The synthesis pass lives in `meridian_core` and `worker/orchestrate.py`; the
+`orchestrator` service runs it from its own image, with the model keys and the relay
+directory only it can reach.
 
 ## Documentation
 
@@ -242,6 +246,8 @@ because nothing has had a key or a reason to make one yet.
 |---|---|
 | [Architecture spec](docs/spec/autonomous-research-system-spec.md) | The full design: data model, the two loops, agent integration, interface, evaluation. The "why." |
 | [Project scaffold](docs/spec/meridian-project-scaffold.md) | Directory layout, container topology, database roles, build and deploy. |
+| [Documentation map](docs/README.md) | Every feature document, guide and reference, and where each feature lives in the code. |
+| [Decision records](docs/adr/README.md) | Decisions the operator has made, why, and what they cost. |
 | [Roadmap](docs/roadmap.md) | Build phases and their acceptance checkpoints. |
 | [TASKS.md](TASKS.md) | The live build list — what's done, what's next, broken into single-sitting tasks. |
 | [Handover](docs/handover.md) | How the built parts fit together, the traps already discovered, and what is verified live rather than only tested. |
@@ -258,14 +264,11 @@ because nothing has had a key or a reason to make one yet.
 ## FAQ
 
 **Can I run it today?**
-Yes, for reading documents. `make migrate && make seed` gives you a real, empty database;
-the worker crawls unattended, and the corpus is searchable through the web interface, the
-HTTP API and MCP. What is not yet *populated* is the graph: the tables, the write tools
-and the orchestrator exist and `python -m worker.orchestrate --dry-run` walks a whole
-synthesis cycle, but the stages that reason over documents are not written, so no edge
-has been produced. Contested pairs, coverage scoring and synthesis are phases 5 to 7 and
-follow from that. So today it finds and cites passages; it does not yet relate them. The
-[roadmap](docs/roadmap.md) tracks progress.
+Yes. `make quickstart` gives you a running, empty stack; the worker crawls unattended and
+the corpus is searchable through the web interface, the HTTP API and MCP. The graph fills
+as the synthesis pass runs, which needs a model: a hosted key, a local endpoint, or a relay
+agent answering batches. Without one, crawling and search carry on and synthesis defers.
+The [roadmap](docs/roadmap.md) tracks what is still owed.
 
 **How is this different from Zotero, Obsidian, or a RAG chatbot?**
 Those store or retrieve documents. Meridian builds a *typed graph of claims* with

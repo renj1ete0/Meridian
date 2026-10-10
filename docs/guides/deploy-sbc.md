@@ -1,5 +1,12 @@
 # Deploying on two ARM boards, with automatic updates
 
+> **No longer the reference layout.** Production is Docker on a single server, optionally
+> with an NVIDIA GPU ([ADR 0001](../adr/0001-production-runs-on-a-server.md)); follow
+> [deployment.md](deployment.md). This layout remains supported, and images stay multi-arch
+> for it. Images are not yet published to GHCR
+> ([ADR 0008](../adr/0008-release-channels.md)), so `make promote` has nothing to point a
+> board at until they are.
+
 Meridian on two arm64 single-board computers, updated by Watchtower whenever a
 build is promoted. Task `P3-12`. The general runbook is
 [deployment.md](deployment.md) — its keys table (§1b), smoke run (§4), egress

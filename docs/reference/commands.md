@@ -5,6 +5,8 @@
 | Target | What it does |
 |---|---|
 | `make test` | `make lint`, then the Python suite (needs the dev Postgres up) |
+| `make coverage` | The Python suite with branch coverage; HTML report in `.coverage-html/` ([guides/testing.md](../guides/testing.md)) |
+| `make mutate` | Mutation testing of the pure modules (`scripts/mutate.sh`); slow ([guides/testing.md](../guides/testing.md)) |
 | `make lint` | `ruff check .`, `ruff format --check .`, and the web package's `npm run lint` (oxlint, then `prettier --check`) |
 | `npm run format` (in `web/`) | Rewrites the web package with Prettier |
 | `make dev-up` / `dev-down` | The dev stack (`docker-compose.dev.yml`): Postgres and services for tests |
@@ -20,6 +22,8 @@
 | `make bench-search` | Search recall, latency and arm agreement |
 | `make leak-check` | The integration suite on a fresh database; prints any rows or settings it left behind ([below](#leak-check)) |
 | `make clock-check DAYS=400` | Every test today and `DAYS` ahead on every clock; prints what fails only ahead ([below](#clock-check)) |
+| `make stale-dist-info` | Deletes the `meridian_*.dist-info` folders a version bump left without a `RECORD` (run by `make lint`) |
+| `make build-worker` | Builds the worker image locally as `meridian-worker:dev` |
 | `make build-push` / `promote SHA=…` | Build images, and move the `stable` channel (GHCR, operator only) |
 
 Running `uv run pytest` directly needs the dev environment exported:
@@ -89,6 +93,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.areas` | always (`--report` dry) | Map areas; `--name-only` renames the newest build |
 | `worker.boilerplate` | always (`--report` dry) | Repeated lines per site |
 | `worker.rechunk` | `--apply` | Re-cuts stored sources with furniture removed |
+| `worker.retable` | `--apply` | Re-extracts stored PDFs whose tables a fresh extraction would keep, replacing their passages; `--domain`, `--source`, `--limit` narrow it (`B-215`) |
 | `worker.reembed` | `--apply` | Re-embeds passages whose embedded text has changed |
 | `worker.dockind` | `--apply` | Classifies stored documents by kind; `--all` re-derives |
 | `worker.furniture` | `--apply` | Demotes site furniture to junk |
@@ -104,6 +109,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.steerproposals` | always (`--report` dry) | Steering proposals |
 | `worker.digest` | always | Digest and alerts |
 | `worker.sweep` | `--apply` | Retention sweep (the only pass that deletes files) |
+| `worker.liveness` | — | The container healthcheck: exits 1 when the heartbeat file is missing or stale |
 
 ## API commands
 
@@ -111,7 +117,7 @@ Run in the API container: `docker compose exec api python -m api.<name> …`.
 
 | Command | What it does |
 |---|---|
-| `api.tokens issue <name> [--profile reader\|analyst\|operator] [--days 90]` | Issue an MCP token, printed once with client setup |
+| `api.tokens issue <name> [--profile reader\|analyst\|operator] [--days N]` | Issue an MCP token, printed once with client setup; expires in 90 days unless `--days` says otherwise, and `--days 0` never expires (ADR 0011) |
 | `api.tokens list [--all]` | List tokens (never their secrets) |
 | `api.tokens revoke <id>` | Turn a token off |
 
@@ -127,4 +133,5 @@ Run in the API container: `docker compose exec api python -m api.<name> …`.
 | `scripts/build_and_push.sh`, `promote.sh` | Image release |
 | `scripts/preflight.sh`, `quickstart.sh` | Server checks and local bootstrap |
 | `scripts/init-roles.sh` | Creates the database roles on first Postgres start |
+| `scripts/mutate.sh` | Mutation testing in a staging tree, `.mutate/` (`make mutate`) |
 | `scripts/clockshift/` | The clock check and the leak check (`make clock-check`, `make leak-check`) |

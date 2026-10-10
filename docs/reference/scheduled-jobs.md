@@ -2,8 +2,9 @@
 
 The scheduler (`python -m worker.scheduler`) reads its timetable from the `scheduled_jobs`
 table. There are no cron files. `config/schedule.yaml` seeds the table at first boot; after
-that the database is authoritative, and a new job's row has to be inserted on a live stack
-by hand (see [features/operations.md](../features/operations.md)).
+that the database is authoritative, and a new job's row has to be inserted on a live stack,
+by the migration that adds the job or by hand (see
+[features/operations.md](../features/operations.md)).
 
 Each job runs as `python -m <module> <args>` in a subprocess. It is never run through a shell,
 because the row is editable from a UI. A missed run is run once and then rescheduled from now;

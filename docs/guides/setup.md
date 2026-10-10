@@ -18,6 +18,11 @@ instructions for something that does not exist are worse than no instructions.
 | [7. Look at it](#7-look-at-it) | Search, API, the web UI, and the bot | **works** |
 | [8. Expose it](#8-expose-it) | Your phone can reach it | **code done, needs your Cloudflare account** |
 
+Production is Docker on a single server, optionally with an NVIDIA GPU
+([ADR 0001](../adr/0001-production-runs-on-a-server.md)). To try the whole stack on a
+workstation first, `make quickstart` checks the machine, builds, migrates, seeds and prints
+the URL ([commands](../reference/commands.md)).
+
 ---
 
 ## 1. Decisions to make first
@@ -26,9 +31,9 @@ instructions for something that does not exist are worse than no instructions.
 `pgdata/`, `raw/` and `figures/`. The raw store only grows — put it on the disk
 you are willing to fill.
 
-**How images get there.** The target is arm64 and your laptop probably is not.
-Build on the server (`docker compose build`) for a first deploy; `make
-build-push` is the multi-arch path and is not written yet (`P1-37`).
+**How images get there.** Build on the server (`docker compose build`) for a
+first deploy. `make build-push` is the multi-arch path (`P1-37`), for when images
+are published to a registry ([deployment.md](deployment.md) §1).
 
 **Whether you are sharing.** If the answer is no, skip part 8 entirely and leave
 `PG_GUEST_PASSWORD` blank. Nothing degrades.
@@ -208,9 +213,10 @@ TELEGRAM_CHAT_ID=<your own chat id>
 # see what would be sent, without sending
 docker compose run --rm worker python -m worker.digest --no-send
 
-# then on a timer (systemd, or cron)
-docker compose run --rm worker python -m worker.digest
 ```
+
+The `scheduler` service runs it daily from the timetable (`config/schedule.yaml`,
+seeded at first boot; the database is authoritative afterwards); nothing else needs a timer.
 
 It sends the health line and alerts on **sustained** conditions only — fetch
 success low over a window, nothing fetched for hours, disk above 80%, and the
@@ -350,7 +356,9 @@ is not re-fetchable, only re-visitable.
 
 ## 7. Look at it
 
-**The API and the web UI**, on the server or a checkout:
+**The API and the web UI**, on a checkout. The local stack (`make local-up`) publishes the
+API on 21114 and the web on 21116; production publishes no port, so on the server publish
+`web` first ([connecting-an-assistant.md](connecting-an-assistant.md) §2):
 
 ```bash
 # API — health, stats, search
@@ -409,9 +417,10 @@ docker compose run --rm worker python -m worker.orchestrate --dry-run
 
 It walks a whole synthesis cycle and prints what each stage would do, inside a
 transaction that is rolled back — so it writes nothing, including the run row
-itself. Today every stage reports which task builds it, which is the honest
-answer: the state machine, the resumability and the budget accounting are
-built, and the stages that reason over the corpus are not.
+itself. The `pull`, `extract` and `tag` stages are built; the rest (`score`,
+`analogies`, `gap`, `seed`) report which task builds them. In production the
+`orchestrator` service runs the cycle as a daemon, daily
+([features/synthesis.md](../features/synthesis.md)).
 
 Drop `--dry-run` and it records a real run. `--stop-after <stage>` stops part
 way and leaves the run resumable, so the next invocation continues rather than
@@ -453,7 +462,8 @@ Three behaviours to expect, all deliberate:
 Everything on Meridian's side is built and tested; what remains is configuration
 in a Cloudflare account. The pieces that exist:
 
-- ✅ `/mcp` — the MCP server with four read tools, mounted on the API
+- ✅ `/mcp` — the MCP server with its read tools, mounted on the API
+  (the list is in [features/mcp.md](../features/mcp.md))
 - ✅ `meridian_guest` — a database role that cannot read your token table
 - ✅ `meridian_core/tokens.py` — scoped credentials with tool scope and expiry
 
@@ -560,13 +570,15 @@ for here are the best evidence about which curated tool to build next.
 | Still open | Task |
 |---|---|
 | Mapping an Access identity to a grant | `P3-06`, `P3-10` |
-| Per-token rate limiting and an audit log | `P3-11` |
+| Calling the per-grant audit log and per-token rate limit from the MCP server (`meridian_core.grants` has both) | `P3-11` |
 
 **Do not set `MERIDIAN_MCP_ALLOW_ANONYMOUS` on anything reachable.** It is for a
 loopback development machine. With it set on an exposed host, every tool answers
 anyone who can reach the port.
 
-Issuing a credential, once the tunnel exists:
+Issuing a credential, once the tunnel exists: **Admin → Assistant access**, or
+`docker compose exec api python -m api.tokens issue <name> --profile reader`
+([connecting-an-assistant.md](connecting-an-assistant.md) §4). The same, by hand:
 
 ```python
 # from a shell on the server: docker compose run --rm api python

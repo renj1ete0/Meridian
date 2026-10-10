@@ -134,8 +134,8 @@ properties are load-bearing and none of them are obvious.
 ```
 
 Three rules. `tests/unit/test_compose_topology.py` enforces the first
-generically — `test_the_worker_is_the_only_writer_on_egress` fails if any new
-service sits on both networks — and the other two **only for `crawl4ai`**, by
+generically — `test_only_named_services_write_from_egress` fails if any service
+not on its allowlist sits on both networks — and the other two **only for `crawl4ai`**, by
 name. Your sidecar needs its own two assertions there; copy
 `test_the_browser_holds_no_credentials` and `test_the_browser_publishes_no_ports`
 and point them at your service. A rule nothing checks is a rule that lasts until

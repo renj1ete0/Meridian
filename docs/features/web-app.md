@@ -20,7 +20,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
 | `/growth` | `GrowthPage` | How the corpus grew: pages per topic per day, passages, sites, graph, map; 7 days, 30 days or all, filterable by topic | `CorpusGrowth.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
-| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminDisplay.dc.html` |
+| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, possible duplicates, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminDisplay.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |
 
 The **Ask panel** (`explore/AskPanel.tsx`) is a toggle on every reading surface except Admin.
@@ -329,7 +329,8 @@ honest "don't know".
   click landed on an unrelated screen. Now: seed and gazetteer proposals open their sections, a
   run summary the run log, an alert the section for its condition (`ALERT_SECTION`, read against
   the keys `alerts.py` raises; the disk has no page and gets no action), and a possible
-  duplicate the node it created, since no screen decides a merge yet (`B-182`). Every type the
+  duplicate Admin › Possible duplicates, where the pair is decided (`B-202`; until then it
+  opened the node it created). Every type the
   database allows has an entry in `ACTION_FOR_TYPE`, and a test fails until a new one is given
   a place. The pill asks "is the crawl all right?", so it opens Crawl health, or the run log
   when the last run failed.
@@ -551,7 +552,7 @@ shown as zeros.
 
 **It leads back** (`B-177`). Until `v0.166.7` the landing passed this list an empty set of
 nodes, though the node page had recorded every node opened in `localStorage` since `P6-01`, so
-the half of the list the design draws as "Silver Zone · NODE · Yesterday" never appeared.
+the half of the list the design draws as "<a node> · NODE · Yesterday" never appeared.
 Up to three recent nodes now show, each with when it was opened. Saved views open through one
 function, `hrefForView` (`explore/views.ts`): a node view on its node with its filters, a
 search view on Find with its words and filters. Before it, a node view was a dead click on the
@@ -614,8 +615,8 @@ the corpus. Notes gain "show all" while some are not shown, up to the route's ce
 past that the Markdown export is the notebook. The API client now treats a 204 as an answer
 with no body. A note can be rewritten in place from the landing (`B-201`): "edit"
 opens its title and text, saved through the existing edit route, and a refusal keeps the editor
-open with the reason. Removing a note is not built: a note is a node in the graph, and removing
-one needs a decision about its links.
+open with the reason. A note is withdrawn rather than removed (`B-201`, see [Notes](#notes)): a
+note is a node in the graph, and withdrawing keeps its links for when it is put back.
 ### Source pages
 
 The first screen where the corpus reads as documents rather than results (`P6-14`, `P6-15`):
@@ -668,7 +669,7 @@ this corpus's own copy at the caption's page, which is what §5.4 keeps raw file
 rot is the binding reason and a local copy keeps a citation checkable years later.
 
 <a id="figures-furniture"></a>**Logos and icons are not figures** (`B-156`). Extraction stores every
-image a page carries, and on a sample of 40,000 stored figures about half were the page's chrome:
+image a page carries, and on a large sample of stored figures about half were the page's chrome:
 logos, social icons, close buttons, seals, banners. `figures.is_furniture` drops an inline
 (`data:`) image, an SVG, an image whose path names such a thing, and one whose short label does
 (a long label that mentions a logo is a description). A random sample of what it dropped held
@@ -929,7 +930,7 @@ with an expiry that removes itself. Both are on Topic weights too; here they are
 with expired boosts kept in view, since an expired boost on the row is the record of what was
 boosted and until when.
 
-**A boost belongs to a topic.** The mock's table has a Term column ("covered walkway 1.8×"),
+**A boost belongs to a topic.** The mock's table has a Term column (a term at "1.8×"),
 and this system has no term boosts: §10's boost is a multiplier on one topic's weight with an
 expiry, stored on the topic row. The column is left out rather than filled with the topic name
 twice, which would suggest a finer control than exists. **A factor and an expiry, or neither**:
@@ -990,14 +991,26 @@ while stages are unbuilt and the interesting one once they are not. Zero written
 real answer.
 
 
-**It goes back, and reads cleanly** (`B-198`). It showed the newest 25 runs of 422 with no way
-past them; "Older runs (N more)" now pages back (`/api/admin/runs?offset=`), and the run in
+**It goes back, and reads cleanly** (`B-198`). It showed the newest 25 runs of several hundred with no
+way past them; "Older runs (N more)" now pages back (`/api/admin/runs?offset=`), and the run in
 flight is still named from among the newest. Counts are singular when they are one ("1 edge"),
 and the status line drops a stage that repeats the status ("done", not "done · done"). A run
 deferred because the relay holds its prompt was recorded as "every agent for
 'relation_extraction' refused: …", which reads as a failure; when every reason is a relay
 waiting (`RelayPending`), the reason now reads "waiting for the relay to answer", with the file
 it waits for.
+### Possible duplicates
+
+A pair entity resolution could not decide is decided here (`B-202`): both nodes side by side
+with their evidence, then merge or keep apart. A merge is reversible from the same row, and the
+bell's "Decide" opens this section. The mechanism is in
+[knowledge-graph.md](knowledge-graph.md).
+
+### Assistant access and Display
+
+Assistant access issues and revokes MCP tokens ([mcp.md](mcp.md)); Display sets the zone every
+time is shown in ([operations.md](operations.md#display-time-zone)).
+
 ### Gazetteer approvals
 
 §5.6 ends "approve in the UI — a two-minute weekly task". The harvest files terms by the

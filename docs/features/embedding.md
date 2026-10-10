@@ -11,8 +11,10 @@ embedded first.
   `reembed.py`, `fetchmodel.py`; `packages/meridian_core/meridian_core/chunks.py` (tiers),
   `embedder.py` (client), `embedtext.py` (what text is embedded)
 - **Tasks:** `P2-01`, `P2-17`, `P2-19`, `B-25`, `B-49`, `B-61`, `B-66`, `B-75`, `B-76`,
-  `B-89`, `B-127`, `B-129`–`B-131`
+  `B-89`, `B-127`, `B-129`–`B-131`, `B-133`, `B-136`, `B-151`, `B-152`, `B-160`, `B-161`, `B-195`,
+  `B-203`
 - **Decisions:** [ADR 0001](../adr/0001-production-runs-on-a-server.md),
+  [ADR 0006](../adr/0006-stricter-triage-for-very-long-documents.md),
   [ADR 0007](../adr/0007-half-precision-vector-index.md)
 
 ## How it works
@@ -71,7 +73,9 @@ crawl's bottleneck, and those passages were cut mid-row anyway; a re-cut (`worke
 
 <a id="backpressure"></a>**Backpressure** (`B-61`). The crawl pauses while more than
 `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` passages in the `first` and `then` tiers wait. The `last`
-tier does not count, or the crawl would pause for good behind off-topic text.
+tier does not count, or the crawl would pause for good behind off-topic text. Claiming resumes
+below 80% of the ceiling (`RESUME_SHARE`), and Crawl health reads the pause as `paused`, not
+`stalled` (`B-203`).
 
 <a id="the-vector-index"></a>**The vector index** (`B-136`, ADR 0007). Passages are found by an
 HNSW index built over half-precision copies of the vectors,

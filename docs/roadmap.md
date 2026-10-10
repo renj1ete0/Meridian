@@ -10,12 +10,12 @@ one layer. Each phase should run unattended before the next begins.
 | Phase | Deliverable | Done when | State |
 |---|---|---|---|
 | **0** | `meridian_core` models, migrations, seed script, cold-start config | `make migrate && make seed` yields a clean, **empty** database ready to crawl — config only, no content | closed |
-| **1** | Queue, fetcher, extractor, raw retention | Runs 48h unattended without failing. The result becomes the first development corpus | built; **the 48h run has not happened** |
-| **2** | Embeddings, novelty gate, hybrid search, minimal Explore | **Go/no-go** — is searching the corpus already useful with no model involved? | built; the checkpoint waits on phase 1's run |
-| **3** | MCP server, read tools only | An external agent can retrieve usefully | built; remote access waits on a Cloudflare account |
-| **4** | Graph tables, entity resolution, MCP write tools, validation | **The loop closes here** | spine built — store, resolution, write tools, routing, run state, model client. **No run has written an edge**: `P4-16`'s prompt and parse are what close it |
-| **5** | Frontier expansion, coverage scoring, scheduling, alerting | Now autonomous | scheduler, alerting, the gazetteer and the Telegram control surface built; coverage needs edges to exist |
-| **6** | Graph UI, node detail, annotation, admin surfaces | The payoff layer | everything that does not need the graph is built |
+| **1** | Queue, fetcher, extractor, raw retention | Runs 48h unattended without failing. The result becomes the first development corpus | built; a 12-hour checkpoint run was made, **the 48h run has not happened** |
+| **2** | Embeddings, novelty gate, hybrid search, minimal Explore | **Go/no-go** — is searching the corpus already useful with no model involved? | built, with the question-set runner (`P2-22`); the go/no-go (`P2-09`) waits on the question set being reviewed and run against the live corpus |
+| **3** | MCP server, read tools only | An external agent can retrieve usefully | built: read tools, tokens and grants, served at `/mcp`; remote access through Cloudflare waits on an account |
+| **4** | Graph tables, entity resolution, MCP write tools, validation | **The loop closes here** | built — store, resolution, write tools, routing, run state, model client, and the stages' prompt and parse (`P4-16`). The loop has closed: the relay agent wrote the first entities and edges through the validated tools. Synthesis at corpus scale waits on a paid model or a model on the server (`B-135`) |
+| **5** | Frontier expansion, coverage scoring, scheduling, alerting | Now autonomous | scheduler, alerting, diversity seeding, the gazetteer and the Telegram control surface built; per-topic and per-place coverage are Gaps sources. Coverage per attribute (`P5-03`) needs attribute values at scale; entity co-occurrence (`P5-01`) has no consumer yet |
+| **6** | Graph UI, node detail, annotation, admin surfaces | The payoff layer | built: Find and the answer page, the Map, the node workspace, routes, Gaps, Growth, notes, notifications and Admin. The Ask panel is built but has not yet been run against a model (`P6-06`) |
 | **7** | Attribute audit, analogies, contradictions, temporal flags, enrichment, reports | Full design | not started |
 
 The phases are not being finished in order, deliberately — §"build thin end-to-end
@@ -49,4 +49,7 @@ market share of X by deployment?".
 
 The half that is still owed is the other output: §14.1's held-out question set, which is
 the only real regression test this system will ever have. Phase 2's go/no-go is
-supposed to be judged against it, and it does not exist yet.
+supposed to be judged against it. It is drafted in `eval/questions.yaml`, and the runner
+exists (`P2-22`), but it is not finished: the operator's own questions are in, the
+drafted ones still await review (`P0-15`), and no graded run against the live corpus has
+been made.

@@ -10,7 +10,7 @@ topic prototypes.
 - **Code:** `packages/meridian_core/meridian_core/places.py`, `placenames.py`,
   `gazetteer.py`, `models/gazetteer.py`; `services/worker/worker/places.py`, `harvest.py`,
   `ner.py`
-- **Tasks:** `P2-23`, `P5-02`, `B-123`
+- **Tasks:** `P2-23`, `P5-02`, `P6-13`, `B-123`, `B-209`
 
 ## How it works
 
@@ -119,8 +119,8 @@ change re-examines every source through the basis fingerprint.
   codes, since nothing asks questions at that level yet): a document about a state's regulation
   names the country too rarely to tag otherwise.
 - Names match case-sensitively as proper nouns, plus all-caps for headings and some PDFs.
-  `AMBIGUOUS` holds forms routinely meaning something else (common names, a US state that is
-  also a country, a word that is also a bird). Demonyms and adjectives are not matched: most are
+  `AMBIGUOUS` holds forms routinely meaning something else (common names, a state that shares
+  a country's name, a word that is also a bird). Demonyms and adjectives are not matched: most are
   also a language's name, and quoting a foreign-language title does not make a document about
   that country. `NOT_PLACES` (a treaty or newspaper named for a city) are consumed first. The
   matcher tries longest names first, so a containing name or phrase wins, and uses lookarounds
@@ -232,9 +232,12 @@ resolution trusts.
 
 ## Operating it
 
-- **Admin → Gazetteer approvals** lists pending terms and approves or rejects them. Approving a term
-  shows whether it will actually load: a surface form that two rows share is withheld from
-  the matcher.
+- **Admin → Gazetteer approvals** lists terms under three tabs (waiting, approved, turned
+  down), a page of 100 at a time, and approves, rejects or restores them one by one or in bulk;
+  a term's type can be corrected in place. Approving a term shows whether it will actually load:
+  a surface form that two rows share is withheld from the matcher. A search box finds a term by
+  any part of its name (`B-209`); while it is set, the pager counts the matches and the tab
+  counts stay the whole queue's.
 - `python -m worker.places` reports tags it would change; `--apply` writes.
 
 ## Failure modes and traps

@@ -47,8 +47,8 @@ latency and no protection). A NULL tool list grants **nothing**, not everything.
 verifies the token; each tool then checks that this token is scoped to it.
 
 **Profiles** are fixed sets of tools, held to the tools the server defines by a test
-(`B-138`): `reader` (search, source details, what is new, overview), `analyst` and `operator`
-(both add read-only SQL).
+(`B-138`): `reader` (every tool in the table above except `run_readonly_query`), `analyst` and
+`operator` (both add read-only SQL).
 
 **Grants** (`grants.py`, `P3-06`). Access for someone other than the operator is granted to a
 *person*, with a named profile (`reader`, `analyst`, `operator`), never a free-form tool list.
@@ -114,8 +114,8 @@ instruction position.
 **What an assistant needs to cite and to recover** (`B-189`, measured on the live corpus by
 calling every tool in-process):
 
-- Each result carries `page_unit` beside `page_or_offset`. It was computed and dropped, so 30223
-  on a web page and 22 in a PDF looked alike. `language` and `places` came with it. A test reads
+- Each result carries `page_unit` beside `page_or_offset`. It was computed and dropped, so a
+  character offset on a web page and a page number in a PDF looked alike. `language` and `places` came with it. A test reads
   the hit's fields from the dataclass, and a new one fails until it is passed on or named as
   left out.
 - `framed` names the title, the page where the source counts pages, and the passage id beside
@@ -125,8 +125,8 @@ calling every tool in-process):
 - Arguments are typed. `source_tier` is the database's enum, dates are `YYYY-MM-DD`, `limit`
   is at most 50, and every parameter has a description in the input schema. A bad value is
   refused before any search, with the argument named in the message; before, a date in another
-  form surfaced as "Error executing tool search_chunks". At 500 results a call returned 444 KB;
-  each passage still appears twice (`results` and `framed`), about 3 KB a passage.
+  form surfaced as "Error executing tool search_chunks". Each passage still appears twice
+  (`results` and `framed`), about 3 KB a passage, which is one reason for the cap.
 - An empty `find_route` or `list_contested` carries a `note` saying what empty means: not
   evidence that subjects are unrelated, or that sources agree.
 
@@ -137,8 +137,7 @@ needs no query and no embedder.
 **It hands over what search would, and nothing else** (`B-188`). Until `v0.166.1` it filtered only
 copies and superseded passages, so an assistant walking forward was given quarantined and
 unscreened text that `search_chunks` refused (§2.5: only `cleared` reaches a model), plus
-junk-tier passages. Measured on the live corpus: 7,005 quarantined and about 78,900 unscreened
-passages were reachable. Both paths now take their predicate from one definition,
+junk-tier passages, in numbers measured on the live corpus that were far from small. Both paths now take their predicate from one definition,
 `readable_passage_conditions()` in `meridian_core.search`, and a test reads the server's source
 and fails if a tool selects passages without it. One consequence of walking by id: a passage
 still unscreened when the walker passes it is not handed over later, when its source clears.

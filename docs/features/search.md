@@ -2,14 +2,16 @@
 
 Find is hybrid search over every live passage: a lexical arm (Postgres full-text) and a
 vector arm (pgvector, using the same model the corpus was embedded with), fused by
-reciprocal rank. Filters (topic, place, tier, date, kind) apply inside both arms. Every hit
+reciprocal rank. Filters (topic, place, source tier, language, publication date) apply inside
+both arms. Every hit
 carries its source, its age, and the rank each arm gave it. A search that could run only one
 arm says so.
 
 - **Code:** `packages/meridian_core/meridian_core/search.py`, `answer.py`, `watch.py`,
   `stats.py`, `ageing.py`; `services/api/api/search_service.py`,
   `routes/explore.py`
-- **Tasks:** `P2-06`, `P2-07`, `P2-17`, `P2-20`, `B-65`, `P6-43`
+- **Tasks:** `P2-06`, `P2-07`, `P2-17`, `P2-20`, `B-65`, `P6-43`, `B-152`, `B-168`, `B-173`,
+  `B-174`, `B-175`, `B-178`, `B-190`, `B-194`, `B-206`
 
 ## How it works
 
@@ -30,8 +32,8 @@ are thin. Hits with no place are split into "examined, about no place" and "not 
 No model writes anything on this page.
 
 **Watched questions** (`P6-43`). A saved view counts what has arrived since it was last opened
-that matches its own words and topic filter, using the lexical arm only, so the count is
-cheap for every view at once.
+that matches its own words and every filter it stores, using the lexical arm only, so the count
+is cheap for every view at once.
 
 **Corpus counts** (`/api/explore/stats`): documents, nodes, edges and contested pairs, counted
 exactly rather than estimated.
@@ -72,7 +74,8 @@ and what is safe to filter on is the module's decision, not each caller's.
 - **Topics and places match by overlap** (`P2-14`, `P2-23`). A source carries every topic and
   place it belongs to, so naming two means "either", which is what a reader narrowing a search
   expects; an AND across topics would return almost nothing, since a document rarely sits
-  squarely in two. The SQL is `&&` (array overlap): `= ANY` is the other way round and `IN`
+  squarely in two. Where two topics meet is asked for explicitly: `topic_match=all`
+  (`topics_all`, `B-72`) keeps only sources carrying every named topic. The SQL is `&&` (array overlap): `= ANY` is the other way round and `IN`
   does not apply to an array column, and both are easy to reach for. Naming a country finds its
   cities' sources too, because a city is only ever tagged beside its country.
 - **NULL labels are excluded by a filter, not by its absence.** A source whose `topic_labels`
@@ -113,8 +116,8 @@ exactly the one-step ranking.
 
 <a id="questions"></a>**A whole question finds nothing lexically, and that is left alone.**
 `websearch_to_tsquery` ANDs every word, so a question asked as a sentence (the Ask panel, an
-assistant over MCP, the held-out set) usually matches no passage: on 2026-10-08, 21 of the 41
-held-out questions had no lexical hit in their top ten, and search was the vector arm alone.
+assistant over MCP, the held-out set) usually matches no passage: on 2026-10-08, about half of
+the held-out questions had no lexical hit in their top ten, and search was the vector arm alone.
 An OR fallback was measured and rejected: the strict matches first, then passages matching
 *any* of the words, ranked by `ts_rank_cd`, whenever the strict query fell short of the
 candidate depth. On 18 questions written for the test (not the held-out set), it changed five
@@ -154,7 +157,7 @@ side, and a recall benchmark at k=100 was capped at 40% by arithmetic. The multi
 because a filtered query spends candidates on rows the filter discards: the index cannot see
 `_conditions()`, so `ef_search` has to cover the misses as well as the hits.
 
-**Doubling was not enough** (`B-152`). Measured on a live corpus of about 850,000 passages, the
+**Doubling was not enough** (`B-152`). Measured on a live corpus, the
 arm returned on average 43 of 100 with an official-source filter, 27 with a peer-reviewed one,
 and about one with a single topic: a topic-filtered Find was running on words alone without
 saying so. The arm now also scans on past what its filters remove; see
@@ -176,8 +179,9 @@ Passages shorter than 40 characters (`VECTOR_MIN_CHARS`) are left out of the vec
 (`B-190`). The chunker merges a short piece into its neighbour, but only within a stretch of
 text: where page furniture was cut out (`B-43`), a page number ("iii") or a lone table cell
 ("$176,000") is stranded and kept as its own passage, because merging across the cut would make
-the passage something other than a slice of the text. 23,537 live passages were under 40
-characters on 2026-10-10, 21,633 of them embedded. A fragment's vector sits near everything:
+the passage something other than a slice of the text. On 2026-10-10 a few percent of live
+passages were under 40 characters, nearly all of them embedded. A fragment's vector sits near
+everything:
 
 | Query (vector arm, top 10) | under 40 characters, before | after |
 |---|---|---|
@@ -358,7 +362,8 @@ and forgotten in the DTO fails rather than being dropped on the way out.
   date, and either default is wrong for the other kind.
 - **A source's chunks page by `chunk_index`**, a genuine offset in document order, unlike search,
   where an offset into a fused ranking means something weaker. It is how a reader sees what
-  surrounds a hit.
+  surrounds a hit: `around=<chunk id>` (`B-178`) starts the window a few passages before that
+  chunk, so a passage link opens its source on the passage, in its context.
 - **A figure's `raw_url` is None unless the deployment serves raw files** (`P6-14`). §12.5 asks
   for page-accurate links to raw files, and a caption with a dead link is worse than a caption
   alone.

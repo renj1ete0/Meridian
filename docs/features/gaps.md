@@ -6,7 +6,7 @@ search seed, or boost a topic. Every action is reversible and leaves a `steering
 
 - **Code:** `packages/meridian_core/meridian_core/gaps.py`; `services/api/api/routes/gaps.py`,
   `cache.py`; `web/src/explore/GapsPage.tsx`
-- **Tasks:** `P6-36`, `P6-37`, `P6-42`, `P2-23`, `P2-24`, `B-121`
+- **Tasks:** `P6-36`, `P6-37`, `P6-42`, `P2-23`, `P2-24`, `B-97`, `B-121`, `B-184`
 
 ## How it works
 
@@ -24,7 +24,8 @@ list reads every source and ranks the results together.
 | `question-set` | Items of the held-out set that scored low in the newest run |
 
 A source that the design names but nobody has built is listed as *pending*, so an empty list
-never reads as "no gaps of that kind".
+never reads as "no gaps of that kind". Every source the design names is built today, so none is
+pending.
 
 **Actions** are Admin routes: `POST /api/admin/gaps/seed` queues a search; `POST
 /api/admin/gaps/boost` boosts a topic for a while. The list itself is
@@ -32,8 +33,8 @@ never reads as "no gaps of that kind".
 
 ## Design choices
 
-- **Written for people.** Titles and reasons name a topic in words ("on demand bus", via
-  `searchseeds.topic_words`) and group digits ("2,168"); ids, subjects and evidence keep the
+- **Written for people.** Titles and reasons name a topic in words (a hyphenated slug reads as
+  spaced words, via `searchseeds.topic_words`) and group digits ("1,234"); ids, subjects and evidence keep the
   topic's stored name, which actions and links need.
 
 - **The held-out rule shapes the question-set actions.** A question from the evaluation set is
@@ -104,6 +105,13 @@ every read.
 A seed from Gaps is queued at the priority `worker.seedsearch` gives its own queries, so a
 person's seed neither jumps nor trails the crawl's own questions, and is logged under the same
 `seed` field as `POST /api/admin/seeds`.
+
+### On the page
+
+The page groups the list as All, Coverage, Searches and Question set, and the group is in the
+link (`?kind=`), so Back and a shared link keep it (`B-184`). Coverage and the question set lead;
+search yield is folded below them, since it is a symptom rather than a cause (see
+[Ranking](#ranking)). An action's result links to where it can be undone.
 
 ## Failure modes and traps
 

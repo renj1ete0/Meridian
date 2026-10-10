@@ -12,7 +12,9 @@ page about one of the topics.
   `packages/meridian_core/meridian_core/searchseeds.py`, `hostscores.py`,
   `citedpapers.py`, `diversity.py`, `translations.py`, `tiering.py`
 - **Tasks:** `P1-06`, `P1-14`, `P1-28`, `P1-34`, `P5-05`, `B-48`, `B-51`, `B-52`, `B-58`,
-  `B-90`–`B-92`, `B-103`–`B-118`
+  `B-90`–`B-92`, `B-103`–`B-118`, `B-150`, `B-155`
+- **Decisions:** [ADR 0015](../adr/0015-followed-links-follow-the-evidence.md),
+  [ADR 0016](../adr/0016-proven-by-following.md)
 
 ## How it works
 
@@ -541,5 +543,8 @@ at the floor when nothing recommends it.
 ## Tests
 
 `tests/unit/test_prefilter*.py`, `test_searchseeds.py`, `test_sitemaps.py`,
-`test_topicmatch.py`, `test_hostscores.py`, `test_cited_paper_rank.py`;
-`tests/integration/test_requeue*.py`, `test_sitemapmine.py`, `test_resolve_doi*.py`.
+`test_topicmatch.py`, `test_hostscores.py`, `test_cited_paper_rank.py`, `test_resolve_doi.py`,
+`test_vouched_hosts.py`, `test_translations.py`, `test_diversity.py`;
+`tests/integration/test_requeue*.py`, `test_sitemapmine.py`, `test_seedsearch.py`,
+`test_host_scores.py`, `test_link_vouches.py`, `test_cited_papers.py`, `test_translations.py`,
+`test_diversity_graph.py`.

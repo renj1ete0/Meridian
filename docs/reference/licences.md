@@ -141,6 +141,10 @@ Using a GPL program inside a container does not license the application: the
 obligation is to offer the source of *those programs* if you redistribute the
 image, which Debian and Alpine already satisfy upstream.
 
+The worker image adds one such package itself: `poppler-utils`, whose GPL programs
+`pdftotext` and `pdfinfo` are the PDF extractor. They are run as separate processes from
+Debian's unmodified package, never linked, so the same reading applies.
+
 This matters only if Meridian's images are distributed to third parties. Today
 they are pushed to a private registry for one operator's own machines
 (scaffold §5), which is not distribution in the sense that triggers anything.

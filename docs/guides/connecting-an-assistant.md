@@ -55,7 +55,9 @@ docker compose exec api python -m api.tokens issue laptop-claude-code --profile 
 ```
 
 - `--profile reader` (default) can search, read source details, list what is new and see the
-  overview. `analyst` adds read-only SQL. No profile can write.
+  overview, and read what the site shows: nodes and routes in the graph, a term's
+  neighbourhood, map areas, gaps, contested claims and growth. `analyst` and `operator` add
+  read-only SQL. No profile can write.
 - `--days 90` (default) sets the expiry; `--days 0` never expires (revoke it when done).
 - The token is printed **once**, with ready-to-paste setup for Claude Code and Gemini CLI.
   Only its hash is stored.

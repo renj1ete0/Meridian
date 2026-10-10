@@ -9,7 +9,7 @@ deletes what was recorded (§2.5).
 - **Code:** `packages/meridian_core/meridian_core/steering.py`, `steering_proposals.py`,
   `mapsteer.py`; `services/worker/worker/steerproposals.py`, `commands.py` (Telegram);
   `services/api/api/routes/steering_proposals.py`, `routes/admin.py`
-- **Tasks:** `P6-12`, `P6-35`, `P6-38`, `B-64`
+- **Tasks:** `P6-12`, `P6-35`, `P6-38`, `B-26`, `B-64`, `B-211`
 
 ## How it works
 
@@ -18,7 +18,7 @@ by clamping and redistributing until every topic sits within its bounds, so a fl
 silently violated when one topic dominates.
 
 **Boosts** multiply a topic's weight until an expiry. They are applied at read time and never
-cleared: an expired boost simply stops counting, so nothing has to remember to remove it.
+cleared automatically: an expired boost simply stops counting, so nothing has to remember to remove it.
 
 **Status.** Paused, maintenance and archived topics leave the pool; their stored weight is
 kept, so returning is a status change.
@@ -159,7 +159,9 @@ any reason given, and keeps the pass from proposing for that topic again the nex
 ## Operating it
 
 - **Admin → Topic weights** sets weights, floors and status; **Admin → Pins & boosts** pins
-  topics and ends boosts; **Admin → Proposals** accepts or rejects; **Admin → Seeds** queues
+  topics and ends boosts, lists running boosts first, says when a new boost replaces one still
+  running, and runs an expired boost again from a filled-in form or clears it (`B-211`);
+  **Admin → Proposals** accepts or rejects; **Admin → Seeds** queues
   searches by hand.
 - From a phone, Telegram's `/weights`, `/boost`, `/pause` and `/seed` do the same
   ([operations.md](operations.md)).

@@ -171,7 +171,9 @@ How much of what a host serves is about the topics (`B-48`). Derived wholesale b
 `worker.hostscore` from the content labels and the pending queue, and read by the fetch loop to
 decide whether a link is worth queueing. The loop never computes it, so no model or vector is
 anywhere near the crawl. `vouched` counts the other hosts with an on-topic page linking here
-(`B-150`).
+(`B-150`). `followed_examined` and `followed_on_topic` (`B-155`) count only the pages reached
+by following a link or a sitemap: what predicts the next followed page, which pages a search
+picked do not.
 
 ## Link vouches
 
@@ -279,6 +281,9 @@ every snapshot (§11.11).
 - **The source-tier mapping rides in the global `fetch_policy` row**, as one blob of domain
   policy read with the fetch settings on every request; leaving it in a file the worker
   re-reads would make the YAML authoritative again.
+- **The display zone rides there too** (`display_timezone` in the global row's `settings`, ADR
+  0009). Every stored instant is UTC; this names the IANA zone people read times in, changed
+  from Admin. An unknown or missing value falls back to the default (GMT+8).
 - **No agent may be registered as `HUMAN`.** `produced_by = HUMAN` marks the reader's own notes
   (`P6-05`, §12.5), and that layer stays distinguishable only while nothing else can write it.
 
@@ -321,6 +326,12 @@ nobody saw.
   domain: a large site is not judged per page, and a domain cleared on Monday does not have one
   page quarantined on Friday because it quoted something. `clean_fetches` counts consecutive
   unflagged fetches and resets like the other counters.
+
+### Agents
+
+One row per model the orchestrator or the Ask panel may call. **`route_order`**
+(`B-137`, ADR 0002) is the routing order, lowest first; rows without one follow every row that
+has one, by quality tier. A newly seeded row needs an order, or a test fails.
 
 ### Grants and their audit
 
@@ -379,6 +390,10 @@ Areas (`P6-30`) are derived data, rebuilt wholesale by `worker.areas`. Reads use
 build; older builds are removed except the previous one, which the next build reads for stable
 positions. Deleting them breaks no promise that nothing is deleted: an area cites nothing and is
 re-derived from the passages. See [features/map.md](../features/map.md).
+
+`area_build_history` (`B-140`, ADR 0005) keeps each build's size (passages, regions, areas,
+sub-areas, weak areas) after the build itself is pruned, so the growth page can show how the
+map grew. It has no foreign key to `area_builds` on purpose: its rows outlive the builds.
 
 ## Runs and reports
 

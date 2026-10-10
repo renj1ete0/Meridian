@@ -10,7 +10,7 @@ nothing else.
   `packages/meridian_core/meridian_core/runs.py` (state), `proposals.py` (prompts and
   parsing), `framing.py`, `routing.py`, `provider.py`, `budget.py`, `writes.py`,
   `validation.py`, `trust.py`
-- **Tasks:** `P4-04`–`P4-18`, `B-63`
+- **Tasks:** `P4-04`–`P4-18`, `B-36`, `B-40`, `B-63`, `B-137`, `B-162`, `B-170`, `B-171`, `B-204`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md),
   [ADR 0004](../adr/0004-hosted-claude-generation.md)
 
@@ -28,8 +28,8 @@ at a time (a unique partial index). A heartbeat tells a crashed run from a live 
 - **tag** tags attributes, then advances the mark. Its prompt lists, under each active
   attribute, up to `VALUES_IN_PROMPT` (8) wordings already in the graph, most used first
   (`B-170`): the prompt asked for "the same wording for the same value" but never showed the
-  wording, and after a few dozen values `operating_environment` held both "road" and
-  "public road", `autonomy_level` both "driverless" and "unmanned". An attribute whose values
+  wording, and after a few dozen values single attributes held two wordings of one value (a
+  term and the same term with a qualifier, or two synonyms). An attribute whose values
   are all phrased differently discriminates nothing.
 - `score`, `analogies`, `gap` and `seed` are named stages that say which task builds them.
 
@@ -104,9 +104,11 @@ vocabularies in the prompt are read from the schema's own constraints.
 `--dry-run` and `--once` flags §11.10 asks for.
 
 - **It lives in the worker package, not `services/orchestrator/`.** When it was written the
-  stages were not built, and a separate service would have meant a Dockerfile, a compose entry,
-  a release-script line and a healthcheck for a process with nothing to do. The worker package
-  already ran `python -m worker.<x>` entry points; moving the module is a rename.
+  stages were not built, and a separate package would have meant a second codebase for a
+  process with nothing to do; the worker package already ran `python -m worker.<x>` entry
+  points. `services/orchestrator/` now holds the `orchestrator` service's Dockerfile (`P4-17`)
+  and empty placeholder folders; the image installs the worker package with the `agent` extra and runs
+  `python -m worker.orchestrate --daemon` (see [the daemon](#daemon)).
 - **`--dry-run` is a rolled-back transaction, not a flag each stage checks.** A flag one stage
   has to remember is a flag one stage will forget. The whole cycle runs in a transaction that is
   rolled back unconditionally, and the journal records and prints every intended call.
@@ -371,4 +373,4 @@ orchestrator.
 
 `tests/integration/test_orchestrate.py`, `test_runs.py`, `test_budget.py`,
 `test_provider.py`, `test_routing.py`; `tests/unit/test_framing.py`, `test_proposals.py`,
-`test_orchestrator_image.py`.
+`test_references.py`, `test_orchestrator_image.py`.

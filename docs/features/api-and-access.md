@@ -5,11 +5,11 @@ One FastAPI service serves the reader (`/api/explore/*`), the control surface
 boundary**: explore routes get a read-only database session, admin routes get a writable one
 behind an identity gate, and nothing under `/api/explore` can open a writable session.
 
-- **Code:** `services/api/api/main.py`, `deps.py`, `access.py`, `cache.py`,
-  `routes/explore.py`, `routes/admin.py`, `routes/graph.py`, `routes/gaps.py`,
-  `routes/connect.py`, `routes/neighbourhood.py`, `routes/steering_proposals.py`;
-  `packages/meridian_core/meridian_core/db.py`
-- **Tasks:** `P2-07`, `P3-07`, `P3-08`, `P6-13`, `B-121`
+- **Code:** `services/api/api/main.py`, `deps.py`, `access.py`, `auth.py`, `cache.py`,
+  `tokens.py`, `routes/explore.py`, `routes/admin.py`, `routes/graph.py`, `routes/gaps.py`,
+  `routes/connect.py`, `routes/neighbourhood.py`, `routes/steering_proposals.py`,
+  `routes/growth.py`, `routes/tokens.py`; `packages/meridian_core/meridian_core/db.py`
+- **Tasks:** `P2-07`, `P3-07`, `P3-08`, `P6-13`, `B-121`, `B-145`, `B-146`, `B-201`, `B-202`
 
 ## How it works
 
@@ -118,9 +118,11 @@ Without `PG_GUEST_URL` the tools that need it are absent rather than failing at 
 
 `/api/admin/*` (`P6-13`) is the only surface that changes anything.
 
-- **Nothing deletes, except saved views.** Topics archive by status, leaving every node, edge and
-  tag they produced, so returning is a status change, not a re-crawl. Rejected gazetteer terms
-  stay as tombstones, because the harvest re-reads the same documents and a deleted row comes
+- **Nothing deletes, except saved views and pending seeds.** Topics archive by status, leaving
+  every node, edge and tag they produced, so returning is a status change, not a re-crawl.
+  Rejected gazetteer terms stay as tombstones, because the harvest re-reads the same documents
+  and a deleted row comes back. A note is withdrawn, not deleted (`B-201`, ADR 0020): it leaves
+  every list, panel, export and graph walk, keeps its row and links, and `…/restore` puts it
   back. A saved view holds no evidence and nothing depends on it, so it is deleted.
 - **Gazetteer curation** (§5.6). Approving reports what the matcher will do: a row two others
   collide with is withheld from the `EntityRuler`, so "approved" alone could hide a term that
@@ -177,6 +179,13 @@ Without `PG_GUEST_URL` the tools that need it are absent rather than failing at 
 - **Steering from the map** (`P6-35`) writes through existing steering (a boost with an expiry,
   a search, a saved view), so it is reversible and logged, and refuses in words.
 - **Asking the graph** is here because it writes a thread and spends tokens.
+- **Possible duplicates** (`B-202`) are decided here: merge (reversible from the same row with
+  `…/undo`) or keep apart. See [duplicates.md](duplicates.md).
+- **The display time zone** (`B-145`, ADR 0009) is set with `PUT /settings/display-timezone`
+  and read by everyone from `/api/explore/settings`. Stored times do not move.
+- **MCP tokens** (`B-146`) are issued, listed and revoked under `/api/admin/tokens`, the same
+  mechanism as `python -m api.tokens`; the secret is in the issuing response only. See
+  [mcp.md](mcp.md).
 
 ### Explore routes
 
@@ -222,5 +231,6 @@ Without `PG_GUEST_URL` the tools that need it are absent rather than failing at 
 
 ## Tests
 
-`tests/integration/test_explore_api.py`, `test_admin*.py`, `test_guest_role.py`;
+`tests/integration/test_explore_api.py`, `test_admin*.py`, `test_guest_role.py`,
+`test_annotations.py`, `test_duplicates.py`, `test_display_settings.py`, `test_growth_api.py`;
 `tests/unit/test_access.py`, `test_api_cache.py`.

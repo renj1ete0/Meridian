@@ -207,7 +207,9 @@ labels, since a count of documents is what a person weighing "is there anything 
 ## Configuration
 
 - Topics, descriptions, vocabulary and status (active, paused, maintenance, archived):
-  **Admin → Topic weights**.
+  **Admin → Topic weights**. The add-topic dialog asks what the topic is about, and its
+  searches are built from that; once added, Admin says what the topic needs next, with links
+  to Seeds and Crawl health (`B-196`).
 - Thresholds are constants in `topiclabels.py`. Changing one changes the basis, so every
   source is relabelled on the next `topics` run (about minutes, not hours).
 

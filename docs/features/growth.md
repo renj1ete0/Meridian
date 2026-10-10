@@ -7,7 +7,7 @@ where?" at a glance, and makes the days the crawl was off visible instead of hid
 - **Code:** `packages/meridian_core/meridian_core/growth.py`, `schemas/growth.py`,
   `areabuild.record_history`; `services/api/api/routes/growth.py`; the `corpus_growth` MCP
   tool; `web/src/explore/GrowthPage.tsx`, `web/src/lib/growth.ts`
-- **Tasks:** `B-140`
+- **Tasks:** `B-140`, `B-187`
 - **Decisions:** [ADR 0005](../adr/0005-growth-page-for-readers.md),
   [ADR 0010](../adr/0010-growth-page-placement-and-range.md),
   [ADR 0009](../adr/0009-times-stored-in-utc-shown-in-a-display-zone.md)
@@ -62,6 +62,6 @@ copies, gaps, the "as of" bound, new sites, passages, map history),
 
 ### A window that holds everything
 
-On a corpus younger than the chosen window every count is new, and the tiles read "+91,850 in
-30 days" beside 91,850. A tile whose window count equals its total now says "all since"
+On a corpus younger than the chosen window every count is new, and the tiles read "+N in
+30 days" beside a total of N. A tile whose window count equals its total now says "all since"
 the first day instead (`B-187`), formatted as a calendar date, not an instant.

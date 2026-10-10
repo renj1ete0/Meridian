@@ -10,7 +10,10 @@ separate view shows passages as points in three dimensions.
   (a build), `areaview.py` (reads), `bridges.py`, `bridgeview.py`, `fields.py`,
   `corpusmap.py`, `mapsteer.py`; `services/worker/worker/areas.py`;
   `web/src/explore/map/`, `web/src/explore/MapPage.tsx`
-- **Tasks:** `P6-26`, `P6-29`–`P6-35`, `B-74`, `B-93`
+- **Tasks:** `P6-26`, `P6-29`–`P6-35`, `B-74`, `B-93`, `B-102`, `B-106`, `B-156`, `B-157`,
+  `B-159`, `B-172`, `B-186`, `B-200`
+- **Decisions:** [ADR 0017](../adr/0017-map-names-must-fit.md),
+  [ADR 0018](../adr/0018-a-map-name-must-win-clearly.md)
 
 ## How it works
 
@@ -142,7 +145,7 @@ has the embedder; `fields.py` is pure apart from reading the file.
 On a live build the Fields level read "Speech and Hearing", "Algebra and Number Theory",
 "Geometry and Topology" and "Emergency Medical Services". Their terms told a different story:
 statutes ("shall", "subsection", "amended"), occupational statistics, a mixed science region,
-congressional documents. Three causes:
+legislative documents. Three causes:
 
 - *The list had no names for most of the corpus.* A mostly public-sector corpus is largely
   legislation, appropriations, regulations, forms, statistics and site furniture, and a
@@ -153,9 +156,9 @@ congressional documents. Three causes:
 - *Almost any fit was accepted.* `MIN_SIMILARITY` was 0.05 after centring, which nearly every
   label clears. Read against each area's terms, names under 0.20 were mismatches ("Small
   Animals" for a page of trading listings, "Genetics" for document-index furniture); above
-  it, mostly right. Raised to 0.20; on the live build 70 of 81 subfield-level areas and 350 of
-  401 below them keep a listed name, the rest their terms.
-- *A plurality named a mixed region.* "Geometry and Topology" named a 72,000-passage region
+  it, mostly right. Raised to 0.20; on the live build most areas at every level kept a listed
+  name, the rest their terms.
+- *A plurality named a mixed region.* "Geometry and Topology" named a large region
   after one area holding a seventh of it. Regions now need a majority, or a named pair.
 
 **A name must also win clearly** (`B-159`, [ADR 0018](../adr/0018-a-map-name-must-win-clearly.md)).

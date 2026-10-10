@@ -8,7 +8,7 @@ health screen for the hours in between.
 - **Code:** `services/worker/worker/scheduler.py`, `digest.py`, `telegram.py`, `bot.py`,
   `commands.py`, `liveness.py`; `packages/meridian_core/meridian_core/schedule.py`,
   `alerts.py`, `crawlhealth.py`, `attempts.py`, `logging.py`
-- **Tasks:** `P5-06`–`P5-08`, `P6-08`, `P6-25`, `B-15`, `B-19`
+- **Tasks:** `P5-06`–`P5-08`, `P6-08`, `P6-25`, `B-15`, `B-19`, `B-145`, `B-203`, `B-210`
 
 ## How it works
 
@@ -193,6 +193,10 @@ later on purpose.
   the last rows are still being worked.
 - **Everything is as of one instant** (`now`), counting only queue rows that existed then, which
   lets tests choose an instant no real row is near.
+- **Paused is not stalled** (`B-203`). A crawl the worker has paused for embedding (the backlog
+  above `MERIDIAN_WORKER_MAX_EMBED_BACKLOG`) reads `paused`, with how far the backlog is from the
+  point the worker resumes at, rather than `stalled`: the brake is working, not failing. A
+  backlog that has fallen back under the ceiling is no longer read as over it.
 - **Rolling hours, not clock hours**: a clock-aligned chart always ends in a partial, short bar,
   a false alarm on a screen for spotting a slowdown.
 

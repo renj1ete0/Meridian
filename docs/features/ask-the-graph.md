@@ -8,7 +8,7 @@ every reading surface except Admin.
 - **Code:** `packages/meridian_core/meridian_core/chat.py`, `framing.py`, `provider.py`,
   `models/chat.py`; `services/api/api/routes/admin.py` (`POST /api/admin/chat/ask`),
   `routes/explore.py` (thread reads); `web/src/explore/AskPanel.tsx`
-- **Tasks:** `P6-06`, `P6-07`
+- **Tasks:** `P6-06`, `P6-07`, `B-135`, `B-183`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md)
 
 ## How it works
@@ -86,4 +86,4 @@ correct.
 ## Tests
 
 `tests/integration/test_chat*.py`; `tests/unit/test_chat*.py`, `test_framing.py`;
-`web/tests/ask*.test.tsx`.
+`web/tests/ask-panel.test.tsx`.

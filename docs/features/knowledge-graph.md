@@ -10,12 +10,14 @@ and the list of contested pairs.
 
 - **Code:** `packages/meridian_core/meridian_core/models/graph.py`, `writes.py`,
   `validation.py`, `resolution.py`, `mentions.py`, `graphview.py`, `route.py`,
-  `neighbourhood.py`, `annotations.py`, `export.py`; `services/api/api/routes/graph.py`,
-  `connect.py`, `neighbourhood.py`
+  `neighbourhood.py`, `annotations.py`, `duplicates.py`, `export.py`;
+  `services/api/api/routes/graph.py`, `connect.py`, `neighbourhood.py`, `admin.py` (notes and
+  possible duplicates)
 - **Tasks:** `P4-01`–`P4-05`, `P4-16`, `P6-01`–`P6-05`, `P6-10`, `P6-15`, `P6-32`, `P6-33`,
-  `B-41`, `B-60`
+  `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md),
-  [ADR 0003](../adr/0003-external-assistants-over-mcp.md)
+  [ADR 0003](../adr/0003-external-assistants-over-mcp.md),
+  [ADR 0020](../adr/0020-a-note-is-withdrawn-not-deleted.md)
 
 ## How it works
 
@@ -440,7 +442,8 @@ being configured (ADR 0002).
 
 `tests/integration/test_edges.py`, `test_writes.py`, `test_validation.py`,
 `test_resolution.py`, `test_mentions.py`, `test_merge_folds.py`, `test_graph_workspace.py`,
-`test_graph_store.py`, `test_route.py`, `test_neighbourhood.py`, `test_annotations.py`;
+`test_graph_store.py`, `test_route.py`, `test_neighbourhood.py`, `test_annotations.py`,
+`test_duplicates.py`;
 `tests/unit/test_edge_schema.py`, `test_export.py`, `test_neighbourhood.py`.
 
 ## In the web app

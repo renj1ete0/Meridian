@@ -1,6 +1,8 @@
 # Deploying the stack
 
-> **Two ARM boards with automatic updates?** See [deploy-sbc.md](deploy-sbc.md)
+> **Production is Docker on a single server**, optionally with an NVIDIA GPU
+> ([ADR 0001](../adr/0001-production-runs-on-a-server.md)); this page is its runbook.
+> The earlier two-board layout is still supported in [deploy-sbc.md](deploy-sbc.md)
 > (`P3-12`): images pulled from GHCR, promoted to a `stable` channel that
 > Watchtower follows, and the embedding model on a board of its own. This page
 > remains the reference for everything that layout shares.
@@ -23,14 +25,15 @@ server.
 
 ## 0. What you are deploying
 
-Fourteen services in `docker-compose.yml`, three of them one-shots that run and
-exit (`datadirs`, `modelfetch`, `tools`) and one that still has nothing behind
-it: `orchestrator` is profile-gated because its Dockerfile does not exist.
-Phase 4's spine *is* built — it runs from the worker image as
-`python -m worker.orchestrate`, and gets a service of its own when the stages
-that reason over documents land (`P4-16`).
+Seventeen services in `docker-compose.yml`. Three are one-shots that run and
+exit (`datadirs`, `modelfetch`, `tools`), and two are behind the `autoupdate`
+profile and start only when it is named (`migrate`, `watchtower`; see
+[deploy-sbc.md](deploy-sbc.md)). `orchestrator` has its own image, built with the
+model client the worker image leaves out, and runs the synthesis cycle as a daemon
+(`python -m worker.orchestrate --daemon`, `P4-17`): daily, and early when the
+backlog grows. A run with no usable agent refuses rather than failing.
 
-`bot` is the newest (`P5-07`): §13.3's inbound Telegram commands. It starts
+`bot` (`P5-07`) is §13.3's inbound Telegram commands. It starts
 whether or not a token is configured and idles when there is none, so an
 unconfigured deployment has no control surface rather than a crash loop.
 
@@ -60,14 +63,17 @@ deletes only with `--apply` (`P1-31`). A 48h run is the first time that will be
 visible. Put it on the disk you are willing to fill, and check `df` before and
 after.
 
-**Decide how the images get there.** The server is arm64 and your machine
-probably is not, so there are two routes:
+**Decide how the images get there.** Images are multi-arch, so the server may be
+x86 or arm64, and there are two routes:
 
 - **Build on the server.** `docker compose build` over an SSH session. Slowest,
   needs no registry, and is the right call for a first smoke run.
 - **Build and push multi-arch.** What `make build-push` is *for*: every image,
   both architectures, tagged by commit; `make promote SHA=…` then points the
-  `stable` channel at it (`P3-12`, [deploy-sbc.md](deploy-sbc.md)).
+  `stable` channel at it (`P3-12`, [deploy-sbc.md](deploy-sbc.md)). Images are not
+  published to GHCR until the operator says so
+  ([ADR 0008](../adr/0008-release-channels.md)), so for now this is the route for a
+  registry of your own.
 
 ---
 
@@ -81,7 +87,8 @@ something specific on top.
 
 | Variable | Needed for | Without it |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Synthesis — the model client (`P4-15`) | The crawl and search are unaffected. A run finds no usable agent and refuses; the orchestrator's stages are not built yet anyway (`P4-16`) |
+| `ANTHROPIC_API_KEY` | Synthesis and the Ask panel through the hosted Claude rows (`P4-15`, [ADR 0002](../adr/0002-model-routing.md)) | The crawl and search are unaffected. A run finds no usable agent and refuses, unless another agent row (a local or hosted OpenAI-compatible server, or the relay) is enabled |
+| `HOSTED_LLM_URL`, `HOSTED_LLM_MODEL`, `HOSTED_LLM_API_KEY` | The `hosted-compatible` agent row: any hosted OpenAI-compatible API | The row stays disabled |
 | `SEMANTIC_SCHOLAR_API_KEY` | Open-access PDF resolution for DOIs | The provider still answers, then rate-limits hard. Free to get, and the 48h run is when its absence is felt (`P1-35`) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | The digest, the alerts, and inbound commands (`P5-07`) | The digest still runs and still records findings to `notifications`; it simply delivers nothing. **Both or neither** |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Reaching the API from outside the LAN (`P3-05`) | Everything works on the LAN. This is what lets an assistant on your phone query the corpus |
@@ -397,8 +404,7 @@ out early; a healthy run keeps finding more than it drains.
 `du` is the other. Nothing deletes from the raw store, and this run is the first
 time that has ever been true at volume.
 
-**Afterwards:** `P1-16` says `make snapshot-corpus`. It does not work yet — see
-below.
+**Afterwards:** `P1-16` says `make snapshot-corpus` — see below.
 
 ---
 

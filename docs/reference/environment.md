@@ -13,6 +13,7 @@ reads. When you add a variable, add it here and to `.env.example`.
 |---|---|---|
 | `PG_RW_URL` | — (required) | Read-write role: worker, orchestrator, `/api/admin/*` |
 | `PG_RO_URL` | — (required by the API) | Read-only role: `/api/explore/*`, MCP tools |
+| `PG_MIGRATION_URL` | — (required by `make migrate`) | The database owner, which migrations run as (`migrations/env.py`); never the read-write role |
 | `PG_GUEST_URL` | unset | Guest role for shared read access (`P3-07`); unset disables guests |
 | `MERIDIAN_DB_POOL_SIZE` | 5 | Connections per engine |
 | `MERIDIAN_DB_MAX_OVERFLOW` | 5 | Extra connections under load |
@@ -20,6 +21,7 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `MERIDIAN_DB_POOL_RECYCLE` | 1800 | Seconds before a connection is replaced |
 | `MERIDIAN_DB_ECHO` | off | Log every SQL statement (debugging only) |
 | `PG_SHARED_BUFFERS`, `PG_EFFECTIVE_CACHE_SIZE`, `PG_MAINTENANCE_WORK_MEM`, `PG_WORK_MEM`, `PG_RANDOM_PAGE_COST` | 2GB, 6GB, 512MB, 32MB, 1.1 | Postgres server settings, read by compose (`B-132`); see `.env.example` for sizing |
+| `PG_SHM_SIZE` | 1g | Postgres's shared memory, read by compose (`B-144`); must stay above `PG_MAINTENANCE_WORK_MEM` for parallel index builds |
 
 ## Crawl worker
 
@@ -120,3 +122,18 @@ or `model`); see [features/synthesis.md](../features/synthesis.md).
 | `MERIDIAN_SCHEDULER_ID` | host-derived | Name recorded on scheduled-job claims |
 | `MERIDIAN_LOG_LEVEL` | `INFO` | Log level for every service |
 | `CLOUDFLARE_TUNNEL_TOKEN` | unset | The public tunnel (compose) |
+
+## Compose only
+
+Read by the compose files, not by the code. `.env.example` says which a deployment sets.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PG_USER`, `PG_PASSWORD`, `PG_RW_PASSWORD`, `PG_RO_PASSWORD`, `PG_GUEST_PASSWORD` | — | Postgres owner and role passwords; `scripts/init-roles.sh` creates the roles on first start |
+| `DATA_ROOT` | `/srv/meridian` (`./.localdata` locally) | Host folder for raw files, model weights, relay files and question-set runs |
+| `MERIDIAN_REGISTRY`, `MERIDIAN_TAG` | the project's GHCR namespace, `stable` | Where images are pulled from, and which channel (ADR 0008) |
+| `MERIDIAN_POSTGRES_TAG`, `MERIDIAN_CRAWL4AI_TAG` | `stable` | Channels of the Postgres and browser images |
+| `GHCR_READ_USER`, `GHCR_READ_PAT` | unset | Read-only registry login for the `autoupdate` profile's watchtower |
+| `WATCHTOWER_POLL_INTERVAL`, `WATCHTOWER_NOTIFICATION_URL` | 3600, unset | How often watchtower checks for new images, and where it reports |
+| `TZ` | set in compose | The watchtower container's zone. The display zone is a database setting, not this (ADR 0009) |
+| `MODELS_DIR`, `EMBEDDER_BIND`, `EMBEDDER_MEMORY` | `/srv/meridian/models`, `0.0.0.0`, 8G | The separate embedder node (`deploy/embedder-node/`): weights folder, listen address, memory limit |

@@ -1,6 +1,6 @@
 # The held-out question set
 
-A fixed set of 20–30 questions, written without looking at the corpus. It is re-run against
+A fixed set of questions, written without looking at the corpus. It is re-run against
 the corpus to judge whether search and exploration are actually useful (§14.1's "only real
 regression test", and `P2-09`'s go/no-go). The questions and their rules live in
 [`eval/README.md`](../../eval/README.md) and `eval/questions.yaml`. This page covers the
@@ -20,6 +20,13 @@ compares as "not graded", never as a number.
 
 Gaps lists items that scored low in the newest run. Because a held-out question must never
 steer the corpus, the only action offered is to search for it in Find.
+
+## Current state
+
+The set is a draft (`status: draft`, set version 2). The operator's own questions are reviewed by
+definition, though the grading criteria under them are agent drafts; the agent-drafted items
+still await review (`P0-15`). The runner is built (`P2-22`), but no graded run against the live
+corpus has been made, so `P2-09`'s go/no-go is still open.
 
 ## Rules that shape the code
 

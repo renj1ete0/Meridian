@@ -8,7 +8,7 @@ moves, and the system can report how much it caught.
 - **Code:** `packages/meridian_core/meridian_core/novelty.py`, `docdupes.py`;
   `services/worker/worker/novelty.py`, `docdupes.py`, `edgedupes.py`;
   `resolution.fold_repeated_edges`
-- **Tasks:** `P2-03`, `B-41`, `B-44`, `B-127`
+- **Tasks:** `P2-03`, `B-41`, `B-44`, `B-88`, `B-127`, `B-151`
 
 ## How it works
 
@@ -38,6 +38,10 @@ its passages are somebody's evidence.
 **Repeated edges.** Merging two entities could leave one claim as two rows. `merge` now folds
 them as it goes, and `edgedupes` folds those left from before. Each fold is logged on the
 merge, so reversing the merge splits them again.
+
+Two nodes that may name one thing are not a duplicate of this kind: resolution decides those,
+and the ones it cannot decide are settled by a person in **Admin → Possible duplicates**
+(`B-202`, [knowledge-graph.md](knowledge-graph.md#deciding-a-possible-duplicate)).
 
 ## Design choices
 
