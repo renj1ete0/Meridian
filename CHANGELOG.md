@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.4] — 2026-10-10
+
+### Fixed
+
+- `B-174`: Passages pages on: "More passages" under the list reads the next twenty of the same
+  search, up to the pool the ranking saw, and says when the end is the ranking's
+
 ## [0.166.3] — 2026-10-10
 
 ### Fixed

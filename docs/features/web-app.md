@@ -443,6 +443,13 @@ clamped to eight lines with CSS, so find-in-page, copy and screen readers still 
 verbatim chunk; a list where one extraction-damaged chunk fills three screens is a list nobody
 reads past the first hit.
 
+**More passages** (`B-174`). The list once stopped at twenty with no way on, though the route
+pages by `offset`. A button under the list reads the next twenty of the same search (words and
+every filter), appended and keyed by passage so a ranking that shifted between requests never
+shows one twice. A page is never asked for past the candidate pool, which the route refuses
+because fusion never ranked anything beyond it. Once a reader has paged to the end, one line
+says it is the end of what this search ranked, not of the corpus.
+
 ### The filter rail
 
 The results page has the Explore artboard's left rail (`B-173`, `FindRail.tsx`): topic, place,

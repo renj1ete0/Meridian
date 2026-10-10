@@ -1761,7 +1761,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       control (the API always took them); places and every filter but topics fell out of the link
       and out of saved views; the landing carried rows of chips the design does not. The Explore
       design's left rail on results, one filter model (`lib/find.ts`) for link, request and view
-- [ ] `B-174` **More passages** — Passages stops at 20 with no way on, though the API pages by
+- [x] `B-174` **More passages** — `v0.166.4`. Passages stops at 20 with no way on, though the API pages by
       `offset` up to the candidate pool. A "more" row at the foot of the list
 - [ ] `B-175` **The answer's "N more sources not shown" is a dead end** — make it open Passages
       narrowed to that country

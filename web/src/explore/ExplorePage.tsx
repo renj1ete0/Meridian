@@ -76,6 +76,9 @@ const NOTES_ON_LANDING = 5
 /** How many saved views "where you were" lists. §8: a *short* list. */
 const VIEWS_ON_LANDING = 6
 
+/** Passages asked for at a time, as the route's default page. */
+const PAGE = 20
+
 /** What each entry card says, derived from the counts rather than written once. */
 export function entryState(stats: CorpusStats | null): {
   unavailable: Partial<Record<EntryPointName, string>>
@@ -116,6 +119,10 @@ export function ExplorePage() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The next page of passages (`B-174`): idle, reading, or the reason it failed.
+  const [more, setMore] = useState<{ phase: 'idle' | 'loading' } | { phase: 'failed'; message: string }>({
+    phase: 'idle',
+  })
   // Answer (grouped by country) or passages (the ranked list). Decided per
   // search: the reader's last choice, else whether the text reads as a question.
   const [mode, setMode] = useState<ResultMode>('passages')
@@ -251,6 +258,7 @@ export function ExplorePage() {
       inFlight.current = controller
 
       setPhase('searching')
+      setMore({ phase: 'idle' })
       setMode(view ?? initialMode(trimmed))
       setAsked(trimmed)
       setPicked(null)
@@ -303,6 +311,33 @@ export function ExplorePage() {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [run])
+
+  /** The next page of the same search, appended (`B-174`). */
+  function loadMore() {
+    if (!results || !results.has_more || more.phase === 'loading') return
+    const offset = results.hits.length
+    const controller = new AbortController()
+    inFlight.current = controller
+    setMore({ phase: 'loading' })
+    searchCorpus(
+      // Never past the pool the ranking saw: the route refuses a window beyond it.
+      { q: asked, ...searchFilters(filters), offset, limit: Math.min(PAGE, results.candidate_pool - offset) },
+      { signal: controller.signal },
+    )
+      .then((page) => {
+        // Keyed by passage: a ranking that shifted between requests must not show one twice.
+        const seen = new Set(results.hits.map((hit) => hit.chunk_id))
+        setResults({ ...page, hits: [...results.hits, ...page.hits.filter((hit) => !seen.has(hit.chunk_id))] })
+        setMore({ phase: 'idle' })
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setMore({
+          phase: 'failed',
+          message: cause instanceof ApiError ? cause.message : 'The next passages could not be read.',
+        })
+      })
+  }
 
   /** A filter changed: kept for the next search, and the current one re-run with it. */
   function narrow(next: FindFilters) {
@@ -420,6 +455,7 @@ export function ExplorePage() {
                 <SearchOutcome
                   asked={asked}
                   results={results}
+                  footer={<MorePassages results={results} state={more} onMore={loadMore} />}
                   aside={
                     <SaveView
                       key={savedCount}
@@ -603,11 +639,14 @@ export function SearchOutcome({
   asked,
   results,
   aside,
+  footer,
 }: {
   asked: string
   results: SearchResponse
   /** Controls set at the right of the summary line — saving the view. */
   aside?: React.ReactNode
+  /** Below the list: the way to the next page. */
+  footer?: React.ReactNode
 }) {
   const empty = results.hits.length === 0
 
@@ -628,9 +667,50 @@ export function SearchOutcome({
             {aside}
           </div>
           <ResultList hits={results.hits} />
+          {footer}
         </>
       )}
     </>
+  )
+}
+
+/**
+ * The foot of the passage list (`B-174`): more while the ranking has more, and, once a
+ * reader has paged to its end, a line saying the end is the ranking's, not the corpus's.
+ */
+export function MorePassages({
+  results,
+  state,
+  onMore,
+}: {
+  results: SearchResponse
+  state: { phase: 'idle' | 'loading' } | { phase: 'failed'; message: string }
+  onMore: () => void
+}) {
+  if (results.hits.length === 0) return null
+  if (!results.has_more) {
+    // Only said after paging: on a first page that ends early, the summary line already
+    // counts what matched.
+    return results.hits.length > PAGE ? (
+      <p className="mt-3 font-mono text-[10.5px] leading-[1.5] text-text-faint">
+        The end of what this search ranked. Other wording, or narrower filters, reach passages it did not.
+      </p>
+    ) : null
+  }
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        onClick={onMore}
+        disabled={state.phase === 'loading'}
+        className="h-8 border border-line-strong bg-surface-raised px-3 font-sans text-[12.5px] text-text/85 hover:text-text disabled:opacity-50"
+      >
+        {state.phase === 'loading' ? 'Reading…' : 'More passages'}
+      </button>
+      {state.phase === 'failed' ? (
+        <span className="font-mono text-[10.5px] text-text-muted">{state.message}</span>
+      ) : null}
+    </div>
   )
 }
 
