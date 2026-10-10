@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { focusSearch } from '../lib/hotkeys'
 import { openSession } from '../lib/lastVisit'
+import { passageCitation } from '../lib/cite'
 import { rememberFind } from '../lib/lastFind'
 import { hrefForNode, navigate } from '../lib/route'
 import { initialMode, rememberMode, type ResultMode } from '../lib/answer'
@@ -40,6 +41,7 @@ import {
   type CorpusStats,
   type CrawlProgress,
   type SavedViewRecord,
+  type SearchHit,
   type SearchResponse,
 } from '../lib/api'
 import {
@@ -497,27 +499,30 @@ export function ExplorePage() {
                   results={results}
                   footer={<MorePassages results={results} state={more} onMore={loadMore} />}
                   aside={
-                    <SaveView
-                      key={savedCount}
-                      query={asked}
-                      filters={viewFiltersOf(filters)}
-                      busy={saving}
-                      error={saveError}
-                      onSave={(name, text, stored) => {
-                        setSaving(true)
-                        setSaveError(null)
-                        saveView({ name, query: text, filters: stored })
-                          .then((view) => {
-                            setViews((current) => [view, ...current])
-                            // Remounted closed: the view is in the rail now, which says it took.
-                            setSavedCount((n) => n + 1)
-                          })
-                          .catch((cause: unknown) => {
-                            setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
-                          })
-                          .finally(() => setSaving(false))
-                      }}
-                    />
+                    <span className="flex flex-wrap items-center gap-2">
+                      <CopyCitations hits={results.hits} />
+                      <SaveView
+                        key={savedCount}
+                        query={asked}
+                        filters={viewFiltersOf(filters)}
+                        busy={saving}
+                        error={saveError}
+                        onSave={(name, text, stored) => {
+                          setSaving(true)
+                          setSaveError(null)
+                          saveView({ name, query: text, filters: stored })
+                            .then((view) => {
+                              setViews((current) => [view, ...current])
+                              // Remounted closed: the view is in the rail now, which says it took.
+                              setSavedCount((n) => n + 1)
+                            })
+                            .catch((cause: unknown) => {
+                              setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
+                            })
+                            .finally(() => setSaving(false))
+                        }}
+                      />
+                    </span>
                   }
                 />
               ) : null}
@@ -751,6 +756,51 @@ export function SearchOutcome({
         </>
       )}
     </>
+  )
+}
+
+/**
+ * Every passage shown, as citations to paste (`B-207`): the words, where from, the way back.
+ * Beside "Save this view", since both take the results somewhere.
+ */
+export function CopyCitations({ hits }: { hits: readonly SearchHit[] }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  if (hits.length === 0) return null
+  function copy() {
+    const text = hits
+      .map((hit) =>
+        passageCitation(
+          {
+            source_id: hit.source_id,
+            title: hit.title,
+            url: hit.url,
+            publication_date: hit.publication_date,
+            page_unit: hit.page_unit,
+          },
+          hit,
+          window.location.origin,
+        ),
+      )
+      .join('\n\n')
+    const done = (next: 'copied' | 'failed') => {
+      setState(next)
+      window.setTimeout(() => setState('idle'), 2000)
+    }
+    if (navigator.clipboard?.writeText)
+      navigator.clipboard.writeText(text).then(
+        () => done('copied'),
+        () => done('failed'),
+      )
+    else done('failed')
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="h-8 border border-line-strong bg-surface-raised px-3 font-sans text-[12.5px] text-text/85 hover:text-text"
+    >
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Not copied' : `Copy ${hits.length} citations`}
+    </button>
   )
 }
 

@@ -91,6 +91,12 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.1] — 2026-10-10
+
+### Added
+
+- `B-207`: "Copy N citations" on Find's passages copies every passage shown as a citation
+
 ## [0.168.0] — 2026-10-10
 
 ### Added

@@ -455,6 +455,11 @@ shows one twice. A page is never asked for past the candidate pool, which the ro
 because fusion never ranked anything beyond it. Once a reader has paged to the end, one line
 says it is the end of what this search ranked, not of the corpus.
 
+**The passages shown can be copied as citations** (`B-207`): "Copy N citations", beside "Save this
+view", puts every passage on the page on the clipboard in the source page's citation form (the
+words, where from, the link back), separated by blank lines. With "More passages" read, it copies
+those too.
+
 ### The filter rail
 
 The results page has the Explore artboard's left rail (`B-173`, `FindRail.tsx`): topic, place,

@@ -148,3 +148,20 @@ describe('the end and the failures', () => {
     expect(screen.getByRole('button', { name: 'More passages' })).toBeTruthy()
   })
 })
+
+describe('copying the passages as citations (B-207)', () => {
+  it('copies every passage shown, each with its way back, and says it did', async () => {
+    const writeText = vi.fn(async (_text: string) => {})
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    stub([page(0, 3, { has_more: false })])
+    await open('/?q=x&view=passages')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Copy 3 citations' }))
+    })
+    const text = writeText.mock.calls[0]![0]
+    expect(text.split('\n\n')).toHaveLength(3)
+    expect(text).toContain('“Passage number 0.”')
+    expect(text).toContain('/sources/2?passage=2')
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy()
+  })
+})
