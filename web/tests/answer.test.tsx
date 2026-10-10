@@ -163,7 +163,8 @@ describe('the grouped answer', () => {
     const de = screen.getByRole('region', { name: 'Germany' })
     expect(de.textContent).toContain('4 sources · 3 publishers · 1 government · 3 press · newest 2025-04-02')
     const links = within(de).getAllByRole('link')
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/sources/11', '/sources/12'])
+    // On the passage that stands for each source, not the top of it (`B-178`).
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/sources/11?passage=101', '/sources/12?passage=102'])
     expect(de.textContent).toContain('A licence is required before trading')
     expect(de.textContent).toContain('3 matching passages')
     expect(de.textContent).toContain('2 more sources not shown')

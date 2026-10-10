@@ -1822,8 +1822,8 @@ function BridgePanel({
                   {[pair.a, pair.b].map((p) => (
                     <a
                       key={p.chunk_id}
-                      href={hrefForSource(p.source_id)}
-                      onClick={onInternalClick(hrefForSource(p.source_id))}
+                      href={hrefForSource(p.source_id, p.chunk_id)}
+                      onClick={onInternalClick(hrefForSource(p.source_id, p.chunk_id))}
                       className="text-[12.5px] italic leading-[1.55] text-text-muted no-underline hover:text-text"
                     >
                       “{readable(p.snippet)}…”
@@ -1876,8 +1876,8 @@ function AreaPanel({ panel, onClose }: { panel: Extract<Panel, { kind: 'area' }>
             {detail.passages.map((p) => (
               <li key={p.chunk_id} className="border-t border-line pt-2">
                 <a
-                  href={hrefForSource(p.source_id)}
-                  onClick={onInternalClick(hrefForSource(p.source_id))}
+                  href={hrefForSource(p.source_id, p.chunk_id)}
+                  onClick={onInternalClick(hrefForSource(p.source_id, p.chunk_id))}
                   className="text-[12.5px] leading-[1.55] text-text-muted no-underline hover:text-text"
                 >
                   “{p.snippet.trim()}…”

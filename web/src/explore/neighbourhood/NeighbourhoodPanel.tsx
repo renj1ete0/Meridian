@@ -471,8 +471,8 @@ function Body({
                     {closeness(similarity)}
                   </span>
                   <a
-                    href={hrefForSource(hit.source_id)}
-                    onClick={onInternalClick(hrefForSource(hit.source_id))}
+                    href={hrefForSource(hit.source_id, hit.chunk_id)}
+                    onClick={onInternalClick(hrefForSource(hit.source_id, hit.chunk_id))}
                     className="font-mono text-[10.5px] text-accent-graph hover:underline"
                   >
                     source →

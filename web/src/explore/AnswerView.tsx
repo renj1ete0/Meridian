@@ -320,7 +320,7 @@ function GroupSection({
 }
 
 function ItemRow({ item }: { item: AnswerItem }) {
-  const href = hrefForSource(item.source_id)
+  const href = hrefForSource(item.source_id, item.chunk_id)
   return (
     <li className="flex flex-col gap-1.5 px-5 py-3.5">
       <a

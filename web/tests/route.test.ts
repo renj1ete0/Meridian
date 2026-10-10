@@ -10,7 +10,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 
-import { hrefForNode, hrefForSource, parseRoute } from '../src/lib/route'
+import { hrefForNode, hrefForSource, parseRoute, passageOf } from '../src/lib/route'
 
 describe('parsing', () => {
   it('reads a source id out of the path', () => {
@@ -82,5 +82,16 @@ describe('nodes are addressable too (task P6-04)', () => {
 
   it('round-trips through the href builder', () => {
     expect(parseRoute(hrefForNode(7))).toEqual({ name: 'node', entityId: 7 })
+  })
+})
+
+describe('a link to a passage (B-178)', () => {
+  it('round-trips the passage, and ignores what is not one', () => {
+    expect(hrefForSource(7)).toBe('/sources/7')
+    expect(hrefForSource(7, 1043)).toBe('/sources/7?passage=1043')
+    expect(passageOf(new URL(hrefForSource(7, 1043), 'http://x').search)).toBe(1043)
+    expect(passageOf('?passage=12x')).toBeNull()
+    expect(passageOf('?passage=-3')).toBeNull()
+    expect(passageOf('')).toBeNull()
   })
 })

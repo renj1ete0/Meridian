@@ -122,15 +122,15 @@ export function ResultList({ hits }: ResultListProps) {
         <li key={hit.chunk_id} className="flex flex-col gap-2 px-5 py-4">
           <div className="flex items-baseline justify-between gap-4">
             <a
-              href={hrefForSource(hit.source_id)}
-              onClick={onInternalClick(hrefForSource(hit.source_id))}
+              href={hrefForSource(hit.source_id, hit.chunk_id)}
+              onClick={onInternalClick(hrefForSource(hit.source_id, hit.chunk_id))}
               className="min-w-0 font-sans text-[14.5px] font-semibold leading-snug text-text hover:text-accent-graph"
             >
               {hit.title ? plainLetters(hit.title) : domainOf(hit.url)}
             </a>
             <a
-              href={hrefForSource(hit.source_id)}
-              onClick={onInternalClick(hrefForSource(hit.source_id))}
+              href={hrefForSource(hit.source_id, hit.chunk_id)}
+              onClick={onInternalClick(hrefForSource(hit.source_id, hit.chunk_id))}
               className="shrink-0 font-mono text-[10.5px] text-accent-graph hover:underline"
             >
               the source →

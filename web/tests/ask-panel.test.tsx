@@ -134,7 +134,7 @@ describe('the panel', () => {
     const posted = calls.find((c) => c.url.endsWith('/api/admin/chat/ask'))!
     expect(posted.body).toEqual({ question: 'How does this relate?', thread_id: null, context_entity_ids: [501] })
     const link = await screen.findByRole('link', { name: '[1]' })
-    expect(link.getAttribute('href')).toBe('/sources/11')
+    expect(link.getAttribute('href')).toBe('/sources/11?passage=101')
     const chips = within(screen.getByRole('list', { name: 'Nodes cited' })).getAllByRole('link')
     expect(chips.map((c) => c.getAttribute('href'))).toEqual(['/nodes/501', '/nodes/502'])
     expect(chips[1]!.textContent).toContain('†')

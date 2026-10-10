@@ -95,8 +95,8 @@ export function SourceLine({ hit, certainty }: { hit: SearchHit; certainty?: str
   return (
     <div className="flex flex-wrap items-center gap-2">
       <a
-        href={hrefForSource(hit.source_id)}
-        onClick={onInternalClick(hrefForSource(hit.source_id))}
+        href={hrefForSource(hit.source_id, hit.chunk_id)}
+        onClick={onInternalClick(hrefForSource(hit.source_id, hit.chunk_id))}
         className="font-mono text-[10px] text-accent-graph"
       >
         {domainOf(hit.url)}

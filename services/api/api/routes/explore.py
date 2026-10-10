@@ -103,6 +103,8 @@ MAX_EXPORT_SOURCES = 200
 #: text and a response nobody renders.
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 20
+#: Passages shown above a linked one, so it opens in its context rather than at the top.
+CONTEXT_BEFORE = 3
 
 #: How many supporting chunks one node panel carries. An entity with a dozen
 #: attributes can cite a hundred chunks, and a panel that returned all of them
@@ -389,13 +391,39 @@ async def explore_source_chunks(
     sess: ReadSession,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
+    around: Annotated[
+        int | None,
+        Query(
+            description="A chunk id: start the window a few passages before it, so a hit opens "
+            "in its context. Replaces `offset`; ignored when it is not a live chunk of this source."
+        ),
+    ] = None,
 ) -> SourceChunksRead:
     """A source's chunks in document order — the context around a hit.
 
     Ordered by `chunk_index`. A source with no chunks returns an empty list, not a 404.
+    `offset` in the response is where the window starts, which `around` decides (`B-178`).
     """
     if await sess.get(Source, source_id) is None:
         raise HTTPException(status_code=404, detail=f"no source {source_id}")
+
+    if around is not None:
+        target = await sess.scalar(
+            select(Chunk.chunk_index).where(
+                Chunk.chunk_id == around,
+                Chunk.source_id == source_id,
+                Chunk.superseded_at.is_(None),
+            )
+        )
+        if target is not None:
+            before = await sess.scalar(
+                select(func.count()).where(
+                    Chunk.source_id == source_id,
+                    Chunk.superseded_at.is_(None),
+                    Chunk.chunk_index < target,
+                )
+            )
+            offset = max(0, int(before or 0) - CONTEXT_BEFORE)
 
     rows = (
         await sess.execute(

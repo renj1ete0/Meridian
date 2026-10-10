@@ -607,6 +607,17 @@ follow the same rule: "page 12", never "offset 0". **Annotation lives here** (`P
 reading happens; ticking passages puts the citations on a note without copying chunk ids by
 hand, the version of the feature that would not get used.
 
+
+**A passage link opens on the passage** (`B-178`). Every link from a passage (Find's results,
+the answer page, the neighbourhood, node evidence, the Map's theme card, Ask's citations)
+carries `?passage=<chunk id>`, and the page asks `/sources/{id}/chunks?around=` for a window
+starting three passages before it, marks it (`aria-current`, the accent rule) and scrolls it to
+the centre once. Before, every link opened page one and the page read twenty passages and
+stopped: an audit followed six hits and two were not on the page at all (one on page 24 of a
+source whose page ended at page 9, under a figures list running to page 54). The window now
+grows both ways ("Earlier passages", "Later passages"), the count says which passages are shown
+("41–60, more after"), and a link to a passage the source no longer holds as live text says so
+instead of marking nothing.
 ### Figures
 
 §12.5 asks for "thumbnails linked to the node, with page-accurate links to raw files". There are

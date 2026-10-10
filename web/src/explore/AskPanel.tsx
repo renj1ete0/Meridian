@@ -425,8 +425,8 @@ function Answer({ message }: { message: ChatMessage }) {
             ) : (
               <a
                 key={j}
-                href={hrefForSource(part.citation.source_id)}
-                onClick={onInternalClick(hrefForSource(part.citation.source_id))}
+                href={hrefForSource(part.citation.source_id, part.citation.chunk_id)}
+                onClick={onInternalClick(hrefForSource(part.citation.source_id, part.citation.chunk_id))}
                 title={`${part.citation.title ?? part.citation.url} · ${part.citation.source_tier.replace('_', ' ')}`}
                 className="mx-[1px] align-super font-mono text-[10px] text-accent-graph no-underline hover:underline"
               >

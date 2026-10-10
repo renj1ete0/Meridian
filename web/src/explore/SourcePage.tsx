@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   ApiError,
@@ -13,7 +13,7 @@ import {
 } from '../lib/api'
 import { citablePosition } from '../lib/position'
 import { readable } from '../lib/readable'
-import { onInternalClick } from '../lib/route'
+import { onInternalClick, passageOf } from '../lib/route'
 import { DataChip, TierChip } from '../ui/Tier'
 import { NoteComposer } from './Annotations'
 import { FiguresPanel } from './FiguresPanel'
@@ -49,9 +49,94 @@ function useResource<T>(load: (signal: AbortSignal) => Promise<T>, key: unknown)
   return state
 }
 
+/** Passages read at a time, as the route's default page. */
+const WINDOW = 20
+
+type Window =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | {
+      status: 'ready'
+      chunks: readonly Chunk[]
+      /** Where the window starts, in document order. */
+      start: number
+      more: boolean
+      /** A side being read, or the reason it failed. */
+      busy: 'earlier' | 'later' | null
+      failed: string | null
+    }
+
+/**
+ * A source's passages as a window that grows both ways (`B-178`): opened on a linked passage
+ * in its context, or at the top, with earlier and later passages a click away. Before it the
+ * page read the first twenty and stopped, so a hit on page 24 was often not on the page.
+ */
+export function usePassageWindow(sourceId: number, target: number | null) {
+  const [state, setState] = useState<Window>({ status: 'loading' })
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setState({ status: 'loading' })
+    getSourceChunks(sourceId, target !== null ? { around: target, limit: WINDOW } : { limit: WINDOW }, {
+      signal: controller.signal,
+    })
+      .then((page) =>
+        setState({
+          status: 'ready',
+          chunks: page.chunks,
+          start: page.offset,
+          more: page.has_more,
+          busy: null,
+          failed: null,
+        }),
+      )
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        setState({ status: 'error', message: error instanceof ApiError ? error.message : 'The passages did not load.' })
+      })
+    return () => controller.abort()
+  }, [sourceId, target])
+
+  const extend = useCallback(
+    (side: 'earlier' | 'later') => {
+      if (state.status !== 'ready' || state.busy) return
+      const from = side === 'earlier' ? Math.max(0, state.start - WINDOW) : state.start + state.chunks.length
+      const limit = side === 'earlier' ? state.start - from : WINDOW
+      if (limit <= 0) return
+      setState({ ...state, busy: side, failed: null })
+      getSourceChunks(sourceId, { offset: from, limit })
+        .then((page) =>
+          setState((now) => {
+            if (now.status !== 'ready') return now
+            const seen = new Set(now.chunks.map((c) => c.chunk_id))
+            const fresh = page.chunks.filter((c) => !seen.has(c.chunk_id))
+            return side === 'earlier'
+              ? { ...now, chunks: [...fresh, ...now.chunks], start: from, busy: null }
+              : { ...now, chunks: [...now.chunks, ...fresh], more: page.has_more, busy: null }
+          }),
+        )
+        .catch((error: unknown) =>
+          setState((now) =>
+            now.status === 'ready'
+              ? {
+                  ...now,
+                  busy: null,
+                  failed: error instanceof ApiError ? error.message : 'Those passages did not load.',
+                }
+              : now,
+          ),
+        )
+    },
+    [sourceId, state],
+  )
+
+  return { state, extend }
+}
+
 export function SourcePage({ sourceId }: { sourceId: number }) {
   const source = useResource<SourceWithPage>((signal) => getSource(sourceId, { signal }), sourceId)
-  const chunks = useResource((signal) => getSourceChunks(sourceId, {}, { signal }), sourceId)
+  const target = passageOf(window.location.search)
+  const { state: chunks, extend } = usePassageWindow(sourceId, target)
   const figures = useResource((signal) => getSourceFigures(sourceId, { signal }), sourceId)
 
   // Which passages the note will cite. A set rather than a list: ticking the
@@ -102,7 +187,10 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
   }
 
   const it = source.data
-  const passageCount = chunks.status === 'ready' ? chunks.data.chunks.length : null
+  const span =
+    chunks.status === 'ready' && chunks.chunks.length > 0
+      ? `${chunks.start + 1}–${chunks.start + chunks.chunks.length}${chunks.more ? ', more after' : ''}`
+      : null
 
   return (
     <article className={PAGE}>
@@ -147,18 +235,23 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
             <h2 id="passages-heading" className={LABEL}>
               Passages
             </h2>
-            {passageCount !== null ? (
-              <span className="font-mono text-[10px] text-text-faint">
-                {passageCount}
-                {chunks.status === 'ready' && chunks.data.has_more ? '+' : ''}
-              </span>
-            ) : null}
+            {span !== null ? <span className="font-mono text-[10px] text-text-faint">{span}</span> : null}
           </div>
           {chunks.status === 'loading' ? <p className="font-mono text-[10.5px] text-text-faint">Loading.</p> : null}
           {chunks.status === 'error' ? <p className="text-[13.5px] text-text">{chunks.message}</p> : null}
+          {chunks.status === 'ready' && chunks.start > 0 ? (
+            <MoreButton side="earlier" busy={chunks.busy === 'earlier'} onClick={() => extend('earlier')} />
+          ) : null}
+          {chunks.status === 'ready' && target !== null && !chunks.chunks.some((c) => c.chunk_id === target) ? (
+            // The link named a passage this source no longer holds as live text (`P1-32`).
+            <p className="mb-3 font-mono text-[10.5px] leading-[1.5] text-text-muted">
+              The passage this link points to is no longer in the source's current text; it opens at the start.
+            </p>
+          ) : null}
           {chunks.status === 'ready' ? (
             <Passages
-              chunks={chunks.data.chunks}
+              chunks={chunks.chunks}
+              target={target}
               pageUnit={source.status === 'ready' ? source.data.page_unit : null}
               citing={citing}
               onCite={(chunkId) =>
@@ -167,6 +260,12 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
                 )
               }
             />
+          ) : null}
+          {chunks.status === 'ready' && chunks.more ? (
+            <MoreButton side="later" busy={chunks.busy === 'later'} onClick={() => extend('later')} />
+          ) : null}
+          {chunks.status === 'ready' && chunks.failed ? (
+            <p className="mt-2 font-mono text-[10.5px] text-text-muted">{chunks.failed}</p>
           ) : null}
         </section>
 
@@ -260,17 +359,44 @@ export function RecordDetails({ source }: { source: Source }) {
   )
 }
 
+function MoreButton({ side, busy, onClick }: { side: 'earlier' | 'later'; busy: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className={`${side === 'earlier' ? 'mb-3' : 'mt-3'} h-8 border border-line-strong bg-surface-raised px-3 font-sans text-[12.5px] text-text/85 hover:text-text disabled:opacity-50`}
+    >
+      {busy ? 'Reading…' : side === 'earlier' ? '↑ Earlier passages' : 'Later passages ↓'}
+    </button>
+  )
+}
+
 function Passages({
   chunks,
+  target,
   pageUnit,
   citing,
   onCite,
 }: {
   chunks: readonly Chunk[]
+  /** The passage the link opened on, marked and scrolled to once. */
+  target: number | null
   pageUnit: SourceWithPage['page_unit']
   citing: readonly number[]
   onCite: (chunkId: number) => void
 }) {
+  const marked = useRef<HTMLLIElement | null>(null)
+  const scrolled = useRef(false)
+  useEffect(() => {
+    scrolled.current = false
+  }, [target])
+  useEffect(() => {
+    if (scrolled.current || !marked.current) return
+    scrolled.current = true
+    marked.current.scrollIntoView?.({ block: 'center' })
+  }, [chunks])
+
   if (chunks.length === 0) {
     // §6.5 makes metadata-only a valid resting state, so this is a finding
     // rather than an error — a scanned PDF or a paywall, not a broken fetch.
@@ -285,8 +411,17 @@ function Passages({
     <ol className="divide-y divide-line/60 border border-line bg-surface">
       {chunks.map((chunk) => {
         const on = citing.includes(chunk.chunk_id)
+        const linked = chunk.chunk_id === target
         return (
-          <li key={chunk.chunk_id} className={`flex flex-col gap-2.5 px-5 py-4 ${on ? 'bg-accent-graph/5' : ''}`}>
+          <li
+            key={chunk.chunk_id}
+            id={`p-${chunk.chunk_id}`}
+            ref={linked ? marked : undefined}
+            aria-current={linked ? 'location' : undefined}
+            className={`flex scroll-mt-24 flex-col gap-2.5 px-5 py-4 ${
+              linked ? 'border-l-2 border-accent-graph bg-accent-graph/[0.07]' : on ? 'bg-accent-graph/5' : ''
+            }`}
+          >
             <p className="whitespace-pre-wrap text-[14.5px] leading-[1.62] text-text/90">{readable(chunk.text)}</p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-[10px] text-text-faint">
               <label

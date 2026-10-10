@@ -634,12 +634,14 @@ export function getSource(sourceId: number, init?: RequestInit): Promise<SourceW
 
 export function getSourceChunks(
   sourceId: number,
-  params: { limit?: number; offset?: number } = {},
+  params: { limit?: number; offset?: number; around?: number } = {},
   init?: RequestInit,
 ): Promise<SourceChunks> {
   const query = new URLSearchParams()
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
+  // A passage to open on (`B-178`): the server starts the window a few passages before it.
+  if (params.around !== undefined) query.set('around', String(params.around))
   const suffix = query.toString() ? `?${query}` : ''
   return request<SourceChunks>(`/api/explore/sources/${sourceId}/chunks${suffix}`, init)
 }

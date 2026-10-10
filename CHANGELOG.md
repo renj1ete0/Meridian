@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.10] — 2026-10-10
+
+### Fixed
+
+- `B-178`: a passage link opens its source on that passage, marked, in its context; source pages
+  read earlier and later passages instead of stopping at twenty. `/sources/{id}/chunks` takes
+  `around=<chunk id>`
+
 ## [0.166.9] — 2026-10-10
 
 ### Fixed

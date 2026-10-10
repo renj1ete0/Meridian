@@ -178,3 +178,73 @@ describe('the states that are not success', () => {
     expect(screen.getByText(/still citable/)).toBeTruthy()
   })
 })
+
+describe('opening on the passage that was clicked (B-178)', () => {
+  function chunk(id: number, index: number) {
+    return {
+      chunk_id: id,
+      source_id: 7,
+      text: `Passage at index ${index}.`,
+      page_or_offset: index,
+      chunk_index: index,
+      novelty_checked_at: null,
+      nearest_similarity: null,
+      duplicate_of: null,
+      superseded_at: null,
+      embedding_view: 1,
+      created_at: '2026-09-01T00:00:00Z',
+    }
+  }
+  function page(start: number, count: number, more: boolean) {
+    return {
+      source_id: 7,
+      chunks: Array.from({ length: count }, (_, i) => chunk(1000 + start + i, start + i)),
+      limit: 20,
+      offset: start,
+      has_more: more,
+    }
+  }
+
+  afterEach(() => window.history.pushState({}, '', '/'))
+
+  it('asks for the window around it, marks it, and reads earlier and later from its edges', async () => {
+    window.history.pushState({}, '', '/sources/7?passage=1043')
+    vi.mocked(getSourceChunks)
+      .mockResolvedValueOnce(page(40, 20, true))
+      .mockResolvedValueOnce(page(20, 20, false))
+      .mockResolvedValueOnce(page(60, 5, false))
+    render(<SourcePage sourceId={7} />)
+
+    const marked = await screen.findByText('Passage at index 43.')
+    expect(vi.mocked(getSourceChunks).mock.calls[0]![1]).toEqual({ around: 1043, limit: 20 })
+    expect(marked.closest('li')!.getAttribute('aria-current')).toBe('location')
+    expect(screen.getByText('41–60, more after')).toBeTruthy()
+
+    screen.getByRole('button', { name: '↑ Earlier passages' }).click()
+    await screen.findByText('Passage at index 20.')
+    expect(vi.mocked(getSourceChunks).mock.calls[1]![1]).toEqual({ offset: 20, limit: 20 })
+
+    screen.getByRole('button', { name: 'Later passages ↓' }).click()
+    await screen.findByText('Passage at index 64.')
+    expect(vi.mocked(getSourceChunks).mock.calls[2]![1]).toEqual({ offset: 60, limit: 20 })
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Later passages ↓' })).toBeNull())
+    expect(screen.getByText('21–65')).toBeTruthy()
+  })
+
+  it('says so when the passage is no longer in the source, rather than marking nothing silently', async () => {
+    window.history.pushState({}, '', '/sources/7?passage=99999')
+    vi.mocked(getSourceChunks).mockResolvedValueOnce(page(0, 3, false))
+    render(<SourcePage sourceId={7} />)
+    expect(await screen.findByText(/no longer in the source's current text/)).toBeTruthy()
+    expect(document.querySelector('[aria-current="location"]')).toBeNull()
+  })
+
+  it('opens at the top without a passage, and offers later passages', async () => {
+    vi.mocked(getSourceChunks).mockResolvedValueOnce(page(0, 20, true))
+    render(<SourcePage sourceId={7} />)
+    await screen.findByText('Passage at index 0.')
+    expect(vi.mocked(getSourceChunks).mock.calls[0]![1]).toEqual({ limit: 20 })
+    expect(screen.queryByRole('button', { name: '↑ Earlier passages' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Later passages ↓' })).toBeTruthy()
+  })
+})

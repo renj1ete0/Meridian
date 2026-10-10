@@ -48,8 +48,18 @@ export function parseRoute(pathname: string): Route {
   return { name: 'explore' }
 }
 
-export function hrefForSource(sourceId: number): string {
-  return `/sources/${sourceId}`
+/**
+ * A source's page; with a passage, opened on it in its context (`B-178`). Every link from a
+ * passage passes it, so a reader lands on what they clicked, not on page one.
+ */
+export function hrefForSource(sourceId: number, passage?: number | null): string {
+  return passage != null ? `/sources/${sourceId}?passage=${passage}` : `/sources/${sourceId}`
+}
+
+/** The passage a source link asks to open on, or null. */
+export function passageOf(search: string): number | null {
+  const raw = new URLSearchParams(search).get('passage')
+  return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null
 }
 
 export function hrefForNode(entityId: number): string {

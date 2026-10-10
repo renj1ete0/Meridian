@@ -1775,7 +1775,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-194` `v0.166.9`. **Watched counts ignore a view's filters** — `watch.py` reads `topic`, but views
       have stored `topics` since `B-73`, so "N new" on a saved search ignores its topics, and
       places, source types and years were never applied. Count with the search's own predicate
-- [ ] `B-178` **Open a source at the passage** — a hit links to the top of its source, and the
+- [x] `B-178` `v0.166.10`. **Open a source at the passage** — a hit links to the top of its source, and the
       source page loads 20 passages, so a hit on page 24 is often not on the page at all. Link
       `?chunk=`, load the window around it, mark it; earlier/later at both ends. Same for node
       evidence, the Map's theme card and notes' passage chips

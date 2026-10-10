@@ -412,6 +412,70 @@ async def test_source_chunk_paging_does_not_skip(client, corpus) -> None:
     assert second["has_more"] is False
 
 
+@pytest.fixture
+async def long_source(session_for, marker: str):
+    """One source of twelve passages, long enough for a window to start mid-document."""
+    sess = await session_for("rw")
+    source, _ = await upsert_source(
+        sess, f"https://{marker}.test/long", checksum=f"sha256:{uuid.uuid4().hex}"
+    )
+    await replace_chunks(
+        sess,
+        source.source_id,
+        [ChunkWrite(text=f"{marker} passage {n}.", chunk_index=n) for n in range(12)],
+    )
+    await sess.commit()
+    ids = list(
+        await sess.scalars(
+            select(Chunk.chunk_id)
+            .where(Chunk.source_id == source.source_id)
+            .order_by(Chunk.chunk_index)
+        )
+    )
+    yield source.source_id, ids
+    await sess.execute(delete(Source).where(Source.url == f"https://{marker}.test/long"))
+    await sess.commit()
+
+
+async def test_a_linked_passage_opens_in_its_context(client, long_source) -> None:
+    """`B-178`: a hit on the ninth passage opened the source at the first, and with twenty
+    passages a page a hit past the twentieth was not on the page at all."""
+    from api.routes.explore import CONTEXT_BEFORE
+
+    source_id, ids = long_source
+    body = (
+        await client.get(
+            f"/api/explore/sources/{source_id}/chunks", params={"around": ids[8], "limit": 2}
+        )
+    ).json()
+    assert body["offset"] == 8 - CONTEXT_BEFORE
+    assert body["chunks"][0]["chunk_index"] == 8 - CONTEXT_BEFORE
+    assert body["has_more"] is True
+
+    # Near the top the window starts at the top, never before it.
+    near = (
+        await client.get(f"/api/explore/sources/{source_id}/chunks", params={"around": ids[1]})
+    ).json()
+    assert near["offset"] == 0
+    assert ids[1] in [c["chunk_id"] for c in near["chunks"]]
+
+
+async def test_a_passage_from_elsewhere_is_ignored_not_trusted(client, long_source, corpus) -> None:
+    """Another source's chunk, or one that does not exist, leaves the window at `offset`."""
+    source_id, _ = long_source
+    other = (await client.get(f"/api/explore/sources/{corpus[0].source_id}/chunks")).json()[
+        "chunks"
+    ][0]["chunk_id"]
+    for around in (other, 10**12):
+        body = (
+            await client.get(
+                f"/api/explore/sources/{source_id}/chunks", params={"around": around, "offset": 4}
+            )
+        ).json()
+        assert body["offset"] == 4
+        assert body["chunks"][0]["chunk_index"] == 4
+
+
 async def test_a_chunk_reads_back_with_the_gates_verdict(client, session_for, corpus) -> None:
     sess = await session_for("rw")
     chunk = (
