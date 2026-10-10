@@ -182,9 +182,11 @@ export function BoostsTable({
               <tr key={row.topic.topic} className={ROW} data-topic={row.topic.topic}>
                 <td className={TDM}>{row.topic.topic}</td>
                 <td className={`${TDM} whitespace-nowrap`}>{row.topic.boost_factor}×</td>
-                <td className={`${TDM} whitespace-nowrap ${row.boost_active ? '' : 'text-text-faint'}`}>
+                <td className={`${TDM} sm:whitespace-nowrap ${row.boost_active ? '' : 'text-text-faint'}`}>
                   {row.boost_active ? '' : 'expired '}
-                  {row.topic.boost_expires_at ? dayOf(row.topic.boost_expires_at) : null}
+                  {row.topic.boost_expires_at ? (
+                    <span className="whitespace-nowrap">{dayOf(row.topic.boost_expires_at)}</span>
+                  ) : null}
                 </td>
                 <td className={`${TD} whitespace-nowrap text-right`}>
                   {row.boost_active ? (
@@ -198,7 +200,8 @@ export function BoostsTable({
                     </button>
                   ) : (
                     // The steering log keeps the record, so clearing loses nothing.
-                    <span className="flex justify-end gap-2">
+                    // Stacked on a phone, where two buttons side by side ran off the card.
+                    <span className="flex flex-col items-end gap-2 sm:flex-row sm:justify-end">
                       <button
                         type="button"
                         className={BUTTON_ROW}

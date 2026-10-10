@@ -936,7 +936,8 @@ action, so the common next step, boosting the same topic again, meant retyping i
 **Run again** opens the form on its topic and multiplier with a fresh fortnight, and **Clear**
 removes the row; the steering log keeps the record, so clearing loses nothing. Running boosts
 are listed first, and the form says when a new boost would replace one that is still running,
-since a topic has one boost and the second silently overwrote the first.
+since a topic has one boost and the second silently overwrote the first. On a phone the two
+buttons stack, since side by side they ran off the card (`B-213`).
 
 ### Proposals
 

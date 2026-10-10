@@ -1893,7 +1893,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       of `NaN`; leave them out as furniture spans. Then re-cut the table-heavy sources
       (`worker.rechunk --apply`, the operator's call)
 - [ ] `B-192` **Figure captions are not searchable** (suspect value) and PDF tables lose columns
-      without `-layout` (suspect); lexical search is English-only for ~30k chunks (suspect)
+      without `-layout` (suspect); lexical search is English-only for ~30k chunks (suspect).
+      Captions measured 2026-10-10, refuted: about 16k passages carry a numbered caption in their
+      text, only 57 are a caption alone (short of the vector arm's 40 characters, still found
+      lexically), and their unembedded share is the general backlog's. Tables: being measured
 - [x] `B-172` **Two regions both named "Data"** — `v0.165.5`. After `B-159` more areas take
       their terms, and names from terms were never told apart. Areas listed together whose
       term names coincide now carry their next own term: "Data (health)", "Data (research)"

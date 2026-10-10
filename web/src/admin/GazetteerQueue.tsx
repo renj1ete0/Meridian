@@ -306,7 +306,8 @@ export function GazetteerQueue({
                 Put back selected
               </button>
             ) : null}
-            <span className="ml-auto font-mono text-[10.5px] text-text-faint">
+            {/* Keys mean nothing on a touch screen, where the hint only wrapped mid-phrase. */}
+            <span className="ml-auto hidden font-mono text-[10.5px] text-text-faint pointer-fine:inline">
               {KEYS.map(({ key, does }) => `${key} ${does}`).join(' · ')}
             </span>
           </div>
