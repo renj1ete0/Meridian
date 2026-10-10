@@ -406,8 +406,15 @@ export function NodePage({ entityId }: { entityId: number }) {
           <p className="absolute inset-x-[18px] top-14 text-[12px] text-accent-attention">{unavailable}</p>
         ) : null}
 
-        {/* Status, bottom left. */}
-        <div className="absolute bottom-4 left-[18px] right-[250px] font-mono text-[10.5px] text-text-faint">
+        {/* Status, bottom left. On a phone the controls take most of the width, so the status
+            goes above them rather than into a column a word wide. */}
+        <div
+          className={`absolute left-[18px] font-mono text-[10.5px] text-text-faint ${
+            view === 'node-link' && hood
+              ? 'bottom-16 right-[18px] sm:bottom-4 sm:right-[250px]'
+              : 'bottom-4 right-[18px] sm:right-[250px]'
+          }`}
+        >
           {path.phase === 'picking' ? (
             <div className="pointer-events-auto flex max-w-[360px] flex-col gap-2">
               <span>Path from {focusName}: click a concept, or find one.</span>

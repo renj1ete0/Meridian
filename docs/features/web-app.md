@@ -743,6 +743,11 @@ button is the breadcrumb's back and a refocused view can be pasted into a note. 
 here is re-fetched rather than spliced into the panel, because the server decides what a note
 ends up being.
 
+**On a phone the canvas status goes above its controls** (`B-212`): beside four buttons it was
+a column a word wide and five lines tall. The panel's action bar keeps a clear 16px before the
+question toggle, which sits over its corner, so the toggle does not read as a fourth action
+next to Cite.
+
 ### The node panel
 
 §12.5 asks for "description, attribute tags with confidence, supporting chunks with source and

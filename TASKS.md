@@ -1822,6 +1822,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
+- [x] `B-212` `v0.168.7`. **Node page at the edges** (audit) — the canvas status squeezed
+      beside its controls on a phone; the question toggle crowding Cite
 - [x] `B-211` `v0.168.5`. **Expired boosts were dead rows** (audit) — run one again from a
       filled form, clear it, running ones first, and a warning before replacing a running boost
 - [x] `B-210` `v0.168.4`. **Reaching a time zone** (audit) — the Display select held four

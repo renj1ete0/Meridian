@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.7] — 2026-10-10
+
+### Fixed
+
+- `B-212`: on a phone the node canvas's status line sits above its controls instead of in a
+  narrow column beside them; the node panel's actions keep a clear gap before the question toggle
+
 ## [0.168.6] — 2026-10-10
 
 ### Fixed

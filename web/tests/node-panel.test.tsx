@@ -229,3 +229,13 @@ describe('how much stands behind a node (B-208)', () => {
     expect(standingLine({ degree: 1, sources: 1, newest: null })).toBe('1 link · 1 source')
   })
 })
+
+describe('the action bar beside the question toggle (B-212)', () => {
+  it('leaves the toggle a clear gap, so it does not read as one more action', () => {
+    // The toggle is 44px wide and sits 24px in from the edge (AskPanel, sm and up).
+    const { container } = render(<NodePanel detail={detail()} />)
+    const padding = /\bpr-\[(\d+)px\]/.exec(container.querySelector('footer')!.className)
+    expect(padding).not.toBeNull()
+    expect(Number(padding![1])).toBeGreaterThanOrEqual(44 + 24 + 12)
+  })
+})

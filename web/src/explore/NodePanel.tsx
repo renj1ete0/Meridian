@@ -443,8 +443,9 @@ export function NodePanel({
       </div>
 
       {/* Right padding keeps the actions clear of the question toggle, which
-          sits over this corner (`B-125`). */}
-      <footer className="flex flex-wrap items-center gap-2 border-t border-line py-3.5 pl-5 pr-[72px]">
+          sits over this corner (`B-125`): 44px wide, 24px in, plus a clear 16px,
+          so the toggle does not read as one more action in the row (`B-212`). */}
+      <footer className="flex flex-wrap items-center gap-2 border-t border-line py-3.5 pl-5 pr-[84px]">
         <button
           type="button"
           onClick={onExpand}
