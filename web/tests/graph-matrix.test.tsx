@@ -271,3 +271,12 @@ describe('the matrix in the workspace', () => {
     expect(screen.queryByText(/is not built yet/)).toBeNull()
   })
 })
+
+describe('the table names its two scopes (B-208)', () => {
+  it('says which counts are about this link and which are the neighbour’s own', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const source = readFileSync(join(__dirname, '..', 'src', 'explore', 'graph', 'TableView.tsx'), 'utf8')
+    for (const label of ['Passages here', 'Its links', 'Its sources']) expect(source).toContain(`label: '${label}'`)
+  })
+})

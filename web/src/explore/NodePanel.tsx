@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { GraphNodeDetail, ContestedPair, Evidence } from './graph/api'
+import type { GraphNode, GraphNodeDetail, ContestedPair, Evidence } from './graph/api'
 import type { NodeAttribute, NoteDraft, SearchHit } from '../lib/api'
 import { readable } from '../lib/readable'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
@@ -46,6 +46,17 @@ export function excerpt(text: string, max = 240): string {
   if (flat.length <= max) return flat
   const cut = flat.slice(0, max)
   return `${cut.slice(0, cut.lastIndexOf(' ') > max * 0.6 ? cut.lastIndexOf(' ') : max)}…`
+}
+
+/**
+ * How much stands behind a node (`B-208`, design `Explore`): `41 links · 12 sources · newest
+ * 2026-07`. What a reader judges a node's weight by before reading its evidence.
+ */
+export function standingLine(s: Pick<GraphNode, 'degree' | 'sources' | 'newest'>): string {
+  const n = (count: number, one: string) => `${count.toLocaleString('en')} ${count === 1 ? one : `${one}s`}`
+  const parts = [n(s.degree, 'link'), n(s.sources, 'source')]
+  if (s.newest) parts.push(`newest ${s.newest.slice(0, 7)}`)
+  return parts.join(' · ')
 }
 
 /** `Intervention · walkability · SG` — type, topics, jurisdiction, as known. */
@@ -221,10 +232,13 @@ export interface NodePanelProps {
   writing?: boolean
   writeError?: string | null
   origin?: string
+  /** The node's own counts across the graph, from its neighbourhood (`B-208`). */
+  standing?: Pick<GraphNode, 'degree' | 'sources' | 'newest'> | null
 }
 
 export function NodePanel({
   detail,
+  standing = null,
   onExpand,
   expandBlocked = null,
   onWrite,
@@ -280,6 +294,7 @@ export function NodePanel({
               {entity.canonical_name}
             </h1>
             <p className="font-mono text-[9.5px] uppercase tracking-[0.15em] text-text-faint">{metaLine(detail)}</p>
+            {standing ? <p className="font-mono text-[10.5px] text-text-faint">{standingLine(standing)}</p> : null}
             {entity.aliases && entity.aliases.length > 0 ? (
               <p className="font-mono text-[10.5px] text-text-faint">also {entity.aliases.join(' · ')}</p>
             ) : null}

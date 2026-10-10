@@ -457,6 +457,7 @@ export function NodePage({ entityId }: { entityId: number }) {
       {detail ? (
         <NodePanel
           detail={detail}
+          standing={hood?.focus ?? null}
           onExpand={() => setLimit((l) => Math.min(CEILING, l + PAGE))}
           expandBlocked={hood ? expandBlocked(hood, limit) : 'Loading.'}
           onWrite={onWrite}

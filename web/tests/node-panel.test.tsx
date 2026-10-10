@@ -24,6 +24,7 @@ import {
   excerpt,
   formatConfidence,
   metaLine,
+  standingLine,
 } from '../src/explore/NodePanel'
 import { attribute, detail, entity, evidence, hit, pair } from './graph-fixtures'
 
@@ -217,5 +218,14 @@ describe('the panel', () => {
   it('names the node id in the action bar', () => {
     render(<NodePanel detail={detail()} />)
     expect(screen.getByText('node #1')).toBeTruthy()
+  })
+})
+
+describe('how much stands behind a node (B-208)', () => {
+  it('counts links and sources, and gives the newest month', () => {
+    expect(standingLine({ degree: 41, sources: 12, newest: '2026-07-14' })).toBe(
+      '41 links · 12 sources · newest 2026-07',
+    )
+    expect(standingLine({ degree: 1, sources: 1, newest: null })).toBe('1 link · 1 source')
   })
 })

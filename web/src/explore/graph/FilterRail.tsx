@@ -308,6 +308,7 @@ export function FilterRail({
             >
               <input
                 aria-label="Name for this view"
+                placeholder="Name this view"
                 autoFocus
                 value={naming}
                 onChange={(e) => setNaming(e.target.value)}

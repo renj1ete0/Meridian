@@ -1822,6 +1822,8 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
+- [x] `B-208` `v0.168.2`. **Node page reading** (audit): summary line, table scopes named,
+      save placeholder
 - [x] `B-207` `v0.168.1`. **Copy the passages as citations** — beside Save this view
 - [x] `B-206` `v0.168.0`. **The answer as a brief** — a Markdown download of the answer page,
       every source quoted and cited, nothing generated

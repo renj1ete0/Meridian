@@ -66,13 +66,16 @@ export function sortRows(rows: readonly TableRow[], key: SortKey, descending: bo
   return descending ? sorted.reverse() : sorted
 }
 
-const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
-  { key: 'name', label: 'Neighbour' },
-  { key: 'type', label: 'Type' },
-  { key: 'support', label: 'Passages', numeric: true },
-  { key: 'degree', label: 'Edges', numeric: true },
-  { key: 'sources', label: 'Sources', numeric: true },
-  { key: 'newest', label: 'Newest' },
+// Two scopes in one table, named apart (`B-208`): passages joining this neighbour to the focus,
+// then the neighbour's own totals across the graph. "Passages 1, edges 5, sources 4" read as a
+// contradiction while all three looked like one scope.
+const COLUMNS: { key: SortKey; label: string; numeric?: boolean; title: string }[] = [
+  { key: 'name', label: 'Neighbour', title: 'The node linked to this one' },
+  { key: 'type', label: 'Type', title: 'What kind of thing it is' },
+  { key: 'support', label: 'Passages here', numeric: true, title: 'Passages stating a link between it and this node' },
+  { key: 'degree', label: 'Its links', numeric: true, title: 'Its links across the whole graph' },
+  { key: 'sources', label: 'Its sources', numeric: true, title: 'Sources behind its links across the whole graph' },
+  { key: 'newest', label: 'Newest', title: 'The newest dated source behind its links' },
 ]
 
 export function TableView({ hood }: { hood: Neighbourhood }) {
@@ -100,6 +103,7 @@ export function TableView({ hood }: { hood: Neighbourhood }) {
               >
                 <button
                   type="button"
+                  title={c.title}
                   onClick={() =>
                     setSort((s) => ({
                       key: c.key,

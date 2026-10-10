@@ -498,3 +498,11 @@ types a name wants to land on it without the mouse; its requests are debounced a
 superseded, so a fast typist never sees results for a prefix already typed past. Recently
 focused nodes are kept per browser for the landing's "where you were", like the since-last-visit
 stamp. Returning to a node already on the breadcrumb trail cuts the trail there.
+
+
+**What stands behind a node, and which scope a count is in** (`B-208`). The panel's header now
+carries the design's summary line, "41 links · 12 sources · newest 2026-07", from the node's own
+counts across the graph, so its weight can be judged before reading its evidence. The table's
+columns name their two scopes: "Passages here" (joining that neighbour to this node), then "Its
+links" and "Its sources" (the neighbour's totals across the graph). As "Passages, Edges,
+Sources" a row reading 1, 5, 4 looked like a contradiction.

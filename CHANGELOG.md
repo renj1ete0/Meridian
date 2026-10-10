@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.2] — 2026-10-10
+
+### Fixed
+
+- `B-208`: the node panel says how much stands behind a node (links, sources, newest); the
+  table's columns name which counts are about this link and which are the neighbour's own;
+  the node page's save box has a placeholder
+
 ## [0.168.1] — 2026-10-10
 
 ### Added
