@@ -1779,7 +1779,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       source page loads 20 passages, so a hit on page 24 is often not on the page at all. Link
       `?chunk=`, load the window around it, mark it; earlier/later at both ends. Same for node
       evidence, the Map's theme card and notes' passage chips
-- [ ] `B-179` **Source page for citing** — per-passage copy-citation, original URL in a new tab,
+- [x] `B-179` `v0.166.11`. **Source page for citing** — per-passage copy-citation, original URL in a new tab,
       "Explore" breadcrumb returns to the results; rename the passage "cite" checkbox (it selects
       for a note, while "Cite" on a node copies)
 - [ ] `B-180` **Manage views and notes** — no rename/delete for views (the API has both), notes

@@ -618,6 +618,16 @@ source whose page ended at page 9, under a figures list running to page 54). The
 grows both ways ("Earlier passages", "Later passages"), the count says which passages are shown
 ("41–60, more after"), and a link to a passage the source no longer holds as live text says so
 instead of marking nothing.
+
+**Citing from the page** (`B-179`). Each passage has "copy citation" (`lib/cite.ts`): the
+words, cut at a word past 400 characters and stripped of the Markdown the page was stored in,
+then title, publisher, date ("n.d." when there is none), the page when the source counts pages,
+the original URL, and the link back to this passage here. A character offset is never written as
+a page. The note checkbox, which was also labelled "cite", is "quote in note": the node page's
+"Cite" copies, and two controls with one name doing different things taught the wrong one. The
+original URL opens in a new tab, as it does from the results, and the breadcrumb leads back to
+the results this tab came from ("results for “…”", from `sessionStorage`) rather than to an
+empty landing; Back always worked, the breadcrumb did not.
 ### Figures
 
 §12.5 asks for "thumbnails linked to the node, with page-accurate links to raw files". There are

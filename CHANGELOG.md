@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.11] — 2026-10-10
+
+### Added
+
+- `B-179`: "copy citation" on every passage of a source page; the breadcrumb leads back to the
+  results; the original opens in a new tab; the note checkbox reads "quote in note"
+
 ## [0.166.10] — 2026-10-10
 
 ### Fixed

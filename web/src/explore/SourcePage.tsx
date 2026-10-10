@@ -11,6 +11,8 @@ import {
   type Source,
   type SourceWithPage,
 } from '../lib/api'
+import { passageCitation } from '../lib/cite'
+import { lastFind } from '../lib/lastFind'
 import { citablePosition } from '../lib/position'
 import { readable } from '../lib/readable'
 import { onInternalClick, passageOf } from '../lib/route'
@@ -187,6 +189,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
   }
 
   const it = source.data
+  const from = lastFind()
   const span =
     chunks.status === 'ready' && chunks.chunks.length > 0
       ? `${chunks.start + 1}–${chunks.start + chunks.chunks.length}${chunks.more ? ', more after' : ''}`
@@ -195,11 +198,25 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
   return (
     <article className={PAGE}>
       {/* The artboard's breadcrumb form: mono, faint, the last step in ink. */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 font-mono text-[11px] text-text-faint">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-text-faint">
         <a href="/" onClick={onInternalClick('/')} className="hover:text-accent-graph">
           Explore
         </a>
         <span aria-hidden="true">›</span>
+        {/* Back to the results this tab came from, not the empty landing (`B-179`). */}
+        {from ? (
+          <>
+            <a
+              href={from.href}
+              onClick={onInternalClick(from.href)}
+              className="min-w-0 truncate hover:text-accent-graph"
+              title={`Results for “${from.q}”`}
+            >
+              results for “{from.q}”
+            </a>
+            <span aria-hidden="true">›</span>
+          </>
+        ) : null}
         <span className="text-text">{hostOf(it.url)}</span>
       </nav>
 
@@ -221,6 +238,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
 
         <a
           href={it.url}
+          target="_blank"
           rel="noreferrer"
           className="break-all font-mono text-[10.5px] text-accent-graph hover:underline"
         >
@@ -252,6 +270,7 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
             <Passages
               chunks={chunks.chunks}
               target={target}
+              source={it}
               pageUnit={source.status === 'ready' ? source.data.page_unit : null}
               citing={citing}
               onCite={(chunkId) =>
@@ -359,6 +378,32 @@ export function RecordDetails({ source }: { source: Source }) {
   )
 }
 
+/**
+ * Copies one passage as a citation: the words, where they are from, the way back (`B-179`).
+ * Says whether it took, since a copy that silently failed is pasted as nothing.
+ */
+function CopyCitation({ source, chunk }: { source: SourceWithPage; chunk: Chunk }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  function copy() {
+    const done = (next: 'copied' | 'failed') => {
+      setState(next)
+      window.setTimeout(() => setState('idle'), 2000)
+    }
+    const text = passageCitation(source, chunk, window.location.origin)
+    if (navigator.clipboard?.writeText)
+      navigator.clipboard.writeText(text).then(
+        () => done('copied'),
+        () => done('failed'),
+      )
+    else done('failed')
+  }
+  return (
+    <button type="button" onClick={copy} className="hover:text-accent-graph">
+      {state === 'copied' ? 'copied' : state === 'failed' ? 'not copied' : 'copy citation'}
+    </button>
+  )
+}
+
 function MoreButton({ side, busy, onClick }: { side: 'earlier' | 'later'; busy: boolean; onClick: () => void }) {
   return (
     <button
@@ -375,11 +420,14 @@ function MoreButton({ side, busy, onClick }: { side: 'earlier' | 'later'; busy: 
 function Passages({
   chunks,
   target,
+  source,
   pageUnit,
   citing,
   onCite,
 }: {
   chunks: readonly Chunk[]
+  /** What a copied citation names. */
+  source: SourceWithPage
   /** The passage the link opened on, marked and scrolled to once. */
   target: number | null
   pageUnit: SourceWithPage['page_unit']
@@ -433,8 +481,9 @@ function Passages({
                   onChange={() => onCite(chunk.chunk_id)}
                   className="h-[13px] w-[13px] cursor-pointer accent-[var(--accent-graph)]"
                 />
-                cite
+                quote in note
               </label>
+              <CopyCitation source={source} chunk={chunk} />
               {/* A page is citable; the chunk id and a character offset are bookkeeping,
                   kept within reach of an operator's hover (`B-156`). */}
               <span

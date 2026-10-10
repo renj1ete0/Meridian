@@ -248,3 +248,36 @@ describe('opening on the passage that was clicked (B-178)', () => {
     expect(screen.getByRole('button', { name: 'Later passages ↓' })).toBeTruthy()
   })
 })
+
+describe('citing from the source page (B-179)', () => {
+  afterEach(() => {
+    window.sessionStorage.clear()
+    vi.unstubAllGlobals()
+  })
+
+  it('copies one passage as a citation and says it did', async () => {
+    const writeText = vi.fn(async (_text: string) => {})
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    render(<SourcePage sourceId={7} />)
+    const button = await screen.findByRole('button', { name: 'copy citation' })
+    button.click()
+    await screen.findByRole('button', { name: 'copied' })
+    const text = writeText.mock.calls[0]![0]
+    expect(text).toContain('“A passage about modal share.”')
+    expect(text).toContain('Annual transport report, Example Authority, 2026-04-02, p. 4.')
+    expect(text).toContain('/sources/7?passage=100')
+  })
+
+  it('leads back to the results it came from, and opens the original in a new tab', async () => {
+    window.sessionStorage.setItem('meridian.lastFind', '/?q=modal+share&view=passages')
+    render(<SourcePage sourceId={7} />)
+    const back = await screen.findByRole('link', { name: 'results for “modal share”' })
+    expect(back.getAttribute('href')).toBe('/?q=modal+share&view=passages')
+    expect(screen.getByRole('link', { name: SOURCE.url }).getAttribute('target')).toBe('_blank')
+  })
+
+  it('names the note checkbox for what it does, not "cite", which copies elsewhere', async () => {
+    render(<SourcePage sourceId={7} />)
+    expect(await screen.findByRole('checkbox', { name: 'quote in note' })).toBeTruthy()
+  })
+})

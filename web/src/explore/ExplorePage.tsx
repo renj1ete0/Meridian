@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { focusSearch } from '../lib/hotkeys'
 import { openSession } from '../lib/lastVisit'
+import { rememberFind } from '../lib/lastFind'
 import { hrefForNode, navigate } from '../lib/route'
 import { initialMode, rememberMode, type ResultMode } from '../lib/answer'
 import { Lockup } from '../ui/Mark'
@@ -260,6 +261,9 @@ export function ExplorePage() {
         }
       }
 
+      // Remembered as the URL now reads, so a source page can lead back to these results.
+      rememberFind(`${window.location.pathname}${window.location.search}`)
+
       inFlight.current?.abort()
       const controller = new AbortController()
       inFlight.current = controller
@@ -457,6 +461,7 @@ export function ExplorePage() {
                     rememberMode(next)
                     modeChosen.current = true
                     window.history.replaceState({}, '', findLink(asked, filters, next))
+                    rememberFind(findLink(asked, filters, next))
                   }}
                 />
                 <FiltersButton open={railOpen} count={activeCount(filters)} onClick={() => setRailOpen(!railOpen)} />
