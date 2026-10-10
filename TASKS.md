@@ -1803,6 +1803,12 @@ deploy runbook whose first two commands could not work (`B-17`).
       for a note, while "Cite" on a node copies)
 - [x] `B-180` `v0.166.22`; editing notes is `B-201`. **Manage views and notes** — no rename/delete for views (the API has both), notes
       cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
+- [ ] `B-205` **The tag call re-sends the batch** (relay agent's finding) — extraction and
+      tagging each send all 40 passages. Measured 2026-10-10: of 37 attribute values the relay
+      wrote, 28 (76%) cite a passage that extraction also cited; tagging only cited passages would
+      cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
+      Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
+      (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
 - [x] `B-204` `v0.167.4`. **Reference filter misses** (relay agent's finding) — bulleted
       author-year lists without initials, entry tails split across passages, abbreviation glossaries
 - [x] `B-202` `v0.167.0`; a pair kept apart is not yet remembered by resolution. **Decide a possible duplicate** — most of the bell is `merge_adjudication`, and no
