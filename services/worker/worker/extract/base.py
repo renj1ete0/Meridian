@@ -125,6 +125,8 @@ class ExtractedDocument:
     #: source stays metadata-only and OCR is queued rather than run (§6.6) —
     #: distinct from "extracted nothing", which needs no follow-up.
     needs_ocr: bool = False
+    #: Tables kept as rows (`B-214`): how many a PDF's pages gained.
+    tables: int = 0
 
     @property
     def char_count(self) -> int:

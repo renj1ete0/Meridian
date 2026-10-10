@@ -75,6 +75,35 @@ async def replace_chunks(
     return written, superseded
 
 
+async def carry_embeddings(sess: AsyncSession, source_id: int) -> int:
+    """Give each new live chunk the vector of a superseded one with the same text.
+
+    For a re-cut that changes a few passages of a long document (`B-215`): the rest would
+    embed to the same vector, so they keep it rather than queue behind the backlog. A
+    passage starting with a table row is left to embed, since its vector can carry a header
+    row from the passage before it, which a re-cut may have changed. Flushes; returns how
+    many were carried.
+    """
+    result = await sess.execute(
+        sql_text(
+            """
+            UPDATE chunks n SET embedding = o.embedding, embedding_view = o.embedding_view
+            FROM (
+                SELECT DISTINCT ON (text) text, embedding, embedding_view
+                FROM chunks
+                WHERE source_id = :sid AND superseded_at IS NOT NULL AND embedding IS NOT NULL
+                ORDER BY text, superseded_at DESC
+            ) o
+            WHERE n.source_id = :sid AND n.superseded_at IS NULL AND n.embedding IS NULL
+              AND n.text = o.text AND ltrim(n.text) NOT LIKE '|%'
+            """
+        ),
+        {"sid": source_id},
+    )
+    await sess.flush()
+    return result.rowcount or 0
+
+
 async def supersede_chunks(sess: AsyncSession, source_id: int, *, now=None) -> int:
     """Retire this source's live chunks without removing them. Flushes.
 

@@ -7,7 +7,7 @@ location (page or character offset) that a reader can follow back into the store
 
 - **Code:** `services/worker/worker/extract/` (`html.py`, `pdf.py`, `document.py`,
   `figures.py`, `clean.py`, `chunk.py`, `dockind.py`, `errorpage.py`, `injection.py`),
-  `cleancut.py`, `rawstore.py`, `ocr_queue.py`, `boilerplate.py`, `rechunk.py`, `dockind.py`,
+  `cleancut.py`, `rawstore.py`, `ocr_queue.py`, `boilerplate.py`, `rechunk.py`, `retable.py`, `dockind.py`,
   `retitle.py`; `packages/meridian_core/meridian_core/chunks.py`, `sources.py`,
   `boilerplate.py`, `titles.py`, `figures.py`
 - **Tasks:** `P1-07`–`P1-13`, `P2-02`, `B-42`–`B-45`, `B-59`, `B-69`
@@ -201,9 +201,9 @@ rest of the page is untouched.
   placed 624 tables on 364 pages; no placed page gained or lost more than 8% of its words, and
   across them 0.1% of words were lost and 0.7% read twice. Refused: mostly form-like pages,
   where each record is laid out on its own.
-- **Stored documents keep their old text.** The re-cut (`worker.rechunk`) rebuilds from stored
-  passages, not from the file, so tables reach only documents extracted from now on; re-extracting
-  stored PDFs rewrites and re-embeds their passages and is the operator's call.
+- **Stored documents** get their tables from `worker.retable` (`B-215`, below). The re-cut
+  (`worker.rechunk`) cannot do it: it rebuilds from stored passages, which hold the table column
+  by column, not from the file.
 - If the `-layout` pass fails or its pages do not line up with the first pass, the document is
   extracted as before. The pass costs a second `pdftotext` run per PDF.
 
@@ -441,6 +441,21 @@ with a blank line. Three phases, because the per-host set needs every page's lin
 rebuild the boilerplate set, then re-cut and compare. Re-cut sources get new ids, so the embedding,
 novelty and labelling passes pick them up again.
 
+<a id="re-extracting-stored-pdfs"></a>**Re-extracting stored PDFs for their tables** (`B-215`,
+[ADR 0019](../adr/0019-stored-pdfs-re-extracted-for-their-tables.md)). `retable` reads each
+stored PDF's raw file again, through the same extraction a fetch uses, and replaces the source's
+passages only where that extraction places a table. A source no table reaches is left exactly as
+it is, even when a fresh cut of it would differ for some other reason: that difference is not
+this pass's to make. Also left alone: a source anything cites; a file whose checksum is not the
+fetch's (the stored passages were not cut from it); a source whose text came from OCR; and a PDF
+that now reads as a scan. A new passage whose text an old one had keeps that vector
+(`meridian_core.chunks.carry_embeddings`), except one that starts with a table row, whose vector
+can carry a header row from the passage before. A second run changes nothing.
+
+Measured on 338 stored PDFs before the run: 92 gained tables (1,734 placed), passages went from
+14,001 to 14,294, and 81% of the new passages kept their old vector, so the re-embedding is a
+fifth of the passages rewritten.
+
 ### Titles
 
 Measured on a live corpus, declared titles are wrong in three recurring ways (`B-69`): a
@@ -505,7 +520,7 @@ One row per URL, created on first fetch and updated on every fetch.
 
 ## Operating it
 
-- `boilerplate` runs daily. `rechunk`, `dockind`, `retitle` and `furniture` are one-off
+- `boilerplate` runs daily. `rechunk`, `retable`, `dockind`, `retitle` and `furniture` are one-off
   passes for what was stored before a rule existed. Each reports by default, needs `--apply`
   to write, and never touches a source that anything cites.
 - `pdftotext` (poppler) is required in the worker image. Without it every PDF fails loudly,
@@ -527,4 +542,4 @@ One row per URL, created on first fetch and updated on every fetch.
 `tests/unit/test_chunk*.py`, `test_clean*.py`, `test_extract_html.py`,
 `test_extract_pdf.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
 `test_injection_screen.py`, `test_rawstore*.py`; `tests/integration/test_chunks*.py`,
-`test_rechunk*.py`.
+`test_rechunk*.py`, `test_retable.py`.

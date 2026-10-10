@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.171.0] — 2026-10-11
+
+### Added
+
+- `B-215`: `worker.retable` re-extracts stored PDFs from their raw files so their tables keep
+  their rows (ADR 0019). A source's passages are replaced only where a table is placed; cited
+  sources, files that are not the one fetched and OCR text are left alone. A new passage whose
+  text an old one had keeps its vector (`meridian_core.chunks.carry_embeddings`). Reports by
+  default; `--apply` writes. PDF extraction now reports how many tables it placed
+
 ## [0.170.0] — 2026-10-11
 
 ### Added

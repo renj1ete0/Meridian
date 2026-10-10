@@ -181,7 +181,7 @@ async def extract_pdf(
             **(await _metadata(content, timeout_s) if with_metadata else {}),
         )
 
-    extracted = await _with_tables(content, extracted, timeout_s=timeout_s)
+    extracted, tables = await _with_tables(content, extracted, timeout_s=timeout_s)
     metadata = await _metadata(content, timeout_s) if with_metadata else {}
     return ExtractedDocument(
         text="\n\n".join(page.text for page in extracted.pages),
@@ -191,6 +191,7 @@ async def extract_pdf(
         # fabricated bbox would put false precision on a citation.
         figures=figures_from_pages(extracted.pages),
         extractor="pdftotext",
+        tables=tables,
         **metadata,
     )
 
@@ -223,8 +224,10 @@ async def _run_pdftotext(content: bytes, *, timeout_s: int) -> PdfText | None:
     return PdfText(pages=pages, page_count=len(pages))
 
 
-async def _with_tables(content: bytes, extracted: PdfText, *, timeout_s: int) -> PdfText:
-    """The pages with their tables as rows, where a table can be placed (`B-214`).
+async def _with_tables(
+    content: bytes, extracted: PdfText, *, timeout_s: int
+) -> tuple[PdfText, int]:
+    """The pages with their tables as rows, where a table can be placed, and how many (`B-214`).
 
     A second pass in `-layout` mode finds the tables; reading order stays the page's text
     everywhere else. If that pass fails or its pages do not line up with the first, the
@@ -235,7 +238,7 @@ async def _with_tables(content: bytes, extracted: PdfText, *, timeout_s: int) ->
         [PDFTOTEXT, "-q", "-layout", "-enc", "UTF-8", "-", "-"], content, timeout_s
     )
     if layout is None:
-        return extracted
+        return extracted, 0
     pieces = layout.split(FORM_FEED)
     if pieces and not pieces[-1].strip():
         pieces.pop()
@@ -244,7 +247,7 @@ async def _with_tables(content: bytes, extracted: PdfText, *, timeout_s: int) ->
             "pdf layout pass does not line up; tables left in reading order",
             extra={"pages": extracted.page_count, "layout_pages": len(pieces)},
         )
-        return extracted
+        return extracted, 0
 
     pages = []
     tables = 0
@@ -258,7 +261,7 @@ async def _with_tables(content: bytes, extracted: PdfText, *, timeout_s: int) ->
         pages.append(Page(number=page.number, text=text) if placed else page)
     if tables:
         log.info("pdf tables kept as rows", extra={"tables": tables})
-    return dataclasses.replace(extracted, pages=tuple(pages))
+    return dataclasses.replace(extracted, pages=tuple(pages)), tables
 
 
 async def _metadata(content: bytes, timeout_s: int) -> dict[str, object]:

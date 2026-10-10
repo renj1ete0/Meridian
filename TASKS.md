@@ -21,6 +21,18 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-11 (night) — `v0.170.0`–`v0.171.0`, pushed.** Operator decisions taken: stored PDFs
+> re-extracted for their tables (ADR 0019), a note is withdrawn not deleted (ADR 0020), paid-model
+> work parked, old commit messages may be reworded. Built: `worker.retable` (`B-215`) and note
+> withdrawal (`B-201`). **The `retable --apply` run was still going at handover** (started
+> 2026-10-10 15:58 UTC inside `meridian-local-worker-1` via `docker exec`, about a fifth through,
+> ~4 h in all): do not recreate the worker until it ends; it is safe to re-run, since a finished
+> source reads "same passages already". Its new passages queue to embed (most keep their vector).
+> The local DB is migrated to `b201a1d4a300`; api and web rebuilt, the worker image has the
+> `B-215` code. **Resume with:** check the run finished (re-run the report: `would change` ≈ 0),
+> then tick `B-215`; `B-216` (MCP shows notes to every token); non-English lexical search
+> (`B-192`); remind the operator that `B-163`/`B-205` wait for a paid model.
+
 > **2026-10-10 (evening) — `v0.168.3`–`v0.169.0`, pushed; local stack rebuilt.** Built: find a
 > gazetteer term, with the pager counting matches (`B-209`); time zones by city or offset, and a
 > stored `UTC` shown as UTC (`B-210`); expired boosts run again or cleared (`B-211`); node page
@@ -1830,10 +1842,16 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
-- [ ] `B-215` **Re-extract stored PDFs for their tables** (operator's call) — `B-214` reaches
-      only documents extracted from now on; the re-cut rebuilds from passages, not files. A
-      re-extract from the raw file rewrites and re-embeds passages of about 7k PDFs, a third
-      of whose pages hold tables. Needs a tool that skips cited sources, as the re-cut does
+- [~] `B-215` `v0.171.0`: built, `--apply` run in progress at handover ([ADR 0019](docs/adr/0019-stored-pdfs-re-extracted-for-their-tables.md)). **Re-extract stored PDFs for their tables** — `worker.retable` reads
+      each stored PDF's raw file again and replaces its passages only where a table is placed;
+      cited sources, changed files and OCR text are left alone, and unchanged passages keep their
+      vectors. Tick when the run has finished and a report shows nothing left to change
+- [ ] `B-216` **MCP shows the operator's notes to every token** (found while building `B-201`) —
+      `get_node` returns a node's notes and `find_nodes`/neighbourhood include note nodes for any
+      token, while docs/features/mcp.md says notes go only with the `operator` profile.
+      `Grant.annotations` exists but nothing reads it, and a token stores only its tool list,
+      which is the same for `analyst` and `operator`; enforcing it needs the profile on the
+      token (or its grant) and a filter in those three tools
 - [x] `B-214` `v0.169.0`. **PDF tables keep their rows** — a `-layout` pass finds tables and
       puts them, as pipe tables, where reading order had their cells column by column; placed
       only when clean (measured: 624 tables on 364 of 1,912 sample pages, 0.1% of words lost)
