@@ -1018,6 +1018,18 @@ model's enums by a test, so a new value must be given words. Queue states with n
 are left out: `extracted` and `embedded` read 0 every day. Each of the busiest domains links to
 its Fetch policy row (`/admin/fetch-policy?q=<domain>`), since "0 of 7 succeeded" is answered
 there and the page had no links at all.
+
+**A deliberate pause is named as one** (`B-203`). The worker stops claiming while the valuable
+embedding backlog is over its ceiling (`B-61`, `MERIDIAN_WORKER_MAX_EMBED_BACKLOG`, 20,000 by
+default) and starts again under 80% of it. Liveness saw only "no fetch, work ready" and judged
+it stalled: the pill turned brass with "crawl stalled", and Crawl health told the operator to
+check the worker was running, while it was waiting by design for a CPU embedder to catch up.
+Liveness now counts the backlog when it would otherwise say stalled, and if it is over the
+resume point the state is `paused`, carrying the backlog and the ceiling: "Paused for
+embedding — N passages wait for a vector … resumes by itself under M". The pill stays calm and
+says "paused for embedding" in words. The ceiling has one definition (`crawlhealth`), read by
+the worker and by liveness, and the local compose passes the same variable to the API; a test
+holds the two services' values together.
 ### The first run
 
 §16 lists cold-start seed quality as a real risk, "worth spending an evening on", and that

@@ -1806,6 +1806,9 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-202` `v0.167.0`; a pair kept apart is not yet remembered by resolution. **Decide a possible duplicate** — most of the bell is `merge_adjudication`, and no
       screen decides one: show both nodes and their evidence side by side, merge or keep apart
       (a merge is reversible: the old id redirects)
+- [x] `B-203` `v0.167.1`. **A deliberate pause shown as a stall** — the worker stops claiming
+      over the embedding ceiling; the pill said "crawl stalled" and Crawl health told the
+      operator to check the worker. Liveness now says `paused`, with backlog and ceiling
 - [ ] `B-201` **Edit or remove a note** — a note is a node; PATCH exists with no interface, and
       removing one needs a decision about its links (soft delete, as §2.5 does for steering?)
 - [x] `B-181` **Notification links go to the right place** — `v0.166.2`. approvals, run summaries and

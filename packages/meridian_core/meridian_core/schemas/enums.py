@@ -119,4 +119,6 @@ PageUnit = Literal["page", "offset"]
 #: Whether the crawl is alive (`P6-25`), judged at read time by `crawlhealth.judge`.
 #: ``waiting`` (all pending work in backoff) is not ``stalled``; see
 #: docs/reference/data-model.md#crawl-health.
-LivenessState = Literal["crawling", "stalled", "waiting", "idle"]
+#: ``paused`` (`B-203`): no fetch, work ready, and the embedding backlog over the worker's
+#: ceiling, so the worker is holding off by design rather than stuck.
+LivenessState = Literal["crawling", "stalled", "paused", "waiting", "idle"]

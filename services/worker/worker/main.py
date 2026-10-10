@@ -31,6 +31,7 @@ from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_a
 from meridian_core.boilerplate import host_key
 from meridian_core.chunks import as_writes, chunk_count, embedding_backlog, replace_chunks
 from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
+from meridian_core.crawlhealth import DEFAULT_MAX_EMBED_BACKLOG, EMBED_BACKLOG_ENV, RESUME_SHARE
 from meridian_core.db import dispose_engines, session
 from meridian_core.figures import FigureWrite, replace_figures
 from meridian_core.hostscores import Decision, HostPolicy, Standing, record_vouches
@@ -182,7 +183,6 @@ DEFAULT_DIRECTED_EVERY = 2
 LOOKUP_EVERY = 3
 
 #: The crawl pauses while this many live chunks wait for a vector (`B-61`).
-DEFAULT_MAX_EMBED_BACKLOG = 20_000
 
 #: How often the backlog is re-counted while claiming.
 BACKLOG_CHECK_S = 60.0
@@ -275,9 +275,7 @@ class WorkerSettings:
             directed_every=_env_int(
                 "MERIDIAN_WORKER_DIRECTED_EVERY", DEFAULT_DIRECTED_EVERY, minimum=0
             ),
-            max_embed_backlog=_env_int(
-                "MERIDIAN_WORKER_MAX_EMBED_BACKLOG", DEFAULT_MAX_EMBED_BACKLOG, minimum=0
-            ),
+            max_embed_backlog=_env_int(EMBED_BACKLOG_ENV, DEFAULT_MAX_EMBED_BACKLOG, minimum=0),
         )
 
 
@@ -568,7 +566,7 @@ class Worker:
             async with self._session_factory() as sess:
                 backlog = await embedding_backlog(sess, valuable_only=True)
             was = self._paused
-            self._paused = backlog > ceiling if not was else backlog > int(ceiling * 0.8)
+            self._paused = backlog > ceiling if not was else backlog > int(ceiling * RESUME_SHARE)
             if self._paused != was:
                 log.info(
                     "crawl paused for embedding" if self._paused else "crawl resumed",

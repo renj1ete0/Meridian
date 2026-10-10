@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import os
 
 from sqlalchemy import DateTime, Integer, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,23 @@ TOP_DOMAINS = 10
 #: No fetch attempt for this long, with work that is ready, is a stall: the claim
 #: lease, "longer than any fetch should take". See docs/features/operations.md#crawl-health.
 STALL_AFTER = dt.timedelta(seconds=DEFAULT_LEASE_SECONDS)
+
+#: The valuable embedding backlog above which the worker stops claiming (`B-61`), and the
+#: share of it below which it starts again. One definition, read by the worker and by
+#: liveness, so a deliberate pause is never shown as a stall (`B-203`).
+DEFAULT_MAX_EMBED_BACKLOG = 20_000
+RESUME_SHARE = 0.8
+EMBED_BACKLOG_ENV = "MERIDIAN_WORKER_MAX_EMBED_BACKLOG"
+
+
+def embed_ceiling() -> int:
+    """The worker's backlog ceiling, from the environment; 0 means backpressure is off."""
+    raw = os.environ.get(EMBED_BACKLOG_ENV, "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_MAX_EMBED_BACKLOG
+    except ValueError:
+        return DEFAULT_MAX_EMBED_BACKLOG
+    return max(0, value)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,6 +92,9 @@ class Liveness:
     ready: int
     #: All pending rows, including those still backing off.
     pending: int
+    #: When the embedding backlog decided the state (`paused`), it and the ceiling.
+    embed_backlog: int | None = None
+    embed_ceiling: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,14 +120,24 @@ def judge(
     pending: int,
     now: dt.datetime,
     stall_after: dt.timedelta = STALL_AFTER,
+    embed_backlog: int | None = None,
+    ceiling: int = 0,
 ) -> LivenessState:
     """The verdict, from the numbers alone.
 
     Separate from the queries, so tests can drive every branch. A recent fetch is
-    ``crawling`` even with an empty queue.
+    ``crawling`` even with an empty queue. Ready work and no fetch, with the embedding
+    backlog over the point the worker resumes at, is ``paused``: the brake, not a fault.
     """
     if last_attempt_at is not None and now - last_attempt_at <= stall_after:
         return "crawling"
+    if (
+        ready > 0
+        and ceiling > 0
+        and embed_backlog is not None
+        and embed_backlog > int(ceiling * RESUME_SHARE)
+    ):
+        return "paused"
     if ready > 0:
         # Includes a crawl that has never fetched anything: ready work and no
         # attempt on record is a worker that is not running.
@@ -213,10 +244,27 @@ async def liveness(sess: AsyncSession, *, now: dt.datetime | None = None) -> Liv
         )
         or 0
     )
+    state = judge(last_attempt_at=last, ready=ready, pending=pending, now=now)
+    backlog = ceiling = None
+    if state == "stalled" and (limit := embed_ceiling()) > 0:
+        # Counted only when it could change the verdict: the count is the costly part.
+        counted = int(await embedding_backlog(sess, valuable_only=True))
+        state = judge(
+            last_attempt_at=last,
+            ready=ready,
+            pending=pending,
+            now=now,
+            embed_backlog=counted,
+            ceiling=limit,
+        )
+        if state == "paused":
+            backlog, ceiling = counted, limit
     return Liveness(
-        state=judge(last_attempt_at=last, ready=ready, pending=pending, now=now),
+        state=state,
         last_attempt_at=last,
         quiet_seconds=None if last is None else int((now - last).total_seconds()),
         ready=ready,
         pending=pending,
+        embed_backlog=backlog,
+        embed_ceiling=ceiling,
     )

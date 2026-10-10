@@ -423,6 +423,9 @@ services:
       # fail: it silently halves retrieval on the stack whose whole purpose is
       # to show what retrieval does.
       MERIDIAN_EMBEDDER_URL: http://embedder:8100
+      # The worker's crawl backpressure ceiling, so Crawl health and the status pill call a
+      # deliberate pause "paused" rather than "stalled" (`B-203`). Same default as the worker's.
+      MERIDIAN_WORKER_MAX_EMBED_BACKLOG: ${MERIDIAN_WORKER_MAX_EMBED_BACKLOG:-20000}
       # Admin writes need an identity, and there is no Cloudflare Access in
       # front of a local stack. Opting out explicitly rather than leaving the
       # API to guess: the flag is the same one the tests use, and it is named

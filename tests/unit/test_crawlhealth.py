@@ -15,7 +15,7 @@ import typing
 import pytest
 
 from meridian_core import crawlhealth
-from meridian_core.crawlhealth import STALL_AFTER, judge
+from meridian_core.crawlhealth import RESUME_SHARE, STALL_AFTER, judge
 from meridian_core.queueing import DEFAULT_LEASE_SECONDS
 from meridian_core.schemas import search as dtos
 from meridian_core.schemas.enums import LivenessState
@@ -69,9 +69,10 @@ def test_every_state_is_reachable() -> None:
     """A state in the Literal that `judge` can never return is a state the
     screen has words for and will never show — and the reverse is a 500."""
     reached = {
-        judge(last_attempt_at=last, ready=r, pending=p, now=NOW)
+        judge(last_attempt_at=last, ready=r, pending=p, now=NOW, embed_backlog=b, ceiling=100)
         for last in (RECENT, OLD, None)
         for r, p in ((0, 0), (0, 1), (1, 1))
+        for b in (None, 0, 1000)
     }
     assert reached == set(typing.get_args(LivenessState))
 
@@ -123,3 +124,88 @@ def test_the_whole_answer_validates_from_the_dataclass() -> None:
     unknown = dataclasses.replace(health, queue={"sleeping": 1})
     with pytest.raises(ValueError):
         dtos.CrawlHealthRead.model_validate(unknown)
+
+
+# --------------------------------------------------------------------------
+# A deliberate pause is not a stall (`B-203`)
+# --------------------------------------------------------------------------
+
+
+def test_ready_work_and_no_fetch_over_the_ceiling_is_a_pause_not_a_stall() -> None:
+    """The worker stops claiming above the embedding ceiling (`B-61`); the pill said "crawl
+    stalled" and Crawl health told the operator to check the worker was running."""
+    quiet = NOW - dt.timedelta(hours=1)
+    ceiling = 20_000
+    paused = judge(
+        last_attempt_at=quiet, ready=5, pending=5, now=NOW, embed_backlog=27_258, ceiling=ceiling
+    )
+    assert paused == "paused"
+    # Resumes below 80% of the ceiling: between there and the ceiling it may still be paused.
+    edge = int(ceiling * RESUME_SHARE)
+    assert (
+        judge(
+            last_attempt_at=quiet,
+            ready=5,
+            pending=5,
+            now=NOW,
+            embed_backlog=edge + 1,
+            ceiling=ceiling,
+        )
+        == "paused"
+    )
+    assert (
+        judge(
+            last_attempt_at=quiet, ready=5, pending=5, now=NOW, embed_backlog=edge, ceiling=ceiling
+        )
+        == "stalled"
+    )
+    # Backpressure off, or no count: a stall is a stall.
+    assert (
+        judge(last_attempt_at=quiet, ready=5, pending=5, now=NOW, embed_backlog=27_258, ceiling=0)
+        == "stalled"
+    )
+    assert judge(last_attempt_at=quiet, ready=5, pending=5, now=NOW) == "stalled"
+    # A crawl that is fetching is crawling, whatever the backlog.
+    assert (
+        judge(
+            last_attempt_at=NOW, ready=5, pending=5, now=NOW, embed_backlog=99_999, ceiling=ceiling
+        )
+        == "crawling"
+    )
+
+
+def test_the_ceiling_is_read_as_the_worker_reads_it(monkeypatch) -> None:
+    """One variable for both, so the screen's verdict matches the worker's behaviour."""
+    from meridian_core.crawlhealth import (
+        DEFAULT_MAX_EMBED_BACKLOG,
+        EMBED_BACKLOG_ENV,
+        embed_ceiling,
+    )
+
+    monkeypatch.delenv(EMBED_BACKLOG_ENV, raising=False)
+    assert embed_ceiling() == DEFAULT_MAX_EMBED_BACKLOG
+    monkeypatch.setenv(EMBED_BACKLOG_ENV, "0")
+    assert embed_ceiling() == 0
+    monkeypatch.setenv(EMBED_BACKLOG_ENV, "not a number")
+    assert embed_ceiling() == DEFAULT_MAX_EMBED_BACKLOG
+    monkeypatch.setenv(EMBED_BACKLOG_ENV, "-5")
+    assert embed_ceiling() == 0
+
+
+def test_every_compose_file_that_runs_the_worker_gives_the_api_the_same_ceiling() -> None:
+    """Drift: a ceiling set for the worker and not the API would call its pause a stall."""
+    import pathlib
+
+    import yaml
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    for path in root.glob("docker-compose*.yml"):
+        services = (yaml.safe_load(path.read_text()) or {}).get("services", {})
+        worker, api = services.get("worker"), services.get("api")
+        if not worker or not api or "env_file" in api:
+            continue
+        worker_env = worker.get("environment") or {}
+        if "MERIDIAN_WORKER_MAX_EMBED_BACKLOG" in worker_env:
+            assert worker_env["MERIDIAN_WORKER_MAX_EMBED_BACKLOG"] == (
+                api.get("environment") or {}
+            ).get("MERIDIAN_WORKER_MAX_EMBED_BACKLOG"), path.name

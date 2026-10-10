@@ -1521,7 +1521,7 @@ export function getCrawlProgress(init?: RequestInit): Promise<CrawlProgress> {
 /** `LivenessState` in `schemas/enums.py`. A verdict computed at read time, not
  * a column, so there is no CHECK constraint to drift against — the states are
  * the four branches of `crawlhealth.judge`. */
-export type LivenessState = 'crawling' | 'stalled' | 'waiting' | 'idle'
+export type LivenessState = 'crawling' | 'stalled' | 'paused' | 'waiting' | 'idle'
 
 export const HOUR_BUCKET_FIELDS = ['start', 'succeeded', 'failed'] as const
 
@@ -1552,7 +1552,15 @@ export interface DomainCount {
   succeeded: number
 }
 
-export const LIVENESS_FIELDS = ['state', 'last_attempt_at', 'quiet_seconds', 'ready', 'pending'] as const
+export const LIVENESS_FIELDS = [
+  'state',
+  'last_attempt_at',
+  'quiet_seconds',
+  'ready',
+  'pending',
+  'embed_backlog',
+  'embed_ceiling',
+] as const
 
 /** Mirrors `LivenessRead`. */
 export interface Liveness {
@@ -1561,6 +1569,9 @@ export interface Liveness {
   quiet_seconds: number | null
   ready: number
   pending: number
+  /** When the embedding backlog decided the state (`paused`, `B-203`): it and the ceiling. */
+  embed_backlog: number | null
+  embed_ceiling: number | null
 }
 
 export const CRAWL_HEALTH_FIELDS = [

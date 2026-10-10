@@ -344,6 +344,10 @@ class LivenessRead(BaseModel):
     quiet_seconds: int | None
     ready: int
     pending: int
+    #: Valuable passages waiting for a vector, and the backlog the worker pauses above, when
+    #: they decided the state (`paused`); None otherwise (`B-203`).
+    embed_backlog: int | None = None
+    embed_ceiling: int | None = None
 
 
 class CrawlHealthRead(BaseModel):

@@ -48,6 +48,8 @@ function liveness(over: Partial<Liveness> = {}): Liveness {
     state: 'crawling',
     last_attempt_at: '2026-09-23T11:58:00Z',
     quiet_seconds: 120,
+    embed_backlog: null,
+    embed_ceiling: null,
     ready: 40,
     pending: 42,
     ...over,

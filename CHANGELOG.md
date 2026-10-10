@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.167.1] — 2026-10-10
+
+### Fixed
+
+- `B-203`: a crawl paused by its own embedding backpressure reads "paused for embedding",
+  with how far it is from resuming, instead of "stalled"; liveness gains the `paused` state
+
 ## [0.167.0] — 2026-10-10
 
 ### Added

@@ -23,7 +23,8 @@ import {
   statusLine,
   type RunHistory,
 } from '../src/lib/status'
-import { NAV, TopBar, type ClusterData } from '../src/ui/TopBar'
+import { NAV, StatusPill, TopBar, type ClusterData } from '../src/ui/TopBar'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { CrawlProgress, NotificationItem as Notification, RunRow } from '../src/lib/api'
 
 afterEach(() => {
@@ -155,6 +156,8 @@ const STALLED = {
   quiet_seconds: 32 * 60,
   ready: 3104,
   pending: 3150,
+  embed_backlog: null,
+  embed_ceiling: null,
 }
 
 describe('a stalled crawl shows on every page (B-156)', () => {
@@ -418,5 +421,18 @@ describe('the shell, assembled', () => {
     window.history.pushState({}, '', '/map')
     render(<App />)
     expect(document.querySelector('main')?.className).not.toMatch(/max-w-/)
+  })
+})
+
+describe('a deliberate pause is not a stall (B-203)', () => {
+  const PAUSED = { ...STALLED, state: 'paused' as const, embed_backlog: 27258, embed_ceiling: 20000 }
+
+  it('keeps the pill calm, and says paused in words and in the title', () => {
+    const paused = progress({ liveness: PAUSED })
+    expect(pillHealth(paused, 'ok')).toBe('ok')
+    const markup = renderToStaticMarkup(<StatusPill progress={paused} runs={null} />)
+    expect(markup).toContain('paused for embedding')
+    expect(markup).not.toContain('crawl stalled')
+    expect(statusDetail(paused, 'ok', null)).toContain('27,258 passages wait for a vector')
   })
 })

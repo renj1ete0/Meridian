@@ -235,6 +235,8 @@ export function StatusPill({ progress, runs }: { progress: CrawlProgress | null;
           invisible to a reader who cannot see brass. */}
       {health === 'failed' ? <span className="text-accent-attention">· run failed</span> : null}
       {crawlStalled(progress) ? <span className="text-accent-attention">· crawl stalled</span> : null}
+      {/* The worker's own brake, said in words and not in brass: nothing is wrong (`B-203`). */}
+      {progress?.liveness?.state === 'paused' ? <span>· paused for embedding</span> : null}
       <span className="sr-only">. {detail}</span>
     </a>
   )

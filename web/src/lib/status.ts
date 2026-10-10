@@ -88,6 +88,11 @@ export function statusDetail(progress: CrawlProgress | null, health: RunHealth, 
           ? 'nothing has ever been fetched'
           : `no fetch for ${Math.max(1, Math.round(live.quiet_seconds / 60)).toLocaleString('en')} min`
       parts.push(`The crawl has stalled: ${quiet}, with ${live.ready.toLocaleString('en')} pages ready.`)
+    } else if (live?.state === 'paused') {
+      parts.push(
+        `The crawl is paused while ${(live.embed_backlog ?? 0).toLocaleString('en')} passages wait for a vector; ` +
+          'it resumes by itself as embedding catches up.',
+      )
     } else if (live?.state === 'waiting') {
       parts.push('Every queued page is waiting out a back-off.')
     } else if (live?.state === 'idle') {
