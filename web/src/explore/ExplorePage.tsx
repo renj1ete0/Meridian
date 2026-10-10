@@ -339,6 +339,18 @@ export function ExplorePage() {
       })
   }
 
+  /**
+   * One country from the answer, as passages (`B-175`): the same words, narrowed to it. A new
+   * history entry, so Back returns to the answer it came from.
+   */
+  function readPlace(code: string) {
+    const next = { ...filters, places: [code] }
+    setFilters(next)
+    modeChosen.current = true
+    window.history.pushState({}, '', findLink(asked, next, 'passages'))
+    run(asked, next, 'keep', 'passages')
+  }
+
   /** A filter changed: kept for the next search, and the current one re-run with it. */
   function narrow(next: FindFilters) {
     setFilters(next)
@@ -438,7 +450,9 @@ export function ExplorePage() {
                 <FiltersButton open={railOpen} count={activeCount(filters)} onClick={() => setRailOpen(!railOpen)} />
               </div>
 
-              {mode === 'answer' && asked ? <AnswerView question={asked} filters={filters} /> : null}
+              {mode === 'answer' && asked ? (
+                <AnswerView question={asked} filters={filters} onReadPlace={readPlace} />
+              ) : null}
 
               {mode === 'passages' && phase === 'searching' ? (
                 <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>

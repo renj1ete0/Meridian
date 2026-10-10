@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.5] — 2026-10-10
+
+### Fixed
+
+- `B-175`: the answer's "N more sources not shown" opens Passages narrowed to that country;
+  Back returns to the answer
+
 ## [0.166.4] — 2026-10-10
 
 ### Fixed

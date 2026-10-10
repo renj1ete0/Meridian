@@ -85,11 +85,13 @@ export interface AnswerViewProps {
   question: string
   /** Everything Find is narrowed by; the answer runs the same search. */
   filters: FindFilters
+  /** Read one country's sources as passages (`B-175`): the same search, narrowed to it. */
+  onReadPlace?: (code: string) => void
 }
 
 type State = { phase: 'loading' } | { phase: 'done'; answer: Answer } | { phase: 'failed'; message: string }
 
-export function AnswerView({ question, filters }: AnswerViewProps) {
+export function AnswerView({ question, filters, onReadPlace }: AnswerViewProps) {
   const [state, setState] = useState<State>({ phase: 'loading' })
   // Serialised, so a new object with the same filters does not refetch.
   const wireKey = JSON.stringify(searchFilters(filters))
@@ -116,7 +118,12 @@ export function AnswerView({ question, filters }: AnswerViewProps) {
     return <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{state.message}</p>
   }
   return (
-    <AnswerBody answer={state.answer} question={question} topic={filters.topics[0] ?? state.answer.topics[0] ?? null} />
+    <AnswerBody
+      answer={state.answer}
+      question={question}
+      topic={filters.topics[0] ?? state.answer.topics[0] ?? null}
+      onReadPlace={onReadPlace}
+    />
   )
 }
 
@@ -128,11 +135,13 @@ export function AnswerBody({
   answer,
   question,
   topic,
+  onReadPlace,
 }: {
   answer: Answer
   question: string
   /** What a find-more search is filed under. */
   topic: string | null
+  onReadPlace?: (code: string) => void
 }) {
   const nothing = answer.groups.length === 0 && answer.unplaced === null
 
@@ -149,7 +158,14 @@ export function AnswerBody({
       )}
 
       {answer.groups.map((group) => (
-        <GroupSection key={group.code} group={group} answer={answer} question={question} topic={topic} />
+        <GroupSection
+          key={group.code}
+          group={group}
+          answer={answer}
+          question={question}
+          topic={topic}
+          onReadPlace={onReadPlace}
+        />
       ))}
 
       {answer.unplaced ? (
@@ -242,11 +258,13 @@ function GroupSection({
   answer,
   question,
   topic,
+  onReadPlace,
 }: {
   group: AnswerGroup
   answer: Answer
   question: string
   topic: string | null
+  onReadPlace?: (code: string) => void
 }) {
   const placed = group.code !== null
   const thin = placed && group.coverage === 'thin'
@@ -279,9 +297,21 @@ function GroupSection({
 
       {more > 0 || thin ? (
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 px-5 py-3">
-          <span className="font-mono text-[10.5px] text-text-faint">
-            {more > 0 ? `${plural(more, 'more source')} not shown` : ''}
-          </span>
+          {more > 0 && group.code !== null && onReadPlace ? (
+            // The rest of this country, as the ranked passages of the same search (`B-175`).
+            // The unplaced group has no code to narrow by, so it keeps the plain count.
+            <button
+              type="button"
+              onClick={() => onReadPlace(group.code!)}
+              className="font-mono text-[10.5px] text-accent-graph hover:underline"
+            >
+              {plural(more, 'more source')}: read all {group.sources} as passages →
+            </button>
+          ) : (
+            <span className="font-mono text-[10.5px] text-text-faint">
+              {more > 0 ? `${plural(more, 'more source')} not shown` : ''}
+            </span>
+          )}
           {thin ? <FindMore question={question} place={group.name} topic={topic} /> : null}
         </footer>
       ) : null}

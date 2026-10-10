@@ -3,15 +3,15 @@
  * The answer page: evidence grouped by country, coverage stated against its
  * rule, and "find more" queuing exactly the search it says it will.
  */
-import { NO_FILTERS } from '../src/lib/find'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AnswerBody, AnswerView, countLine, mixLine, thinReason } from '../src/explore/AnswerView'
-import { ModeSwitch } from '../src/explore/ExplorePage'
+import { ExplorePage, ModeSwitch } from '../src/explore/ExplorePage'
+import { NO_FILTERS } from '../src/lib/find'
 import {
   findMoreQuery,
   initialMode,
@@ -382,5 +382,58 @@ describe('the rule the client shows is the server’s', () => {
     const min = Number(source.match(/^STRONG_MIN_PUBLISHERS = (\d+)/m)![1])
     expect(answer().strong_min_publishers).toBe(min)
     expect(source).toMatch(/PRIMARY_TIERS[^=]*= frozenset\(\{"government", "peer_reviewed"\}\)/)
+  })
+})
+
+describe('the rest of a country (B-175)', () => {
+  it('offers the sources not shown as passages, for a country and not for the unplaced', () => {
+    const onReadPlace = vi.fn()
+    render(<AnswerBody answer={answer()} question={QUESTION} topic={null} onReadPlace={onReadPlace} />)
+    fireEvent.click(screen.getByRole('button', { name: '2 more sources: read all 4 as passages →' }))
+    expect(onReadPlace).toHaveBeenCalledWith('DE')
+    // The unplaced group has no code to narrow by: its count stays words, not a dead button.
+    expect(screen.getByText('4 more sources not shown')).toBeTruthy()
+  })
+
+  it('in Find, opens Passages narrowed to that country, and Back returns to the answer', async () => {
+    const fetchMock = server({
+      '/api/explore/answer': { body: answer() },
+      '/api/explore/search': {
+        body: {
+          hits: [],
+          arms: ['lexical', 'vector'],
+          degraded: false,
+          degraded_reason: null,
+          limit: 20,
+          offset: 0,
+          has_more: false,
+          candidate_pool: 100,
+          lexical_candidates: 0,
+          vector_candidates: 0,
+        },
+      },
+    })
+    window.history.pushState({}, '', `/?q=${encodeURIComponent(QUESTION)}&view=answer`)
+    await act(async () => {
+      render(<ExplorePage />)
+    })
+    const back = window.history.length
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: /read all 4 as passages/ }))
+    })
+    const params = new URLSearchParams(window.location.search)
+    expect(params.getAll('place')).toEqual(['DE'])
+    expect(params.get('view')).toBe('passages')
+    expect(window.history.length).toBe(back + 1)
+    const searched = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.startsWith('/api/explore/search'))
+    expect(new URL(searched.at(-1)!, 'http://x').searchParams.getAll('place')).toEqual(['DE'])
+    expect(screen.getByRole('tab', { name: 'Passages' }).getAttribute('aria-selected')).toBe('true')
+
+    await act(async () => {
+      window.history.replaceState({}, '', `/?q=${encodeURIComponent(QUESTION)}&view=answer`)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(screen.getByRole('tab', { name: 'Answer' }).getAttribute('aria-selected')).toBe('true')
+    window.history.pushState({}, '', '/')
   })
 })

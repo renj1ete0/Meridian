@@ -256,6 +256,10 @@ called and nothing is summarised: every item is a passage a source actually cont
   examined.
 - **One item per source.** A document's best-scoring passage stands for it, with how many of
   its passages matched. A group of five items is five documents.
+- **The rest of a country is one click away** (`B-175`). A group shows its top five sources;
+  "N more sources: read all M as passages" opens Find's Passages tab with the same words
+  narrowed to that country, as a new history entry so Back returns to the answer. The
+  unplaced group has no code to narrow by and keeps its count as words.
 - **Coverage is a count, not a verdict on credibility** (design-system.md §4).
   `COVERAGE_RULE` is the sentence the interface shows, built from the constants the rule uses,
   so the words cannot drift from the arithmetic.

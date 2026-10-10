@@ -1763,7 +1763,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       design's left rail on results, one filter model (`lib/find.ts`) for link, request and view
 - [x] `B-174` **More passages** — `v0.166.4`. Passages stops at 20 with no way on, though the API pages by
       `offset` up to the candidate pool. A "more" row at the foot of the list
-- [ ] `B-175` **The answer's "N more sources not shown" is a dead end** — make it open Passages
+- [x] `B-175` `v0.166.5`. **The answer's "N more sources not shown" is a dead end** — make it open Passages
       narrowed to that country
 - [ ] `B-176` **The neighbourhood panel on a whole question** — "No concept is called “how do
       cities …?”" and concepts matched on single common words. Quiet unless a concept is named
