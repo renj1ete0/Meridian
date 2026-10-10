@@ -42,6 +42,8 @@ export function recordRecentNode(node: {
     name: node.canonical_name,
     nodeType: glyphFor(node.node_type),
     contested: Boolean(node.contested),
+    // When, so the list can say "yesterday" as it does for a saved view.
+    at: new Date().toISOString(),
   }
   const next = [entry, ...readRecentNodes().filter((n) => n.id !== entry.id)].slice(0, MAX_RECENT)
   try {

@@ -27,6 +27,7 @@ import { GraphCanvas, type CanvasApi, type HoverTarget } from './graph/GraphCanv
 import { NodeSearchBox } from './graph/NodeSearchBox'
 import { readPalette } from './graph/palette'
 import { recordRecentNode } from './graph/recent'
+import { hrefForView } from './views'
 import { neighbourhoodScene, pathScene } from './graph/scene'
 import { MatrixView, adjacency, matrixLine } from './graph/MatrixView'
 import { TableView } from './graph/TableView'
@@ -223,7 +224,8 @@ export function NodePage({ entityId }: { entityId: number }) {
   function openView(view: SavedViewRecord) {
     void markViewOpened(view.view_id).catch(() => {})
     if (view.focus_entity_id === null) {
-      navigate('/')
+      // A search view opens its search, not an empty landing (`B-177`).
+      navigate(hrefForView(view))
       return
     }
     const next = { filters: filtersFromRecord(view.filters), view: url.view }

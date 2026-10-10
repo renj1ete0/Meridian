@@ -538,6 +538,15 @@ other number is the delta. The artboard's line also carries edges and newly cont
 the API's delta covers sources and passages only (`P6-11`), so those are absent rather than
 shown as zeros.
 
+
+**It leads back** (`B-177`). Until `v0.166.7` the landing passed this list an empty set of
+nodes, though the node page had recorded every node opened in `localStorage` since `P6-01`, so
+the half of the list the design draws as "Silver Zone · NODE · Yesterday" never appeared.
+Up to three recent nodes now show, each with when it was opened. Saved views open through one
+function, `hrefForView` (`explore/views.ts`): a node view on its node with its filters, a
+search view on Find with its words and filters. Before it, a node view was a dead click on the
+landing (it has no words to search for), and a search view opened from the node workspace's
+rail went to an empty landing.
 ### Notes
 
 §12.5 asks for "my own notes and edges, tagged as mine" and adds the rule that shapes the

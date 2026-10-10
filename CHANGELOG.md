@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.7] — 2026-10-10
+
+### Fixed
+
+- `B-177`: "Where you were" lists the nodes this browser opened, with when; a saved node view
+  opens its node from the landing, and a saved search view opens its search from the node
+  workspace
+
 ## [0.166.6] — 2026-10-10
 
 ### Fixed

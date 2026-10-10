@@ -1767,8 +1767,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       narrowed to that country
 - [x] `B-176` `v0.166.6`. **The neighbourhood panel on a whole question** — "No concept is called “how do
       cities …?”" and concepts matched on single common words. Quiet unless a concept is named
-- [ ] `B-177` **Where you were** — recent nodes never listed (`recentNodes={[]}` though
+- [x] `B-177` `v0.166.7`. **Where you were** — recent nodes never listed (`recentNodes={[]}` though
       `graph/recent.ts` records them); a saved node view on the landing is a dead click
+- [ ] `B-193` **A node view with a filter cannot be saved** — the node workspace stores
+      `topic`/`tier`/`published_from`, which the server's `SearchFilters` check refuses (422,
+      verified on the live API). Validate a node view against the graph's own filter model
 - [ ] `B-178` **Open a source at the passage** — a hit links to the top of its source, and the
       source page loads 20 passages, so a hit on page 24 is often not on the page at all. Link
       `?chunk=`, load the window around it, mark it; earlier/later at both ends. Same for node

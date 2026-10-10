@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { focusSearch } from '../lib/hotkeys'
 import { openSession } from '../lib/lastVisit'
-import { navigate } from '../lib/route'
+import { hrefForNode, navigate } from '../lib/route'
 import { initialMode, rememberMode, type ResultMode } from '../lib/answer'
 import { Lockup } from '../ui/Mark'
 import { TIER_LABEL } from '../ui/Tier'
@@ -20,6 +20,8 @@ import { getTermNeighbourhood, worthShowing } from './neighbourhood/api'
 import { FiltersButton, FindRail } from './FindRail'
 import { topicWords } from '../lib/growth'
 import { WhereYouWere } from './WhereYouWere'
+import { readRecentNodes } from './graph/recent'
+import { hrefForView } from './views'
 import {
   ApiError,
   corpusStats,
@@ -76,6 +78,9 @@ const NOTES_ON_LANDING = 5
 /** How many saved views "where you were" lists. §8: a *short* list. */
 const VIEWS_ON_LANDING = 6
 
+/** Recent nodes beside the views: the mock draws one; a few, so the list stays short. */
+const NODES_ON_LANDING = 3
+
 /** Passages asked for at a time, as the route's default page. */
 const PAGE = 20
 
@@ -116,6 +121,8 @@ export function ExplorePage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedCount, setSavedCount] = useState(0)
+  // Nodes this browser opened (`B-177`), recorded by the node page.
+  const [recent] = useState(() => readRecentNodes().slice(0, NODES_ON_LANDING))
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -362,6 +369,11 @@ export function ExplorePage() {
     // Recorded as a write, and failing to record it must not stop the view from
     // opening: the ordering of a list is not worth refusing somebody the thing they clicked.
     void markViewOpened(view.view_id).catch(() => {})
+    // A node view opens on its node (`B-177`); it has no words to search for.
+    if (view.focus_entity_id !== null) {
+      navigate(hrefForView(view))
+      return
+    }
     const saved = filtersOfView(view.filters)
     setFilters(saved)
     setQuery(view.query ?? '')
@@ -558,7 +570,8 @@ export function ExplorePage() {
             at: view.last_opened_at ?? view.created_at,
             fresh: view.new_since,
           }))}
-          recentNodes={[]}
+          recentNodes={recent}
+          onOpenNode={(id) => navigate(hrefForNode(Number(id)))}
           onOpenView={(id) => {
             const view = views.find((v) => String(v.view_id) === id)
             if (view) openView(view)

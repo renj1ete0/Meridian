@@ -316,7 +316,9 @@ describe('recent nodes for the landing', () => {
     recordRecentNode({ entity_id: 5, canonical_name: 'n5', node_type: 'place', contested: true })
     const recent = readRecentNodes()
     expect(recent).toHaveLength(MAX_RECENT)
-    expect(recent[0]).toEqual({ id: '5', name: 'n5', nodeType: 'place', contested: true })
+    expect(recent[0]).toMatchObject({ id: '5', name: 'n5', nodeType: 'place', contested: true })
+    // When it was opened, so the landing can say "yesterday" (`B-177`).
+    expect(Number.isNaN(Date.parse(recent[0]!.at ?? ''))).toBe(false)
     expect(recent.filter((n) => n.id === '5')).toHaveLength(1)
   })
 
