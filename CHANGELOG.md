@@ -81,6 +81,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.14] — 2026-10-10
+
+### Fixed
+
+- `B-191`: tables are chunked between rows instead of at the character cap, and every
+  last-resort cut backs off to whitespace; measured on stored spreadsheets, cuts inside a
+  token went from 50% of passages to none. New text only; stored passages keep their cuts
+  until re-cut
+
 ## [0.166.13] — 2026-10-10
 
 ### Fixed

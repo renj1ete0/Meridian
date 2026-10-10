@@ -1812,9 +1812,14 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-190` `v0.166.13`: out of the vector arm under 40 characters; absorbing across a cut was rejected (a passage must stay a slice). **Runt passages** — 23.5k live chunks under 40 characters, most embedded; a nonsense
       query's nearest neighbours are "z", "terms". Runts are absorbed per kept stretch, so page
       furniture strands fragments (`chunk.py`). Absorb across, keep runts out of the vector arm
-- [ ] `B-191` **Tables cut mid-row and headerless** — 4.6% of chunks sit at the 2,000-character cap
+- [x] `B-191` `v0.166.14`: rows and whitespace; header carry and NaN rows left, see `B-195`. **Tables cut mid-row and headerless** — 4.6% of chunks sit at the 2,000-character cap
       (80% of spreadsheet chunks); a pipe table is one "paragraph" and is cut mid-number. Split at
       rows, carry the header into the embedding view, back the hard cut off to whitespace
+- [ ] `B-195` **Table passages without their header; NaN rows** — a continuation passage of a
+      table has no header row, so its cells cannot be read as columns; carry the header (and the
+      title) into the embedding view, not the stored text. Converted spreadsheets emit whole rows
+      of `NaN`; leave them out as furniture spans. Then re-cut the table-heavy sources
+      (`worker.rechunk --apply`, the operator's call)
 - [ ] `B-192` **Figure captions are not searchable** (suspect value) and PDF tables lose columns
       without `-layout` (suspect); lexical search is English-only for ~30k chunks (suspect)
 - [x] `B-172` **Two regions both named "Data"** — `v0.165.5`. After `B-159` more areas take

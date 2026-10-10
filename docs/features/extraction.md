@@ -337,6 +337,33 @@ out entities, so a sweep could delete a chunk only an entity cited. Everything s
 filters on `superseded_at IS NULL`, or it would quote a document as saying what it no longer
 says.
 
+
+**Tables are cut between rows** (`B-191`). A Markdown pipe table, which is what converted
+spreadsheets and HTML tables become, has no blank lines, so the chunker read a whole table as one
+paragraph, found no sentence boundary in it, and cut at the 2,000-character cap: mid-row and
+mid-number ("| 1389("), leaving the next passage a run of cells with no row start. On
+2026-10-10, 4.6% of all passages sat exactly at the cap, and 80% of spreadsheet passages. A
+paragraph of three or more lines, most starting with `|`, is now split between rows, packed up
+to the cap (rows are dense and seldom the answer, and packing to the 1,200 target nearly
+doubled the passages a spreadsheet makes). Every last-resort cut, in prose too, backs off to
+the last whitespace in the second half of the window, so only a run with no whitespace at all
+is cut inside a token. Property tests (Hypothesis) generate tables and unbroken runs and check
+the cap, the slice and the row boundaries.
+
+Measured read-only on 26 stored sources from the six hosts with the most cut tables, rebuilding
+each text from its passages and cutting it both ways:
+
+| | passages | at the cap | cut inside a token | table passages starting at a row |
+|---|---|---|---|---|
+| before | 21,095 | 85% | 50% | 7% |
+| after | 23,019 | 0.2% | 0% | 98% |
+
+This applies to text chunked from now on. Stored passages keep their old cuts until a source
+is re-cut (`worker.rechunk --apply`, which also re-embeds what changed); that is the operator's
+call, since its first phases write even without `--apply`. Not done yet: a continuation passage
+still lacks its table's header row, so a value's column cannot be read from it alone (carrying
+the header into the embedding view, not the stored text, keeps the passage a slice), and
+spreadsheets still emit rows of `NaN` cells.
 ### Document kinds
 
 `source_tier` says who published a document; the kind says what it *is* (`B-59`). It matters most

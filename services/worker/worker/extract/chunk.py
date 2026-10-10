@@ -151,7 +151,9 @@ def _pack(
             if open_span:
                 out.append(open_span)
                 open_span = None
-            out.extend(_split_sentences(text, start, end, target, maximum))
+            # A table has no sentences; cut it between rows (`B-191`).
+            split = _split_rows if _is_table(text, start, end) else _split_sentences
+            out.extend(split(text, start, end, target, maximum))
             continue
         if open_span and end - open_span[0] > target:
             out.append(open_span)
@@ -177,25 +179,91 @@ def _split_sentences(
         span for span in (_trim(text, a, b) for a, b in itertools.pairwise(boundaries)) if span
     ]
 
+    return _pack_pieces(text, sentences, target, maximum)
+
+
+def _is_table(text: str, start: int, end: int) -> bool:
+    """Whether a paragraph is a pipe table: three or more lines, most of them rows.
+
+    Converted spreadsheets and HTML tables arrive as Markdown pipe tables, one row a line
+    and no blank line between rows, so the whole table is one "paragraph" (`B-191`).
+    """
+    lines = [line.strip() for line in text[start:end].split("\n") if line.strip()]
+    if len(lines) < 3:
+        return False
+    rows = sum(1 for line in lines if line.startswith("|"))
+    return rows >= 0.6 * len(lines)
+
+
+def _split_rows(
+    text: str, start: int, end: int, target: int, maximum: int
+) -> list[tuple[int, int]]:
+    """One oversized table, cut between rows (`B-191`); a row over the cap is cut at a space.
+
+    Cutting at the cap, as prose with no sentence boundary is, split rows and numbers in two
+    ("| 1389(") and left the rest of the row a passage without its first cells.
+    """
+    rows: list[tuple[int, int]] = []
+    cursor = start
+    for match in re.finditer("\n", text[start:end]):
+        rows.append((cursor, start + match.start()))
+        cursor = start + match.end()
+    rows.append((cursor, end))
+    # Packed to the cap, not the target: rows are dense and seldom the answer, and packing to
+    # the target nearly doubled the passages a converted spreadsheet makes (measured: 21,095
+    # → 38,738 over 26 sources), each one to embed.
+    pieces = [r for r in (_trim(text, a, b) for a, b in rows) if r]
+    return _pack_pieces(text, pieces, maximum, maximum)
+
+
+def _pack_pieces(
+    text: str, pieces: list[tuple[int, int]], target: int, maximum: int
+) -> list[tuple[int, int]]:
+    """Join consecutive pieces (sentences or rows) up to ``target``.
+
+    A piece over ``maximum`` is cut at whitespace by :func:`_hard_cuts`.
+    """
     out: list[tuple[int, int]] = []
     open_span: tuple[int, int] | None = None
-    for s_start, s_end in sentences:
-        piece_start, piece_end = s_start, s_end
-        while piece_end - piece_start > maximum:
+    for p_start, p_end in pieces:
+        if p_end - p_start > maximum:
             if open_span:
                 out.append(open_span)
                 open_span = None
-            out.append((piece_start, piece_start + maximum))
-            piece_start += maximum
-        if piece_end <= piece_start:
-            continue
-        if open_span and piece_end - open_span[0] > target:
+            *whole, (p_start, p_end) = _hard_cuts(text, p_start, p_end, maximum)
+            out.extend(whole)
+        if open_span and p_end - open_span[0] > target:
             out.append(open_span)
             open_span = None
-        open_span = (open_span[0] if open_span else piece_start, piece_end)
+        open_span = (open_span[0] if open_span else p_start, p_end)
 
     if open_span:
         out.append(open_span)
+    return out
+
+
+def _hard_cuts(text: str, start: int, end: int, maximum: int) -> list[tuple[int, int]]:
+    """A span with no boundary left, cut into pieces of at most ``maximum``.
+
+    Each cut backs off to the last whitespace in the second half of the window, so a word
+    or a number is not split in two; only a run with no whitespace at all is cut at the cap.
+    """
+    out: list[tuple[int, int]] = []
+    while end - start > maximum:
+        limit = start + maximum
+        space = max(
+            text.rfind(" ", start + maximum // 2, limit),
+            text.rfind("\n", start + maximum // 2, limit),
+        )
+        cut = space if space > start else limit
+        piece = _trim(text, start, cut)
+        if piece:
+            out.append(piece)
+        rest = _trim(text, cut, end)
+        if rest is None:
+            return out
+        start = rest[0]
+    out.append((start, end))
     return out
 
 
