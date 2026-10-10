@@ -70,7 +70,15 @@ jobs:
         run: make lint
 
       - name: Python tests
-        run: uv run pytest -q
+        run: |
+          set -o pipefail
+          uv run pytest -q -rfE 2>&1 | tee pytest.log
+      # Logs need a token to read; annotations do not. The failing tests' names, as one.
+      - name: Failures as an annotation
+        if: failure()
+        run: |
+          names=$(grep -E '^(FAILED|ERROR) ' pytest.log | cut -c1-200 | head -60 | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Python tests::${names:-no FAILED lines; see the log}"
 
       - name: Web tests
         run: cd web && npm run typecheck && npx vitest run
