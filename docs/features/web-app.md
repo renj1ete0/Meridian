@@ -925,6 +925,15 @@ there. **Counters, not a verdict**: §11.9 compares cost and volume run on run, 
 while stages are unbuilt and the interesting one once they are not. Zero written is shown as a
 real answer.
 
+
+**It goes back, and reads cleanly** (`B-198`). It showed the newest 25 runs of 422 with no way
+past them; "Older runs (N more)" now pages back (`/api/admin/runs?offset=`), and the run in
+flight is still named from among the newest. Counts are singular when they are one ("1 edge"),
+and the status line drops a stage that repeats the status ("done", not "done · done"). A run
+deferred because the relay holds its prompt was recorded as "every agent for
+'relation_extraction' refused: …", which reads as a failure; when every reason is a relay
+waiting (`RelayPending`), the reason now reads "waiting for the relay to answer", with the file
+it waits for.
 ### Gazetteer approvals
 
 §5.6 ends "approve in the UI — a two-minute weekly task". The harvest files terms by the

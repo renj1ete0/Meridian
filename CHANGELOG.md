@@ -81,6 +81,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.17] — 2026-10-10
+
+### Fixed
+
+- `B-198`: Run history pages back past the newest 25 (`/api/admin/runs?offset=`); "1 edge", not
+  "1 edges"; no "done · done"; a run waiting on the relay says it is waiting, not that every
+  agent refused
+
 ## [0.166.16] — 2026-10-10
 
 ### Fixed

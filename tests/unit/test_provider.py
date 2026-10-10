@@ -410,3 +410,36 @@ def test_the_migration_and_the_seed_name_the_same_models() -> None:
 
     for agent_id, (_, current) in module.MODELS.items():
         assert seeded[agent_id] == current
+
+
+# --------------------------------------------------------------------------
+# A relay waiting is said as a wait (`B-198`)
+# --------------------------------------------------------------------------
+
+
+async def test_a_relay_without_an_answer_raises_a_wait_not_a_failure(monkeypatch, tmp_path) -> None:
+    from meridian_core.provider import RelayPending
+
+    monkeypatch.setenv(RELAY_DIR_ENV, str(tmp_path))
+    with pytest.raises(RelayPending):
+        await _call_relay(
+            agent(agent_id="session", provider="relay", model="m"),
+            prompt="p",
+            system=None,
+            max_tokens=10,
+            timeout_s=1,
+        )
+
+
+def test_the_run_says_it_is_waiting_only_when_every_reason_was_a_wait() -> None:
+    """The run log read "every agent … refused" for a relay holding a prompt, which reads as
+    a failure. Said as a wait only when nothing else went wrong."""
+    from meridian_core.provider import _refusal
+
+    waiting = _refusal("relation_extraction", ["session: waiting for k.answer.txt"], 1)
+    assert waiting.startswith("waiting for the relay to answer (relation_extraction)")
+    assert "refused" not in waiting
+
+    mixed = _refusal("relation_extraction", ["session: waiting", "local: connection refused"], 1)
+    assert mixed.startswith("every agent for 'relation_extraction' refused")
+    assert _refusal("chat", [], 0).startswith("every agent")

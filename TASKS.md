@@ -1803,7 +1803,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       searches) and no next step; add both
 - [x] `B-197` `v0.166.16`. **Crawl health leads somewhere** — words for outcomes and states,
       empty states left out, domains link to their policy row
-- [ ] `B-198` **Run history** — no paging past 25 of 422; "1 edges"; "done · done"; a deferred
+- [x] `B-198` `v0.166.17`. **Run history** — no paging past 25 of 422; "1 edges"; "done · done"; a deferred
       relay run reads as a failure
 - [ ] `B-199` **Admin wording and shell** — agent models shown as `${…}`; "Not being crawled. 0
       failures in a row"; nested `<main>`; weight drafts dropped silently on section change; the

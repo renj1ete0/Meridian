@@ -1685,9 +1685,13 @@ export function editAgent(agentId: string, change: AgentChange, init?: RequestIn
   })
 }
 
-export function getRuns(params: { limit?: number } = {}, init?: RequestInit): Promise<Runs> {
-  const query = params.limit ? `?limit=${params.limit}` : ''
-  return request<Runs>(`/api/admin/runs${query}`, init)
+export function getRuns(params: { limit?: number; offset?: number } = {}, init?: RequestInit): Promise<Runs> {
+  const query = new URLSearchParams()
+  if (params.limit) query.set('limit', String(params.limit))
+  // Older runs, a page at a time (`B-198`).
+  if (params.offset) query.set('offset', String(params.offset))
+  const suffix = query.toString()
+  return request<Runs>(`/api/admin/runs${suffix ? `?${suffix}` : ''}`, init)
 }
 
 // --------------------------------------------------------------------------

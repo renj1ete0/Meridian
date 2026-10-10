@@ -1130,14 +1130,23 @@ async def list_runs(
     _: AdminAllowed,
     sess: WriteSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 25,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> RunsRead:
     """Recent synthesis runs, newest first, with the one in flight called out.
 
-    Counters rather than a verdict, so a run that wrote nothing is visible.
+    Counters rather than a verdict, so a run that wrote nothing is visible. `offset` pages
+    back through older runs (`B-198`); the run in flight is looked for among the newest.
     """
     total = int(await sess.scalar(select(func.count()).select_from(Run)) or 0)
-    rows = list(await sess.scalars(select(Run).order_by(Run.run_id.desc()).limit(limit)))
-    active = next((row for row in rows if row.status in ("running", "deferred")), None)
+    rows = list(
+        await sess.scalars(select(Run).order_by(Run.run_id.desc()).offset(offset).limit(limit))
+    )
+    newest = (
+        rows
+        if offset == 0
+        else list(await sess.scalars(select(Run).order_by(Run.run_id.desc()).limit(limit)))
+    )
+    active = next((row for row in newest if row.status in ("running", "deferred")), None)
     return RunsRead(
         rows=[RunRowRead.model_validate(row) for row in rows],
         total=total,

@@ -12,6 +12,9 @@ export interface RunsPanelProps {
   rows: readonly RunRow[]
   total: number
   active: RunRow | null
+  /** Read the next page of older runs; absent when there is none to read. */
+  onOlder?: () => void
+  loadingOlder?: boolean
 }
 
 /**
@@ -28,7 +31,13 @@ export const STATUS_NOTES: Record<string, string> = {
 /** Written work, as one line. Zero is a real answer and is shown as one —
  * a run that wrote nothing is a fact about the corpus, not a gap in the row. */
 export function written(row: RunRow): string {
-  return `${row.edges_added} edges · ${row.tags_added} tags · ${row.seeds_emitted} seeds`
+  const n = (count: number, one: string) => `${count} ${count === 1 ? one : `${one}s`}`
+  return `${n(row.edges_added, 'edge')} · ${n(row.tags_added, 'tag')} · ${n(row.seeds_emitted, 'seed')}`
+}
+
+/** Status and stage, without saying the same word twice ("done · done"). */
+export function statusLine(row: RunRow): string {
+  return row.stage && row.stage !== row.status ? `${row.status} · ${row.stage}` : row.status
 }
 
 export function spent(row: RunRow): string {
@@ -36,7 +45,7 @@ export function spent(row: RunRow): string {
   return row.cost_usd === null ? tokens : `${tokens} · $${row.cost_usd.toFixed(2)}`
 }
 
-export function RunsPanel({ rows, total, active }: RunsPanelProps) {
+export function RunsPanel({ rows, total, active, onOlder, loadingOlder = false }: RunsPanelProps) {
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Run history">
@@ -69,10 +78,7 @@ export function RunsPanel({ rows, total, active }: RunsPanelProps) {
                   <td className={TDM}>{row.run_id}</td>
                   <td className={`${TDM} whitespace-nowrap text-text-muted`}>{stamp(row.started_at)}</td>
                   <td className={TD}>
-                    <span className="font-mono text-[11.5px] text-text">
-                      {row.status}
-                      {row.stage ? ` · ${row.stage}` : ''}
-                    </span>
+                    <span className="font-mono text-[11.5px] text-text">{statusLine(row)}</span>
                     <div className="text-[11.5px] text-text-faint">{STATUS_NOTES[row.status] ?? ''}</div>
                   </td>
                   <td className={`${TDM} whitespace-nowrap`}>{written(row)}</td>
@@ -101,6 +107,16 @@ export function RunsPanel({ rows, total, active }: RunsPanelProps) {
           </tbody>
         </TableCard>
       )}
+      {onOlder && rows.length < total ? (
+        <button
+          type="button"
+          onClick={onOlder}
+          disabled={loadingOlder}
+          className="self-start border border-line-strong bg-surface-raised px-3 py-1.5 font-sans text-[12.5px] text-text/85 hover:text-text disabled:opacity-50"
+        >
+          {loadingOlder ? 'Reading…' : `Older runs (${(total - rows.length).toLocaleString()} more)`}
+        </button>
+      ) : null}
     </section>
   )
 }

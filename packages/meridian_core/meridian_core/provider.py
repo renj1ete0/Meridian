@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import pathlib
+from collections.abc import Sequence
 from typing import Any, Final
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,6 +53,10 @@ DEFAULT_TIMEOUT_S: Final[float] = 600.0
 
 class ProviderError(RuntimeError):
     """One agent could not answer. The chain moves on."""
+
+
+class RelayPending(ProviderError):
+    """The relay has the prompt and no answer yet: the run waits, nothing went wrong (`B-198`)."""
 
 
 class NotConfigured(ProviderError):
@@ -286,7 +291,7 @@ async def _call_relay(
             ),
             encoding="utf-8",
         )
-    raise ProviderError(f"{agent.agent_id}: waiting for {key}.answer.txt in the relay directory")
+    raise RelayPending(f"{agent.agent_id}: waiting for {key}.answer.txt in the relay directory")
 
 
 _SHAPES = {
@@ -332,6 +337,21 @@ def _settings_resolve(agent: Any) -> bool:
     return True
 
 
+def _refusal(task_type: str, failures: Sequence[str], waiting: int) -> str:
+    """Why nothing answered, in the run's words.
+
+    A relay holding a prompt is a run waiting for an attended session, not a failure, and the
+    run log said "every agent … refused" for it (`B-198`). Said as a wait when every agent's
+    reason was one.
+    """
+    if failures and waiting == len(failures):
+        return (
+            f"waiting for the relay to answer ({task_type}): the prompt is in the relay "
+            f"directory and the run resumes once an answer is filed. {'; '.join(failures)}"
+        )
+    return f"every agent for {task_type!r} refused: {'; '.join(failures)}"
+
+
 async def complete(
     sess: AsyncSession,
     run: Run,
@@ -355,6 +375,7 @@ async def complete(
 
     reserved = _estimate(prompt, system, max_tokens)
     failures: list[str] = []
+    waiting = 0
 
     for agent in chain:
         # The seeded rows ship with a placeholder model string. Saying so is the
@@ -376,6 +397,7 @@ async def complete(
             await settle_tokens(sess, run.run_id, reserved=reserved, actual=0)
             log.warning("agent could not answer", extra={"agent": agent.agent_id})
             failures.append(str(exc))
+            waiting += isinstance(exc, RelayPending)
             continue
 
         await settle_tokens(
@@ -391,7 +413,7 @@ async def complete(
             output_tokens=output_tokens,
         )
 
-    raise ProviderError(f"every agent for {task_type!r} refused: {'; '.join(failures)}")
+    raise ProviderError(_refusal(task_type, failures, waiting))
 
 
 async def ask(
@@ -414,6 +436,7 @@ async def ask(
         raise NoAgentAvailable(f"no enabled agent declares {task_type!r}.")
 
     failures: list[str] = []
+    waiting = 0
     for agent in chain:
         refusal = _cannot_answer(agent)
         if refusal is not None:
@@ -427,6 +450,7 @@ async def ask(
         except ProviderError as exc:
             log.warning("agent could not answer", extra={"agent": agent.agent_id})
             failures.append(str(exc))
+            waiting += isinstance(exc, RelayPending)
             continue
         model = agent.model or ""
         if model.startswith("${"):
@@ -440,4 +464,4 @@ async def ask(
             output_tokens=output_tokens,
         )
 
-    raise ProviderError(f"every agent for {task_type!r} refused: {'; '.join(failures)}")
+    raise ProviderError(_refusal(task_type, failures, waiting))

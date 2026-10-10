@@ -232,6 +232,23 @@ async def test_run_history_calls_out_the_run_in_flight(
     assert body["active"]["status"] in ("running", "deferred")
 
 
+async def test_run_history_pages_back_without_losing_the_run_in_flight(
+    client, open_admin, registry, marker: str
+) -> None:
+    """`B-198`: 25 of 422 runs was all the screen could show. A page further back still
+    names the run in flight, which lives among the newest."""
+    sess = registry
+    for status in ("done", "done", "running"):
+        sess.add(Run(started_at=NOW, stage="extract", status=status, agent_id=marker))
+    await sess.commit()
+
+    first = (await client.get("/api/admin/runs", params={"limit": 1})).json()
+    second = (await client.get("/api/admin/runs", params={"limit": 1, "offset": 1})).json()
+    assert first["rows"][0]["run_id"] > second["rows"][0]["run_id"]
+    assert second["active"] is not None
+    assert (await client.get("/api/admin/runs", params={"offset": -1})).status_code == 422
+
+
 @pytest.mark.parametrize("path", ["/api/admin/agents", "/api/admin/runs"])
 async def test_neither_route_exists_under_explore(client, path: str) -> None:
     """§12.6: the prefix *is* the role boundary. A read-only surface that could

@@ -24,7 +24,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { AgentsPanel, rowState, tierLabel } from '../src/admin/AgentsPanel'
-import { RunsPanel, STATUS_NOTES, spent, written } from '../src/admin/RunsPanel'
+import { RunsPanel, spent, STATUS_NOTES, statusLine, written } from '../src/admin/RunsPanel'
 import type { AgentRow, RunRow } from '../src/lib/api'
 
 function text(markup: string): string {
@@ -223,5 +223,14 @@ describe('routing order (B-137)', () => {
   it('says nothing about order for a row without one', () => {
     const markup = renderToStaticMarkup(<AgentsPanel rows={[agent()]} unserved={[]} />)
     expect(text(markup)).not.toContain('tried')
+  })
+})
+
+describe('run history reads cleanly and goes back past the first page (B-198)', () => {
+  it('counts one as one, and does not say the same word twice', () => {
+    expect(written(run({ edges_added: 1, tags_added: 1, seeds_emitted: 1 }))).toBe('1 edge · 1 tag · 1 seed')
+    expect(statusLine(run({ status: 'done', stage: 'done' }))).toBe('done')
+    expect(statusLine(run({ status: 'deferred', stage: 'extract' }))).toBe('deferred · extract')
+    expect(statusLine(run({ status: 'running', stage: null }))).toBe('running')
   })
 })

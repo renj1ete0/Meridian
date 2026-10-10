@@ -113,6 +113,7 @@ export function AdminPage() {
 
   const [agents, setAgents] = useState<Agents | null>(null)
   const [runs, setRuns] = useState<Runs | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const [health, setHealth] = useState<CrawlHealth | null>(null)
   const [proposals, setProposals] = useState<Proposals | null>(null)
   const [proposalBusy, setProposalBusy] = useState<number | null>(null)
@@ -663,7 +664,22 @@ export function AdminPage() {
 
         {section === 'runs' ? (
           runs ? (
-            <RunsPanel rows={runs.rows} total={runs.total} active={runs.active} />
+            <RunsPanel
+              rows={runs.rows}
+              total={runs.total}
+              active={runs.active}
+              loadingOlder={loadingOlder}
+              onOlder={() => {
+                setLoadingOlder(true)
+                getRuns({ limit: 25, offset: runs.rows.length })
+                  .then((older) => {
+                    const seen = new Set(runs.rows.map((r) => r.run_id))
+                    setRuns({ ...runs, rows: [...runs.rows, ...older.rows.filter((r) => !seen.has(r.run_id))] })
+                  })
+                  .catch(() => {})
+                  .finally(() => setLoadingOlder(false))
+              }}
+            />
           ) : (
             <Loading what="run history" />
           )
