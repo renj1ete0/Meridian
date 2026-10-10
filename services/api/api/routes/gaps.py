@@ -117,5 +117,5 @@ async def boost_from_gap(body: GapBoost, _: AdminAllowed, sess: WriteSession) ->
         topic=body.topic,
         expires_at=expires,
         detail=f"boost ×{body.factor:g} until {format_instant(expires, zone)}",
-        undo="expires by itself; clear it sooner in Admin › Topics",
+        undo="expires by itself; clear it sooner in Admin › Pins & boosts",
     )

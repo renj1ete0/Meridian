@@ -1791,7 +1791,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       opens the two nodes; a superseded proposal still reads as pending
 - [x] `B-183` **Ask panel with no model** — `v0.166.3`. the composer offers "citations checked" and fails only
       after asking, in operator words. Say so first, and point to the Answer tab
-- [ ] `B-184` **Gaps: reader gaps first** — search-yield diagnostics fill the first eleven rows;
+- [x] `B-184` `v0.166.15`. **Gaps: reader gaps first** — search-yield diagnostics fill the first eleven rows;
       the off-topic gap's action contradicts its advice; `!bang` syntax in prefills; the tab is
       lost on Back
 - [ ] `B-185` **Admin small fixes** — add-topic dialog has no description (which drives seed

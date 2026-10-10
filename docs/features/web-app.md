@@ -690,6 +690,19 @@ visual language is the Coverage board's gap aside (brass mono label with the dag
 heading, the reason, "takes effect at the crawl's next claim · reversible in Admin") laid out as
 a list on Admin's primitives. See [gaps.md](gaps.md).
 
+
+**What a reader can ask comes first** (`B-184`). Ranked purely by severity, the first eleven
+rows were the crawl's own search diagnostics (searches finding nothing new, or landing off
+topic), and the question set, the most useful rows to a reader, began at twelve. "All" now lists
+coverage, fields and the question set first, and folds "Search yield" below them with one line
+saying what it is for: it changes what is fetched, not what is known. Rows are numbered within
+the list shown. The tab is in the link (`?kind=`), so following "Search it in Find" and pressing
+Back returns to it. An off-topic search gap says a description would steer it, so it links to
+where descriptions are edited; a seed search keeps engine syntax (`!news`) on what is queued but
+out of the words a reader edits, named beside the field instead. An action's result links to
+where it can be undone, and its text names that section correctly (a boost said "Admin ›
+Topics"; boosts are in Pins & boosts). A web test reads every "Admin › …" the route writes and
+checks it is a section.
 ### Contested
 
 §12.5's third entry point (`P6-10`). Every disagreement §9 marked, each once, newest first, both

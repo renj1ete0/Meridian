@@ -81,6 +81,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.15] — 2026-10-10
+
+### Fixed
+
+- `B-184`: Gaps leads with coverage and the question set and folds search yield below; the tab
+  is in the link; an off-topic search links to the topic's description; engine syntax stays out
+  of the editable search words; an action's result links to where it can be undone, and the
+  boost's text names the right section
+
 ## [0.166.14] — 2026-10-10
 
 ### Fixed

@@ -10,7 +10,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App, sectionOf } from '../src/App'
-import { FLAG_AT, GapsPage, SOURCE_NAMES } from '../src/explore/GapsPage'
+import { FLAG_AT, GapsPage, SOURCE_NAMES, UNDO_HREF, splitBangs } from '../src/explore/GapsPage'
+import { SECTIONS } from '../src/admin/sections'
 import {
   GAP_ACTION_FIELDS,
   GAP_FIELDS,
@@ -324,8 +325,88 @@ describe('the page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Question set (1)' }))
     const rows = within(screen.getByRole('list', { name: /most severe first/ })).getAllByRole('listitem')
     expect(rows).toHaveLength(1)
-    // The rank stays the row's place in the whole list, not in the filtered one.
-    expect(rows[0]!.textContent).toContain('02')
+    // Numbered within the list shown (`B-184`): "All" is now two lists, and a number taken
+    // from the whole would read 01, 02, 05 in either of them.
+    expect(rows[0]!.textContent).toContain('01')
+    expect(window.location.search).toBe('?kind=questions')
+  })
+})
+
+describe('what a reader can ask comes first (B-184)', () => {
+  afterEach(() => window.history.pushState({}, '', '/'))
+
+  const search = gap({
+    id: 'search-off-topic:robotics',
+    source: 'search-results',
+    kind: 'search_off_topic',
+    title: '3 of 90 search results are about robotics',
+    severity: 0.59,
+    actions: [
+      {
+        kind: 'seed_query',
+        label: 'Seed a search',
+        topic: 'robotics',
+        query: '!news !science gripper torque',
+        factor: null,
+        days: null,
+      },
+    ],
+  })
+  const question = gap({
+    id: 'question:Q1',
+    source: 'question-set',
+    subject: 'Q1',
+    title: 'Q1 low',
+    severity: 0.4,
+    actions: [],
+  })
+
+  it('lists questions and coverage, and folds the search yield below them', async () => {
+    await renderWith(() => respond(body([search, question])))
+    const reader = within(screen.getByRole('list', { name: 'Gaps, most severe first' })).getAllByRole('listitem')
+    expect(reader.map((r) => r.textContent)).toEqual([expect.stringContaining('Q1 low')])
+    expect(screen.queryByText('3 of 90 search results are about robotics')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Search yield · 1/ }))
+    expect(screen.getByText('3 of 90 search results are about robotics')).toBeTruthy()
+  })
+
+  it('opens on the tab a link names, so Back returns to it', async () => {
+    window.history.pushState({}, '', '/gaps?kind=search')
+    await renderWith(() => respond(body([search, question])))
+    expect(screen.getByText('3 of 90 search results are about robotics')).toBeTruthy()
+    expect(screen.queryByText('Q1 low')).toBeNull()
+  })
+
+  it('points an off-topic search at the description that would steer it, and keeps engine syntax out of the words', async () => {
+    window.history.pushState({}, '', '/gaps?kind=search')
+    const fetchMock = await renderWith(() => respond(body([search])))
+    expect(screen.getByRole('link', { name: 'Edit the topic’s description' }).getAttribute('href')).toBe(
+      '/admin/topics',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Seed a search' }))
+    const input = screen.getByRole('textbox') as HTMLInputElement
+    expect(input.value).toBe('gripper torque')
+    expect(screen.getByText('as a news, science search')).toBeTruthy()
+    void fetchMock
+  })
+
+  it('splits engine syntax from words, and puts it back on what is queued', () => {
+    expect(splitBangs('!news !science gripper torque')).toEqual({ bangs: '!news !science', words: 'gripper torque' })
+    expect(splitBangs('gripper !news')).toEqual({ bangs: '', words: 'gripper !news' })
+  })
+})
+
+describe('an action says where it can be undone, and that place exists (B-184)', () => {
+  it('names only Admin sections that exist', () => {
+    // Read from the route: the boost's text named "Admin › Topics", where boosts are not.
+    const route = readFileSync(join(__dirname, '..', '..', 'services', 'api', 'api', 'routes', 'gaps.py'), 'utf8')
+    const named = [...route.matchAll(/Admin › ([^"]+?)(?: while|"|,)/g)].map((m) => m[1]!.trim())
+    expect(named.length).toBeGreaterThan(1)
+    const labels = SECTIONS.map((s) => s.label)
+    for (const name of named) expect(labels).toContain(name)
+    for (const href of Object.values(UNDO_HREF)) {
+      expect(SECTIONS.map((s) => `/admin/${s.path}`)).toContain(href)
+    }
   })
 })
 

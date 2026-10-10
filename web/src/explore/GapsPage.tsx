@@ -38,9 +38,21 @@ const GROUPS: readonly { key: GapGroup | null; label: string }[] = [
   { key: 'questions', label: 'Question set' },
 ]
 
+/** The group a link names (`?kind=`), so Back and a shared link keep the tab (`B-184`). */
+export function groupFromSearch(search: string): GapGroup | null {
+  const kind = new URLSearchParams(search).get('kind')
+  return GROUPS.some((g) => g.key === kind) ? (kind as GapGroup) : null
+}
+
 export function GapsPage() {
   const [load, setLoad] = useState<Load>({ status: 'loading' })
-  const [group, setGroup] = useState<GapGroup | null>(null)
+  const [group, setGroupState] = useState<GapGroup | null>(() => groupFromSearch(window.location.search))
+  const [yieldOpen, setYieldOpen] = useState(false)
+
+  function setGroup(next: GapGroup | null) {
+    setGroupState(next)
+    window.history.replaceState({}, '', next ? `/gaps?kind=${next}` : '/gaps')
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -57,7 +69,10 @@ export function GapsPage() {
   }, [])
 
   const gaps = load.status === 'ready' ? load.body.gaps : []
-  const shown = group === null ? gaps : gaps.filter((g) => groupOf(g) === group)
+  // "All" leads with what a reader can ask about; how the crawl's searches are doing is the
+  // operator's, and folds below (`B-184`). It ranked first by severity and hid the questions.
+  const [reader, searches] = group === null ? splitForReaders(gaps) : [gaps.filter((g) => groupOf(g) === group), []]
+  const shown = reader
 
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-6 px-4 pb-24 pt-8 sm:px-6">
@@ -84,7 +99,7 @@ export function GapsPage() {
             value={group}
             onChange={setGroup}
           />
-          {shown.length === 0 ? (
+          {shown.length === 0 && searches.length === 0 ? (
             <Card className="px-[18px] py-6">
               <p className="text-[13px] text-text-muted">
                 {gaps.length === 0
@@ -93,18 +108,68 @@ export function GapsPage() {
               </p>
             </Card>
           ) : (
-            <Card>
-              <ol aria-label="Gaps, most severe first">
-                {shown.map((gap, index) => (
-                  <GapRow key={gap.id} gap={gap} rank={gaps.indexOf(gap) + 1} first={index === 0} />
-                ))}
-              </ol>
-            </Card>
+            <>
+              {shown.length > 0 ? (
+                <Card>
+                  <ol aria-label="Gaps, most severe first">
+                    {shown.map((gap, index) => (
+                      <GapRow key={gap.id} gap={gap} rank={index + 1} first={index === 0} />
+                    ))}
+                  </ol>
+                </Card>
+              ) : null}
+              {searches.length > 0 ? (
+                <section aria-label="Search yield" className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    aria-expanded={yieldOpen}
+                    onClick={() => setYieldOpen(!yieldOpen)}
+                    className="flex items-baseline gap-2 self-start text-left"
+                  >
+                    <span className={LABEL}>
+                      {yieldOpen ? '⌄' : '›'} Search yield · {searches.length}
+                    </span>
+                    <span className="text-[12.5px] text-text-muted">
+                      How the crawl&rsquo;s searches are landing. They change what is fetched, not what is known.
+                    </span>
+                  </button>
+                  {yieldOpen ? (
+                    <Card>
+                      <ol aria-label="Search yield, most severe first">
+                        {searches.map((gap, index) => (
+                          <GapRow key={gap.id} gap={gap} rank={index + 1} first={index === 0} />
+                        ))}
+                      </ol>
+                    </Card>
+                  ) : null}
+                </section>
+              ) : null}
+            </>
           )}
         </>
       ) : null}
     </div>
   )
+}
+
+/** Gaps a reader asks about, then the crawl's search diagnostics; each keeps its severity order. */
+export function splitForReaders(gaps: readonly Gap[]): [Gap[], Gap[]] {
+  return [gaps.filter((g) => groupOf(g) !== 'search'), gaps.filter((g) => groupOf(g) === 'search')]
+}
+
+/** Where an action's result can be undone, by the kind of action (`B-184`). */
+export const UNDO_HREF: Record<string, string> = {
+  seed_query: '/admin/seeds',
+  boost_topic: '/admin/boosts',
+}
+
+/**
+ * Engine syntax at the start of a seed search (`!news`, `!science`): kept on the search, kept
+ * out of the words a reader edits (`B-184`).
+ */
+export function splitBangs(query: string): { bangs: string; words: string } {
+  const match = /^((?:![a-z]+\s+)+)/i.exec(query)
+  return match ? { bangs: match[1]!.trim(), words: query.slice(match[1]!.length) } : { bangs: '', words: query }
 }
 
 export const SOURCE_NAMES: Record<string, string> = {
@@ -220,6 +285,12 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
             {open.label}
           </a>
         ) : null}
+        {gap.kind === 'search_off_topic' ? (
+          // The reason says a description would steer these searches; this is where it is set.
+          <a href="/admin/topics" onClick={onInternalClick('/admin/topics')} className={BUTTON_SECONDARY}>
+            Edit the topic&rsquo;s description
+          </a>
+        ) : null}
         {mapHrefOf(gap.evidence) ? (
           <a
             href={mapHrefOf(gap.evidence)!}
@@ -245,17 +316,25 @@ function SeedForm({
   onSubmit: (query: string) => void
   onCancel: () => void
 }) {
-  const [query, setQuery] = useState(action.query ?? '')
+  const { bangs, words } = splitBangs(action.query ?? '')
+  const [query, setQuery] = useState(words)
   return (
     <form
       className="mt-2 flex max-w-[640px] flex-col gap-2 border border-line bg-surface-raised p-3"
       onSubmit={(event) => {
         event.preventDefault()
-        onSubmit(query)
+        onSubmit(bangs ? `${bangs} ${query.trim()}` : query)
       }}
     >
       <label className="flex flex-col gap-1.5 text-[12.5px] text-text-muted">
-        Words to search for, queued for {action.topic}
+        <span>
+          Words to search for, queued for {action.topic}
+          {bangs ? (
+            <span className="ml-2 font-mono text-[10.5px] text-text-faint">
+              as a {bangs.replaceAll('!', '').split(/\s+/).join(', ')} search
+            </span>
+          ) : null}
+        </span>
         <input className={FIELD} value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
       </label>
       <div className="flex gap-2">
@@ -281,9 +360,18 @@ function Outcome({ done }: { done: Done }) {
       </p>
     )
   }
+  const undo = UNDO_HREF[done.result.kind]
   return (
     <p role="status" className="font-mono text-[11px] text-accent-graph">
       {done.result.detail} — {done.result.undo}
+      {undo ? (
+        <>
+          {' '}
+          <a href={undo} onClick={onInternalClick(undo)} className="underline">
+            open it
+          </a>
+        </>
+      ) : null}
     </p>
   )
 }
