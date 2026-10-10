@@ -209,6 +209,8 @@ async def explore_answer(
     place: Annotated[list[str] | None, Query(description="As on `/search`.")] = None,
     source_tier: Annotated[list[SourceTier] | None, Query()] = None,
     language: Annotated[list[str] | None, Query()] = None,
+    published_after: Annotated[dt.date | None, Query(description="As on `/search`.")] = None,
+    published_before: Annotated[dt.date | None, Query(description="As on `/search`.")] = None,
     candidates: Annotated[
         int,
         Query(ge=1, le=1000, description="How deep the one search goes before grouping."),
@@ -230,6 +232,8 @@ async def explore_answer(
         topics=topic,
         topics_all=topic_match == "all",
         places=place,
+        published_after=published_after,
+        published_before=published_before,
     )
     return await answer_search(sess, q, filters=filters, candidates=candidates, top=top)
 

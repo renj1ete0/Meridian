@@ -112,7 +112,7 @@ describe('saving', () => {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { savedTopics, viewFilters } from '../src/explore/ExplorePage'
+import { filtersOfView, NO_FILTERS, viewFiltersOf, type FindFilters } from '../src/lib/find'
 
 /** `SearchFilters`' fields, read from the dataclass the server validates against. */
 function searchFilterFields(): string[] {
@@ -127,24 +127,48 @@ function searchFilterFields(): string[] {
   return [...body.matchAll(/^ {4}([a-z_][a-z0-9_]*)\s*:/gm)].map((m) => m[1]!)
 }
 
+/** Every filter the rail can set, at once. */
+const EVERYTHING: FindFilters = {
+  topics: ['a', 'b'],
+  match: 'all',
+  places: ['DE'],
+  tiers: ['government', 'press'],
+  from: 2015,
+  to: 2020,
+}
+
 describe('a saved view carries filters the server can apply', () => {
   it('names every key as SearchFilters does', () => {
     const fields = searchFilterFields()
     expect(fields).toContain('topics')
-    for (const filters of [viewFilters(['a'], 'any'), viewFilters(['a', 'b'], 'all'), viewFilters(['a', 'b'], 'any')]) {
-      for (const key of Object.keys(filters)) expect(fields).toContain(key)
+    for (const filters of [EVERYTHING, { ...EVERYTHING, match: 'any' as const }, { ...NO_FILTERS, topics: ['a'] }]) {
+      for (const key of Object.keys(viewFiltersOf(filters))) expect(fields).toContain(key)
     }
   })
 
-  it('stores all-of only when there is more than one topic to meet', () => {
-    expect(viewFilters([], 'all')).toEqual({})
-    expect(viewFilters(['a'], 'all')).toEqual({ topics: ['a'] })
-    expect(viewFilters(['a', 'b'], 'all')).toEqual({ topics: ['a', 'b'], topics_all: true })
+  it('stores every filter the rail can set, and reads it back unchanged (B-173)', () => {
+    // A filter missing here reopens a view narrower or wider than it was saved.
+    expect(filtersOfView(viewFiltersOf(EVERYTHING))).toEqual(EVERYTHING)
+    expect(filtersOfView(viewFiltersOf(NO_FILTERS))).toEqual(NO_FILTERS)
   })
 
-  it('reopens views saved either way', () => {
-    expect(savedTopics({ topics: ['a'] })).toEqual(['a'])
-    expect(savedTopics({ topic: ['b'] })).toEqual(['b'])
-    expect(savedTopics({})).toEqual([])
+  it('stores all-of only when there is more than one topic to meet', () => {
+    expect(viewFiltersOf({ ...NO_FILTERS, match: 'all' })).toEqual({})
+    expect(viewFiltersOf({ ...NO_FILTERS, topics: ['a'], match: 'all' })).toEqual({ topics: ['a'] })
+    expect(viewFiltersOf({ ...NO_FILTERS, topics: ['a', 'b'], match: 'all' })).toEqual({
+      topics: ['a', 'b'],
+      topics_all: true,
+    })
+  })
+
+  it('reopens views saved either way, and ignores what it cannot apply', () => {
+    expect(filtersOfView({ topics: ['a'] }).topics).toEqual(['a'])
+    expect(filtersOfView({ topic: ['b'] }).topics).toEqual(['b'])
+    expect(filtersOfView({})).toEqual(NO_FILTERS)
+    // A tier the UI does not know, or a date that is not one, is dropped, not passed on.
+    expect(filtersOfView({ source_tiers: ['rumour', 'press'], published_after: 'soon' })).toEqual({
+      ...NO_FILTERS,
+      tiers: ['press'],
+    })
   })
 })

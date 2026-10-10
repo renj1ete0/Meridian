@@ -40,7 +40,7 @@ function Check({ on }: { on: boolean }) {
   )
 }
 
-function Row({
+export function Row({
   label,
   count,
   on,
@@ -65,7 +65,7 @@ function Row({
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-[11px]">
       <h2 className={LBL}>{title}</h2>
@@ -74,7 +74,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-const RULE = <div className="h-px shrink-0 bg-line" />
+export const RULE = <div className="h-px shrink-0 bg-line" />
 
 export function countOf(facets: readonly FacetCount[], value: string): number {
   return facets.find((f) => f.value === value)?.count ?? 0

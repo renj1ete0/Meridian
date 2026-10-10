@@ -81,6 +81,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.0] — 2026-10-10
+
+### Added
+
+- `B-173`: Find's results have the Explore design's filter rail: topic, place, source type,
+  publication years and saved views. Source type and years are new to the interface; the Answer
+  tab takes the same filters (`/api/explore/answer` gains `published_after`/`published_before`).
+  Every filter, and the chosen tab, travels in the link and in a saved view, which kept topics
+  only before. The landing loses its rows of filter chips, as the design draws it
+
 ## [0.165.5] — 2026-10-08
 
 ### Fixed

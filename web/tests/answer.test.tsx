@@ -3,6 +3,7 @@
  * The answer page: evidence grouped by country, coverage stated against its
  * rule, and "find more" queuing exactly the search it says it will.
  */
+import { NO_FILTERS } from '../src/lib/find'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -293,13 +294,22 @@ describe('fetching the answer', () => {
       '/api/explore/answer': { body: answer() },
       '/api/admin/seeds': { status: 201, body: QUEUED },
     })
-    render(<AnswerView question={QUESTION} topics={[]} match="any" places={['DE']} />)
+    render(
+      <AnswerView
+        question={QUESTION}
+        filters={{ ...NO_FILTERS, places: ['DE'], tiers: ['government'], from: 2019, to: 2021 }}
+      />,
+    )
     await screen.findByRole('region', { name: 'Coverage by country' })
     const url = new URL(String(fetchMock.mock.calls[0]![0]), 'http://x')
     expect(url.pathname).toBe('/api/explore/answer')
     expect(url.searchParams.get('q')).toBe(QUESTION)
     expect(url.searchParams.getAll('place')).toEqual(['DE'])
     expect(url.searchParams.getAll('topic')).toEqual([])
+    // Every filter the rail can set reaches the answer, not only topic and place (`B-173`).
+    expect(url.searchParams.getAll('source_tier')).toEqual(['government'])
+    expect(url.searchParams.get('published_after')).toBe('2019-01-01')
+    expect(url.searchParams.get('published_before')).toBe('2021-12-31')
 
     fireEvent.click(screen.getByRole('button', { name: 'Find more about France' }))
     await screen.findByText(/^Queued/)
@@ -309,7 +319,7 @@ describe('fetching the answer', () => {
 
   it('names a failure rather than showing an empty page', async () => {
     server({ '/api/explore/answer': { status: 500, body: { detail: 'The database is down.' } } })
-    render(<AnswerView question={QUESTION} topics={['a']} match="all" places={[]} />)
+    render(<AnswerView question={QUESTION} filters={{ ...NO_FILTERS, topics: ['a'], match: 'all' }} />)
     expect(await screen.findByText('The database is down.')).toBeTruthy()
   })
 })

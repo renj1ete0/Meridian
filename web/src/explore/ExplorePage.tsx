@@ -5,6 +5,7 @@ import { openSession } from '../lib/lastVisit'
 import { navigate } from '../lib/route'
 import { initialMode, rememberMode, type ResultMode } from '../lib/answer'
 import { Lockup } from '../ui/Mark'
+import { TIER_LABEL } from '../ui/Tier'
 import { AnswerView } from './AnswerView'
 import { NotesPanel } from './Annotations'
 import { CorpusCounts, type CorpusFigures } from './CorpusCounts'
@@ -16,7 +17,8 @@ import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
 import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
 import { getTermNeighbourhood, hasNeighbourhood } from './neighbourhood/api'
-import { TopicFilter } from './TopicFilter'
+import { FiltersButton, FindRail } from './FindRail'
+import { topicWords } from '../lib/growth'
 import { WhereYouWere } from './WhereYouWere'
 import {
   ApiError,
@@ -32,9 +34,17 @@ import {
   type CrawlProgress,
   type SavedViewRecord,
   type SearchResponse,
-  type TopicMatch,
 } from '../lib/api'
-import { findHref, findParams } from '../lib/topicweb'
+import {
+  activeCount,
+  filtersOfView,
+  findLink,
+  NO_FILTERS,
+  readFind,
+  searchFilters,
+  viewFiltersOf,
+  type FindFilters,
+} from '../lib/find'
 
 /**
  * Explore — the landing and the search results (tasks P2-08, P6-27; spec §12.5;
@@ -91,26 +101,26 @@ export function entryState(stats: CorpusStats | null): {
 export function ExplorePage() {
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState('')
-  // Topics narrow the *next* search rather than re-filtering the last one's
+  // Filters narrow the *next* search rather than re-filtering the last one's
   // results: fusion ranks a candidate pool, so a filter applied afterwards
   // would show the top 20 of an unfiltered ranking with most of them removed,
   // which looks like a topic with almost nothing in it (`P6-24`).
-  const [topics, setTopics] = useState<string[]>([])
-  // Whether a source must carry any chosen topic or all of them (`B-72`):
-  // the Map's topic web hands its intersections over as `all`.
-  const [topicMatch, setTopicMatch] = useState<TopicMatch>('any')
-  // Places narrow the same way topics do (`P2-23`), as codes.
-  const [places, setPlaces] = useState<string[]>([])
+  const [filters, setFilters] = useState<FindFilters>(NO_FILTERS)
+  // The rail below `lg`, where it folds behind a button.
+  const [railOpen, setRailOpen] = useState(false)
 
   const [views, setViews] = useState<readonly SavedViewRecord[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [savedCount, setSavedCount] = useState(0)
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Answer (grouped by country) or passages (the ranked list). Decided per
   // search: the reader's last choice, else whether the text reads as a question.
   const [mode, setMode] = useState<ResultMode>('passages')
+  // Whether the reader picked the tab for this search, so a shared link opens on it.
+  const modeChosen = useRef(false)
 
   const [stats, setStats] = useState<CorpusStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
@@ -220,24 +230,18 @@ export function ExplorePage() {
   }, [])
 
   const run = useCallback(
-    (
-      text: string,
-      within: readonly string[] = [],
-      where: readonly string[] = [],
-      match: TopicMatch = 'any',
-      history: 'push' | 'keep' = 'push',
-    ) => {
+    (text: string, within: FindFilters = NO_FILTERS, history: 'push' | 'keep' = 'push', view?: ResultMode) => {
       const trimmed = text.trim()
       if (!trimmed) return
 
       // The search in the URL (`B-95`), so it can be shared and Back returns to
       // it. A new question is a new entry; the same one re-filtered replaces it,
-      // or every topic toggled would be a step of Back.
+      // or every filter toggled would be a step of Back.
       if (history === 'push') {
-        const href = findHref(trimmed, within, match)
+        const href = findLink(trimmed, within, view)
         const current = `${window.location.pathname}${window.location.search}`
         if (href !== current) {
-          const same = findParams(window.location.search).q === trimmed
+          const same = readFind(window.location.search).q === trimmed
           window.history[same ? 'replaceState' : 'pushState']({}, '', href)
         }
       }
@@ -247,15 +251,12 @@ export function ExplorePage() {
       inFlight.current = controller
 
       setPhase('searching')
-      setMode(initialMode(trimmed))
+      setMode(view ?? initialMode(trimmed))
       setAsked(trimmed)
       setPicked(null)
       setError(null)
 
-      searchCorpus(
-        { q: trimmed, topic: within, place: where, topic_match: within.length > 0 ? match : undefined },
-        { signal: controller.signal },
-      )
+      searchCorpus({ q: trimmed, ...searchFilters(within) }, { signal: controller.signal })
         .then((response) => {
           setResults(response)
           setPhase('done')
@@ -269,32 +270,28 @@ export function ExplorePage() {
     [],
   )
 
-  // `/?q=…` opens with that search run; `topic=` (repeated) and `topic_match=` preselect
-  // the topic filter. See docs/features/web-app.md#explore-and-find.
+  // `/?q=…` opens with that search run, narrowed by whatever filters the link names.
+  // See docs/features/web-app.md#explore-and-find.
   useEffect(() => {
-    const linked = findParams(window.location.search)
-    if (linked.topics.length > 0) {
-      setTopics(linked.topics)
-      setTopicMatch(linked.match)
-    }
+    const linked = readFind(window.location.search)
+    setFilters(linked.filters)
     if (!linked.q) {
-      if (linked.topics.length > 0) focusSearch()
+      if (activeCount(linked.filters) > 0) focusSearch()
       return
     }
     setQuery(linked.q)
-    run(linked.q, linked.topics, [], linked.match, 'keep')
+    run(linked.q, linked.filters, 'keep', linked.view ?? undefined)
   }, [run])
 
   // Back and Forward between searches run the search the URL now names.
   useEffect(() => {
     const onPop = () => {
       if (window.location.pathname !== '/') return
-      const linked = findParams(window.location.search)
-      setTopics(linked.topics)
-      setTopicMatch(linked.match)
+      const linked = readFind(window.location.search)
+      setFilters(linked.filters)
       if (linked.q) {
         setQuery(linked.q)
-        run(linked.q, linked.topics, [], linked.match, 'keep')
+        run(linked.q, linked.filters, 'keep', linked.view ?? undefined)
       } else {
         inFlight.current?.abort()
         setQuery('')
@@ -307,8 +304,27 @@ export function ExplorePage() {
     return () => window.removeEventListener('popstate', onPop)
   }, [run])
 
+  /** A filter changed: kept for the next search, and the current one re-run with it. */
+  function narrow(next: FindFilters) {
+    setFilters(next)
+    if (asked) run(asked, next, 'push', modeChosen.current ? mode : undefined)
+    else window.history.replaceState({}, '', findLink('', next))
+  }
+
+  function openView(view: SavedViewRecord) {
+    // Recorded as a write, and failing to record it must not stop the view from
+    // opening: the ordering of a list is not worth refusing somebody the thing they clicked.
+    void markViewOpened(view.view_id).catch(() => {})
+    const saved = filtersOfView(view.filters)
+    setFilters(saved)
+    setQuery(view.query ?? '')
+    if (view.query) run(view.query, saved)
+  }
+
   function clear() {
-    if (window.location.search) window.history.pushState({}, '', '/')
+    // Back to the overview keeps the filters: they are set up for the next search.
+    const href = findLink('', filters)
+    if (`${window.location.pathname}${window.location.search}` !== href) window.history.pushState({}, '', href)
     inFlight.current?.abort()
     setQuery('')
     setAsked('')
@@ -325,133 +341,118 @@ export function ExplorePage() {
     <SearchField
       value={query}
       onChange={setQuery}
-      onSubmit={(text) => run(text, topics, places, topicMatch)}
+      onSubmit={(text) => {
+        modeChosen.current = false
+        run(text, filters)
+      }}
       size={idle ? 'large' : 'regular'}
     />
   )
 
-  const topicFilter = stats ? (
-    <TopicFilter
-      topics={stats.topics}
-      active={topics}
-      unexamined={stats.sources_without_topics > 0}
-      onToggle={(topic) => {
-        const next = topics.includes(topic) ? topics.filter((t) => t !== topic) : [...topics, topic]
-        setTopics(next)
-        // Re-run immediately, but only when there is a query to re-run.
-        // Changing the filter with an empty box is setting up a search, not
-        // performing one.
-        if (asked) run(asked, next, places, topicMatch)
-      }}
-      onClear={() => {
-        setTopics([])
-        if (asked) run(asked, [], places, topicMatch)
-      }}
-      match={topicMatch}
-      onMatch={(next) => {
-        setTopicMatch(next)
-        if (asked && topics.length > 1) run(asked, topics, places, next)
-      }}
+  const rail = (
+    <FindRail
+      topics={stats?.topics ?? []}
+      places={stats?.places ?? []}
+      filters={filters}
+      onChange={narrow}
+      unexaminedTopics={(stats?.sources_without_topics ?? 0) > 0}
+      unexaminedPlaces={(stats?.sources_without_places ?? 0) > 0}
+      views={views}
+      onOpenView={openView}
     />
-  ) : null
-
-  const placeList = stats?.places ?? []
-  const placeFilter =
-    placeList.length > 0 ? (
-      <TopicFilter
-        label="Place"
-        every="every place"
-        topics={placeList.map((p) => p.code)}
-        names={Object.fromEntries(placeList.map((p) => [p.code, p.name]))}
-        active={places}
-        unexamined={(stats?.sources_without_places ?? 0) > 0}
-        caveat="Documents not yet examined for places are not included, and a document is tagged only when it names a place often enough to be about it."
-        onToggle={(code) => {
-          const next = places.includes(code) ? places.filter((p) => p !== code) : [...places, code]
-          setPlaces(next)
-          if (asked) run(asked, topics, next, topicMatch)
-        }}
-        onClear={() => {
-          setPlaces([])
-          if (asked) run(asked, topics, [], topicMatch)
-        }}
-      />
-    ) : null
+  )
+  const placeNames = Object.fromEntries((stats?.places ?? []).map((p) => [p.code, p.name]))
 
   if (!idle) {
     const shown = new Set(results?.hits.map((hit) => hit.chunk_id) ?? [])
     return (
-      <div className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-8">
-        <div className="flex max-w-[912px] flex-col gap-3">
-          {field}
-          {topicFilter}
-          {placeFilter}
+      <div className="mx-auto w-full max-w-[1440px] px-4 pb-24 pt-8">
+        {/* The rail beside everything from `lg` (design `Explore`); below it, folded
+            behind a button so the results stay the first thing on a phone. The field
+            comes first in the document, so it is first in tab order too. */}
+        <div className="grid grid-cols-1 items-start gap-x-8 gap-y-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="flex max-w-[912px] flex-col gap-3 lg:col-start-2 lg:row-start-1">{field}</div>
+
+          <aside
+            id="find-rail"
+            className={`${railOpen ? 'block' : 'hidden'} border border-line bg-surface p-4 lg:sticky lg:top-[70px] lg:block lg:border-0 lg:bg-transparent lg:p-0 lg:pt-1 lg:max-h-[calc(100vh-90px)] lg:overflow-y-auto lg:col-start-1 lg:row-span-2 lg:row-start-1`}
+          >
+            {rail}
+          </aside>
+
+          {/* Results and the neighbourhood side by side (`P6-33`); stacked,
+              results first, below the width where both fit. The panel appears
+              once it has something to show; while it loads, or when it holds
+              nothing, the results keep the width. */}
+          <div
+            className={`grid grid-cols-1 items-start gap-6 lg:col-start-2 lg:row-start-2 ${
+              showHood ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : 'max-w-[1100px]'
+            }`}
+          >
+            <section aria-live="polite">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <ModeSwitch
+                  mode={mode}
+                  onChange={(next) => {
+                    setMode(next)
+                    rememberMode(next)
+                    modeChosen.current = true
+                    window.history.replaceState({}, '', findLink(asked, filters, next))
+                  }}
+                />
+                <FiltersButton open={railOpen} count={activeCount(filters)} onClick={() => setRailOpen(!railOpen)} />
+              </div>
+
+              {mode === 'answer' && asked ? <AnswerView question={asked} filters={filters} /> : null}
+
+              {mode === 'passages' && phase === 'searching' ? (
+                <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>
+              ) : null}
+
+              {mode === 'passages' && phase === 'failed' && error ? (
+                // §4: an error names the cause and the scope. The API's own message
+                // is the most specific thing available, so it is shown rather than
+                // replaced with a generic line.
+                <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{error}</p>
+              ) : null}
+
+              {mode === 'passages' && phase === 'done' && results ? (
+                <SearchOutcome
+                  asked={asked}
+                  results={results}
+                  aside={
+                    <SaveView
+                      key={savedCount}
+                      query={asked}
+                      filters={viewFiltersOf(filters)}
+                      busy={saving}
+                      error={saveError}
+                      onSave={(name, text, stored) => {
+                        setSaving(true)
+                        setSaveError(null)
+                        saveView({ name, query: text, filters: stored })
+                          .then((view) => {
+                            setViews((current) => [view, ...current])
+                            // Remounted closed: the view is in the rail now, which says it took.
+                            setSavedCount((n) => n + 1)
+                          })
+                          .catch((cause: unknown) => {
+                            setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
+                          })
+                          .finally(() => setSaving(false))
+                      }}
+                    />
+                  }
+                />
+              ) : null}
+            </section>
+            {showHood && hood ? (
+              <NeighbourhoodPanel state={hood} shownChunkIds={shown} onPick={(term) => setPicked(term.entity_id)} />
+            ) : null}
+          </div>
         </div>
 
-        {/* Results and the neighbourhood side by side (`P6-33`); stacked,
-            results first, below the width where both fit. The panel appears
-            once it has something to show; while it loads, or when it holds
-            nothing, the results keep the width. */}
-        <div
-          className={`mt-8 grid grid-cols-1 items-start gap-6 ${
-            showHood ? 'lg:grid-cols-[minmax(0,1fr)_400px]' : 'max-w-[1100px]'
-          }`}
-        >
-          <section aria-live="polite">
-            <ModeSwitch
-              mode={mode}
-              onChange={(next) => {
-                setMode(next)
-                rememberMode(next)
-              }}
-            />
-
-            {mode === 'answer' && asked ? (
-              <AnswerView question={asked} topics={topics} match={topicMatch} places={places} />
-            ) : null}
-
-            {mode === 'passages' && phase === 'searching' ? (
-              <p className="font-mono text-[10.5px] text-text-faint">Searching.</p>
-            ) : null}
-
-            {mode === 'passages' && phase === 'failed' && error ? (
-              // §4: an error names the cause and the scope. The API's own message
-              // is the most specific thing available, so it is shown rather than
-              // replaced with a generic line.
-              <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{error}</p>
-            ) : null}
-
-            {mode === 'passages' && phase === 'done' && results ? (
-              <SearchOutcome
-                asked={asked}
-                results={results}
-                aside={
-                  <SaveView
-                    query={asked}
-                    filters={viewFilters(topics, topicMatch)}
-                    busy={saving}
-                    error={saveError}
-                    onSave={(name, text, filters) => {
-                      setSaving(true)
-                      setSaveError(null)
-                      saveView({ name, query: text, filters })
-                        .then((view) => setViews((current) => [view, ...current]))
-                        .catch((cause: unknown) => {
-                          setSaveError(cause instanceof ApiError ? cause.message : 'That view was not saved.')
-                        })
-                        .finally(() => setSaving(false))
-                    }}
-                  />
-                }
-              />
-            ) : null}
-          </section>
-          {showHood && hood ? (
-            <NeighbourhoodPanel state={hood} shownChunkIds={shown} onPick={(term) => setPicked(term.entity_id)} />
-          ) : null}
-        </div>
-
-        <p className="mt-8">
+        <p className="mt-8 lg:pl-[252px]">
           <button type="button" onClick={clear} className="font-mono text-[10.5px] text-accent-graph hover:underline">
             ← back to the overview
           </button>
@@ -468,8 +469,7 @@ export function ExplorePage() {
           <Lockup size={34} wordmarkSize={26} gap={14} />
           <div className="flex w-full flex-col gap-3">
             {field}
-            {topicFilter}
-            {placeFilter}
+            <ActiveFilters filters={filters} placeNames={placeNames} onClear={() => narrow(NO_FILTERS)} />
           </div>
         </div>
 
@@ -511,17 +511,7 @@ export function ExplorePage() {
           recentNodes={[]}
           onOpenView={(id) => {
             const view = views.find((v) => String(v.view_id) === id)
-            if (!view) return
-            // Recorded as a write, and failing to record it must not stop the
-            // view from opening — the ordering of a list is not worth refusing
-            // somebody the thing they clicked.
-            void markViewOpened(view.view_id).catch(() => {})
-            const saved = savedTopics(view.filters)
-            const match: TopicMatch = view.filters.topics_all === true ? 'all' : 'any'
-            setTopics(saved)
-            setTopicMatch(match)
-            setQuery(view.query ?? '')
-            if (view.query) run(view.query, saved, places, match)
+            if (view) openView(view)
           }}
         />
 
@@ -670,17 +660,34 @@ export function RetrievalNotice({ reason, empty }: { reason: string; empty: bool
 }
 
 /**
- * A view's filters, named as the server's `SearchFilters` names them — it
- * validates against that model, and `topic` (the query-string spelling) was
- * refused, so no view with a topic filter could be saved (`B-73`).
+ * The filters a search will be narrowed by, on the landing, where the rail is not shown:
+ * one quiet line, and only when a link or a saved view set some (`B-173`).
  */
-export function viewFilters(topics: string[], match: TopicMatch): Record<string, unknown> {
-  if (topics.length === 0) return {}
-  return match === 'all' && topics.length > 1 ? { topics, topics_all: true } : { topics }
-}
-
-/** The topics a saved view carries: `topics`, or `topic` from before `B-73`. */
-export function savedTopics(filters: Record<string, unknown>): string[] {
-  const value = filters.topics ?? filters.topic
-  return Array.isArray(value) ? (value as string[]) : []
+export function ActiveFilters({
+  filters,
+  placeNames,
+  onClear,
+}: {
+  filters: FindFilters
+  placeNames: Readonly<Record<string, string>>
+  onClear: () => void
+}) {
+  if (activeCount(filters) === 0) return null
+  const parts = [
+    ...filters.topics.map(topicWords),
+    ...filters.places.map((code) => placeNames[code] ?? code),
+    ...filters.tiers.map((tier) => TIER_LABEL[tier].toLowerCase()),
+  ]
+  if (filters.from !== null || filters.to !== null) {
+    parts.push(`published ${filters.from ?? '…'}–${filters.to ?? '…'}`)
+  }
+  const joiner = filters.match === 'all' && filters.topics.length > 1 ? ' + ' : ' · '
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-3 font-mono text-[10.5px] text-text-muted">
+      <span>Searching within: {parts.join(joiner)}</span>
+      <button type="button" onClick={onClear} className="text-accent-graph hover:underline">
+        clear
+      </button>
+    </p>
+  )
 }

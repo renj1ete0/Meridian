@@ -10,18 +10,16 @@
  * meet" into "any of these".
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ExplorePage } from '../src/explore/ExplorePage'
 import { MAP_VIEWS, modeFromSearch } from '../src/explore/MapPage'
-import { TopicFilter } from '../src/explore/TopicFilter'
+import { readFind } from '../src/lib/find'
 import { TopicsView, readoutLine } from '../src/explore/map/TopicsScreen'
 import { searchQuery, type TopicOverlaps } from '../src/lib/api'
 import {
   carrying,
   combinationsContaining,
-  findParams,
   labelWidth,
   layoutTopics,
   rimToRim,
@@ -250,12 +248,10 @@ describe('where the view lives', () => {
 
 describe('Find carries topic and topic_match', () => {
   it('round-trips the hand-off URL', () => {
-    expect(findParams(new URL(searchHref(['a', 'b'], 'q x'), 'http://x').search)).toEqual({
-      q: 'q x',
-      topics: ['a', 'b'],
-      match: 'all',
-    })
-    expect(findParams('?topic=a&topic=a&topic_match=bogus')).toEqual({ q: '', topics: ['a'], match: 'any' })
+    const back = readFind(new URL(searchHref(['a', 'b'], 'q x'), 'http://x').search)
+    expect(back.q).toBe('q x')
+    expect(back.filters.topics).toEqual(['a', 'b'])
+    expect(back.filters.match).toBe('all')
     expect(searchHref([])).toBe('/')
   })
 
@@ -329,16 +325,30 @@ describe('Find carries topic and topic_match', () => {
       render(<ExplorePage />)
     })
     expect(searches()).toHaveLength(0)
-    expect(screen.getByRole('button', { name: 'a' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('radio', { name: 'all at once' }).getAttribute('aria-checked')).toBe('true')
+    // The landing has no rail: what the link set up is said in one line, with a way out.
+    expect(screen.getByText('Searching within: a + b')).toBeTruthy()
 
-    // The next search carries what the link set up.
+    // The next search carries what the link set up, and the rail shows it ticked.
     const input = document.querySelector('input') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'canopy' } })
     await act(async () => {
       fireEvent.submit(input.closest('form')!)
     })
     expect(searches().at(-1)!.get('topic_match')).toBe('all')
+    expect((screen.getByRole('checkbox', { name: 'a' }) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'all at once' }) as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('clears what the link set up from the landing', async () => {
+    const searches = stubbed()
+    window.history.pushState({}, '', searchHref(['a', 'b']))
+    await act(async () => {
+      render(<ExplorePage />)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'clear' }))
+    expect(screen.queryByText(/Searching within/)).toBeNull()
+    expect(window.location.search).toBe('')
+    expect(searches()).toHaveLength(0)
   })
 
   it('switches back to any from the filter, and the next search says so', async () => {
@@ -348,19 +358,10 @@ describe('Find carries topic and topic_match', () => {
       render(<ExplorePage />)
     })
     await act(async () => {
-      fireEvent.click(screen.getByRole('radio', { name: 'any of these' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'all at once' }))
     })
     expect(searches()).toHaveLength(2)
     expect(searches()[1]!.has('topic_match')).toBe(false)
     expect(searches()[1]!.getAll('topic')).toEqual(['a', 'b'])
-  })
-
-  it('offers the any/all switch only with two or more topics, and only for topics', () => {
-    const one = renderToStaticMarkup(<TopicFilter topics={['a', 'b']} active={['a']} onMatch={() => {}} />)
-    expect(one).not.toContain('all at once')
-    const two = renderToStaticMarkup(<TopicFilter topics={['a', 'b']} active={['a', 'b']} onMatch={() => {}} />)
-    expect(two).toContain('all at once')
-    const places = renderToStaticMarkup(<TopicFilter topics={['a', 'b']} active={['a', 'b']} />)
-    expect(places).not.toContain('all at once')
   })
 })

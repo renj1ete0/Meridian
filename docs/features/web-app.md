@@ -382,10 +382,20 @@ at the candidate pool, so a count that reached it is written `100+`: "100 matche
 read as an exact count when it was a ceiling.
 
 **`/?q=…` opens with that search run**, so a search can be linked and shared. Gaps' "Search it
-in Find" (`P6-36`) and the Map's "Open in Find" (`P6-34`) link here. `topic=` (repeated) and
-`topic_match=` preselect the topic filter; the Map's topic web (`B-72`) sends its
-intersections with `topic_match=all`. Topics without a query set the filter and wait for the
-words.
+in Find" (`P6-36`) and the Map's "Open in Find" (`P6-34`) link here. Every filter travels in the
+link (`B-173`, `lib/find.ts`): `topic=` and `place=` and `tier=` (each repeated), `topic_match=all`,
+`from=` and `to=` (years), and `view=answer|passages` once the reader has picked a tab, so a
+shared link opens as the sender saw it. The Map's topic web (`B-72`) sends its intersections with
+`topic_match=all`. Filters without a query are set up and wait for the words; the landing says
+so in one line ("Searching within: …", with a way to clear). What a hand-edited link cannot mean
+(an unknown tier, a two-digit year, a view called anything else) is dropped rather than searched
+for, and a range typed backwards is read as the same span.
+
+One grammar serves the link, the search request and a saved view. A saved view stores the
+filters under `SearchFilters`' own names, because the server validates against that model;
+before `B-173` it stored topics only, so reopening a view narrowed by place or anything else
+silently widened it. `tests/save-view.test.tsx` checks every key against the dataclass and that
+every filter survives a save and reopen.
 
 ### The search field
 
@@ -424,20 +434,41 @@ clamped to eight lines with CSS, so find-in-page, copy and screen readers still 
 verbatim chunk; a list where one extraction-damaged chunk fills three screens is a list nobody
 reads past the first hit.
 
-### The topic filter
+### The filter rail
 
-`P2-14` put labels on every source and the filter on the API; `P6-24` is the control. Chips
-rather than a dropdown, because the set is small (a handful of topics, which is what §10's
-weight vector is) and a dropdown hides what is available behind a click. Selected chips carry
-the graph accent and nothing else: §2's palette has no green or red, and colour must not imply
-a verdict, so it says only "this is on". Places (`P2-23`) use the same component, because a
-second one would drift from this one in exactly the caveat that matters.
+The results page has the Explore artboard's left rail (`B-173`, `FindRail.tsx`): topic, place,
+source type, publication years and saved views, as ticked rows like the graph workspace's rail,
+whose `Row` and `Section` it reuses. Until `B-173` the filters were rows of chips above the
+results and on the landing (the landing artboard draws none), and source type and dates, which
+the search route had always taken, had no control. An intermediate reader's first narrowing
+("government and peer-reviewed only", "since 2018") was impossible without editing a URL.
 
-**The caveat is the interesting part.** A source never examined for topics carries no labels,
-and a topic filter excludes it: nothing has established that it belongs, and including it would
-assert something no pass checked. That is correct and also invisible: a reader who narrows to a
-topic and sees three results cannot know the corpus holds three hundred documents nobody has
-examined. So the control says so, once, while a filter is active.
+- **The landing has no rail.** It is the default state (§8) and stays a search field and three
+  doors; filters set by a link show as one line there.
+- **Below `lg`** the rail folds behind a "Filters · n" button beside the Answer/Passages tabs,
+  so on a phone the results are still the first thing under the field. The field comes first
+  in the document, so it is first in tab order too.
+- **Every change re-runs the search** and replaces the history entry rather than adding one, or
+  each tick would be a step of Back.
+- **Places fold after eight**, and a chosen place stays visible past the fold so it can be
+  unticked. "All at once" appears only when two topics are chosen.
+- **Years commit on Enter or on leaving the box**, so typing "20" does not search for the year
+  20. Something that is not a plausible year is put back, not applied.
+- **The Answer tab gets the same filters**: `/api/explore/answer` takes the dates too now, and
+  an integration test compares the two routes' signatures so a filter added to one is not
+  silently ignored by the other.
+
+**The caveats are the interesting part, and each is said only while it applies.** A source never
+examined for topics or places carries no labels, and a filter on either excludes it: correct,
+since nothing established that it belongs, and invisible, since a reader who narrows and sees
+three results cannot know three hundred documents were never examined. So the rail says so under
+the section while it narrows. A year does the same to every undated document, which on a web
+crawl is many of them, so the Published section says that too while a year is set. Selected
+rows carry the graph accent and nothing else: §2's palette has no green or red, and colour must
+not imply a verdict.
+
+Not yet: the artboard's per-value counts. They need a facet query over the search's candidate
+pool, which the graph workspace has and Find does not.
 
 ### Entry points
 

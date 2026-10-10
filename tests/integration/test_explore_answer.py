@@ -12,6 +12,7 @@ and the dev database holds a real crawl.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from collections.abc import AsyncIterator
 
@@ -154,6 +155,39 @@ async def test_filters_reach_the_search(client, corpus, marker, scope) -> None:
     assert de["sources"] == 3
 
 
+async def test_publication_years_reach_the_search(
+    client, corpus, marker, scope, session_for
+) -> None:
+    """`B-173`: the answer narrows by date as `/search` does, and an undated source is out."""
+    sess = await session_for("rw")
+    await sess.execute(
+        update(Source)
+        .where(Source.source_id == corpus[0].source_id)
+        .values(publication_date=dt.date(2021, 6, 1))
+    )
+    await sess.execute(
+        update(Source)
+        .where(Source.source_id == corpus[2].source_id)
+        .values(publication_date=dt.date(2015, 6, 1))
+    )
+    await sess.commit()
+
+    response = await client.get(
+        "/api/explore/answer",
+        params={
+            "q": marker,
+            "language": scope,
+            "published_after": "2020-01-01",
+            "published_before": "2022-12-31",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    ids = {item["source_id"] for g in body["groups"] for item in g["items"]}
+    assert ids == {corpus[0].source_id}
+    assert body["unplaced"] is None
+
+
 async def test_empty_question_is_an_empty_answer_not_an_error(client) -> None:
     body = (await client.get("/api/explore/answer", params={"q": ""})).json()
     assert body["groups"] == []
@@ -162,8 +196,35 @@ async def test_empty_question_is_an_empty_answer_not_an_error(client) -> None:
 
 
 @pytest.mark.parametrize(
-    "bad", [{"top": 0}, {"top": 999}, {"candidates": 0}, {"candidates": 5000}, {"topic_match": "x"}]
+    "bad",
+    [
+        {"top": 0},
+        {"top": 999},
+        {"candidates": 0},
+        {"candidates": 5000},
+        {"topic_match": "x"},
+        {"published_after": "last year"},
+        {"published_before": "2021-13-01"},
+    ],
 )
 async def test_out_of_range_parameters_are_refused(client, bad) -> None:
     response = await client.get("/api/explore/answer", params={"q": "x", **bad})
     assert response.status_code == 422
+
+
+def test_answer_takes_every_filter_search_takes() -> None:
+    """`B-173`: a filter the reader can set on Find must narrow the answer too.
+
+    Read from the two handlers' signatures, so a filter added to `/search` and not here
+    fails rather than being silently ignored on the Answer tab.
+    """
+    import inspect
+
+    from api.routes.explore import explore_answer, explore_search
+
+    paging = {"limit", "offset", "candidates", "sess"}
+    # Search-only switches with no meaning for a grouped answer.
+    search_only = {"include_duplicates", "include_junk"}
+    search = set(inspect.signature(explore_search).parameters) - paging - search_only
+    answer = set(inspect.signature(explore_answer).parameters)
+    assert search - answer == set()

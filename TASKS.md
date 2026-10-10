@@ -1757,6 +1757,60 @@ deploy runbook whose first two commands could not work (`B-17`).
       run 18, 1,179 window pages on unjudged hosts had no passage embedded: the `then` tier is
       oldest first, behind a `first` tier the crawl refills as fast as it is embedded. Their
       samples are first-tier now, so vouched-for and promising hosts get judged within the hour
+- [x] `B-173` **Find's filter rail** — `v0.166.0`. Source type and publication years had no
+      control (the API always took them); places and every filter but topics fell out of the link
+      and out of saved views; the landing carried rows of chips the design does not. The Explore
+      design's left rail on results, one filter model (`lib/find.ts`) for link, request and view
+- [ ] `B-174` **More passages** — Passages stops at 20 with no way on, though the API pages by
+      `offset` up to the candidate pool. A "more" row at the foot of the list
+- [ ] `B-175` **The answer's "N more sources not shown" is a dead end** — make it open Passages
+      narrowed to that country
+- [ ] `B-176` **The neighbourhood panel on a whole question** — "No concept is called “how do
+      cities …?”" and concepts matched on single common words. Quiet unless a concept is named
+- [ ] `B-177` **Where you were** — recent nodes never listed (`recentNodes={[]}` though
+      `graph/recent.ts` records them); a saved node view on the landing is a dead click
+- [ ] `B-178` **Open a source at the passage** — a hit links to the top of its source, and the
+      source page loads 20 passages, so a hit on page 24 is often not on the page at all. Link
+      `?chunk=`, load the window around it, mark it; earlier/later at both ends. Same for node
+      evidence, the Map's theme card and notes' passage chips
+- [ ] `B-179` **Source page for citing** — per-passage copy-citation, original URL in a new tab,
+      "Explore" breadcrumb returns to the results; rename the passage "cite" checkbox (it selects
+      for a note, while "Cite" on a node copies)
+- [ ] `B-180` **Manage views and notes** — no rename/delete for views (the API has both), notes
+      cannot be edited or removed, the landing shows 5 notes and 6 views with no list of all
+- [ ] `B-181` **Notification links go to the right place** — approvals, run summaries and
+      alerts all open `/admin` (Topic weights); the status pill too. Map type → section
+- [ ] `B-182` **Possible-duplicate approvals have nowhere to go** — most of the bell is
+      `merge_adjudication`, and nothing can decide one. Until a merge screen exists, "Compare"
+      opens the two nodes; a superseded proposal still reads as pending
+- [ ] `B-183` **Ask panel with no model** — the composer offers "citations checked" and fails only
+      after asking, in operator words. Say so first, and point to the Answer tab
+- [ ] `B-184` **Gaps: reader gaps first** — search-yield diagnostics fill the first eleven rows;
+      the off-topic gap's action contradicts its advice; `!bang` syntax in prefills; the tab is
+      lost on Back
+- [ ] `B-185` **Admin small fixes** — add-topic dialog has no description (which drives seed
+      searches) and no next step; weight drafts dropped silently on section change; crawl health
+      has no links and raw enums; runs list has no paging, "1 edges", "done · done"; agent models
+      shown as `${…}`; fetch policy "Not being crawled. 0 failures in a row"; nested `<main>`;
+      boost undo text names the wrong section; phone tab strip hides 8 of 12 sections
+- [ ] `B-186` **Map small fixes** — theme card terms inert (make them Find links); child names
+      repeat the parent; hover card over the level controls; the jump box finds no concepts and
+      gives no hint that it needs Enter
+- [ ] `B-187` **Growth "+N in 30 days" equals the total** on a young corpus — say "all since …"
+- [ ] `B-188` **`list_new_since` returns quarantined and unscreened passages to assistants** — the
+      one MCP passage path without the cleared-only filter search applies (§2.5). Verified on the
+      live corpus. Highest priority of this batch
+- [ ] `B-189` **MCP citations and arguments** — `page_unit` dropped from citations, `framed` has
+      no title or page; a bad date or tier gives "Error executing tool"; `limit` unbounded
+      (444 KB at 500); parameters undescribed; empty results without a note
+- [ ] `B-190` **Runt passages** — 23.5k live chunks under 40 characters, most embedded; a nonsense
+      query's nearest neighbours are "z", "terms". Runts are absorbed per kept stretch, so page
+      furniture strands fragments (`chunk.py`). Absorb across, keep runts out of the vector arm
+- [ ] `B-191` **Tables cut mid-row and headerless** — 4.6% of chunks sit at the 2,000-character cap
+      (80% of spreadsheet chunks); a pipe table is one "paragraph" and is cut mid-number. Split at
+      rows, carry the header into the embedding view, back the hard cut off to whitespace
+- [ ] `B-192` **Figure captions are not searchable** (suspect value) and PDF tables lose columns
+      without `-layout` (suspect); lexical search is English-only for ~30k chunks (suspect)
 - [x] `B-172` **Two regions both named "Data"** — `v0.165.5`. After `B-159` more areas take
       their terms, and names from terms were never told apart. Areas listed together whose
       term names coincide now carry their next own term: "Data (health)", "Data (research)"

@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react'
 
 import { BUTTON_SECONDARY, FIELD } from '../admin/ui'
-import { ApiError, type TopicMatch } from '../lib/api'
-import { getAnswer, queueFindMore, type Answer, type AnswerGroup, type AnswerItem } from '../lib/answer'
+import { ApiError } from '../lib/api'
+import {
+  getAnswer,
+  queueFindMore,
+  type Answer,
+  type AnswerGroup,
+  type AnswerItem,
+  type AnswerParams,
+} from '../lib/answer'
+import { searchFilters, type FindFilters } from '../lib/find'
 import { readable } from '../lib/readable'
 import { hrefForSource, onInternalClick } from '../lib/route'
 import { TierChip, type SourceTier } from '../ui/Tier'
@@ -75,32 +83,21 @@ function anchor(group: AnswerGroup): string {
 
 export interface AnswerViewProps {
   question: string
-  topics: readonly string[]
-  match: TopicMatch
-  places: readonly string[]
+  /** Everything Find is narrowed by; the answer runs the same search. */
+  filters: FindFilters
 }
 
 type State = { phase: 'loading' } | { phase: 'done'; answer: Answer } | { phase: 'failed'; message: string }
 
-export function AnswerView({ question, topics, match, places }: AnswerViewProps) {
+export function AnswerView({ question, filters }: AnswerViewProps) {
   const [state, setState] = useState<State>({ phase: 'loading' })
-  // Joined, so a new array with the same members does not refetch.
-  const topicKey = topics.join('\u0000')
-  const placeKey = places.join('\u0000')
+  // Serialised, so a new object with the same filters does not refetch.
+  const wireKey = JSON.stringify(searchFilters(filters))
 
   useEffect(() => {
     const controller = new AbortController()
     setState({ phase: 'loading' })
-    const topic = topicKey ? topicKey.split('\u0000') : []
-    getAnswer(
-      {
-        q: question,
-        topic,
-        topic_match: topic.length > 0 ? match : undefined,
-        place: placeKey ? placeKey.split('\u0000') : [],
-      },
-      { signal: controller.signal },
-    )
+    getAnswer({ q: question, ...(JSON.parse(wireKey) as Omit<AnswerParams, 'q'>) }, { signal: controller.signal })
       .then((answer) => setState({ phase: 'done', answer }))
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return
@@ -110,7 +107,7 @@ export function AnswerView({ question, topics, match, places }: AnswerViewProps)
         })
       })
     return () => controller.abort()
-  }, [question, topicKey, match, placeKey])
+  }, [question, wireKey])
 
   if (state.phase === 'loading') {
     return <p className="font-mono text-[10.5px] text-text-faint">Grouping the evidence by country.</p>
@@ -118,7 +115,9 @@ export function AnswerView({ question, topics, match, places }: AnswerViewProps)
   if (state.phase === 'failed') {
     return <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{state.message}</p>
   }
-  return <AnswerBody answer={state.answer} question={question} topic={topics[0] ?? state.answer.topics[0] ?? null} />
+  return (
+    <AnswerBody answer={state.answer} question={question} topic={filters.topics[0] ?? state.answer.topics[0] ?? null} />
+  )
 }
 
 // --------------------------------------------------------------------------

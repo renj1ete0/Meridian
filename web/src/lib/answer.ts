@@ -113,6 +113,9 @@ export interface AnswerParams {
   topic?: readonly string[]
   topic_match?: TopicMatch
   place?: readonly string[]
+  source_tier?: readonly SourceTier[]
+  published_after?: string
+  published_before?: string
 }
 
 export function getAnswer(params: AnswerParams, init?: RequestInit): Promise<Answer> {
