@@ -826,6 +826,13 @@ colour is a token role, so the same markup reads on paper and on the dark palett
   counters rather than a verdict.
 
 
+**Adding a topic says what it needs next** (`B-196`). The dialog asked for a label, a floor and
+a ceiling, and the topic's description, from which its searches are built (`B-103`), could only
+be set afterwards through Edit; a new topic searched for its bare label until someone found
+that. The dialog now has "What it is about" (optional, sent with the add; the weight preview is
+not asked again per keystroke). Once added, a line says the topic gets sources only once
+something is seeded for it, with links to Seeds and to Crawl health for the first fetches.
+
 **Shell fixes from the operator walk** (`B-199`):
 
 - **On a phone, one picker.** The section list became a strip that scrolled sideways, showing

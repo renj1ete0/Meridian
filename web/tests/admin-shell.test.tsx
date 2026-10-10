@@ -6,7 +6,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AdminPage } from '../src/admin/AdminPage'
+import { AddedTopic, AdminPage } from '../src/admin/AdminPage'
 import { SECTIONS } from '../src/admin/sections'
 
 afterEach(() => {
@@ -41,5 +41,17 @@ describe('the shell', () => {
         .sort(),
     ).toEqual(SECTIONS.map((s) => s.key).sort())
     expect(picker.value).toBe('runs')
+  })
+})
+
+describe('after adding a topic (B-196)', () => {
+  it('says what it needs next and links there', () => {
+    const onDismiss = vi.fn()
+    render(<AddedTopic topic="kerbside" onDismiss={onDismiss} />)
+    expect(screen.getByText('Added “kerbside”.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Seed it →' }).getAttribute('href')).toBe('/admin/seeds')
+    expect(screen.getByRole('link', { name: 'Watch the first fetches →' }).getAttribute('href')).toBe('/admin/crawl')
+    screen.getByRole('button', { name: 'dismiss' }).click()
+    expect(onDismiss).toHaveBeenCalled()
   })
 })

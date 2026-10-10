@@ -235,7 +235,34 @@ describe('the add-topic dialog', () => {
     expect(add.disabled).toBe(false)
 
     fireEvent.click(add)
-    expect(onAdd).toHaveBeenCalledWith({ topic: 'kerbside', floor: 0.05, ceiling: 0.6 })
+    expect(onAdd).toHaveBeenCalledWith({ topic: 'kerbside', floor: 0.05, ceiling: 0.6, description: null })
+  })
+
+  it('sends what the topic is about with it, without asking for another preview per keystroke (B-196)', async () => {
+    vi.useFakeTimers()
+    const preview = vi.fn(async (body: TopicAddBody) => ({
+      rows: [...rows, row({ topic: config({ topic: body.topic, weight: 0.05 }) })],
+      sums_to: 1,
+    }))
+    const onAdd = vi.fn()
+    render(<AddTopicDialog rows={rows} sumsTo={1} preview={preview} onAdd={onAdd} onClose={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Topic label'), { target: { value: 'kerbside' } })
+    await act(() => vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS))
+    const asked = preview.mock.calls.length
+
+    fireEvent.change(screen.getByLabelText('What the topic is about'), {
+      target: { value: '  Kerbside space: loading bays, parking and pick-up.  ' },
+    })
+    await act(() => vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS))
+    expect(preview.mock.calls.length).toBe(asked)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add topic' }))
+    expect(onAdd).toHaveBeenCalledWith({
+      topic: 'kerbside',
+      floor: 0.05,
+      ceiling: 0.6,
+      description: 'Kerbside space: loading bays, parking and pick-up.',
+    })
   })
 
   it('shows the server’s refusal and does not offer to commit it', async () => {

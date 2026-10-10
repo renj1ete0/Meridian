@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.19] — 2026-10-10
+
+### Added
+
+- `B-196`: the add-topic dialog takes what the topic is about (its searches are built from it),
+  and once added, Admin says what it needs next with links to Seeds and Crawl health
+
 ## [0.166.18] — 2026-10-10
 
 ### Fixed

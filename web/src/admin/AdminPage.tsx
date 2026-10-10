@@ -87,6 +87,8 @@ export function AdminPage() {
 
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // The topic just added, so the page can say what to do next (`B-196`).
+  const [added, setAdded] = useState<string | null>(null)
 
   const [state, setState] = useState<GazetteerState>('pending')
   const [offset, setOffset] = useState(0)
@@ -530,6 +532,7 @@ export function AdminPage() {
             {error}
           </p>
         ) : null}
+        {added && section === 'topics' ? <AddedTopic topic={added} onDismiss={() => setAdded(null)} /> : null}
         {notice ? (
           <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
             {notice}
@@ -779,7 +782,10 @@ export function AdminPage() {
                 await addTopic(body)
                 await loadTopics()
               })
-              if (ok) setAdding(false)
+              if (ok) {
+                setAdding(false)
+                setAdded(body.topic)
+              }
             })()
           }
         />
@@ -805,6 +811,45 @@ export function AdminPage() {
           }
         />
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * After a topic is added, the next step (`B-196`): a topic with no sources gets none until
+ * something is seeded, and adding it said nothing about that.
+ */
+export function AddedTopic({ topic, onDismiss }: { topic: string; onDismiss: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border border-line bg-surface px-4 py-3"
+    >
+      <span className="text-[13px] text-text">Added “{topic}”.</span>
+      <span className="text-[12.5px] text-text-muted">
+        It gets sources once something is seeded for it: a page you know, or a search.
+      </span>
+      <a
+        href="/admin/seeds"
+        onClick={onInternalClick('/admin/seeds')}
+        className="text-[12.5px] text-accent-graph hover:underline"
+      >
+        Seed it →
+      </a>
+      <a
+        href="/admin/crawl"
+        onClick={onInternalClick('/admin/crawl')}
+        className="text-[12.5px] text-accent-graph hover:underline"
+      >
+        Watch the first fetches →
+      </a>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="ml-auto font-mono text-[10.5px] text-text-faint hover:text-text"
+      >
+        dismiss
+      </button>
     </div>
   )
 }

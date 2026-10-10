@@ -75,13 +75,19 @@ export function AddTopicDialog({
   // exactly what an API call with no bounds would do.
   const [floor, setFloor] = useState('0.05')
   const [ceiling, setCeiling] = useState('0.60')
+  // What the topic is about, in words (`B-196`): its searches are built from them.
+  const [description, setDescription] = useState('')
 
   const topic = label.trim()
   const lower = bound(floor)
   const upper = bound(ceiling)
-  const body: TopicAddBody | null =
+  const weights: TopicAddBody | null =
     topic && lower !== null && upper !== null ? { topic, floor: lower, ceiling: upper } : null
-  const { after, refusal } = usePreview(body ? JSON.stringify(body) : null, (signal) => preview(body!, signal))
+  // The preview is of weights only, so typing a description does not ask for another.
+  const { after, refusal } = usePreview(weights ? JSON.stringify(weights) : null, (signal) => preview(weights!, signal))
+  const body: TopicAddBody | null = weights
+    ? { ...weights, description: description.trim() ? description.trim() : null }
+    : null
   const starts = after?.rows.find((r) => r.topic.topic === topic)?.topic.weight
 
   return (
@@ -142,6 +148,22 @@ export function AddTopicDialog({
           />
         </label>
       </div>
+
+      <label className="flex flex-col gap-[7px]">
+        <span className={LABEL}>What it is about</span>
+        <textarea
+          className={`${FIELD} min-h-[64px] py-2 text-[13px]`}
+          value={description}
+          maxLength={1000}
+          onChange={(event) => setDescription(event.target.value)}
+          aria-label="What the topic is about"
+          placeholder="A sentence or two, in the words its sources would use."
+        />
+        <span className="text-[12px] text-text-faint">
+          Its searches are built from these words; without them it searches for its label alone. Optional, and editable
+          later.
+        </span>
+      </label>
 
       {refusal ? (
         <p role="alert" className="text-[12.5px] text-accent-attention">

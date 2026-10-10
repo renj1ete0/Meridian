@@ -1799,7 +1799,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       has no links and raw enums; runs list has no paging, "1 edges", "done · done"; agent models
       shown as `${…}`; fetch policy "Not being crawled. 0 failures in a row"; nested `<main>`;
       boost undo text names the wrong section; phone tab strip hides 8 of 12 sections
-- [ ] `B-196` **Add a topic, then what** — the dialog has no description (which drives seed
+- [x] `B-196` `v0.166.19`. **Add a topic, then what** — the dialog has no description (which drives seed
       searches) and no next step; add both
 - [x] `B-197` `v0.166.16`. **Crawl health leads somewhere** — words for outcomes and states,
       empty states left out, domains link to their policy row
