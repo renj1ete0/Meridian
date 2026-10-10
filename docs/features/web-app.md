@@ -1013,7 +1013,9 @@ contain them. The tab counts stay the whole queue's, so a narrowed list never re
 emptied one, while the pager counts the matches (`of 412 matching`): paging toward the tab's
 total over a search would page through rows that are not there. A search that finds nothing
 says so and points at the other tabs, rather than the empty-queue line, which would claim
-every term had been decided. Typing in the box never decides a row: the keys belong to nobody who is typing.
+every term had been decided. Typing in the box never decides a row: the keys belong to nobody
+who is typing. The key hint is shown only where the pointer is fine (`pointer-fine`), so not on
+a touch screen, where it meant nothing and wrapped mid-phrase (`B-213`).
 
 ### Fetch policy
 

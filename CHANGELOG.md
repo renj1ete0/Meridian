@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.168.8] — 2026-10-10
+
+### Fixed
+
+- `B-213`: on a phone, an expired boost's actions stack inside the card and its date stays whole;
+  the gazetteer's keyboard hint is shown only where there is a fine pointer
+
 ## [0.168.7] — 2026-10-10
 
 ### Fixed
