@@ -81,6 +81,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.166.13] — 2026-10-10
+
+### Fixed
+
+- `B-190`: passages under 40 characters (page numbers, stray cells, two-word headings) are left
+  out of the vector arm, where they sat near every query; still found by their words
+
 ## [0.166.12] — 2026-10-10
 
 ### Fixed

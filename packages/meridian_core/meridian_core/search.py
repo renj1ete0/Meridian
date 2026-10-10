@@ -42,6 +42,12 @@ EF_SEARCH_FACTOR = 2
 #: pool the size of the result set makes RRF a no-op.
 DEFAULT_CANDIDATES = 100
 
+#: Passages shorter than this are left out of the vector arm (`B-190`): a page number, a
+#: stray cell or a two-word heading is near every query in meaning and proves nothing. They
+#: stay stored, and the lexical arm still finds them by their words.
+#: See docs/features/search.md#fragments.
+VECTOR_MIN_CHARS = 40
+
 DEFAULT_LIMIT = 20
 
 #: How many matches RUM's own order hands to ``ts_rank_cd`` (`B-65`). The depth was
@@ -285,7 +291,11 @@ async def _vector(
     stmt = (
         _arm(filters)
         .add_columns(distance)
-        .where(Chunk.embedding.is_not(None))
+        .where(
+            Chunk.embedding.is_not(None),
+            # A fragment sits near every query in meaning and states nothing (`B-190`).
+            func.char_length(Chunk.text) >= VECTOR_MIN_CHARS,
+        )
         .order_by(distance, Chunk.chunk_id)
         .limit(candidates)
     )

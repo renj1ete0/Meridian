@@ -116,17 +116,29 @@ async def test_a_vector_neighbour_is_found_with_no_matching_words(
 ) -> None:
     """The half of hybrid search that exists because wording and meaning differ."""
     sess = await session_for("rw")
-    await a_source(sess, scope, ["Entirely unrelated wording."], [at(0.99, 3)])
+    await a_source(
+        sess,
+        scope,
+        ["Entirely unrelated wording, at some length, about another matter."],
+        [at(0.99, 3)],
+    )
 
     result = await search(sess, "", query_vector=QUERY, filters=only(scope))
 
-    assert [h.text for h in result.hits] == ["Entirely unrelated wording."]
+    assert [h.text for h in result.hits] == [
+        "Entirely unrelated wording, at some length, about another matter."
+    ]
     assert result.arms == {"vector"}
 
 
 async def test_both_arms_report_themselves(session_for, scope, term, cleanup) -> None:
     sess = await session_for("rw")
-    await a_source(sess, scope, [f"A {term} report."], [at(0.98, 3)])
+    await a_source(
+        sess,
+        scope,
+        [f"A {term} report, long enough to be a passage the vector arm reads."],
+        [at(0.98, 3)],
+    )
 
     result = await search(sess, term, query_vector=QUERY, filters=only(scope))
 
@@ -162,10 +174,26 @@ async def test_the_filter_is_inside_the_vector_query_not_applied_to_its_output(
     query reaches past them to the government chunks behind.
     """
     sess = await session_for("rw")
-    await a_source(sess, scope, ["Nearest press."], [at(0.99, 3)], source_tier="press")
-    await a_source(sess, scope, ["Also press."], [at(0.98, 4)], source_tier="press")
     await a_source(
-        sess, scope, ["Government, further away."], [at(0.70, 5)], source_tier="government"
+        sess,
+        scope,
+        ["Nearest press item, long enough to be a passage the vector arm reads."],
+        [at(0.99, 3)],
+        source_tier="press",
+    )
+    await a_source(
+        sess,
+        scope,
+        ["Also a press item, long enough to be a passage the vector arm reads."],
+        [at(0.98, 4)],
+        source_tier="press",
+    )
+    await a_source(
+        sess,
+        scope,
+        ["Government source, further away, long enough to be a passage."],
+        [at(0.70, 5)],
+        source_tier="government",
     )
 
     result = await search(
@@ -176,7 +204,9 @@ async def test_the_filter_is_inside_the_vector_query_not_applied_to_its_output(
         candidates=2,
     )
 
-    assert [h.text for h in result.hits] == ["Government, further away."]
+    assert [h.text for h in result.hits] == [
+        "Government source, further away, long enough to be a passage."
+    ]
     assert all(h.source_tier == "government" for h in result.hits)
 
 
@@ -356,7 +386,12 @@ async def test_a_superseded_chunk_is_not_found_by_vector(session_for, scope, cle
     # vector arm serving retired text — visible only on queries that happened to
     # match by meaning rather than by words.
     sess = await session_for("rw")
-    source = await a_source(sess, scope, ["Entirely unrelated wording."], [at(0.99, 3)])
+    source = await a_source(
+        sess,
+        scope,
+        ["Entirely unrelated wording, at some length, about another matter."],
+        [at(0.99, 3)],
+    )
     await replace_chunks(sess, source.source_id, [ChunkWrite(text="Replaced.", chunk_index=0)])
 
     result = await search(sess, "", query_vector=QUERY, filters=only(scope))

@@ -1809,7 +1809,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-189` `v0.166.12`. **MCP citations and arguments** — `page_unit` dropped from citations, `framed` has
       no title or page; a bad date or tier gives "Error executing tool"; `limit` unbounded
       (444 KB at 500); parameters undescribed; empty results without a note
-- [ ] `B-190` **Runt passages** — 23.5k live chunks under 40 characters, most embedded; a nonsense
+- [x] `B-190` `v0.166.13`: out of the vector arm under 40 characters; absorbing across a cut was rejected (a passage must stay a slice). **Runt passages** — 23.5k live chunks under 40 characters, most embedded; a nonsense
       query's nearest neighbours are "z", "terms". Runts are absorbed per kept stretch, so page
       furniture strands fragments (`chunk.py`). Absorb across, keep runts out of the vector arm
 - [ ] `B-191` **Tables cut mid-row and headerless** — 4.6% of chunks sit at the 2,000-character cap

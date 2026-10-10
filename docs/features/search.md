@@ -170,6 +170,30 @@ the whole of §12.5's "filters before vector search". Postgres may use a filtere
 a sequential scan depending on selectivity; it will not hand back a top-k drawn from the
 unfiltered corpus.
 
+### Fragments
+
+Passages shorter than 40 characters (`VECTOR_MIN_CHARS`) are left out of the vector arm
+(`B-190`). The chunker merges a short piece into its neighbour, but only within a stretch of
+text: where page furniture was cut out (`B-43`), a page number ("iii") or a lone table cell
+("$176,000") is stranded and kept as its own passage, because merging across the cut would make
+the passage something other than a slice of the text. 23,537 live passages were under 40
+characters on 2026-10-10, 21,633 of them embedded. A fragment's vector sits near everything:
+
+| Query (vector arm, top 10) | under 40 characters, before | after |
+|---|---|---|
+| a nonsense word | 9 | 0 |
+| a six-digit number | 10 (all 30 of the top 30) | 0 |
+| a four-word phrase | 6 | 0 |
+| eight real questions and phrases | 0–3 each, 7 in all | 0 |
+
+The real queries' results were otherwise unchanged, and the number now surfaces whole table
+passages rather than "167", "169". The cost is about 4 ms a query on the vector arm (10.7 → 14.4
+ms over four queries, warm). Fragments stay stored and the lexical arm still finds them by their
+words; they are not removed from the embedding backlog, which would make "awaiting a vector"
+permanent for them. Nothing here says when nothing is close: a nonsense query now gets
+40–80-character passages instead of fragments, and a similarity floor that says "nothing near"
+is a separate question.
+
 ### Per-source cap
 
 `max_per_source` caps how many chunks one document may contribute (`B-30`). Measured on the

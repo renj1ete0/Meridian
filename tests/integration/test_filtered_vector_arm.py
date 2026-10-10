@@ -43,7 +43,13 @@ async def sess(session_for):
     await s.rollback()
 
 
-async def source_with(sess, tier: str, vectors: list[list[float]]) -> list[int]:
+#: Long enough for the vector arm, which leaves fragments out (`B-190`).
+TEXT = "Passage {i}, written out long enough to count as a passage."
+
+
+async def source_with(
+    sess, tier: str, vectors: list[list[float]], texts: list[str] | None = None
+) -> list[int]:
     source, _ = await upsert_source(
         sess,
         f"https://v{uuid.uuid4().hex[:10]}.test/p",
@@ -53,7 +59,10 @@ async def source_with(sess, tier: str, vectors: list[list[float]]) -> list[int]:
     await replace_chunks(
         sess,
         source.source_id,
-        [ChunkWrite(text=f"Passage {i}.", chunk_index=i) for i in range(len(vectors))],
+        [
+            ChunkWrite(text=texts[i] if texts else TEXT.format(i=i), chunk_index=i)
+            for i in range(len(vectors))
+        ],
     )
     ids = list(
         await sess.scalars(
@@ -95,3 +104,26 @@ async def test_results_come_back_nearest_first(sess) -> None:
     mine = [i for i in found if i in ids]
 
     assert mine == [ids[1], ids[2], ids[0]]
+
+
+async def test_a_fragment_is_left_out_of_the_vector_arm_but_found_by_its_words(sess) -> None:
+    """`B-190`: on the live corpus a nonsense query's ten nearest were nine fragments ("z",
+    "terms"), and a short phrase's top ten held six under 40 characters. A fragment nearest
+    of all to the query is still not offered by meaning; its words still find it."""
+    from meridian_core.search import VECTOR_MIN_CHARS, search
+
+    word = f"zq{uuid.uuid4().hex[:8]}"
+    fragment = f"{word} iii"
+    assert len(fragment) < VECTOR_MIN_CHARS
+    ids = await source_with(
+        sess,
+        "government",
+        [at(1.0, 3), at(0.9, 4)],
+        texts=[fragment, f"{word} and a full sentence that says something about it."],
+    )
+    near = await _vector(sess, at(1.0, 3), SearchFilters(source_tiers=["government"]), 20)
+    assert ids[0] not in near
+    assert ids[1] in near
+
+    found = await search(sess, word, query_vector=None, filters=SearchFilters(), limit=10)
+    assert ids[0] in [hit.chunk_id for hit in found.hits]
