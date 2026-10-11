@@ -98,6 +98,9 @@ class SearchResponse(BaseModel):
     candidate_pool: int
     lexical_candidates: int
     vector_candidates: int
+    #: Whether a cross-encoder re-ordered the top of the list (`B-167`). False when it
+    #: was not asked for, is not configured, or failed. See docs/features/search.md#reranking.
+    reranked: bool = False
 
 
 class PlaceRead(BaseModel):

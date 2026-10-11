@@ -178,6 +178,14 @@ async def explore_search(
             "the arms handed it, so this bounds how far paging can reach.",
         ),
     ] = DEFAULT_CANDIDATES,
+    rerank: Annotated[
+        bool,
+        Query(
+            description="Re-order the top 30 with the cross-encoder, when the embedding service "
+            "has one (`reranked` in the answer says whether it did). Seconds, not milliseconds: "
+            "ask for the plain order first."
+        ),
+    ] = False,
 ) -> SearchResponse:
     """Hybrid retrieval over the corpus.
 
@@ -198,7 +206,13 @@ async def explore_search(
     )
     try:
         return await paged_search(
-            sess, q, filters=filters, limit=limit, offset=offset, candidates=candidates
+            sess,
+            q,
+            filters=filters,
+            limit=limit,
+            offset=offset,
+            candidates=candidates,
+            rerank=rerank,
         )
     except WindowTooDeep as exc:
         # 422, not 500: the request is the thing that is wrong, and the message
@@ -224,6 +238,9 @@ async def explore_answer(
     top: Annotated[int, Query(ge=1, le=MAX_TOP, description="Sources shown per place.")] = (
         DEFAULT_TOP
     ),
+    rerank: Annotated[
+        bool, Query(description="As on `/search`: the top 30 of the pool, before grouping.")
+    ] = False,
 ) -> AnswerRead:
     """A question answered as evidence grouped by country, with coverage per country.
 
@@ -241,7 +258,9 @@ async def explore_answer(
         published_after=published_after,
         published_before=published_before,
     )
-    return await answer_search(sess, q, filters=filters, candidates=candidates, top=top)
+    return await answer_search(
+        sess, q, filters=filters, candidates=candidates, top=top, rerank=rerank
+    )
 
 
 @router.get("/topic-overlaps", response_model=TopicOverlapsRead)

@@ -333,6 +333,15 @@ All variables are in [reference/environment.md](../reference/environment.md#embe
 service, raises the backfill's batch, and sets remote-only. The start-up log should say
 `memory_of: device`; `host` means the card was not seen.
 
+<a id="an-amd-gpu"></a>**On an AMD GPU:** `deploy/gpu/rocm-embedder.yml` builds the service's image with
+ROCm's torch (the `TORCH_INDEX` build argument; the default image's torch drives NVIDIA cards
+only), hands it `/dev/kfd` and `/dev/dri`, and selects the card, which ROCm names `cuda` as
+PyTorch does. It needs only the kernel's `amdgpu` driver on the host: the ROCm libraries ship in
+the image, several gigabytes larger for it. On an enforcing SELinux host the container cannot
+open the device nodes with labelling on, so the override turns it off for that one container.
+Measured on an integrated Radeon 890M: the reranker took about 5 s for 30 passages, against 14 s
+on the CPU (search.md#reranking).
+
 ## Operating it
 
 - `docker compose logs embed` shows "embedded a batch", with a running total.

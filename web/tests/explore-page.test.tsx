@@ -77,6 +77,7 @@ function response(over: Partial<SearchResponse> = {}): SearchResponse {
     candidate_pool: 100,
     lexical_candidates: 9,
     vector_candidates: 0,
+    reranked: false,
     ...over,
   }
 }

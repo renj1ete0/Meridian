@@ -46,6 +46,15 @@ class EmbedderMismatch(EmbeddingUnavailable):
     """
 
 
+class RerankingOff(RuntimeError):
+    """The sidecar answers, and has no reranker configured (`B-167`). Not an outage."""
+
+
+#: How long a rerank may take. Generous: on an integrated GPU 30 passages took about
+#: 5 s, on a CPU about 14 s (docs/features/search.md#reranking).
+DEFAULT_RERANK_TIMEOUT_S = 60.0
+
+
 class RemoteEmbedder:
     """Vectors from the embedding sidecar.
 
@@ -62,11 +71,13 @@ class RemoteEmbedder:
         client: httpx.AsyncClient | None = None,
         expect_model: str | None = None,
         token: str | None = None,
+        rerank_timeout_s: float = DEFAULT_RERANK_TIMEOUT_S,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         #: Sent as a bearer token when the sidecar asks for one (`P3-12`).
         self._headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._timeout = timeout_s
+        self._rerank_timeout = rerank_timeout_s
         self._client = client
         self._owns_client = client is None
         #: Which model this corpus was embedded with. When set, a sidecar naming a
@@ -91,6 +102,7 @@ class RemoteEmbedder:
             # disagree silently.
             expect_model=os.environ.get("MERIDIAN_EMBED_MODEL", "").strip() or None,
             token=os.environ.get("MERIDIAN_EMBEDDER_TOKEN", "").strip() or None,
+            rerank_timeout_s=_float_env("MERIDIAN_RERANK_TIMEOUT_S", DEFAULT_RERANK_TIMEOUT_S),
         )
 
     def _http(self) -> httpx.AsyncClient:
@@ -179,6 +191,40 @@ class RemoteEmbedder:
     async def embed_one(self, text: str) -> list[float]:
         """One vector, for the query path."""
         return (await self.embed([text]))[0]
+
+    async def rerank(self, query: str, texts: Sequence[str]) -> list[float]:
+        """A relevance score per text, in order (`B-167`).
+
+        Raises :class:`RerankingOff` when the sidecar has no reranker and
+        :class:`EmbeddingUnavailable` when it failed; never a short list.
+        """
+        if not texts:
+            return []
+        if len(texts) > MAX_TEXTS:
+            raise ValueError(f"{len(texts)} texts exceeds the {MAX_TEXTS} cap for one request")
+        try:
+            response = await self._http().post(
+                f"{self.base_url}/rerank",
+                json={"query": query, "texts": list(texts)},
+                headers=self._headers,
+                timeout=self._rerank_timeout,
+            )
+            if response.status_code == 404:
+                raise RerankingOff(f"{self.base_url} has no reranker configured")
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            raise EmbeddingUnavailable(f"{self.base_url}: {exc}") from exc
+        except ValueError as exc:
+            raise EmbeddingUnavailable(f"{self.base_url}: unreadable response") from exc
+        scores = body.get("scores")
+        if not isinstance(scores, list) or len(scores) != len(texts):
+            # The same alignment check as `embed`: a misaligned score reorders silently.
+            raise EmbeddingUnavailable(
+                f"{self.base_url}: asked for {len(texts)} scores, got "
+                f"{len(scores) if isinstance(scores, list) else 'none'}"
+            )
+        return [float(score) for score in scores]
 
 
 def _float_env(name: str, default: float) -> float:

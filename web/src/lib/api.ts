@@ -128,6 +128,8 @@ export interface SearchResponse {
   candidate_pool: number
   lexical_candidates: number
   vector_candidates: number
+  /** Whether a cross-encoder re-ordered the top 30 (`B-167`); only when asked for. */
+  reranked: boolean
 }
 
 export const SEARCH_RESPONSE_FIELDS = [
@@ -141,6 +143,7 @@ export const SEARCH_RESPONSE_FIELDS = [
   'candidate_pool',
   'lexical_candidates',
   'vector_candidates',
+  'reranked',
 ] as const
 
 /** Mirrors `CorpusStatsRead`. */

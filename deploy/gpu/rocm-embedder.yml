@@ -1,0 +1,47 @@
+# The embedding model and the reranker on an AMD GPU through ROCm (`B-167`).
+#
+#   docker compose -f docker-compose.local.yml -f deploy/gpu/rocm-embedder.yml up -d --build embedder
+#
+# Measured on an integrated Radeon 890M (Ryzen AI 9 HX 370): the reranker took about 5 s
+# for 30 passages, against 14 s on the CPU, with a crawl loading every core. A discrete
+# card should be several times faster. See docs/features/embedding.md#an-amd-gpu.
+#
+# Needs, on the host: the amdgpu kernel driver (any recent kernel) and the device nodes
+# below. Nothing else: the ROCm libraries ship inside the image with torch, which is
+# why the image is several gigabytes larger than the CPU one.
+#
+# Check it took: the embedder's start-up log says "embedding batch sized from memory"
+# with `memory_of: device`. `host` means the card was not seen.
+#
+# What changes here, and only this:
+#   - the sidecar's image is built with ROCm's torch, under its own name so the worker
+#     and the CPU sidecar keep theirs;
+#   - it is handed the GPU's device nodes, and told to use the card (ROCm answers to
+#     PyTorch's `cuda` device name);
+#   - SELinux labelling is off for this one container, which otherwise cannot open the
+#     device nodes on an enforcing host (Fedora);
+#   - a writable cache for the GPU kernels the library compiles, since the root
+#     filesystem is read-only.
+
+services:
+  embedder:
+    image: meridian-local-embedder-rocm
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/rocm6.4
+    environment:
+      MERIDIAN_EMBED_DEVICE: cuda
+      MIOPEN_USER_DB_PATH: /tmp/miopen
+      HOME: /tmp
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    security_opt:
+      - label=disable
+    tmpfs:
+      - /tmp:size=1g
+    deploy:
+      resources:
+        limits: { memory: 12G }

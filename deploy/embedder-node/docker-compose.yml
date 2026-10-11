@@ -25,6 +25,7 @@ services:
     environment:
       MERIDIAN_EMBEDDER_PORT: "8100"
       MERIDIAN_EMBED_CACHE: /models
+      MERIDIAN_RERANK_MODEL: ${MERIDIAN_RERANK_MODEL:-}   # B-167; empty is off
       MERIDIAN_EMBEDDER_TOKEN: ${MERIDIAN_EMBEDDER_TOKEN:?set MERIDIAN_EMBEDDER_TOKEN - the port is on the LAN}
       HF_HUB_OFFLINE: "1"
     volumes:
@@ -50,6 +51,7 @@ services:
     command: ["python", "-m", "worker.fetchmodel"]
     environment:
       MERIDIAN_EMBED_CACHE: /models
+      MERIDIAN_RERANK_MODEL: ${MERIDIAN_RERANK_MODEL:-}   # B-167; empty is off
     volumes:
       - ${MODELS_DIR:-/srv/meridian/models}:/models
     restart: "no"

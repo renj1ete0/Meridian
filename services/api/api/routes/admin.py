@@ -95,7 +95,7 @@ from meridian_core.timefmt import ZONE_KEY, zone_label
 from meridian_core.validation import ValidationError, check_seed_allowed
 
 from ..deps import AdminAllowed, WriteSession
-from ..search_service import embed_query
+from ..search_service import embed_query, reranker
 
 log = get_logger(__name__)
 
@@ -1415,6 +1415,7 @@ async def ask_the_graph(body: ChatAsk, _: AdminAllowed, sess: WriteSession) -> C
             thread_id=body.thread_id,
             context_entity_ids=body.context_entity_ids,
             embed=embed_query,
+            rerank=reranker(),
             now=_now(),
         )
     except chat.ChatRefused as exc:

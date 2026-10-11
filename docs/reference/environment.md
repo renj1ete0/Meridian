@@ -72,6 +72,9 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `MERIDIAN_EMBED_CHUNK_BATCH` | 256 | Passages the backfill draws per batch (split into requests of 256) |
 | `MERIDIAN_EMBED_IDLE_SLEEP_S` | 60 | Backfill sleep when nothing waits |
 | `MERIDIAN_EMBED_REMOTE_ONLY` | off | Never load the model in the backfill process |
+| `MERIDIAN_RERANK_MODEL` | unset (off) | Cross-encoder the service re-orders search with (`B-167`); `BAAI/bge-reranker-v2-m3` was measured. Set on the service and on `fetchmodel` |
+| `MERIDIAN_RERANK_DEVICE` | the embedder's | Device for the reranker, when it differs from `MERIDIAN_EMBED_DEVICE` |
+| `MERIDIAN_RERANK_TIMEOUT_S` | 60 | How long a caller waits for a rerank before keeping the fused order |
 | `HF_HUB_OFFLINE` | set in compose | Stops the model library probing the network from isolated containers |
 
 ## Judgement passes

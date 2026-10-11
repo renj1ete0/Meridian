@@ -292,3 +292,54 @@ def test_the_fetcher_is_never_put_offline(path: pathlib.Path) -> None:
         assert _environment(services[name]).get(OFFLINE) != "1", (
             f"{path.name}: {name} downloads the weights and cannot do it offline"
         )
+
+
+def _env(service: dict) -> dict:
+    env = service.get("environment") or {}
+    if isinstance(env, list):
+        env = dict(item.split("=", 1) for item in env)
+    return env
+
+
+@pytest.mark.parametrize(
+    "path",
+    [*COMPOSE_FILES, REPO / "deploy/embedder-node/docker-compose.yml"],
+    ids=lambda p: p.name,
+)
+def test_the_fetcher_fetches_the_reranker_the_sidecar_will_load(path: pathlib.Path) -> None:
+    """`B-167`: a sidecar told to rerank with a model the fetcher never downloaded loads
+    nothing offline, and every search quietly stays unreranked."""
+    services = _services(path)
+    sidecars, fetchers = _running(path, EMBEDSERVER), _running(path, FETCHMODEL)
+    if not sidecars:
+        pytest.skip(f"{path.name} does not run the sidecar")
+    wanted = {_env(services[name]).get("MERIDIAN_RERANK_MODEL") for name in sidecars}
+    fetched = {_env(services[name]).get("MERIDIAN_RERANK_MODEL") for name in fetchers}
+    assert wanted == fetched, f"{path.name}: sidecar {wanted}, fetcher {fetched}"
+    assert None not in wanted, f"{path.name}: the sidecar cannot be told to rerank"
+
+
+def test_no_reranker_is_nothing_to_fetch(monkeypatch) -> None:
+    from worker.fetchmodel import fetch_reranker
+    from worker.rerank import RerankerSettings
+
+    assert fetch_reranker(RerankerSettings()) is False
+
+
+def test_a_reranker_is_loaded_and_asked_once(monkeypatch) -> None:
+    from worker import rerank
+    from worker.fetchmodel import fetch_reranker
+
+    asked = []
+
+    class Recording(rerank.FakeReranker):
+        def __init__(self, settings) -> None:
+            super().__init__(settings.model_name)
+
+        def score(self, query, texts):
+            asked.append((query, list(texts)))
+            return [1.0]
+
+    monkeypatch.setattr(rerank, "CrossEncoderReranker", Recording)
+    assert fetch_reranker(rerank.RerankerSettings(model_name="some/reranker")) is True
+    assert asked == [("warm", ["warm"])]

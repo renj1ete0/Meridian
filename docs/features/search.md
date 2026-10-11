@@ -128,7 +128,24 @@ fusion gives them the vector arm's weight; one question's list filled with six p
 one report. It also cost about 300 ms. A relaxation worth trying would weight words by rarity,
 which Postgres full-text search does not keep; measure it the same way before shipping it.
 
-### Reranking (measured, not built)
+### Reranking
+
+**Built** (`B-167`): the embedding service answers `/rerank` when `MERIDIAN_RERANK_MODEL` names a
+cross-encoder, and `meridian_core.rerank` re-orders the top 30 fused hits by it
+(`RERANK_DEPTH`); the rest keep the fused order after them.
+
+- **Ask** and **MCP `search_chunks`** rerank whenever the service can: nobody watches their
+  spinner, and their few passages are the ones that most need to state the answer. MCP says
+  `reranked` in its result.
+- **Find** (`/api/explore/search`) and the **answer view** (`/answer`) rerank only when asked
+  (`rerank=true`), since it costs seconds; the response says `reranked`. Every page of a
+  reranked search fetches at least 30, so page two continues page one's order.
+- **Off, down or slow is not an error.** No reranker configured (the service answers 404), the
+  service failing, or taking longer than `MERIDIAN_RERANK_TIMEOUT_S`: the fused order is
+  kept, `reranked` is false, and a failure is logged as an outage.
+- Scores are only an order; nothing stores or shows them.
+
+The measurements that led here:
 
 A cross-encoder reads the question and each passage together, rather than comparing two
 vectors made apart, and is the usual next step in result quality. Measured on 2026-10-08 on the
@@ -144,8 +161,9 @@ same 18 test questions as [the OR fallback](#questions), reranking the fused top
   agreed with the large model's top ten barely more than the fused order did (about 6 of 10,
   against 5.6): their speed did not come with its gain.
 
-So reranking is worth building where a GPU serves the embedder (`B-131`), where the large model
-should take well under a second for 30 passages, and not before.
+So reranking was worth building where a GPU serves the embedder (`B-131`), where the large
+model should take well under a second for 30 passages; the grading below showed it worth
+building for the surfaces nobody waits on even without one.
 
 **Graded, 2026-10-11.** 24 new questions (six in Japanese, Korean, Chinese, Spanish or German,
 none from the held-out set), the fused top 50 each, re-ordered by four models; the union of

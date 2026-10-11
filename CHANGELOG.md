@@ -91,6 +91,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.0] — 2026-10-11
+
+### Added
+
+- `B-167`: search results re-ordered by a cross-encoder. The embedding service answers
+  `/rerank` when `MERIDIAN_RERANK_MODEL` names one (`BAAI/bge-reranker-v2-m3` was measured:
+  nDCG@10 0.58 → 0.78 on 24 blind-graded questions); `fetchmodel` downloads it. Ask and MCP
+  `search_chunks` rerank the top 30 whenever they can; Find and the answer view when asked
+  (`rerank=true`). Off, down or slow keeps the fused order and says `reranked: false`.
+  `deploy/gpu/rocm-embedder.yml` runs the service on an AMD GPU (ROCm torch through the
+  `TORCH_INDEX` build argument)
+
 ## [0.173.0] — 2026-10-11
 
 ### Added

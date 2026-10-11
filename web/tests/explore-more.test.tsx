@@ -55,6 +55,7 @@ function page(from: number, count: number, over: Partial<SearchResponse> = {}): 
     candidate_pool: 100,
     lexical_candidates: 50,
     vector_candidates: 100,
+    reranked: false,
     ...over,
   }
 }

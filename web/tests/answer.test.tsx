@@ -108,6 +108,7 @@ function answer(over: Partial<Answer> = {}): Answer {
     arms: ['lexical', 'vector'],
     degraded: false,
     degraded_reason: null,
+    reranked: false,
     ...over,
   }
 }
@@ -412,6 +413,7 @@ describe('the rest of a country (B-175)', () => {
           candidate_pool: 100,
           lexical_candidates: 0,
           vector_candidates: 0,
+          reranked: false,
         },
       },
     })

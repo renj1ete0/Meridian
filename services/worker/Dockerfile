@@ -47,6 +47,18 @@ COPY services/worker/ services/worker/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package meridian-worker --extra embed
 
+# Another build of torch, for a GPU the default wheel does not drive (`B-167`): AMD's
+# ROCm through `deploy/gpu/rocm-embedder.yml`. Empty, the default, changes nothing.
+# `--no-deps`: the rest of the environment stays as locked; only torch and the compiler
+# it ships with are swapped. See docs/features/embedding.md#an-amd-gpu.
+ARG TORCH_INDEX=
+ARG TORCH_PACKAGES="torch pytorch-triton-rocm"
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ -n "$TORCH_INDEX" ]; then \
+      uv pip install --python /app/.venv/bin/python --no-deps --reinstall \
+        --index-url "$TORCH_INDEX" $TORCH_PACKAGES; \
+    fi
+
 # --- runtime ---------------------------------------------------------------
 FROM python:3.12-slim-bookworm AS runtime
 

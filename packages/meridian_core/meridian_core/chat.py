@@ -24,6 +24,7 @@ from .graphview import is_contested
 from .logging import get_logger
 from .models import ChatMessage, ChatThread, Edge, Entity
 from .provider import ProviderError, ask
+from .rerank import RERANK_DEPTH, Scorer, rerank_hits
 from .routing import NoAgentAvailable
 from .search import SearchHit, search
 
@@ -249,6 +250,7 @@ async def ask_corpus(
     thread_id: int | None = None,
     context_entity_ids: Sequence[int] = (),
     embed: Embed | None = None,
+    rerank: Scorer | None = None,
     now: dt.datetime,
 ) -> Exchange:
     """Answer one question and store both turns. Flushes; the caller commits.
@@ -293,10 +295,17 @@ async def ask_corpus(
     # the node the reader clicked, and search needs its name to know that.
     query = " ".join([question, *(e.canonical_name for e in selected)])
     vector = await embed(query) if embed is not None else None
+    # Deeper when a reranker will choose among them (`B-167`); the per-source cap still
+    # holds, since it applies to the deeper list.
     result = await search(
-        sess, query, query_vector=vector, limit=MAX_PASSAGES, max_per_source=MAX_PER_SOURCE
+        sess,
+        query,
+        query_vector=vector,
+        limit=max(MAX_PASSAGES, RERANK_DEPTH) if rerank else MAX_PASSAGES,
+        max_per_source=MAX_PER_SOURCE,
     )
-    hits = list(result.hits)
+    hits, _ = await rerank_hits(rerank, query, result.hits)
+    hits = hits[:MAX_PASSAGES]
     nodes = await nodes_for(sess, hits, selected)
 
     answer = ChatMessage(thread_id=thread.thread_id, role="assistant", text="")

@@ -75,3 +75,5 @@ class AnswerRead(BaseModel):
     arms: list[SearchArm]
     degraded: bool
     degraded_reason: str | None = None
+    #: Whether a cross-encoder re-ordered the top of the pool before grouping (`B-167`).
+    reranked: bool = False

@@ -86,6 +86,8 @@ export interface Answer {
   arms: Array<'lexical' | 'vector'>
   degraded: boolean
   degraded_reason: string | null
+  /** Whether a cross-encoder re-ordered the pool's top before grouping (`B-167`). */
+  reranked: boolean
 }
 
 export const ANSWER_FIELDS = [
@@ -102,6 +104,7 @@ export const ANSWER_FIELDS = [
   'arms',
   'degraded',
   'degraded_reason',
+  'reranked',
 ] as const
 
 export type AssertAnswerItem = Expect<Equal<keyof AnswerItem, (typeof ANSWER_ITEM_FIELDS)[number]>>

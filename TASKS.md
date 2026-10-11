@@ -1776,7 +1776,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       are implausibly low on well-tested modules. The guide says what to try next
 - [x] `Q-03` 2026-10-10: property tests for fuse, the cap and the reference filter; CI green on GitHub (run 38037151019); the web's `readable()` with fast-check; `group_hits`. **Property-based tests and CI** — Hypothesis installed; fuse, cap_per_source,
       group_hits, is_reference_list and readable() first; then a CI workflow for lint and tests
-- [ ] `B-167` **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
+- [x] `B-167` `v0.174.0`. **Rerank search with a cross-encoder, on a GPU** — measured 2026-10-08
       ([search.md#reranking](docs/features/search.md)): `bge-reranker-v2-m3` over the fused top
       30 brought answer-stating passages into the top ten on most of 18 test questions, but
       took 20–35 s a question on CPU; small cross-encoders were fast and did not reproduce

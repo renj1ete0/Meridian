@@ -16,6 +16,7 @@ import sys
 from meridian_core.logging import configure_logging, get_logger
 
 from .embeddings import EmbedderSettings, EmbeddingError
+from .rerank import RerankerSettings
 
 log = get_logger(__name__)
 
@@ -59,12 +60,32 @@ def fetch(settings: EmbedderSettings | None = None) -> int:
     return dimensions
 
 
+def fetch_reranker(settings: RerankerSettings | None = None) -> bool:
+    """Download the reranker's weights, when one is configured (`B-167`).
+
+    Loaded and asked to score one pair, for the same reason as the embedder. Returns
+    whether there was one to fetch.
+    """
+    from .rerank import CrossEncoderReranker
+
+    settings = settings or RerankerSettings.from_env()
+    if not settings.enabled:
+        return False
+    log.info("fetching reranker weights", extra={"model": settings.model_name})
+    scores = CrossEncoderReranker(settings).score("warm", ["warm"])
+    if len(scores) != 1:
+        raise EmbeddingError(f"{settings.model_name} returned {len(scores)} scores for one pair")
+    log.info("reranker weights ready", extra={"model": settings.model_name})
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
     configure_logging("fetchmodel")
     try:
         fetch()
+        fetch_reranker()
     except EmbeddingError as exc:
         # A non-zero exit so `docker compose run` fails visibly. The caller is
         # `scripts/quickstart.sh`, which must not go on to start a sidecar that

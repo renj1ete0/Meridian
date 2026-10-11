@@ -18,9 +18,10 @@ from meridian_core.answer import (
     group_hits,
     leading_topics,
 )
-from meridian_core.embedder import EmbeddingUnavailable, RemoteEmbedder
+from meridian_core.embedder import EmbeddingUnavailable, RemoteEmbedder, RerankingOff
 from meridian_core.logging import get_logger
 from meridian_core.places import countries_named, load_vocabulary
+from meridian_core.rerank import RERANK_DEPTH, Scorer, rerank_hits
 from meridian_core.schemas.answer import AnswerGroupRead, AnswerRead
 from meridian_core.schemas.search import SearchHitRead, SearchResponse
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, search
@@ -105,6 +106,27 @@ async def embed_query(query: str) -> Sequence[float] | None:
         await embedder.aclose()
 
 
+class _SidecarScorer:
+    """The sidecar's `/rerank`, with a client opened per call like `embed_query`'s."""
+
+    async def rerank(self, query: str, texts: Sequence[str]) -> list[float]:
+        client = RemoteEmbedder.from_env()
+        if client is None:
+            raise RerankingOff("no embedding service is configured")
+        try:
+            return await client.rerank(query, texts)
+        finally:
+            await client.aclose()
+
+
+def reranker() -> Scorer | None:
+    """What re-orders search results, or None when no sidecar is configured (`B-167`).
+
+    A sidecar without a reranker answers 404, which `rerank_hits` reads as "off".
+    """
+    return _SidecarScorer() if RemoteEmbedder.from_env() is not None else None
+
+
 async def paged_search(
     sess: AsyncSession,
     query: str,
@@ -113,10 +135,13 @@ async def paged_search(
     limit: int,
     offset: int,
     candidates: int = DEFAULT_CANDIDATES,
+    rerank: bool = False,
 ) -> SearchResponse:
     """One page of fused hits, with an account of how they were found.
 
-    ``has_more`` comes from asking for one hit more than the page needs.
+    ``has_more`` comes from asking for one hit more than the page needs. ``rerank``
+    re-orders the top :data:`RERANK_DEPTH` when the sidecar can (`B-167`); every page
+    asks for at least that many, so pages agree on the order.
     """
     check_window(limit, offset, candidates)
     vector = await embed_query(query)
@@ -126,6 +151,8 @@ async def paged_search(
 
     # One extra, to answer "is there another page" without a second query.
     window = offset + limit + 1
+    if rerank:
+        window = max(window, RERANK_DEPTH)
     result = await search(
         sess,
         query,
@@ -135,8 +162,11 @@ async def paged_search(
         candidates=candidates,
     )
 
-    page = result.hits[offset : offset + limit]
-    has_more = len(result.hits) > offset + limit
+    hits, reranked = (
+        await rerank_hits(reranker(), query, result.hits) if rerank else (result.hits, False)
+    )
+    page = hits[offset : offset + limit]
+    has_more = len(hits) > offset + limit
 
     log.info(
         "explore search",
@@ -166,6 +196,7 @@ async def paged_search(
         candidate_pool=candidates,
         lexical_candidates=result.lexical_candidates,
         vector_candidates=result.vector_candidates,
+        reranked=reranked,
     )
 
 
@@ -176,6 +207,7 @@ async def answer_search(
     filters: SearchFilters,
     candidates: int,
     top: int,
+    rerank: bool = False,
 ) -> AnswerRead:
     """The whole candidate pool, grouped by place (see `meridian_core.answer`).
 
@@ -195,11 +227,12 @@ async def answer_search(
         limit=2 * candidates,
         candidates=candidates,
     )
+    hits, reranked = (
+        await rerank_hits(reranker(), query, result.hits) if rerank else (result.hits, False)
+    )
     # Read per request: it is small, and an approved gazetteer term counts at once.
     vocab = await load_vocabulary(sess)
-    groups, unplaced = group_hits(
-        result.hits, top=top, named=lambda text: countries_named(text, vocab)
-    )
+    groups, unplaced = group_hits(hits, top=top, named=lambda text: countries_named(text, vocab))
     log.info(
         "explore answer",
         extra={
@@ -225,4 +258,5 @@ async def answer_search(
         degraded_reason=_degraded_reason(
             result.arms, vector is not None, embedder_configured=embedder_configured
         ),
+        reranked=reranked,
     )

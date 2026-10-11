@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from meridian_core.logging import configure_logging, get_logger
 
 from .embeddings import BGEEmbedder, EmbedderSettings, EmbeddingError
+from .rerank import CrossEncoderReranker, RerankerSettings
 
 log = get_logger(__name__)
 
@@ -68,10 +69,27 @@ class EmbedResponse(BaseModel):
     model: str
 
 
-def create_app(embedder: object | None = None) -> FastAPI:
-    """The app. ``embedder`` is injectable so a test needs no 2.3GB download."""
+class RerankRequest(BaseModel):
+    query: Annotated[str, Field(min_length=1, max_length=2000)]
+    texts: Annotated[list[str], Field(min_length=1, max_length=MAX_TEXTS)]
+
+
+class RerankResponse(BaseModel):
+    #: One per text, in the order sent; higher is more relevant.
+    scores: list[float]
+    model: str
+
+
+def create_app(embedder: object | None = None, reranker: object | None = None) -> FastAPI:
+    """The app. Both models are injectable so a test needs no download.
+
+    ``reranker`` None means the one `MERIDIAN_RERANK_MODEL` names, or none at all.
+    """
     settings = EmbedderSettings.from_env()
     model = embedder or BGEEmbedder(settings)
+    if reranker is None:
+        rerank_settings = RerankerSettings.from_env()
+        reranker = CrossEncoderReranker(rerank_settings) if rerank_settings.enabled else None
 
     app = FastAPI(title="Meridian embedder", summary="Vectors for the corpus and its queries.")
     # A shared secret when the sidecar runs on another machine (`P3-12`); unset on
@@ -89,14 +107,20 @@ def create_app(embedder: object | None = None) -> FastAPI:
             "model": settings.model_name,
             "dimensions": settings.dimensions,
             "loaded": bool(getattr(model, "loaded", False)),
+            # None when reranking is off (`B-167`).
+            "rerank_model": reranker.settings.model_name if reranker else None,
+            "rerank_loaded": bool(getattr(reranker, "loaded", False)),
         }
 
-    @app.post("/embed", response_model=EmbedResponse)
-    async def embed(request: Annotated[EmbedRequest, Body()], raw: Request) -> EmbedResponse:
+    def check(raw: Request) -> None:
         if token and not hmac.compare_digest(
             raw.headers.get("authorization", ""), f"Bearer {token}"
         ):
             raise HTTPException(status_code=401, detail="A valid embedder token is required.")
+
+    @app.post("/embed", response_model=EmbedResponse)
+    async def embed(request: Annotated[EmbedRequest, Body()], raw: Request) -> EmbedResponse:
+        check(raw)
         try:
             # In a thread, so a synchronous encode does not stall `/health`.
             vectors = await embed_in_slices(model.embed, request.texts, raw.is_disconnected)
@@ -121,6 +145,22 @@ def create_app(embedder: object | None = None) -> FastAPI:
             # compare without erroring and rank nonsense confidently.
             model=settings.model_name,
         )
+
+    @app.post("/rerank", response_model=RerankResponse)
+    async def rerank(request: Annotated[RerankRequest, Body()], raw: Request) -> RerankResponse:
+        """Scores for re-ordering search results (`B-167`).
+
+        404 when reranking is off, so a caller can tell "not configured" from "failed".
+        """
+        check(raw)
+        if reranker is None:
+            raise HTTPException(status_code=404, detail="Reranking is not configured.")
+        try:
+            scores = await asyncio.to_thread(reranker.score, request.query, request.texts)
+        except EmbeddingError as exc:
+            log.error("reranking failed", extra={"reason": str(exc)})
+            raise HTTPException(status_code=503, detail="The reranker is unavailable.") from exc
+        return RerankResponse(scores=scores, model=reranker.settings.model_name)
 
     return app
 

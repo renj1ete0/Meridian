@@ -19,7 +19,7 @@ Meridian holds the corpus and its provenance; it generates nothing here.
 
 | Tool | Returns |
 |---|---|
-| `search_chunks` | Hybrid search, each hit with its citation and the caveats an assistant must keep |
+| `search_chunks` | Hybrid search, each hit with its citation and the caveats an assistant must keep; re-ordered by the cross-encoder when the embedding service has one (`reranked`) |
 | `get_source_metadata` | One source: title, publisher, tier, date, URL |
 | `list_new_since` | Passages added after a mark, for an assistant keeping up with the corpus |
 | `corpus_overview` | Counts and topics |

@@ -27,13 +27,14 @@ from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
 from meridian_core.readonly_query import run_readonly_query as execute_readonly
+from meridian_core.rerank import RERANK_DEPTH, rerank_hits
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.search import SearchFilters, readable_passage_conditions, search
 from meridian_core.stats import corpus_stats
 
 from ..auth import require_tool, sees_notes
-from ..search_service import embed_query
+from ..search_service import embed_query, reranker
 
 log = get_logger(__name__)
 
@@ -200,16 +201,28 @@ def build_mcp(
         # no embedding service answers. `retrieval` says which.
         vector = await embed_query(query)
         async with session_ro() as sess:
-            result = await search(sess, query, query_vector=vector, filters=filters, limit=limit)
+            # At least the rerank depth, so the cross-encoder chooses the top `limit` (`B-167`).
+            result = await search(
+                sess,
+                query,
+                query_vector=vector,
+                filters=filters,
+                limit=max(limit, RERANK_DEPTH),
+            )
+        ranked, reranked = await rerank_hits(reranker(), query, result.hits)
+        hits = ranked[:limit]
 
         return {
             "retrieval": LEXICAL_ONLY if result.degraded else HYBRID,
             "arms": sorted(result.arms),
-            "results": [_cite(hit) for hit in result.hits],
-            "returned": len(result.hits),
+            # Whether a cross-encoder re-ordered the top (`B-167`); without it, the order is
+            # fused rank, which puts fewer passages that state an answer first.
+            "reranked": reranked,
+            "results": [_cite(hit) for hit in hits],
+            "returned": len(hits),
             # Structured `results` for rendering citations, and `framed` (`P4-06`) to
             # paste into a prompt. See docs/features/mcp.md#what-reaches-a-model.
-            "framed": frame_passages(result.hits, detailed=True),
+            "framed": frame_passages(hits, detailed=True),
         }
 
     @mcp.tool()
