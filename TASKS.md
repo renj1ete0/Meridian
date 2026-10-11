@@ -1859,6 +1859,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
+- [x] `B-219` `v0.174.3`. **"words + meaning" over a words-only search** (UX sweep 2026-10-11)
+      — with the embedding service down, the search field's badge kept claiming both while the
+      notice under it said "only the lexical arm ran" and the reason cited `P2-07`. The badge
+      now says "words only" after such a search; the notices are in a reader's words
 - [x] `B-218` `v0.174.2`. **Gaps' question items named their kind, not their question** (UX
       sweep 2026-10-11) — headed "Lookup question, 1 of 3, proposed (heuristic, not a score)",
       and the reason named the run's YAML file and `eval/README.md`. Now headed by the question;

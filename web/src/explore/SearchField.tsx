@@ -22,10 +22,13 @@ export interface SearchFieldProps {
   note?: string
   /** `large` on the landing, where the field is the page; `regular` above results. */
   size?: 'large' | 'regular'
+  /** The last search matched words only (the embedding service absent or down). */
+  wordsOnly?: boolean
   id?: string
 }
 
 export const MODE_MARKER = 'words + meaning'
+export const WORDS_ONLY_MARKER = 'words only'
 export const FILTER_NOTE = 'Filters narrow what is searched, not what is shown.'
 export const SHORTCUT_NOTE = '⌘K from anywhere'
 
@@ -36,6 +39,7 @@ export function SearchField({
   disabled = false,
   note,
   size = 'large',
+  wordsOnly = false,
   id = SEARCH_INPUT_ID,
 }: SearchFieldProps) {
   const large = size === 'large'
@@ -76,7 +80,7 @@ export function SearchField({
         />
         {/* Not on a phone, where it took the room the placeholder needs (`B-125`). */}
         <span className="hidden shrink-0 border border-line px-1.5 py-[3px] font-mono text-[9.5px] leading-none text-text-faint sm:inline">
-          {MODE_MARKER}
+          {wordsOnly ? WORDS_ONLY_MARKER : MODE_MARKER}
         </span>
       </div>
 

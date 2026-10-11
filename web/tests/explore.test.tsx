@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 
 import { CorpusCounts, UNKNOWN, type CorpusFigures } from '../src/explore/CorpusCounts'
 import { ENTRY_POINTS, EntryPoints } from '../src/explore/EntryPoints'
-import { FILTER_NOTE, MODE_MARKER, SearchField } from '../src/explore/SearchField'
+import { FILTER_NOTE, MODE_MARKER, SearchField, WORDS_ONLY_MARKER } from '../src/explore/SearchField'
 import { FRESH_CAP, WhereYouWere, freshText } from '../src/explore/WhereYouWere'
 import { DAGGER } from '../src/ui/Contested'
 
@@ -65,6 +65,15 @@ describe('the search field', () => {
 
     expect(text(markup)).toContain('Lexical matches only.')
     expect(text(markup)).not.toContain(FILTER_NOTE)
+  })
+
+  it('says words only when the last search matched words only', () => {
+    // With the embedding service down the badge still read "words + meaning" while the
+    // notice under it said meaning was not searched: two claims, one false.
+    const markup = renderToStaticMarkup(<SearchField value="" onChange={noop} wordsOnly />)
+    expect(text(markup)).toContain(WORDS_ONLY_MARKER)
+    expect(text(markup)).not.toContain(MODE_MARKER)
+    expect(WORDS_ONLY_MARKER).not.toMatch(/hybrid|vector|lexical/i)
   })
 
   it('labels the input for a screen reader', () => {

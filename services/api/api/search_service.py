@@ -31,8 +31,8 @@ log = get_logger(__name__)
 #: Why the vector arm did not run. A sentence rather than a code, because it is
 #: displayed to a person deciding whether to trust a thin result set.
 NO_EMBEDDER = (
-    "This API has no embedder, so only the lexical arm ran. Results are matched "
-    "on words rather than meaning (P2-07)."
+    "Matched words only: this deployment has no embedding service, so passages that "
+    "say the same thing in other words were not found."
 )
 
 #: Why nothing ran at all.
@@ -41,9 +41,9 @@ NO_QUERY = "No query text and no vector, so neither arm ran."
 #: Configured and not answering. Worded unlike `NO_EMBEDDER`: an outage is not a
 #: deployment choice. See docs/features/search.md#degraded-mode.
 EMBEDDER_DOWN = (
-    "The embedding service is configured but did not answer, so only the "
-    "lexical arm ran. Results are matched on words rather than meaning. This is "
-    "an outage, not a limitation of this deployment."
+    "Matched words only: the embedding service did not answer, so passages that say "
+    "the same thing in other words were not found. This is an outage, not how this "
+    "deployment is set up."
 )
 
 

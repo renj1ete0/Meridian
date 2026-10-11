@@ -89,11 +89,13 @@ export interface AnswerViewProps {
   filters: FindFilters
   /** Read one country's sources as passages (`B-175`): the same search, narrowed to it. */
   onReadPlace?: (code: string) => void
+  /** Told whether each answer matched words only, so the search field can say so. */
+  onWordsOnly?: (wordsOnly: boolean) => void
 }
 
 type State = { phase: 'loading' } | { phase: 'done'; answer: Answer } | { phase: 'failed'; message: string }
 
-export function AnswerView({ question, filters, onReadPlace }: AnswerViewProps) {
+export function AnswerView({ question, filters, onReadPlace, onWordsOnly }: AnswerViewProps) {
   const [state, setState] = useState<State>({ phase: 'loading' })
   // Serialised, so a new object with the same filters does not refetch.
   const wireKey = JSON.stringify(searchFilters(filters))
@@ -112,6 +114,10 @@ export function AnswerView({ question, filters, onReadPlace }: AnswerViewProps) 
       })
     return () => controller.abort()
   }, [question, wireKey])
+
+  useEffect(() => {
+    if (state.phase === 'done') onWordsOnly?.(state.answer.degraded)
+  }, [state, onWordsOnly])
 
   if (state.phase === 'loading') {
     return <p className="font-mono text-[10.5px] text-text-faint">Grouping the evidence by country.</p>

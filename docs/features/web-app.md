@@ -383,7 +383,11 @@ and every response says so. A reader who searches a topic, sees nothing, and is 
 meaning-based matching was off will conclude the corpus lacks the topic: false, costly, and the
 confusion §12.5 exists to prevent. So the notice is loudest when there are no hits (bordered,
 full ink), because a degraded search that returned nothing makes a claim about the corpus it is
-not entitled to make; with hits on screen it is a mono caveat line above the list.
+not entitled to make; with hits on screen it is a mono caveat line above the list. The search
+field's badge says the same: "words only" after a search, Answer or Passages, that matched words
+only, where it had gone on claiming "words + meaning" above a notice saying meaning was not
+searched (`B-219`). The notice itself is in a reader's words ("Matched words only: … passages
+that say the same thing in other words were not found"), not "the lexical arm".
 
 **Searching happens on submit**, not per keystroke: each query is a fused ranking over two arms
 and a candidate pool, and one per character spends the machine on queries nobody finished

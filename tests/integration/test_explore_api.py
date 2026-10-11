@@ -350,7 +350,9 @@ async def test_a_lexical_only_search_says_so(client, corpus, marker, scope) -> N
 
     assert body["arms"] == ["lexical"]
     assert body["degraded"] is True
-    assert "embedder" in body["degraded_reason"]
+    from api.search_service import NO_EMBEDDER
+
+    assert body["degraded_reason"] == NO_EMBEDDER
     assert body["vector_candidates"] == 0
 
 

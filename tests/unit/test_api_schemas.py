@@ -14,6 +14,7 @@ Also the paging guard, which is arithmetic and belongs nowhere near a fixture.
 from __future__ import annotations
 
 import dataclasses
+import re
 
 import pytest
 
@@ -259,6 +260,16 @@ def test_a_missing_embedder_and_a_broken_one_read_differently() -> None:
     assert broken == EMBEDDER_DOWN
     assert absent != broken
     assert "outage" in broken
+
+
+def test_the_degraded_notices_are_in_a_readers_words() -> None:
+    """Shown under the search field and in a downloaded brief. They said "only the
+    lexical arm ran" and cited a task id: true, and meaningless to a reader."""
+    from api.search_service import EMBEDDER_DOWN, NO_EMBEDDER
+
+    for notice in (NO_EMBEDDER, EMBEDDER_DOWN):
+        assert notice.startswith("Matched words only")
+        assert not re.search(r"lexical|vector|embedder\b|arm\b|[A-Z]\d-\d", notice), notice
 
 
 def test_a_working_hybrid_search_reports_no_degradation() -> None:

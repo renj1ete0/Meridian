@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.3] — 2026-10-11
+
+### Fixed
+
+- `B-219`: after a search that matched words only (no embedding service, or one that did not
+  answer), the search field says "words only" instead of "words + meaning", and the notice
+  says what was missed in plain words rather than "only the lexical arm ran"
+
 ## [0.174.2] — 2026-10-11
 
 ### Fixed

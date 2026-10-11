@@ -138,6 +138,8 @@ export function ExplorePage() {
   const [recent] = useState(() => readRecentNodes().slice(0, NODES_ON_LANDING))
   const [phase, setPhase] = useState<Phase>('idle')
   const [results, setResults] = useState<SearchResponse | null>(null)
+  // Whether the last answer matched words only; Passages reads it off `results`.
+  const [answerWordsOnly, setAnswerWordsOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The next page of passages (`B-174`): idle, reading, or the reason it failed.
   const [more, setMore] = useState<{ phase: 'idle' | 'loading' } | { phase: 'failed'; message: string }>({
@@ -421,6 +423,7 @@ export function ExplorePage() {
         run(text, filters)
       }}
       size={idle ? 'large' : 'regular'}
+      wordsOnly={!idle && (mode === 'answer' ? answerWordsOnly : Boolean(results?.degraded))}
     />
   )
 
@@ -480,7 +483,12 @@ export function ExplorePage() {
               </div>
 
               {mode === 'answer' && asked ? (
-                <AnswerView question={asked} filters={filters} onReadPlace={readPlace} />
+                <AnswerView
+                  question={asked}
+                  filters={filters}
+                  onReadPlace={readPlace}
+                  onWordsOnly={setAnswerWordsOnly}
+                />
               ) : null}
 
               {mode === 'passages' && phase === 'searching' ? (
