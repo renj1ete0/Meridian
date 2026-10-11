@@ -13,7 +13,19 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
-> **2026-10-11 (late) — `v0.172.0`.** Traps and findings:
+> **2026-10-11 (evening) — `v0.174.1`–`v0.174.4`.** Traps and findings:
+> - **Keep this machine's load down.** `docker compose run` has no `--cpus`: cap a long job
+>   with an override file (`services: worker: cpus: 4`) passed as a second `-f`. Vitest's
+>   `--maxWorkers=2` still spawned a worker per file (64) and the load reached 30 on 24
+>   cores; run the full web suite with `--no-file-parallelism`. Start only the containers a
+>   task needs.
+> - **`B-215` finished**: its last `retable` report finds 2 sources that would change again
+>   with the same passage count, so extraction is not quite repeatable on them (not chased).
+>   The passages it rewrote still need the embedding backfill.
+> - **Gaps caches for 15 minutes**: after changing what a gap says, restart the API or wait
+>   before screenshotting.
+
+
 > - **`entities` and `edges` have row-level security** (`B-216`): a permissive policy admits
 >   row to every role, a restrictive one hides notes from `meridian_guest`. A new role meant
 >   for someone else's reads needs its own restrictive policy; dropping `every_row` would hide
