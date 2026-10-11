@@ -1226,22 +1226,25 @@ def question_gaps(run: dict, run_name: str) -> list[Gap]:
         if grade > 1:
             continue
         severity = (0.9 - 0.2 * grade) if basis == "operator" else (0.45 - 0.15 * grade)
-        who = "graded" if basis == "operator" else "proposed (heuristic, not a score)"
+        who = "the operator" if basis == "operator" else "a heuristic, not the operator"
         missing = (op or {}).get("missing") if basis == "operator" else None
         question = item.get("question")
+        kind = f"{item.get('kind')} question" if item.get("kind") else "question"
         out.append(
             Gap(
                 id=f"question:{item.get('id')}",
                 source="question-set",
                 kind="question_low",
                 subject=str(item.get("id")),
-                title=f"{str(item.get('kind')).capitalize()} question, {grade} of 3, {who}",
+                # What was asked; the kind and grade follow in the reason. The run's
+                # file is in `evidence`, not in reader-facing text.
+                title=str(question) if question else f"A {kind}",
                 reason=(
                     (missing or _hits_line(len(item.get("hits") or [])))
-                    + f" From {run_name}"
-                    + (", a draft set." if draft else ".")
+                    + f" A {kind}, graded {grade} of 3 by {who}"
+                    + (", in a draft set." if draft else ".")
                     + (LEXICAL_NOTE if lexical else "")
-                    + " Fix for the kind of question, not this question (eval/README.md)."
+                    + " Improve search for this kind of question, not for this one."
                 ),
                 severity=round(severity, 3),
                 evidence={

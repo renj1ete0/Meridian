@@ -1859,6 +1859,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
+- [x] `B-218` `v0.174.2`. **Gaps' question items named their kind, not their question** (UX
+      sweep 2026-10-11) — headed "Lookup question, 1 of 3, proposed (heuristic, not a score)",
+      and the reason named the run's YAML file and `eval/README.md`. Now headed by the question;
+      kind, grade and grader in the reason; the file only in the evidence line
 - [x] `B-217` `v0.173.0`. **CJK passages unreachable by word** (`B-192`'s last suspect) — the
       `english` parser keeps a run of CJK characters as one token; a term from inside a passage
       found it 10% (zh), 6% (ja), 30% (ko) of the time over ~19k passages. A partial index of

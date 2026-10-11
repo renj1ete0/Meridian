@@ -39,7 +39,10 @@ pending.
 
 - **The held-out rule shapes the question-set actions.** A question from the evaluation set is
   never used as a seed or a steering reason (`eval/README.md`), so a low-scoring item offers
-  "search it in Find" and nothing that steers.
+  "search it in Find" and nothing that steers. Its heading is the question as asked; the
+  reason says its kind, its grade and who gave it. It once led with the kind ("Lookup question,
+  1 of 3") and named the run's file and `eval/README.md`, which told a reader nothing they
+  could act on. The run's file is in the evidence line.
 - **Kept in memory, refreshed behind the reader** (`B-121`). Counting every on-topic passage
   takes seconds and grows with the corpus, while the list changes over hours. The route keeps
   its answer for 15 minutes and refreshes in the background (stale-while-revalidate). The

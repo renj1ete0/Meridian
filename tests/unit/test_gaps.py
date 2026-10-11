@@ -131,8 +131,34 @@ def test_operator_grades_outrank_proposals_and_only_low_items_are_gaps():
     assert set(found) == {"A", "B"}
     assert found["B"].severity > found["A"].severity
     assert found["A"].evidence["basis"] == "proposal"
-    assert "not a score" in found["A"].title
+    assert "not the operator" in found["A"].reason
     assert found["B"].reason.startswith("thin")
+
+
+def test_a_question_gap_is_titled_by_its_question_and_names_no_file():
+    """A reader of Gaps saw "Lookup question, 1 of 3, proposed (heuristic, not a score)"
+    and "From 2026-10-08.yaml ... (eval/README.md)": the item's kind and the evaluation's
+    files, not what was asked. The run's file stays in the evidence line."""
+    found = gaps.question_gaps(
+        run(
+            item("A", proposed=0),
+            item("B", kind="evidence", operator={"grade": 1}),
+        ),
+        "2026-10-08.yaml",
+    )
+    for g in found:
+        assert g.title == f"question {g.subject}"
+        assert ".yaml" not in g.reason and ".md" not in g.reason, g.reason
+        assert g.evidence["run"] == "2026-10-08.yaml"
+    by_id = {g.subject: g for g in found}
+    assert "lookup question" in by_id["A"].reason.lower()
+    assert "graded 1 of 3 by the operator" in by_id["B"].reason
+
+
+def test_a_question_without_text_falls_back_to_its_kind():
+    bare = {**item("A", proposed=0), "question": None}
+    (g,) = gaps.question_gaps(run(bare), "r")
+    assert g.title == "A lookup question" and g.actions == ()
 
 
 def test_a_low_item_from_a_lexical_only_run_says_so():

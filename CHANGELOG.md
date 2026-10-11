@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.2] — 2026-10-11
+
+### Fixed
+
+- `B-218`: a question-set item on Gaps is headed by its question rather than its kind, and its
+  reason says the kind, the grade and who gave it, without naming the evaluation's files
+
 ## [0.174.1] — 2026-10-11
 
 ### Fixed
