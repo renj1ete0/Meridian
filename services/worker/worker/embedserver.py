@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import hmac
 import os
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Annotated
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -34,8 +35,53 @@ MAX_TEXTS = 256
 
 #: Texts encoded per thread call (`B-82`). Between slices the server checks the
 #: client is still there, so a restarted backfill does not leave a batch running for
-#: nobody.
-SLICE = 32
+#: nobody, and lets a waiting reader go first (`B-167`), so this is also the most
+#: background work a reader can be kept waiting behind.
+SLICE = 16
+
+#: At most this many texts makes an embedding a reader's (a query), not the backfill's.
+URGENT_TEXTS = 4
+
+
+class Turns:
+    """One model call at a time, a reader's before the backfill's (`B-167`).
+
+    On a GPU the backfill keeps the card busy, and a query or a rerank queued behind
+    a 256-passage request timed out. Background work takes its turn a slice at a time,
+    and only when no reader is waiting. See docs/features/embedding.md#the-service.
+    """
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._waiting = 0
+        self._clear = asyncio.Event()
+        self._clear.set()
+
+    @contextlib.asynccontextmanager
+    async def urgent(self) -> AsyncIterator[None]:
+        self._waiting += 1
+        self._clear.clear()
+        try:
+            async with self._lock:
+                yield
+        finally:
+            self._waiting -= 1
+            if not self._waiting:
+                self._clear.set()
+
+    @contextlib.asynccontextmanager
+    async def background(self) -> AsyncIterator[None]:
+        while True:
+            await self._clear.wait()
+            await self._lock.acquire()
+            if not self._waiting:
+                break
+            # A reader arrived while this waited for the lock; it goes first.
+            self._lock.release()
+        try:
+            yield
+        finally:
+            self._lock.release()
 
 
 class Abandoned(Exception):
@@ -47,15 +93,20 @@ async def embed_in_slices(
     texts: Sequence[str],
     gone: Callable[[], Awaitable[bool]],
     size: int = SLICE,
+    turn: Callable[[], contextlib.AbstractAsyncContextManager[None]] | None = None,
 ) -> list[list[float]]:
-    """``embed(texts)`` a slice at a time, off the event loop, stopping if ``gone()``."""
+    """``embed(texts)`` a slice at a time, off the event loop, stopping if ``gone()``.
+
+    Each slice waits for ``turn``, when given.
+    """
     if size < 1:
         raise ValueError("a slice holds at least one text")
     vectors: list[list[float]] = []
     for start in range(0, len(texts), size):
         if start and await gone():
             raise Abandoned(f"client left after {start} of {len(texts)} texts")
-        vectors.extend(await asyncio.to_thread(embed, texts[start : start + size]))
+        async with turn() if turn else contextlib.nullcontext():
+            vectors.extend(await asyncio.to_thread(embed, texts[start : start + size]))
     return vectors
 
 
@@ -95,6 +146,7 @@ def create_app(embedder: object | None = None, reranker: object | None = None) -
     # A shared secret when the sidecar runs on another machine (`P3-12`); unset on
     # one machine. `/health` stays open so a supervisor needs no secret.
     token = os.environ.get("MERIDIAN_EMBEDDER_TOKEN", "").strip()
+    turns = Turns()
 
     @app.get("/health")
     async def health() -> dict[str, object]:
@@ -123,7 +175,12 @@ def create_app(embedder: object | None = None, reranker: object | None = None) -
         check(raw)
         try:
             # In a thread, so a synchronous encode does not stall `/health`.
-            vectors = await embed_in_slices(model.embed, request.texts, raw.is_disconnected)
+            vectors = await embed_in_slices(
+                model.embed,
+                request.texts,
+                raw.is_disconnected,
+                turn=turns.urgent if len(request.texts) <= URGENT_TEXTS else turns.background,
+            )
         except Abandoned as exc:
             # Nobody is reading the answer; 499 is for the log, not the client.
             log.info("embedding abandoned", extra={"reason": str(exc)})
@@ -156,7 +213,8 @@ def create_app(embedder: object | None = None, reranker: object | None = None) -
         if reranker is None:
             raise HTTPException(status_code=404, detail="Reranking is not configured.")
         try:
-            scores = await asyncio.to_thread(reranker.score, request.query, request.texts)
+            async with turns.urgent():
+                scores = await asyncio.to_thread(reranker.score, request.query, request.texts)
         except EmbeddingError as exc:
             log.error("reranking failed", extra={"reason": str(exc)})
             raise HTTPException(status_code=503, detail="The reranker is unavailable.") from exc

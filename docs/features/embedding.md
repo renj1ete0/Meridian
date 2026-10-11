@@ -266,6 +266,12 @@ the orchestrator must not acquire a model dependency.
   thread so an encode does not stall `/health`, and in slices of texts (`B-82`), checking
   between slices that the client is still there: a backfill restarted mid-batch, which every
   deploy does, used to leave a batch running for nobody.
+- **A reader goes before the backfill** (`B-167`). The model runs one call at a time. A call of
+  at most four texts (a query) and every rerank is a reader's; anything larger is background
+  work, which takes its turn a slice (16 texts) at a time and only when no reader is waiting.
+  On a GPU the backfill keeps the card busy, and a query queued behind a 256-passage request
+  timed out. A reader now waits for the slice running and no more, however many backfill
+  requests are queued; a first-come lock would put each of their next slices first.
 
 <a id="timeouts"></a>**Timeouts** (`B-27`). A batch's timeout is sized from a per-text allowance
 times the batch. The two defaults once contradicted each other: the backfill sent 256 chunks per
@@ -338,7 +344,10 @@ ROCm's torch (the `TORCH_INDEX` build argument; the default image's torch drives
 only), hands it `/dev/kfd` and `/dev/dri`, and selects the card, which ROCm names `cuda` as
 PyTorch does. It needs only the kernel's `amdgpu` driver on the host: the ROCm libraries ship in
 the image, several gigabytes larger for it. On an enforcing SELinux host the container cannot
-open the device nodes with labelling on, so the override turns it off for that one container.
+open the device nodes with labelling on, so the override turns it off for that one container. ROCm's
+torch has no kernels for integrated RDNA 3.5 GPUs (gfx1150, gfx1151): the model loads, then its
+first call fails with "invalid device function". The override presents the card as a gfx1100
+(`HSA_OVERRIDE_GFX_VERSION`, 11.0.0 unless `.env` says otherwise; an RDNA 2 card wants 10.3.0).
 Measured on an integrated Radeon 890M: the reranker took about 5 s for 30 passages, against 14 s
 on the CPU (search.md#reranking).
 

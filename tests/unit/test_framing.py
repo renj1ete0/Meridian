@@ -143,6 +143,4 @@ def test_the_mcp_search_tool_returns_a_framed_block() -> None:
     ).read_text()
 
     # `hits`: the reranked list the results are built from (`B-167`).
-    assert "frame_passages(hits" in body, (
-        "the MCP search tool no longer frames what it returns"
-    )
+    assert "frame_passages(hits" in body, "the MCP search tool no longer frames what it returns"

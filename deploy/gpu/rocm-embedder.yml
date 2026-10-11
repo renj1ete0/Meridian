@@ -18,8 +18,16 @@
 #     and the CPU sidecar keep theirs;
 #   - it is handed the GPU's device nodes, and told to use the card (ROCm answers to
 #     PyTorch's `cuda` device name);
+#   - the card is presented to ROCm as a gfx1100 (`HSA_OVERRIDE_GFX_VERSION`): ROCm's
+#     torch ships no kernels for integrated RDNA 3.5 (gfx1150, gfx1151), and without
+#     the override the model loads and then fails its first call with "invalid device
+#     function". 11.0.0 suits RDNA 3 and 3.5; set it in `.env` for another family (an
+#     RDNA 2 card wants 10.3.0);
 #   - SELinux labelling is off for this one container, which otherwise cannot open the
 #     device nodes on an enforcing host (Fedora);
+#   - the backfill never loads the model itself, and draws bigger batches, as in
+#     `gpu-embedder.yml`: without it, a restart of the sidecar left the backfill
+#     embedding on its own CPU for good;
 #   - a writable cache for the GPU kernels the library compiles, since the root
 #     filesystem is read-only.
 
@@ -33,6 +41,7 @@ services:
         TORCH_INDEX: https://download.pytorch.org/whl/rocm6.4
     environment:
       MERIDIAN_EMBED_DEVICE: cuda
+      HSA_OVERRIDE_GFX_VERSION: ${HSA_OVERRIDE_GFX_VERSION:-11.0.0}
       MIOPEN_USER_DB_PATH: /tmp/miopen
       HOME: /tmp
     devices:
@@ -45,3 +54,8 @@ services:
     deploy:
       resources:
         limits: { memory: 12G }
+
+  embed:
+    environment:
+      MERIDIAN_EMBED_CHUNK_BATCH: "1024"
+      MERIDIAN_EMBED_REMOTE_ONLY: "1"

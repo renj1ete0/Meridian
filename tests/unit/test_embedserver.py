@@ -172,3 +172,81 @@ def test_without_a_token_the_sidecar_is_open_as_before(monkeypatch) -> None:
     monkeypatch.delenv("MERIDIAN_EMBEDDER_TOKEN", raising=False)
     open_ = TestClient(create_app(FakeEmbedder()))
     assert open_.post("/embed", json={"texts": ["a"]}).status_code == 200
+
+
+# --------------------------------------------------------------------------
+# A reader before the backfill (`B-167`)
+# --------------------------------------------------------------------------
+
+
+def test_a_reader_goes_before_every_queued_backfill_slice() -> None:
+    """On a GPU a query queued behind backfill requests timed out. With two backfill
+    requests in flight, a reader must wait for the slice running and no more; a plain
+    first-come lock would put the other request's slice first."""
+    from worker.embedserver import Turns
+
+    async def scenario() -> list[str]:
+        turns, order = Turns(), []
+        first_running = asyncio.Event()
+
+        def slow(texts):
+            first_running.set()
+            import time
+
+            time.sleep(0.05)
+            order.append(f"bg:{texts[0]}")
+            return [[0.0] for _ in texts]
+
+        async def reader():
+            await first_running.wait()
+            await asyncio.sleep(0.01)  # both backfills are now queued for the model
+            async with turns.urgent():
+                order.append("reader")
+
+        def backfill(texts):
+            return embed_in_slices(
+                slow, texts, lambda: asyncio.sleep(0, False), 1, turns.background
+            )
+
+        await asyncio.gather(backfill(["a1", "a2"]), backfill(["b1", "b2"]), reader())
+        return order
+
+    order = asyncio.run(scenario())
+    assert order[1] == "reader", order
+    assert sorted(order) == ["bg:a1", "bg:a2", "bg:b1", "bg:b2", "reader"]
+
+
+def test_readers_wait_for_each_other_in_turn() -> None:
+    from worker.embedserver import Turns
+
+    async def scenario() -> list[int]:
+        turns, inside, peak = Turns(), 0, []
+
+        async def one(i):
+            nonlocal inside
+            async with turns.urgent():
+                inside += 1
+                peak.append(inside)
+                await asyncio.sleep(0.01)
+                inside -= 1
+
+        await asyncio.gather(*(one(i) for i in range(5)))
+        return peak
+
+    assert max(asyncio.run(scenario())) == 1, "two model calls ran at once"
+
+
+def test_the_backfill_runs_when_nobody_is_waiting() -> None:
+    from worker.embedserver import Turns
+
+    async def scenario() -> int:
+        turns = Turns()
+        vectors = await embed_in_slices(
+            lambda texts: [[1.0] for _ in texts],
+            ["x"] * 40,
+            lambda: asyncio.sleep(0, False),
+            turn=turns.background,
+        )
+        return len(vectors)
+
+    assert asyncio.run(asyncio.wait_for(scenario(), 2)) == 40

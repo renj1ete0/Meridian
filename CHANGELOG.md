@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.1] — 2026-10-11
+
+### Fixed
+
+- `B-167`: on a GPU, a query or a rerank no longer times out behind the backfill. The embedding
+  service runs one model call at a time, a reader's before the backfill's, which takes its turn
+  16 texts at a time. `deploy/gpu/rocm-embedder.yml` presents an integrated RDNA 3.5 card as a
+  gfx1100 (`HSA_OVERRIDE_GFX_VERSION`), without which its first call failed with "invalid device
+  function", and keeps the backfill off its own CPU when the service restarts
+
 ## [0.174.0] — 2026-10-11
 
 ### Added

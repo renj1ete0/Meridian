@@ -21,6 +21,15 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-10-11 (evening) — `v0.172.0`–`v0.174.1`.** Built: notes reach an operator token only
+> (`B-216`), CJK passages searchable by word (`B-217`), cross-encoder reranking (`B-167`, graded
+> nDCG@10 0.58 → 0.78), and on the GPU a reader goes before the backfill (`v0.174.1`). The local
+> stack was found down, so whether the `B-215` run finished
+> is unknown. **Resume with:** bring the stack up and run the `retable` report with the worker's
+> CPUs capped (`would change` ≈ 0 ticks `B-215`; otherwise re-run `--apply`, which is safe);
+> remind the operator that `B-163`/`B-205` wait for a paid model. **Keep the load down on this
+> machine:** run pytest single-process under `nice`, and cap containers' CPUs for long jobs.
+
 > **2026-10-11 (night) — `v0.170.0`–`v0.171.0`, pushed.** Operator decisions taken: stored PDFs
 > re-extracted for their tables (ADR 0019), a note is withdrawn not deleted (ADR 0020), paid-model
 > work parked, old commit messages may be reworded. Built: `worker.retable` (`B-215`) and note
@@ -1784,7 +1793,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       sidecar is on a GPU, applied to Find, the answer view and `search_chunks`; measure
       latency on the card first. Graded 2026-10-11 (24 questions, blind): nDCG@10 0.58 →
       0.78, answers in the top five 42% → 62%; an LLM embedder instead gained nothing
-      reliable. 5 s for 30 passages on this machine's iGPU, 14 s CPU
+      reliable. 5 s for 30 passages on this machine's iGPU, 14 s CPU. `v0.174.1`: a query or rerank
+      goes before the backfill's slices, which had timed it out on the GPU; RDNA 3.5 iGPUs need
+      `HSA_OVERRIDE_GFX_VERSION`
 - [ ] `B-163` (parked 2026-10-11: no paid model to test with; remind the operator) **Which passages synthesis reads** — measured in the 2026-10-07 relay session
       (3 batches, 120 passages, 34 relations, 5 attribute values). Synthesis reads a passage when
       it *or its source* is labelled on a topic, so one borderline page reaches the model whole:
