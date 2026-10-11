@@ -21,14 +21,16 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-11 (evening) — `v0.172.0`–`v0.174.1`.** Built: notes reach an operator token only
+> **2026-10-11 (evening) — `v0.172.0`–`v0.174.4`, pushed.** Built: notes reach an operator token only
 > (`B-216`), CJK passages searchable by word (`B-217`), cross-encoder reranking (`B-167`, graded
 > nDCG@10 0.58 → 0.78), and on the GPU a reader goes before the backfill (`v0.174.1`). The local
 > stack was found down and the `B-215` run unfinished; it was finished with the worker capped at
 > 4 CPUs (`B-215` ticked). Its new passages wait for the embedding backfill when the stack is
-> next up. **Resume with:** remind the operator that `B-163`/`B-205` wait for a paid model. **Keep
+> next up. A UX sweep of the reader screens fixed Gaps' question items (`B-218`) and the search
+> badge after a words-only search (`B-219`), and filed `B-220` and `B-221`. **Resume with:**
+> `B-221`, `B-220`; remind the operator that `B-163`/`B-205` wait for a paid model. **Keep
 > the load down on this machine:** run pytest single-process under `nice`, and cap containers'
-> CPUs for long jobs.
+> CPUs for long jobs; the full web suite with `--no-file-parallelism`.
 
 > **2026-10-11 (night) — `v0.170.0`–`v0.171.0`, pushed.** Operator decisions taken: stored PDFs
 > re-extracted for their tables (ADR 0019), a note is withdrawn not deleted (ADR 0020), paid-model
@@ -1859,6 +1861,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
+- [ ] `B-221` **Map circles overlap at the field level** (UX sweep 2026-10-11) — at 1440×900,
+      Data, Mathematics, Social Sciences and Transportation overlap, and their "N subfields
+      inside" lines run under neighbours and under the solid links. Check the layout's
+      collision radius against the drawn radius, and whether labels should sit above links
+- [ ] `B-220` **A source titled by its editor** (UX sweep 2026-10-11) — a TRL report's passages
+      show "R Balcombe, TRL Limited (Editor)" as the title in Find; the PDF's metadata title is
+      the author line. Count how many sources' titles look like a name list before choosing a
+      fix (`clean_title`, `B-69`)
 - [x] `B-219` `v0.174.3`. **"words + meaning" over a words-only search** (UX sweep 2026-10-11)
       — with the embedding service down, the search field's badge kept claiming both while the
       notice under it said "only the lexical arm ran" and the reason cited `P2-07`. The badge
