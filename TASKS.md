@@ -24,11 +24,11 @@ against a real Postgres, 1053 frontend.
 > **2026-10-11 (evening) — `v0.172.0`–`v0.174.1`.** Built: notes reach an operator token only
 > (`B-216`), CJK passages searchable by word (`B-217`), cross-encoder reranking (`B-167`, graded
 > nDCG@10 0.58 → 0.78), and on the GPU a reader goes before the backfill (`v0.174.1`). The local
-> stack was found down, so whether the `B-215` run finished
-> is unknown. **Resume with:** bring the stack up and run the `retable` report with the worker's
-> CPUs capped (`would change` ≈ 0 ticks `B-215`; otherwise re-run `--apply`, which is safe);
-> remind the operator that `B-163`/`B-205` wait for a paid model. **Keep the load down on this
-> machine:** run pytest single-process under `nice`, and cap containers' CPUs for long jobs.
+> stack was found down and the `B-215` run unfinished; it was finished with the worker capped at
+> 4 CPUs (`B-215` ticked). Its new passages wait for the embedding backfill when the stack is
+> next up. **Resume with:** remind the operator that `B-163`/`B-205` wait for a paid model. **Keep
+> the load down on this machine:** run pytest single-process under `nice`, and cap containers'
+> CPUs for long jobs.
 
 > **2026-10-11 (night) — `v0.170.0`–`v0.171.0`, pushed.** Operator decisions taken: stored PDFs
 > re-extracted for their tables (ADR 0019), a note is withdrawn not deleted (ADR 0020), paid-model
@@ -1855,7 +1855,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       cut the tag call to roughly a quarter of the batch and lose about a quarter of the values.
       Not adopted: a recall-for-tokens call worth making with a paid model's costs in hand
       (`B-135`); a middle rule (cited passages and their same-source neighbours) is worth measuring
-- [~] `B-215` `v0.171.0`: built, `--apply` run in progress at handover ([ADR 0019](docs/adr/0019-stored-pdfs-re-extracted-for-their-tables.md)). **Re-extract stored PDFs for their tables** — `worker.retable` reads
+- [x] `B-215` `v0.171.0`, run to the end 2026-10-11 ([ADR 0019](docs/adr/0019-stored-pdfs-re-extracted-for-their-tables.md)): 7,309 PDFs examined, 2,780 re-cut in all; a second report finds 2 that would change again with the same passage count (extraction not quite repeatable on them, not chased). **Re-extract stored PDFs for their tables** — `worker.retable` reads
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
