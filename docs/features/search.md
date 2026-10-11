@@ -147,6 +147,34 @@ same 18 test questions as [the OR fallback](#questions), reranking the fused top
 So reranking is worth building where a GPU serves the embedder (`B-131`), where the large model
 should take well under a second for 30 passages, and not before.
 
+**Graded, 2026-10-11.** 24 new questions (six in Japanese, Korean, Chinese, Spanish or German,
+none from the held-out set), the fused top 50 each, re-ordered by four models; the union of
+every method's top ten (557 passages) graded 0–2 blind by model judges that did not know which
+method chose a passage. The scripts and grades are in `meridian-calibration/rerank`.
+
+| Top ten from | nDCG@10 | answers in top 5 | graded 0 in top 10 |
+|---|---|---|---|
+| fused order (today) | 0.58 | 42% | 2.4 |
+| bge-m3 cosine alone | 0.60 | 41% | 2.3 |
+| Qwen3-Embedding-0.6B cosine | 0.63 | 43% | 1.7 |
+| `bge-reranker-v2-m3` | 0.78 | 62% | 1.0 |
+| Qwen3-Reranker-0.6B | 0.81 | 63% | 1.4 |
+| both rerankers, rank-fused | 0.82 | 61% | |
+
+- **Reranking is the gain**: either reranker improved 22 of 24 questions and made one worse,
+  in every language tried. Reranking only the top 30 kept 8 of the top ten (nDCG at least 0.75
+  for `bge-reranker-v2-m3`); the top 20, less.
+- **Another embedder is not**: a newer LLM-based embedder re-ordering the same pool beat
+  bge-m3 on 12 questions and lost on 10. This compares ordering within a pool bge-m3 helped
+  pick, not retrieval over the whole corpus, but nothing here pays for re-embedding 1.5M
+  passages.
+- **Cost on this machine**, with a crawl job loading every core: `bge-reranker-v2-m3` took
+  about 5 s for 30 passages on the integrated Radeon 890M (ROCm, PyTorch 2.9, float16) and
+  14 s on the CPU; Qwen3-Reranker-0.6B about three times as long. Cutting passages to 512
+  tokens saved almost nothing: most are shorter. A discrete GPU remains the condition for
+  interactive use; on this hardware reranking suits answers that are not waited on (the Ask
+  panel's passages, MCP) better than Find.
+
 ### Vector arm depth
 
 `hnsw.ef_search` is set per query as a multiple of the candidates asked for. **pgvector's

@@ -1782,7 +1782,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       took 20–35 s a question on CPU; small cross-encoders were fast and did not reproduce
       the gain. Build with `B-131`: a `/rerank` route on the embedding sidecar, off unless the
       sidecar is on a GPU, applied to Find, the answer view and `search_chunks`; measure
-      latency on the card first
+      latency on the card first. Graded 2026-10-11 (24 questions, blind): nDCG@10 0.58 →
+      0.78, answers in the top five 42% → 62%; an LLM embedder instead gained nothing
+      reliable. 5 s for 30 passages on this machine's iGPU, 14 s CPU
 - [ ] `B-163` (parked 2026-10-11: no paid model to test with; remind the operator) **Which passages synthesis reads** — measured in the 2026-10-07 relay session
       (3 batches, 120 passages, 34 relations, 5 attribute values). Synthesis reads a passage when
       it *or its source* is labelled on a topic, so one borderline page reaches the model whole:
