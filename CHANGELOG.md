@@ -91,6 +91,12 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.4] — 2026-10-11
+
+### Fixed
+
+- `B-218`: "An evidence question", not "A evidence question", in a question item's reason on Gaps
+
 ## [0.174.3] — 2026-10-11
 
 ### Fixed

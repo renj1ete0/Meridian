@@ -1230,6 +1230,7 @@ def question_gaps(run: dict, run_name: str) -> list[Gap]:
         missing = (op or {}).get("missing") if basis == "operator" else None
         question = item.get("question")
         kind = f"{item.get('kind')} question" if item.get("kind") else "question"
+        article = "An" if kind[0] in "aeiou" else "A"
         out.append(
             Gap(
                 id=f"question:{item.get('id')}",
@@ -1238,10 +1239,10 @@ def question_gaps(run: dict, run_name: str) -> list[Gap]:
                 subject=str(item.get("id")),
                 # What was asked; the kind and grade follow in the reason. The run's
                 # file is in `evidence`, not in reader-facing text.
-                title=str(question) if question else f"A {kind}",
+                title=str(question) if question else f"{article} {kind}",
                 reason=(
                     (missing or _hits_line(len(item.get("hits") or [])))
-                    + f" A {kind}, graded {grade} of 3 by {who}"
+                    + f" {article} {kind}, graded {grade} of 3 by {who}"
                     + (", in a draft set." if draft else ".")
                     + (LEXICAL_NOTE if lexical else "")
                     + " Improve search for this kind of question, not for this one."

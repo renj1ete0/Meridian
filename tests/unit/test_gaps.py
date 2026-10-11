@@ -152,7 +152,7 @@ def test_a_question_gap_is_titled_by_its_question_and_names_no_file():
         assert g.evidence["run"] == "2026-10-08.yaml"
     by_id = {g.subject: g for g in found}
     assert "lookup question" in by_id["A"].reason.lower()
-    assert "graded 1 of 3 by the operator" in by_id["B"].reason
+    assert "An evidence question, graded 1 of 3 by the operator" in by_id["B"].reason
 
 
 def test_a_question_without_text_falls_back_to_its_kind():

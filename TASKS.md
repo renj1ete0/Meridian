@@ -1866,7 +1866,8 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-218` `v0.174.2`. **Gaps' question items named their kind, not their question** (UX
       sweep 2026-10-11) — headed "Lookup question, 1 of 3, proposed (heuristic, not a score)",
       and the reason named the run's YAML file and `eval/README.md`. Now headed by the question;
-      kind, grade and grader in the reason; the file only in the evidence line
+      kind, grade and grader in the reason; the file only in the evidence line.
+      `v0.174.4`: "An evidence question", seen in the rebuilt stack
 - [x] `B-217` `v0.173.0`. **CJK passages unreachable by word** (`B-192`'s last suspect) — the
       `english` parser keeps a run of CJK characters as one token; a term from inside a passage
       found it 10% (zh), 6% (ja), 30% (ko) of the time over ~19k passages. A partial index of
