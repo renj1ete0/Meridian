@@ -238,6 +238,37 @@ subject. It must reach Postgres as a `regconfig`: bound as a plain string the ca
 `websearch_to_tsquery(varchar, varchar)`, which does not exist, and the error is an undefined
 function rather than a type mismatch.
 
+<a id="cjk"></a>
+### Chinese, Japanese and Korean
+
+These scripts are written without spaces between words, and the `english` parser keeps a whole
+run of their characters as one token, often 50 characters long. Measured on the local corpus
+(2026-10-11), a three-character term taken from inside a passage found that passage lexically
+10% of the time for Chinese, 6% for Japanese and 30% for Korean, about 19,000 passages; the
+vector arm alone carried them. European languages were not affected in the same way: their
+words are delimited, so a word in the passage matches itself under any configuration.
+
+A query holding any CJK character (`meridian_core.cjk`, `B-217`) reads a second index instead:
+each run split into overlapping two-character pairs (`meridian_cjk_bigrams()`, the usual
+approach for unsegmented scripts), under `simple`, on the passages holding such characters
+only (about 24,000, a partial GIN index, so the large table is not rewritten). The query's
+runs become quoted phrases of the same pairs, so "数据保护" needs 数据, 据保 and 保护 side by
+side, not anywhere in the passage. Measured with the same probes: 100% for all three.
+
+- **The split exists twice**, in Python for the query and in SQL for the passage, and a test
+  compares them on generated text. The character class is written as escapes in both and must
+  stay character-for-character the same: the partial index serves only a predicate that matches
+  its own, and a bound parameter in either the expression or the predicate does not match
+  either, so both are literals (a test reads the plan).
+- **A mixed query** ("GDPR 数据") is read entirely by the CJK index, so its Latin words are not
+  stemmed there. The passages it can find hold CJK text anyway.
+- **No dictionary segmentation**: pairs over-match a little (a pair that spans two words) and
+  need no word list, model or extension. Ranking is `ts_rank_cd` over the matches, without RUM's
+  order.
+- **Cost**: the arm took 40 ms to 1 s on the local corpus (five queries, 2026-10-11); the slowest
+  was a common Korean word, since a phrase match is rechecked by recomputing each candidate's
+  pairs. A stored column would remove the recheck's cost, at a rewrite of the whole table.
+
 ### Degraded mode
 
 The vector comes from the embedding service, which runs the model the corpus was embedded

@@ -28,6 +28,9 @@ from sqlalchemy import text as sql_text  # `Chunk.text` shadows the name in that
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from meridian_core.cjk import CJK_CLASS
+from meridian_core.cjk import SQL_FUNCTION as CJK_SQL_FUNCTION
+from meridian_core.cjk import TS_CONFIG as CJK_TS_CONFIG
 from meridian_core.db import Base
 
 from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
@@ -307,6 +310,14 @@ class Chunk(Base, TimestampMixin):
             "search_vector",
             postgresql_using="rum",
             postgresql_ops={"search_vector": "rum_tsvector_ops"},
+        ),
+        # CJK passages by character pairs (`B-217`), partial; the search must repeat the
+        # expression and the predicate exactly. See docs/features/search.md#cjk.
+        Index(
+            "ix_chunks_cjk_search",
+            sql_text(f"to_tsvector('{CJK_TS_CONFIG}'::regconfig, {CJK_SQL_FUNCTION}(text))"),
+            postgresql_using="gin",
+            postgresql_where=sql_text(f"text ~ '[{CJK_CLASS}]'"),
         ),
         # --- the vector half of hybrid retrieval (§12.5, task P2-04) -------
         # HNSW, cosine ops, not partial. Half precision (`B-136`, ADR 0007): queries

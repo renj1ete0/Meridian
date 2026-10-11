@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.173.0] — 2026-10-11
+
+### Added
+
+- `B-217`: Chinese, Japanese and Korean passages are searchable by word. A query holding CJK
+  text reads a partial index of each passage's character pairs, its runs as phrases; a term
+  from inside a passage now finds it every time (was 10% Chinese, 6% Japanese, 30% Korean)
+
 ## [0.172.0] — 2026-10-11
 
 ### Fixed

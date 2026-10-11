@@ -11,10 +11,11 @@ import dataclasses
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import ColumnElement, Float, Select, and_, cast, func, or_, select
+from sqlalchemy import ColumnElement, Float, Select, and_, cast, func, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import cjk
 from .ageing import age_in_days, decay_factor
 from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
@@ -254,8 +255,11 @@ async def _lexical(
     """Chunk ids by lexical relevance, best first.
 
     The RUM index picks the best :data:`LEXICAL_POOL` matches, and ``ts_rank_cd`` orders
-    them (`B-65`). See docs/features/search.md#lexical-ranking.
+    them (`B-65`). See docs/features/search.md#lexical-ranking. A query holding CJK text
+    reads the pair index instead (`B-217`).
     """
+    if cjk.has_cjk(query):
+        return await _lexical_cjk(sess, query, filters, candidates)
     tsquery = func.websearch_to_tsquery(cast(TS_CONFIG, REGCONFIG), query)
     pool = (
         _arm(filters)
@@ -270,6 +274,41 @@ async def _lexical(
         .order_by(func.ts_rank_cd(pool.c.search_vector, tsquery).desc(), pool.c.chunk_id)
         .limit(candidates)
     )
+    return list((await sess.execute(stmt)).scalars())
+
+
+def lexical_cjk_statement(query: str, filters: SearchFilters, candidates: int) -> Select:
+    """The CJK lexical arm's statement, best first (`B-217`).
+
+    The expression and the `text ~` predicate are written as the partial index has them,
+    or the planner cannot use it. See docs/features/search.md#cjk.
+    """
+    # Literals, not bind parameters: a parameter would not match the index's expression.
+    config = literal_column(f"'{cjk.TS_CONFIG}'::regconfig")
+    vector = func.to_tsvector(config, getattr(func, cjk.SQL_FUNCTION)(Chunk.text))
+    tsquery = func.websearch_to_tsquery(config, cjk.query_text(query))
+    pool = (
+        _arm(filters)
+        .add_columns(vector.label("cjk_vector"))
+        .where(
+            Chunk.text.op("~")(literal_column(f"'[{cjk.CJK_CLASS}]'")),
+            vector.op("@@")(tsquery),
+        )
+        .limit(max(LEXICAL_POOL, candidates))
+        .subquery()
+    )
+    return (
+        select(pool.c.chunk_id)
+        .order_by(func.ts_rank_cd(pool.c.cjk_vector, tsquery).desc(), pool.c.chunk_id)
+        .limit(candidates)
+    )
+
+
+async def _lexical_cjk(
+    sess: AsyncSession, query: str, filters: SearchFilters, candidates: int
+) -> list[int]:
+    """Chunk ids by lexical relevance over CJK passages, best first (`B-217`)."""
+    stmt = lexical_cjk_statement(query, filters, candidates)
     return list((await sess.execute(stmt)).scalars())
 
 
