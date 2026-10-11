@@ -35,6 +35,26 @@ def allows_anonymous() -> bool:
     }
 
 
+class MeridianAccessToken(AccessToken):
+    """A verified token, with what decides what its tools return rather than which it may call."""
+
+    #: Whether the operator's notes reach this caller (`B-216`).
+    notes: bool = False
+
+
+def sees_notes() -> bool:
+    """Whether the caller may see the operator's notes (`B-216`).
+
+    Only a token issued under the `operator` profile, or the loopback development mode,
+    where the caller is the operator. Anything else, including a token this module did
+    not make, sees none. See docs/features/mcp.md#grants-design.
+    """
+    token = get_access_token()
+    if token is None:
+        return allows_anonymous()
+    return getattr(token, "notes", False) is True
+
+
 class MeridianTokenVerifier(TokenVerifier):
     """Resolves a bearer token against `agent_tokens`.
 
@@ -59,11 +79,12 @@ class MeridianTokenVerifier(TokenVerifier):
             "mcp authenticated",
             extra={"agent_id": scope.agent_id, "token_id": scope.token_id},
         )
-        return AccessToken(
+        return MeridianAccessToken(
             token=token,
             client_id=scope.agent_id,
             scopes=sorted(scope.allowed_tools),
             resource=self._resource,
+            notes=scope.notes,
         )
 
 

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
-from .models import AgentToken
+from .models import AgentToken, Grant
 
 log = get_logger(__name__)
 
@@ -43,6 +43,9 @@ class TokenScope:
     agent_id: str
     allowed_tools: frozenset[str]
     rate_limit: int | None
+    #: Whether its tools return the operator's notes (`B-216`): only under the `operator`
+    #: profile, on the token and on its grant if it has one.
+    notes: bool = False
 
     def permits(self, tool: str) -> bool:
         return tool in self.allowed_tools
@@ -63,10 +66,12 @@ async def issue_token(
     allowed_tools: Sequence[str],
     expires_at: dt.datetime | None = None,
     rate_limit: int | None = None,
+    profile: str | None = None,
 ) -> tuple[str, AgentToken]:
     """Mint a credential. Returns the secret **once**; only its hash is stored.
 
-    ``allowed_tools`` has no default. Flushes; does not commit.
+    ``allowed_tools`` has no default. ``profile`` is recorded, not expanded: without it
+    the token sees no notes. Flushes; does not commit.
     """
     secret = new_secret()
     row = AgentToken(
@@ -75,6 +80,7 @@ async def issue_token(
         allowed_tools=list(allowed_tools),
         expires_at=expires_at,
         rate_limit=rate_limit,
+        profile=profile,
     )
     sess.add(row)
     await sess.flush()
@@ -118,6 +124,13 @@ async def resolve_token(
         log.warning("token rejected", extra={"reason": "expired", "token_id": row.token_id})
         return None
 
+    notes = row.profile == "operator"
+    if notes and row.grant_id is not None:
+        # A token cannot see more than the grant it was issued under.
+        notes = await sess.scalar(select(Grant.profile).where(Grant.grant_id == row.grant_id)) == (
+            "operator"
+        )
+
     return TokenScope(
         token_id=row.token_id,
         agent_id=row.agent_id,
@@ -126,6 +139,7 @@ async def resolve_token(
         # without thinking will hold.
         allowed_tools=frozenset(row.allowed_tools or ()),
         rate_limit=row.rate_limit,
+        notes=notes,
     )
 
 

@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.172.0] — 2026-10-11
+
+### Fixed
+
+- `B-216`: the operator's notes reach an `operator` MCP token only. A token now records the
+  profile it was issued under (`agent_tokens.profile`); `find_nodes` and `get_node` leave notes
+  out for any other token, and read-only SQL hides them from the guest role by a row policy.
+  Admin lists an operator token as `operator` (it read as `analyst`). Tokens issued earlier have
+  no profile and see no notes until reissued
+
 ## [0.171.0] — 2026-10-11
 
 ### Added

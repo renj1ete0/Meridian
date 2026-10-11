@@ -13,7 +13,7 @@ import datetime as dt
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, func, or_, select, text, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import annotations
@@ -336,13 +336,18 @@ async def neighbourhood(
     filters: GraphFilters | None = None,
     *,
     limit: int = DEFAULT_NEIGHBOURS,
+    notes: bool = True,
 ) -> NeighbourhoodRead:
-    """One node and its depth-1 neighbours, filtered, ranked and capped (§12.2)."""
+    """One node and its depth-1 neighbours, filtered, ranked and capped (§12.2).
+
+    ``notes=False`` leaves the operator's notes out, and a note as the focus is not found
+    (`B-216`).
+    """
     filters = filters or GraphFilters()
     limit = max(1, min(limit, MAX_NEIGHBOURS))
 
     focus = await sess.get(Entity, entity_id)
-    if focus is None:
+    if focus is None or (not notes and focus.is_annotation):
         raise NodeNotFound(entity_id)
 
     incident = (
@@ -363,7 +368,7 @@ async def neighbourhood(
             ).all()
             # A node merged into another is a redirect, not a neighbour (§5.5); a withdrawn
             # note is not one either (`B-201`).
-            if e.redirects_to is None and e.withdrawn_at is None
+            if e.redirects_to is None and e.withdrawn_at is None and (notes or not e.is_annotation)
         }
 
     evidence = await _evidence_for(
@@ -414,7 +419,7 @@ async def neighbourhood(
             )
         ).all()
 
-    hint_edges, hint_entities = await _hints(sess, entity_id, shown_ids)
+    hint_edges, hint_entities = await _hints(sess, entity_id, shown_ids, notes=notes)
 
     stats = await _stats(sess, [entity_id, *shown_ids])
     homes = await _home_topics(sess, [focus, *(others[i] for i in shown_ids)])
@@ -510,7 +515,7 @@ def _facets(
 
 
 async def _hints(
-    sess: AsyncSession, focus_id: int, shown_ids: Sequence[int]
+    sess: AsyncSession, focus_id: int, shown_ids: Sequence[int], *, notes: bool = True
 ) -> tuple[list[Edge], list[Entity]]:
     """A few second-hop nodes per neighbour, strongest edges first.
 
@@ -541,7 +546,7 @@ async def _hints(
                 ) AS rn
                 FROM candidate c
                 JOIN entities en ON en.entity_id = c.other AND en.redirects_to IS NULL
-                    AND en.withdrawn_at IS NULL
+                    AND en.withdrawn_at IS NULL AND (:notes OR NOT en.is_annotation)
                 WHERE NOT (c.other = ANY(CAST(:excluded AS bigint[])))
             )
             SELECT edge_id, other FROM ranked
@@ -555,6 +560,7 @@ async def _hints(
             "excluded": sorted(excluded),
             "per": HINTS_PER_NEIGHBOUR,
             "cap": MAX_HINTS,
+            "notes": notes,
         },
     )
     picked = rows.all()
@@ -704,10 +710,16 @@ async def contested_pairs(
     )
 
 
-async def node_detail(sess: AsyncSession, entity_id: int) -> GraphNodeDetailRead:
-    """Everything the panel beside the canvas shows, in one request (§12.5)."""
+async def node_detail(
+    sess: AsyncSession, entity_id: int, *, notes: bool = True
+) -> GraphNodeDetailRead:
+    """Everything the panel beside the canvas shows, in one request (§12.5).
+
+    ``notes=False`` leaves out the operator's notes and the edges attaching them, and a
+    note itself is not found (`B-216`).
+    """
     entity = await sess.get(Entity, entity_id)
-    if entity is None:
+    if entity is None or (not notes and entity.is_annotation):
         raise NodeNotFound(entity_id)
 
     rows = (
@@ -742,6 +754,7 @@ async def node_detail(sess: AsyncSession, entity_id: int) -> GraphNodeDetailRead
         await sess.scalars(
             select(Edge)
             .where(or_(Edge.from_node == entity_id, Edge.to_node == entity_id))
+            .where(true() if notes else Edge.relation_type != annotations.ANNOTATES)
             .order_by(Edge.edge_id)
         )
     ).all()
@@ -831,7 +844,11 @@ async def node_detail(sess: AsyncSession, entity_id: int) -> GraphNodeDetailRead
     ]
 
     homes = await _home_topics(sess, [entity])
-    mine = await annotations.listing(sess, about=entity_id, limit=MAX_PANEL_ANNOTATIONS)
+    mine = (
+        (await annotations.listing(sess, about=entity_id, limit=MAX_PANEL_ANNOTATIONS)).annotations
+        if notes
+        else []
+    )
 
     return GraphNodeDetailRead(
         entity=EntityRead.model_validate(entity),
@@ -841,7 +858,7 @@ async def node_detail(sess: AsyncSession, entity_id: int) -> GraphNodeDetailRead
         evidence=evidence[:MAX_EVIDENCE],
         evidence_total=len(evidence),
         contested_with=pairs,
-        annotations=mine.annotations,
+        annotations=mine,
     )
 
 
@@ -855,13 +872,14 @@ def _like(term: str) -> str:
 
 
 async def search_nodes(
-    sess: AsyncSession, query: str, *, limit: int = DEFAULT_MATCHES
+    sess: AsyncSession, query: str, *, limit: int = DEFAULT_MATCHES, notes: bool = True
 ) -> NodeSearchRead:
     """Entities whose name or an alias contains the query, best match first.
 
     Exact name, then prefix, then substring; within each, the better-connected
     node first, because a reader typing a name wants the node with something
-    around it. Merged-away entities are skipped — they are redirects.
+    around it. Merged-away entities are skipped — they are redirects. ``notes=False``
+    skips the operator's notes (`B-216`).
     """
     term = query.strip()
     limit = max(1, min(limit, MAX_MATCHES))
@@ -882,6 +900,7 @@ async def search_nodes(
                     WHERE d.from_node = e.entity_id OR d.to_node = e.entity_id) AS degree
             FROM entities e
             WHERE e.redirects_to IS NULL AND e.withdrawn_at IS NULL
+              AND (:notes OR NOT e.is_annotation)
               AND (e.canonical_name ILIKE :contains ESCAPE '\'
                    OR EXISTS (SELECT 1 FROM unnest(e.aliases) a
                               WHERE a ILIKE :contains ESCAPE '\'))
@@ -893,7 +912,7 @@ async def search_nodes(
             LIMIT :limit
             """
         ),
-        {"contains": contains, "prefix": prefix, "term": term, "limit": limit},
+        {"contains": contains, "prefix": prefix, "term": term, "limit": limit, "notes": notes},
     )
     return NodeSearchRead(
         query=query,

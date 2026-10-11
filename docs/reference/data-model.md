@@ -338,7 +338,11 @@ has one, by quality tier. A newly seeded row needs an order, or a test fails.
 **The unit of sharing is a person, not a credential** (`P3-06`, shared-read-access §3).
 Somebody holds several tokens (a browser session, an MCP client on a laptop, another on a
 server), and revoking their access must revoke all of them: `agent_tokens.grant_id` points at
-the grant, and revoking it revokes every token beneath it in one statement. `subject_kind` is a
+the grant, and revoking it revokes every token beneath it in one statement.
+`agent_tokens.profile` (`B-216`) records the profile a token was issued under; only `operator`
+sees the operator's notes (NULL, for older tokens, sees none). `entities` and `edges` carry
+row-level security: one policy admits every row, and a restrictive one hides notes and
+`annotates` edges from `meridian_guest`. `subject_kind` is a
 column rather than inferred from whether the subject looks like an email address, because a
 person (via SSO) and a machine (via a service token) are audited differently.
 

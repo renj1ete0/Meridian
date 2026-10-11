@@ -32,7 +32,7 @@ from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.search import SearchFilters, readable_passage_conditions, search
 from meridian_core.stats import corpus_stats
 
-from ..auth import require_tool
+from ..auth import require_tool, sees_notes
 from ..search_service import embed_query
 
 log = get_logger(__name__)
@@ -372,7 +372,9 @@ def build_mcp(
         """Knowledge-graph nodes whose name or alias matches, to get an `entity_id`."""
         require_tool("find_nodes")
         async with session_ro() as sess:
-            found = await graphview.search_nodes(sess, query, limit=min(limit, 50))
+            found = await graphview.search_nodes(
+                sess, query, limit=min(limit, 50), notes=sees_notes()
+            )
         return found.model_dump(mode="json")
 
     @mcp.tool()
@@ -384,10 +386,14 @@ def build_mcp(
         """
         require_tool("get_node")
         limit = max(1, min(neighbours, graphview.MAX_NEIGHBOURS))
+        # The operator's notes go to an `operator` token only (`B-216`).
+        notes = sees_notes()
         async with session_ro() as sess:
             try:
-                detail = await graphview.node_detail(sess, entity_id)
-                around = await graphview.neighbourhood(sess, entity_id, GraphFilters(), limit=limit)
+                detail = await graphview.node_detail(sess, entity_id, notes=notes)
+                around = await graphview.neighbourhood(
+                    sess, entity_id, GraphFilters(), limit=limit, notes=notes
+                )
             except graphview.NodeNotFound as missing:
                 return {"error": str(missing)}
         return {

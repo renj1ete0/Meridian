@@ -1846,12 +1846,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
-- [ ] `B-216` **MCP shows the operator's notes to every token** (found while building `B-201`) —
+- [x] `B-216` `v0.172.0`. **MCP shows the operator's notes to every token** (found while building `B-201`) —
       `get_node` returns a node's notes and `find_nodes`/neighbourhood include note nodes for any
       token, while docs/features/mcp.md says notes go only with the `operator` profile.
       `Grant.annotations` exists but nothing reads it, and a token stores only its tool list,
       which is the same for `analyst` and `operator`; enforcing it needs the profile on the
-      token (or its grant) and a filter in those three tools
+      token (or its grant) and a filter in those three tools. Built that way, plus hint dots
+      and `annotates` citations, and a row policy for read-only SQL, which leaked them too
 - [x] `B-214` `v0.169.0`. **PDF tables keep their rows** — a `-layout` pass finds tables and
       puts them, as pipe tables, where reading order had their cells column by column; placed
       only when clean (measured: 624 tables on 364 of 1,912 sample pages, 0.1% of words lost)

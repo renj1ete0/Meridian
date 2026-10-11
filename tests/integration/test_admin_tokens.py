@@ -105,3 +105,18 @@ async def test_admin_is_gated(monkeypatch) -> None:
         # Closed, naming the fix, when no caller identity is configured (`deps.admin_is_allowed`).
         assert (await c.get("/api/admin/tokens")).status_code == 503
     await dispose_engines()
+
+
+@pytest.mark.parametrize("profile", sorted(PROFILE_TOOLS))
+async def test_a_token_is_listed_under_the_profile_it_was_issued_with(
+    client, session_for, profile
+) -> None:
+    """`analyst` and `operator` carry the same tools, so reading the profile back from the
+    tools listed every operator token as an analyst one (`B-216`)."""
+    issued = (await issue(client, profile=profile))["row"]
+    stored = await (await session_for("ro")).scalar(
+        select(AgentToken.profile).where(AgentToken.token_id == issued["token_id"])
+    )
+    listed = {r["token_id"]: r for r in (await client.get("/api/admin/tokens")).json()["rows"]}
+    assert stored == profile
+    assert listed[issued["token_id"]]["profile"] == profile

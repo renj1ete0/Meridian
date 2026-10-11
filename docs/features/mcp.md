@@ -48,7 +48,15 @@ verifies the token; each tool then checks that this token is scoped to it.
 
 **Profiles** are fixed sets of tools, held to the tools the server defines by a test
 (`B-138`): `reader` (every tool in the table above except `run_readonly_query`), `analyst` and
-`operator` (both add read-only SQL).
+`operator` (both add read-only SQL). A token records the profile it was issued under
+(`agent_tokens.profile`, `B-216`), since `analyst` and `operator` carry the same tools and differ
+only in what those tools return: **the operator's notes reach an `operator` token only**.
+`find_nodes` and `get_node` leave them out for any other (as a match, in the panel, as a
+neighbour or hint, and as an `annotates` edge's citation), and a note asked for by id is "not
+found". A token under a grant needs `operator` on both. Tokens issued before `v0.172.0` have no
+profile and see no notes; reissue one as `operator` for that. With no token, only the loopback
+development mode sees them. `find_route`, `term_neighbourhood` and `list_gaps` never included
+notes.
 
 **Grants** (`grants.py`, `P3-06`). Access for someone other than the operator is granted to a
 *person*, with a named profile (`reader`, `analyst`, `operator`), never a free-form tool list.
@@ -59,7 +67,8 @@ by default.
 development machine only. Without it, and without a token, every tool refuses.
 
 **Read-only SQL** (`P3-04`). The guest role can `SELECT` the corpus and the graph, and nothing
-else (no token hashes, no fetch policy). The statement timeout is what makes it safe to
+else (no token hashes, no fetch policy). Row-level security hides the operator's notes and their
+`annotates` edges from it (`B-216`), under every profile: one query role serves them all. The statement timeout is what makes it safe to
 expose. Every query is logged, because the queries assistants reach for show which curated
 tools to build next.
 
@@ -192,7 +201,11 @@ thing an assistant can check: thirty passages and thirty thousand support very d
   `operator` is not "everything": a grant is for reading someone else's corpus (§2.1).
 - **Annotations only with `operator`, and no column for it.** Annotations are the operator's own
   thinking, the most personal layer (§12.5). A per-grant flag would be a checkbox someone ticks
-  while setting up a colleague.
+  while setting up a colleague. The token's `profile` column is not such a flag: it records the
+  profile, and notes follow from it (`B-216`).
+- **Notes are left out, not refused.** A refusal would tell the caller that an id is a note;
+  "not found" tells it nothing. Read-only SQL hides them by a row policy rather than by revoking
+  `entities`, which the graph questions SQL exists for need.
 - **Filters intersect.** A guest may narrow further, and nothing they send widens the grant.
   `cleared_only` is forced on, as for the MCP surface.
 - **Raw files need the grant and the deployment** (`MERIDIAN_SERVE_RAW`). The raw store is a

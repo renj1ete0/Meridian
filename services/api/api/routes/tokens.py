@@ -22,7 +22,11 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 def profile_of(tools: list[str] | None) -> str:
-    """The profile whose tools these are exactly, or "custom"."""
+    """The profile whose tools these are exactly, or "custom".
+
+    For tokens issued before the profile was recorded (`B-216`). `analyst` and `operator`
+    carry the same tools, so such a token reads as `analyst`, which is also what it sees.
+    """
     have = set(tools or [])
     for name, granted in PROFILE_TOOLS.items():
         if have == set(granted):
@@ -39,7 +43,7 @@ def row_of(token: AgentToken, now: dt.datetime) -> TokenRowRead:
     return TokenRowRead(
         token_id=token.token_id,
         held_by=token.agent_id,
-        profile=profile_of(token.allowed_tools),
+        profile=token.profile or profile_of(token.allowed_tools),
         tools=sorted(token.allowed_tools or []),
         created_at=token.created_at,
         expires_at=token.expires_at,
@@ -73,6 +77,7 @@ async def tokens_issue(body: TokenIssue, _: AdminAllowed, sess: WriteSession) ->
         agent_id=body.held_by.strip(),
         allowed_tools=sorted(PROFILE_TOOLS[body.profile]),
         expires_at=expires,
+        profile=body.profile,
     )
     await sess.commit()
     await sess.refresh(row)

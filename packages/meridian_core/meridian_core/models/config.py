@@ -451,6 +451,10 @@ class AgentToken(Base, TimestampMixin):
     )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     allowed_tools: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    #: The profile it was issued under (`B-216`). Decides what its tools return, not
+    #: which it may call: only `operator` sees the operator's notes. NULL for tokens
+    #: issued before it was recorded, which see none.
+    profile: Mapped[str | None] = mapped_column(GRANT_PROFILE)
 
     rate_limit: Mapped[int | None] = mapped_column(Integer)
     seed_cap_per_run: Mapped[int | None] = mapped_column(Integer)

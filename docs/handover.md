@@ -13,6 +13,17 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-11 (late) — `v0.172.0`.** Traps and findings:
+> - **`entities` and `edges` have row-level security** (`B-216`): a permissive policy admits
+>   row to every role, a restrictive one hides notes from `meridian_guest`. A new role meant
+>   for someone else's reads needs its own restrictive policy; dropping `every_row` would hide
+>   every row from every role but the owner.
+> - **What an MCP tool returns can depend on the token**, not only whether it may be called:
+>   `api.auth.sees_notes()`. A new graph view that can hold notes takes `notes=`, and a test
+>   reads the server's source for calls missing it.
+> - **A reboot ends a `docker exec` run** without a trace: the retable run was restarted with
+>   `docker exec -d … > /tmp/retable.log` and its summary prints at the end of that log.
+
 > **2026-10-10 (evening) — `v0.168.3`–`v0.169.0`.** Traps and findings:
 > - **PDF tables are found in a second `-layout` pass** (`B-214`) and placed into reading-order
 >   text only when the words going out and coming in match; a placement that fails a check

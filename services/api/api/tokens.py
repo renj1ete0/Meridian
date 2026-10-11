@@ -64,7 +64,11 @@ async def _issue(name: str, profile: str, days: int | None) -> int:
     expires = dt.datetime.now(dt.UTC) + dt.timedelta(days=days) if days else None
     async with session() as sess:
         secret, row = await issue_token(
-            sess, agent_id=name, allowed_tools=sorted(PROFILE_TOOLS[profile]), expires_at=expires
+            sess,
+            agent_id=name,
+            allowed_tools=sorted(PROFILE_TOOLS[profile]),
+            expires_at=expires,
+            profile=profile,
         )
         zone = await display_zone(sess)
         await sess.commit()
