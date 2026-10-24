@@ -1,0 +1,63 @@
+# Fedora CoreOS, provisioned for Meridian (`B-226`). Butane, compiled to Ignition:
+#
+#   podman run --rm -i -v "$PWD/deploy:/deploy:ro,z" quay.io/coreos/butane:release \
+#     --pretty --strict --files-dir /deploy < deploy/podman/meridian.bu > meridian.ign
+#
+# Then install with that Ignition file (docs/guides/deploy-podman.md). Replace the SSH
+# key first. What it sets up, and nothing else: the compose binary, the units in this
+# folder, the egress rules, and podman's socket. The checkout and .env come after
+# first boot, by hand, because .env holds the credentials.
+
+variant: fcos
+version: 1.5.0
+
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - ssh-ed25519 REPLACE-WITH-YOUR-PUBLIC-KEY
+
+storage:
+  directories:
+    - path: /var/srv/meridian
+      mode: 0755
+  files:
+    # Compose v5.6.0, released 2026-10-02, checked against its published sha256.
+    - path: /usr/local/bin/docker-compose
+      mode: 0755
+      contents:
+        source: https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64
+        verification:
+          hash: sha256-47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
+    - path: /etc/nftables/meridian.nft
+      mode: 0644
+      contents: { local: egress-restrict.nft }
+    - path: /etc/systemd/system/meridian.service
+      contents: { local: podman/meridian.service }
+    - path: /etc/systemd/system/meridian-update.service
+      contents: { local: podman/meridian-update.service }
+    - path: /etc/systemd/system/meridian-update.timer
+      contents: { local: podman/meridian-update.timer }
+    - path: /etc/systemd/system/meridian-egress.service
+      contents: { local: podman/meridian-egress.service }
+    - path: /etc/systemd/system/meridian-label.service
+      contents: { local: podman/meridian-label.service }
+    - path: /etc/systemd/system/meridian-backup.service
+      contents: { local: podman/meridian-backup.service }
+    - path: /etc/systemd/system/meridian-backup.timer
+      contents: { local: meridian-backup.timer }
+
+systemd:
+  units:
+    - name: podman.socket
+      enabled: true
+    - name: meridian-label.service
+      enabled: true
+    - name: meridian-egress.service
+      enabled: true
+    # Enabled now, and harmless until the checkout and .env exist: compose fails and
+    # the unit says so in `systemctl status meridian`.
+    - name: meridian.service
+      enabled: true
+    - name: meridian-update.timer
+      enabled: true

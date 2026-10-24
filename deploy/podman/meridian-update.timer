@@ -1,0 +1,13 @@
+# Hourly, as Watchtower polled. `stable` moves only on `make promote`, so most
+# runs pull nothing and recreate nothing.
+
+[Unit]
+Description=Meridian — pull and apply new images, hourly
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

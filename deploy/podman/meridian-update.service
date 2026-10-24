@@ -1,0 +1,20 @@
+# Watchtower's job on podman (`B-226`): pull the channel's images and recreate what
+# changed. `migrate` is in the `autoupdate` profile, so a new tools image migrates
+# before the services that need the new schema are used. See
+# docs/guides/deploy-podman.md#updates.
+
+[Unit]
+Description=Meridian — pull and apply new images (podman)
+After=meridian.service
+Requires=podman.socket
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/meridian/app
+Environment=DOCKER_HOST=unix:///run/podman/podman.sock
+# Every app service also has a `build:` section, so `--ignore-buildable` would skip
+# them all; a locally built image that is in no registry fails its pull and is kept.
+ExecStart=/usr/local/bin/docker-compose pull --quiet --ignore-pull-failures
+ExecStart=/usr/local/bin/docker-compose up -d --remove-orphans
+ExecStartPost=/usr/bin/podman image prune -f
+TimeoutStartSec=1800

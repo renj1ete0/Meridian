@@ -1886,11 +1886,8 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-227` `v0.175.0`. **Drain the queue when the GPU machine comes up** (§11.7) — the
       synthesis daemon looks at opportunistic synthesis rows' health every 5 min and starts a run
       when one was down, is up, and work waits past the mark. Waking it is `B-229`
-- [ ] `B-229` **Wake the GPU machine as a safety net** (§11.7) — daily, with no local run in
-      24 h and work queued, send Wake-on-LAN to `wake_mac` and wait for health up to 3 min.
-      Needs the operator first: whether the machine supports and wants WoL (§11.7 assumed a box
-      in daily use), and the LAN's shape, since a broadcast does not leave a bridged container
-      and the egress rules drop it; a directed broadcast, a host helper or the router's relay
+- [-] `B-229` dropped 2026-10-24 by the operator: the GPU machine is switched on by hand.
+      **Wake the GPU machine as a safety net** (§11.7). `wake_mac` stays a stored, unread column
 - [x] `B-228` `v0.176.0`. **An admin status route** — `GET /api/admin/status`: the embedder
       (configured, up, model, loaded) and each enabled local model (probed, up, why not), with
       the embedding backlog. Admin-only, since a reason can name a LAN machine. The synthesis
@@ -1898,9 +1895,21 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-225` `v0.176.1`, compose config validated, not yet run on the card. **The GPU node runs
       the local model too** — `deploy/embedder-node/gpu.yml`: the node's embedder on the GPU (it
       was given no device) and llama.cpp beside it under `--profile llm`; guide §3c
-- [ ] `B-226` **Podman on Fedora** — Quadlet units (or compose on the podman socket), `podman
-      auto-update` for Watchtower, SELinux labels on bind mounts, rootful so the egress rules
-      match; a deploy guide. Needs the mini PC's size and OS from the operator
+- [~] `B-226` `v0.177.0`; run on rootless podman 5.8 with compose 5.6 (Postgres, migrate, api,
+      web, backup), not yet on Fedora CoreOS or the Windows GPU machine. **Podman: Fedora CoreOS,
+      and the GPU node on Windows** — the same compose files: `deploy/podman/` (overlay, units,
+      Butane), `deploy/embedder-node/podman-windows.yml` and `start-windows.ps1`, guide
+      `docs/guides/deploy-podman.md`. Tick after a first boot on the mini PC
+- [ ] `B-230` **The split overlay gives the API an internet route** (found running `B-226`) — on
+      `internal` alone the API has none; the split overlay adds `lan`, an ordinary bridge, and the
+      egress rules drop only private addresses from it, so `api` and `embed` reached github.com
+      (seen on podman; the same on Docker). Drop everything from `lan` but `lan_allow`, once it is
+      known which network the multi-network services (`orchestrator`, `scheduler`) take their
+      default route through on each runtime, or they lose their hosted-model calls
+- [ ] `B-231` **One hostname for the app, the API and MCP behind Access** — setup §8a points the
+      tunnel at `api:8000`, which serves no web app; pointing it at `web:8080` loses `/health`
+      and the MCP discovery path (`/.well-known/oauth-protected-resource/mcp`), which nginx sends
+      to the SPA. Proxy both to the API, point the tunnel at `web`, and fix §8
 - [ ] `B-221` **Map circles overlap at the field level** (UX sweep 2026-10-11) — at 1440×900,
       Data, Mathematics, Social Sciences and Transportation overlap, and their "N subfields
       inside" lines run under neighbours and under the solid links. Check the layout's

@@ -1,0 +1,17 @@
+# Off-device snapshots on podman (`B-226`). The twin of deploy/meridian-backup.service,
+# whose header explains why this is a host timer; deploy/meridian-backup.timer
+# schedules either. There is no `docker` CLI here, so the compose command is named.
+
+[Unit]
+Description=Meridian — off-device backup (podman)
+After=meridian.service
+Requires=podman.socket
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/meridian/app
+Environment=DOCKER_HOST=unix:///run/podman/podman.sock
+Environment=MERIDIAN_COMPOSE=/usr/local/bin/docker-compose
+Environment=MERIDIAN_BACKUP_ROOT=/var/mnt/backup/meridian
+ExecStart=/srv/meridian/app/scripts/backup.sh
+TimeoutStartSec=3600

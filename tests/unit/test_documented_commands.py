@@ -34,7 +34,11 @@ yaml = pytest.importorskip("yaml")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE = REPO / "docker-compose.yml"
-DOCS = [REPO / "docs/guides/setup.md", REPO / "docs/guides/deployment.md"]
+DOCS = [
+    REPO / "docs/guides/setup.md",
+    REPO / "docs/guides/deployment.md",
+    REPO / "docs/guides/deploy-podman.md",
+]
 
 #: `docker compose run [--rm] [-e FOO=bar ...] <service> [command...]`
 #:
@@ -43,7 +47,8 @@ DOCS = [REPO / "docs/guides/setup.md", REPO / "docs/guides/deployment.md"]
 #: `--rm` as the service name and reported it missing, which is a test failing
 #: about itself.
 RUN = re.compile(
-    r"docker compose run\s+(?:(?:--rm|-e\s+\S+)\s+)*"
+    # `dc` is the podman guide's alias for the `docker-compose` binary (`B-226`).
+    r"(?:docker[ -]compose|\bdc) run\s+(?:(?:--rm|-e\s+\S+)\s+)*"
     r"(?P<service>[a-z][a-z0-9_-]*)(?:\s+(?P<command>[^\n`]+))?"
 )
 

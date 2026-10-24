@@ -1,0 +1,19 @@
+# SELinux label for the data root, once (`B-226`). Fedora CoreOS enforces SELinux,
+# and a bind mount labelled var_t is refused to every container ("permission
+# denied" from Postgres at first start). New files inherit the directory's label,
+# so labelling the empty root at first boot covers everything written later,
+# including the checkout. Seen and fixed this way under podman 5.8.
+
+[Unit]
+Description=Meridian — label the data root for containers
+ConditionPathExists=!/var/srv/meridian/.labelled
+Before=meridian.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/mkdir -p /var/srv/meridian
+ExecStart=/usr/bin/chcon -R -t container_file_t /var/srv/meridian
+ExecStart=/usr/bin/touch /var/srv/meridian/.labelled
+
+[Install]
+WantedBy=multi-user.target

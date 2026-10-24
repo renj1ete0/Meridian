@@ -6,6 +6,8 @@
 > (`P3-12`): images pulled from GHCR, promoted to a `stable` channel that
 > Watchtower follows, and the embedding model on a board of its own. This page
 > remains the reference for everything that layout shares.
+> On podman (Fedora CoreOS, or a GPU machine on Windows), [deploy-podman.md](deploy-podman.md)
+> covers what differs; the compose files are the same.
 
 The runbook for putting Meridian on the server it is meant to live on, and for
 the two runs that close phase 1: the bounded **smoke run** (does the stack come

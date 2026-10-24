@@ -35,10 +35,12 @@ meridian_require_postgres() {
   # It also matters for which compose file got picked: the dev/production probe
   # above asks Docker a question, so an unreachable daemon silently answers
   # "not dev" and the message would name the production file on a dev machine.
-  if ! docker info >/dev/null 2>&1; then
-    echo "meridian: the Docker daemon is not reachable." >&2
+  # Through compose, not `docker info`: a podman host has no `docker` CLI (`B-226`).
+  # shellcheck disable=SC2086
+  if ! $COMPOSE ps -q >/dev/null 2>&1; then
+    echo "meridian: the container runtime is not reachable." >&2
     echo "  Check it is running, and that DOCKER_HOST points at its socket" >&2
-    echo "  (rootless installs commonly need DOCKER_HOST=unix:///var/run/docker.sock)." >&2
+    echo "  (rootless Docker: unix:///var/run/docker.sock; podman: unix:///run/podman/podman.sock)." >&2
     exit 1
   fi
   if ! meridian_psql -c 'SELECT 1' >/dev/null 2>&1; then

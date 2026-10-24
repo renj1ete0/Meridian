@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.177.0] — 2026-10-24
+
+### Added
+
+- `B-226`: deploying on podman with the same compose files. Fedora CoreOS gets a Butane config,
+  systemd units (start at boot, hourly pull in place of Watchtower, SELinux label, egress rules,
+  backup) and an overlay; a GPU node on Windows gets an overlay passing the card by CDI name and
+  a start script. `backup.sh` checks the runtime through compose, since podman hosts have no
+  `docker` CLI. Guide: `docs/guides/deploy-podman.md`
+
 ## [0.176.1] — 2026-10-24
 
 ### Added

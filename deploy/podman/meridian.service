@@ -1,0 +1,27 @@
+# The stack on podman (`B-226`): up at boot, down at shutdown. The podman twin of
+# deploy/meridian.service, whose header explains why this is a oneshot and why
+# compose, not systemd, owns per-service restarts.
+#
+# Podman has no daemon, so nothing brings `restart: unless-stopped` containers back
+# after a reboot; this unit does, by running compose at boot. Compose talks to
+# podman's Docker-compatible socket, rootful so the egress rules match the stack's
+# fixed subnets. COMPOSE_FILE and COMPOSE_PROFILES come from .env.
+
+[Unit]
+Description=Meridian — autonomous research system (podman)
+After=podman.socket network-online.target meridian-egress.service
+Requires=podman.socket
+Wants=network-online.target meridian-egress.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/meridian/app
+Environment=DOCKER_HOST=unix:///run/podman/podman.sock
+ExecStart=/usr/local/bin/docker-compose up -d --remove-orphans
+ExecStop=/usr/local/bin/docker-compose down
+# See deploy/meridian.service: the worker drains its fetches on SIGTERM.
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target

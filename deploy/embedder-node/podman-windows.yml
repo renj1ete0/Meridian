@@ -1,0 +1,38 @@
+# The GPU node on Windows with Podman (`B-226`): named last, after gpu.yml.
+#
+#   COMPOSE_FILE=docker-compose.yml;gpu.yml;podman-windows.yml     (in .env; `;` on Windows)
+#   podman compose --profile llm up -d                              (start-windows.ps1 does this)
+#
+# What changes here, and only this:
+#   - the card is passed by its CDI name. gpu.yml's `deploy` device reservation is
+#     Docker's NVIDIA runtime; podman wants the CDI spec generated inside the podman
+#     machine (docs/guides/deploy-podman.md#the-gpu-machine-on-windows);
+#   - the weights live in a named volume inside the podman machine, not a host path:
+#     a Windows drive reaches the machine through a slow file share, and gigabytes of
+#     weights are read at every start;
+#   - Watchtower is parked: it needs Docker's socket. start-windows.ps1 pulls instead.
+
+services:
+  embedder:
+    devices: ["nvidia.com/gpu=all"]
+    deploy: !override
+      resources:
+        limits: { memory: "${EMBEDDER_MEMORY:-8G}" }
+    volumes: !override
+      - models:/models
+
+  modelfetch:
+    volumes: !override
+      - models:/models
+
+  llm:
+    devices: ["nvidia.com/gpu=all"]
+    deploy: !reset {}
+    volumes: !override
+      - models:/models
+
+  watchtower:
+    profiles: !override [docker-only]
+
+volumes:
+  models:

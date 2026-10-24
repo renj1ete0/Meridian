@@ -1,0 +1,18 @@
+# Loads the egress rules at boot (`P1-25`, `B-226`): Fedora CoreOS persists no nft
+# ruleset of its own. The table is deleted first so a restart does not duplicate
+# its rules. Verify after every change: docs/guides/deployment.md, egress section.
+
+[Unit]
+Description=Meridian — egress restriction (nftables)
+Before=meridian.service
+After=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/sbin/nft delete table inet meridian
+ExecStart=/usr/sbin/nft -f /etc/nftables/meridian.nft
+ExecStop=/usr/sbin/nft delete table inet meridian
+
+[Install]
+WantedBy=multi-user.target
