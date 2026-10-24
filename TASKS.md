@@ -1868,10 +1868,19 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-223` `v0.174.6`; measured on a dropping address: first search 3.05 s, then 0.00 s (was 30 s each). **An embedder that is off costs a reader the whole timeout** — one httpx timeout
       covers connect as well as read, so a search waits up to 30 s (a batch up to ~500 s) on a
       powered-off host. A short connect timeout, and the read path remembers "down" briefly
-- [ ] `B-224` **Agents' `health_url`, `availability` and `wake_mac` are stored and never read** —
-      a local model on another machine is found down only by a real call. Probe `health_url`
-      before routing to it, wake it on a backlog when `wake_mac` is set, and an admin-only
-      status route (embedder and local models: up, last seen; backlog)
+- [x] `B-224` `v0.174.7`; measured on a dropping address: probe 3.08 s then 0.00 s, a call 3.01 s
+      (was the full 600 s). **A local model is asked only when its machine is up** — `health_url`
+      was stored and never read, and a call had one ten-minute timeout for connect and answer.
+      Probe it first (§11.7 "down / loading → skip"), connect in 3 s, remember a down machine
+- [ ] `B-227` **Drain the queue when the GPU machine comes up; wake it as a safety net** (§11.7)
+      — the orchestrator polls opportunistic rows' `health_url` every 5 min and starts a run early
+      when one turns up with work past the mark; daily, with no local run in 24 h and work
+      queued, send Wake-on-LAN to `wake_mac` and wait for health up to 3 min. `wake_mac` is
+      stored and never read, though the orchestrator already holds `NET_RAW` for it
+- [ ] `B-228` **An admin status route** — `/api/admin/status`: the embedder (configured, up,
+      model, loaded) and each enabled local model (up, last checked), plus the embedding and
+      synthesis backlogs. Admin-only, since it names LAN addresses; the public `/health` stays
+      liveness
 - [ ] `B-225` **The GPU node runs the local model too** — `deploy/embedder-node/` gains an
       optional llama.cpp server beside the embedder, so the GPU machine is one `up -d`
 - [ ] `B-226` **Podman on Fedora** — Quadlet units (or compose on the podman socket), `podman

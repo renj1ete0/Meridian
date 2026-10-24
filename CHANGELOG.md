@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.7] — 2026-10-24
+
+### Fixed
+
+- `B-224`: a local model on a machine that is off or still loading is skipped in seconds. Its
+  `health_url` is probed before it is asked, connecting has its own 3 s timeout, and a machine
+  found down is remembered for a minute; before, a call waited the whole ten-minute timeout
+
 ## [0.174.6] — 2026-10-24
 
 ### Fixed

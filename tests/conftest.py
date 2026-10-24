@@ -24,6 +24,7 @@ from meridian_core.db import Role, normalize_url
 from meridian_core.embedder import forget_outages
 from meridian_core.netguard import IPAddress
 from meridian_core.policy import ResolvedPolicy
+from meridian_core.provider import forget_agent_outages
 
 DEV_URLS = {
     "rw": "postgresql://meridian_rw:dev@localhost:21111/meridian",
@@ -39,8 +40,9 @@ def _url(role: str) -> str:
 
 @pytest.fixture(autouse=True)
 def _no_remembered_outages() -> None:
-    """An embedder outage one test simulates must not refuse the next test's calls."""
+    """An outage one test simulates must not refuse the next test's calls."""
     forget_outages()
+    forget_agent_outages()
 
 
 async def _reachable() -> bool:

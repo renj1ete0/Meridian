@@ -94,6 +94,8 @@ reads. When you add a variable, add it here and to `.env.example`.
 |---|---|---|
 | `ANTHROPIC_API_KEY` | unset | Named by the hosted agent rows |
 | `LOCAL_LLM_URL` | unset | Endpoint of the local OpenAI-compatible row |
+| `LOCAL_LLM_HEALTH_URL` | unset | Its health check (llama.cpp: `http://<host>:<port>/health`); probed before the row is asked (`B-224`) |
+| `MERIDIAN_AGENT_DOWN_FOR_S` | 60 | How long a local model found down is skipped without asking again; 0 is off (`B-224`) |
 | `LOCAL_CHAT_LLM_URL`, `LOCAL_CHAT_MODEL` | unset | Endpoint and model of the Ask panel's local row |
 | `HOSTED_LLM_URL`, `HOSTED_LLM_MODEL`, `HOSTED_LLM_API_KEY` | unset | The hosted OpenAI-compatible row (DeepSeek, OpenRouter, …): endpoint ending in `/v1`, model name, key |
 | `MERIDIAN_RELAY_DIR` | unset | Folder where relay prompts and answers are exchanged |

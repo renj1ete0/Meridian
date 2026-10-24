@@ -208,6 +208,38 @@ async def test_an_agent_that_will_not_answer_hands_on_to_the_next(registry, answ
     assert len(asked) == 2, "the next agent answered; nothing was retried"
 
 
+async def test_a_local_model_whose_machine_is_off_is_skipped_unasked_and_unreserved(
+    registry, answers, monkeypatch
+) -> None:
+    """§11.7, `B-224`: "down / loading → skip", before a token is reserved or a call made."""
+    import httpx
+
+    sess, run = registry
+    monkeypatch.setenv("LOCAL_LLM_HEALTH_URL", "http://gpu.test:8080/health")
+    probed: list[str] = []
+    real = httpx.AsyncClient
+
+    def loading(request: httpx.Request) -> httpx.Response:
+        probed.append(str(request.url))
+        return httpx.Response(503, json={"status": "loading model"})
+
+    class Routed(real):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, transport=httpx.MockTransport(loading), **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", Routed)
+    chain = [a.agent_id for a in await chain_for(sess, "tag_attributes")]
+    assert chain[0] == "local-llamacpp", "the seeded order puts the local model first"
+    asked = answers(**{"*": ("ok", 10, 5)})
+
+    result = await complete(sess, run, "tag_attributes", prompt="x", token_cap=100_000, now=NOW)
+
+    assert probed == ["http://gpu.test:8080/health"]
+    assert "local-llamacpp" not in asked
+    assert result.agent_id == chain[1]
+    assert run.tokens_used == 15, "the skipped model reserved nothing"
+
+
 async def test_every_agent_refusing_is_one_error_naming_all_of_them(registry, answers) -> None:
     """What §13.4 means by deferring a run rather than failing it — and the
     caller needs to know it was the whole chain, not one bad agent."""

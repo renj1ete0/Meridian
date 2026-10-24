@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import pathlib
+import time
 from collections.abc import Sequence
 from typing import Any, Final
 
@@ -49,6 +50,41 @@ DEFAULT_MAX_TOKENS: Final[int] = 16_000
 #: How long to wait on one agent. A frontier model reasoning over a batch is
 #: minutes, not seconds; the chain is what handles an agent that never answers.
 DEFAULT_TIMEOUT_S: Final[float] = 600.0
+
+#: How long to wait for a local model's machine to accept a connection, apart from
+#: the answer's timeout (`B-224`): a machine that is switched off behind a router
+#: never refuses, and the call waited the whole ten minutes. See
+#: docs/features/synthesis.md#a-local-model-on-a-machine-that-sleeps.
+CONNECT_TIMEOUT_S: Final[float] = 3.0
+
+#: How long a health probe may take, all in.
+HEALTH_TIMEOUT_S: Final[float] = 5.0
+
+#: How long a local model found down is skipped without asking again, by any call in
+#: this process (`B-224`); ``MERIDIAN_AGENT_DOWN_FOR_S``.
+DEFAULT_DOWN_FOR_S: Final[float] = 60.0
+
+#: Until when each agent, by id, is taken to be down.
+_down_until: dict[str, float] = {}
+
+
+def forget_agent_outages() -> None:
+    """Clear every remembered agent outage; for tests."""
+    _down_until.clear()
+
+
+def _down_for() -> float:
+    raw = os.environ.get("MERIDIAN_AGENT_DOWN_FOR_S", "").strip()
+    try:
+        return max(float(raw), 0.0) if raw else DEFAULT_DOWN_FOR_S
+    except ValueError:
+        return DEFAULT_DOWN_FOR_S
+
+
+def _mark_down(agent: Agent) -> None:
+    window = _down_for()
+    if window > 0:
+        _down_until[agent.agent_id] = time.monotonic() + window
 
 
 class ProviderError(RuntimeError):
@@ -191,8 +227,9 @@ async def _call_openai_compatible(
     if key:
         headers["Authorization"] = f"Bearer {key}"
 
+    limits = httpx.Timeout(timeout_s, connect=min(CONNECT_TIMEOUT_S, timeout_s))
     try:
-        async with httpx.AsyncClient(timeout=timeout_s) as client:
+        async with httpx.AsyncClient(timeout=limits) as client:
             response = await client.post(
                 f"{endpoint.rstrip('/')}/chat/completions",
                 json={"model": model, "messages": messages, "max_tokens": max_tokens},
@@ -200,6 +237,10 @@ async def _call_openai_compatible(
             )
             response.raise_for_status()
             body = response.json()
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        # The machine is off or unreachable: the next call would wait the same way.
+        _mark_down(agent)
+        raise ProviderError(f"{agent.agent_id}: {type(exc).__name__}") from exc
     except Exception as exc:  # noqa: BLE001
         # The type only. A local endpoint's error body can echo the prompt back.
         raise ProviderError(f"{agent.agent_id}: {type(exc).__name__}") from exc
@@ -301,6 +342,44 @@ _SHAPES = {
 }
 
 
+async def _not_up(agent: Any) -> str | None:
+    """Why a model on a machine that is not always on cannot be asked now; None if it can.
+
+    Only for ``openai_compatible`` rows whose availability is not ``always``: a hosted API
+    is assumed up and its failure is the call's. With a ``health_url`` the server is asked
+    first, so a model still loading is skipped rather than timed out (§11.7). A result is
+    remembered for ``MERIDIAN_AGENT_DOWN_FOR_S``.
+    """
+    if agent.provider != "openai_compatible" or agent.availability == "always":
+        return None
+    until = _down_until.get(agent.agent_id)
+    if until is not None:
+        left = until - time.monotonic()
+        if left > 0:
+            return f"{agent.agent_id}: down; not asked again for {left:.0f} s"
+        _down_until.pop(agent.agent_id, None)
+    try:
+        url = resolved(agent, agent.health_url, "health check")
+    except NotConfigured:
+        # No probe configured: the call's own short connect timeout is the check.
+        return None
+
+    import httpx
+
+    limits = httpx.Timeout(HEALTH_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
+    try:
+        async with httpx.AsyncClient(timeout=limits) as client:
+            response = await client.get(url)
+    except httpx.HTTPError as exc:
+        _mark_down(agent)
+        return f"{agent.agent_id}: health check failed ({type(exc).__name__})"
+    if response.status_code != 200:
+        # llama.cpp answers 503 while it loads the model.
+        _mark_down(agent)
+        return f"{agent.agent_id}: not ready (health check answered {response.status_code})"
+    return None
+
+
 def _cannot_answer(agent: Any) -> str | None:
     """Why this row could not be asked at all, before any call; None when it could."""
     if agent.provider not in _SHAPES:
@@ -380,7 +459,7 @@ async def complete(
     for agent in chain:
         # The seeded rows ship with a placeholder model string. Saying so is the
         # difference between "fill this in" and a provider error nobody can act on.
-        refusal = _cannot_answer(agent)
+        refusal = _cannot_answer(agent) or await _not_up(agent)
         if refusal is not None:
             failures.append(refusal)
             continue
@@ -438,7 +517,7 @@ async def ask(
     failures: list[str] = []
     waiting = 0
     for agent in chain:
-        refusal = _cannot_answer(agent)
+        refusal = _cannot_answer(agent) or await _not_up(agent)
         if refusal is not None:
             failures.append(refusal)
             continue

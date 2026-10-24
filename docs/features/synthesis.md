@@ -290,6 +290,25 @@ a code change.
   records the row's model string. Nothing is exposed: no port, no credential; it trusts only the
   relay directory, which only the operator can write.
 
+### A local model on a machine that sleeps
+
+§11.7 puts the local model on a GPU machine that is not always on. `B-224` makes asking it cheap
+when it is off.
+
+- **A row whose availability is not `always` is probed first**, when it is `openai_compatible`
+  and has a `health_url` (`LOCAL_LLM_HEALTH_URL` for the seeded local row). Anything but a 200 is
+  skipped with its reason in the run log, before a token is reserved: llama.cpp answers 503 while
+  it loads a model, and a request sent then would wait out the load.
+- **Connecting has its own 3 s timeout** (`CONNECT_TIMEOUT_S`), apart from the answer's ten
+  minutes. A machine switched off behind a router or VPN drops packets rather than refusing, and
+  one timeout for both held a synthesis call, or a reader's question, for the whole of it.
+- **A machine found down is remembered for 60 s** (`MERIDIAN_AGENT_DOWN_FOR_S`, 0 is off), by
+  agent, whether the probe or a call found it. A run makes many calls, and each would otherwise
+  pay the connect timeout again. An error status or a slow answer after connecting does not
+  count: that machine is on, and skipping it would hide the fault.
+- Measured against an address that drops packets: probe 3.08 s, then 0.00 s while remembered; a
+  call without a `health_url` 3.01 s, where before it waited the full timeout.
+
 ### Budgets
 
 `budget.py` (`P4-10`, `P4-13`) bounds the one loop nothing else does: gaps emit seeds, seeds grow
