@@ -231,6 +231,55 @@ On a GPU, Postgres is likely the next limit rather than the model. Measure the H
 the backfill's batch query (`chunks_without_embeddings`) before raising the backlog
 ceiling.
 
+<a id="a-gpu-machine-that-is-not-always-on"></a>
+## 3c. A GPU machine that is not always on
+
+The stack on a small always-on machine, and the embedder and a local language model on a GPU
+machine that is switched on when it is wanted. The small machine calls the GPU machine; nothing
+on the GPU machine calls back, and it holds no state. While it is off the crawl goes on, search
+answers by words, passages queue for vectors, and synthesis waits or uses a hosted model.
+
+**On the GPU machine** (`deploy/embedder-node/`):
+
+```bash
+cp env.example .env && chmod 600 .env    # the token, MODELS_DIR, LLM_HF, EMBEDDER_BIND
+docker compose --profile tools run --rm modelfetch                       # embedder weights, once
+docker compose -f docker-compose.yml -f gpu.yml --profile llm up -d      # embedder + llama.cpp
+curl -s localhost:8100/health; curl -s localhost:8080/health             # 503 while loading
+```
+
+Set `EMBEDDER_BIND` to the machine's LAN address and firewall 8100 and 8080 to the small
+machine's address. The embedder refuses `/embed` without the token; llama.cpp has no token
+here, so the firewall is its only protection.
+
+**On the small machine**, the split overlay (`deploy/split/remote-embedder.yml`), and in `.env`:
+
+```bash
+MERIDIAN_EMBEDDER_URL=http://<gpu machine>:8100
+MERIDIAN_EMBEDDER_TOKEN=<the same token>
+LOCAL_LLM_URL=http://<gpu machine>:8080/v1
+LOCAL_LLM_HEALTH_URL=http://<gpu machine>:8080/health
+LOCAL_CHAT_LLM_URL=http://<gpu machine>:8080/v1
+LOCAL_CHAT_MODEL=meridian            # the node's LLM_ALIAS
+```
+
+Then in Admin → Agents set `local-llamacpp`'s model to the same alias and enable it and
+`local-chat`. Add both ports to the egress rules' `lan_allow` set
+(`{ <gpu machine> . 8100, <gpu machine> . 8080 }`), or the `lan` network cannot reach them.
+Give the GPU machine a fixed address (a DHCP reservation, or a VPN name): nothing discovers it.
+
+**What happens while it is off**, and the tasks that made each cheap:
+
+| | Off | Back on |
+|---|---|---|
+| Embedding backfill (`B-222`) | stops at the first failed request; probes `/health` from 30 s doubling to 10 min | drains the backlog, newest first |
+| Search (`B-223`) | words only; the first search waits 3 s to connect, the next 30 s none | words and meaning |
+| Synthesis, Ask (`B-224`) | the local model is skipped in about 3 s, remembered for a minute; the chain goes on to a hosted model or defers | used first again |
+| Synthesis daemon (`B-227`) | | starts a run within 5 min if work waits |
+
+`GET /api/admin/status` (`B-228`) says which of them answers right now and how many passages
+wait for a vector. Waking the machine is not built (`B-229`).
+
 ---
 
 ## 4. The smoke run

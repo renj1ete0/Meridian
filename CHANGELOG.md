@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.176.1] — 2026-10-24
+
+### Added
+
+- `B-225`: `deploy/embedder-node/gpu.yml` puts the node's embedder on the GPU (it had no device
+  before) and adds an optional llama.cpp server (`--profile llm`), so the GPU machine is one
+  `up -d`; the deployment guide's §3c covers a GPU machine that is not always on
+
 ## [0.176.0] — 2026-10-24
 
 ### Added

@@ -1884,8 +1884,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       (configured, up, model, loaded) and each enabled local model (probed, up, why not), with
       the embedding backlog. Admin-only, since a reason can name a LAN machine. The synthesis
       backlog is left out: it is computed in the worker package. Not yet on an Admin screen
-- [ ] `B-225` **The GPU node runs the local model too** — `deploy/embedder-node/` gains an
-      optional llama.cpp server beside the embedder, so the GPU machine is one `up -d`
+- [x] `B-225` `v0.176.1`, compose config validated, not yet run on the card. **The GPU node runs
+      the local model too** — `deploy/embedder-node/gpu.yml`: the node's embedder on the GPU (it
+      was given no device) and llama.cpp beside it under `--profile llm`; guide §3c
 - [ ] `B-226` **Podman on Fedora** — Quadlet units (or compose on the podman socket), `podman
       auto-update` for Watchtower, SELinux labels on bind mounts, rootful so the egress rules
       match; a deploy guide. Needs the mini PC's size and OS from the operator

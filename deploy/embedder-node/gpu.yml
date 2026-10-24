@@ -1,0 +1,81 @@
+# The GPU node (`B-225`): the embedding model on the card, and optionally a local
+# language model beside it, so one `up -d` brings up everything the GPU machine
+# serves. An override of docker-compose.yml in this folder:
+#
+#   docker compose -f docker-compose.yml -f gpu.yml up -d                 # embedder on the GPU
+#   docker compose -f docker-compose.yml -f gpu.yml --profile llm up -d   # and the local model
+#
+# Needs the NVIDIA driver and Container Toolkit on this machine, so that
+# `docker run --gpus all ... nvidia-smi` works (deploy/gpu/gpu-embedder.yml says
+# which driver). On podman, generate the CDI spec once instead
+# (`sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`).
+#
+# On the other machine, in its .env (see docs/guides/deployment.md#a-gpu-machine-that-is-not-always-on):
+#   MERIDIAN_EMBEDDER_URL=http://<this machine>:8100
+#   LOCAL_LLM_URL=http://<this machine>:8080/v1
+#   LOCAL_LLM_HEALTH_URL=http://<this machine>:8080/health
+#   LOCAL_CHAT_LLM_URL=http://<this machine>:8080/v1      # the Ask panel, same server
+#
+# The card's memory: the embedder and reranker take about 3 GB, which leaves the rest
+# of a 24 GB card for the model and its context (`LLM_CTX` × `LLM_PARALLEL`).
+
+services:
+  embedder:
+    environment:
+      MERIDIAN_EMBED_DEVICE: cuda
+    deploy:
+      resources:
+        limits: { memory: "${EMBEDDER_MEMORY:-8G}" }
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # llama.cpp's OpenAI-compatible server (§11.7). A process of its own for Meridian,
+  # not one shared with interactive use: its slots are fixed (`--parallel`), and a
+  # shared one makes a hung request impossible to place.
+  llm:
+    image: ${LLM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    profiles: [llm]
+    restart: unless-stopped
+    ports:
+      - "${EMBEDDER_BIND:-0.0.0.0}:8080:8080"
+    # `-hf` fetches the GGUF into the cache on first start and reuses it after.
+    command:
+      - "-hf"
+      # Required with the profile; not `:?`, which compose checks even with the
+      # profile off and so would refuse the embedder-only start.
+      - "${LLM_HF:-}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--n-gpu-layers"
+      - "999"
+      - "--ctx-size"
+      - "${LLM_CTX:-32768}"
+      - "--parallel"
+      - "${LLM_PARALLEL:-2}"
+      - "--alias"
+      - "${LLM_ALIAS:-meridian}"
+    environment:
+      LLAMA_CACHE: /models/llm
+    volumes:
+      - ${MODELS_DIR:-/srv/meridian/models}:/models
+    healthcheck:
+      # 503 while the model loads, 200 once it answers: the same probe Meridian uses.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 600s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
