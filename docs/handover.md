@@ -27,6 +27,15 @@ add it here.
 >   current. Restore with an `update()` statement (`test_local_models_up.py`).
 > - **Compose interpolates every service, whatever the profile.** A `${VAR:?}` in a profiled
 >   service refuses the whole file when unset; use `${VAR:-}` there.
+> - **Podman, measured** (`B-226`): SELinux refuses a bind mount until the directory is
+>   `container_file_t` (new files inherit it); compose *merges* a `profiles` list, so parking
+>   a service needs `!override`; a CDI name in `devices:` reaches podman as CDI through compose.
+>   Test podman here with `systemctl --user start podman.socket` and
+>   `DOCKER_HOST=unix:///run/user/1000/podman/podman.sock docker compose …`; private images go
+>   across with `docker save | podman load`.
+> - **A test that a route exists is not a test that a client can reach it.** The MCP metadata
+>   route existed on the sub-app and was a 404 at the URL the 401 advertises (`B-231`). Follow
+>   the advertised URL instead.
 > - **`.env.dev` must be loaded for some integration tests** (`set -a; . ./.env.dev`); without
 >   it `test_the_pass_says_it_is_alive_before_the_batch_not_after` fails on `PG_RW_URL`,
 >   with or without any change.
