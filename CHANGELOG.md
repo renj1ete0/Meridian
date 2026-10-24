@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.177.4] — 2026-10-24
+
+### Fixed
+
+- `B-245`: the tagging prompt lists the node types the parser accepts; without them every model
+  guessed, and every tag from Claude and from a local model was refused in a side-by-side run.
+  The extraction prompt says where `jurisdiction` goes, which a local model got wrong on 7 of 15
+
 ## [0.177.3] — 2026-10-24
 
 ### Changed

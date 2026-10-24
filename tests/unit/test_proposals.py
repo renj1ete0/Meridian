@@ -16,6 +16,7 @@ into a refused write nobody reads.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -347,13 +348,33 @@ def test_a_citation_outside_the_batch_is_refused(number: int) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_the_prompt_offers_every_node_type_the_database_accepts() -> None:
+@pytest.mark.parametrize("which", ["extract", "tag"])
+def test_the_prompt_offers_every_node_type_the_database_accepts(which) -> None:
     """Computed from `NODE_TYPE.enums`, so a type added to the schema is
-    named here without anybody remembering to edit a prompt."""
-    prompt = extract_prompt(passages()).system
+    named here without anybody remembering to edit a prompt.
 
-    missing = [value for value in MODEL_NODE_TYPES if value not in prompt]
-    assert not missing, f"node types the model is never told about: {missing}"
+    `B-245`: the tagging prompt showed `"node_type": "..."` and never the list, so a
+    model guessed ("city", "policy", "service") and the parser refused every tag.
+    """
+    if which == "extract":
+        prompt = extract_prompt(passages()).system
+    else:
+        prompt = tag_prompt(passages(), attributes=[("density", None)]).system
+
+    # Whole words: `place` must not pass because `workplace` is in the prose.
+    missing = [value for value in MODEL_NODE_TYPES if not re.search(rf"\b{value}\b", prompt)]
+    assert not missing, f"node types the {which} model is never told about: {missing}"
+
+
+def test_an_item_level_jurisdiction_is_refused_and_the_prompt_says_where_it_goes() -> None:
+    """Seen from a local model: `jurisdiction` beside the subject rather than in it."""
+    item = (
+        '[{"subject": {"name": "Service 451", "node_type": "service_model"}, '
+        '"relation": "connects", "object": {"name": "Bukit Gombak", "node_type": "place"}, '
+        '"citations": [1], "jurisdiction": "SG"}]'
+    )
+    assert parse_edges(item).rejected
+    assert "never beside them" in extract_prompt(passages()).system
 
 
 def test_the_prompt_does_not_offer_annotation() -> None:

@@ -176,6 +176,8 @@ traversed.
 
 `jurisdiction` is an ISO country code, and only when the passage makes it
 plain. The same name is routinely a different thing in a different country.
+It goes inside the `subject` or `object` it describes, never beside them: an
+item with a `jurisdiction` of its own is refused whole.
 
 `stance` ({", ".join(STANCE.enums)}) and `certainty` ({", ".join(CERTAINTY.enums)})
 are properties of *the passage*, not verdicts about it. Stance is the position
@@ -194,20 +196,24 @@ would break the inference). A comparison without its limits stated is the
 failure this system exists to avoid, and it will be refused.
 """
 
-_TAG_TASK = """\
+_TAG_TASK = f"""\
 You read passages from a research corpus and assign audited attributes to the
 entities they describe.
 
 Each item in your answer assigns one attribute to one entity:
 
-  {
-    "entity":     {"name": "...", "node_type": "..."},
+  {{
+    "entity":     {{"name": "...", "node_type": "..."}},
     "attribute":  "...",
     "value":      "high",
     "value_numeric": null,
     "citations":  [2],
     "confidence": 0.7
-  }
+  }}
+
+`node_type` is one of: {", ".join(MODEL_NODE_TYPES)}. An entity named with
+any other type is refused (`B-245`): "city" is a `place`, a scheme or policy
+an `intervention`, a bus service a `service_model`.
 
 The attribute list below is closed. It is the set of dimensions this corpus
 compares things along, and it is audited and capped deliberately — an

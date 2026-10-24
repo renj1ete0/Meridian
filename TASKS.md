@@ -1931,6 +1931,9 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-241` **Answer groups by country on questions about no place** (review) — "United States 85
       strong" on a question about crash reduction reads as a verdict. Group by place only when
       the question names one; "well-sourced / few sources" rather than strong/thin
+- [x] `B-245` `v0.177.4`. **The tagging prompt never listed the node types the parser enforces** —
+      found running the same batch through Claude and a local Qwen3.6-35B: all 5 tags refused on
+      `node_type`. Both prompts now list `MODEL_NODE_TYPES`, tested; jurisdiction placement said
 - [ ] `B-242` **Followed links are most of the crawl and almost none of the evidence** (measured
       2026-10-24) — 84,366 of 97k kept sources came from followed links at 5.7% on a topic (10.3%
       in the latest week, after the gates), against search 42.6% and cited papers 40.6%. The crawl

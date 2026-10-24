@@ -342,6 +342,16 @@ first autonomous run", and this module enforces that ordering.
 
 ### Framing and parsing
 
+<a id="every-closed-list-in-the-prompt"></a>**Every closed list the parser enforces is in the
+prompt** (`B-245`). The tagging prompt showed `"node_type": "..."` and never the thirteen types,
+so a model guessed: given the same batch, Claude wrote "service", "city" and "policy", a local
+Qwen3.6-35B wrote two others, and the parser refused every tag from both. The graph's 37 tags
+came only from answers that happened to guess right. Both prompts now list the types from
+`MODEL_NODE_TYPES`, and a test holds each prompt to the list. The extraction prompt also says
+`jurisdiction` goes inside the subject or object: the local model put it beside them on 7 of 15
+relations, which the strict parser refuses whole. Changing a prompt changes its relay key, so a
+prompt waiting in the relay directory is asked again.
+
 <a id="framing-design"></a>**Framing** (`framing.py`, §11.8). The crawler fetches arbitrary
 content and hands it to a model holding write tools. Framing does not stop a determined
 injection; it tells the model which text is data, so the obvious attacks stop working. The
