@@ -16,10 +16,21 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.168.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.176.1`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
+
+> **2026-10-24 — `v0.174.5`–`v0.176.1`, pushed.** The operator is deploying the stack on a
+> mini PC with podman on Fedora, with the embedder and a local model on a 3090 machine that is
+> not always on. Built: the backfill waits for an absent embedder (`B-222`), short connect
+> timeouts and a remembered outage for the embedder (`B-223`) and local models (`B-224`), the
+> daemon runs when the GPU machine comes up (`B-227`), `GET /api/admin/status` (`B-228`), and the
+> GPU node's compose with llama.cpp (`B-225`, config validated, not run on a card). Runbook:
+> deployment guide §3c. **Resume with:** `B-226` (podman) once the operator says the mini PC's
+> CPU/RAM, Fedora CoreOS or Server, and the 3090 machine's OS, network and runtime; `B-229`
+> (Wake-on-LAN) needs their call; then `B-221`, `B-220`. Remind them `B-163`/`B-205` wait for
+> a paid model.
 
 > **2026-10-11 (evening) — `v0.172.0`–`v0.174.4`, pushed.** Built: notes reach an operator token only
 > (`B-216`), CJK passages searchable by word (`B-217`), cross-encoder reranking (`B-167`, graded

@@ -13,6 +13,24 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-24 — `v0.174.5`–`v0.176.1`: a GPU machine that is not always on.** Traps and findings:
+> - **A machine that is off behind a router never refuses.** Same subnet, a connect fails in
+>   ~3 s (ARP); off-subnet or over a VPN the packets are dropped and a connect waits for the
+>   whole timeout (measured 45 s with curl). Every client that may talk to the GPU machine
+>   needs its own connect timeout; `RemoteEmbedder` and `provider` have one now (3 s).
+> - **The outage memories are module-level** (`embedder._down_until`,
+>   `provider._down_until`), because the API opens a client per search. `tests/conftest.py`
+>   clears both before every test; a test that simulates an outage without that fixture
+>   would refuse the next test's calls.
+> - **A fixture that restores rows through its own session's objects writes nothing** when a
+>   test edited those rows through another session: the stale object believes the value is
+>   current. Restore with an `update()` statement (`test_local_models_up.py`).
+> - **Compose interpolates every service, whatever the profile.** A `${VAR:?}` in a profiled
+>   service refuses the whole file when unset; use `${VAR:-}` there.
+> - **`.env.dev` must be loaded for some integration tests** (`set -a; . ./.env.dev`); without
+>   it `test_the_pass_says_it_is_alive_before_the_batch_not_after` fails on `PG_RW_URL`,
+>   with or without any change.
+
 > **2026-10-11 (evening) — `v0.174.1`–`v0.174.4`.** Traps and findings:
 > - **Keep this machine's load down.** `docker compose run` has no `--cpus`: cap a long job
 >   with an override file (`services: worker: cpus: 4`) passed as a second `-f`. Vitest's
