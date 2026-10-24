@@ -502,9 +502,9 @@ def chat_answer(request):
 
 
 async def test_a_model_that_is_up_is_asked(lan) -> None:
-    from meridian_core.provider import _not_up
+    from meridian_core.provider import not_up
 
-    assert await _not_up(local()) is None
+    assert await not_up(local()) is None
     assert [path for path, _ in lan] == ["/health"]
 
 
@@ -525,21 +525,21 @@ async def test_a_model_that_is_up_is_asked(lan) -> None:
 )
 async def test_a_model_that_is_down_or_loading_is_skipped_and_says_why(lan, answer, reason) -> None:
     """§11.7: "down / loading → skip", rather than a request left to time out."""
-    from meridian_core.provider import _not_up
+    from meridian_core.provider import not_up
 
     lan.state["handler"] = answer
-    refusal = await _not_up(local())
+    refusal = await not_up(local())
     assert refusal is not None and refusal.startswith("local:") and reason in refusal
 
 
 async def test_a_model_found_down_is_not_probed_again_for_a_while(lan) -> None:
     import httpx
 
-    from meridian_core.provider import _not_up
+    from meridian_core.provider import not_up
 
     lan.state["handler"] = lambda r: httpx.Response(503)
-    assert await _not_up(local())
-    assert "not asked again" in (await _not_up(local()) or "")
+    assert await not_up(local())
+    assert "not asked again" in (await not_up(local()) or "")
     assert len(lan) == 1, "a remembered outage was probed again"
 
 
@@ -551,22 +551,22 @@ async def test_the_memory_expires_and_a_recovered_model_is_asked(lan, monkeypatc
     now = [1000.0]
     monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
     lan.state["handler"] = lambda r: httpx.Response(503)
-    assert await provider._not_up(local())
+    assert await provider.not_up(local())
     now[0] += provider.DEFAULT_DOWN_FOR_S + 1
     lan.state["handler"] = chat_answer
-    assert await provider._not_up(local()) is None
+    assert await provider.not_up(local()) is None
     assert len(lan) == 2
 
 
 async def test_the_window_is_read_from_the_environment(lan, monkeypatch) -> None:
     import httpx
 
-    from meridian_core.provider import _not_up
+    from meridian_core.provider import not_up
 
     monkeypatch.setenv("MERIDIAN_AGENT_DOWN_FOR_S", "0")
     lan.state["handler"] = lambda r: httpx.Response(503)
-    await _not_up(local())
-    await _not_up(local())
+    await not_up(local())
+    await not_up(local())
     assert len(lan) == 2, "a zero window still remembered the outage"
 
 
@@ -583,9 +583,9 @@ async def test_the_window_is_read_from_the_environment(lan, monkeypatch) -> None
     ids=["always", "not openai-compatible", "no health url", "unset variable"],
 )
 async def test_rows_without_a_probe_are_not_probed(lan, row) -> None:
-    from meridian_core.provider import _not_up
+    from meridian_core.provider import not_up
 
-    assert await _not_up(row()) is None
+    assert await not_up(row()) is None
     assert lan == []
 
 
@@ -606,25 +606,25 @@ async def test_the_call_waits_briefly_to_connect_and_long_for_the_answer(lan) ->
 async def test_a_call_that_cannot_connect_marks_the_model_down(lan) -> None:
     import httpx
 
-    from meridian_core.provider import _call_openai_compatible, _not_up
+    from meridian_core.provider import _call_openai_compatible, not_up
 
     lan.state["handler"] = lambda r: (_ for _ in ()).throw(httpx.ConnectError("x", request=r))
     with pytest.raises(ProviderError, match="ConnectError"):
         await _call_openai_compatible(
             local(health_url=None), prompt="p", system=None, max_tokens=10, timeout_s=600.0
         )
-    assert "not asked again" in (await _not_up(local(health_url=None)) or "")
+    assert "not asked again" in (await not_up(local(health_url=None)) or "")
 
 
 async def test_a_call_that_fails_after_connecting_does_not_mark_it_down(lan) -> None:
     """A 500 or a slow answer is a machine that is on; skipping it would hide the fault."""
     import httpx
 
-    from meridian_core.provider import _call_openai_compatible, _not_up
+    from meridian_core.provider import _call_openai_compatible, not_up
 
     lan.state["handler"] = lambda r: httpx.Response(500)
     with pytest.raises(ProviderError):
         await _call_openai_compatible(
             local(health_url=None), prompt="p", system=None, max_tokens=10, timeout_s=600.0
         )
-    assert await _not_up(local(health_url=None)) is None
+    assert await not_up(local(health_url=None)) is None

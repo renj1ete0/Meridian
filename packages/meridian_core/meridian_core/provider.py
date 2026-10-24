@@ -36,6 +36,8 @@ __all__ = [
     "ProviderError",
     "ask",
     "complete",
+    "has_probe",
+    "not_up",
 ]
 
 #: Rough characters per token, for the reservation made before a call. Pessimistic:
@@ -342,7 +344,18 @@ _SHAPES = {
 }
 
 
-async def _not_up(agent: Any) -> str | None:
+def has_probe(agent: Any) -> bool:
+    """Whether :func:`not_up` would ask this row's server rather than assume it up."""
+    if agent.provider != "openai_compatible" or agent.availability == "always":
+        return False
+    try:
+        resolved(agent, agent.health_url, "health check")
+    except NotConfigured:
+        return False
+    return True
+
+
+async def not_up(agent: Any) -> str | None:
     """Why a model on a machine that is not always on cannot be asked now; None if it can.
 
     Only for ``openai_compatible`` rows whose availability is not ``always``: a hosted API
@@ -459,7 +472,7 @@ async def complete(
     for agent in chain:
         # The seeded rows ship with a placeholder model string. Saying so is the
         # difference between "fill this in" and a provider error nobody can act on.
-        refusal = _cannot_answer(agent) or await _not_up(agent)
+        refusal = _cannot_answer(agent) or await not_up(agent)
         if refusal is not None:
             failures.append(refusal)
             continue
@@ -517,7 +530,7 @@ async def ask(
     failures: list[str] = []
     waiting = 0
     for agent in chain:
-        refusal = _cannot_answer(agent) or await _not_up(agent)
+        refusal = _cannot_answer(agent) or await not_up(agent)
         if refusal is not None:
             failures.append(refusal)
             continue

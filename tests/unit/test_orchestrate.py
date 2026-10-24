@@ -109,7 +109,9 @@ async def test_an_unknown_stop_stage_is_refused_before_anything_starts() -> None
 # while the backlog it should have consumed keeps growing.
 
 
-async def drive_serve(monkeypatch, *, waiting: int, polls: int = 1, **kwargs) -> tuple[int, int]:
+async def drive_serve(
+    monkeypatch, *, waiting: int, polls: int = 1, ups=None, **kwargs
+) -> tuple[int, int]:
     """Run `serve` for a fixed number of polls; report (polls, runs).
 
     The stop event is set from inside the backlog query, which is the first
@@ -132,7 +134,13 @@ async def drive_serve(monkeypatch, *, waiting: int, polls: int = 1, **kwargs) ->
         ran.append(1)
         return Journal()
 
+    looks = iter(ups or [])
+
+    async def local_up() -> dict[str, bool]:
+        return next(looks, {})
+
     monkeypatch.setattr(orchestrate, "waiting_chunks", counted)
+    monkeypatch.setattr(orchestrate, "local_models_up", local_up)
     monkeypatch.setattr(orchestrate, "run_orchestrator", orchestrated)
     monkeypatch.setattr(orchestrate, "beat", lambda *a, **k: None)
 
@@ -166,3 +174,73 @@ async def test_a_small_backlog_waits_for_the_timer(monkeypatch) -> None:
     polls, ran = await drive_serve(monkeypatch, waiting=3, early_at=500, polls=3, interval_s=86_400)
 
     assert (polls, ran) == (3, 1), "only the startup run should have happened"
+
+
+# §11.7: "every 5 min: poll /health; ready + work queued → drain queue" (`B-227`).
+
+
+async def test_a_local_model_coming_up_drains_a_small_backlog(monkeypatch) -> None:
+    """The GPU machine was off at the daily slot; the run happens when it is back."""
+    polls, ran = await drive_serve(
+        monkeypatch,
+        waiting=3,
+        early_at=500,
+        polls=3,
+        interval_s=86_400,
+        ups=[{"local": False}, {"local": False}, {"local": True}],
+    )
+    assert (polls, ran) == (3, 2)
+
+
+@pytest.mark.parametrize(
+    ("waiting", "ups", "why"),
+    [
+        (0, [{"local": False}, {"local": True}], "nothing waits"),
+        (3, [{"local": True}, {"local": True}], "up at the first look: nothing came up"),
+        (3, [{}, {"local": True}], "first seen up, never seen down"),
+        (3, [{"local": True}, {"local": False}], "went down, not up"),
+    ],
+)
+async def test_a_local_model_triggers_a_run_only_by_coming_up_with_work(
+    monkeypatch, waiting, ups, why
+) -> None:
+    """Staying up must not run synthesis every five minutes, nor coming up to nothing."""
+    polls, ran = await drive_serve(
+        monkeypatch, waiting=waiting, early_at=500, polls=2, interval_s=86_400, ups=ups
+    )
+    assert (polls, ran) == (2, 1), why
+
+
+async def test_with_a_local_model_to_watch_the_daemon_looks_every_five_minutes(
+    monkeypatch,
+) -> None:
+    waits: list[float] = []
+    stopping = asyncio.Event()
+
+    async def counted() -> int:
+        return 0
+
+    async def fake_wait_for(awaitable, timeout):
+        waits.append(timeout)
+        awaitable.close()
+        if len(waits) >= 2:
+            stopping.set()
+        raise TimeoutError
+
+    looks = iter([{"local": False}, {}])
+
+    async def local_up() -> dict[str, bool]:
+        return next(looks)
+
+    async def orchestrated(**_) -> Journal:
+        return Journal()
+
+    monkeypatch.setattr(orchestrate, "waiting_chunks", counted)
+    monkeypatch.setattr(orchestrate, "local_models_up", local_up)
+    monkeypatch.setattr(orchestrate, "run_orchestrator", orchestrated)
+    monkeypatch.setattr(orchestrate, "beat", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate.asyncio, "wait_for", fake_wait_for)
+
+    await orchestrate.serve(stop=stopping, poll_s=900, local_poll_s=300)
+
+    assert waits == [300, 900], "the wait did not follow whether a local model is watched"

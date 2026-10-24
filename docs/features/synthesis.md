@@ -161,6 +161,14 @@ a run starts early once `DEFAULT_EARLY_AT` (500) chunks wait past the mark; belo
 spends a frontier model on a handful of passages. The daily run still happens on a quiet
 corpus, because the run that finds little is the one that reports the corpus is quiet.
 
+A third trigger is a local model's machine coming up (`B-227`, §11.7 "ready + work queued →
+drain queue"). With an `opportunistic` synthesis row that has a health check, the daemon looks
+every `LOCAL_POLL_S` (5 min) and starts a run when that row was down at the last look, is up
+now, and anything waits past the mark. The model is free, so the 500-chunk threshold does not
+apply. Only the change counts: a machine that stays up does not start a run every five minutes,
+and one first seen up has not come up. A chat-only row is not watched, since its coming up is no
+reason to run synthesis. Without such a row the daemon keeps its 15-minute look.
+
 ### Reference lists
 
 <a id="reference-lists"></a>`pull` leaves out passages that are reference lists (`B-171`,

@@ -1872,11 +1872,14 @@ deploy runbook whose first two commands could not work (`B-17`).
       (was the full 600 s). **A local model is asked only when its machine is up** — `health_url`
       was stored and never read, and a call had one ten-minute timeout for connect and answer.
       Probe it first (§11.7 "down / loading → skip"), connect in 3 s, remember a down machine
-- [ ] `B-227` **Drain the queue when the GPU machine comes up; wake it as a safety net** (§11.7)
-      — the orchestrator polls opportunistic rows' `health_url` every 5 min and starts a run early
-      when one turns up with work past the mark; daily, with no local run in 24 h and work
-      queued, send Wake-on-LAN to `wake_mac` and wait for health up to 3 min. `wake_mac` is
-      stored and never read, though the orchestrator already holds `NET_RAW` for it
+- [x] `B-227` `v0.175.0`. **Drain the queue when the GPU machine comes up** (§11.7) — the
+      synthesis daemon looks at opportunistic synthesis rows' health every 5 min and starts a run
+      when one was down, is up, and work waits past the mark. Waking it is `B-229`
+- [ ] `B-229` **Wake the GPU machine as a safety net** (§11.7) — daily, with no local run in
+      24 h and work queued, send Wake-on-LAN to `wake_mac` and wait for health up to 3 min.
+      Needs the operator first: whether the machine supports and wants WoL (§11.7 assumed a box
+      in daily use), and the LAN's shape, since a broadcast does not leave a bridged container
+      and the egress rules drop it; a directed broadcast, a host helper or the router's relay
 - [ ] `B-228` **An admin status route** — `/api/admin/status`: the embedder (configured, up,
       model, loaded) and each enabled local model (up, last checked), plus the embedding and
       synthesis backlogs. Admin-only, since it names LAN addresses; the public `/health` stays

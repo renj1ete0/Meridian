@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.175.0] — 2026-10-24
+
+### Added
+
+- `B-227`: the synthesis daemon watches a local model on a machine that sleeps, every five
+  minutes, and starts a run when it comes up with work waiting, rather than leaving that work
+  for the next daily run
+
 ## [0.174.7] — 2026-10-24
 
 ### Fixed

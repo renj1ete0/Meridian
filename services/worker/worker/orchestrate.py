@@ -46,7 +46,14 @@ from meridian_core.proposals import (
     parse_tags,
     tag_prompt,
 )
-from meridian_core.provider import Completion, NotConfigured, ProviderError, complete
+from meridian_core.provider import (
+    Completion,
+    NotConfigured,
+    ProviderError,
+    complete,
+    has_probe,
+    not_up,
+)
 from meridian_core.references import is_reference_list
 from meridian_core.resolution import expansions_from_gazetteer
 from meridian_core.routing import NoAgentAvailable
@@ -844,6 +851,29 @@ DEFAULT_EARLY_AT: Final[int] = 500
 #: the hour rather than at whatever moment the day happens to turn over.
 POLL_S: Final[int] = 900
 
+#: How often a local model on a machine that sleeps is looked for (§11.7, `B-227`):
+#: "every 5 min: poll /health; ready + work queued → drain queue".
+LOCAL_POLL_S: Final[int] = 300
+
+
+async def local_models_up() -> dict[str, bool]:
+    """Whether each enabled synthesis model on a machine that sleeps answers now.
+
+    Rows that are ``opportunistic`` and have a health check; a chat-only row is left out,
+    since its coming up is no reason to run synthesis.
+    """
+    async with get_sessionmaker("rw")() as sess:
+        agents = list(
+            await sess.scalars(
+                select(Agent).where(Agent.enabled, Agent.availability == "opportunistic")
+            )
+        )
+    found: dict[str, bool] = {}
+    for agent in agents:
+        if has_probe(agent) and set(agent.task_types or ()) - {"chat"}:
+            found[agent.agent_id] = await not_up(agent) is None
+    return found
+
 
 async def waiting_chunks() -> int:
     """How many chunks sit past the current run's mark, for the early trigger.
@@ -864,30 +894,39 @@ async def serve(
     interval_s: int = DEFAULT_INTERVAL_S,
     early_at: int = DEFAULT_EARLY_AT,
     poll_s: int = POLL_S,
+    local_poll_s: int = LOCAL_POLL_S,
     max_cycles: int = 10,
     agent_id: str | None = None,
     stop: asyncio.Event | None = None,
 ) -> None:
     """Run synthesis on §6.3's schedule until told to stop.
 
-    Daily, or early once `early_at` chunks wait (checked every `poll_s`). A service
-    rather than a timetable row, because the scheduler's image cannot call a model.
-    See docs/features/synthesis.md#daemon.
+    Daily, or early once `early_at` chunks wait (checked every `poll_s`), or when a local
+    model on a machine that sleeps comes up with work waiting (checked every
+    `local_poll_s`). A service rather than a timetable row, because the scheduler's image
+    cannot call a model. See docs/features/synthesis.md#daemon.
     """
     stopping = stop or asyncio.Event()
     next_run = 0.0  # the first cycle happens at startup, not a day later
+    was_up: dict[str, bool] = {}
 
     while not stopping.is_set():
         beat()
         now = time.monotonic()
         waiting = await waiting_chunks()
+        up = await local_models_up()
+        # Down at the last look and up now; the first look has nothing to compare with.
+        came_up = sorted(a for a, ok in up.items() if ok and was_up.get(a) is False)
+        was_up = up
         due = now >= next_run
         early = waiting >= early_at
+        woke = bool(came_up) and waiting > 0
 
-        if due or early:
+        if due or early or woke:
+            reason = "scheduled" if due else "backlog" if early else "local model up"
             log.info(
                 "synthesis run starting",
-                extra={"waiting": waiting, "reason": "scheduled" if due else "backlog"},
+                extra={"waiting": waiting, "reason": reason, "came_up": came_up},
             )
             journal = await run_orchestrator(max_cycles=max_cycles, agent_id=agent_id)
             for line in journal.render().splitlines():
@@ -897,7 +936,9 @@ async def serve(
             log.info("synthesis idle", extra={"waiting": waiting, "early_at": early_at})
 
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stopping.wait(), timeout=poll_s)
+            await asyncio.wait_for(
+                stopping.wait(), timeout=min(poll_s, local_poll_s) if up else poll_s
+            )
 
 
 async def _serve(args: argparse.Namespace) -> None:
