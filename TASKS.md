@@ -16,22 +16,24 @@ something went wrong.
 - Tasks marked **⚑ human** need a judgment call and should not be delegated to an agent.
 - Add new tasks freely; don't renumber existing ones.
 
-**`v0.177.2`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
+**`v0.177.4`. Phases 0–3 are built; phase 1's checkpoint is not.** 5349 backend tests
 against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
-> **2026-10-24 — `v0.174.5`–`v0.177.2`, pushed.** The operator deploys the stack on a mini PC
-> (16 GB, i5 10th gen) with Fedora CoreOS and podman, and the embedder and a local model on a
-> Windows 3090 machine with Podman Desktop that is switched on by hand. Built: the stack waits
-> cheaply for an absent GPU machine (`B-222`–`B-224`), runs synthesis when it comes up (`B-227`),
-> `GET /api/admin/status` (`B-228`), the GPU node's compose with llama.cpp (`B-225`), the podman
-> deployment with the same compose files (`B-226`, ADR 0022, guide `deploy-podman.md`), and MCP
-> sign-in discovery through one Cloudflare hostname (`B-231`). `B-229` (Wake-on-LAN) dropped.
-> **Resume with:** `B-226` stays open until a first boot on the mini PC and the GPU machine; the
-> operator creates the Cloudflare tunnel and Access apps (setup §8). `B-230` (the split overlay's
-> `lan` network gives the API an internet route) needs a test on the target runtime. Then
-> `B-221`, `B-220`; remind them `B-163`/`B-205` wait for a paid model.
+> **2026-10-24 (late) — `v0.174.5`–`v0.177.4`, pushed.** Deployment: mini PC (16 GB, i5 10th gen)
+> on Fedora CoreOS + podman with the same compose files (ADR 0022, `deploy-podman.md`, Zincati
+> window); Windows GPU machine with a 3090 and a 6700 XT. Built: the stack waits cheaply for an
+> absent GPU machine (`B-222`–`B-224`), synthesis when it returns (`B-227`), admin status
+> (`B-228`), GPU node compose (`B-225`), MCP sign-in discovery via one hostname (`B-231`), the
+> tagging prompt's node types (`B-245`). Measured: a third-party UI review (`B-233`–`B-241`),
+> crawl mix (87% of sources from followed links at 5.7% on-topic, `B-242`), news lag (median 57
+> days), Claude vs a local Qwen3.6-35B on synthesis (Claude 93% supported, local 73% and no
+> stance), rerankers (`B-246`), llama.cpp parity for the 6700 XT (`B-248`), Singapore outlets
+> (`B-249`). Reranker: the operator said turn it on; the GPU node's env names it. **Resume with:**
+> `B-248` (the operator's GPU plan depends on it), then `B-249`, `B-242`, `B-246`; `B-226` until
+> first boot. The operator creates the Cloudflare tunnel and Access apps (setup §8) and revokes
+> the review's MCP token ("ux-review-laptop"). Remind: `B-163`/`B-205` wait for a paid model.
 
 > **2026-10-11 (evening) — `v0.172.0`–`v0.174.4`, pushed.** Built: notes reach an operator token only
 > (`B-216`), CJK passages searchable by word (`B-217`), cross-encoder reranking (`B-167`, graded
@@ -1946,13 +1948,31 @@ deploy runbook whose first two commands could not work (`B-17`).
       certainty empty on every on-topic relation. llama.cpp can constrain output to a JSON schema
       (`response_format`); derive it from the proposal models and send it to `openai_compatible`
       rows that declare support
+- [ ] `B-248` **Embedding and reranking from a llama.cpp server** (the operator's GPU plan
+      2026-10-24: the LLM on the 3090, bge-m3 and the reranker on the 6700 XT; PyTorch has no route
+      to that card on Windows, llama.cpp's Vulkan build does). Measured locally on AMD:
+      bge-m3 FP16 GGUF reproduces the stored vectors (300 sampled: min cosine 0.9993, top-5
+      neighbours 98.5%), so no re-embedding; bge-reranker FP16 agrees 9.5/10 with PyTorch at a
+      third of the time; Qwen3-Reranker-4B Q8 (`Voodisss/...-llama_cpp`) 0.772 nDCG (PyTorch
+      0.794), 7.9/10 overlap. `RemoteEmbedder` learns OpenAI `/v1/embeddings` and llama.cpp
+      `/v1/rerank` beside its own API, keeping the model check (`/v1/models`) and the outage
+      memory. Artefacts: `meridian-calibration/2026-10-24/`
+- [ ] `B-249` **Singapore news by news sitemap, not only feeds** — operator: feeds list only the
+      latest items. 33 outlets probed: news sitemaps (every article of the last ~2 days) on
+      Straits Times (423 today), Business Times (154), 8world (227), CNA, AsiaOne, Tech in Asia
+      (~50), Berita Harian (59), Tamil Murasu (120), The Independent (34); full dated sitemaps on
+      MOT, URA, HDB, gov.sg, CLC; RSS only on Mothership; nothing usable from TODAY, LTA, Yahoo,
+      SGTrains, Shin Min (listing pages to watch). A `watch` row (feed | news sitemap | listing
+      page) polled on an interval, entries through the prefilter and a headline-vocabulary
+      filter for general outlets. Supersedes `B-243`'s feed-only design; probe in
+      `meridian-calibration/2026-10-24/sgnews/`
 - [ ] `B-242` **Followed links are most of the crawl and almost none of the evidence** (measured
       2026-10-24) — 84,366 of 97k kept sources came from followed links at 5.7% on a topic (10.3%
       in the latest week, after the gates), against search 42.6% and cited papers 40.6%. The crawl
       falls back to links when directed work runs out (1,009 queries in all, never repeated but
       news). Cap followed links' share of claims, and give the cap's slots to feeds (`B-243`),
       news (`B-244`) and cited papers
-- [ ] `B-243` **Feeds: news rooms and press releases polled as they publish** — no RSS/Atom support;
+- [-] `B-243` folded into `B-249` (feeds are one kind of watched source). **Feeds: news rooms and press releases polled as they publish** — no RSS/Atom support;
       news arrives a median 57 days after publication. A `feed` task: feeds per topic set in
       Admin, discovered on proven hosts (`<link rel="alternate">`), polled hourly with
       ETag/Last-Modified (the columns exist), entries through the prefilter

@@ -13,6 +13,25 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-10-24 (late) — experiments and their traps.** Artefacts in
+> `meridian-calibration/2026-10-24/` (README there).
+> - **Comparing models on synthesis:** `tagcmp/pull.py` builds the real extract and tag prompts
+>   inside the orchestrator image (read-only); `local.py` sends them to any OpenAI-compatible
+>   server exactly as `provider.py` does; `compare.py` runs Meridian's own parsers. A blind judge
+>   then grades each relation against its cited passages. Lemonade on this machine
+>   (`localhost:13305`) serves current GGUF models on the iGPU; a 12k-token prompt took 4–8 min.
+> - **Graded retrieval:** `rerank/` grades every top-10 slot, so nDCG has no gaps; search caps
+>   the fused pool near 100. The scripts run in `meridian-local-embedder-rocm` with
+>   `--device /dev/kfd --device /dev/dri`, `HSA_OVERRIDE_GFX_VERSION=11.0.0`, and the host HF cache
+>   as `HF_HOME`.
+> - **llama.cpp parity:** `~/.local/bin/llama serve -hf <repo>:<tag> --embedding|--reranking`;
+>   the tag is the file's (`FP16`, not `F16`). Stop a server by its port, not `pkill -f`: the
+>   pattern matches the shell running it, which killed the session's shell once.
+> - **GDELT** allows one request per 5 s and penalises bursts for minutes; `OR` terms need
+>   parentheses. Its Singapore coverage looked thin (one outlet in a 250-article sample).
+> - **A `pgrep -f` waiter matches its own command line** if the pattern appears in it: the queued
+>   batch never started. Wait on a PID or a file instead.
+
 > **2026-10-24 — `v0.174.5`–`v0.176.1`: a GPU machine that is not always on.** Traps and findings:
 > - **A machine that is off behind a router never refuses.** Same subnet, a connect fails in
 >   ~3 s (ARP); off-subnet or over a VPN the packets are dropped and a connect waits for the
