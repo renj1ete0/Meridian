@@ -1861,7 +1861,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
-- [ ] `B-222` **A remote-only backfill walks the whole backlog when the GPU box is off**
+- [x] `B-222` `v0.174.5`, run against an absent LAN address 2026-10-24: one request, then quiet probes. **A remote-only backfill walks the whole backlog when the GPU box is off**
       (deploy review 2026-10-24) — each failed batch logs a traceback and the pass steps to the
       next, one doomed request per batch. Stop the pass at the first outage, then wait for the
       sidecar's `/health` with a backoff before drawing another batch
