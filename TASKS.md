@@ -1931,6 +1931,20 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-241` **Answer groups by country on questions about no place** (review) — "United States 85
       strong" on a question about crash reduction reads as a verdict. Group by place only when
       the question names one; "well-sourced / few sources" rather than strong/thin
+- [ ] `B-242` **Followed links are most of the crawl and almost none of the evidence** (measured
+      2026-10-24) — 84,366 of 97k kept sources came from followed links at 5.7% on a topic (10.3%
+      in the latest week, after the gates), against search 42.6% and cited papers 40.6%. The crawl
+      falls back to links when directed work runs out (1,009 queries in all, never repeated but
+      news). Cap followed links' share of claims, and give the cap's slots to feeds (`B-243`),
+      news (`B-244`) and cited papers
+- [ ] `B-243` **Feeds: news rooms and press releases polled as they publish** — no RSS/Atom support;
+      news arrives a median 57 days after publication. A `feed` task: feeds per topic set in
+      Admin, discovered on proven hosts (`<link rel="alternate">`), polled hourly with
+      ETag/Last-Modified (the columns exist), entries through the prefilter
+- [ ] `B-244` **News search asks for recent news** — `!news` queries carry no time range, so SearXNG
+      returns news of any age by relevance, and repeat every 3 days. A day/week `time_range`,
+      a daily repeat, and GDELT's free DOC API (keyword per topic, articles from the last hours,
+      many languages) as a second news source
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published
