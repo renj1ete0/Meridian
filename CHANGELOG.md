@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.176.0] — 2026-10-24
+
+### Added
+
+- `B-228`: `GET /api/admin/status` reports the embedding service and each enabled local model
+  as asked just now (configured, up, model, why not), with the embedding backlog
+
 ## [0.175.0] — 2026-10-24
 
 ### Added

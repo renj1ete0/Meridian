@@ -1880,10 +1880,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       Needs the operator first: whether the machine supports and wants WoL (§11.7 assumed a box
       in daily use), and the LAN's shape, since a broadcast does not leave a bridged container
       and the egress rules drop it; a directed broadcast, a host helper or the router's relay
-- [ ] `B-228` **An admin status route** — `/api/admin/status`: the embedder (configured, up,
-      model, loaded) and each enabled local model (up, last checked), plus the embedding and
-      synthesis backlogs. Admin-only, since it names LAN addresses; the public `/health` stays
-      liveness
+- [x] `B-228` `v0.176.0`. **An admin status route** — `GET /api/admin/status`: the embedder
+      (configured, up, model, loaded) and each enabled local model (probed, up, why not), with
+      the embedding backlog. Admin-only, since a reason can name a LAN machine. The synthesis
+      backlog is left out: it is computed in the worker package. Not yet on an Admin screen
 - [ ] `B-225` **The GPU node runs the local model too** — `deploy/embedder-node/` gains an
       optional llama.cpp server beside the embedder, so the GPU machine is one `up -d`
 - [ ] `B-226` **Podman on Fedora** — Quadlet units (or compose on the podman socket), `podman

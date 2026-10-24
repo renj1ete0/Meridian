@@ -457,6 +457,8 @@ API, the orchestrator and the MCP tools share one shape that cannot drift.
   `key_present` is read from the environment the API sees, because a screen that cannot tell a
   configured agent from an unconfigured one is how somebody enables an agent and waits a day to
   learn it never answered.
+- **`StatusRead` (`B-228`) keeps "not configured" apart from "down"** (`configured` and `up`),
+  and a local model with no health check as `probed: false` with `up: null`, never as up.
 - **First run is "no sources yet", not "no seeds yet"**: `make seed` queues seeds at first boot,
   so a fresh install always has them. The setup screen lists the cold-start seeds still pending,
   since §16 calls cold-start seed quality worth an evening, and shows how many are already

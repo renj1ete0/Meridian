@@ -176,6 +176,8 @@ Without `PG_GUEST_URL` the tools that need it are absent rather than failing at 
   models, endpoints and task types are deployment configuration.
 - **Runs** are listed with counters, not a verdict: "successful" would hide the run that wrote
   nothing.
+- **Dependency status** (`B-228`) is read here, not on `/health`, because it can name LAN
+  machines. See [operations.md](operations.md#dependency-status).
 - **Steering from the map** (`P6-35`) writes through existing steering (a boost with an expiry,
   a search, a saved view), so it is reversible and logged, and refuses in words.
 - **Asking the graph** is here because it writes a thread and spends tokens.

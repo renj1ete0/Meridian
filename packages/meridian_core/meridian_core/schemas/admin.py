@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
-from .enums import DomainStatus, GazetteerEntityType, TaskType, TopicStatus
+from .enums import AgentAvailability, DomainStatus, GazetteerEntityType, TaskType, TopicStatus
 from .gazetteer import GazetteerTermRead
 from .queue import QueueTaskRead
 
@@ -335,6 +335,45 @@ class AgentsRead(BaseModel):
     #: undeclared one is a stage that defers every run — and the registry looks
     #: fine, because the absence is between rows rather than in one.
     unserved_tasks: list[str] = Field(default_factory=list)
+
+
+class EmbedderStatusRead(BaseModel):
+    """The embedding service as asked just now (`B-228`)."""
+
+    #: ``MERIDIAN_EMBEDDER_URL`` is set. Unset is a deployment choice: words-only search.
+    configured: bool
+    #: It answered its health check. None when not configured.
+    up: bool | None = None
+    model: str | None = None
+    #: The weights are resident; up and not loaded is still starting, or never asked.
+    loaded: bool | None = None
+    rerank_model: str | None = None
+
+
+class LocalModelStatusRead(BaseModel):
+    """One enabled model on a machine that is not always on (`B-228`)."""
+
+    agent_id: str
+    availability: AgentAvailability
+    #: A health check is configured. Without one the call is the only check.
+    probed: bool
+    #: None when not probed.
+    up: bool | None = None
+    #: Why it is not up, or why it was not probed.
+    reason: str | None = None
+
+
+class StatusRead(BaseModel):
+    """What the stack depends on beyond itself, asked now (`B-228`).
+
+    Admin-only, unlike the public `/health`, because the reasons can name LAN machines.
+    """
+
+    checked_at: dt.datetime
+    embedder: EmbedderStatusRead
+    local_models: list[LocalModelStatusRead] = Field(default_factory=list)
+    #: Passages waiting for a vector; grows while the embedder is down.
+    embedding_backlog: int
 
 
 class AgentEdit(BaseModel):

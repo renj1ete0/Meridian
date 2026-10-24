@@ -8,6 +8,7 @@ See docs/features/api-and-access.md#admin-routes.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import os
 from typing import Annotated, Literal
@@ -19,6 +20,8 @@ from sqlalchemy import func, select
 from meridian_core import annotations, chat, duplicates, mapsteer, steering
 from meridian_core.areaview import AreaNotFound
 from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
+from meridian_core.chunks import embedding_backlog
+from meridian_core.embedder import RemoteEmbedder
 from meridian_core.gazetteer import loading_report
 from meridian_core.logging import get_logger
 from meridian_core.models import (
@@ -40,6 +43,7 @@ from meridian_core.policy import (
     learned_render_js,
     merge_layers,
 )
+from meridian_core.provider import has_probe, not_up
 from meridian_core.queueing import enqueue
 from meridian_core.routing import TASK_TYPES
 from meridian_core.schemas.admin import (
@@ -48,6 +52,7 @@ from meridian_core.schemas.admin import (
     AgentsRead,
     BudgetEdit,
     BudgetRead,
+    EmbedderStatusRead,
     FetchPolicyEdit,
     FetchPolicyPage,
     FetchPolicyRowRead,
@@ -57,9 +62,11 @@ from meridian_core.schemas.admin import (
     GazetteerQueueRead,
     GazetteerRowRead,
     GazetteerTermEdit,
+    LocalModelStatusRead,
     RunRowRead,
     RunsRead,
     SeedCreate,
+    StatusRead,
     SteeringLogPage,
     TopicAdd,
     TopicEdit,
@@ -1224,6 +1231,57 @@ async def edit_agent(
         await sess.flush()
     await sess.commit()
     return await list_agents(_, sess)
+
+
+async def _embedder_status() -> EmbedderStatusRead:
+    client = RemoteEmbedder.from_env()
+    if client is None:
+        return EmbedderStatusRead(configured=False)
+    try:
+        described = await client.describe()
+    finally:
+        await client.aclose()
+    if described is None:
+        return EmbedderStatusRead(configured=True, up=False)
+    return EmbedderStatusRead(
+        configured=True,
+        up=True,
+        model=described.get("model"),
+        loaded=bool(described.get("loaded")),
+        rerank_model=described.get("rerank_model"),
+    )
+
+
+async def _model_status(agent: Agent) -> LocalModelStatusRead:
+    base = {"agent_id": agent.agent_id, "availability": agent.availability}
+    if not has_probe(agent):
+        return LocalModelStatusRead(**base, probed=False, reason="no health check configured")
+    reason = await not_up(agent)
+    return LocalModelStatusRead(**base, probed=True, up=reason is None, reason=reason)
+
+
+@router.get("/status", response_model=StatusRead)
+async def status(_: AdminAllowed, sess: WriteSession) -> StatusRead:
+    """The embedder and each enabled local model, asked now, and the embedding backlog.
+
+    The probes run together, each bounded by its own short timeouts (`B-223`, `B-224`).
+    See docs/features/operations.md#dependency-status.
+    """
+    agents = [
+        agent
+        for agent in await sess.scalars(select(Agent).where(Agent.enabled).order_by(Agent.agent_id))
+        if agent.provider == "openai_compatible" and agent.availability != "always"
+    ]
+    backlog = await embedding_backlog(sess)
+    embedder, *models = await asyncio.gather(
+        _embedder_status(), *(_model_status(agent) for agent in agents)
+    )
+    return StatusRead(
+        checked_at=dt.datetime.now(dt.UTC),
+        embedder=embedder,
+        local_models=models,
+        embedding_backlog=backlog,
+    )
 
 
 @router.get("/runs", response_model=RunsRead)

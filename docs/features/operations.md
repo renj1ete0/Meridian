@@ -177,6 +177,23 @@ a lock).
 - **The threshold is generous**: one fetch can take a minute against a slow origin, and a probe
   that fires during normal work trains its reader to ignore it.
 
+### Dependency status
+
+`GET /api/admin/status` (`B-228`) answers "is the GPU machine on, and is anything waiting for
+it?" It asks the embedding service's `/health` and probes every enabled local model whose
+availability is not `always`, together, and reports the embedding backlog.
+
+- **Admin-only.** The public `/health` stays liveness plus the database; a reason here can name
+  a machine on the LAN, and the route sits behind the same gate as every write.
+- **Not configured is not down.** An unset `MERIDIAN_EMBEDDER_URL` is a deployment choice
+  (words-only search) and reports `configured: false`; set and silent is `up: false`.
+- **A local model without a health check is listed as not probed**, rather than up: the call is
+  its only check, and claiming more would be a guess.
+- **It is quick when the machine is off**: each probe connects within 3 s (`B-223`, `B-224`), and
+  a model remembered as down is reported without asking again.
+- The synthesis backlog is not here: it is computed in the worker package, which the API does
+  not import. The run log and Admin → Runs carry it.
+
 ### Crawl health
 
 `crawlhealth.py` (`P6-25`). `/progress` answers "is anything happening" for a fresh install's
