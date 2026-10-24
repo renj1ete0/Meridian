@@ -1861,6 +1861,22 @@ deploy runbook whose first two commands could not work (`B-17`).
       each stored PDF's raw file again and replaces its passages only where a table is placed;
       cited sources, changed files and OCR text are left alone, and unchanged passages keep their
       vectors. Tick when the run has finished and a report shows nothing left to change
+- [ ] `B-222` **A remote-only backfill walks the whole backlog when the GPU box is off**
+      (deploy review 2026-10-24) — each failed batch logs a traceback and the pass steps to the
+      next, one doomed request per batch. Stop the pass at the first outage, then wait for the
+      sidecar's `/health` with a backoff before drawing another batch
+- [ ] `B-223` **An embedder that is off costs a reader the whole timeout** — one httpx timeout
+      covers connect as well as read, so a search waits up to 30 s (a batch up to ~500 s) on a
+      powered-off host. A short connect timeout, and the read path remembers "down" briefly
+- [ ] `B-224` **Agents' `health_url`, `availability` and `wake_mac` are stored and never read** —
+      a local model on another machine is found down only by a real call. Probe `health_url`
+      before routing to it, wake it on a backlog when `wake_mac` is set, and an admin-only
+      status route (embedder and local models: up, last seen; backlog)
+- [ ] `B-225` **The GPU node runs the local model too** — `deploy/embedder-node/` gains an
+      optional llama.cpp server beside the embedder, so the GPU machine is one `up -d`
+- [ ] `B-226` **Podman on Fedora** — Quadlet units (or compose on the podman socket), `podman
+      auto-update` for Watchtower, SELinux labels on bind mounts, rootful so the egress rules
+      match; a deploy guide. Needs the mini PC's size and OS from the operator
 - [ ] `B-221` **Map circles overlap at the field level** (UX sweep 2026-10-11) — at 1440×900,
       Data, Mathematics, Social Sciences and Transportation overlap, and their "N subfields
       inside" lines run under neighbours and under the solid links. Check the layout's
