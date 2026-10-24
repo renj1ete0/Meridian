@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from meridian_core.db import Role, normalize_url
+from meridian_core.embedder import forget_outages
 from meridian_core.netguard import IPAddress
 from meridian_core.policy import ResolvedPolicy
 
@@ -34,6 +35,12 @@ DEV_URLS = {
 def _url(role: str) -> str:
     env = {"rw": "PG_RW_URL", "ro": "PG_RO_URL", "owner": "PG_MIGRATION_URL"}[role]
     return normalize_url(os.environ.get(env) or DEV_URLS[role])
+
+
+@pytest.fixture(autouse=True)
+def _no_remembered_outages() -> None:
+    """An embedder outage one test simulates must not refuse the next test's calls."""
+    forget_outages()
 
 
 async def _reachable() -> bool:

@@ -1865,7 +1865,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       (deploy review 2026-10-24) — each failed batch logs a traceback and the pass steps to the
       next, one doomed request per batch. Stop the pass at the first outage, then wait for the
       sidecar's `/health` with a backoff before drawing another batch
-- [ ] `B-223` **An embedder that is off costs a reader the whole timeout** — one httpx timeout
+- [x] `B-223` `v0.174.6`; measured on a dropping address: first search 3.05 s, then 0.00 s (was 30 s each). **An embedder that is off costs a reader the whole timeout** — one httpx timeout
       covers connect as well as read, so a search waits up to 30 s (a batch up to ~500 s) on a
       powered-off host. A short connect timeout, and the read path remembers "down" briefly
 - [ ] `B-224` **Agents' `health_url`, `availability` and `wake_mac` are stored and never read** —

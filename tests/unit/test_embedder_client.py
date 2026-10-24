@@ -331,3 +331,166 @@ async def test_the_client_sends_the_token_from_the_environment(monkeypatch) -> N
     await bare.embed(["a"])
 
     assert seen == ["Bearer s3cret", None]
+
+
+# --------------------------------------------------------------------------
+# A machine that is switched off (`B-223`)
+# --------------------------------------------------------------------------
+
+
+def refusing(calls: list[str], exc: type[httpx.HTTPError] = httpx.ConnectError):
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        raise exc("no route to host", request=request)
+
+    return handler
+
+
+@pytest.mark.parametrize(
+    ("call", "read_s"),
+    [
+        (lambda e: e.embed(["a", "b"]), max(30.0, 2 * SECONDS_PER_TEXT)),
+        (lambda e: e.rerank("q", ["a"]), 60.0),
+        (lambda e: e.describe(), 5.0),
+    ],
+)
+async def test_every_call_waits_briefly_for_a_connection_and_long_for_an_answer(
+    call, read_s
+) -> None:
+    """One timeout for both made a search wait all 30 s on a host that never refuses."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions["timeout"])
+        return httpx.Response(200, json={**vectors(2), "scores": [0.5]})
+
+    embedder = RemoteEmbedder(URL, client=responder(handler), connect_timeout_s=3.0)
+    await call(embedder)
+
+    assert seen[0]["connect"] == 3.0
+    assert seen[0]["read"] == read_s
+
+
+async def test_a_refused_connection_is_remembered_across_clients() -> None:
+    """The API opens a client per search, so the memory cannot live on the instance."""
+    calls: list[str] = []
+    first = RemoteEmbedder(URL, client=responder(refusing(calls)))
+    with pytest.raises(EmbeddingUnavailable):
+        await first.embed_one("q")
+
+    second = RemoteEmbedder(URL, client=responder(refusing(calls)))
+    with pytest.raises(EmbeddingUnavailable, match="not asked again"):
+        await second.embed_one("q")
+    with pytest.raises(EmbeddingUnavailable, match="not asked again"):
+        await second.rerank("q", ["a"])
+
+    assert calls == ["/embed"], "a remembered outage still went to the network"
+
+
+async def test_an_outage_is_remembered_per_sidecar() -> None:
+    calls: list[str] = []
+    with pytest.raises(EmbeddingUnavailable):
+        await RemoteEmbedder(URL, client=responder(refusing(calls))).embed_one("q")
+
+    other = RemoteEmbedder(
+        "http://other.test", client=responder(lambda r: httpx.Response(200, json=vectors(1)))
+    )
+    assert len(await other.embed_one("q")) == 4
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        lambda r: httpx.Response(500, json={}),
+        lambda r: (_ for _ in ()).throw(httpx.ReadTimeout("slow", request=r)),
+    ],
+    ids=["error status", "slow answer"],
+)
+async def test_a_sidecar_that_answers_badly_is_not_remembered_as_down(answer) -> None:
+    """A slow GPU or a 500 is a machine that is on; refusing the next search would hide it."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return answer(request)
+
+    embedder = RemoteEmbedder(URL, client=responder(handler))
+    for _ in range(2):
+        with pytest.raises(EmbeddingUnavailable):
+            await embedder.embed_one("q")
+    assert calls == ["/embed", "/embed"]
+
+
+async def test_the_health_probe_is_asked_while_down_and_brings_it_back() -> None:
+    """The probe is how the backfill learns the machine is on again (`B-222`)."""
+    calls: list[str] = []
+    with pytest.raises(EmbeddingUnavailable):
+        await RemoteEmbedder(URL, client=responder(refusing(calls))).embed_one("q")
+
+    def up(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok", "model": "bge-m3"})
+        return httpx.Response(200, json=vectors(1))
+
+    back = RemoteEmbedder(URL, client=responder(up))
+    assert await back.healthy() is True
+    assert len(await back.embed_one("q")) == 4
+    assert calls == ["/embed", "/health", "/embed"]
+
+
+async def test_a_failed_health_probe_keeps_it_down() -> None:
+    calls: list[str] = []
+    embedder = RemoteEmbedder(URL, client=responder(refusing(calls, httpx.ConnectTimeout)))
+    assert await embedder.healthy() is False
+    with pytest.raises(EmbeddingUnavailable, match="not asked again"):
+        await embedder.embed_one("q")
+    assert calls == ["/health"]
+
+
+async def test_the_memory_expires(monkeypatch) -> None:
+    import meridian_core.embedder as module
+
+    now = [1000.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    calls: list[str] = []
+    embedder = RemoteEmbedder(URL, client=responder(refusing(calls)), down_for_s=30.0)
+    with pytest.raises(EmbeddingUnavailable):
+        await embedder.embed_one("q")
+    now[0] += 29.0
+    with pytest.raises(EmbeddingUnavailable, match="not asked again for 1 s"):
+        await embedder.embed_one("q")
+    now[0] += 2.0
+    with pytest.raises(EmbeddingUnavailable):
+        await embedder.embed_one("q")
+    assert calls == ["/embed", "/embed"]
+
+
+async def test_a_zero_window_turns_the_memory_off() -> None:
+    calls: list[str] = []
+    embedder = RemoteEmbedder(URL, client=responder(refusing(calls)), down_for_s=0)
+    for _ in range(2):
+        with pytest.raises(EmbeddingUnavailable):
+            await embedder.embed_one("q")
+    assert calls == ["/embed", "/embed"]
+
+
+def test_both_settings_are_read_from_the_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_URL", URL)
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_CONNECT_TIMEOUT_S", "1.5")
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_DOWN_FOR_S", "90")
+    embedder = RemoteEmbedder.from_env()
+    assert embedder._connect_timeout == 1.5
+    assert embedder._down_for == 90.0
+
+
+async def test_a_connect_timeout_above_the_read_timeout_is_capped_by_it() -> None:
+    """httpx would otherwise wait longer to connect than the caller allowed in all."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions["timeout"])
+        return httpx.Response(200, json={"status": "ok"})
+
+    await RemoteEmbedder(URL, client=responder(handler), connect_timeout_s=60.0).describe()
+    assert seen[0]["connect"] == 5.0

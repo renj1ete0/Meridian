@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.6] — 2026-10-24
+
+### Fixed
+
+- `B-223`: a search no longer waits the whole 30 s timeout when the embedding service's machine
+  is switched off. Connecting has its own 3 s timeout, and a refused connection is remembered
+  for 30 s, so the searches after it fall back to words at once
+
 ## [0.174.5] — 2026-10-24
 
 ### Fixed

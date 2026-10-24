@@ -61,6 +61,8 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `MERIDIAN_EMBEDDER_URL` | unset | The embedding service; unset means lexical-only search |
 | `MERIDIAN_EMBEDDER_TOKEN` | unset | Shared secret when the service is on another machine |
 | `MERIDIAN_EMBEDDER_TIMEOUT_S` | 30 | Query timeout (batch calls scale it by size) |
+| `MERIDIAN_EMBEDDER_CONNECT_TIMEOUT_S` | 3 | How long to wait for the sidecar's machine to accept a connection (`B-223`) |
+| `MERIDIAN_EMBEDDER_DOWN_FOR_S` | 30 | After a refused connection, how long nothing in the process asks again; 0 is off (`B-223`) |
 | `MERIDIAN_EMBEDDER_HOST`, `MERIDIAN_EMBEDDER_PORT` | `0.0.0.0`, 8100 | Where the service listens |
 | `MERIDIAN_EMBEDDER_WAIT_S` | 180 | How long the backfill waits for the service at start-up |
 | `MERIDIAN_EMBED_MODEL` | `BAAI/bge-m3` | Model name; client and service must agree |

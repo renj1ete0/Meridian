@@ -321,6 +321,18 @@ for days. `B-222` makes that a wait, not a stream of failures.
 - **The wait beats the heartbeat**, so the container stays healthy while it waits: waiting
   for the GPU machine is the job. The backlog alert is what says vectors are behind.
 - **A stop during the wait is honoured at once**, not after the current ten minutes.
+- **Connecting has its own short timeout** (`B-223`, `MERIDIAN_EMBEDDER_CONNECT_TIMEOUT_S`, 3 s).
+  A machine that is off on the same subnet is refused in about 3 s, but one behind a router or
+  a VPN never refuses: the packets are dropped, and with one timeout for connect and read a
+  search waited all 30 s (measured 45 s with no timeout at all). The read timeout is unchanged,
+  since a busy GPU answering slowly is a machine that is on.
+- **A refused connection is remembered for 30 s** (`MERIDIAN_EMBEDDER_DOWN_FOR_S`), by URL and
+  across clients, because the API opens one per search. While it lasts, `/embed` and
+  `/rerank` fail at once and search reports words only. Only a refused or timed-out
+  connection counts; an error status or a slow answer does not. `/health` is always asked,
+  and an answer clears the memory, which is how the backfill's probe brings the machine back.
+  Measured against an address that drops packets: the first search took 3.05 s, the next ones
+  0.00 s; before, 30 s each.
 
 ### Fetching the weights
 
