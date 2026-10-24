@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from meridian_core.db import dispose_engines
 from meridian_core.models import Agent
@@ -33,8 +33,14 @@ async def rows(session_for):
     yield {a.agent_id: a for a in agents}
     # `local_models_up` opens the shared engine inside this test's loop.
     await dispose_engines()
-    for agent in agents:
-        agent.enabled, agent.health_url = before[agent.agent_id]
+    # By statement, not through these objects: a test edits the rows in its own session,
+    # and assigning a value this session still believes is current writes nothing.
+    for agent_id, (enabled, health_url) in before.items():
+        await sess.execute(
+            update(Agent)
+            .where(Agent.agent_id == agent_id)
+            .values(enabled=enabled, health_url=health_url)
+        )
     await sess.commit()
 
 
