@@ -55,6 +55,21 @@ def test_the_mcp_block_comes_before_the_catch_all() -> None:
     assert NGINX.index("location /mcp") < NGINX.index("location / {")
 
 
+def test_health_and_discovery_reach_the_api_through_the_app() -> None:
+    """`B-231`: one hostname at `web` must still answer `/health` and MCP discovery.
+
+    Both fell through to the single-page app, which answers 200 with index.html: a
+    watchdog read that as healthy, and a client found no authorization server.
+    """
+    for path in ("= /health", "/.well-known/"):
+        block = _block(path)
+        assert "proxy_pass http://api:8000;" in block, path
+        assert "proxy_set_header Host $host;" in block, (
+            f"{path}: MCP checks the host it is called by"
+        )
+        assert NGINX.index(f"location {path}") < NGINX.index("location / {"), path
+
+
 def test_publishing_puts_web_on_a_network_with_a_gateway() -> None:
     """`B-18`: a port on a container that is only on an `internal` network publishes nothing."""
     web = _override()["services"]["web"]

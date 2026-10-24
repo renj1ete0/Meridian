@@ -492,10 +492,16 @@ And the authentication, which is the half worth reading before you open a port:
 
 `cloudflared` is already in `docker-compose.yml` and needs a token.
 
+Cloudflare's free Zero Trust plan covers the tunnel and Access (up to 50 users); the hostname
+must be on a domain whose DNS is on Cloudflare.
+
 1. Cloudflare Zero Trust → **Networks → Tunnels** → create a tunnel, copy the
    token into `CLOUDFLARE_TUNNEL_TOKEN` in `.env`
-2. Add a **public hostname** on that tunnel: your hostname → `http://api:8000`
-3. `docker compose up -d cloudflared api`
+2. Add a **public hostname** on that tunnel: your hostname → `http://web:8080`. One hostname
+   serves the app, `/api`, `/mcp`, `/health` and the MCP sign-in discovery, because nginx in
+   `web` forwards all but the app to the API (`B-231`). Pointed at `api:8000` instead, there is
+   no web app; that was this step until `B-231`.
+3. `docker compose up -d cloudflared api web`
 
 ### 8b. Put Access in front of it
 
@@ -504,6 +510,11 @@ And the authentication, which is the half worth reading before you open a port:
 5. Add a policy — email-based is enough to start; one-time PIN needs no identity
    provider
 6. Copy the application's **AUD tag** (Overview tab)
+7. Add a second self-hosted application on the same hostname for two paths, `/health` and
+   `/.well-known/oauth-protected-resource/mcp`, with a **Bypass** policy (Everyone). A watchdog
+   cannot sign in, and the discovery document is what tells an assistant where to sign in, so
+   behind Access it could never be read. Both disclose nothing about the corpus, and the API
+   exempts exactly these two paths from its own check.
 
 ### 8c. Tell Meridian
 
@@ -535,6 +546,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<your-hostname>/api/explore/sta
 
 # Must SUCCEED — health bypasses Access so the watchdog can reach it
 curl -s https://<your-hostname>/health
+
+# Must SUCCEED — the MCP discovery document, naming your team as the authorization server
+curl -s https://<your-hostname>/.well-known/oauth-protected-resource/mcp
 
 # Must FAIL — a forged identity header must not be believed
 curl -s -o /dev/null -w '%{http_code}\n' \

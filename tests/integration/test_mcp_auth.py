@@ -306,6 +306,71 @@ def test_anonymous_mode_advertises_no_authentication(monkeypatch) -> None:
     assert not any(".well-known" in path for path in routes)
 
 
+async def _advertised_and_served(app) -> tuple[str, int, dict]:
+    """The metadata URL a 401 names, and what the app answers at that path."""
+    import urllib.parse
+
+    import httpx
+
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            refused = await client.post(
+                "/mcp/",
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                headers={"accept": "application/json, text/event-stream"},
+            )
+            assert refused.status_code == 401
+            header = refused.headers["www-authenticate"]
+            url = header.split('resource_metadata="', 1)[1].split('"', 1)[0]
+            served = await client.get(urllib.parse.urlsplit(url).path)
+    return url, served.status_code, served.json() if served.status_code == 200 else {}
+
+
+async def test_the_metadata_a_refusal_points_to_is_served_there(monkeypatch) -> None:
+    """`B-231`: the 401 named `/.well-known/oauth-protected-resource/mcp` at the root, and the
+    app served it only below the `/mcp` mount, so a client following the header got a 404."""
+    from api.main import create_app
+
+    monkeypatch.setenv("MERIDIAN_MCP_ALLOW_ANONYMOUS", "")
+    monkeypatch.setenv("MERIDIAN_MCP_ISSUER_URL", "https://team.cloudflareaccess.com")
+    monkeypatch.setenv("MERIDIAN_MCP_RESOURCE_URL", "https://meridian.example.test/mcp")
+    monkeypatch.setenv("MERIDIAN_MCP_ALLOWED_HOSTS", "localhost")
+    monkeypatch.delenv("CF_ACCESS_TEAM_DOMAIN", raising=False)
+
+    url, status, body = await _advertised_and_served(create_app())
+
+    assert url == "https://meridian.example.test/.well-known/oauth-protected-resource/mcp"
+    assert status == 200
+    assert body["resource"] == "https://meridian.example.test/mcp"
+    assert [s.rstrip("/") for s in body["authorization_servers"]] == [
+        "https://team.cloudflareaccess.com"
+    ]
+
+
+async def test_the_metadata_is_readable_before_signing_in_behind_access(monkeypatch) -> None:
+    """It says where to sign in, so Access must not demand a sign-in to read it; the
+    corpus stays behind Access."""
+    import httpx
+
+    from api.main import create_app
+
+    monkeypatch.setenv("MERIDIAN_MCP_ALLOW_ANONYMOUS", "")
+    monkeypatch.setenv("MERIDIAN_MCP_ISSUER_URL", "https://team.cloudflareaccess.com")
+    monkeypatch.setenv("MERIDIAN_MCP_RESOURCE_URL", "https://meridian.example.test/mcp")
+    monkeypatch.setenv("CF_ACCESS_TEAM_DOMAIN", "team.cloudflareaccess.com")
+    monkeypatch.setenv("CF_ACCESS_AUD", "an-audience")
+    app = create_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        metadata = await client.get("/.well-known/oauth-protected-resource/mcp")
+        corpus = await client.get("/api/explore/stats")
+
+    assert metadata.status_code == 200
+    assert corpus.status_code in {401, 403}
+
+
 # --------------------------------------------------------------------------
 # A token works with no MCP URLs configured (`B-138`)
 # --------------------------------------------------------------------------

@@ -178,8 +178,9 @@ def test_the_unprotected_set_is_small_and_explicit() -> None:
     """A prefix would exempt every route added under it later, and nobody
     revisits an exemption when adding a route. `/health` is exempt because a
     watchdog cannot complete an SSO flow, and it discloses nothing about the
-    corpus by design."""
-    assert {"/health"} == UNPROTECTED
+    corpus by design. The MCP metadata is exempt because it says where to sign in
+    (`B-231`), and names only public URLs."""
+    assert {"/health", "/.well-known/oauth-protected-resource/mcp"} == UNPROTECTED
 
 
 def test_the_header_name_is_cloudflares() -> None:

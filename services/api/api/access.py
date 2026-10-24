@@ -26,7 +26,14 @@ ASSERTION_HEADER = "Cf-Access-Jwt-Assertion"
 #: Paths served without an assertion. Deliberately a small, explicit set rather
 #: than a prefix match — a prefix exempts everything added under it later, and
 #: nobody revisits the exemption when they add a route.
-UNPROTECTED = frozenset({"/health"})
+UNPROTECTED = frozenset(
+    {
+        "/health",
+        # The MCP surface's protected-resource metadata (`B-231`, RFC 9728): it says where
+        # to sign in, so it must be readable before signing in.
+        "/.well-known/oauth-protected-resource/mcp",
+    }
+)
 
 ALGORITHMS = ["RS256"]
 

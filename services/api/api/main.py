@@ -189,17 +189,21 @@ def create_app() -> FastAPI:
     # layer (§11.1b). Authentication is `P3-03`; see docs/features/mcp.md.
     mcp = build_mcp(version=os.environ.get("MERIDIAN_VERSION", "0"), **mcp_auth())
     app.state.mcp = mcp
-    app.mount(
-        MCP_PATH,
+    mcp_app = mcp.streamable_http_app(
         # `streamable_http_path="/"`: the default, mounted at `/mcp`, would publish
         # `/mcp/mcp`.
-        mcp.streamable_http_app(
-            streamable_http_path="/",
-            # DNS-rebinding protection, off by default in the SDK and needed behind
-            # a tunnel (`P3-05`).
-            transport_security=transport_security(),
-        ),
+        streamable_http_path="/",
+        # DNS-rebinding protection, off by default in the SDK and needed behind
+        # a tunnel (`P3-05`).
+        transport_security=transport_security(),
     )
+    app.mount(MCP_PATH, mcp_app)
+    # The protected-resource metadata at the origin's root as well (`B-231`). RFC 9728 puts
+    # it at `/.well-known/oauth-protected-resource/mcp`, and the 401 names that URL; under
+    # the mount it answered only below `/mcp`, so a client discovered nothing.
+    for route in mcp_app.routes:
+        if getattr(route, "path", "").startswith("/.well-known/"):
+            app.router.routes.append(route)
 
     @app.exception_handler(RequestValidationError)
     async def readable_validation_error(request: Request, exc: RequestValidationError):

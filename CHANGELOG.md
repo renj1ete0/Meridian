@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.177.1] — 2026-10-24
+
+### Fixed
+
+- `B-231`: an assistant can discover where to sign in. The MCP protected-resource metadata is
+  served at the root path a 401 names (it answered only below `/mcp`), and is readable before
+  signing in behind Access. nginx forwards it and `/health`, so the tunnel points at `web` and one
+  hostname serves the app, the API and MCP; setup §8 says so, with the Access bypass for both paths
+
 ## [0.177.0] — 2026-10-24
 
 ### Added

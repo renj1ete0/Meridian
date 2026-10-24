@@ -1906,10 +1906,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       (seen on podman; the same on Docker). Drop everything from `lan` but `lan_allow`, once it is
       known which network the multi-network services (`orchestrator`, `scheduler`) take their
       default route through on each runtime, or they lose their hosted-model calls
-- [ ] `B-231` **One hostname for the app, the API and MCP behind Access** — setup §8a points the
-      tunnel at `api:8000`, which serves no web app; pointing it at `web:8080` loses `/health`
-      and the MCP discovery path (`/.well-known/oauth-protected-resource/mcp`), which nginx sends
-      to the SPA. Proxy both to the API, point the tunnel at `web`, and fix §8
+- [x] `B-231` `v0.177.1`; nginx run under podman (`/health` through `web`), discovery tests fail
+      on the old code. **One hostname for the app, the API and MCP behind Access** — the tunnel
+      pointed at `api:8000` (no web app), and the MCP discovery document a 401 names at the root
+      answered only below `/mcp`: no assistant could have found where to sign in. Served at the
+      root, exempt from Access, forwarded by nginx with `/health`; setup §8 rewritten
 - [ ] `B-221` **Map circles overlap at the field level** (UX sweep 2026-10-11) — at 1440×900,
       Data, Mathematics, Social Sciences and Transportation overlap, and their "N subfields
       inside" lines run under neighbours and under the solid links. Check the layout's

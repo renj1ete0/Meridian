@@ -114,6 +114,13 @@ The **guest role** (`P3-07`) exists because `meridian_ro` can read `agent_tokens
 every token hash, and so is the wrong role behind a query tool an external agent reaches.
 Without `PG_GUEST_URL` the tools that need it are absent rather than failing at call time.
 
+**Two paths are public** (`access.UNPROTECTED`): `/health`, for a watchdog, and the MCP surface's
+protected-resource metadata at `/.well-known/oauth-protected-resource/mcp` (`B-231`), which tells
+a client where to sign in and so cannot itself require it. The metadata is served at the root, as
+RFC 9728 places it and as the 401's `resource_metadata` names it; under the `/mcp` mount alone it
+answered only at `/mcp/.well-known/…`, and a client following the header found nothing. nginx in
+`web` forwards both, so one public hostname at `web` serves everything.
+
 ### Admin routes
 
 `/api/admin/*` (`P6-13`) is the only surface that changes anything.
