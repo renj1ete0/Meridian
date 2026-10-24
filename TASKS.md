@@ -1901,6 +1901,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       and the GPU node on Windows** — the same compose files: `deploy/podman/` (overlay, units,
       Butane), `deploy/embedder-node/podman-windows.yml` and `start-windows.ps1`, guide
       `docs/guides/deploy-podman.md`. Tick after a first boot on the mini PC
+- [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
+      re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
+      but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published
+      MMTEB retrieval is 54.6 (bge-m3) against 64.6 / 69.6 / 70.9 (Qwen3 0.6B / 4B / 8B). On the
+      3090: embed one topic's passages with Qwen3-Embedding-4B (MRL to 1024, so `Vector(1024)`
+      stays; query instruction prefix), compare top-50 recall on the graded questions and grade
+      what only one model finds. Re-embed only if recall gains; mind VRAM beside llama.cpp
 - [ ] `B-230` **The split overlay gives the API an internet route** (found running `B-226`) — on
       `internal` alone the API has none; the split overlay adds `lan`, an ordinary bridge, and the
       egress rules drop only private addresses from it, so `api` and `embed` reached github.com

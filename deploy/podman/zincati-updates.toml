@@ -1,0 +1,13 @@
+# When Fedora CoreOS may reboot into an update (`B-226`). Zincati, its update agent,
+# otherwise reboots as soon as an update is staged, at any hour. The stack comes back
+# by itself (meridian.service) and the worker drains its fetches on the way down, so a
+# weekly window costs a minute of crawling. Times are UTC: Sat 20:00 UTC is Sun 04:00
+# in Singapore. Change both to suit; `rpm-ostree status` shows what is staged.
+
+[updates]
+strategy = "periodic"
+
+[[updates.periodic.window]]
+days = [ "Sat" ]
+start_time = "20:00"
+length_minutes = 60

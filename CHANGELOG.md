@@ -91,6 +91,13 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.177.3] — 2026-10-24
+
+### Changed
+
+- `B-226`: Fedora CoreOS reboots into OS updates only in a weekly window (Zincati), and the GPU
+  node's example environment turns the reranker on, the measured gain in search quality
+
 ## [0.177.2] — 2026-10-24
 
 ### Changed

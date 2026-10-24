@@ -105,6 +105,16 @@ def test_the_compose_binary_is_pinned_and_verified(butane) -> None:
     assert version.lstrip("v") in GUIDE.read_text(), "the guide names a different version"
 
 
+def test_os_updates_reboot_only_in_a_window(butane) -> None:
+    """Unconfigured, Zincati reboots into an update whenever one is staged."""
+    import tomllib
+
+    entry = next(f for f in butane["storage"]["files"] if f["path"].startswith("/etc/zincati/"))
+    config = tomllib.loads((ROOT / "deploy" / entry["contents"]["local"]).read_text())
+    assert config["updates"]["strategy"] == "periodic"
+    assert config["updates"]["periodic"]["window"], "a periodic strategy with no window"
+
+
 def test_the_ssh_key_is_a_placeholder_rather_than_someone_elses(butane) -> None:
     keys = butane["passwd"]["users"][0]["ssh_authorized_keys"]
     assert all("REPLACE" in key for key in keys)

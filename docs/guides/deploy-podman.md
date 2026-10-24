@@ -107,6 +107,12 @@ anything else if the load stays above the core count.
 
 ### <a id="updates"></a>5. Updates
 
+**The operating system** updates itself (Zincati) and reboots only in a weekly window,
+Sunday 04:00 Singapore time (`deploy/podman/zincati-updates.toml`, in UTC). A bad update is
+rolled back with `sudo rpm-ostree rollback` and a reboot.
+
+**The stack:**
+
 `meridian-update.timer` runs hourly: `compose pull`, then `compose up -d`, which recreates only
 what changed. `migrate` is in the `autoupdate` profile, so a new tools image migrates first. An
 image that is built locally and in no registry fails its pull and is kept. `systemctl start
