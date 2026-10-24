@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.174.5] — 2026-10-24
+
+### Fixed
+
+- `B-222`: with the embedding model on another machine that is switched off, the backfill stops
+  its pass at the first failed request and waits for the machine with a doubling health probe,
+  instead of sending one request and logging one traceback per batch across the backlog
+
 ## [0.174.4] — 2026-10-11
 
 ### Fixed

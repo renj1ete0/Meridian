@@ -305,6 +305,23 @@ there is none to ask.
   ValueError, which reads as "unusable", so raising the batch for a GPU quietly moved embedding
   onto the backfill's CPU, or with remote-only failed every batch.
 
+### When the GPU machine is off
+
+With `MERIDIAN_EMBED_REMOTE_ONLY` the model lives on another machine, which may be switched off
+for days. `B-222` makes that a wait, not a stream of failures.
+
+- **An outage is not a bad batch.** A refused batch is counted and stepped past, so one bad
+  batch cannot stall the queue. An outage (the sidecar does not answer, or answers with another
+  model) raises `EmbedderOffline`, and the pass stops at that batch. Stepping on, as it used to,
+  sent one doomed request and logged one traceback per batch across the whole backlog, on every
+  pass.
+- **The loop then probes `/health`, not `/embed`**, waiting 30 s, then doubling to a ten-minute
+  ceiling. A machine off overnight costs a probe every ten minutes; one that has just booted is
+  noticed within a minute, after which the backlog drains newest first as usual.
+- **The wait beats the heartbeat**, so the container stays healthy while it waits: waiting
+  for the GPU machine is the job. The backlog alert is what says vectors are behind.
+- **A stop during the wait is honoured at once**, not after the current ten minutes.
+
 ### Fetching the weights
 
 The sidecar sits on `internal`, which has no gateway, DNS or route out, and the weights are not

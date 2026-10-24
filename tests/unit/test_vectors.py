@@ -18,7 +18,8 @@ import logging
 import pytest
 
 from meridian_core.embedder import EmbedderMismatch, EmbeddingUnavailable
-from worker.vectors import LocalEmbedder, PreferRemote, build_embedder
+from worker.embeddings import EmbeddingError
+from worker.vectors import EmbedderOffline, LocalEmbedder, PreferRemote, build_embedder
 
 
 class FakeLocal:
@@ -46,6 +47,9 @@ class FakeRemote:
 
     async def describe(self):
         return self.described
+
+    async def healthy(self):
+        return self.described is not None
 
     async def embed(self, texts):
         self.calls += 1
@@ -311,6 +315,48 @@ async def test_remote_only_fails_the_batch_instead_of_falling_back(failure) -> N
         await embedder.embed(["a"])
     assert FakeLocal.built == 0
     assert embedder.using_remote is True, "the next batch asks the sidecar again"
+
+
+@pytest.mark.parametrize("failure", [EmbeddingUnavailable("down"), EmbedderMismatch("other model")])
+async def test_remote_only_names_an_outage_as_offline(failure) -> None:
+    """`B-222`: the backfill stops its pass on this, so it must not be a plain failure."""
+    embedder = PreferRemote(FakeRemote(fail=failure), local_factory=FakeLocal, remote_only=True)
+    with pytest.raises(EmbedderOffline, match="unavailable"):
+        await embedder.embed(["a"])
+
+
+async def test_a_refused_batch_is_not_mistaken_for_an_outage() -> None:
+    """A bad batch is stepped past; calling it an outage would stall the whole backlog."""
+    embedder = PreferRemote(
+        FakeRemote(fail=ValueError("too many texts")), local_factory=FakeLocal, remote_only=True
+    )
+    with pytest.raises(EmbeddingError) as raised:
+        await embedder.embed(["a"])
+    assert not isinstance(raised.value, EmbedderOffline)
+
+
+@pytest.mark.parametrize(
+    ("described", "remote_only", "expected"),
+    [
+        ({"model": "m"}, True, True),
+        (None, True, False),
+        # A local fallback can always embed, whatever the sidecar says.
+        (None, False, True),
+    ],
+)
+async def test_availability_is_the_sidecars_health_only_when_nothing_else_may_embed(
+    described, remote_only, expected
+) -> None:
+    embedder = PreferRemote(
+        FakeRemote(described=described), local_factory=FakeLocal, remote_only=remote_only
+    )
+    assert await embedder.available() is expected
+    assert FakeLocal.built == 0, "a probe must not load the model"
+
+
+async def test_with_no_sidecar_the_local_model_is_always_available() -> None:
+    assert await PreferRemote(None, local_factory=FakeLocal).available() is True
+    assert await LocalEmbedder(object()).available() is True
 
 
 async def test_remote_only_with_no_sidecar_configured_is_refused(monkeypatch) -> None:

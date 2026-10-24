@@ -34,7 +34,7 @@ from meridian_core.logging import bind_run_id, configure_logging, get_logger
 
 from .embeddings import EmbeddingError
 from .liveness import beat
-from .vectors import AsyncEmbedder, build_embedder
+from .vectors import AsyncEmbedder, EmbedderOffline, build_embedder
 
 log = get_logger(__name__)
 
@@ -48,6 +48,12 @@ DEFAULT_CHUNK_BATCH = 256
 #: How long the loop waits when the backlog is empty.
 DEFAULT_IDLE_SLEEP_S = 60.0
 
+#: The first and the longest wait between health probes while the sidecar is off
+#: (`B-222`). Doubling between them: a machine that is off for the night costs a
+#: probe every ten minutes, and one that just rebooted is noticed within a minute.
+DEFAULT_OFFLINE_WAIT_S = 30.0
+DEFAULT_OFFLINE_WAIT_MAX_S = 600.0
+
 
 @dataclasses.dataclass
 class EmbedStats:
@@ -57,6 +63,8 @@ class EmbedStats:
     batches: int = 0
     failed_batches: int = 0
     seconds: float = 0.0
+    #: The pass stopped because the sidecar is off (`B-222`).
+    offline: bool = False
 
     @property
     def per_second(self) -> float:
@@ -69,6 +77,7 @@ class EmbedStats:
             "failed_batches": self.failed_batches,
             "seconds": round(self.seconds, 1),
             "chunks_per_second": round(self.per_second, 2),
+            "offline": self.offline,
         }
 
 
@@ -84,6 +93,8 @@ class Backfill:
         idle_sleep_s: float = DEFAULT_IDLE_SLEEP_S,
         max_batches: int | None = None,
         start_after: int = 0,
+        offline_wait_s: float = DEFAULT_OFFLINE_WAIT_S,
+        offline_wait_max_s: float = DEFAULT_OFFLINE_WAIT_MAX_S,
     ) -> None:
         self._embedder = embedder
         self._session_factory = session_factory
@@ -93,6 +104,8 @@ class Backfill:
         # Where the queue scan begins; 0 is the whole table. An operator or a test
         # passes the id to start past.
         self._start_after = start_after
+        self._offline_wait_s = offline_wait_s
+        self._offline_wait_max_s = max(offline_wait_max_s, offline_wait_s)
         self._stopping = asyncio.Event()
 
     def stop(self) -> None:
@@ -161,6 +174,16 @@ class Backfill:
                 # Async: the embedder may be the sidecar (`P2-19`); `LocalEmbedder`
                 # keeps the loop free in-process, so a signal still stops the pass.
                 vectors = await self._embedder.embed([text for _, text in batch])
+            except EmbedderOffline as exc:
+                # Every later batch would fail the same way; see
+                # docs/features/embedding.md#when-the-gpu-machine-is-off.
+                stats.failed_batches += 1
+                stats.offline = True
+                log.warning(
+                    "embedding sidecar is offline; the pass stops and waits for it",
+                    extra={"reason": str(exc), "embedded": stats.embedded},
+                )
+                break
             except (EmbeddingError, ValueError):
                 stats.failed_batches += 1
                 failed.update(chunk_id for chunk_id, _ in batch)
@@ -203,11 +226,28 @@ class Backfill:
             total.seconds += stats.seconds
             if self._stopping.is_set():
                 break
+            if stats.offline:
+                await self._wait_for_embedder()
+                continue
             if stats.embedded == 0:
                 # An idle pass is still a live one: beat while the backlog is empty too.
                 beat()
                 await self._sleep(self._idle_sleep_s)
         return total
+
+    async def _wait_for_embedder(self) -> None:
+        """Probe the sidecar with a doubling wait until it answers or the loop stops."""
+        wait = self._offline_wait_s
+        while not self._stopping.is_set():
+            # A wait for the sidecar is a live process doing its job, not a hang.
+            beat()
+            await self._sleep(wait)
+            if self._stopping.is_set():
+                return
+            if await self._embedder.available():
+                log.info("embedding sidecar answers again; the backfill resumes")
+                return
+            wait = min(wait * 2, self._offline_wait_max_s)
 
     async def _sleep(self, seconds: float) -> None:
         """Wait, but wake immediately when asked to stop."""

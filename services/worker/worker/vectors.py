@@ -26,10 +26,22 @@ from .embeddings import BGEEmbedder, Embedder, EmbedderSettings, EmbeddingError
 log = get_logger(__name__)
 
 
+class EmbedderOffline(EmbeddingError):
+    """The remote-only sidecar did not answer: an outage, not a bad batch (`B-222`).
+
+    Every batch after it would fail the same way, so the backfill stops its pass and
+    waits for the sidecar instead of stepping on.
+    """
+
+
 class AsyncEmbedder(Protocol):
     """What the backfill needs. Async, because one of the two is a network call."""
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+    async def available(self) -> bool:
+        """Whether a batch could be embedded now; a cheap probe, not a batch."""
+        ...
 
 
 class LocalEmbedder:
@@ -46,6 +58,9 @@ class LocalEmbedder:
         if not texts:
             return []
         return await asyncio.to_thread(self._embedder.embed, list(texts))
+
+    async def available(self) -> bool:
+        return True
 
 
 class PreferRemote:
@@ -107,9 +122,13 @@ class PreferRemote:
         if self._remote is not None and self._remote_only:
             try:
                 return await self._ask_remote(texts)
-            except (EmbeddingUnavailable, ValueError) as exc:
-                # EmbeddingError, which the backfill counts and steps past.
-                raise EmbeddingError(f"remote-only embedder unavailable: {exc}") from exc
+            except EmbeddingUnavailable as exc:
+                # The machine is off or the wrong model answered: the next batch would
+                # fail the same way, so the backfill waits rather than stepping on.
+                raise EmbedderOffline(f"remote-only embedder unavailable: {exc}") from exc
+            except ValueError as exc:
+                # This batch was refused; the backfill counts it and steps past.
+                raise EmbeddingError(f"remote-only embedder refused a batch: {exc}") from exc
 
         if self._remote is not None:
             try:
@@ -122,6 +141,15 @@ class PreferRemote:
                 self._give_up_on_remote(str(exc))
 
         return await self._fallback().embed(texts)
+
+    async def available(self) -> bool:
+        """Whether the sidecar answers its health probe, when nothing else may embed.
+
+        With a local fallback there is always something to embed with.
+        """
+        if self._remote is None or not self._remote_only:
+            return True
+        return await self._remote.healthy()
 
 
 #: How long to keep asking a configured sidecar before loading the model here
@@ -195,6 +223,7 @@ async def build_embedder(
 
 __all__ = [
     "AsyncEmbedder",
+    "EmbedderOffline",
     "EmbeddingError",
     "LocalEmbedder",
     "PreferRemote",

@@ -12,6 +12,7 @@ columns, and survives being interrupted.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -28,7 +29,7 @@ from meridian_core.models import Chunk, Source
 from meridian_core.sources import upsert_source
 from worker.embed import Backfill
 from worker.embeddings import EmbeddingError, FakeEmbedder
-from worker.vectors import LocalEmbedder
+from worker.vectors import EmbedderOffline, LocalEmbedder
 
 pytestmark = pytest.mark.usefixtures("require_db")
 
@@ -281,6 +282,108 @@ async def test_a_failing_batch_is_skipped_rather_than_retried_forever(
 
     assert stats.failed_batches == stats.batches > 1
     assert stats.embedded == 0
+
+
+class Intermittent(LocalEmbedder):
+    """A remote-only sidecar on a machine that is off until ``down_probes`` probes pass."""
+
+    def __init__(self, *, down_probes: int, stop_after: int | None = None) -> None:
+        super().__init__(FakeEmbedder())
+        self.down_probes = down_probes
+        self.stop_after = stop_after
+        self.backfill: Backfill | None = None
+        self.calls = 0
+        self.probes = 0
+        self.embedded = 0
+
+    @property
+    def up(self) -> bool:
+        return self.probes > self.down_probes
+
+    async def embed(self, texts):
+        self.calls += 1
+        if not self.up:
+            raise EmbedderOffline("remote-only embedder unavailable: connection refused")
+        vectors = await super().embed(texts)
+        self.embedded += len(texts)
+        if self.stop_after is not None and self.embedded >= self.stop_after:
+            self.backfill.stop()
+        return vectors
+
+    async def available(self) -> bool:
+        self.probes += 1
+        return self.up
+
+
+async def test_an_offline_sidecar_stops_the_pass_at_the_first_batch(
+    session_for, url, cleanup
+) -> None:
+    """`B-222`: with the GPU machine off, every later batch would fail the same way.
+
+    Stepping on, as for a bad batch, sent one doomed request and logged one traceback
+    per batch across the whole backlog, on every pass.
+    """
+    sess = await session_for("rw")
+    _, chunks = await a_source_with_chunks(sess, url, 6)
+    embedder = Intermittent(down_probes=10)
+    backfill = backfill_for(sess, chunks, batch_size=2)
+    backfill._embedder = embedder
+
+    stats = await backfill.run_once()
+
+    assert embedder.calls == 1, "the pass asked again after the sidecar was found off"
+    assert stats.offline is True
+    assert stats.failed_batches == stats.batches == 1
+    assert stats.as_dict()["offline"] is True
+
+
+async def test_the_loop_waits_for_the_sidecar_then_drains_the_backlog(
+    session_for, url, cleanup
+) -> None:
+    """The waits double up to the cap, and the backlog is embedded once it answers."""
+    sess = await session_for("rw")
+    _, chunks = await a_source_with_chunks(sess, url, 6)
+    embedder = Intermittent(down_probes=4, stop_after=6)
+    backfill = backfill_for(sess, chunks, batch_size=2, offline_wait_s=1.0, offline_wait_max_s=4.0)
+    backfill._embedder = embedder
+    embedder.backfill = backfill
+    waits: list[float] = []
+
+    async def record(seconds: float) -> None:
+        waits.append(seconds)
+
+    backfill._sleep = record
+
+    total = await backfill.run_forever()
+
+    assert waits == [1.0, 2.0, 4.0, 4.0, 4.0], "the wait did not double to its cap"
+    assert embedder.probes == 5
+    assert total.embedded == 6
+    for chunk in chunks:
+        await sess.refresh(chunk)
+        assert chunk.embedding is not None
+
+
+async def test_a_stop_while_waiting_for_the_sidecar_ends_the_loop(
+    session_for, url, cleanup
+) -> None:
+    """A `SIGTERM` during a night with the GPU machine off must not wait for morning."""
+    sess = await session_for("rw")
+    _, chunks = await a_source_with_chunks(sess, url, 2)
+    embedder = Intermittent(down_probes=10**6)
+    backfill = backfill_for(sess, chunks, batch_size=2, offline_wait_s=3600.0)
+    backfill._embedder = embedder
+
+    async def stop_soon() -> None:
+        await asyncio.sleep(0.05)
+        backfill.stop()
+
+    stopper = asyncio.create_task(stop_soon())
+    total = await asyncio.wait_for(backfill.run_forever(), timeout=5)
+    await stopper
+
+    assert total.embedded == 0
+    assert embedder.probes == 0, "the probe ran after the stop"
 
 
 async def test_work_committed_before_a_stop_survives_it(session_for, url, cleanup) -> None:
