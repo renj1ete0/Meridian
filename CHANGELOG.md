@@ -91,6 +91,12 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.177.2] — 2026-10-24
+
+### Changed
+
+- `B-229` dropped: the orchestrator no longer holds `NET_RAW`, which it had only for Wake-on-LAN
+
 ## [0.177.1] — 2026-10-24
 
 ### Fixed

@@ -475,7 +475,7 @@ services:
     env_file: .env
     # `network_mode` and `networks` are mutually exclusive and compose refuses a
     # file setting both; this used to set `network_mode: bridge` *and* a network
-    # list. `lan` is the one that carries the llama.cpp and wake-on-LAN traffic.
+    # list. `lan` is the one that carries the traffic to a local model on another machine.
     networks: [internal, egress, lan]
     depends_on:
       postgres: { condition: service_healthy }
@@ -491,7 +491,7 @@ services:
       # Written by this container as uid 1001. An answer is written into it
       # with `docker exec`, so supplying one takes the operator's Docker access.
       - ${DATA_ROOT:-/srv/meridian}/relay:/relay
-    cap_add: [NET_RAW]            # wake-on-LAN magic packets
+    # No `NET_RAW`: it was held for Wake-on-LAN, which is not built (ADR 0022).
     healthcheck:
       test: ["CMD", "python", "-c", "import anthropic, worker.orchestrate"]
       interval: 5m

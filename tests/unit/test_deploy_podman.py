@@ -216,6 +216,13 @@ def test_every_gpu_service_gets_the_card_by_its_cdi_name(node) -> None:
         assert isinstance(windows[name].get("deploy"), Tagged), f"{name} keeps the reservation"
 
 
+def test_no_service_holds_a_capability_for_a_feature_that_was_not_built() -> None:
+    """ADR 0022: no Wake-on-LAN, so the orchestrator, which holds the model keys, needs no
+    raw sockets."""
+    base = load(ROOT / "docker-compose.yml")["services"]
+    assert all("NET_RAW" not in (svc.get("cap_add") or []) for svc in base.values())
+
+
 def test_the_windows_overlay_parks_watchtower(node) -> None:
     profiles = node["podman-windows.yml"]["watchtower"]["profiles"]
     assert isinstance(profiles, Tagged) and profiles["value"] == ["docker-only"]
