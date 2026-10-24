@@ -31,6 +31,7 @@ chosen.
 | [0018](0018-a-map-name-must-win-clearly.md) | A Map name must win clearly, not only fit | 2026-10-08 | Accepted |
 | [0019](0019-stored-pdfs-re-extracted-for-their-tables.md) | Stored PDFs are re-extracted for their tables | 2026-10-11 | Accepted |
 | [0020](0020-a-note-is-withdrawn-not-deleted.md) | A note is withdrawn, not deleted | 2026-10-11 | Accepted |
+| [0021](0021-the-stack-calls-the-gpu-machine.md) | The stack calls the GPU machine; the GPU machine keeps no state | 2026-10-24 | Accepted |
 
 ## Template
 
