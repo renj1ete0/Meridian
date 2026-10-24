@@ -1901,6 +1901,36 @@ deploy runbook whose first two commands could not work (`B-17`).
       and the GPU node on Windows** — the same compose files: `deploy/podman/` (overlay, units,
       Butane), `deploy/embedder-node/podman-windows.yml` and `start-windows.ps1`, guide
       `docs/guides/deploy-podman.md`. Tick after a first boot on the mini PC
+- [ ] `B-233` **arXiv is labelled peer reviewed** (third-party review 2026-10-24) — 1,855 of 1,862
+      arXiv sources carry `peer_reviewed`, which the tier filter and Answer's "strong" rest on. A
+      `preprint` tier for arXiv, SSRN, OSF and the like, and peer review only on venue evidence
+      (a journal DOI, OpenAlex `journal-article`). Needs a migration for the CHECK constraint
+- [ ] `B-234` **Source metadata is thin and sometimes wrong** (review) — of 97,198 kept sources 21%
+      have no date, 74% no author, 97% no DOI; titles such as a journal name or a file name lead
+      results and exports cite "n.d.". Resolve from identifiers (arXiv ID gives year and month:
+      500 arXiv sources undated; DOI via Crossref/OpenAlex), reject placeholder titles; `B-220`
+      is one case of it
+- [ ] `B-235` **Search has no relevance floor, and indexes undecodable text** (review) — a nonsense
+      query returns 20 passages; the top ones were PDF text with broken font maps (a 3-letter
+      shift, ~0.09% of passages). Detect and drop such text at extraction; say "no good matches"
+      under a floor
+- [ ] `B-236` **Bibliographies and mirrored copies crowd search results** (review) — 4 of 8 MCP results
+      for one question were reference lists (`B-171` keeps them out of synthesis only), and one
+      report appeared three times through mirrors. Down-rank reference passages, fold copies
+- [ ] `B-237` **Nothing answers "what is new"** (review) — Growth is crawl volume; no view or MCP tool
+      by publication date; `list_new_since` starts at passage 1 with no date or topic. A "what's
+      new" view and tool by publication date per topic, and a freshness line on Home
+- [ ] `B-238` **Topics have no front door** (review) — Home lists no topics; their descriptions live
+      only in Admin. Topic cards: description, on-topic source count, newest source, subthemes
+- [ ] `B-239` **Operator diagnostics on reader pages** (review) — Gaps opens on question-set items and
+      search tasks; the header pill and notifications speak crawler ("paused for embedding");
+      MCP tool descriptions cite spec sections. Move to Admin; reader Gaps about evidence
+- [ ] `B-240` **Counts disagree between pages** (review) — sources 97,198 vs 116,392, passages five
+      different figures, labelled sources 10,239 vs ~97k implied, bell 50 vs "All 102". One
+      counting definition, shown where counted
+- [ ] `B-241` **Answer groups by country on questions about no place** (review) — "United States 85
+      strong" on a question about crash reduction reads as a verdict. Group by place only when
+      the question names one; "well-sourced / few sources" rather than strong/thin
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published
