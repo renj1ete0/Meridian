@@ -1934,6 +1934,18 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-245` `v0.177.4`. **The tagging prompt never listed the node types the parser enforces** —
       found running the same batch through Claude and a local Qwen3.6-35B: all 5 tags refused on
       `node_type`. Both prompts now list `MODEL_NODE_TYPES`, tested; jurisdiction placement said
+- [ ] `B-246` **Qwen3-Reranker-4B in the embedding service** — graded 2026-10-24 on the 24 questions
+      over today's pools, every slot judged: nDCG@10 0.512 unreranked, 0.709 `bge-reranker-v2-m3`
+      over the top 30 (what production can switch on), 0.733 over the top 100, **0.794
+      Qwen3-Reranker-4B over the top 30** (answers in the top 5: 58% → 71%); both rank-fused 0.774
+      with the least junk. The service runs cross-encoders only; a Qwen3 reranker scores the
+      yes/no logits of a causal LM (`meridian-calibration/rerank/rank.py` has it). 33 s per
+      question on the integrated GPU, so a discrete card's job (the 3090)
+- [ ] `B-247` **A local model's answers held to the schema while it writes** — side by side with
+      Claude, a local Qwen3.6-35B lost 7 of 22 relations to a misplaced field and left stance and
+      certainty empty on every on-topic relation. llama.cpp can constrain output to a JSON schema
+      (`response_format`); derive it from the proposal models and send it to `openai_compatible`
+      rows that declare support
 - [ ] `B-242` **Followed links are most of the crawl and almost none of the evidence** (measured
       2026-10-24) — 84,366 of 97k kept sources came from followed links at 5.7% on a topic (10.3%
       in the latest week, after the gates), against search 42.6% and cited papers 40.6%. The crawl
