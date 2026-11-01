@@ -163,3 +163,18 @@ def test_a_science_query_is_never_the_bang_alone() -> None:
     assert all(
         len(q.text) > len(SCIENCE_BANG) + 1 for q in candidates(topic) if q.kind == "science"
     )
+
+
+def test_only_a_news_query_asks_for_the_last_week() -> None:
+    """`B-244`: without a range SearXNG answers news of any age by relevance, so a repeated news
+    query found the same old articles; an ordinary query must stay unbounded."""
+    from worker.search import NEWS_TIME_RANGE, search_params
+
+    news = search_params("!news walkability")
+    plain = search_params("walkability study")
+    language = search_params("!news :de Fußgänger")
+
+    assert news == {"q": "!news walkability", "format": "json", "time_range": NEWS_TIME_RANGE}
+    assert language["time_range"] == NEWS_TIME_RANGE
+    assert "time_range" not in plain
+    assert NEWS_TIME_RANGE in {"day", "week", "month", "year"}, "SearXNG's own values"

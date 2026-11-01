@@ -31,7 +31,7 @@ page about one of the topics.
 vocabulary: the concept alone, two concepts together, evidence phrasings ("… evaluation"),
 counter-seeds ("criticism of …"), news (`!news`), scholarly sources (`!science`), and
 other-language seeds from Wikipedia's interlanguage titles (`translate`). A query is never
-repeated, except news queries, which come round again after three days.
+repeated, except news queries, which come round again daily and ask for the last week (`B-244`).
 
 **SearXNG** answers queries with results from several engines. An unresponsive engine is
 routine and logged. Empty results mean the query is done. An unreachable SearXNG is
@@ -109,7 +109,7 @@ after the first few seeds the crawl was 98% link-following, fetching more of the
   counter-evidence. Each run takes one of each shape that still has a new query, then fills the
   rest at random. The shuffle is seeded, so a run is reproducible and successive runs differ.
 - **No repeats**: the generator sees every query already queued, in any status. News is the
-  exception (`B-105`), asked again after three days, because it is the one shape whose answers
+  exception (`B-105`), asked again daily since `B-244` (three days before), because it is the one shape whose answers
   change: a news query found 29 new pages on average in the three days before, against 11 for
   any other shape, and under the no-repeat rule each could be asked once, ever.
 - **Queries outrank links.** Query rows are `seed_source="diversity"` (§7.4's reserved share) at
@@ -120,6 +120,10 @@ after the first few seeds the crawl was 98% link-following, fetching more of the
   search should not come back to a backlog of hundreds.
 - **A result carries its query's topic**, not one guessed from its path: a query was written
   *for* a topic, so every result is an answer to it.
+  Since `B-244` a news query also carries SearXNG's `time_range=week`: without it the engines
+  answered news of any age by relevance, so asking again mostly found the same old articles.
+  A week rather than a day, because not every news engine honours `day`, and the daily repeat
+  covers the overlap; the queue drops what it has already seen.
 
 **The search backend** (`P1-34`, §6.4). SearXNG scrapes upstream engines, so individual engines
 break or are rate-limited regularly, and a dead engine must never stall the queue. Three

@@ -98,8 +98,8 @@ def specific_enough(topic: TopicSeedInput) -> bool:
 
 
 #: A news query may be asked again after this long (`B-105`): news is the one shape
-#: whose answers change.
-NEWS_REPEAT = dt.timedelta(days=3)
+#: whose answers change. Daily since `B-244`, now that it asks only for the last week.
+NEWS_REPEAT = dt.timedelta(days=1)
 
 
 async def asked_before(sess: AsyncSession, *, now: dt.datetime | None = None) -> list[str]:

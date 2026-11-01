@@ -2066,10 +2066,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       news arrives a median 57 days after publication. A `feed` task: feeds per topic set in
       Admin, discovered on proven hosts (`<link rel="alternate">`), polled hourly with
       ETag/Last-Modified (the columns exist), entries through the prefilter
-- [ ] `B-244` **News search asks for recent news** — `!news` queries carry no time range, so SearXNG
+- [x] `B-244` **News search asks for recent news** (time range and daily repeat; GDELT is `B-267`) — `!news` queries carry no time range, so SearXNG
       returns news of any age by relevance, and repeat every 3 days. A day/week `time_range`,
       a daily repeat, and GDELT's free DOC API (keyword per topic, articles from the last hours,
       many languages) as a second news source
+- [ ] `B-267` **GDELT as a second news source** (split from `B-244`) — GDELT's free DOC API:
+      a keyword per topic, articles from the last hours, many languages. A provider beside
+      SearXNG for news queries, paced, with its results queued like search results
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published

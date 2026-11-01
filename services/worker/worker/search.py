@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from meridian_core.logging import get_logger
+from meridian_core.searchseeds import NEWS_BANG
 
 log = get_logger(__name__)
 
@@ -43,6 +44,20 @@ THROTTLE_WORDS = ("suspended", "captcha", "too many requests", "access denied", 
 #: saves the queue row rather than the request.
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 
+
+
+#: How far back a news query looks (`B-244`). Without a range SearXNG returned news of any age
+#: by relevance, so a query repeated every few days found the same old articles. A week, not a
+#: day: not every news engine honours `day`, and the daily repeat covers the overlap.
+NEWS_TIME_RANGE = "week"
+
+
+def search_params(query: str) -> dict[str, str]:
+    """SearXNG's parameters for one query: a news query (`!news …`) asks for the last week."""
+    params = {"q": query, "format": "json"}
+    if query.lstrip().startswith(NEWS_BANG):
+        params["time_range"] = NEWS_TIME_RANGE
+    return params
 
 class SearchError(RuntimeError):
     """The backend could not be reached or did not answer usefully."""
@@ -174,7 +189,7 @@ class SearxClient:
         try:
             response = await self._http().get(
                 f"{self.base_url}/search",
-                params={"q": query, "format": "json"},
+                params=search_params(query),
                 timeout=self.timeout_s,
             )
             response.raise_for_status()

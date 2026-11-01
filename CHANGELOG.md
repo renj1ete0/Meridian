@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.189.2] — 2026-11-01
+
+### Changed
+
+- `B-244`: news search queries ask SearXNG for the last week (`time_range=week`) and come round
+  daily instead of every three days. GDELT as a second news source is filed as `B-267`.
+
+**Deploy:** image only.
+
 ## [0.189.1] — 2026-11-01
 
 ### Fixed
