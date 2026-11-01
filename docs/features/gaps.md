@@ -6,7 +6,7 @@ search seed, or boost a topic. Every action is reversible and leaves a `steering
 
 - **Code:** `packages/meridian_core/meridian_core/gaps.py`; `services/api/api/routes/gaps.py`,
   `cache.py`; `web/src/explore/GapsPage.tsx`
-- **Tasks:** `P6-36`, `P6-37`, `P6-42`, `P2-23`, `P2-24`, `B-97`, `B-121`, `B-184`
+- **Tasks:** `P6-36`, `P6-37`, `P6-42`, `P2-23`, `P2-24`, `B-97`, `B-121`, `B-184`, `B-239`
 
 ## How it works
 
@@ -22,6 +22,11 @@ list reads every source and ranks the results together.
 | `search-results` | Topics whose search-found pages turned out mostly off-topic |
 | `routes` | Pairs of topics whose most-cited nodes no chain of stated links joins within a few hops |
 | `question-set` | Items of the held-out set that scored low in the newest run |
+
+**Readers see the evidence** (`B-239`). The web page lists `topic-coverage`, `place-coverage`,
+`areas` and `routes`; `question-set` and the two search sources fold under "For the operator",
+shown with `admin.view` ([web-app.md](web-app.md#reader-and-operator)). The route still serves
+every source.
 
 A source that the design names but nobody has built is listed as *pending*, so an empty list
 never reads as "no gaps of that kind". Every source the design names is built today, so none is

@@ -293,7 +293,9 @@ in a table.
 ### The status pill and bell
 
 The top-right cluster (`P6-27`, design-system.md §5, §8) answers three questions, each with an
-honest "don't know".
+honest "don't know". The pill and the bell are the operator's: someone without `admin.view` sees
+only settings, and the cluster is not polled for them (`B-239`, [What a reader is
+shown](#reader-and-operator)).
 
 - **The status pill** shows queue depth, last hour's fetch success, and whether the last run
   failed. The dot is cyan, brass when a run failed, and *hollow* when run history could not be
@@ -737,13 +739,13 @@ heading, the reason, "takes effect at the crawl's next claim · reversible in Ad
 a list on Admin's primitives. See [gaps.md](gaps.md).
 
 
-**What a reader can ask comes first** (`B-184`). Ranked purely by severity, the first eleven
-rows were the crawl's own search diagnostics (searches finding nothing new, or landing off
-topic), and the question set, the most useful rows to a reader, began at twelve. "All" now lists
-coverage, fields and the question set first, and folds "Search yield" below them with one line
-saying what it is for: it changes what is fetched, not what is known. Rows are numbered within
-the list shown. The tab is in the link (`?kind=`), so following "Search it in Find" and pressing
-Back returns to it. An off-topic search gap says a description would steer it, so it links to
+**The evidence comes first, and only the evidence is the reader's** (`B-184`, `B-239`).
+Ranked purely by severity, the first eleven rows were the crawl's own search diagnostics. `B-184`
+folded "Search yield" below; `B-239` went further: the list is coverage, places, fields and
+routes, and the question set and search yield are two folds under "For the operator", shown with
+`admin.view` (see [What a reader is shown](#reader-and-operator)). Each fold says in one line
+what it is for. Rows are numbered within the list shown. An open fold is in the link
+(`?kind=questions|search`), so following "Search it in Find" and pressing Back returns to it. An off-topic search gap says a description would steer it, so it links to
 where descriptions are edited; a seed search keeps engine syntax (`!news`) on what is queued but
 out of the words a reader edits, named beside the field instead. An action's result links to
 where it can be undone, and its text names that section correctly (a boost said "Admin ›
@@ -1054,6 +1056,36 @@ empty app, and the server refuses what a person may not do either way.
 - **Settings** shows who is signed in and as what.
 - `lib/permissionLabels.ts` copies each permission's label so a refusal can be named without
   the people list; a Python test holds it to `meridian_core.permissions`.
+
+### <a id="reader-and-operator"></a>What a reader is shown (`B-239`)
+
+The reading pages (Explore, Find, sources, nodes, the Map, Gaps, Growth) once also showed the
+operator's diagnostics: Gaps opened on the evaluation's questions and the crawl's search tasks,
+the top bar spoke about the crawl ("paused for embedding"), and a right-click on the Map
+offered steering to someone who could not steer. A reader should see the corpus, not the
+machine that fills it. Each item was decided on its own, and **the operator keeps everything**:
+the test is a permission held, not a separate set of pages.
+
+| Item | Decision | Who sees it |
+|---|---|---|
+| Gaps: coverage, places, fields, routes | Stays: the evidence a reader is asking about | Everyone |
+| Gaps: question set | Folded under "For the operator" below the list: it is the operator's evaluation, held out by rule | `admin.view` |
+| Gaps: search yield | Folded there too: it changes what is fetched, not what is known | `admin.view` |
+| Gaps: which sources ran | Split the same way: a reader's line names only the evidence sources, and says a source was not checked without the note on how to fix it ("run …") | Each with its list; notes `admin.view` |
+| Gaps: seed and boost buttons | Shown only to whoever may use them; the "reversible in Admin" sentence with them | `seeds.add`, `topics.steer` |
+| Gaps: "Edit the topic's description" | Search-yield only, and it leads into Admin | `admin.view` |
+| Top bar: status pill and bell | Hidden, and not polled: they speak about runs, the queue and approvals, and every row leads into Admin | `admin.view` |
+| Top bar: Admin tab | Hidden from someone who may open no part of Admin | `admin.view` or `access.manage` |
+| Map: right-click steering | The steering items go; zoom, route and Find stay | `topics.steer` (area), `seeds.add` (empty space) |
+| Assistant tool descriptions | No spec sections or task numbers: an assistant reads them, not the builders (`tests/integration/test_mcp.py`) | Everyone |
+| Growth | Stays: how much is here and since when is a reader's question; the "not crawled" day is what keeps a zero honest | Everyone |
+| Source and node provenance (extractor, language, tiers) | Stays: it is what makes a citation checkable | Everyone |
+| The first hour | Stays: it is only shown while the corpus is empty, and is then the truest thing to say | Everyone |
+
+While `/api/me` has not answered, `can` says yes (see above), so the operator never sees their
+cluster flash in; a reader may see it for that instant. Hiding is presentation only: the
+server refuses every write a person may not make, and `/api/explore/gaps` still serves all
+sources (the assistant's `list_gaps` too), because the split is about what a page leads with.
 
 ### <a id="people-and-permissions"></a>People & permissions (`B-257`)
 

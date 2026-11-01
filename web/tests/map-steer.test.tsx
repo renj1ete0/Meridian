@@ -4,9 +4,13 @@
  * before it moves it, refuses "less" of an area no topic holds, and reports
  * the server's own words — result, undo path, or refusal.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { steeringFor } from '../src/explore/MapPage'
 import { AreaSteerItems, SuggestBox } from '../src/explore/map/Steer'
 import { topicNameFrom, type AreaSteering, type MapSteerResult } from '../src/lib/areas'
 import { area } from './areas-fixtures'
@@ -191,5 +195,30 @@ describe('this is noise (P6-42)', () => {
     fireEvent.click(await screen.findByText('Undo'))
     expect(await screen.findByText('3 sources put back.')).toBeTruthy()
     expect(calls.some((u) => u.endsWith('/api/admin/map/noise/m1/restore'))).toBe(true)
+  })
+})
+
+describe('only whoever may steer is offered steering (B-239)', () => {
+  const actions = { areaItems: () => 'area', emptySpace: () => 'empty' }
+  const can = (held: string[]) => (p: string) => held.includes(p)
+
+  it('gives a reader neither menu, and each to its own permission', () => {
+    expect(steeringFor(actions, can(['explore.read']))).toEqual({ areaItems: undefined, emptySpace: undefined })
+    expect(steeringFor(actions, can(['topics.steer'])).areaItems).toBe(actions.areaItems)
+    expect(steeringFor(actions, can(['topics.steer'])).emptySpace).toBeUndefined()
+    expect(steeringFor(actions, can(['seeds.add'])).emptySpace).toBe(actions.emptySpace)
+  })
+
+  it('asks for the permissions the routes behind each menu require', () => {
+    // Read from the API, so a route moved to another permission fails here until the menu follows.
+    const api = join(process.cwd(), '..', 'services/api/api')
+    const admin = readFileSync(join(api, 'routes/admin.py'), 'utf8')
+    const deps = readFileSync(join(api, 'deps.py'), 'utf8')
+    const needs = (route: string) => {
+      const dep = new RegExp(`"${route}"[\\s\\S]{0,200}?_: (Can\\w+)`).exec(admin)?.[1]
+      return dep ? new RegExp(`^${dep} = .*require\\("([a-z_.]+)"\\)`, 'm').exec(deps)?.[1] : undefined
+    }
+    expect(needs('/map/areas/\\{area_id\\}/steer')).toBe('topics.steer')
+    expect(needs('/map/suggest')).toBe('seeds.add')
   })
 })

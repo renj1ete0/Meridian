@@ -18,6 +18,7 @@ load-bearing and is tested as such.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
@@ -127,6 +128,21 @@ async def test_every_registered_tool_describes_itself(mcp) -> None:
     all — the description is the entire interface it gets."""
     for tool in await mcp.list_tools():
         assert tool.description, f"{tool.name} has no description"
+
+
+async def test_no_tool_description_speaks_to_the_builders(mcp) -> None:
+    """The description is read by an assistant, not by whoever built the server (`B-239`):
+    a spec section or a task number is noise to it, and reads as if it should look them up."""
+    builders = re.compile(r"§|\bspec\b|\b[A-Z]{1,2}\d?-\d{2,3}\b|\bADR\b")
+    for tool in await mcp.list_tools():
+        texts = [tool.description or ""]
+        texts += [
+            str(field.get("description", ""))
+            for field in (tool.input_schema.get("properties") or {}).values()
+        ]
+        for text_ in texts:
+            found = builders.search(text_)
+            assert not found, f"{tool.name}: {found!r} in {text_!r}"
 
 
 # --------------------------------------------------------------------------

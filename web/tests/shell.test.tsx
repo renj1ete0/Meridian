@@ -23,7 +23,9 @@ import {
   statusLine,
   type RunHistory,
 } from '../src/lib/status'
-import { NAV, StatusPill, TopBar, type ClusterData } from '../src/ui/TopBar'
+import { NAV, navFor, StatusPill, TopBar, useClusterData, type ClusterData } from '../src/ui/TopBar'
+import { MeProvider } from '../src/lib/me'
+import type { Me } from '../src/lib/people'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CrawlProgress, NotificationItem as Notification, RunRow } from '../src/lib/api'
 
@@ -434,5 +436,67 @@ describe('a deliberate pause is not a stall (B-203)', () => {
     expect(markup).toContain('paused for embedding')
     expect(markup).not.toContain('crawl stalled')
     expect(statusDetail(paused, 'ok', null)).toContain('27,258 passages wait for a vector')
+  })
+})
+
+describe('a reader is shown the reading, not the crawl (B-239)', () => {
+  const who = (permissions: string[]): Me => ({
+    subject: 'r@example.test',
+    profile: 'reader',
+    owner: false,
+    permissions,
+    setup_needed: false,
+  })
+
+  async function barAs(permissions: string[]) {
+    await act(async () => {
+      render(
+        <MeProvider load={async () => who(permissions)}>
+          <TopBar section="explore" translucent theme="system" onTheme={vi.fn()} data={data()} />
+        </MeProvider>,
+      )
+    })
+  }
+
+  it('hides the status pill, the bell and Admin from a reader', async () => {
+    await barAs(['explore.read'])
+    expect(screen.queryByRole('button', { name: /Notifications/ })).toBeNull()
+    expect(document.querySelector('[data-health]')).toBeNull()
+    const nav = screen.getByRole('navigation', { name: 'Sections' })
+    expect(within(nav).queryByRole('link', { name: 'Admin' })).toBeNull()
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((l) => l.textContent),
+    ).toEqual(['Explore', 'Map', 'Gaps', 'Growth'])
+    // Settings stays: the theme and who is signed in are anybody's.
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
+  })
+
+  it('shows them to whoever may open Admin', async () => {
+    await barAs(['explore.read', 'admin.view'])
+    expect(screen.getByRole('button', { name: /Notifications/ })).toBeTruthy()
+    expect(document.querySelector('[data-health]')).not.toBeNull()
+  })
+
+  it('lists Admin for someone who may manage access only, whose sections live there', () => {
+    const can = (held: string[]) => (p: string) => held.includes(p)
+    expect(navFor(can(['access.manage'])).map((n) => n.name)).toContain('admin')
+    expect(navFor(can([])).map((n) => n.name)).not.toContain('admin')
+    // Every other section is reading and stays, whatever is held.
+    expect(navFor(can([])).length).toBe(NAV.length - 1)
+  })
+
+  it('does not poll the crawl for a reader', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })))
+    vi.stubGlobal('fetch', fetchMock)
+    function Probe() {
+      useClusterData(60_000, false)
+      return null
+    }
+    await act(async () => {
+      render(<Probe />)
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -11,6 +11,7 @@ import {
   type Swatch,
   type TopicCount,
 } from '../lib/corpusmap'
+import { useMe } from '../lib/me'
 import { hrefForSource, navigate } from '../lib/route'
 import { AreasScreen, type MapActions } from './map/AreasScreen'
 import { mapActions } from './map/Steer'
@@ -58,11 +59,24 @@ export const MAP_VIEWS = [
 ] as const satisfies readonly (readonly [Mode, string, string])[]
 
 /**
+ * The right-click steering a person may use (`B-239`): turning a field up or down needs
+ * `topics.steer`, suggesting a search from empty space `seeds.add`. A reader right-clicking
+ * an area still gets the reading items (zoom, route, Find).
+ */
+export function steeringFor(actions: MapActions, can: (permission: string) => boolean): MapActions {
+  return {
+    areaItems: can('topics.steer') ? actions.areaItems : undefined,
+    emptySpace: can('seeds.add') ? actions.emptySpace : undefined,
+  }
+}
+
+/**
  * The Map screen (task P6-34): the corpus as nested, named areas, with the
  * passage cloud (`P6-26`, `P6-29`) as a toggle inside it rather than a screen
  * of its own — the operator's "fewer screens, each useful".
  */
 export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
+  const steering = steeringFor(actions, useMe().can)
   const [mode, setMode] = useState<Mode>(() => modeFromSearch(window.location.search))
 
   useEffect(() => {
@@ -105,7 +119,7 @@ export function MapPage({ actions = STEERING }: { actions?: MapActions } = {}) {
           </a>
         ))}
       </nav>
-      {mode === 'areas' ? <AreasScreen actions={actions} /> : null}
+      {mode === 'areas' ? <AreasScreen actions={steering} /> : null}
       {mode === 'topics' ? <TopicsScreen /> : null}
       {mode === 'points' ? <PointsPage /> : null}
     </Workspace>

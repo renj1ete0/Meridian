@@ -399,6 +399,10 @@ reversible where those are and lands in the steering log. The menu reads first w
 would move, and says so: "more" of an area names the topic it will boost, and "less" of an area
 no topic holds is shown disabled with the reason.
 
+Each menu is offered only to someone who may use it (`B-239`, `MapPage.steeringFor`): the area
+items need `topics.steer`, a suggestion from empty space `seeds.add`, as their routes do. A
+reader right-clicking an area still gets zoom, route and Find.
+
 ### The topics readout
 
 The Topics view's readout lists exact combinations as bars rather than drawing a Venn diagram:

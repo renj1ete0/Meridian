@@ -274,13 +274,14 @@ def build_mcp(
                 "accessed": source.accessed_at.isoformat() if source.accessed_at else None,
             }
 
+    # §6.3's mark and §11.1a's entry point. A tool's docstring is its description, written
+    # for the assistant, so the spec is cited here and not there (`B-239`).
     @mcp.tool()
     async def list_new_since(mark: int = 0, limit: int = 50) -> dict[str, Any]:
         """Passages added since a high-water mark, oldest first.
 
-        §6.3's mark, and §11.1a's entry point: a synthesis session walks what is
-        new rather than searching for it, so this path needs no query and no
-        embedder. Pass the `next_mark` you get back as `mark` next time.
+        Walk what is new rather than searching for it: this needs no query and
+        no embedder. Pass the `next_mark` you get back as `mark` next time.
 
         The mark is a `chunk_id`. Ids are monotonic, so "everything after N" is
         exact — it cannot skip a row that arrived while you were reading, and it
@@ -330,14 +331,14 @@ def build_mcp(
             "next_mark": passages[-1]["chunk_id"] if passages else mark,
         }
 
+    # §12.5's "absence is visible", as the first thing an agent can check (`B-239`).
     @mcp.tool()
     async def corpus_overview() -> dict[str, Any]:
         """How much evidence exists at all, before you ask it anything.
 
-        §12.5's "absence is visible", as the first thing an agent can check. A
-        corpus of thirty passages and one of thirty thousand support very
-        different claims, and nothing else here would tell you which you are
-        talking to.
+        Check this first. A corpus of thirty passages and one of thirty thousand
+        support very different claims, and nothing else here would tell you
+        which you are talking to.
         """
         require_tool("corpus_overview")
 

@@ -46,6 +46,14 @@ export const NAV = [
 
 export type Section = (typeof NAV)[number]['name']
 
+/**
+ * The sections a person is shown: Admin only to someone who may open some part of it
+ * (`B-239`); everything else is reading, open to all.
+ */
+export function navFor(can: (permission: string) => boolean): readonly (typeof NAV)[number][] {
+  return NAV.filter((item) => item.name !== 'admin' || can('admin.view') || can('access.manage'))
+}
+
 const THEME_LABEL: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
 /** How often the cluster re-reads. Slow on purpose: this is a glance, not a monitor. */
@@ -81,12 +89,14 @@ function reasonOf(cause: unknown): string {
  * The three reads behind the cluster, each failing on its own.
  *
  * One endpoint down must not blank the others: a closed Admin (503 on
- * `/api/admin/runs`) still leaves queue depth and notifications worth showing.
+ * `/api/admin/runs`) still leaves queue depth and notifications worth showing. Nothing is read
+ * while `enabled` is false: a reader is not shown the cluster, so it is not polled for them.
  */
-export function useClusterData(pollMs: number = POLL_MS): ClusterData {
+export function useClusterData(pollMs: number = POLL_MS, enabled: boolean = true): ClusterData {
   const [data, setData] = useState<ClusterData>({ progress: null, runs: null, notifications: null })
 
   useEffect(() => {
+    if (!enabled) return
     let controller = new AbortController()
 
     function load() {
@@ -116,7 +126,7 @@ export function useClusterData(pollMs: number = POLL_MS): ClusterData {
       window.clearInterval(timer)
       controller.abort()
     }
-  }, [pollMs])
+  }, [pollMs, enabled])
 
   return data
 }
@@ -143,11 +153,13 @@ export function TopBar(props: TopBarProps) {
 }
 
 function LiveBar(props: TopBarProps) {
-  const data = useClusterData()
+  const data = useClusterData(POLL_MS, useMe().can('admin.view'))
   return <Bar {...props} data={data} />
 }
 
 function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProps & { data: ClusterData }) {
+  const { can } = useMe()
+  const operator = can('admin.view')
   return (
     <header
       data-surface={translucent ? 'translucent' : 'opaque'}
@@ -175,7 +187,7 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
       <span aria-hidden="true" className="hidden h-[22px] w-px shrink-0 bg-line sm:block" />
 
       <nav className="flex shrink-0 gap-0.5 sm:gap-1" aria-label="Sections">
-        {NAV.map(({ path, label, name }) => (
+        {navFor(can).map(({ path, label, name }) => (
           <a
             key={path}
             href={path}
@@ -193,9 +205,14 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
       <div ref={slotRef} className="flex min-w-0 flex-1 items-center gap-3" data-role="topbar-slot" />
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
-        <StatusPill progress={data.progress} runs={data.runs} />
-        <span aria-hidden="true" className="hidden h-5 w-px bg-line md:block" />
-        <Bell notifications={data.notifications} />
+        {/* The pill and the bell speak about the crawl, so they are the operator's (`B-239`). */}
+        {operator ? (
+          <>
+            <StatusPill progress={data.progress} runs={data.runs} />
+            <span aria-hidden="true" className="hidden h-5 w-px bg-line md:block" />
+            <Bell notifications={data.notifications} />
+          </>
+        ) : null}
         <Settings theme={theme} onTheme={onTheme} />
       </div>
     </header>

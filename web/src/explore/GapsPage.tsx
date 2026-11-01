@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, Card, FIELD, Filters, LABEL, Loading, PageHeader, ROW } from '../admin/ui'
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, Card, FIELD, LABEL, Loading, PageHeader, ROW } from '../admin/ui'
 import { ApiError } from '../lib/api'
 import {
   boostFromGap,
@@ -17,6 +17,7 @@ import {
   type Gaps,
   type GapSource,
 } from '../lib/gaps'
+import { useMe } from '../lib/me'
 import { onInternalClick } from '../lib/route'
 import { stampOf, zoneLabel } from '../lib/time'
 
@@ -31,27 +32,39 @@ type Load = { status: 'loading' } | { status: 'error'; message: string } | { sta
 /** Severity at or above this is flagged in brass with the dagger (§6). */
 export const FLAG_AT = 0.6
 
-const GROUPS: readonly { key: GapGroup | null; label: string }[] = [
-  { key: null, label: 'All' },
-  { key: 'coverage', label: 'Coverage' },
-  { key: 'search', label: 'Searches' },
-  { key: 'questions', label: 'Question set' },
+/** The operator's groups (`B-239`): each folds below the reader's list, under its own line. */
+const OPERATOR_GROUPS: readonly { key: GapGroup; label: string; about: string }[] = [
+  {
+    key: 'questions',
+    label: 'Question set',
+    about: 'Held-out questions that scored low in the newest evaluation run.',
+  },
+  {
+    key: 'search',
+    label: 'Search yield',
+    about: 'How the crawl’s searches are landing. They change what is fetched, not what is known.',
+  },
 ]
 
-/** The group a link names (`?kind=`), so Back and a shared link keep the tab (`B-184`). */
+/**
+ * The operator's group a link names (`?kind=`), so Back and a shared link reopen its fold
+ * (`B-184`). Null for anything else, the reader's list included.
+ */
 export function groupFromSearch(search: string): GapGroup | null {
   const kind = new URLSearchParams(search).get('kind')
-  return GROUPS.some((g) => g.key === kind) ? (kind as GapGroup) : null
+  return OPERATOR_GROUPS.some((g) => g.key === kind) ? (kind as GapGroup) : null
 }
 
 export function GapsPage() {
+  const { can } = useMe()
+  const operator = can('admin.view')
   const [load, setLoad] = useState<Load>({ status: 'loading' })
-  const [group, setGroupState] = useState<GapGroup | null>(() => groupFromSearch(window.location.search))
-  const [yieldOpen, setYieldOpen] = useState(false)
+  const [open, setOpenState] = useState<GapGroup | null>(() => groupFromSearch(window.location.search))
 
-  function setGroup(next: GapGroup | null) {
-    setGroupState(next)
-    window.history.replaceState({}, '', next ? `/gaps?kind=${next}` : '/gaps')
+  function toggle(next: GapGroup) {
+    const value = open === next ? null : next
+    setOpenState(value)
+    window.history.replaceState({}, '', value ? `/gaps?kind=${value}` : '/gaps')
   }
 
   useEffect(() => {
@@ -69,16 +82,22 @@ export function GapsPage() {
   }, [])
 
   const gaps = load.status === 'ready' ? load.body.gaps : []
-  // "All" leads with what a reader can ask about; how the crawl's searches are doing is the
-  // operator's, and folds below (`B-184`). It ranked first by severity and hid the questions.
-  const [reader, searches] = group === null ? splitForReaders(gaps) : [gaps.filter((g) => groupOf(g) === group), []]
-  const shown = reader
+  // A reader's Gaps is about evidence (`B-239`): the question set is the operator's
+  // evaluation, and search yield is how the crawl is doing. Both fold below, for the operator.
+  const shown = readerGaps(gaps)
+  const acts = can('seeds.add') || can('topics.steer')
 
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-6 px-4 pb-24 pt-8 sm:px-6">
       <PageHeader title="Gaps">
-        What the corpus cannot yet answer, most severe first. Every action goes through the crawl queue or the steering
-        vector, takes effect at the crawl&rsquo;s next claim, and is reversible in Admin.
+        Where the evidence is thin, weak, stale or unconnected, most severe first.
+        {acts ? (
+          <>
+            {' '}
+            Every action goes through the crawl queue or the steering vector, takes effect at the crawl&rsquo;s next
+            claim, and is reversible in Admin.
+          </>
+        ) : null}
       </PageHeader>
 
       {load.status === 'loading' ? <Loading what="the gaps" /> : null}
@@ -90,72 +109,80 @@ export function GapsPage() {
 
       {load.status === 'ready' ? (
         <>
-          <SourceLine sources={load.body.sources} computedAt={load.body.computed_at} />
-          <Filters
-            options={GROUPS.map((g) => ({
-              ...g,
-              count: g.key === null ? gaps.length : gaps.filter((x) => groupOf(x) === g.key).length,
-            }))}
-            value={group}
-            onChange={setGroup}
+          <SourceLine
+            sources={load.body.sources.filter((s) => isReaderSource(s.name))}
+            computedAt={load.body.computed_at}
+            notes={operator}
           />
-          {shown.length === 0 && searches.length === 0 ? (
+          {shown.length === 0 ? (
             <Card className="px-[18px] py-6">
               <p className="text-[13px] text-text-muted">
-                {gaps.length === 0
-                  ? 'No gaps from the sources that ran. Sources marked unavailable or pending above were not checked.'
-                  : 'No gaps of this kind.'}
+                No gaps in the evidence from the sources that ran. Sources marked unavailable or pending above were not
+                checked.
               </p>
             </Card>
           ) : (
-            <>
-              {shown.length > 0 ? (
-                <Card>
-                  <ol aria-label="Gaps, most severe first">
-                    {shown.map((gap, index) => (
-                      <GapRow key={gap.id} gap={gap} rank={index + 1} first={index === 0} />
-                    ))}
-                  </ol>
-                </Card>
-              ) : null}
-              {searches.length > 0 ? (
-                <section aria-label="Search yield" className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    aria-expanded={yieldOpen}
-                    onClick={() => setYieldOpen(!yieldOpen)}
-                    className="flex items-baseline gap-2 self-start text-left"
-                  >
-                    <span className={LABEL}>
-                      {yieldOpen ? '⌄' : '›'} Search yield · {searches.length}
-                    </span>
-                    <span className="text-[12.5px] text-text-muted">
-                      How the crawl&rsquo;s searches are landing. They change what is fetched, not what is known.
-                    </span>
-                  </button>
-                  {yieldOpen ? (
-                    <Card>
-                      <ol aria-label="Search yield, most severe first">
-                        {searches.map((gap, index) => (
-                          <GapRow key={gap.id} gap={gap} rank={index + 1} first={index === 0} />
-                        ))}
-                      </ol>
-                    </Card>
-                  ) : null}
-                </section>
-              ) : null}
-            </>
+            <Card>
+              <ol aria-label="Gaps, most severe first">
+                {shown.map((gap, index) => (
+                  <GapRow key={gap.id} gap={gap} rank={index + 1} first={index === 0} />
+                ))}
+              </ol>
+            </Card>
           )}
+
+          {operator ? (
+            <section aria-label="For the operator" className="mt-4 flex flex-col gap-3 border-t border-line pt-5">
+              <span className={LABEL}>For the operator</span>
+              <SourceLine sources={load.body.sources.filter((s) => !isReaderSource(s.name))} />
+              {OPERATOR_GROUPS.map(({ key, label, about }) => {
+                const rows = gaps.filter((g) => groupOf(g) === key)
+                const expanded = open === key
+                return (
+                  <section key={key} aria-label={label} className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      onClick={() => toggle(key)}
+                      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 self-start text-left"
+                    >
+                      <span className={`${LABEL} whitespace-nowrap`}>
+                        {expanded ? '⌄' : '›'} {label} · {rows.length}
+                      </span>
+                      <span className="text-[12.5px] text-text-muted">{about}</span>
+                    </button>
+                    {expanded && rows.length > 0 ? (
+                      <Card>
+                        <ol aria-label={`${label}, most severe first`}>
+                          {rows.map((gap, index) => (
+                            <GapRow key={gap.id} gap={gap} rank={index + 1} first={index === 0} />
+                          ))}
+                        </ol>
+                      </Card>
+                    ) : null}
+                  </section>
+                )
+              })}
+            </section>
+          ) : null}
         </>
       ) : null}
     </div>
   )
 }
 
-/** Gaps a reader asks about, then the crawl's search diagnostics; each keeps its severity order. */
-export function splitForReaders(gaps: readonly Gap[]): [Gap[], Gap[]] {
-  return [gaps.filter((g) => groupOf(g) !== 'search'), gaps.filter((g) => groupOf(g) === 'search')]
+/** The gaps a reader is shown: about the evidence, not the operator's evaluation or searches. */
+export function readerGaps(gaps: readonly Gap[]): Gap[] {
+  return gaps.filter((g) => groupOf(g) !== 'search' && groupOf(g) !== 'questions')
 }
+
+/** Whether a gap source speaks about the evidence (shown to readers) or the operator's work. */
+export function isReaderSource(name: string): boolean {
+  return !OPERATOR_SOURCES.includes(name)
+}
+
+/** The sources whose gaps are the operator's (`B-239`); `groupOf` puts them in `search` or `questions`. */
+export const OPERATOR_SOURCES: readonly string[] = ['search-queries', 'search-results', 'question-set']
 
 /** Where an action's result can be undone, by the kind of action (`B-184`). */
 export const UNDO_HREF: Record<string, string> = {
@@ -183,22 +210,37 @@ export const SOURCE_NAMES: Record<string, string> = {
 }
 
 /** Which sources ran, so an empty list is never read as "no gaps anywhere". */
-export function SourceLine({ sources, computedAt }: { sources: GapSource[]; computedAt: string }) {
+export function SourceLine({
+  sources,
+  computedAt,
+  notes = true,
+}: {
+  sources: GapSource[]
+  computedAt?: string
+  /**
+   * Whether to print each source's note. A note says how to fix what is unavailable ("run …"),
+   * which is the operator's to act on (`B-239`); a reader is told only that it was not checked.
+   */
+  notes?: boolean
+}) {
+  if (sources.length === 0) return null
   return (
     <section aria-label="Gap sources" className="flex flex-col gap-1.5">
-      <span className={LABEL}>
-        Checked {stampOf(computedAt)} {zoneLabel(computedAt)}
-      </span>
+      {computedAt ? (
+        <span className={LABEL}>
+          Checked {stampOf(computedAt)} {zoneLabel(computedAt)}
+        </span>
+      ) : null}
       <ul className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-text-muted">
         {sources.map((s) => (
-          <li key={s.name} title={s.note ?? undefined}>
+          <li key={s.name} title={notes ? (s.note ?? undefined) : undefined} className="[overflow-wrap:anywhere]">
             <span className="text-text">{SOURCE_NAMES[s.name] ?? s.name}</span>{' '}
             {s.status === 'ok' ? (
               <span className="tabular-nums">{s.gaps}</span>
             ) : (
               <span className={s.status === 'unavailable' ? 'text-accent-attention' : 'text-text-faint'}>
                 {s.status}
-                {s.note ? ` — ${s.note}` : ''}
+                {notes && s.note ? ` — ${s.note}` : ''}
               </span>
             )}
           </li>
@@ -211,12 +253,14 @@ export function SourceLine({ sources, computedAt }: { sources: GapSource[]; comp
 type Done = { ok: true; result: GapActionResult } | { ok: false; message: string }
 
 export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: boolean }) {
+  const { can } = useMe()
   const [seeding, setSeeding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<Done | null>(null)
   const flagged = gap.severity >= FLAG_AT
-  const seed = gap.actions.find((a) => a.kind === 'seed_query')
-  const boost = gap.actions.find((a) => a.kind === 'boost_topic')
+  // Steering is offered only to whoever may steer (`B-239`); the server refuses it otherwise.
+  const seed = can('seeds.add') ? gap.actions.find((a) => a.kind === 'seed_query') : undefined
+  const boost = can('topics.steer') ? gap.actions.find((a) => a.kind === 'boost_topic') : undefined
   const open = gap.actions.find((a) => a.kind === 'open_search')
 
   async function act(run: () => Promise<GapActionResult>) {
@@ -285,7 +329,7 @@ export function GapRow({ gap, rank, first }: { gap: Gap; rank: number; first?: b
             {open.label}
           </a>
         ) : null}
-        {gap.kind === 'search_off_topic' ? (
+        {gap.kind === 'search_off_topic' && can('admin.view') ? (
           // The reason says a description would steer these searches; this is where it is set.
           <a href="/admin/topics" onClick={onInternalClick('/admin/topics')} className={BUTTON_SECONDARY}>
             Edit the topic&rsquo;s description

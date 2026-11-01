@@ -10,7 +10,18 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App, sectionOf } from '../src/App'
-import { FLAG_AT, GapsPage, SOURCE_NAMES, UNDO_HREF, splitBangs } from '../src/explore/GapsPage'
+import {
+  FLAG_AT,
+  GapsPage,
+  OPERATOR_SOURCES,
+  SOURCE_NAMES,
+  UNDO_HREF,
+  isReaderSource,
+  readerGaps,
+  splitBangs,
+} from '../src/explore/GapsPage'
+import { MeProvider } from '../src/lib/me'
+import type { Me } from '../src/lib/people'
 import { SECTIONS } from '../src/admin/sections'
 import {
   GAP_ACTION_FIELDS,
@@ -225,10 +236,14 @@ describe('the page', () => {
 
   it('an empty list names what was not checked', async () => {
     await renderWith(() => respond(body([])))
-    expect(screen.getByText(/No gaps from the sources that ran/).textContent).toMatch(/unavailable or pending/)
-    const sources = screen.getByRole('region', { name: 'Gap sources' })
-    expect(sources.textContent).toContain('unavailable — no run file')
-    expect(sources.textContent).toContain('pending')
+    expect(screen.getByText(/No gaps in the evidence from the sources that ran/).textContent).toMatch(
+      /unavailable or pending/,
+    )
+    const [reader, operator] = screen.getAllByRole('region', { name: 'Gap sources' })
+    expect(reader!.textContent).toContain('pending')
+    // The question set is the operator's (`B-239`): its state is said in their section.
+    expect(reader!.textContent).not.toContain('question set')
+    expect(operator!.textContent).toContain('unavailable — no run file')
   })
 
   it('writes a kind with several words as words', async () => {
@@ -314,21 +329,23 @@ describe('the page', () => {
         },
       ],
     })
+    window.history.pushState({}, '', '/gaps?kind=questions')
     await renderWith(() => respond(body([q])))
     expect(screen.queryByRole('button', { name: /Seed|Boost/ })).toBeNull()
     expect(screen.getByRole('link', { name: 'Search it in Find' }).getAttribute('href')).toBe('/?q=the%20question')
   })
 
-  it('filters by kind with counts', async () => {
+  it('opens an operator group with its count, numbered within itself, and keeps it in the link', async () => {
     const q = gap({ id: 'question:Q1', source: 'question-set', subject: 'Q1', title: 'Q1 low', actions: [] })
     await renderWith(() => respond(body([gap(), q])))
-    fireEvent.click(screen.getByRole('button', { name: 'Question set (1)' }))
-    const rows = within(screen.getByRole('list', { name: /most severe first/ })).getAllByRole('listitem')
+    fireEvent.click(screen.getByRole('button', { name: /Question set · 1/ }))
+    const rows = within(screen.getByRole('list', { name: 'Question set, most severe first' })).getAllByRole('listitem')
     expect(rows).toHaveLength(1)
-    // Numbered within the list shown (`B-184`): "All" is now two lists, and a number taken
-    // from the whole would read 01, 02, 05 in either of them.
+    // Numbered within the list shown (`B-184`): a number taken from the whole would read 02.
     expect(rows[0]!.textContent).toContain('01')
     expect(window.location.search).toBe('?kind=questions')
+    fireEvent.click(screen.getByRole('button', { name: /Question set · 1/ }))
+    expect(window.location.search).toBe('')
   })
 })
 
@@ -361,11 +378,12 @@ describe('what a reader can ask comes first (B-184)', () => {
     actions: [],
   })
 
-  it('lists questions and coverage, and folds the search yield below them', async () => {
-    await renderWith(() => respond(body([search, question])))
+  it('lists the evidence, and folds the question set and search yield below it (B-239)', async () => {
+    await renderWith(() => respond(body([search, question, gap()])))
     const reader = within(screen.getByRole('list', { name: 'Gaps, most severe first' })).getAllByRole('listitem')
-    expect(reader.map((r) => r.textContent)).toEqual([expect.stringContaining('Q1 low')])
+    expect(reader.map((r) => r.textContent)).toEqual([expect.stringContaining('robotics: 0 sources')])
     expect(screen.queryByText('3 of 90 search results are about robotics')).toBeNull()
+    expect(screen.queryByText('Q1 low')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Search yield · 1/ }))
     expect(screen.getByText('3 of 90 search results are about robotics')).toBeTruthy()
   })
@@ -420,5 +438,71 @@ describe('Find opens a linked search', () => {
     })
     const searched = fetchMock.mock.calls.map(([url]) => String(url)).filter((u) => u.startsWith('/api/explore/search'))
     expect(searched.some((u) => u.includes('q=shade+study') || u.includes('q=shade%20study'))).toBe(true)
+  })
+})
+
+describe('a reader sees the evidence, not the operator diagnostics (B-239)', () => {
+  const reader: Me = {
+    subject: 'r@example.test',
+    profile: 'reader',
+    owner: false,
+    permissions: ['explore.read'],
+    setup_needed: false,
+  }
+  const question = gap({ id: 'question:Q1', source: 'question-set', subject: 'Q1', title: 'Q1 low', actions: [] })
+  const search = gap({ id: 'search-zero:x', source: 'search-queries', subject: 'x', title: 'x searches found nothing' })
+
+  async function renderAs(me: Me, gaps: Gap[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => respond(body(gaps))),
+    )
+    await act(async () => {
+      render(
+        <MeProvider load={async () => me}>
+          <GapsPage />
+        </MeProvider>,
+      )
+    })
+  }
+
+  it('shows a reader no question set, no search yield and no operator section', async () => {
+    window.history.pushState({}, '', '/gaps?kind=questions')
+    await renderAs(reader, [question, search, gap()])
+    expect(screen.queryByRole('region', { name: 'For the operator' })).toBeNull()
+    expect(screen.queryByText('Q1 low')).toBeNull()
+    expect(screen.queryByText('x searches found nothing')).toBeNull()
+    expect(screen.getByText('robotics: 0 sources')).toBeTruthy()
+    const sources = screen.getByRole('region', { name: 'Gap sources' }).textContent
+    expect(sources).not.toContain('question set')
+    // A note says how to fix a source ("run …"): the operator's to act on, not the reader's.
+    expect(sources).toContain('fields pending')
+    expect(sources).not.toContain('arrive with')
+  })
+
+  it('offers a reader no steering, but still the ways to read about a gap', async () => {
+    await renderAs(reader, [gap({ evidence: { area_id: 4, parent_id: 2 } })])
+    expect(screen.queryByRole('button', { name: /Seed|Boost/ })).toBeNull()
+    expect(screen.getByRole('link', { name: 'See it on the Map' })).toBeTruthy()
+    expect(screen.queryByText(/reversible in Admin/)).toBeNull()
+  })
+
+  it('offers each action only to whoever holds its permission', async () => {
+    await renderAs({ ...reader, permissions: ['explore.read', 'seeds.add'] }, [gap()])
+    expect(screen.getByRole('button', { name: 'Seed a search' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Boost/ })).toBeNull()
+  })
+
+  it('places every source the server registers, and only the operator ones leave the reader', () => {
+    // Read from the server's registry, so a new source is placed on purpose, not by default.
+    const core = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/gaps.py'), 'utf8')
+    const registered = [...core.matchAll(/@register\("([a-z-]+)"\)/g)].map((m) => m[1]!)
+    expect(registered.length).toBeGreaterThan(3)
+    for (const name of OPERATOR_SOURCES) expect(registered).toContain(name)
+    for (const name of registered) {
+      const g = gap({ id: name, source: name })
+      expect(readerGaps([g]).length === 1, name).toBe(isReaderSource(name))
+      expect(groupOf(g), name).not.toBe('other')
+    }
   })
 })

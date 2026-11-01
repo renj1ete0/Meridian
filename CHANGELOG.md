@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.191.1] — 2026-11-01
+
+### Changed
+
+- `B-239`: reader pages show the evidence, and the operator's diagnostics need `admin.view`:
+  Gaps' question-set and search-yield groups, the server's how-to-fix notes, the top bar's
+  status pill and bell; Seed, Boost and Map steering need the permission their route needs.
+  The assistant's tool descriptions no longer cite spec sections or task IDs.
+
+**Deploy:** image only.
+
 ## [0.191.0] — 2026-11-01
 
 ### Added
