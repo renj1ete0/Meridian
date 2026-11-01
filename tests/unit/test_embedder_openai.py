@@ -493,3 +493,14 @@ async def test_an_outage_with_no_message_still_says_what_happened() -> None:
     )
     with pytest.raises(EmbeddingUnavailable, match="ReadTimeout"):
         await embedder.embed_one("q")
+
+
+def test_a_query_times_out_quickly_and_a_backfill_slice_does_not() -> None:
+    """`B-269`: a slice sized at 2 s a text (32 s for 16) timed out on a card the reranker
+    shared, and the backfill called a slow server offline; a query must still fail fast."""
+    from meridian_core.embedder import SLICE_TIMEOUT_FLOOR_S
+
+    embedder = RemoteEmbedder(EMBED, api="openai", timeout_s=30)
+    assert embedder._slice_timeout(1) == 30
+    assert embedder._slice_timeout(16) == SLICE_TIMEOUT_FLOOR_S
+    assert embedder._slice_timeout(256) == 512

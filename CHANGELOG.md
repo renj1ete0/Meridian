@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.196.1] — 2026-11-02
+
+### Fixed
+
+- `B-269`: a backfill slice waits at least 120 s for a remote model server, while a single
+  query keeps its short timeout. Sized at 2 s a text, a 16-text slice got 32 s, and on a card
+  the reranker shares the end-to-end run saw the pass call a slow server offline.
+
+**Deploy:** image only.
+
 ## [0.196.0] — 2026-11-02
 
 ### Fixed

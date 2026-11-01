@@ -381,7 +381,9 @@ What the client does that the sidecar did for it:
   on the operator's machine during an end-to-end run), so search fell back to words exactly
   while a crawl was adding pages. In slices a query waits for one slice, about a second; the
   backfill's throughput does not change. Giving the server more than one slot (llama.cpp
-  `-np`) removes the wait altogether.
+  `-np`) removes the wait altogether. A slice waits at least 120 s (`SLICE_TIMEOUT_FLOOR_S`): sized
+  at 2 s a text, a slice timed out while a search reranked on the same card, and the backfill
+  called a slow server offline. A single query keeps the short timeout.
 - **Scales vectors to length one**, as the worker stores them; maps results back by `index`,
   since rerank results arrive sorted by score.
 - **Reads 404 or 501 from `/v1/rerank` as reranking off**, not an outage: 501 is a llama.cpp

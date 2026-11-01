@@ -34,6 +34,11 @@ DEFAULT_TIMEOUT_S = 30.0
 #: How long one text may take, used to size a batch's timeout (`B-27`). Generous
 #: on purpose; see docs/features/embedding.md#timeouts.
 SECONDS_PER_TEXT = 2.0
+#: The least a slice of a backfill waits (`B-269`). Sized per slice, 16 texts got 32 s, and on
+#: a card the reranker shares a slice took longer while a search reranked: measured in the
+#: end-to-end run, the pass then called a slow server offline. A single query keeps the short
+#: timeout, so a search still falls back quickly.
+SLICE_TIMEOUT_FLOOR_S = 120.0
 
 #: How long to wait for the sidecar's machine to accept a connection (`B-223`). Short,
 #: and apart from the read timeout: a machine that is switched off and not on this
@@ -339,6 +344,12 @@ class RemoteEmbedder:
         """
         return max(self._timeout, count * SECONDS_PER_TEXT)
 
+    def _slice_timeout(self, count: int) -> float:
+        """A backfill slice's wait: never under `SLICE_TIMEOUT_FLOOR_S`; a query's is short."""
+        if count <= 1:
+            return self._batch_timeout(count)
+        return max(self._batch_timeout(count), SLICE_TIMEOUT_FLOOR_S)
+
     async def embed_one(self, text: str) -> list[float]:
         """One vector, for the query path."""
         return (await self.embed([text]))[0]
@@ -526,7 +537,7 @@ class RemoteEmbedder:
             self.base_url,
             "/v1/embeddings",
             json=self._named({"input": inputs}, self.served_model),
-            read_s=self._batch_timeout(len(texts)),
+            read_s=self._slice_timeout(len(texts)),
         )
         body = self._body(self.base_url, response)
         data = body.get("data")
