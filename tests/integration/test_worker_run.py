@@ -43,6 +43,7 @@ from meridian_core.models import (
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier, source_tier_map
 from meridian_core.sources import get_source, upsert_source
 from meridian_core.uploads import NO_COPY
+from worker import requeue_links
 from worker.crawl import Crawler
 from worker.extract.pdf import available as pdf_available
 from worker.fetch import Fetcher
@@ -1390,6 +1391,175 @@ async def test_the_crawl_actually_continues_past_its_seed(
     assert stats.claimed == 4, "the loop ran out of work despite frontier expansion"
     assert stats.queued >= 3
     assert len(rec.requests) == 4
+
+
+# --------------------------------------------------------------------------
+# B-242: a followed link waits for its page's verdict
+# --------------------------------------------------------------------------
+
+
+def serve_links(links: dict[str, tuple[str, ...]]):
+    """Each path serves a page linking to its listed paths; anything else links nowhere."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = linking_page(*links.get(request.url.path, ()))
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    return handler
+
+
+async def row_for(sess, url: str) -> QueueTask:
+    return await sess.scalar(select(QueueTask).where(QueueTask.url_or_query == url))
+
+
+async def test_a_followed_link_waits_for_its_pages_verdict(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Queued with a wait the length of the verdict wait, never attempted, page recorded."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    handler = serve_links({"/a": ("/child",)})
+    worker, _ = with_frontier(sess, handler, run_domain, run_topic, resolver=resolve, max_tasks=1)
+
+    before = dt.datetime.now(dt.UTC)
+    await worker.run()
+
+    child = await row_for(sess, f"https://{run_domain}/child")
+    wait = worker._verdict_wait_s
+    assert wait > 0
+    assert child.attempts == 0
+    assert child.parent_source_id is not None, "a held link no verdict can ever reach"
+    assert child.next_attempt_at is not None, "the link was claimable before its page was read"
+    held_for = (child.next_attempt_at - before).total_seconds()
+    assert wait - 60 <= held_for <= wait + 60
+
+
+async def test_no_wait_when_the_wait_is_turned_off(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic)
+    handler = serve_links({"/a": ("/child",)})
+    worker, _ = with_frontier(sess, handler, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    worker._verdict_wait_s = 0
+
+    await worker.run()
+
+    child = await row_for(sess, f"https://{run_domain}/child")
+    assert child.next_attempt_at is None
+
+
+async def test_ready_work_goes_before_a_link_still_waiting_however_high_it_ranks(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    sess = await session_for("rw")
+    waiting = await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/waiting",
+        seed_source="frontier",
+        priority=500,
+        next_attempt_at=dt.datetime.now(dt.UTC) + dt.timedelta(hours=3),
+    )
+    await enqueue(sess, run_domain, run_topic, path="/ready", priority=0)
+    worker, rec = with_frontier(
+        sess, serve_links({}), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+
+    await worker.run()
+
+    assert [r.url.path for r in rec.requests] == ["/ready"]
+    await sess.refresh(waiting)
+    assert waiting.status == "pending"
+
+
+async def test_a_waiting_link_is_claimed_when_nothing_else_is_ready(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The floor that keeps discovery alive: the wait reorders the crawl, never idles it."""
+    sess = await session_for("rw")
+    await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/waiting",
+        seed_source="frontier",
+        next_attempt_at=dt.datetime.now(dt.UTC) + dt.timedelta(hours=3),
+    )
+    worker, rec = with_frontier(
+        sess, serve_links({}), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+
+    stats = await worker.run()
+
+    assert stats.claimed == 1
+    assert [r.url.path for r in rec.requests] == ["/waiting"]
+
+
+async def test_a_retry_backing_off_is_not_taken_for_a_verdict_wait(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Only a row never attempted is waiting on a verdict; a backoff is still honoured."""
+    sess = await session_for("rw")
+    backing_off = await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/failed-once",
+        seed_source="frontier",
+        attempts=1,
+        next_attempt_at=dt.datetime.now(dt.UTC) + dt.timedelta(hours=1),
+    )
+    worker, rec = with_frontier(
+        sess, serve_links({}), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.3)
+    worker.stop()
+    stats = await asyncio.wait_for(task, timeout=5)
+
+    assert stats.claimed == 0
+    assert rec.requests == []
+    await sess.refresh(backing_off)
+    assert backing_off.attempts == 1
+
+
+async def test_an_on_topic_pages_links_go_ahead_of_an_off_topic_pages(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """End to end: two pages fetched, the labeller's verdicts, the re-ranking pass, the claim.
+
+    The off-topic page's link was queued first and ranks the same; after the verdicts
+    the on-topic page's link is fetched first and the other waits at the floor.
+    """
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic, path="/off", priority=10)
+    await enqueue(sess, run_domain, run_topic, path="/on", priority=9)
+    handler = serve_links({"/off": ("/off-child",), "/on": ("/on-child",)})
+    worker, rec = with_frontier(sess, handler, run_domain, run_topic, resolver=resolve, max_tasks=2)
+    await worker.run()
+    assert [r.url.path for r in rec.requests] == ["/off", "/on"]
+
+    for path, labels in (("/off", []), ("/on", [run_topic])):
+        source = await get_source(sess, f"https://{run_domain}{path}")
+        source.topic_labels = labels
+    await sess.flush()
+
+    await requeue_links.demote(sess)
+    children, _ = await requeue_links.promotable(sess, HostPolicy({}))
+    await requeue_links._raise(sess, children, requeue_links.PROMOTED_PRIORITY)
+    assert await requeue_links.release_judged(sess) >= 2
+
+    off_child = await row_for(sess, f"https://{run_domain}/off-child")
+    on_child = await row_for(sess, f"https://{run_domain}/on-child")
+    assert on_child.next_attempt_at is None and off_child.next_attempt_at is None
+    assert on_child.priority > off_child.priority == requeue_links.DEMOTED_PRIORITY
+
+    worker, rec = with_frontier(sess, handler, run_domain, run_topic, resolver=resolve, max_tasks=1)
+    await worker.run()
+    assert [r.url.path for r in rec.requests] == ["/on-child"]
 
 
 async def test_frontier_expansion_is_off_when_no_prefilter_is_given(
@@ -3236,10 +3406,10 @@ async def test_every_third_claim_asks_for_directed_work_first(
     sess = await session_for("rw")
     worker, _ = build_worker(sess, ok_html, run_domain, run_topic, resolver=resolve)
     worker._settings = dc.replace(worker._settings, topics=None, directed_every=3)
-    asked: list[tuple[bool, bool | None]] = []
+    asked: list[tuple[bool, bool | None] | str] = []
 
-    async def record(_sess, topics, *, directed=False, lookups=None):
-        asked.append((directed, lookups))
+    async def record(_sess, topics, *, directed=False, lookups=None, include_held=False):
+        asked.append("held" if include_held else (directed, lookups))
         return None
 
     async def no_shares(_sess):
@@ -3252,18 +3422,19 @@ async def test_every_third_claim_asks_for_directed_work_first(
 
     # Claims 3 and 6 try directed work — pages first, then lookups — and fall
     # through to the ordinary claim. Lookups lead only one directed slot in
-    # LOOKUP_EVERY (`B-86`), so both of these lead with pages.
-    ordinary = (False, None)
+    # LOOKUP_EVERY (`B-86`), so both of these lead with pages. Every empty claim
+    # ends by asking for a link still waiting for its page's verdict (`B-242`).
+    ordinary = [(False, None), "held"]
     pages_first = [(True, False), (True, True)]
     assert asked == [
-        ordinary,
-        ordinary,
+        *ordinary,
+        *ordinary,
         *pages_first,
-        ordinary,
-        ordinary,
-        ordinary,
+        *ordinary,
+        *ordinary,
+        *ordinary,
         *pages_first,
-        ordinary,
+        *ordinary,
     ]
 
 

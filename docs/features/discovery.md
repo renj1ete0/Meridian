@@ -12,7 +12,7 @@ page about one of the topics.
   `packages/meridian_core/meridian_core/searchseeds.py`, `hostscores.py`,
   `citedpapers.py`, `diversity.py`, `translations.py`, `tiering.py`
 - **Tasks:** `P1-06`, `P1-14`, `P1-28`, `P1-34`, `P5-05`, `B-48`, `B-51`, `B-52`, `B-58`,
-  `B-90`–`B-92`, `B-103`–`B-118`, `B-150`, `B-155`
+  `B-90`–`B-92`, `B-103`–`B-118`, `B-150`, `B-155`, `B-242`
 - **Decisions:** [ADR 0015](../adr/0015-followed-links-follow-the-evidence.md),
   [ADR 0016](../adr/0016-proven-by-following.md)
 
@@ -21,7 +21,7 @@ page about one of the topics.
 | Source | Queued by | Seed source | How it is ranked |
 |---|---|---|---|
 | **Search** | `seedsearch` every 3 h | `diversity` (the query), `search` (its results) | Queries above every link; results by source tier |
-| **Followed links** | the fetch loop, as each page is stored | `frontier` | Source tier, adjusted by the host's score and the parent page's labels |
+| **Followed links** | the fetch loop, as each page is stored | `frontier` | Source tier, adjusted by the host's score and the parent page's labels; each waits for its page's verdict ([`B-242`](#verdict-wait)) |
 | **Sitemaps** | `sitemapmine` hourly, for proven hosts | `sitemap` | Paths matching a topic's vocabulary first; the rest at the bottom |
 | **Watched sources** | `watch` every 5 min, for each news sitemap or feed the operator watches | `watch` | The read level with an operator's seed (100), its new entries just behind (90) |
 | **Cited papers** | the fetch loop (DOIs on a page) | `doi`, `citation` | By the citing page: on-topic page high, off-topic floor, unjudged modest |
@@ -317,7 +317,9 @@ previous hour's numbers. The same pass blocks domains that refuse every request 
   almost always more of the same. So its pending links (`queue.parent_source_id`, recorded since
   `B-91`) move down to the floor the host gate uses for off-topic government links. A link that
   an on-topic page also carries keeps its own row's rank. Idempotent, so hourly after `topics`.
-  Since `B-150` the same pass also raises links: see [vouched hosts](#vouched-hosts).
+  Since `B-150` the same pass also raises links: see [vouched hosts](#vouched-hosts). Since
+  `B-242` it also ends the wait of links whose page now has a verdict
+  ([waiting for the verdict](#verdict-wait)).
 
 ### Vouched hosts
 
@@ -390,6 +392,75 @@ proven under the old rule became 20 proven, 9 promising and 3 thin.
 (the migration moves it only from the old default), so a host's change of standing reaches its
 waiting links within the hour; it takes seconds. A promising host loses nothing for good: its
 links wait at a lower rank until its first followed pages are read.
+
+### <a id="verdict-wait"></a>Waiting for the page's verdict (`B-242`)
+
+A followed link is queued with `next_attempt_at` set `verdict_wait_hours` ahead (3 by
+default; in the global policy's `frontier` block, read at worker start; 0 turns it off), so
+it is not claimed until the labeller has read the page that carried it and `requeue_links`
+has raised it (page on a topic) or moved it to the floor (page about nothing). Once the page
+has a verdict, `requeue_links` ends the wait for its links in the same pass, so the wait is
+"until the verdict, at most three hours". Only a link with a recorded parent waits; a search
+result, seed, sitemap entry or lookup never does. A row already attempted is a retry backing
+off, never a wait (`queueing.held` is `attempts = 0`).
+
+**The floor that keeps discovery alive.** Waiting links are claimed when nothing else is
+ready: every claim path ends by asking once more with `include_held`, so the wait reorders the
+crawl and never idles a lane. A young crawl whose only work is the links of the page it just
+read keeps crawling them. Crawl health counts waiting links as ready work, so a queue of them
+with no fetch is still reported as a stall.
+
+**Why the wait, measured** (local corpus, 2026-09-22 to 2026-10-11, measured 2026-11-02;
+labels as they stand now). By seed source, over every claim:
+
+| Seed source | Claims | Kept | On a topic, of examined | On-topic sources per 100 claims | Passages | On-topic passages per claim | Cited by an edge |
+|---|---|---|---|---|---|---|---|
+| `frontier` | 128,974 | 84,366 | 9.0% | 5.9 | 1,003,002 | 0.33 | 79 sources |
+| `search` | 17,293 | 11,004 | 46.4% | 27.9 | 255,028 | 2.33 | 12 sources |
+| `doi` (resolved copies) | 3,519 | 1,776 | 45.3% | 22.7 | 112,292 | 2.35 | 0 |
+| `sitemap` | 45 | 45 | 64.4% | 64.4 | 232 | 0.98 | 0 |
+
+The graph held 318 edges, too few to rank sources by. The task's finding stands (84,366 of the
+kept sources from followed links at a few percent), but two facts changed the remedy:
+
+- **In the latest week links were most of the evidence, not almost none.** After the host gates
+  (`B-150`, `B-155`) followed pages were on a topic 18–29% of the time by day, and brought in
+  about 7,000 on-topic sources against search's 1,400. Directed work had run out: no search
+  result was pending, 20 queries were, and of 25,600 pending DOIs 24,800 sat at the floor a
+  directed claim skips. A cap on links' share of claims would have left lanes idle, not given
+  their slots to better work. The directed slot (`B-61`) already takes half of claims whenever
+  anything directed waits.
+- **The waste was timing.** Of 42,599 followed claims that week, a link was fetched a median
+  20 minutes after its page, before the labeller had read the page (labelling lags a fetch by
+  0.65 h at the median, 1.5 h at the 75th percentile), so `requeue_links` had nothing to act on
+  yet. Priority hardly predicted the outcome: the band at 82 (proven hosts' press-tier links)
+  took 14,346 claims at 3.3% on a topic, while 90–97 took 9,703 at 37.8%. By the parent's verdict
+  and how soon after it the link was fetched:
+
+| Fetched after its page | Page on a topic | Page about nothing | Page never read |
+|---|---|---|---|
+| under 1 h | 2,692 claims, 45.4% | 8,191 claims, 7.1% | 3,028 claims, 5.3% |
+| 1–3 h | 1,641, 58.3% | 2,271, 12.3% | 915, 8.1% |
+| 3–24 h | 491, 23.6% | 3,363, 1.6% | 851, 1.4% |
+| over 24 h | 5,085, 22.1% | 7,531, 9.6% | 2,088, 6.3% |
+
+**Simulated effect** of a three-hour wait on that week: the 10,462 claims on links of
+pages about nothing, fetched inside three hours, would have waited at the floor (they found
+861 on-topic sources and 3,804 on-topic passages). There were 28,956 pending links of on-topic
+pages above the floor to take those claims, and such links fetched later than three hours were
+on a topic 22.2% of the time with 1.25 on-topic passages each, so the claims would have found
+about 2,300 on-topic sources and 13,100 passages. Net for the week's followed claims: 5,662 to
+about 7,100 on-topic sources (13.3 to 16.7 per 100 claims) and 31,700 to about 41,000 on-topic
+passages. The 4,333 links of on-topic pages fetched inside three hours are delayed, not lost;
+the 3,943 whose page was never read in time are claimed at their own rank when the wait ends.
+The rate of new on-topic sources from the frontier rises; the frontier is not shortened, only
+reordered, and the pool of on-topic pages' links lasts weeks at that rate while every
+on-topic page adds to it.
+
+**Considered and not chosen.** A path naming a topic's vocabulary (`topicmatch`) lifted a link
+from 13.1% to 27.5% on a topic but matched under 1% of links (68 phrases), too few to steer
+by. Links appearing inside a page's passages rather than its navigation could not be measured:
+links survive as Markdown in only about a sixth of stored passages. Neither is ruled out.
 
 ### Sitemaps
 
@@ -652,6 +723,8 @@ at the floor when nothing recommends it.
   SearXNG's own engine list is in `config/searxng/`.
 - Topics and their descriptions: **Admin → Topic weights**; vocabulary: **Admin → Gazetteer approvals**.
 - Seed languages for translations: `search_languages` in the global fetch-policy row.
+- How long a followed link waits for its page's verdict: `frontier.verdict_wait_hours` in the
+  global fetch-policy row (3; 0 turns it off; read at worker start).
 - Paper resolution: `MERIDIAN_CONTACT_EMAIL` (Unpaywall, Wikimedia), `CORE_API_KEY`,
   `SEMANTIC_SCHOLAR_API_KEY`.
 - The headline filter: `MERIDIAN_EMBEDDER_URL` (and the embedder variables beside it) in the
@@ -685,8 +758,8 @@ at the floor when nothing recommends it.
 `tests/unit/test_prefilter*.py`, `test_searchseeds.py`, `test_sitemaps.py`,
 `test_topicmatch.py`, `test_hostscores.py`, `test_cited_paper_rank.py`, `test_resolve_doi.py`,
 `test_vouched_hosts.py`, `test_translations.py`, `test_diversity.py`, `test_watched_sources.py`,
-`test_headline_filter.py`;
+`test_headline_filter.py`, `test_verdict_wait.py`;
 `tests/integration/test_requeue*.py`, `test_sitemapmine.py`, `test_seedsearch.py`,
 `test_host_scores.py`, `test_link_vouches.py`, `test_cited_papers.py`, `test_translations.py`,
-`test_diversity_graph.py`, `test_headline_topics.py`, and the watched-source cases in
-`test_worker_run.py`.
+`test_diversity_graph.py`, `test_headline_topics.py`, and the watched-source and
+verdict-wait cases in `test_worker_run.py`.

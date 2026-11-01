@@ -91,6 +91,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.198.0] — 2026-11-02
+
+### Changed
+
+- `B-242`: a followed link waits for its page's verdict before it is fetched. Links are queued
+  `verdict_wait_hours` ahead (3 by default, in the global fetch policy's `frontier` block; 0
+  turns it off), and `requeue_links` ends the wait as soon as the page is labelled either way,
+  raising the links of on-topic pages and dropping the rest to the floor. Waiting links are
+  still claimed whenever nothing else is ready, so no lane idles; Crawl health counts them as
+  ready work. Measured on a week of followed claims, links fetched before their page was read
+  were the waste, not links as such, so the share cap the task proposed was not built.
+  See docs/features/discovery.md#verdict-wait.
+
+**Deploy:** image only. Hosts already running take the three-hour default; the policy row
+needs no change.
+
 ## [0.197.1] — 2026-11-02
 
 ### Fixed

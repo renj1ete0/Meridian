@@ -84,6 +84,11 @@ max_page_bytes:         20000000
 # consecutive-failure counter can also write them (§6.4). This list is the
 # seeded floor for links nobody should ever have followed in the first place.
 frontier:
+  # Hours a followed link waits for the labeller to read the page that carried it, so
+  # links from on-topic pages go first and links from off-topic ones wait (`B-242`,
+  # docs/features/discovery.md#verdict-wait). Waiting links are still claimed when
+  # nothing else is ready. 0 turns the wait off.
+  verdict_wait_hours: 3
   blocked_domains:
     - facebook.com
     - instagram.com

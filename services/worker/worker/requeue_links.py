@@ -3,8 +3,9 @@
 ``python -m worker.requeue_links`` moves the pending links of a page found about none of
 the topics (``queue.parent_source_id``, `B-91`) down to :data:`DEMOTED_PRIORITY`, then
 raises those of a page found on a topic to :data:`PROMOTED_PRIORITY` and those into a
-vouched-for host to :data:`VOUCHED_PRIORITY`. Never deleted, idempotent; reports by
-default, writes only with ``--apply``. See docs/features/discovery.md#re-ranking.
+vouched-for host to :data:`VOUCHED_PRIORITY`, and lets go of links still waiting for a
+verdict their page now has (`B-242`). Never deleted, idempotent; reports by default, writes
+only with ``--apply``. See docs/features/discovery.md#re-ranking.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import argparse
 import asyncio
 import contextlib
 import dataclasses
+import datetime as dt
 import time
 
 from sqlalchemy import and_, func, select, update
@@ -30,6 +32,7 @@ from meridian_core.hostscores import (
 )
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, Source
+from meridian_core.queueing import held
 
 log = get_logger(__name__)
 
@@ -142,11 +145,46 @@ async def _raise(sess: AsyncSession, ids: list[int], priority: int) -> int:
     return moved
 
 
+def _releasable(now: dt.datetime):
+    """Links waiting for a verdict (`B-242`) whose page has now been read, either way."""
+    parent_read = (
+        select(Source.source_id)
+        .where(Source.source_id == QueueTask.parent_source_id, Source.topic_labels.is_not(None))
+        .exists()
+    )
+    return and_(QueueTask.status == "pending", held(now), parent_read)
+
+
+async def count_releasable(sess: AsyncSession, now: dt.datetime | None = None) -> int:
+    now = now or dt.datetime.now(dt.UTC)
+    return int(
+        await sess.scalar(select(func.count()).select_from(QueueTask).where(_releasable(now))) or 0
+    )
+
+
+async def release_judged(sess: AsyncSession, now: dt.datetime | None = None) -> int:
+    """End the wait of links whose page has its verdict. Flushes; returns how many.
+
+    Run after the re-ranking, so a released link is claimable at the rank its page earned.
+    A retry's backoff is never touched: :func:`~meridian_core.queueing.held` is only rows
+    never attempted.
+    """
+    now = now or dt.datetime.now(dt.UTC)
+    result = await sess.execute(
+        update(QueueTask)
+        .where(_releasable(now))
+        .values(next_attempt_at=None)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount or 0)
+
+
 @dataclasses.dataclass(frozen=True)
 class Moved:
     demoted: int
     promoted: int
     vouched: int
+    released: int = 0
 
 
 async def run_pass(*, apply: bool) -> Moved:
@@ -157,12 +195,10 @@ async def run_pass(*, apply: bool) -> Moved:
             demoted = await demote(sess)
         children, vouched = await promotable(sess, HostPolicy(await load(sess)))
         if not apply:
-            return Moved(demoted, len(children), len(vouched))
-        moved = Moved(
-            demoted,
-            await _raise(sess, children, PROMOTED_PRIORITY),
-            await _raise(sess, vouched, VOUCHED_PRIORITY),
-        )
+            return Moved(demoted, len(children), len(vouched), await count_releasable(sess))
+        promoted = await _raise(sess, children, PROMOTED_PRIORITY)
+        raised = await _raise(sess, vouched, VOUCHED_PRIORITY)
+        moved = Moved(demoted, promoted, raised, await release_judged(sess))
         await sess.commit()
         return moved
 
@@ -189,7 +225,8 @@ def main() -> None:
         f"{n.demoted} pending followed links from pages about none of the topics {done}"
         f"moved down to priority {DEMOTED_PRIORITY}; {n.promoted} from pages on a topic "
         f"{done}raised to {PROMOTED_PRIORITY}; {n.vouched} into vouched-for hosts {done}"
-        f"raised to {VOUCHED_PRIORITY}."
+        f"raised to {VOUCHED_PRIORITY}; {n.released} waiting for their page's verdict "
+        f"{done}let go."
     )
     log.info(
         "followed links requeued",
@@ -197,6 +234,7 @@ def main() -> None:
             "demoted": n.demoted,
             "promoted": n.promoted,
             "vouched": n.vouched,
+            "released": n.released,
             "applied": args.apply,
         },
     )

@@ -8,6 +8,7 @@ already claimed, a search result, a lookup — is one this must leave alone.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 
 import pytest
@@ -91,3 +92,51 @@ async def test_it_only_ever_moves_down_and_a_second_pass_moves_nothing(sess) -> 
     assert await priority_of(sess, high) == requeue_links.DEMOTED_PRIORITY
     assert await requeue_links.count_demotable(sess) == 0
     assert await requeue_links.demote(sess) == 0
+
+
+# --------------------------------------------------------------------------
+# B-242: a link waiting for its page's verdict is let go once the page is read
+# --------------------------------------------------------------------------
+
+
+async def held_link(sess, parent, *, attempts=0, seed="frontier", hours=3):
+    task = await link(sess, parent, seed=seed)
+    task.attempts = attempts
+    task.next_attempt_at = dt.datetime.now(dt.UTC) + dt.timedelta(hours=hours)
+    await sess.flush()
+    return task
+
+
+async def wait_of(sess, task):
+    return await sess.scalar(
+        select(QueueTask.next_attempt_at).where(QueueTask.task_id == task.task_id)
+    )
+
+
+async def test_a_verdict_either_way_ends_the_wait_and_no_verdict_keeps_it(sess) -> None:
+    on = await held_link(sess, await page(sess, ["walkability"]))
+    off = await held_link(sess, await page(sess, []))
+    unread = await held_link(sess, await page(sess, None))
+
+    assert await requeue_links.count_releasable(sess) >= 2
+    released = await requeue_links.release_judged(sess)
+
+    assert released >= 2
+    assert await wait_of(sess, on) is None
+    assert await wait_of(sess, off) is None, "an off-topic page's link waits at the floor instead"
+    assert await wait_of(sess, unread) is not None, "a page nobody has read was judged"
+    assert await requeue_links.release_judged(sess) == 0, "a second pass found more to release"
+
+
+@pytest.mark.parametrize(
+    ("attempts", "seed"),
+    [
+        (1, "frontier"),  # a retry's backoff, not a verdict wait
+        (0, "search"),  # a search result is never held
+    ],
+)
+async def test_a_backoff_or_a_chosen_row_is_never_let_go(sess, attempts, seed) -> None:
+    task = await held_link(sess, await page(sess, ["walkability"]), attempts=attempts, seed=seed)
+    before = await wait_of(sess, task)
+    await requeue_links.release_judged(sess)
+    assert await wait_of(sess, task) == before

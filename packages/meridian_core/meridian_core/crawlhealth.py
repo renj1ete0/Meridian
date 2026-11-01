@@ -10,14 +10,14 @@ import dataclasses
 import datetime as dt
 import os
 
-from sqlalchemy import DateTime, Integer, case, func, literal, or_, select
+from sqlalchemy import DateTime, Integer, case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .attempts import SUCCESS_OUTCOMES
 from .chunks import embedding_backlog
 from .models import FetchAttempt, QueueTask
 from .models.queue import FETCH_OUTCOME, TASK_STATUS
-from .queueing import DEFAULT_LEASE_SECONDS, queue_depth
+from .queueing import DEFAULT_LEASE_SECONDS, queue_depth, ready
 from .schemas.enums import LivenessState
 
 #: The history the chart covers, in hourly buckets.
@@ -232,26 +232,24 @@ async def liveness(sess: AsyncSession, *, now: dt.datetime | None = None) -> Liv
     )
     # The claim query's eligibility, minus the lease: a claimed row is work in
     # flight, and in-flight work that produces no attempt for a whole lease is
-    # the stall this is looking for.
-    ready = int(
+    # the stall this is looking for. A link waiting for its page's verdict counts:
+    # the loop claims it when nothing else waits (`B-242`).
+    ready_rows = int(
         await sess.scalar(
             select(func.count())
             .select_from(QueueTask)
-            .where(
-                *pending_rows,
-                or_(QueueTask.next_attempt_at.is_(None), QueueTask.next_attempt_at <= now),
-            )
+            .where(*pending_rows, ready(now, include_held=True))
         )
         or 0
     )
-    state = judge(last_attempt_at=last, ready=ready, pending=pending, now=now)
+    state = judge(last_attempt_at=last, ready=ready_rows, pending=pending, now=now)
     backlog = ceiling = None
     if state == "stalled" and (limit := embed_ceiling()) > 0:
         # Counted only when it could change the verdict: the count is the costly part.
         counted = int(await embedding_backlog(sess, valuable_only=True))
         state = judge(
             last_attempt_at=last,
-            ready=ready,
+            ready=ready_rows,
             pending=pending,
             now=now,
             embed_backlog=counted,
@@ -263,7 +261,7 @@ async def liveness(sess: AsyncSession, *, now: dt.datetime | None = None) -> Liv
         state=state,
         last_attempt_at=last,
         quiet_seconds=None if last is None else int((now - last).total_seconds()),
-        ready=ready,
+        ready=ready_rows,
         pending=pending,
         embed_backlog=backlog,
         embed_ceiling=ceiling,

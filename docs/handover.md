@@ -1416,6 +1416,13 @@ mysteriously returns `unsafe_target` is usually this.
 Use `streamed(...)` from `tests/http_doubles.py`, which builds a real `AsyncByteStream`
 and lets a test control chunk boundaries, which is where the caps are enforced.
 
+### A pending followed link with a future `next_attempt_at` is not backing off
+
+Since `B-242` a `frontier` row with `attempts = 0` and `next_attempt_at` ahead is waiting
+for its page's verdict (`queueing.held`), and the loop claims it when nothing else is ready.
+A test that wants a row *backing off* must set `attempts` to at least 1, or it is reading a
+wait the loop may take. See [discovery](features/discovery.md#verdict-wait).
+
 ### `caplog` does not work in this suite
 
 `addopts` carries `-p no:logging`, because pytest's logging plugin attaches handlers to

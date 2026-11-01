@@ -171,6 +171,12 @@ lookups, on a topic about as often as a coin toss and often deferred for want of
 many slots as search results. Lookups are claimed only in their own turn, never in a topic's
 ordinary draw, which is for pages.
 
+**Links waiting for a verdict** (`B-242`). A followed link is queued with `next_attempt_at` in
+the future until its page is labelled ([discovery](discovery.md#verdict-wait)). Every claim
+path ends with one more claim that also takes such links (`include_held`), so they are fetched
+whenever nothing else is ready and a lane never idles over them. Only rows never attempted
+count as waiting; a retry's backoff is always honoured.
+
 **Backpressure** pauses claiming at `MERIDIAN_WORKER_MAX_EMBED_BACKLOG` (`B-61`) because a CPU
 embedder falls behind a free-running crawl by an order of magnitude.
 

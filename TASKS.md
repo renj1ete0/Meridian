@@ -2060,7 +2060,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       page) polled on an interval, entries through the prefilter and a headline-vocabulary
       filter for general outlets. Supersedes `B-243`'s feed-only design; probe in
       `meridian-calibration/2026-10-24/sgnews/`
-- [ ] `B-242` **Followed links are most of the crawl and almost none of the evidence** (measured
+- [x] `B-242` (verdict wait instead of a share cap: links fetched before their page was read were the waste) **Followed links are most of the crawl and almost none of the evidence** (measured
       2026-10-24) — 84,366 of 97k kept sources came from followed links at 5.7% on a topic (10.3%
       in the latest week, after the gates), against search 42.6% and cited papers 40.6%. The crawl
       falls back to links when directed work runs out (1,009 queries in all, never repeated but

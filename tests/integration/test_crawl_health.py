@@ -223,6 +223,7 @@ async def test_pending_work_inside_its_backoff_is_waiting_not_stalled(sess, doma
             domain,
             created_at=PAST - dt.timedelta(days=1),
             next_attempt_at=PAST + dt.timedelta(hours=1),
+            attempts=1,
         )
     )
     await sess.flush()
@@ -231,6 +232,25 @@ async def test_pending_work_inside_its_backoff_is_waiting_not_stalled(sess, doma
 
     assert live.state == "waiting"
     assert (live.ready, live.pending) == (0, 1)
+
+
+async def test_a_link_waiting_for_its_pages_verdict_is_ready_work(sess, domain: str) -> None:
+    """`B-242`: the loop claims a waiting link when nothing else is ready, so a queue of
+    them with no fetch for hours is a stall, not a crawl politely waiting."""
+    sess.add(
+        task(
+            domain,
+            seed_source="frontier",
+            created_at=PAST - dt.timedelta(days=1),
+            next_attempt_at=PAST + dt.timedelta(hours=1),
+        )
+    )
+    await sess.flush()
+
+    live = (await crawl_health(sess, now=PAST)).liveness
+
+    assert (live.ready, live.pending) == (1, 1)
+    assert live.state == "stalled"
 
 
 async def test_rows_that_are_not_pending_do_not_hold_off_idle(sess, domain: str) -> None:

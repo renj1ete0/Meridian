@@ -181,6 +181,13 @@ def watch_topic(
 #: ahead of the other links on the page that declared it.
 ENGLISH_ALTERNATE_BONUS = 10
 
+#: How long a followed link waits for the labeller to read the page that carried it
+#: (`B-242`), so `requeue_links` can raise or lower it first. Three hours: labelling
+#: lags a fetch by under 1.5 h for three pages in four, and the re-ranking pass runs
+#: hourly. ``verdict_wait_hours`` in the global policy's ``frontier`` block overrides
+#: it; 0 turns the wait off. See docs/features/discovery.md#verdict-wait.
+DEFAULT_VERDICT_WAIT_S = 3 * 3600.0
+
 #: Added to a search result's tier priority (`B-51`): at the same tier, an answer
 #: to a question about a topic goes before a followed link.
 SEARCH_RESULT_BONUS = 5
@@ -447,7 +454,10 @@ class Worker:
         hosts: HostPolicy | None = None,
         inbox: Path | None = None,
         headlines: HeadlineFilter | None = None,
+        verdict_wait_s: float = DEFAULT_VERDICT_WAIT_S,
     ) -> None:
+        if verdict_wait_s < 0:
+            raise ValueError("a verdict wait cannot be negative")
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
         self._session_factory = session_factory
@@ -475,6 +485,8 @@ class Worker:
         self._inbox = inbox
         # `B-251`: None filters watched headlines by the vocabulary alone.
         self._headlines = headlines
+        # `B-242`: followed links wait this long for their page's verdict.
+        self._verdict_wait_s = verdict_wait_s
         self._stopping = asyncio.Event()
         self._claims = 0
         self._directed_claims = 0
@@ -667,7 +679,10 @@ class Worker:
             if self._settings.topics:
                 # An operator said what this worker is for. The vector does not
                 # get to widen that.
-                return await self._claim_within(sess, list(self._settings.topics))
+                topics = list(self._settings.topics)
+                return await self._claim_within(sess, topics) or await self._claim_within(
+                    sess, topics, include_held=True
+                )
 
             shares = await self._shares(sess)
 
@@ -711,7 +726,11 @@ class Worker:
                 # spent on it is a draw wasted.
                 shares.pop(topic, None)
 
-            return await self._claim_within(sess, None)
+            # `B-242`: a link still waiting for its page's verdict goes only when nothing
+            # else is ready, so the wait reorders the crawl and never idles it.
+            return await self._claim_within(sess, None) or await self._claim_within(
+                sess, None, include_held=True
+            )
 
     async def _claim_within(
         self,
@@ -720,10 +739,12 @@ class Worker:
         *,
         directed: bool = False,
         lookups: bool | None = None,
+        include_held: bool = False,
     ) -> Claim | None:
         """One claim.
 
         ``lookups`` True claims only lookup tasks, False only page work, None either (`B-68`).
+        ``include_held`` also takes links waiting for their page's verdict (`B-242`).
         """
         task_types = self._claimable_task_types()
         if lookups is not None:
@@ -740,6 +761,7 @@ class Worker:
             directed=directed,
             # `B-112`: not a page on a host this worker is already waiting on.
             skip_domains=self._busy_domains(),
+            include_held=include_held,
         )
         if task is None:
             return None
@@ -1650,6 +1672,11 @@ class Worker:
         tiers = await source_tier_map(sess)
         queued = 0
         held: collections.Counter[str] = collections.Counter()
+        # `B-242`: wait for this page's verdict, which `requeue_links` reads through the
+        # parent recorded below; a link with no parent has no verdict coming.
+        hold_until = None
+        if source is not None and self._verdict_wait_s > 0:
+            hold_until = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=self._verdict_wait_s)
         for url in verdict.kept:
             # §5.2: ranked by tier; `P2-20` brings forward a page whose kind rots fast.
             priority = priority_with_urgency(url, tiers, HALF_LIFE_DAYS)
@@ -1667,6 +1694,7 @@ class Worker:
                 # records. Without it nobody can ask whether an on-topic page's
                 # links are on-topic more often than an off-topic page's.
                 parent_source_id=source.source_id if source is not None else None,
+                hold_until=hold_until,
             )
             queued += 1
 
@@ -1681,6 +1709,7 @@ class Worker:
                 "dropped": verdict.dropped,
                 "held_by_host": dict(held),
                 "english_alternate": alternate,
+                "verdict_wait_s": self._verdict_wait_s if hold_until is not None else 0,
             },
         )
         return queued + dois + alternate
@@ -2154,6 +2183,37 @@ async def build_prefilter() -> Prefilter:
     return Prefilter(blocked)
 
 
+def verdict_wait_from(frontier: dict) -> float:
+    """Seconds a followed link waits for its page's verdict, from the ``frontier`` block.
+
+    ``verdict_wait_hours`` (`B-242`); absent means the default. A value that is not a
+    non-negative number is refused, never read as 0, which would quietly turn the wait off.
+    """
+    raw = frontier.get("verdict_wait_hours")
+    if raw is None:
+        return DEFAULT_VERDICT_WAIT_S
+    if isinstance(raw, bool) or not isinstance(raw, int | float) or raw < 0:
+        raise ValueError(f"frontier.verdict_wait_hours must be hours >= 0, got {raw!r}")
+    return float(raw) * 3600.0
+
+
+async def build_verdict_wait() -> float:
+    """Read the followed-link verdict wait once, at startup (`B-242`, §13.1).
+
+    An unreadable or malformed value is logged and the default used: a crawl that will
+    not start is worse than one that waits three hours.
+    """
+    try:
+        async with session() as sess:
+            frontier = await frontier_settings(sess)
+        wait = verdict_wait_from(frontier)
+    except Exception:
+        log.exception("could not read the verdict wait; using the default")
+        return DEFAULT_VERDICT_WAIT_S
+    log.info("followed links wait for their page's verdict", extra={"verdict_wait_s": wait})
+    return wait
+
+
 async def build_topic_vocabulary() -> TopicVocabulary:
     """Read the topic vocabulary once, at startup (`P1-28`).
 
@@ -2183,6 +2243,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
 
     prefilter = await build_prefilter()
     topics = await build_topic_vocabulary()
+    verdict_wait_s = await build_verdict_wait()
     hosts = HostPolicy()
 
     search = SearxClient.from_env()
@@ -2227,6 +2288,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
             hosts=hosts,
             inbox=inbox,
             headlines=headlines,
+            verdict_wait_s=verdict_wait_s,
         )
         await worker.refresh_hosts()
         install_signal_handlers(worker)

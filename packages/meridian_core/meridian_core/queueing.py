@@ -12,7 +12,7 @@ import datetime as dt
 import random
 from collections.abc import Collection, Sequence
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import robotscache
@@ -57,6 +57,28 @@ FOLLOWED_SOURCES = ("frontier", "sitemap")
 #: the place to spend on it.
 DIRECTED_FLOOR = 3
 
+#: Seed sources whose new rows may be *held* until their page's verdict (`B-242`): a
+#: followed link waits for the labeller to read the page that carried it, so the
+#: re-ranking pass can move it first. See docs/features/discovery.md#verdict-wait.
+HELD_SOURCES = ("frontier",)
+
+
+def held(now: dt.datetime) -> ColumnElement[bool]:
+    """Rows waiting out a verdict hold: never attempted, so not a retry's backoff (`B-242`)."""
+    return and_(
+        QueueTask.attempts == 0,
+        QueueTask.task_type == "url",
+        QueueTask.seed_source.in_(HELD_SOURCES),
+        QueueTask.next_attempt_at.is_not(None),
+        QueueTask.next_attempt_at > now,
+    )
+
+
+def ready(now: dt.datetime, *, include_held: bool = False) -> ColumnElement[bool]:
+    """Past any backoff; with ``include_held``, also rows only waiting on a verdict hold."""
+    due = or_(QueueTask.next_attempt_at.is_(None), QueueTask.next_attempt_at <= now)
+    return or_(due, held(now)) if include_held else due
+
 
 async def claim_next(
     sess: AsyncSession,
@@ -67,6 +89,7 @@ async def claim_next(
     task_types: list[str] | None = None,
     directed: bool = False,
     skip_domains: Collection[str] = (),
+    include_held: bool = False,
 ) -> QueueTask | None:
     """Claim the highest-priority eligible task, or return None if there is none.
 
@@ -74,6 +97,8 @@ async def claim_next(
     ordered by priority then age. ``skip_domains`` (`B-112`) leaves out page tasks on
     those domains (lookups and queries are never skipped). ``directed`` (`B-61`) keeps
     only search results, queries, seeds and cited papers above the floor.
+    ``include_held`` (`B-242`) also takes followed links still waiting for their page's
+    verdict: the last resort, so a hold reorders the crawl and never idles it.
     ``task_types`` keeps the kinds the caller can handle. The row lock lasts only this
     statement. See docs/features/crawling.md#claiming.
     """
@@ -84,7 +109,7 @@ async def claim_next(
         select(QueueTask)
         .where(
             QueueTask.status == "pending",
-            or_(QueueTask.next_attempt_at.is_(None), QueueTask.next_attempt_at <= now),
+            ready(now, include_held=include_held),
             or_(QueueTask.claimed_at.is_(None), QueueTask.claimed_at < lease_cutoff),
         )
         .order_by(QueueTask.priority.desc(), QueueTask.created_at.asc())
@@ -315,6 +340,7 @@ async def enqueue(
     priority: int = 0,
     seed_mechanism: str | None = None,
     parent_source_id: int | None = None,
+    hold_until: dt.datetime | None = None,
 ) -> QueueTask:
     """Add one task to the queue. Flushes; does not commit.
 
@@ -322,9 +348,12 @@ async def enqueue(
     ``diversity`` query (`P5-05`). No filtering here: that is `worker/prefilter.py`.
     Records how a URL's domain first became known (`P4-12`), so no caller can forget it;
     a query or DOI names no host and records nothing (`B-149`);
-    `seed_allowed` is set only for an operator's own seed. See
+    `seed_allowed` is set only for an operator's own seed. ``hold_until`` keeps a
+    followed link back until then (`B-242`, :func:`held`). See
     docs/features/discovery.md#queueing.
     """
+    if hold_until is not None and seed_source not in HELD_SOURCES:
+        raise ValueError(f"only {HELD_SOURCES} rows wait for a verdict, not {seed_source!r}")
     if task_type in ADDRESS_TASK_TYPES:
         with contextlib.suppress(ValueError):
             await record_discovery(sess, registrable_domain(url), seed_source=seed_source)
@@ -337,6 +366,7 @@ async def enqueue(
         priority=priority,
         seed_mechanism=seed_mechanism,
         parent_source_id=parent_source_id,
+        next_attempt_at=hold_until,
     )
     sess.add(task)
     await sess.flush()
