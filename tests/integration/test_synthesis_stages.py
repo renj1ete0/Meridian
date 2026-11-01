@@ -38,6 +38,7 @@ from meridian_core.provider import Completion, ProviderError
 from meridian_core.routing import NoAgentAvailable
 from meridian_core.runs import begin_or_resume, unfinished
 from meridian_core.sources import upsert_source
+from meridian_core.stubs import set_stub
 from worker import orchestrate
 from worker.orchestrate import Batch, Journal, step
 
@@ -645,6 +646,42 @@ async def test_a_junk_source_is_not_reasoned_over(corpus, monkeypatch) -> None:
     pulled = [passage.chunk_id for passage in batch.passages]
     assert pulled[: len(ids)] == ids
     assert not set(junk_ids) & set(pulled)
+
+
+async def test_a_paywall_stub_is_not_reasoned_over(corpus, monkeypatch) -> None:
+    """`B-256`: a stub holds a walled article's headline and teaser. An edge from it would
+    cite an article nobody read. A stub whose mark is cleared (the article arrived) is
+    read again, so the filter is the mark and not the URL or the text."""
+    sess, ids, marker = corpus
+    urls = [f"https://{marker}.test/walled", f"https://{marker}.test/freed"]
+    sources = []
+    for url in urls:
+        source, _ = await upsert_source(sess, url, checksum=f"sha256:{uuid.uuid4().hex}")
+        set_stub(source, {"reason": "paywall", "rule": "isAccessibleForFree", "from": "page"})
+        await replace_chunks(
+            sess, source.source_id, [ChunkWrite(text=f"{marker} headline.", chunk_index=0)]
+        )
+        sources.append(source)
+    set_stub(sources[1], None)
+    await sess.flush()
+    walled, freed = [
+        list(await sess.scalars(select(Chunk.chunk_id).where(Chunk.source_id == s.source_id)))
+        for s in sources
+    ]
+    assert walled and freed and min(walled + freed) > ids[-1]
+    await sess.commit()
+
+    try:
+        _, _, batch = await drive(sess, ids, FakeModel(), monkeypatch, dry_run=True)
+    finally:
+        await sess.rollback()
+        await sess.execute(delete(Source).where(Source.url.in_(urls)))
+        await sess.commit()
+
+    pulled = [passage.chunk_id for passage in batch.passages]
+    assert pulled[: len(ids)] == ids
+    assert not set(walled) & set(pulled)
+    assert set(freed) <= set(pulled)
 
 
 # --------------------------------------------------------------------------

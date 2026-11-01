@@ -146,6 +146,8 @@ class AnswerItem:
     score: float
     #: How many of this source's passages were in the pool.
     passages: int
+    #: A stub (`B-256`): a paywalled page's visible opening, not the article.
+    partial: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -220,6 +222,7 @@ def _item(hit: SearchHit, passages: int) -> AnswerItem:
         text=hit.text,
         score=hit.score,
         passages=passages,
+        partial=hit.partial,
     )
 
 

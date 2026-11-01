@@ -17,6 +17,7 @@ import { searchFilters, type FindFilters } from '../lib/find'
 import { readable } from '../lib/readable'
 import { dayOf } from '../lib/time'
 import { hrefForSource, onInternalClick } from '../lib/route'
+import { PartialLabel } from '../ui/Partial'
 import { TierChip, type SourceTier } from '../ui/Tier'
 
 /**
@@ -476,6 +477,7 @@ function ItemRow({ item }: { item: AnswerItem }) {
       </a>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <TierChip tier={item.source_tier} />
+        {item.partial ? <PartialLabel url={item.url} /> : null}
         <span className="font-mono text-[10px] text-text-faint">{item.publication_date ?? 'no date'}</span>
         <span className="break-all font-mono text-[10px] text-text-faint">{item.publisher}</span>
         {item.passages > 1 ? (

@@ -31,7 +31,13 @@ from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
 from meridian_core.bibliography import FROM_KEY
 from meridian_core.boilerplate import host_key
-from meridian_core.chunks import as_writes, chunk_count, embedding_backlog, replace_chunks
+from meridian_core.chunks import (
+    ChunkWrite,
+    as_writes,
+    chunk_count,
+    embedding_backlog,
+    replace_chunks,
+)
 from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
 from meridian_core.crawlhealth import DEFAULT_MAX_EMBED_BACKLOG, EMBED_BACKLOG_ENV, RESUME_SHARE
 from meridian_core.db import dispose_engines, session
@@ -65,6 +71,7 @@ from meridian_core.schemaready import wait_before_start
 from meridian_core.sources import get_source, touch_source, upsert_source
 from meridian_core.steering import draw_shares, draw_topic
 from meridian_core.steering import topics as steering_topics
+from meridian_core.stubs import is_stub, replace_stubs, set_stub
 from meridian_core.tiering import (
     document_tier,
     is_tier_mapped,
@@ -94,6 +101,7 @@ from .extract.document import supports as supports_document
 from .extract.errorpage import error_page_reason
 from .extract.injection import Screening, screen
 from .extract.language import detect_language
+from .extract.paywall import Stub, paywall_stub
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .headlines import HeadlineFilter
@@ -1349,6 +1357,13 @@ class Worker:
 
         async with self._session_factory() as sess:
             await settle_upload(sess, upload_id, status="done", source_id=kept.source_id)
+            if upload.source_url:
+                # `B-256`: the whole article, handed in for a page kept as a stub.
+                await replace_stubs(
+                    sess,
+                    [upload.source_url, normalise_url(upload.source_url) or ""],
+                    by_source_id=kept.source_id,
+                )
             await sess.commit()
         await self._settle(claim, "fetched", "upload_ok", fetched_status="done")
         log.info(
@@ -1510,6 +1525,20 @@ class Worker:
                 )
             else:
                 document = handed_in.document
+            # `B-256`: a walled article is kept as what the page shows everyone. Never a
+            # handed-in document: whoever handed it in could read the whole of it.
+            stub = (
+                paywall_stub(_decoded(result.content), document)
+                if handed_in is None and result.media_type in HTML_MEDIA_TYPES
+                else None
+            )
+            if stub is not None and document is not None:
+                if existing is not None and (existing.extra or {}).get("stub_replaced_by"):
+                    # The whole article was handed in; a teaser beside it adds nothing.
+                    document = dataclasses.replace(document, text="", pages=(), figures=())
+                    stub = None
+                else:
+                    document = stub.as_document(document)
             screening = self._screen(claim, result, document)
             if screening is not None and screening.suspicious:
                 self._stats.flagged += 1
@@ -1522,6 +1551,9 @@ class Worker:
 
             flagged = bool(screening and screening.suspicious)
             fields = _bibliography(document, screening, url=claim.url)
+            if stub is not None:
+                # Its one passage is text, though short of the floor an article must clear.
+                fields["text_available"] = True
             if handed_in is not None:
                 fields = handed_in.applied_to(fields)
 
@@ -1555,6 +1587,10 @@ class Worker:
                     **fields,
                     **validators(result.headers),
                 )
+                # Set or cleared on every fetch: a later fetch that finds the whole
+                # article, or a connector handing it in, replaces the stub.
+                was_stub = is_stub(source)
+                set_stub(source, stub.mark() if stub is not None and not missing else None)
                 if document is not None and document.needs_ocr:
                     # After the upsert, so a scan's OCR columns survive
                     # `_bibliography`'s view that it simply had no text.
@@ -1591,7 +1627,10 @@ class Worker:
                     sess,
                     source,
                     document,
-                    changed=changed,
+                    # A page first kept whole and now found walled is re-cut even
+                    # when its bytes have not changed.
+                    changed=changed or (stub is not None and not was_stub),
+                    stub=stub,
                     evidence=evidence_from(
                         result.final_url or claim.url,
                         document,
@@ -1855,13 +1894,18 @@ class Worker:
         *,
         changed: bool,
         evidence: Evidence | None = None,
+        stub: Stub | None = None,
     ) -> int:
         """Cut the extracted text into chunks and make them the source's set.
 
         Skipped when the checksum is unchanged. Done in the fetch pass because a
-        `background` source keeps no raw file (§5.4). See
-        docs/features/crawling.md#loop-stages.
+        `background` source keeps no raw file (§5.4). A stub (`B-256`) is one passage,
+        never cleaned or cut. See docs/features/crawling.md#loop-stages.
         """
+        if stub is not None and document is not None:
+            return await self._chunk_stub(
+                sess, source, document, changed=changed, evidence=evidence
+            )
         if document is None or not document.has_text:
             if evidence is not None:
                 record_doc_kind(source, classify(evidence))
@@ -1937,6 +1981,41 @@ class Worker:
                 "lines_removed": cut.lines_removed,
                 "kept_whole": cut.kept_original,
                 "unreadable": cut.unreadable,
+            },
+        )
+        return written
+
+    async def _chunk_stub(
+        self,
+        sess: AsyncSession,
+        source: Source,
+        document: ExtractedDocument,
+        *,
+        changed: bool,
+        evidence: Evidence | None,
+    ) -> int:
+        """Make a stub's one passage the source's set (`B-256`).
+
+        Its kind is read from the address and the head alone: a teaser is not the text
+        the link-density rules were measured on, and a stub is never a listing.
+        """
+        if not changed and await chunk_count(sess, source.source_id):
+            return 0
+        if evidence is not None:
+            record_doc_kind(source, classify(dataclasses.replace(evidence, text="")))
+        written, _ = await replace_chunks(
+            sess,
+            source.source_id,
+            [ChunkWrite(text=document.text, chunk_index=0, page_or_offset=0)],
+        )
+        await replace_figures(sess, source.source_id, [])
+        log.info(
+            "paywalled: kept as a stub",
+            extra={
+                "url": source.url,
+                "source_id": source.source_id,
+                "chars": document.char_count,
+                "rule": (source.extra or {}).get("stub", {}).get("rule"),
             },
         )
         return written
@@ -2380,6 +2459,11 @@ def _bibliography(
     if extra:
         fields["extra"] = extra
     return fields
+
+
+def _decoded(content: bytes | str) -> str:
+    """Page bytes as text, for reading its markup; undecodable bytes replaced."""
+    return content.decode("utf-8", "replace") if isinstance(content, bytes) else content
 
 
 def _unusable(document: ExtractedDocument | None, media_type: str) -> str | None:

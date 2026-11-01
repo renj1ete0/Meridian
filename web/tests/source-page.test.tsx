@@ -16,6 +16,7 @@ vi.mock('../src/lib/api', async () => {
 
 import { ApiError, getSource, getSourceChunks, getSourceFigures } from '../src/lib/api'
 import { SourcePage } from '../src/explore/SourcePage'
+import { PARTIAL_LABEL } from '../src/ui/Partial'
 
 const SOURCE = {
   source_id: 7,
@@ -56,6 +57,9 @@ const SOURCE = {
   trust_state: 'cleared' as const,
   acronyms_harvested_at: null,
   page_unit: 'page' as const,
+  partial: false,
+  partial_reason: null,
+  replaced_by: null as number | null,
   extra: null,
   created_at: '2026-09-01T00:00:00Z',
 }
@@ -125,6 +129,22 @@ describe('what a reader arriving at a citation needs', () => {
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toContain('example.test')
     expect(screen.getByText('page 4')).toBeTruthy()
     expect(screen.getByText('page 4').getAttribute('title')).toBe('chunk 100 · at 4')
+  })
+
+  it('says a stub is the opening of a paywalled page, linking out (B-256)', async () => {
+    vi.mocked(getSource).mockResolvedValue({ ...SOURCE, partial: true, partial_reason: 'paywall' })
+    render(<SourcePage sourceId={7} />)
+    const label = await screen.findByRole('link', { name: new RegExp(PARTIAL_LABEL) })
+    expect(label.getAttribute('href')).toBe(SOURCE.url)
+  })
+
+  it('points a replaced stub at the article that was handed in (B-256)', async () => {
+    vi.mocked(getSource).mockResolvedValue({ ...SOURCE, text_available: false, replaced_by: 42 })
+    render(<SourcePage sourceId={7} />)
+    const link = await screen.findByRole('link', { name: /the article was handed in/ })
+    expect(link.getAttribute('href')).toBe('/sources/42')
+    expect(screen.queryByText(new RegExp(PARTIAL_LABEL))).toBeNull()
+    expect(screen.queryByText('no extractable text')).toBeNull()
   })
 
   it('names no position for a page whose offset is bookkeeping', async () => {

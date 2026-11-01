@@ -138,6 +138,11 @@ calling every tool in-process):
   refused before any search, with the argument named in the message; before, a date in another
   form surfaced as "Error executing tool search_chunks". Each passage still appears twice
   (`results` and `framed`), about 3 KB a passage, which is one reason for the cap.
+- A passage from a paywalled page kept as a stub (`B-256`) says so: `partial: true` and a
+  `partial_note` in `search_chunks` results, `list_new_since` passages and
+  `get_source_metadata`, and the same note beside its source in `framed`, so an assistant
+  quoting it does not present a teaser as the article. See
+  [extraction](extraction.md#paywalled-articles).
 - An empty `find_route` or `list_contested` carries a `note` saying what empty means: not
   evidence that subjects are unrelated, or that sources agree.
 

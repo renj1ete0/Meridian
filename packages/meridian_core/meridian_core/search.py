@@ -26,6 +26,7 @@ from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
 from .passagetopics import carries_all_topics, on_topic_passage
 from .references import is_reference_list
+from .stubs import is_stub
 from .trust import READABLE_STATES
 from .vectorindex import MAX_SCAN_TUPLES, indexed_distance, scan_past_filtered
 
@@ -185,6 +186,9 @@ class SearchHit:
     #: How many lower-ranked passages were folded into this one as copies of it (`B-236`):
     #: the same words, usually the same document on another host. Not independent evidence.
     copies: int = 0
+    #: Whether the source is a stub (`B-256`): a paywalled page's headline and visible
+    #: opening, not the article. See docs/features/search.md#stubs.
+    partial: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -597,6 +601,7 @@ async def search(
                 topic_labels=source.topic_labels,
                 passage_topics=list(passage) if passage is not None else None,
                 places=source.places,
+                partial=is_stub(source),
                 duplicate_of=chunk.duplicate_of,
                 media_type=(source.extra or {}).get("media_type"),
                 page_unit=page_unit_for((source.extra or {}).get("media_type")),

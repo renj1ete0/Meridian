@@ -133,6 +133,7 @@ export function attribute(over: Partial<NodeAttribute> = {}): NodeAttribute {
 
 export function hit(over: Partial<SearchHit> = {}): SearchHit {
   return {
+    partial: false,
     chunk_id: 12,
     source_id: 3,
     text: 'Casualty rates fell within treated zones.',

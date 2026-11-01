@@ -2041,7 +2041,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-255` **Listing pages as watches** — outlets with no news sitemap or feed (several in the
       2026-10-24 probe) publish a latest-articles page. A third watch kind re-reads it and
       queues new same-site article links (dated or slug paths, not navigation)
-- [ ] `B-256` **Paywalled news kept as a stub** — the operator asked about paywalls; not bypassed.
+- [x] `B-256` **Paywalled news kept as a stub** — the operator asked about paywalls; not bypassed.
       A paywalled article's headline, time, keywords and teaser from its sitemap/feed entry
       stored as a source stub that links out, marked as a stub so synthesis never cites it as
       the article

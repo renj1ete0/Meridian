@@ -19,6 +19,7 @@ afterEach(() => {
 
 function hit(chunk: number): SearchHit {
   return {
+    partial: false,
     chunk_id: chunk,
     source_id: chunk,
     text: `Passage number ${chunk}.`,

@@ -122,6 +122,16 @@ reader who cannot see them (colour-blind, printed page, sunlight) loses the find
 decoration. The dagger is rendered as text rather than a pseudo-element or background image, so
 it survives copying, printing, reading aloud and a page without CSS.
 
+### <a id="stubs"></a>Stubs (`B-256`)
+
+A passage from a paywalled page kept as a stub carries one label wherever it is shown: Find's
+result list, Ask's items and the source page's header. `PartialLabel` (`web/src/ui/Partial.tsx`)
+reads "first paragraph only — paywalled ↗" in the attention colour and links to the original page
+in a new tab, where a reader with access can read the rest; its title says it is not the article.
+One component, so every surface uses the same words. A stub whose article was handed in shows "the
+article was handed in →" on its source page instead, linking to the source that holds it. Tests:
+`explore-page.test.tsx`, `answer.test.tsx`, `source-page.test.tsx`.
+
 ### Tier chips
 
 Two rules from the design system meet in `ui/Tier.tsx`. **"A tier is a bordered mono chip, not a

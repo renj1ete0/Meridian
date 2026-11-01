@@ -7,13 +7,13 @@ location (page or character offset) that a reader can follow back into the store
 
 - **Code:** `services/worker/worker/extract/` (`html.py`, `pdf.py`, `document.py`,
   `pdftables.py`, `figures.py`, `clean.py`, `chunk.py`, `dockind.py`, `errorpage.py`,
-  `injection.py`, `language.py`, `readable.py`), `cleancut.py`, `rawstore.py`, `ocr_queue.py`,
+  `injection.py`, `language.py`, `paywall.py`, `readable.py`), `cleancut.py`, `rawstore.py`, `ocr_queue.py`,
   `boilerplate.py`, `rechunk.py`, `retable.py`, `dockind.py`, `retitle.py`, `relanguage.py`,
   `unreadable.py`, `remeta.py`, `extract/declared.py`;
   `packages/meridian_core/meridian_core/chunks.py`, `sources.py`, `boilerplate.py`, `titles.py`,
-  `figures.py`, `bibliography.py`
+  `figures.py`, `bibliography.py`, `stubs.py`
 - **Tasks:** `P1-07`–`P1-13`, `P2-02`, `B-42`–`B-45`, `B-59`, `B-69`, `B-153`, `B-191`, `B-195`,
-  `B-214`, `B-215`, `B-234`, `B-235`
+  `B-214`, `B-215`, `B-234`, `B-235`, `B-256`
 - **Decisions:** [ADR 0019](../adr/0019-stored-pdfs-re-extracted-for-their-tables.md)
 
 ## How it works
@@ -274,6 +274,76 @@ so its figures carry an exact page and no bbox, since inventing one would put fa
 a citation. On a re-crawl figures are replaced wholesale, in the same transaction as the source
 row and chunks: they have no stable identity across fetches, and matching them would be guesswork
 with a caption attached to the wrong picture as the cost.
+
+### <a id="paywalled-articles"></a>Paywalled articles (`B-256`)
+
+A paywall is never bypassed. What a walled page shows everyone (its headline, its time and
+its opening paragraphs) is still worth having: search can find the story, and a reader can
+follow the link. So such a page is kept as a **stub**: one passage holding what is visible,
+and a mark saying it is not the article. Code: `worker/extract/paywall.py`,
+`meridian_core/stubs.py`.
+
+**Detection is the publisher's own markup, and nothing else.** The schema.org markup publishers
+write so search engines can tell a paywall from cloaking: `isAccessibleForFree: false` on the
+JSON-LD item the page declares itself to be, or on one of its `hasPart` elements (the walled
+section, named by a CSS selector). `false` is read as a boolean or as the string `"False"`;
+one outlet writes the string. Only the page's own items count, top level, list members and
+`@graph`: a walled article listed inside a page does not wall the page. Then two conditions:
+
+- **The extracted text is under `STUB_CEILING` (4,000 characters).** A metered site that sends
+  every reader the whole text has not walled it, whatever its markup says.
+- **It is not a scholarly page** (its own DOI or `citation_*` meta). An abstract page is the
+  paper's own summary, already read as one, and resolution (`P1-14`) looks for the open copy.
+
+**Measured** (2026-11-01). Live, one request each, three seconds apart: 25 articles from one
+general outlet's news sitemap (3 declared walled), 5 from a business daily's feed (2) and 5
+from a regional outlet's feed (5, all through a `hasPart` with `"False"`). Every declared page
+extracted 387 to 1,042 characters (the headline, the standfirst, the byline and one to three
+paragraphs); the free articles beside them 1,079 to 10,940, so length alone cannot separate
+them, and no free page was flagged. In the stored corpus, 114 of 95,940 raw HTML files carry
+`isAccessibleForFree` false somewhere; the rule makes 22 of them stubs (essays, magazine
+articles and an archive's journal-article pages, 0 to 3,018 characters, the longest ending
+"register to continue reading"), keeps 4 whole (5,352 to 12,078 characters, served in full
+behind the markup), and leaves 88 alone: 6 scholarly pages declaring it, and 82 where the
+`false` sits on something other than the page's own item. Three signals were measured
+and rejected: wrapper class names (`paywall`, `premium`, a metering script) were on every
+page of one outlet, free or not; JSON-LD `wordCount` was declared by none of the walled pages;
+and length alone overlaps, as above.
+
+**The stub's passage** is the headline, a line `Published <time>` when the article declares an
+ISO 8601 `datePublished` (kept verbatim; anything else is left out, not guessed), a blank line,
+and the teaser: the extracted text less a first line repeating the headline, or, when the page
+renders none, the JSON-LD `description`, else `og:description`, `twitter:description` or the
+meta description. Each part is the page's own words; the passage is assembled from them, so
+its offset counts into the assembled text, not into an extraction. It is one passage, never
+cleaned or cut, and with less than a headline and a sentence (60 characters) there is no stub.
+Its kind is read from the address and the head alone (a teaser is not text the listing rules
+were measured on). `text_available` is true: the passage is searchable text.
+
+**The mark** is `sources.extra['stub']`: `reason` (`paywall`), `rule` (`isAccessibleForFree` or
+`hasPart`), `from` (`page`), `visible` (which of headline, published, teaser it holds),
+`published`, and `chars_seen` (what extraction got). It is set or cleared on every fetch, in the
+same transaction as the passage:
+
+- **A later fetch that finds the whole article** (the wall came down) cuts it as any page and
+  clears the mark; the stub's passage is superseded, not deleted.
+- **A page first kept whole and later walled** becomes a stub even when its bytes did not change,
+  so search stops offering text the page no longer shows.
+- **The article handed in through the connector** (`B-264`) with the page's address as its
+  `source_url` replaces the stub: the stub's passage is retired, its mark cleared, and
+  `extra['stub_replaced_by']` names the source holding the article. A later fetch of the walled
+  page does not put a teaser back beside it. A handed-in document is never itself a stub.
+
+Where the mark shows: search hits, Find, Ask and the source page (`partial`, see
+[search](search.md#stubs) and [the web app](web-app.md#stubs)), and every MCP tool that returns a
+passage or a source ([MCP](mcp.md#what-reaches-a-model)). Synthesis never reads a stub
+([the cycle](synthesis.md#the-cycle)).
+
+**Not built:** the headline and summary from a feed or news-sitemap entry. The page itself carried
+the same headline and description on every walled page measured, and carrying a feed entry's
+text to the page fetch would need a column on the queue. A stub is made only by a fetch: sources
+stored before this rule, most of them keeping no raw file to read the markup from, are not
+re-examined.
 
 ### Error pages
 
@@ -732,10 +802,10 @@ One row per URL, created on first fetch and updated on every fetch.
 ## Tests
 
 `tests/unit/test_chunk*.py`, `test_clean*.py`, `test_extract_html.py`,
-`test_extract_pdf.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
+`test_extract_pdf.py`, `test_paywall.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
 `test_bibliography.py`, `test_bibliography_titles.py`, `test_declared_metadata.py`, `test_remeta_decide.py`,
 `test_injection_screen.py`, `test_rawstore*.py`, `test_pdf_garbled.py`, `test_language_detection.py`,
 `test_storable.py`, `test_readable.py`; `tests/integration/test_chunks*.py`, `test_rechunk*.py`,
 `test_retable.py`, `test_unreadable.py`,
 `test_relanguage.py`, `test_retitle.py`, `test_remeta.py`, `test_dockind_backfill.py`, `test_boilerplate.py`,
-`test_nul_bytes.py`.
+`test_nul_bytes.py`, `test_stub_marks.py`; the fetch path's stubs in `test_worker_run.py`.

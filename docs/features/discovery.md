@@ -564,6 +564,10 @@ parser and defences as any sitemap, then queues the entries it has not seen.
   a sitemap watch that returns HTML stays an unreadable sitemap, never a source of guessed
   links.
 
+An entry whose page turns out to be walled is kept as a stub of what the page shows everyone
+(`B-256`, [extraction](extraction.md#paywalled-articles)); the entry's own headline is not
+carried to it.
+
 `python -m worker.watch add <url> [--feed | --listing] [--topic T] [--headlines] [--every S]`,
 `list`, `enable`, `disable`.
 

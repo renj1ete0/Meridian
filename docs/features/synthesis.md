@@ -125,7 +125,10 @@ vocabularies in the prompt are read from the schema's own constraints.
   and marking 900 abandons 400–899. Novelty is spent as a filter instead. `pull` leaves out
   chunks the gate judged duplicates, chunks a re-crawl superseded (`P1-32`), and junk-tier
   sources (`P2-21`), as search and the map do: text the corpus holds elsewhere, or has decided
-  is not evidence. With `MERIDIAN_SYNTHESIS_ON_TOPIC_ONLY` (`B-63`) it also stops short of any
+  is not evidence. It also leaves out stubs (`B-256`): a paywalled page's headline and
+  teaser, from which an edge would cite an article nobody read
+  ([extraction](extraction.md#paywalled-articles)). A stub replaced by the article is read
+  as its new passages. With `MERIDIAN_SYNTHESIS_ON_TOPIC_ONLY` (`B-63`) it also stops short of any
   passage not yet examined by content labelling.
 - **The batch is small** (`BATCH`, 40 chunks), so a frontier model reads all of it rather than
   summarising the middle, and a failure costs one batch rather than a day. More cycles drain the

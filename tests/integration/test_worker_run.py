@@ -3955,3 +3955,168 @@ async def test_a_sitemap_watch_does_not_read_an_html_page_for_links(
     await worker.run()
 
     assert [r for r in await rows_for(sess, run_domain, "watch") if r.task_type == "url"] == []
+
+
+# --------------------------------------------------------------------------
+# Paywalled articles kept as a stub (`B-256`)
+# --------------------------------------------------------------------------
+
+HEADLINE = "Night buses return to the harbour line"
+TEASER = (
+    "The operator will restore three night routes from December, after a year in which "
+    "late-shift workers relied on ride-hailing to get home."
+)
+
+
+def walled_page(*, free: bool = False) -> bytes:
+    """A news article whose JSON-LD declares it not free, showing only its teaser.
+
+    With ``free``, the same page declares itself free and shows the whole article.
+    """
+    declared = "true" if free else "false"
+    body = (
+        "".join(f"<p>Paragraph {i}. {ARTICLE}</p>" for i in range(6))
+        if free
+        else f"<p>{TEASER}</p><div class='paywall-content'></div>"
+    )
+    ld = (
+        '{"@context": "https://schema.org", "@type": "NewsArticle", '
+        f'"headline": "{HEADLINE}", "datePublished": "2026-11-01T05:00:00+08:00", '
+        f'"isAccessibleForFree": {declared}}}'
+    )
+    return (
+        f'<!doctype html><html lang="en"><head><title>{HEADLINE}</title>'
+        '<meta property="og:type" content="article">'
+        f'<script type="application/ld+json">{ld}</script></head>'
+        f"<body><article><h1>{HEADLINE}</h1>{body}</article></body></html>"
+    ).encode()
+
+
+def changing_page(current: dict[str, bytes]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[current["body"]])
+
+    return handler
+
+
+async def fetch_twice(sess, resolve, run_domain, run_topic, first: bytes, second: bytes):
+    """Fetch one address, then fetch it again serving ``second``; the chunks after each."""
+    url = f"https://{run_domain}/news/night-buses"
+    current = {"body": first}
+    task = await enqueue(sess, run_domain, run_topic, path="/news/night-buses")
+    worker, _ = build_worker(
+        sess, changing_page(current), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+    source, before = await chunks_of(sess, url)
+    first_extra = dict(source.extra or {})
+
+    await sess.refresh(task)
+    task.status = "done"
+    await sess.flush()
+    current["body"] = second
+    await enqueue(sess, run_domain, run_topic, path="/news/night-buses")
+    worker2, _ = build_worker(
+        sess, changing_page(current), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker2.run()
+    source, after = await chunks_of(sess, url)
+    await sess.refresh(source)
+    _, every = await chunks_of(sess, url, live_only=False)
+    return first_extra, before, source, after, every
+
+
+async def test_a_walled_article_is_kept_as_one_marked_passage(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The headline, the time and the teaser, in one passage, and the mark that says it
+    is not the article. Searchable, so it counts as text."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic, path="/news/night-buses")
+    worker, _ = build_worker(
+        sess, serve_html(walled_page()), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/news/night-buses")
+    assert len(rows) == 1
+    assert rows[0].text == f"{HEADLINE}\nPublished 2026-11-01T05:00:00+08:00\n\n{TEASER}"
+    mark = source.extra["stub"]
+    assert mark["reason"] == "paywall" and mark["rule"] == "isAccessibleForFree"
+    assert mark["from"] == "page" and mark["visible"] == ["headline", "published", "teaser"]
+    assert source.text_available is True
+    assert source.title == HEADLINE
+
+
+async def test_a_free_article_is_not_a_stub(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The same page declared free is cut as any article: no mark, several passages."""
+    sess = await session_for("rw")
+    await enqueue(sess, run_domain, run_topic, path="/news/night-buses")
+    worker, _ = build_worker(
+        sess,
+        serve_html(walled_page(free=True)),
+        run_domain,
+        run_topic,
+        resolver=resolve,
+        max_tasks=1,
+    )
+    await worker.run()
+
+    source, rows = await chunks_of(sess, f"https://{run_domain}/news/night-buses")
+    assert "stub" not in (source.extra or {})
+    assert len(rows) > 1
+
+
+async def test_a_later_full_fetch_replaces_the_stub_and_clears_the_mark(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The article came out from behind the wall: its passages replace the stub's, which
+    is superseded rather than deleted, and the mark goes."""
+    sess = await session_for("rw")
+    first_extra, before, source, after, every = await fetch_twice(
+        sess, resolve, run_domain, run_topic, walled_page(), walled_page(free=True)
+    )
+
+    assert "stub" in first_extra and len(before) == 1
+    assert "stub" not in (source.extra or {})
+    assert len(after) > 1 and before[0].chunk_id not in {r.chunk_id for r in after}
+    assert any(r.chunk_id == before[0].chunk_id and r.superseded_at for r in every)
+
+
+async def test_a_page_kept_whole_and_then_found_walled_becomes_a_stub(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """The other direction: an article that went behind the wall loses its old passages
+    to the stub, so search no longer offers text the page stopped showing."""
+    sess = await session_for("rw")
+    first_extra, before, source, after, _ = await fetch_twice(
+        sess, resolve, run_domain, run_topic, walled_page(free=True), walled_page()
+    )
+
+    assert "stub" not in first_extra and len(before) > 1
+    assert source.extra["stub"]["reason"] == "paywall"
+    assert len(after) == 1 and after[0].text.startswith(HEADLINE)
+
+
+async def test_a_stub_whose_article_was_handed_in_is_not_kept_again(
+    session_for, resolve, raw_store, run_domain, run_topic, cleanup
+) -> None:
+    """Once the whole article was handed in and replaced the stub, a later fetch of the
+    walled page does not put a teaser back beside it."""
+    sess = await session_for("rw")
+    url = f"https://{run_domain}/news/night-buses"
+    source, _ = await upsert_source(sess, url, checksum="sha256:old")
+    source.extra = {"stub_replaced_by": source.source_id}
+    await sess.flush()
+    await enqueue(sess, run_domain, run_topic, path="/news/night-buses")
+    worker, _ = build_worker(
+        sess, serve_html(walled_page()), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    source, rows = await chunks_of(sess, url)
+    await sess.refresh(source)
+    assert rows == []
+    assert "stub" not in source.extra and source.text_available is False

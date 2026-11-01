@@ -199,7 +199,9 @@ with `error` saying why. `404` for an id that does not exist.
 
    Chunking, figures, document kind, links followed and cited DOIs queued are the same.
 5. The upload is marked `done` with its `source_id`, and the queue row `done`. A DOI satisfied
-   this way has a source with text, so it stays off `/wanted`.
+   this way has a source with text, so it stays off `/wanted`. When its `source_url` is the
+   address of a page the crawl kept as a paywall stub (`B-256`), the stub is retired in the
+   same transaction: see [extraction](extraction.md#paywalled-articles).
 
 An upload **fails** — `uploads.status = 'failed'`, the queue row `failed` with the same
 reason — when nothing could read the file (`no_text: …`, e.g. `no_text: pdftotext-failed

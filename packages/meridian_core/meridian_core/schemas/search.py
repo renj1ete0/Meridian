@@ -47,6 +47,8 @@ class SearchHitRead(BaseModel):
     #: countries, UN/LOCODE without its space for cities. None means never
     #: examined, `[]` examined and about no place it could name.
     places: list[str] | None = None
+    #: A stub (`B-256`): a paywalled page's headline and visible opening, not the article.
+    partial: bool = False
 
     #: What `page_or_offset` counts (`P2-18`, §5.3), and what it was derived from.
     #: None means the media type was never recorded.

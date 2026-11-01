@@ -540,24 +540,44 @@ def _own_items(data: Any) -> list[dict[str, Any]]:
     return [data, *(_own_items(graph) if graph is not None else [])]
 
 
-def schema_types(html_text: str) -> tuple[str, ...]:
-    """The schema.org `@type`s the page declares for itself, lower-cased (`B-253`).
+def json_ld_items(html_text: str) -> list[dict[str, Any]]:
+    """The JSON-LD items the page declares *itself* to be, in page order.
 
-    `https://schema.org/PressRelease` reads as `pressrelease`. A block that is not valid
-    JSON is skipped, never repaired. Sorted, without repeats.
+    A block that is not valid JSON is skipped, never repaired.
     """
-    found: set[str] = set()
+    items: list[dict[str, Any]] = []
     for block in _JSON_LD.finditer(html_text[:JSON_LD_CHARS]):
         try:
             data = json.loads(block.group(1), strict=False)
         except ValueError:
             continue
-        for item in _own_items(data):
-            declared = item.get("@type")
-            for value in declared if isinstance(declared, list) else [declared]:
-                if isinstance(value, str) and value.strip():
-                    found.add(value.strip().rstrip("/").rsplit("/", 1)[-1].lower())
+        items.extend(_own_items(data))
+    return items
+
+
+def schema_types(html_text: str) -> tuple[str, ...]:
+    """The schema.org `@type`s the page declares for itself, lower-cased (`B-253`).
+
+    `https://schema.org/PressRelease` reads as `pressrelease`. Sorted, without repeats.
+    """
+    found: set[str] = set()
+    for item in json_ld_items(html_text):
+        declared = item.get("@type")
+        for value in declared if isinstance(declared, list) else [declared]:
+            if isinstance(value, str) and value.strip():
+                found.add(value.strip().rstrip("/").rsplit("/", 1)[-1].lower())
     return tuple(sorted(found))
+
+
+def meta_content(html_text: str, *names: str) -> str | None:
+    """The first non-empty `content` of a head meta tag named any of ``names``."""
+    wanted = {name.lower() for name in names}
+    for attrs in _meta_tags(html_text):
+        if (attrs.get("property") or attrs.get("name") or "").lower() in wanted:
+            value = _clean(attrs.get("content"))
+            if value:
+                return value
+    return None
 
 
 def has_scholarly_meta(html_text: str) -> bool:

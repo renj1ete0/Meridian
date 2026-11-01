@@ -414,6 +414,16 @@ pages (§6.6). When the media type was never recorded the unit is None, not a de
 "offset" mislabels every PDF and guessing "page" every web page, and a confident wrong label on
 a citation someone will try to follow is worse than "unknown".
 
+### <a id="stubs"></a>Stubs (`B-256`)
+
+A hit from a paywalled page kept as a stub ([extraction](extraction.md#paywalled-articles))
+carries `partial: true`: its passage is the headline, the time and the opening the page shows
+everyone, not the article. Search still returns it, since finding that a story exists and
+where is the point of keeping it; every surface that shows the hit says what it is. The
+answer page's items carry the same field, and the source page has `partial`,
+`partial_reason` and `replaced_by` (the source holding the article, when it was handed in and
+replaced the stub). Read from `sources.extra['stub']` through `meridian_core.stubs`.
+
 ### Text-search configuration
 
 `TS_CONFIG` must match the configuration `chunks.search_vector` was generated under (`P2-05`).

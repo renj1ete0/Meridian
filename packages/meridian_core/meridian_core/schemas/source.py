@@ -123,6 +123,13 @@ class SourcePageRead(SourceRead):
     #: offset that is the corpus's own bookkeeping. None when the media type is unknown. Set
     #: from `extra['media_type']`, as search sets it on a hit.
     page_unit: PageUnit | None = None
+    #: A stub (`B-256`): only a paywalled page's headline and visible opening were kept.
+    #: Set from `extra['stub']`.
+    partial: bool = False
+    #: Why, when it is one: ``paywall``.
+    partial_reason: str | None = None
+    #: When the article was handed in and replaced this stub, the source that holds it.
+    replaced_by: int | None = None
 
 
 class ChunkCreate(CreateBase):

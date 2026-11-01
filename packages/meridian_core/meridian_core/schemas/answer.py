@@ -31,6 +31,8 @@ class AnswerItemRead(BaseModel):
     score: float
     #: How many of this source's passages matched.
     passages: int
+    #: A stub (`B-256`): a paywalled page's visible opening, not the article.
+    partial: bool = False
 
 
 class AnswerGroupRead(BaseModel):

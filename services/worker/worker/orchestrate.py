@@ -69,6 +69,7 @@ from meridian_core.runs import (
     unfinished,
 )
 from meridian_core.schemaready import wait_before_start
+from meridian_core.stubs import not_stub
 from meridian_core.validation import ValidationError
 from meridian_core.writes import add_edge, tag_entity
 
@@ -290,7 +291,8 @@ async def _pull(
     """Choose the chunks this cycle reasons over (§6.3).
 
     Ordered by id past the mark; leaves out duplicates, superseded chunks (`P1-32`),
-    junk-tier sources (`P2-21`) and, when configured, passages not on a topic (`B-63`).
+    junk-tier sources (`P2-21`), stubs (`B-256`) and, when configured, passages not on a
+    topic (`B-63`).
     See docs/features/synthesis.md#the-cycle. Takes `now` unused: every runner has one
     signature.
     """
@@ -307,6 +309,9 @@ async def _pull(
             # Junk is material a sweep will drop — site furniture, for one
             # (`B-42`). Reasoning over it spends a batch to extract nothing.
             Source.retention_tier != "junk",
+            # A paywalled page's visible part (`B-256`): an edge from it would cite
+            # an article nobody read.
+            not_stub(),
         )
         .order_by(Chunk.chunk_id)
     )

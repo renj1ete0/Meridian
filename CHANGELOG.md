@@ -91,6 +91,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.200.0] — 2026-11-02
+
+### Added
+
+- `B-256`: a paywalled article is kept as a marked stub instead of passing as an article.
+  - **Detection:** the publisher's own schema.org markup (`isAccessibleForFree: false` on the
+    page's own item or a `hasPart`), and fewer than 4,000 extracted characters; a page that
+    served the whole text anyway is kept whole, and scholarly pages are never stubs.
+  - **What is kept:** one passage of the headline, the publication time when the page gives
+    one, and the opening the page shows everyone (or its declared description), marked
+    `sources.extra.stub`.
+  - **Where it shows:** search hits, Ask items, the source page and MCP results carry `partial`
+    with a note; Find, Ask and the source page label it "first paragraph only — paywalled",
+    linking to the original. Synthesis does not read stubs.
+  - **Replaced:** a later full fetch supersedes the stub, and an article handed in through the
+    document connector (`B-264`) with the same address retires it for good.
+  See docs/features/extraction.md#paywalled-articles.
+
+**Deploy:** image only. Sources stored before this release become stubs on their next fetch.
+
 ## [0.199.0] — 2026-11-02
 
 ### Changed

@@ -18,12 +18,13 @@ import httpx
 import pytest
 from sqlalchemy import delete, func, select, text
 
-from meridian_core.chunks import chunk_count
+from meridian_core.chunks import ChunkWrite, chunk_count, replace_chunks
 from meridian_core.db import dispose_engines
 from meridian_core.models import FetchPolicy, QueueTask, Source, TopicConfig, Upload
 from meridian_core.models.queue import SEED_SOURCE, TASK_TYPE
 from meridian_core.models.uploads import UPLOAD_STATUS
 from meridian_core.sources import upsert_source
+from meridian_core.stubs import set_stub
 from meridian_core.uploads import NO_COPY, UPLOAD_PRIORITY
 from worker.crawl import Crawler
 from worker.extract.pdf import available as pdf_available
@@ -413,6 +414,43 @@ async def test_an_upload_without_a_doi_is_keyed_by_its_digest(
         assert await sess.get(FetchPolicy, "upload") is None
     finally:
         await sess.rollback()
+
+
+async def test_an_article_handed_in_for_a_stub_replaces_it(
+    client, inbox, topic, marker, session_for
+) -> None:
+    """`B-256`: the crawl kept only a paywalled page's teaser; a reader hands in the whole
+    article with that page's address. The stub's passage is retired and its mark cleared."""
+    walled_url = f"https://{marker}.test/news/walled"
+    setup = await session_for("rw")
+    stub, _ = await upsert_source(setup, walled_url, checksum=f"sha256:{marker}")
+    set_stub(stub, {"reason": "paywall", "rule": "isAccessibleForFree", "from": "page"})
+    await replace_chunks(setup, stub.source_id, [ChunkWrite(text="A headline.", chunk_index=0)])
+    await setup.commit()
+    try:
+        sess, upload = await run_upload(
+            client,
+            session_for,
+            topic,
+            inbox,
+            article(marker),
+            name=f"{marker}.html",
+            source_url=walled_url,
+        )
+        try:
+            assert upload.status == "done", upload.error
+            replaced = await sess.get(Source, stub.source_id)
+            await sess.refresh(replaced)
+            assert "stub" not in replaced.extra
+            assert replaced.extra["stub_replaced_by"] == upload.source_id
+            assert await chunk_count(sess, stub.source_id) == 0
+            assert await chunk_count(sess, upload.source_id) > 0
+        finally:
+            await sess.rollback()
+    finally:
+        await setup.rollback()
+        await setup.execute(delete(Source).where(Source.url == walled_url))
+        await setup.commit()
 
 
 async def test_a_corrupt_pdf_fails_with_a_reason_and_makes_no_source(

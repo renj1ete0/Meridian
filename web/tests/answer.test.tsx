@@ -20,6 +20,7 @@ import {
   thinReason,
 } from '../src/explore/AnswerView'
 import { answerBrief } from '../src/lib/brief'
+import { PARTIAL_LABEL } from '../src/ui/Partial'
 import { ExplorePage, ModeSwitch } from '../src/explore/ExplorePage'
 import { NO_FILTERS } from '../src/lib/find'
 import {
@@ -43,6 +44,7 @@ const QUESTION = 'What rules govern street trading, and how do they differ?'
 
 function item(over: Partial<AnswerItem> = {}): AnswerItem {
   return {
+    partial: false,
     source_id: 11,
     chunk_id: 101,
     title: 'Trading licence guidance',
@@ -191,6 +193,16 @@ describe('the grouped answer', () => {
     expect(de.textContent).toContain('2 more sources not shown')
     // A strong country offers no find-more button.
     expect(within(de).queryByRole('button', { name: /Find more/ })).toBeNull()
+  })
+
+  it('marks a stub among the answer items, and only it (B-256)', () => {
+    const marked = answer()
+    marked.groups[1] = { ...marked.groups[1]!, items: [item({ partial: true, url: 'https://news.example/w' })] }
+    render(<AnswerBody answer={marked} question={QUESTION} topic="trading" />)
+    const fr = screen.getByRole('region', { name: 'France' })
+    const label = within(fr).getByRole('link', { name: new RegExp(PARTIAL_LABEL) })
+    expect(label.getAttribute('href')).toBe('https://news.example/w')
+    expect(within(screen.getByRole('region', { name: 'Germany' })).queryByText(new RegExp(PARTIAL_LABEL))).toBeNull()
   })
 
   it('says why a thin country is thin and offers to find more', () => {

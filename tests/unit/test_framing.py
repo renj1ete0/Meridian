@@ -12,7 +12,7 @@ the model before the payload does.
 
 from __future__ import annotations
 
-from meridian_core.framing import PREAMBLE, frame, frame_passages, new_delimiter
+from meridian_core.framing import PREAMBLE, STUB_NOTE, frame, frame_passages, new_delimiter
 
 
 class Hit:
@@ -103,6 +103,18 @@ def test_the_tier_is_carried_because_a_reader_would_use_it() -> None:
     framed = frame_passages([Hit("a claim", tier="informal")])
 
     assert "informal" in framed
+
+
+def test_a_stub_says_it_is_not_the_article_beside_its_source() -> None:
+    """`B-256`: a paywalled page's teaser, marked where the citation is read, before the
+    text, and only on the stub; a passage with no `partial` attribute is not one."""
+    stub, whole = Hit("a teaser", url="https://news.example/walled"), Hit("an article")
+    stub.partial = True
+    framed = frame_passages([stub, whole])
+
+    assert framed.count(STUB_NOTE) == 1
+    assert framed.index("https://news.example/walled") < framed.index(STUB_NOTE)
+    assert framed.index(STUB_NOTE) < framed.index("a teaser") < framed.index("an article")
 
 
 def test_passages_are_numbered_so_they_can_be_referred_to() -> None:

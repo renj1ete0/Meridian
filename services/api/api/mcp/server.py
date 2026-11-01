@@ -23,7 +23,7 @@ from sqlalchemy import select
 from meridian_core import areaview, graphview, neighbourhood, whatsnew
 from meridian_core import route as routing
 from meridian_core.db import guest_configured, session_guest, session_ro
-from meridian_core.framing import frame_passages
+from meridian_core.framing import STUB_NOTE, frame_passages
 from meridian_core.logging import get_logger
 from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
@@ -34,6 +34,7 @@ from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.schemas.whatsnew import NewBasis
 from meridian_core.search import SearchFilters, readable_passage_conditions, search, site_key
 from meridian_core.stats import corpus_stats
+from meridian_core.stubs import is_stub
 from meridian_core.whatsnew import MAX_FINDINGS, MAX_PER_TOPIC, MAX_WINDOW
 
 from ..auth import require_tool, sees_notes
@@ -124,6 +125,9 @@ def _cite(chunk: Any) -> dict[str, Any]:
         "duplicate_of": chunk.duplicate_of,
         # Identical passages elsewhere folded into this one (`B-236`).
         "copies": chunk.copies,
+        # A paywalled page's headline and visible opening, not the article (`B-256`).
+        "partial": chunk.partial,
+        **({"partial_note": STUB_NOTE} if chunk.partial else {}),
     }
 
 
@@ -291,6 +295,9 @@ def build_mcp(
                 # different thing from one that genuinely had no text (`P1-44`).
                 "extractor": source.extractor,
                 "accessed": source.accessed_at.isoformat() if source.accessed_at else None,
+                # Only a paywalled page's visible part was kept (`B-256`).
+                "partial": is_stub(source),
+                **({"partial_note": STUB_NOTE} if is_stub(source) else {}),
             }
 
     # §6.3's mark and §11.1a's entry point. A tool's docstring is its description, written
@@ -338,6 +345,8 @@ def build_mcp(
                     "page_or_offset": chunk.page_or_offset,
                     "source_id": source.source_id,
                     "chunk_id": chunk.chunk_id,
+                    "partial": is_stub(source),
+                    **({"partial_note": STUB_NOTE} if is_stub(source) else {}),
                 }
                 for chunk, source in rows
             ]

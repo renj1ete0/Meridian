@@ -91,6 +91,7 @@ from meridian_core.schemas.whatsnew import NewBasis, WhatsNewRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for, site_key
 from meridian_core.sites import DEFAULT_SITES, MAX_SITES, site_counts
 from meridian_core.stats import corpus_stats
+from meridian_core.stubs import is_stub, stub_mark
 from meridian_core.timefmt import display_zone, zone_label
 from meridian_core.topiccards import topic_cards
 from meridian_core.topicoverlaps import topic_overlaps
@@ -536,6 +537,10 @@ async def explore_source(source_id: int, sess: ReadSession) -> SourcePageRead:
         raise HTTPException(status_code=404, detail=f"no source {source_id}")
     read = SourcePageRead.model_validate(source)
     read.page_unit = page_unit_for((source.extra or {}).get("media_type"))
+    if (mark := stub_mark(source)) is not None:
+        read.partial, read.partial_reason = True, str(mark.get("reason") or "paywall")
+    replaced_by = (source.extra or {}).get("stub_replaced_by")
+    read.replaced_by = replaced_by if isinstance(replaced_by, int) else None
     return read
 
 
@@ -955,6 +960,7 @@ async def _hydrate_chunks(sess, chunk_ids: list[int]) -> list[SearchHitRead]:
             topic_labels=source.topic_labels,
             passage_topics=passages.get(chunk.chunk_id),
             places=source.places,
+            partial=is_stub(source),
             page_unit=page_unit_for((source.extra or {}).get("media_type")),
             media_type=(source.extra or {}).get("media_type"),
             duplicate_of=chunk.duplicate_of,

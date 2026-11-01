@@ -15,7 +15,8 @@ import { passageCitation } from '../lib/cite'
 import { lastFind } from '../lib/lastFind'
 import { citablePosition } from '../lib/position'
 import { readable } from '../lib/readable'
-import { onInternalClick, passageOf } from '../lib/route'
+import { hrefForSource, onInternalClick, passageOf } from '../lib/route'
+import { PartialLabel } from '../ui/Partial'
 import { DataChip, TierChip } from '../ui/Tier'
 import { NoteComposer } from './Annotations'
 import { FiguresPanel } from './FiguresPanel'
@@ -230,7 +231,18 @@ export function SourcePage({ sourceId }: { sourceId: number }) {
           {it.publication_date !== null ? <span className={META}>{it.publication_date}</span> : null}
           {it.publisher ? <span className={META}>{it.publisher}</span> : null}
           {it.doi !== null ? <span className={META}>doi {it.doi}</span> : null}
-          {!it.text_available ? <DataChip>no extractable text</DataChip> : null}
+          {/* `B-256`: only a paywalled page's opening was kept. */}
+          {it.partial ? <PartialLabel url={it.url} /> : null}
+          {it.replaced_by !== null ? (
+            <a
+              href={hrefForSource(it.replaced_by)}
+              onClick={onInternalClick(hrefForSource(it.replaced_by))}
+              className="font-mono text-[10px] text-accent-graph hover:underline"
+            >
+              the article was handed in →
+            </a>
+          ) : null}
+          {!it.text_available && it.replaced_by === null ? <DataChip>no extractable text</DataChip> : null}
           {(it.topic_labels ?? []).map((topic) => (
             <DataChip key={topic}>{topic}</DataChip>
           ))}

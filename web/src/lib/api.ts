@@ -76,6 +76,11 @@ export interface SearchHit {
    * country, UN/LOCODE without its space for a city. Null means never examined.
    */
   places?: string[] | null
+  /**
+   * A stub (`B-256`): only a paywalled page's headline and visible opening were kept, so
+   * the passage is not the article. Shown as a label linking to the original.
+   */
+  partial: boolean
 
   /**
    * What `page_or_offset` counts (`P2-18`): a page for paginated documents, else a
@@ -117,6 +122,7 @@ export const SEARCH_HIT_FIELDS = [
   'topic_labels',
   'passage_topics',
   'places',
+  'partial',
   'page_unit',
   'media_type',
   'duplicate_of',
@@ -341,10 +347,16 @@ export interface Source {
 export type SourceWithPage = Source & {
   /** What its passages' `page_or_offset` counts: a citable page, or bookkeeping. Null when unknown. */
   page_unit: PageUnit | null
+  /** A stub (`B-256`): only a paywalled page's headline and visible opening were kept. */
+  partial: boolean
+  /** Why, when it is one: `paywall`. */
+  partial_reason: string | null
+  /** The source holding the article that was handed in and replaced this stub. */
+  replaced_by: number | null
 }
 
 /** `SourcePageRead`'s own fields, beyond `SourceRead`'s. */
-export const SOURCE_PAGE_FIELDS = ['page_unit'] as const
+export const SOURCE_PAGE_FIELDS = ['page_unit', 'partial', 'partial_reason', 'replaced_by'] as const
 
 export const SOURCE_FIELDS = [
   'source_id',

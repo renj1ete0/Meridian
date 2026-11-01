@@ -76,6 +76,7 @@ describe('the neighbourhood client matches its DTOs', () => {
 
 function hit(over: Partial<SearchHit> = {}): SearchHit {
   return {
+    partial: false,
     chunk_id: 11,
     source_id: 7,
     passage_topics: null,

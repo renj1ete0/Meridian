@@ -22,6 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { CLAMP_OVER, ResultList, passageOnlyTopics } from '../src/explore/ResultList'
+import { PARTIAL_LABEL } from '../src/ui/Partial'
 import { RetrievalNotice, SearchOutcome, emptyLine, entryState, summaryLine } from '../src/explore/ExplorePage'
 import type { CorpusStats } from '../src/lib/api'
 import type { SearchHit, SearchResponse } from '../src/lib/api'
@@ -40,6 +41,7 @@ function text(markup: string): string {
 
 function hit(over: Partial<SearchHit> = {}): SearchHit {
   return {
+    partial: false,
     chunk_id: 590,
     source_id: 1059,
     text: 'A sustainable land transport sector.',
@@ -114,6 +116,21 @@ describe('every result carries its citation', () => {
     // signal — a reader weighing evidence needs to tell those apart.
     const rendered = text(renderToStaticMarkup(<ResultList hits={[hit({ publication_date: null })]} />))
     expect(rendered).toContain('no date')
+  })
+
+  it('marks a paywalled stub and links its label to the original (B-256)', () => {
+    const markup = renderToStaticMarkup(
+      <ResultList hits={[hit({ partial: true, url: 'https://news.example/walled' }), hit({ chunk_id: 591 })]} />,
+    )
+    expect(markup.split(PARTIAL_LABEL)).toHaveLength(2)
+    const label = markup.slice(markup.lastIndexOf('<a', markup.indexOf(PARTIAL_LABEL)))
+    expect(label).toMatch(/^<a href="https:\/\/news\.example\/walled" target="_blank"/)
+    expect(label).toContain('This is not the article.')
+  })
+
+  it('puts no stub label on a whole article', () => {
+    const rendered = text(renderToStaticMarkup(<ResultList hits={[hit()]} />))
+    expect(rendered).not.toContain(PARTIAL_LABEL)
   })
 
   it('falls back to the host when a source has no title', () => {

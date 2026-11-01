@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { citablePosition } from '../lib/position'
 import { plainLetters, readable } from '../lib/readable'
 import { hrefForSource, onInternalClick } from '../lib/route'
+import { PartialLabel } from '../ui/Partial'
 import { DataChip, TierChip } from '../ui/Tier'
 import type { SearchHit } from '../lib/api'
 
@@ -55,6 +56,8 @@ function Provenance({ hit }: { hit: SearchHit }) {
         {domainOf(hit.url)}
       </a>
       <TierChip tier={hit.source_tier} />
+      {/* `B-256`: a paywalled page's opening, not the article. */}
+      {hit.partial ? <PartialLabel url={hit.url} /> : null}
       <span className={META}>{hit.publication_date ?? 'no date'}</span>
       {/* A page is citable; a character offset is bookkeeping and stays off a
           reader's card (`B-156`). */}

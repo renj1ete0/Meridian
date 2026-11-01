@@ -26,6 +26,8 @@ export interface AnswerItem {
   score: number
   /** How many of this source's passages matched. */
   passages: number
+  /** A stub (`B-256`): a paywalled page's visible opening, not the article. */
+  partial: boolean
 }
 
 export const ANSWER_ITEM_FIELDS = [
@@ -39,6 +41,7 @@ export const ANSWER_ITEM_FIELDS = [
   'text',
   'score',
   'passages',
+  'partial',
 ] as const
 
 export type Coverage = 'strong' | 'thin'
