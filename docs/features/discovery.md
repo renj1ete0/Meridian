@@ -124,6 +124,17 @@ after the first few seeds the crawl was 98% link-following, fetching more of the
   answered news of any age by relevance, so asking again mostly found the same old articles.
   A week rather than a day, because not every news engine honours `day`, and the daily repeat
   covers the overlap; the queue drops what it has already seen.
+- **GDELT beside SearXNG for news** (`B-267`, `worker.search.GdeltClient`, on unless
+  `MERIDIAN_GDELT=false`). GDELT's free DOC API indexes news in many languages within hours.
+  A news query (`!news [:xx] words`) goes to both, for the last week, and the two answers are
+  interleaved so neither's ranking buries the other. GDELT answers status 200 whatever
+  happened: JSON with articles, `{}` for none, a sentence refusing requests closer than five
+  seconds apart (read as throttled, so the query is retried rather than settled empty), or a
+  sentence refusing the query itself (read as an empty answer). Requests are spaced 8 s
+  (`MERIDIAN_GDELT_MIN_INTERVAL_S`). One backend failing does not fail a query the other
+  answered; the failure is listed with the answer. Probed live on 2026-11-01: one empty JSON
+  answer, then refusals for requests a few seconds apart, then a connect timeout; the client
+  handles all three, and the first deployment's crawl health will say how much GDELT adds.
 
 **The search backend** (`P1-34`, §6.4). SearXNG scrapes upstream engines, so individual engines
 break or are rate-limited regularly, and a dead engine must never stall the queue. Three

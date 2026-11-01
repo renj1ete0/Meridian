@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 import os
 import time
 from collections.abc import Iterable
@@ -291,3 +292,183 @@ def _int_env(name: str, default: int) -> int:
     if value <= 0:
         raise RuntimeError(f"{name} must be positive, got {value}")
     return value
+
+
+# --------------------------------------------------------------------------
+# GDELT, a second source for news queries (`B-267`)
+# --------------------------------------------------------------------------
+
+GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+#: GDELT asks for at most one request every five seconds, and answers faster ones with a
+#: plain-text refusal; spaced wider, since a refused query costs a retry.
+GDELT_MIN_INTERVAL_S = 8.0
+GDELT_MAX_RESULTS = 50
+#: GDELT's names for the languages a news query may name with `:xx` (`searchseeds`).
+GDELT_LANGUAGES = {
+    "de": "german",
+    "fr": "french",
+    "es": "spanish",
+    "it": "italian",
+    "nl": "dutch",
+    "pt": "portuguese",
+    "zh": "chinese",
+    "ja": "japanese",
+    "ko": "korean",
+    "ms": "malay",
+    "id": "indonesian",
+    "sv": "swedish",
+    "da": "danish",
+    "fi": "finnish",
+    "no": "norwegian",
+    "pl": "polish",
+}
+
+
+def gdelt_params(query: str) -> dict[str, str] | None:
+    """GDELT DOC parameters for a news query (`!news [:xx] words`), or None for any other.
+
+    The last week, newest first, matching the range SearXNG is asked for.
+    """
+    words = query.split()
+    if not words or words[0] != NEWS_BANG:
+        return None
+    words = words[1:]
+    language = None
+    if words and words[0].startswith(":") and len(words[0]) == 3:
+        language = GDELT_LANGUAGES.get(words[0][1:].lower())
+        words = words[1:]
+    if not words:
+        return None
+    text = " ".join(words)
+    if language:
+        text += f" sourcelang:{language}"
+    return {
+        "query": text,
+        "mode": "ArtList",
+        "format": "json",
+        "maxrecords": str(GDELT_MAX_RESULTS),
+        "timespan": "1w",
+        "sort": "DateDesc",
+    }
+
+
+class GdeltClient:
+    """GDELT's free DOC API for news queries: articles from the last week, many languages.
+
+    Its answers come with status 200 whatever happened: JSON with `articles` (or `{}` for
+    none), or a plain-text sentence for a refusal ("Please limit requests…", read as
+    throttled, so the query is retried) or a query it cannot run (read as an empty answer).
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str = GDELT_URL,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
+        min_interval_s: float = GDELT_MIN_INTERVAL_S,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self.base_url = base_url
+        self.timeout_s = timeout_s
+        self.min_interval_s = min_interval_s
+        self._client = client
+        self._owns_client = client is None
+        self._pace = asyncio.Lock()
+        self._last = 0.0
+
+    @classmethod
+    def from_env(cls) -> GdeltClient | None:
+        """On unless `MERIDIAN_GDELT` says `false`: free, public, and only for news queries."""
+        if os.environ.get("MERIDIAN_GDELT", "true").strip().lower() in {"0", "false", "no"}:
+            return None
+        return cls(min_interval_s=_float_env("MERIDIAN_GDELT_MIN_INTERVAL_S", GDELT_MIN_INTERVAL_S))
+
+    def _http(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self.timeout_s)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._owns_client and self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    async def search(self, query: str) -> SearchResults:
+        """One news query. Raises `SearchError` when GDELT did not answer at all."""
+        params = gdelt_params(query)
+        if params is None:
+            return SearchResults(query=query)
+        async with self._pace:
+            wait = self._last + self.min_interval_s - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last = time.monotonic()
+            try:
+                response = await self._http().get(self.base_url, params=params)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise SearchError(f"gdelt returned {exc.response.status_code}") from exc
+            except (httpx.HTTPError, OSError) as exc:
+                raise SearchError(f"gdelt: {type(exc).__name__}: {exc}") from exc
+        return self._read(query, response.text)
+
+    @staticmethod
+    def _read(query: str, body: str) -> SearchResults:
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            sentence = body.strip().split("\n", 1)[0][:200]
+            if "limit requests" in sentence.lower():
+                return SearchResults(query=query, unresponsive=("gdelt: too many requests",))
+            return SearchResults(query=query, dropped={"gdelt_refused_query": 1})
+        urls: dict[str, None] = {}
+        for article in (payload.get("articles") or []) if isinstance(payload, dict) else []:
+            url = article.get("url") if isinstance(article, dict) else None
+            if isinstance(url, str) and urlsplit(url).scheme.lower() in ALLOWED_SCHEMES:
+                urls[url.strip()] = None
+        return SearchResults(query=query, urls=tuple(urls)[:GDELT_MAX_RESULTS])
+
+
+class NewsSearch:
+    """SearXNG for every query, and GDELT beside it for news queries (`B-267`).
+
+    The two answers are interleaved, so neither's ranking buries the other. One backend
+    failing does not fail the query while the other answered; its failure is listed in
+    `unresponsive`, which is what tells a throttled query (retried) from an empty one.
+    """
+
+    def __init__(self, searx: SearxClient, gdelt: GdeltClient | None) -> None:
+        self.searx = searx
+        self.gdelt = gdelt
+
+    async def healthy(self, timeout_s: float = 5.0) -> bool:
+        return await self.searx.healthy(timeout_s)
+
+    async def aclose(self) -> None:
+        await self.searx.aclose()
+        if self.gdelt is not None:
+            await self.gdelt.aclose()
+
+    async def search(self, query: str) -> SearchResults:
+        if self.gdelt is None or gdelt_params(query) is None:
+            return await self.searx.search(query)
+        answers = await asyncio.gather(
+            self.searx.search(query), self.gdelt.search(query), return_exceptions=True
+        )
+        failed = [a for a in answers if isinstance(a, BaseException)]
+        if len(failed) == len(answers):
+            raise SearchError("; ".join(str(f) for f in failed))
+        got = [a for a in answers if isinstance(a, SearchResults)]
+        merged: dict[str, None] = {}
+        for rank in range(max(len(a.urls) for a in got)):
+            for answer in got:
+                if rank < len(answer.urls):
+                    merged.setdefault(answer.urls[rank], None)
+        unresponsive = tuple(r for a in got for r in a.unresponsive) + tuple(str(f) for f in failed)
+        dropped: dict[str, int] = {}
+        for answer in got:
+            for reason, n in answer.dropped.items():
+                dropped[reason] = dropped.get(reason, 0) + n
+        return SearchResults(
+            query=query, urls=tuple(merged), unresponsive=unresponsive, dropped=dropped
+        )

@@ -77,6 +77,8 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `MERIDIAN_EMBED_DEVICE` | auto | `cpu`, `cuda`, `cuda:N`, `mps` |
 | `MERIDIAN_EMBED_DTYPE` | by hardware | `float32` or `bfloat16` |
 | `MERIDIAN_EMBED_BATCH_SIZE` | by hardware | Passages per model call; overrides automatic sizing |
+| `MERIDIAN_GDELT` | true | GDELT as a second source for news search queries (`B-267`); `false` turns it off |
+| `MERIDIAN_GDELT_MIN_INTERVAL_S` | 8 | Seconds between GDELT requests (GDELT refuses more than one in five) |
 | `MERIDIAN_EMBED_REQUEST_TEXTS` | 16 | Texts per request to an OpenAI-compatible embedding server; a search's query waits behind at most this many (`B-269`) |
 | `MERIDIAN_EMBED_MAX_TOKENS` | 1024 | Truncation length; also where the client cuts before a llama.cpp server (`B-248`) |
 | `MERIDIAN_EMBED_CACHE` | library default | Where model weights are cached |

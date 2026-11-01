@@ -111,7 +111,7 @@ from .resolve_doi import (
     ResolverSettings,
     normalise_doi,
 )
-from .search import SearchError, SearchResults, SearxClient
+from .search import GdeltClient, NewsSearch, SearchError, SearchResults, SearxClient
 from .sitemaps import ParsedSitemap, SitemapError, parse_sitemap
 from .topicmatch import TopicVocabulary, load_topic_vocabulary
 from .watch import WATCH_PRIORITY
@@ -441,7 +441,7 @@ class Worker:
         session_factory: SessionFactory = session,
         prefilter: Prefilter | None = None,
         topics: TopicVocabulary | None = None,
-        search: SearxClient | None = None,
+        search: SearxClient | NewsSearch | None = None,
         resolver: DoiResolver | None = None,
         hosts: HostPolicy | None = None,
         inbox: Path | None = None,
@@ -2185,6 +2185,9 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
     hosts = HostPolicy()
 
     search = SearxClient.from_env()
+    if search is not None:
+        # `B-267`: GDELT beside SearXNG for news queries; off with MERIDIAN_GDELT=false.
+        search = NewsSearch(search, GdeltClient.from_env())
     if search is None:
         # Louder than the browser's equivalent: without search the crawl drains
         # its frontier and idles like a finished one (`P1-34`, §6.4).

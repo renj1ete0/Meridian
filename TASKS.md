@@ -2074,7 +2074,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       returns news of any age by relevance, and repeat every 3 days. A day/week `time_range`,
       a daily repeat, and GDELT's free DOC API (keyword per topic, articles from the last hours,
       many languages) as a second news source
-- [ ] `B-267` **GDELT as a second news source** (split from `B-244`) — GDELT's free DOC API:
+- [x] `B-267` **GDELT as a second news source** (split from `B-244`) — GDELT's free DOC API:
       a keyword per topic, articles from the last hours, many languages. A provider beside
       SearXNG for news queries, paced, with its results queued like search results
 - [ ] `B-268` **Stance toward a named target, pilot first** (operator, 2026-11-01) — not tone

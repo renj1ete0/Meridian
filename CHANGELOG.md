@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.195.0] — 2026-11-02
+
+### Added
+
+- `B-267`: GDELT as a second source for news search queries, beside SearXNG: the last week's
+  articles in many languages, interleaved with SearXNG's answer. Its refusals to answer fast
+  are read as throttled (retried), and one backend failing does not fail the query.
+  `MERIDIAN_GDELT=false` turns it off.
+
+**Deploy:** image only.
+
 ## [0.194.0] — 2026-11-01
 
 ### Added
