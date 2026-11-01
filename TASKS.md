@@ -2072,7 +2072,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       3090: embed one topic's passages with Qwen3-Embedding-4B (MRL to 1024, so `Vector(1024)`
       stays; query instruction prefix), compare top-50 recall on the graded questions and grade
       what only one model finds. Re-embed only if recall gains; mind VRAM beside llama.cpp
-- [ ] `B-230` **The split overlay gives the API an internet route** (found running `B-226`) — on
+- [x] `B-230` **The split overlay gives the API an internet route** (found running `B-226`) — on
       `internal` alone the API has none; the split overlay adds `lan`, an ordinary bridge, and the
       egress rules drop only private addresses from it, so `api` and `embed` reached github.com
       (seen on podman; the same on Docker). Drop everything from `lan` but `lan_allow`, once it is

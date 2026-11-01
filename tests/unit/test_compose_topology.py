@@ -705,3 +705,60 @@ def test_every_service_that_touches_the_database_waits_for_setup() -> None:
             assert waits.get("condition") == "service_completed_successfully", name
     assert deps(services["setup"])["datadirs"]["condition"] == "service_completed_successfully"
     assert "profiles" not in services["setup"] and "profiles" not in services["datadirs"]
+
+
+class _ComposeLoader(yaml.SafeLoader):
+    """Compose's `!override` / `!reset` tags, read as their plain value."""
+
+
+for _tag in ("!override", "!reset"):
+    _ComposeLoader.add_constructor(
+        _tag,
+        lambda loader, node: (
+            loader.construct_mapping(node)
+            if isinstance(node, yaml.MappingNode)
+            else loader.construct_sequence(node)
+            if isinstance(node, yaml.SequenceNode)
+            else loader.construct_scalar(node)
+        ),
+    )
+
+
+def _merged_networks(*files: str) -> dict[str, dict]:
+    """Each service's networks across a base file and its overlays, as mappings."""
+    merged: dict[str, dict] = {}
+    for name in files:
+        doc = yaml.load((REPO / name).read_text(), Loader=_ComposeLoader)  # noqa: S506
+        for svc, body in (doc.get("services") or {}).items():
+            nets = (body or {}).get("networks")
+            if nets is None:
+                continue
+            if isinstance(nets, list):
+                nets = {n: {} for n in nets}
+            merged[svc] = {k: (v or {}) for k, v in nets.items()}
+    return merged
+
+
+@pytest.mark.parametrize(
+    "files",
+    [("docker-compose.yml",), ("docker-compose.yml", "deploy/split/remote-embedder.yml")],
+    ids=["base", "split"],
+)
+def test_a_service_on_egress_and_lan_routes_out_through_egress(files) -> None:
+    """`B-230`: `lan` drops everything but the named LAN services, so a service on both whose
+    default route went through `lan` would lose the hosted models without an error saying
+    why. Docker picks the default route by `gw_priority`; without it, by name order."""
+    for svc, nets in _merged_networks(*files).items():
+        if "egress" in nets and "lan" in nets:
+            assert nets["egress"].get("gw_priority", 0) > nets["lan"].get("gw_priority", 0), svc
+
+
+def test_the_rules_close_lan_and_let_replies_back() -> None:
+    """`B-230`: the `lan` subnet reaches the named LAN services and nothing else, and replies
+    to allowed connections (a LAN browser on a published `web`) are not dropped."""
+    text = (REPO / "deploy/egress-restrict.nft").read_text()
+    rules = [line.strip() for line in text.splitlines() if not line.strip().startswith("#")]
+    assert "ct state established,related accept" in rules
+    allow = rules.index("ip saddr 172.31.242.0/24 ip daddr . tcp dport @lan_allow accept")
+    drop = rules.index("ip saddr 172.31.242.0/24 drop")
+    assert rules.index("ct state established,related accept") < allow < drop

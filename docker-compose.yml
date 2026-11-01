@@ -527,7 +527,12 @@ services:
     # `network_mode` and `networks` are mutually exclusive and compose refuses a
     # file setting both; this used to set `network_mode: bridge` *and* a network
     # list. `lan` is the one that carries the traffic to a local model on another machine.
-    networks: [internal, egress, lan]
+    # The default route goes through `egress` (`B-230`): `lan` drops everything but the named
+    # LAN services, so a default route there would cut off hosted models.
+    networks:
+      internal: {}
+      egress: { gw_priority: 1 }
+      lan: {}
     depends_on:
       postgres: { condition: service_healthy }
       setup: { condition: service_completed_successfully }

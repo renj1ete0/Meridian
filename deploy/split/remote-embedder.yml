@@ -32,4 +32,8 @@ services:
     networks: !override [internal, lan]
 
   scheduler:
-    networks: !override [internal, egress, lan]
+    # Default route through `egress` (`B-230`): `lan` reaches only the named LAN services.
+    networks: !override
+      internal: {}
+      egress: { gw_priority: 1 }
+      lan: {}

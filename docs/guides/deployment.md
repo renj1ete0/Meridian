@@ -420,6 +420,17 @@ This is the defence that survives that mistake, and it is the one thing on this
 page that is genuinely worth doing *before* leaving the crawler running for two
 days on a machine that can see your LAN.
 
+**The `lan` network reaches only what `lan_allow` names** (`B-230`). It is the bridge the
+services that call the GPU machine sit on (the API, `embed`, the scheduler and the
+orchestrator with the split overlay). Before `B-230` it was an ordinary bridge with a default
+route, so the API reached the internet through it; now everything from it but the
+`lan_allow` addresses and Meridian's own networks is dropped. The scheduler and the
+orchestrator are on `egress` too and take their default route through it (`gw_priority: 1`
+in compose), so their hosted-model calls are untouched. Replies to allowed connections pass
+first (`ct state established,related accept`), which also fixes a LAN browser on a published
+`web` getting no answers once these rules were loaded. Put the GPU machine's address and port
+in `lan_allow` (`add element inet meridian lan_allow { <address> . 8090 }`).
+
 **`internal: true` is not this.** It stops a container reaching the internet. It
 does nothing about the worker — which must have a default route — reaching
 `192.168.0.0/16`.

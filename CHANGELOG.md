@@ -91,6 +91,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.187.2] — 2026-11-01
+
+### Fixed
+
+- `B-230`: the `lan` network reaches only the `lan_allow` machines and Meridian's own networks;
+  the API and `embed` no longer have an internet route through it. Services on `egress` and
+  `lan` take their default route through `egress` (`gw_priority`). Replies to allowed
+  connections pass the egress rules, so a LAN-published `web` answers its browser.
+
+**Deploy:** `git pull && docker compose up -d`, then reload the egress rules
+(`sudo nft -f /etc/nftables.d/meridian.nft` after copying `deploy/egress-restrict.nft` there).
+
 ## [0.187.1] — 2026-11-01
 
 ### Changed

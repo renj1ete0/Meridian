@@ -44,6 +44,12 @@ table inet meridian {
     # for anything they recognise. Sitting after them would mean this never runs.
     type filter hook forward priority -10; policy accept;
 
+    # Replies to connections already allowed (`B-230`): a LAN browser talking to a
+    # published `web` gets its answers, which leave from a Meridian subnet towards a
+    # private address and would otherwise meet the drop below. A container cannot get
+    # a connection into this state that the rules below refused when it began.
+    ct state established,related accept
+
     # Meridian's own networks first, or the drop below would cut the worker off
     # from Postgres: Docker allocates bridge subnets inside 172.16.0.0/12, which
     # is RFC1918, so the stack would be blocking itself.
@@ -51,6 +57,12 @@ table inet meridian {
 
     # The named LAN services, from `lan` only, before the private-range drop.
     ip saddr 172.31.242.0/24 ip daddr . tcp dport @lan_allow accept
+
+    # And nothing else from `lan` (`B-230`): it is an ordinary bridge with a default route,
+    # so a service on it alone (the API, `embed`) could reach the internet. Services on
+    # `egress` as well take their default route through `egress` (`gw_priority` in
+    # docker-compose.yml), so their own traffic never leaves from this subnet.
+    ip saddr 172.31.242.0/24 drop
 
     # Everything else private, from anywhere in Meridian's networks.
     ip saddr 172.31.240.0/22 ip daddr {
