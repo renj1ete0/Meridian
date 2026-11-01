@@ -97,7 +97,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.reembed` | `--apply` | Re-embeds passages whose embedded text has changed |
 | `worker.dockind` | `--apply` | Classifies stored documents by kind; `--all` re-derives, `--kind news` only what is recorded as news (`B-253`) |
 | `worker.furniture` | `--apply` | Demotes site furniture to junk |
-| `worker.retier` | `--apply` | Re-tiers pages whose scholarly tier came only from their domain |
+| `worker.retier` | `--apply` | Re-tiers `peer_reviewed` pages whose scholarly tier came only from their domain, and preprint-server pages to `preprint` (`B-233`) |
 | `worker.retitle` | `--apply` | Cleans stored titles |
 | `worker.relanguage` | `--apply` | Reads the language of stored sources that declared none; sends those in another language back for topic labels (`B-153`) |
 | `worker.harvest` | always | Acronym harvest |

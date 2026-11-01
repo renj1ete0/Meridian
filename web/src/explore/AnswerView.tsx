@@ -27,13 +27,21 @@ import { TierChip, type SourceTier } from '../ui/Tier'
 const TIER_WORDS: Record<SourceTier, string> = {
   government: 'government',
   peer_reviewed: 'peer-reviewed',
+  preprint: 'preprint',
   institutional: 'institutional',
   press: 'press',
   informal: 'informal',
 }
 
 /** Order tiers are listed in a mix line: primary material first. */
-const TIER_ORDER: readonly SourceTier[] = ['government', 'peer_reviewed', 'institutional', 'press', 'informal']
+const TIER_ORDER: readonly SourceTier[] = [
+  'government',
+  'peer_reviewed',
+  'preprint',
+  'institutional',
+  'press',
+  'informal',
+]
 
 function plural(n: number, word: string, many = `${word}s`): string {
   return `${n.toLocaleString('en')} ${n === 1 ? word : many}`

@@ -45,9 +45,12 @@ def test_registrable_domain_normalises(raw: str, expected: str) -> None:
 @pytest.mark.parametrize(
     "domain,expected",
     [
-        # Bare domains a "*.x" pattern cannot match — the arxiv.org case.
-        ("arxiv.org", "peer_reviewed"),
-        ("export.arxiv.org", "peer_reviewed"),
+        # Preprint servers, bare and as a subdomain (`B-233`): scholarly, not reviewed.
+        ("arxiv.org", "preprint"),
+        ("export.arxiv.org", "preprint"),
+        ("papers.ssrn.com", "preprint"),
+        ("www.biorxiv.org", "preprint"),
+        ("osf.io", "preprint"),
         ("doi.org", "peer_reviewed"),
         # Comparison-set governments. If any of these regress to informal, that
         # city's official sources start ranking below blogs (§7.2).
@@ -96,7 +99,29 @@ def test_government_outranks_press_and_informal(mapping: dict) -> None:
 
 def test_peer_reviewed_outranks_government(mapping: dict) -> None:
     """Deliberate: papers carry more weight than an agency's own press page."""
-    assert priority_for_domain("arxiv.org", mapping) > priority_for_domain("lta.gov.sg", mapping)
+    assert priority_for_domain("doi.org", mapping) > priority_for_domain("lta.gov.sg", mapping)
+
+
+def test_no_preprint_server_resolves_to_peer_reviewed(mapping: dict) -> None:
+    """`B-233`: each preprint pattern must win, bare and under a subdomain, over `*.org`."""
+    for pattern in mapping["patterns"]["preprint"]:
+        bare = pattern.removeprefix("*.")
+        assert resolve_tier(bare, mapping) == "preprint", bare
+        assert resolve_tier(f"www.{bare}", mapping) == "preprint", bare
+
+
+def test_no_domain_is_both_preprint_and_peer_reviewed(mapping: dict) -> None:
+    preprint = {p.removeprefix("*.") for p in mapping["patterns"]["preprint"]}
+    reviewed = set(mapping["exact"]["peer_reviewed"]) | {
+        p.removeprefix("*.") for p in mapping["patterns"]["peer_reviewed"]
+    }
+    assert not preprint & reviewed
+
+
+def test_preprints_queue_below_papers_and_above_institutions(mapping: dict) -> None:
+    preprint = priority_for_domain("arxiv.org", mapping)
+    assert priority_for_domain("doi.org", mapping) > preprint
+    assert preprint > priority_for_domain("itdp.org", mapping)
 
 
 def test_unknown_tier_has_zero_priority(mapping: dict) -> None:

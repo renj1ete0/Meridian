@@ -36,6 +36,7 @@ KEEPS_RAW_FILE = frozenset({"primary"})
 #: not a property of the domain, and nothing at fetch time knows it yet.
 RETENTION_BY_SOURCE_TIER = {
     "peer_reviewed": "primary",
+    "preprint": "primary",
     "government": "primary",
     "institutional": "primary",
     "press": "background",

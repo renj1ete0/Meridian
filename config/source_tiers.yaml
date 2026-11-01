@@ -45,7 +45,6 @@ patterns:
     - "*.edu.sg"
     - "*.edu.au"
     - "*.edu.hk"
-    - "*.arxiv.org"    # subdomains only — bare arxiv.org is under `exact`
     - "*.springer.com"
     - "*.sciencedirect.com"
     - "*.tandfonline.com"
@@ -53,8 +52,26 @@ patterns:
     - "*.wiley.com"
     - "*.mdpi.com"
 
+  # Preprint servers (`B-233`). Scholarly, and not peer reviewed: a server posts
+  # what its authors upload, and its own DOI (arXiv mints one for every paper)
+  # says nothing about a venue. The reviewed version, where there is one, arrives
+  # from its publisher's domain. A pattern also matches its bare domain, and each
+  # is longer than `*.org`, so these win over `institutional`.
+  preprint:
+    - "*.arxiv.org"
+    - "*.ssrn.com"
+    - "*.osf.io"
+    - "*.biorxiv.org"
+    - "*.medrxiv.org"
+    - "*.chemrxiv.org"
+    - "*.techrxiv.org"
+    - "*.eartharxiv.org"
+    - "*.engrxiv.org"
+    - "*.preprints.org"
+    - "*.researchsquare.com"
+
   institutional:
-    - "*.org"          # broad, and deliberately below the two above
+    - "*.org"          # broad, and deliberately below the ones above
     - "*.int"
 
 # Academic *institutions'* suffixes, whose `peer_reviewed` tier is a guess a
@@ -87,10 +104,8 @@ needs_scholarly_evidence:
 # can match, or a domain a pattern puts in the wrong tier.
 exact:
   peer_reviewed:
-    # Bare domains — a "*.x" pattern does not match "x" itself.
-    - arxiv.org
-    - doi.org
     # Promotions: these match *.org (institutional) but are scholarly indexes.
+    - doi.org
     - openalex.org
     - crossref.org
     - semanticscholar.org
@@ -124,6 +139,7 @@ exact:
 priority_by_tier:
   peer_reviewed: 60
   government: 50
+  preprint: 40
   institutional: 30
   press: 10
   informal: 5

@@ -27,8 +27,9 @@ SOURCE_TIER_RANK = {
     "informal": 0,
     "press": 1,
     "institutional": 2,
-    "government": 3,
-    "peer_reviewed": 4,
+    "preprint": 3,
+    "government": 4,
+    "peer_reviewed": 5,
 }
 
 

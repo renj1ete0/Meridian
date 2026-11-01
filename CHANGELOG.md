@@ -91,6 +91,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.188.0] — 2026-11-01
+
+### Added
+
+- `B-233`: a `preprint` source tier. arXiv and the other preprint servers resolve to it, not
+  `peer_reviewed`; it ranks between institutional and government, ages over ten years, and is
+  not a primary or strong tier. The migration rewrites the stored tier map (operator entries
+  kept) and both tier CHECKs; stored sources are not lowered automatically, since a tier only
+  moves up by itself: `worker.retier --apply` moves them, by hand.
+
+**Deploy:** image only; then run `docker compose run --rm worker python -m worker.retier` to see
+what it would move, and again with `--apply`.
+
 ## [0.187.2] — 2026-11-01
 
 ### Fixed

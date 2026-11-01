@@ -39,6 +39,7 @@ DEFAULT_ANSWER_CANDIDATES = 300
 TIER_WEIGHT: Mapping[str, float] = {
     "government": 1.5,
     "peer_reviewed": 1.5,
+    "preprint": 1.2,
     "institutional": 1.2,
     "press": 1.0,
     "informal": 0.8,

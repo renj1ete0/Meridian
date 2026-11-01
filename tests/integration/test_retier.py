@@ -1,4 +1,4 @@
-"""Re-tiering domain-only scholarly sources (task B-50)."""
+"""Re-tiering domain-only scholarly sources (task B-50) and preprints (task B-233)."""
 
 from __future__ import annotations
 
@@ -93,3 +93,47 @@ async def test_a_domain_not_needing_evidence_is_left_alone(sess, suffix) -> None
     await run_pass(apply=True, session_factory=factory(sess))
 
     assert await tier_of(sess, other.source_id) == "peer_reviewed"
+
+
+@pytest.fixture
+async def preprint_suffix(sess) -> str:
+    """A `.test` suffix of this test's own, mapped as a preprint server."""
+    tag = f"pp{uuid.uuid4().hex[:6]}.test"
+    glob = await sess.scalar(select(FetchPolicy).where(FetchPolicy.domain == GLOBAL_DOMAIN))
+    tiers = dict(glob.settings.get("source_tiers") or {})
+    patterns = {k: list(v or []) for k, v in (tiers.get("patterns") or {}).items()}
+    patterns.setdefault("preprint", []).append(f"*.{tag}")
+    tiers["patterns"] = patterns
+    glob.settings = {**glob.settings, "source_tiers": tiers}
+    await sess.flush()
+    return tag
+
+
+async def test_a_preprint_becomes_preprint_even_with_its_own_doi(sess, preprint_suffix) -> None:
+    paper = await a_source(sess, f"https://{preprint_suffix}/abs/1", doi="10.48550/arxiv.1")
+
+    stats = await run_pass(apply=True, session_factory=factory(sess))
+
+    assert await tier_of(sess, paper.source_id) == "preprint"
+    assert stats.by_host[preprint_suffix] == 1
+    assert stats.to_preprint >= 1
+
+
+async def test_a_preprint_report_changes_no_tier(sess, preprint_suffix) -> None:
+    paper = await a_source(sess, f"https://{preprint_suffix}/abs/2")
+
+    stats = await run_pass(apply=False, session_factory=factory(sess))
+
+    assert stats.by_host[preprint_suffix] == 1
+    assert await tier_of(sess, paper.source_id) == "peer_reviewed"
+
+
+async def test_a_refetch_does_not_demote_a_stored_preprint_by_itself(sess, preprint_suffix) -> None:
+    """§11.12: only the explicit pass lowers a tier; an automatic write keeps the higher one."""
+    url = f"https://{preprint_suffix}/abs/3"
+    paper = await a_source(sess, url)
+
+    await upsert_source(sess, url, checksum=f"sha256:{uuid.uuid4().hex}", source_tier="preprint")
+    await sess.flush()
+
+    assert await tier_of(sess, paper.source_id) == "peer_reviewed"

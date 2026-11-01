@@ -1924,7 +1924,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       and the GPU node on Windows** — the same compose files: `deploy/podman/` (overlay, units,
       Butane), `deploy/embedder-node/podman-windows.yml` and `start-windows.ps1`, guide
       `docs/guides/deploy-podman.md`. Tick after a first boot on the mini PC
-- [ ] `B-233` **arXiv is labelled peer reviewed** (third-party review 2026-10-24) — 1,855 of 1,862
+- [x] `B-233` **arXiv is labelled peer reviewed** (third-party review 2026-10-24) — 1,855 of 1,862
       arXiv sources carry `peer_reviewed`, which the tier filter and Answer's "strong" rest on. A
       `preprint` tier for arXiv, SSRN, OSF and the like, and peer review only on venue evidence
       (a journal DOI, OpenAlex `journal-article`). Needs a migration for the CHECK constraint
@@ -2008,6 +2008,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       restarts services in no particular order, so the worker could start on the new image
       before `migrate` finished. Services wait for the expected revision at start; changelog
       entries say whether a release needs `docker compose up -d` (a compose change)
+- [ ] `B-265` **Grant tier ceilings name tiers that do not exist** (found by `B-233`) —
+      `grants.TIER_ORDER` is `government, academic, industry, press, informal`, which are not
+      the database's tiers, so `tiers_allowed` can never admit peer_reviewed, preprint or
+      institutional for a sharing grant, and the grants CHECK cannot store academic/industry.
+      Order it by the real tiers, with a drift test against `SOURCE_TIER`
 - [x] `B-257` `v0.182.0`; screenshotted against the mock at 1440 and 390 wide. **People & permissions page, and an Admin that shows only what one may do** —
       the web half of `B-252`: Admin → People & permissions as `docs/design/AdminPeople.dc.html`
       (add, profile, per-permission Profile/On/Off, revoke, show revoked); `/api/me` drives the

@@ -19,6 +19,7 @@ log = get_logger(__name__)
 #: §5.2's tiers to BibTeX entry types: a format mapping, not a ranking.
 ENTRY_TYPE = {
     "peer_reviewed": "article",
+    "preprint": "misc",
     "government": "techreport",
     "institutional": "techreport",
     "press": "online",

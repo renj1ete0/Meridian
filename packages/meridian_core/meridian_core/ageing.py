@@ -19,6 +19,7 @@ log = get_logger(__name__)
 #: `None` means no decay at all. See docs/features/source-quality.md#ageing.
 HALF_LIFE_DAYS: dict[str, int | None] = {
     "peer_reviewed": None,
+    "preprint": 3650,
     "academic": 3650,
     "government": 1825,
     "institutional": 1825,

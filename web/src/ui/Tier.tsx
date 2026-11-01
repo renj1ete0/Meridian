@@ -7,13 +7,14 @@
  * §5.2's tiers, in the order the spec lists them, mirrored from the database enum;
  * `tests/tier.test.ts` compares the two.
  */
-export const SOURCE_TIERS = ['peer_reviewed', 'government', 'institutional', 'press', 'informal'] as const
+export const SOURCE_TIERS = ['peer_reviewed', 'preprint', 'government', 'institutional', 'press', 'informal'] as const
 
 export type SourceTier = (typeof SOURCE_TIERS)[number]
 
 /** Display text. Not a ranking, and deliberately not abbreviated to initials. */
 export const TIER_LABEL: Record<SourceTier, string> = {
   peer_reviewed: 'Peer reviewed',
+  preprint: 'Preprint',
   government: 'Government',
   institutional: 'Institutional',
   press: 'Press',

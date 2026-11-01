@@ -7,15 +7,16 @@ model. Each one records the rule that decided it, so it can be checked and rever
 - **Code:** `packages/meridian_core/meridian_core/tiering.py`, `trust.py`, `retention.py`,
   `ageing.py`; `services/worker/worker/extract/injection.py`, `furniture.py`, `retier.py`,
   `sweep.py`, `rawstore.py`
-- **Tasks:** `P1-11`, `P1-23`, `P1-31`, `P2-20`, `P4-14`, `B-23`, `B-42`, `B-50`
+- **Tasks:** `P1-11`, `P1-23`, `P1-31`, `P2-20`, `P4-14`, `B-23`, `B-42`, `B-50`, `B-233`
 
 ## How it works
 
-**Source tier** (§5.2). Each source gets one of `peer_reviewed`, `academic`, `government`,
-`institutional`, `industry`, `press` or `informal`. The tier comes from domain patterns in
+**Source tier** (§5.2). Each source gets one of `peer_reviewed`, `preprint`, `government`,
+`institutional`, `press` or `informal`. The tier comes from domain patterns in
 `config/source_tiers.yaml` plus document evidence. An academic domain makes a page
 `peer_reviewed` only when the page names its own DOI (`B-50`); otherwise it is
-`institutional`. The tier is the first tie-breaker when sources conflict, sets queue priority,
+`institutional`. A preprint server (arXiv, SSRN, OSF, bioRxiv and the like) makes a page
+`preprint`, DOI or not (`B-233`). The tier is the first tie-breaker when sources conflict, sets queue priority,
 and drives counter-seeding toward tiers a node lacks. It says who published something, never
 whether it is right.
 
@@ -42,7 +43,7 @@ any edge or entity cites is never demoted.
 
 **Ageing** (`P2-20`, §9). In search, older material is decayed by a half-life per tier,
 applied to the fused score and never used as a filter. Peer-reviewed work does not decay;
-informal material halves in about six months. The factor never falls below 0.25. Undated
+a preprint halves in ten years; informal material halves in about six months. The factor never falls below 0.25. Undated
 documents are neither old nor new, and every hit shows its age and the factor applied.
 
 **Retention sweep** (`P1-31`). Three verdicts: `droppable` (a file its source says not to
@@ -79,6 +80,23 @@ not whether a page was peer reviewed. `needs_scholarly_evidence` lists those suf
 publisher's domain is not in it, and neither is a domain named exactly, since naming it is
 somebody's judgement about it. `worker.retier` applies the rule to sources already stored: tier
 only, so a kept raw file, edges and claims are untouched, because re-weighing deletes nothing.
+
+<a id="preprints"></a>**Preprints** (`B-233`). A preprint server posts what its authors upload,
+so its papers are scholarly and not reviewed. They get their own tier, `preprint`, rather than
+`institutional`, so a reader can still filter for them and an export cites them as `@misc`. The
+server's own DOI is no evidence of a venue (arXiv mints one for every paper), so a preprint
+server is never in `needs_scholarly_evidence`: its pages are `preprint` whatever they name. The
+reviewed version of a paper, where there is one, arrives from its publisher's domain as
+`peer_reviewed`. A preprint does not count toward Answer's "strong" coverage or Gaps' strong
+tiers, keeps its raw file like a paper, and queues below papers and official sources and above
+institutions.
+
+The tier map is authoritative in the database after first boot, so revision `b233a1c2d3e4`
+writes the preprint patterns into a running install's map and takes arXiv out of
+`peer_reviewed` there. It does not re-label stored sources: a tier never drops automatically
+(§11.12), and an automatic write (a re-fetch) keeps the higher tier. `worker.retier --apply`,
+run by a person after reading its report, moves stored `peer_reviewed` sources on a preprint
+server to `preprint`.
 
 <a id="urgency"></a>**Urgency** (`P2-20`). The queue reads the same half-life table as ranking,
 rather than a second set (two sets diverge because nobody notices they exist; `P7-06` should do
@@ -275,12 +293,14 @@ built on.
 
 ## Configuration
 
-- `config/source_tiers.yaml` (seeded) maps domain patterns to tiers, and lists domains that
-  need scholarly evidence.
+- `config/source_tiers.yaml` (seeded) maps domain patterns to tiers, lists preprint servers,
+  and lists domains that need scholarly evidence.
 - Half-lives are constants in `ageing.py`, overridable per topic.
 
 ## Operating it
 
+- After upgrading past `b233a1c2d3e4`, run `python -m worker.retier` to see how many stored
+  sources are on a preprint server, then `--apply` to re-label them `preprint`.
 - The `sweep` job runs daily in report mode. Read its report, then run
   `python -m worker.sweep --apply` by hand.
 - Until a model can judge them, a person clears a quarantine. Admin does not show or edit
@@ -290,6 +310,6 @@ built on.
 
 ## Tests
 
-`tests/unit/test_tiering.py`, `test_tier_evidence.py`, `test_ageing.py`,
+`tests/unit/test_tiering.py`, `test_tier_evidence.py`, `test_preprint_tier.py`, `test_ageing.py`,
 `test_injection_screen.py`; `tests/integration/test_trust.py`, `test_retention.py`,
 `test_retier.py`, `test_furniture_sweep.py`.

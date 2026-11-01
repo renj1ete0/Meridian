@@ -1328,7 +1328,7 @@ function TopicShare({ area }: { area: Area }) {
 }
 
 /** Tier mix as a stacked bar with labels, in the order tiers are ranked. */
-const TIER_ORDER = ['peer_reviewed', 'government', 'institutional', 'press', 'informal']
+const TIER_ORDER = ['peer_reviewed', 'preprint', 'government', 'institutional', 'press', 'informal']
 
 function TierMix({ mix, total }: { mix: Record<string, number>; total: number }) {
   const rows = TIER_ORDER.filter((tier) => (mix[tier] ?? 0) > 0)

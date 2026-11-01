@@ -39,7 +39,13 @@ from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
 EMBEDDING_DIM = 1024
 
 SOURCE_TIER = constrained(
-    "peer_reviewed", "government", "institutional", "press", "informal", name="source_tier"
+    "peer_reviewed",
+    "preprint",
+    "government",
+    "institutional",
+    "press",
+    "informal",
+    name="source_tier",
 )
 
 # Drives raw-file retention (§5.4). Link rot is the binding reason to keep

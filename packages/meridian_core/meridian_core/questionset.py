@@ -32,6 +32,7 @@ _TIER_WORDS = {
     "government": "government",
     "peer-reviewed": "peer_reviewed",
     "peer_reviewed": "peer_reviewed",
+    "preprint": "preprint",
     "institutional": "institutional",
     "press": "informal",
 }
