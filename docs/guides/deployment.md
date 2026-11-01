@@ -287,7 +287,9 @@ LOCAL_CHAT_MODEL=meridian            # the node's LLM_ALIAS
 ```
 
 Then in Admin → Agents set `local-llamacpp`'s model to the same alias and enable it and
-`local-chat`. Add both ports to the egress rules' `lan_allow` set
+`local-chat`. Which model: Strata, with thinking off and `structured: schema` (the seeded
+default for local agents), ran extraction about twice as fast as a Qwen3 27B at similar
+precision; see [ADR 0026](../adr/0026-strata-for-local-synthesis.md). Add both ports to the egress rules' `lan_allow` set
 (`{ <gpu machine> . 8100, <gpu machine> . 8080 }`), or the `lan` network cannot reach them.
 Give the GPU machine a fixed address (a DHCP reservation, or a VPN name): nothing discovers it.
 
