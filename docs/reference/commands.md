@@ -95,7 +95,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.rechunk` | `--apply` | Re-cuts stored sources with furniture removed |
 | `worker.retable` | `--apply` | Re-extracts stored PDFs whose tables a fresh extraction would keep, replacing their passages; `--domain`, `--source`, `--limit` narrow it (`B-215`) |
 | `worker.reembed` | `--apply` | Re-embeds passages whose embedded text has changed |
-| `worker.dockind` | `--apply` | Classifies stored documents by kind; `--all` re-derives |
+| `worker.dockind` | `--apply` | Classifies stored documents by kind; `--all` re-derives, `--kind news` only what is recorded as news (`B-253`) |
 | `worker.furniture` | `--apply` | Demotes site furniture to junk |
 | `worker.retier` | `--apply` | Re-tiers pages whose scholarly tier came only from their domain |
 | `worker.retitle` | `--apply` | Cleans stored titles |

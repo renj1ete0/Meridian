@@ -211,3 +211,41 @@ async def test_the_database_accepts_every_kind_the_model_declares(sess, host) ->
         text("UPDATE sources SET doc_kind = NULL WHERE source_id = :id"),
         {"id": source.source_id},
     )
+
+
+async def test_one_kind_is_re_derived_on_its_own(sess, host) -> None:
+    """`--kind news` is how `B-253`'s split reaches stored sources: an agency's dated
+    newsroom page recorded as news becomes a release, and a source of another kind with the
+    same shape is not touched."""
+    import datetime as dt
+
+    async def agency_page(kind: str) -> Source:
+        source, _ = await upsert_source(
+            sess,
+            f"https://{host}/newsroom/{uuid.uuid4().hex[:8]}",
+            checksum=f"sha256:{uuid.uuid4().hex}",
+            media_type="text/html",
+            text_available=True,
+            publication_date=dt.date(2026, 1, 2),
+            doc_kind=kind,
+            source_tier="government",
+        )
+        await replace_chunks(
+            sess, source.source_id, [ChunkWrite(text=PROSE, chunk_index=0, page_or_offset=0)]
+        )
+        await sess.flush()
+        return source
+
+    was_news = await agency_page("news")
+    was_other = await agency_page("other")
+
+    stats = await run_pass(apply=True, kind="news", domain=host, session_factory=factory(sess))
+
+    await sess.refresh(was_news)
+    await sess.refresh(was_other)
+    assert stats.examined == 1 and stats.changed == 1
+    assert (was_news.doc_kind, was_news.extra["doc_kind"]["rule"]) == (
+        "press_release",
+        "own_newsroom",
+    )
+    assert was_other.doc_kind == "other"

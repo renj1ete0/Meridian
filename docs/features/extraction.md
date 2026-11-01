@@ -426,15 +426,36 @@ rule is recorded:
    archive and the text is link-dense.
 3. **legal**: section-marked titles or provisions, or a path under legislation, regulations or a
    code. After listing, so a statute's table of contents is a listing and its text is legal.
-4. **news**: a press publisher's dated article, or a dated `og:type article` under a news path.
-5. **report**: a PDF or office document from an official or institutional publisher.
-6. **profile**: an organisation's own pages (home, about, contact, people, programmes).
-7. **other**.
+4. **press_release** (`B-253`): an organisation speaking for itself. The page's JSON-LD declares
+   schema.org `PressRelease`; or a dated or `og:type article` page sits under a release path
+   (`press-release`, `media-release`, `news-release`, `press-statement` and the like, matched
+   inside a segment, so `sponsored-press-releases` counts, whoever hosts it); or a government or
+   institutional site publishes it in its own newsroom (`news`, `newsroom`, `press`, `media`,
+   `media-centre`, `announcements`). An agency's news *is* its own voice.
+5. **opinion** (`B-253`): JSON-LD `OpinionNewsArticle`, or a press publisher's article under an
+   opinion path (`opinion`, `commentary`, `editorial`, `op-ed`, `columns`). Only an outlet's: a
+   `commentary` path on an agency's site is not a column.
+6. **news**: a press publisher's dated article, or a dated `og:type article` under a news path.
+   A story *about* an agency on an outlet stays news; only a release path outranks the outlet.
+7. **report**: a PDF or office document from an official or institutional publisher.
+8. **profile**: an organisation's own pages (home, about, contact, people, programmes).
+9. **other**.
 
 The thresholds were calibrated on a live corpus against known listings on one side and abstract
 pages and articles on the other (the task report has the numbers). The `dockind` pass applies
 the rules to stored sources from their live chunks, with head metadata from the raw file when one
-is kept (absent otherwise, as for a page that declared nothing).
+is kept. A verdict records the head signals it read (`og_type`, `schema_types` in
+`extra['doc_kind']`), because a background source keeps no raw file and re-deriving its kind
+would otherwise lose them: before that was recorded, re-deriving the local corpus's news moved
+501 news-path articles to `other`. For a verdict older than that, the rule it recorded stands in:
+the news-path rule, and the outlet rule on an undated page, could only have fired on `og:type
+article`.
+
+`--kind news` re-derives only what is recorded as news, which is how the `B-253` split reaches
+stored sources. On the local corpus (2026-11-01), of 2,919 news sources: 1,703 stay news, 1,144
+become press releases (1,040 from agency and institution newsrooms, 104 from release paths), 72
+become opinion, none fall to `other`. No stored page declared `PressRelease` in its JSON-LD; the
+path rules carry the split, and the schema rule is there for the sites that declare it.
 
 <a id="re-chunking"></a>**Re-chunking** (`B-43`). `rechunk` re-cuts what was chunked before
 cleaning existed, from the live chunks, since a background source keeps no raw file. Unpaginated

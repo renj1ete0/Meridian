@@ -85,8 +85,9 @@ never by a model (§5.2). It is the first tiebreaker when sources conflict.
   assigned mechanically at fetch from the document's structure. `listing` is a page whose value
   is its links (an index, a feed, a search result page), followed but not chunked. NULL means
   nothing has classified it (the backfill's queue), unlike `other`, which means the rules looked
-  and none applied. The deciding rule and its link measurements are in `extra["doc_kind"]`, so a
-  verdict can be audited. Overwritten on every fetch.
+  and none applied. `press_release` and `opinion` were split from `news` (`B-253`). The deciding
+  rule, its link measurements and the head signals it read (`og_type`, `schema_types`) are in
+  `extra["doc_kind"]`, so a verdict can be audited and re-derived. Overwritten on every fetch.
 - **`duplicate_of`** (`B-44`). The earlier source this one is a copy of: the same document
   under another URL, or its PDF and its HTML page. Document-level, where `chunks.duplicate_of`
   is passage-level; the novelty gate judges passages one at a time and never hides a primary

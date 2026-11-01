@@ -3,7 +3,8 @@
 The fetch path's rules (`worker.extract.dockind`) over what was stored before, with the
 text read back from the live chunks and head metadata from the raw file when one is
 kept. Report by default; ``--apply`` writes each verdict and supersedes a listing's
-chunks, never for a source anything cites. ``--all`` re-derives classified sources too.
+chunks, never for a source anything cites. ``--all`` re-derives classified sources too, and
+``--kind`` only those of one kind (``--kind news`` after `B-253` split it).
 """
 
 from __future__ import annotations
@@ -23,17 +24,18 @@ from meridian_core.chunks import cited_source_ids, replace_chunks
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import Chunk, Source
+from meridian_core.models.source import DOC_KIND
 
 from . import rawstore
 from .extract.dockind import Evidence, Verdict, classify, record_doc_kind
-from .extract.html import has_scholarly_meta, og_type
+from .extract.html import has_scholarly_meta, og_type, schema_types
 
 log = get_logger(__name__)
 
 EXAMPLES = 10
-#: How much of a raw file to read for its head. The tags live in `<head>`,
-#: and reading a whole PDF to learn it has no `<head>` would be waste.
-HEAD_BYTES = 65536
+#: How much of a raw file to read for its head: the tags live in `<head>`, and JSON-LD
+#: is often just after it (`B-253`). Reading a whole PDF to learn it has none is waste.
+HEAD_BYTES = 262144
 #: Sources per transaction under ``--apply``.
 BATCH = 200
 
@@ -68,9 +70,30 @@ def _head(source: Source, raw_root: str | os.PathLike[str] | None) -> str | None
         return None
 
 
+def _recorded_head(source: Source) -> tuple[str | None, tuple[str, ...]]:
+    """The head signals a source's last verdict recorded, for one with no raw file to read.
+
+    A verdict from before `B-253` kept none, but two rules could only have fired on an
+    `og:type` of `article`: the news-path rule, and the outlet rule without a date.
+    """
+    recorded = (source.extra or {}).get("doc_kind") or {}
+    og = recorded.get("og_type")
+    types = tuple(recorded.get("schema_types") or ())
+    rule = recorded.get("rule")
+    if og is None and (
+        rule == "news_path_article" or (rule == "press_article" and source.publication_date is None)
+    ):
+        og = "article"
+    return og, types
+
+
 def evidence_for(source: Source, texts: Sequence[str], head: str | None) -> Evidence:
-    """What the rules read, from a stored source, its live chunk texts, and its raw head."""
+    """What the rules read, from a stored source, its live chunk texts, and its raw head.
+
+    Without a raw head, the signals the last verdict recorded stand in for it.
+    """
     extra = source.extra or {}
+    og, types = (og_type(head), schema_types(head)) if head else _recorded_head(source)
     return Evidence(
         url=extra.get("final_url") or source.url,
         media_type=extra.get("media_type"),
@@ -80,18 +103,21 @@ def evidence_for(source: Source, texts: Sequence[str], head: str | None) -> Evid
         title=source.title,
         doi=source.doi,
         publication_date=source.publication_date,
-        og_type=og_type(head) if head else None,
+        og_type=og,
+        schema_types=types,
         scholarly_meta=has_scholarly_meta(head) if head else False,
     )
 
 
-def _candidates(everything: bool, domain: str | None, limit: int | None):
+def _candidates(everything: bool, domain: str | None, limit: int | None, kind: str | None = None):
     # Junk is left alone: an error page or a refused fetch is not a document of
     # any kind, and its chunks were already retired when it was marked.
     query = (
         select(Source.source_id).where(Source.retention_tier != "junk").order_by(Source.source_id)
     )
-    if not everything:
+    if kind is not None:
+        query = query.where(Source.doc_kind == kind)
+    elif not everything:
         query = query.where(Source.doc_kind.is_(None))
     if domain:
         query = query.where(
@@ -130,13 +156,14 @@ async def run_pass(
     everything: bool = False,
     domain: str | None = None,
     limit: int | None = None,
+    kind: str | None = None,
     raw_root: str | os.PathLike[str] | None = None,
     session_factory=session,
 ) -> KindStats:
     stats = KindStats()
     async with session_factory() as sess:
         cited = await cited_source_ids(sess)
-        ids = list(await sess.scalars(_candidates(everything, domain, limit)))
+        ids = list(await sess.scalars(_candidates(everything, domain, limit, kind)))
         for start in range(0, len(ids), BATCH):
             batch = ids[start : start + BATCH]
             sources = (
@@ -212,6 +239,9 @@ def main() -> None:
     parser.add_argument(
         "--all", action="store_true", help="re-derive every source, not only unclassified ones"
     )
+    parser.add_argument(
+        "--kind", choices=DOC_KIND.enums, help="re-derive only sources recorded as this kind"
+    )
     parser.add_argument("--domain", help="only sources on this host and its subdomains")
     parser.add_argument("--limit", type=int, help="at most this many sources")
     args = parser.parse_args()
@@ -221,7 +251,11 @@ def main() -> None:
     async def go() -> KindStats:
         try:
             return await run_pass(
-                apply=args.apply, everything=args.all, domain=args.domain, limit=args.limit
+                apply=args.apply,
+                everything=args.all,
+                domain=args.domain,
+                limit=args.limit,
+                kind=args.kind,
             )
         finally:
             await dispose_engines()

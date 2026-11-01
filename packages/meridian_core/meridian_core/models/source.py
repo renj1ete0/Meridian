@@ -49,9 +49,18 @@ RETENTION_TIER = constrained("primary", "background", "junk", name="retention_ti
 OCR_TIER = constrained("none", "cheap", "quality", name="ocr_tier")
 
 # What a document *is* (task B-59), assigned mechanically at fetch. A `listing` is
-# followed but not chunked.
+# followed but not chunked. `press_release` and `opinion` were split from `news` (B-253).
 DOC_KIND = constrained(
-    "paper", "report", "news", "legal", "profile", "listing", "other", name="doc_kind"
+    "paper",
+    "report",
+    "news",
+    "press_release",
+    "opinion",
+    "legal",
+    "profile",
+    "listing",
+    "other",
+    name="doc_kind",
 )
 
 

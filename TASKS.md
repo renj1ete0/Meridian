@@ -1988,7 +1988,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       admin route declaring its permission (a test fails on one that does not). The first owner
       from `MERIDIAN_OWNER_EMAILS` (never removable from the UI); with none, a one-time code in
       the API's log claims it. Mock first (docs/design)
-- [ ] `B-253` **Press releases told apart from news** (operator, 2026-11-01) — `doc_kind = news`
+- [x] `B-253` **Press releases told apart from news** (operator, 2026-11-01) — `doc_kind = news`
       holds both: a `/press-releases/` path is news today. Split `news` (journalism) from
       `press_release` (an organisation speaking for itself; government domain + media-release
       path, schema.org `PressRelease`), maybe `opinion`; a watched outlet's entries are news.

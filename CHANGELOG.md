@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.183.0] — 2026-11-01
+
+### Added
+
+- `B-253`: press releases and opinion told apart from news. Two document kinds: `press_release`
+  (schema.org `PressRelease`, a release path, or an agency's or institution's own newsroom) and
+  `opinion` (`OpinionNewsArticle`, or an outlet's opinion path). Pages' JSON-LD types are read;
+  a verdict keeps the head signals it read, so re-deriving a source with no raw file no longer
+  loses them; `worker.dockind --kind news` re-derives only stored news. The `doc_kind` column
+  widens (migration `b253a1c2d3e4`).
+
 ## [0.182.0] — 2026-11-01
 
 ### Added

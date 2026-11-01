@@ -1,7 +1,8 @@
 """What kind of document a source is, decided mechanically (task B-59).
 
-paper, listing, legal, news, report, profile or other: rules in a fixed order, first
-match wins, and the deciding rule is recorded. A listing's chunks are retired. The
+paper, listing, legal, press_release, opinion, news, report, profile or other (`B-253`
+split the middle three): rules in a fixed order, first match wins, and the deciding rule is
+recorded. A listing's chunks are retired. The
 thresholds favour precision. See docs/features/extraction.md#document-kinds.
 """
 
@@ -95,17 +96,35 @@ _LEGAL_SEGMENTS = frozenset(
 _SECTION_LINE = re.compile(r"^\s*\[?§+\s*\d", re.MULTILINE)
 SECTION_LINES = 3
 
-_NEWS_SEGMENTS = frozenset(
-    {
-        "news",
-        "newsroom",
-        "press",
-        "press-release",
-        "press-releases",
-        "media-release",
-        "media-releases",
-    }
+_NEWS_SEGMENTS = frozenset({"news", "newsroom", "press"})
+#: Path segments holding an organisation's own announcements, whoever hosts them (`B-253`).
+#: Matched inside a segment, so `sponsored-press-releases` counts.
+_RELEASE_STEMS = (
+    "press-release",
+    "pressrelease",
+    "media-release",
+    "news-release",
+    "press-statement",
+    "media-statement",
 )
+#: Where an agency or institution publishes about itself: its news is its own voice.
+_NEWSROOM_SEGMENTS = _NEWS_SEGMENTS | {
+    "media",
+    "media-centre",
+    "media-center",
+    "mediacentre",
+    "media-room",
+    "announcements",
+}
+#: Where an outlet keeps commentary rather than reporting.
+_OPINION_SEGMENTS = frozenset(
+    {"opinion", "opinions", "commentary", "editorial", "editorials", "op-ed", "oped", "columns"}
+)
+#: schema.org types that name the kind outright.
+_RELEASE_TYPES = frozenset({"pressrelease"})
+_OPINION_TYPES = frozenset({"opinionnewsarticle"})
+#: Tiers whose own pages speak for the organisation, not about it.
+_OWN_VOICE_TIERS = frozenset({"government", "institutional"})
 _PROFILE_SEGMENTS = frozenset(
     {
         "about",
@@ -267,6 +286,8 @@ class Evidence:
     doi: str | None = None
     publication_date: dt.date | None = None
     og_type: str | None = None
+    #: Lower-cased schema.org `@type`s from the page's JSON-LD (`B-253`).
+    schema_types: tuple[str, ...] = ()
     scholarly_meta: bool = False
 
 
@@ -290,6 +311,7 @@ def evidence_from(
         doi=document.doi,
         publication_date=document.publication_date,
         og_type=document.og_type,
+        schema_types=document.schema_types,
         scholarly_meta=document.scholarly_meta,
     )
 
@@ -299,12 +321,20 @@ class Verdict:
     kind: str
     rule: str
     shape: LinkShape | None = None
+    #: The head signals the rules read, kept with the verdict (`B-253`): a source that keeps
+    #: no raw file has nowhere else to read them from when its kind is re-derived.
+    og_type: str | None = None
+    schema_types: tuple[str, ...] = ()
 
     def as_record(self) -> dict[str, object]:
         """What goes in ``sources.extra["doc_kind"]``."""
         record: dict[str, object] = {"kind": self.kind, "rule": self.rule}
         if self.shape is not None:
             record["links"] = self.shape.as_record()
+        if self.og_type is not None:
+            record["og_type"] = self.og_type
+        if self.schema_types:
+            record["schema_types"] = list(self.schema_types)
         return record
 
 
@@ -314,6 +344,12 @@ def _media(media_type: str | None) -> str:
 
 def classify(evidence: Evidence) -> Verdict:
     """The kind of one document, and the rule that decided it (see module docstring)."""
+    return dataclasses.replace(
+        _decide(evidence), og_type=evidence.og_type, schema_types=evidence.schema_types
+    )
+
+
+def _decide(evidence: Evidence) -> Verdict:
     media = _media(evidence.media_type)
     segments, _, path = _segments(evidence.url)
     is_html = media in HTML_MEDIA_TYPES or (not media and bool(evidence.text))
@@ -341,6 +377,17 @@ def classify(evidence: Evidence) -> Verdict:
 
     article = evidence.og_type == "article"
     dated = evidence.publication_date is not None
+    declared = set(evidence.schema_types)
+    if declared & _RELEASE_TYPES:
+        return Verdict("press_release", "schema_press_release", shape)
+    if (article or dated) and any(stem in s for s in segments for stem in _RELEASE_STEMS):
+        return Verdict("press_release", "release_path", shape)
+    if (article or dated) and evidence.tier in _OWN_VOICE_TIERS and segments & _NEWSROOM_SEGMENTS:
+        return Verdict("press_release", "own_newsroom", shape)
+    if declared & _OPINION_TYPES:
+        return Verdict("opinion", "schema_opinion", shape)
+    if evidence.tier == "press" and (article or dated) and segments & _OPINION_SEGMENTS:
+        return Verdict("opinion", "opinion_path", shape)
     if evidence.tier == "press" and (article or dated):
         return Verdict("news", "press_article", shape)
     if article and dated and segments & _NEWS_SEGMENTS:

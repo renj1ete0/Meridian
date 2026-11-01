@@ -945,6 +945,17 @@ saying what they would have sent. That is the one place in this file where a
 stage is allowed to know which mode it is in, and the reason is that the
 transaction cannot cover what happens outside the database.
 
+### A re-derivation from stored sources reads less than the fetch did
+
+A background source keeps no raw file, so a pass that re-derives something from stored sources
+(the document-kind backfill is one) sees only the passages, not the page's head. Before `B-253`
+recorded the head signals with each verdict, `worker.dockind --all` would have moved 501 of the
+local corpus's news articles to `other`: their kind had rested on an `og:type` nobody kept.
+Measure a re-derivation on the real corpus in report mode before applying it, and keep anything
+a rule reads that a later pass cannot get back. Also: raw files are mode 0600 for the
+container's user, so a report run from the host reads no heads at all; run it in the worker
+image (`docs/features/extraction.md#document-kinds`).
+
 ### Alembic does not see CHECK constraints on existing tables
 
 This is `P0-21`, and it was hit again in `P1-21`. Autogenerate will happily detect that

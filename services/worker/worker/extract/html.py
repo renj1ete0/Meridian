@@ -100,6 +100,7 @@ def extract_html(
         language=document.language or _language_from_html(html_text),
         english_alternate=english_alternate(html_text, url),
         og_type=og_type(html_text),
+        schema_types=schema_types(html_text),
         scholarly_meta=has_scholarly_meta(html_text),
     )
 
@@ -433,6 +434,48 @@ def og_type(html_text: str) -> str | None:
             value = (attrs.get("content") or "").strip().lower()
             return value or None
     return None
+
+
+#: A JSON-LD block. Not only in `<head>`: many sites emit it at the end of `<body>`.
+_JSON_LD = re.compile(
+    r"<script\b[^>]*\btype\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
+    re.IGNORECASE | re.DOTALL,
+)
+#: How much of a page to search for JSON-LD, so a huge page costs a bounded scan.
+JSON_LD_CHARS = 400_000
+
+
+def _own_items(data: Any) -> list[dict[str, Any]]:
+    """The items a JSON-LD block says the page *is*: top level, list members, `@graph`.
+
+    Nested values (a publisher, a list of related articles) describe other things.
+    """
+    if isinstance(data, list):
+        return [item for entry in data for item in _own_items(entry)]
+    if not isinstance(data, dict):
+        return []
+    graph = data.get("@graph")
+    return [data, *(_own_items(graph) if graph is not None else [])]
+
+
+def schema_types(html_text: str) -> tuple[str, ...]:
+    """The schema.org `@type`s the page declares for itself, lower-cased (`B-253`).
+
+    `https://schema.org/PressRelease` reads as `pressrelease`. A block that is not valid
+    JSON is skipped, never repaired. Sorted, without repeats.
+    """
+    found: set[str] = set()
+    for block in _JSON_LD.finditer(html_text[:JSON_LD_CHARS]):
+        try:
+            data = json.loads(block.group(1), strict=False)
+        except ValueError:
+            continue
+        for item in _own_items(data):
+            declared = item.get("@type")
+            for value in declared if isinstance(declared, list) else [declared]:
+                if isinstance(value, str) and value.strip():
+                    found.add(value.strip().rstrip("/").rsplit("/", 1)[-1].lower())
+    return tuple(sorted(found))
 
 
 def has_scholarly_meta(html_text: str) -> bool:

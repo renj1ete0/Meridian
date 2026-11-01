@@ -30,7 +30,17 @@ export type RetentionTier = 'primary' | 'background' | 'junk'
 export type OcrTier = 'none' | 'cheap' | 'quality'
 
 /** `DOC_KIND` in `models/source.py` (`B-59`): what a document is. */
-export const DOC_KINDS = ['paper', 'report', 'news', 'legal', 'profile', 'listing', 'other'] as const
+export const DOC_KINDS = [
+  'paper',
+  'report',
+  'news',
+  'press_release',
+  'opinion',
+  'legal',
+  'profile',
+  'listing',
+  'other',
+] as const
 export type DocKind = (typeof DOC_KINDS)[number]
 
 /** Which retrieval arms ran. Lexical-only is a legitimate, reported mode. */

@@ -29,7 +29,7 @@ from worker.extract.dockind import (
     listing_rule,
     record_doc_kind,
 )
-from worker.extract.html import extract_html, has_scholarly_meta, og_type
+from worker.extract.html import extract_html, has_scholarly_meta, og_type, schema_types
 
 PROSE = (
     "The survey followed each household for a full year and recorded every trip, "
@@ -279,6 +279,35 @@ def evidence(**overrides) -> Evidence:
         ({"url": "https://example.test/"}, ("profile", "home_page")),
         ({"url": "https://example.test/about-us/leadership"}, ("profile", "profile_path")),
         ({"url": "https://example.test/legislation/act-2020"}, ("legal", "legal_path")),
+        ({"schema_types": ("pressrelease",)}, ("press_release", "schema_press_release")),
+        (
+            {
+                "url": "https://example.test/media-releases/2026/new-line",
+                "tier": "press",
+                "og_type": "article",
+            },
+            ("press_release", "release_path"),
+        ),
+        (
+            {
+                "url": "https://agency.example.test/newsroom/new-line-opens",
+                "tier": "government",
+                "publication_date": dt.date(2026, 1, 2),
+            },
+            ("press_release", "own_newsroom"),
+        ),
+        (
+            {"schema_types": ("opinionnewsarticle",), "tier": "informal"},
+            ("opinion", "schema_opinion"),
+        ),
+        (
+            {
+                "url": "https://outlet.example.test/commentary/why-the-line-matters",
+                "tier": "press",
+                "og_type": "article",
+            },
+            ("opinion", "opinion_path"),
+        ),
         ({}, ("other", "no_rule")),
     ],
 )
@@ -292,6 +321,74 @@ def test_each_rule_names_itself(overrides, expected) -> None:
 def test_an_undated_article_off_a_news_path_is_not_news() -> None:
     """`og:type article` is what most CMSs emit for every page; alone it proves nothing."""
     assert classify(evidence(og_type="article")).kind != "news"
+
+
+def test_an_outlets_story_about_an_agency_is_news_not_a_release() -> None:
+    """Journalism about an organisation is not the organisation speaking (`B-253`)."""
+    verdict = classify(
+        evidence(
+            url="https://outlet.example.test/news/singapore/agency-announces-line",
+            tier="press",
+            og_type="article",
+            schema_types=("newsarticle",),
+        )
+    )
+    assert (verdict.kind, verdict.rule) == ("news", "press_article")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # An agency page that is neither dated nor an article: a standing page.
+        {"url": "https://agency.example.test/newsroom/contacts", "tier": "government"},
+        # A release path without a date or article type: an index, never a release.
+        {"url": "https://example.test/press-releases", "tier": "government"},
+        # A newsroom path on a site whose tier is not its own voice.
+        {
+            "url": "https://blog.example.test/news/a-post",
+            "tier": "informal",
+            "og_type": "article",
+        },
+    ],
+)
+def test_near_misses_are_not_press_releases(overrides) -> None:
+    assert classify(evidence(**overrides)).kind != "press_release"
+
+
+@pytest.mark.parametrize("tier", ["government", "institutional", "informal", None])
+def test_an_opinion_path_off_an_outlet_is_not_opinion(tier) -> None:
+    """`/commentary/` on an agency site is its own voice, not an outlet's column."""
+    verdict = classify(
+        evidence(url="https://example.test/commentary/a-view", tier=tier, og_type="article")
+    )
+    assert verdict.kind != "opinion"
+
+
+@pytest.mark.parametrize(
+    "path", ["/press-releases/a", "/sponsored-press-releases/a", "/en/media-release-2026/a"]
+)
+def test_a_release_stem_counts_inside_a_segment(path) -> None:
+    verdict = classify(evidence(url=f"https://example.test{path}", og_type="article"))
+    assert (verdict.kind, verdict.rule) == ("press_release", "release_path")
+
+
+def test_a_word_that_merely_contains_press_is_not_a_release_path() -> None:
+    verdict = classify(
+        evidence(url="https://example.test/expressway-releases-plan/a", og_type="article")
+    )
+    assert verdict.kind != "press_release"
+
+
+def test_a_release_path_outranks_the_outlet_tier() -> None:
+    """A wire or outlet republishing a release under a release path hosts a release."""
+    verdict = classify(
+        evidence(
+            url="https://wire.example.test/news-releases/firm-opens-depot",
+            tier="press",
+            publication_date=dt.date(2026, 1, 2),
+        )
+    )
+    assert verdict.kind == "press_release"
 
 
 def test_a_press_page_that_is_an_index_is_still_a_listing() -> None:
@@ -437,6 +534,58 @@ def test_the_extractor_carries_both_signals() -> None:
     )
     assert document.og_type == "article"
     assert document.scholarly_meta is True
+
+
+def ld(data: str) -> str:
+    return f'<script type="application/ld+json">{data}</script>'
+
+
+def test_schema_types_reads_the_pages_own_items() -> None:
+    page = ld(
+        '{"@context": "https://schema.org", "@type": "PressRelease",'
+        ' "publisher": {"@type": "GovernmentOrganization"}}'
+    )
+    assert schema_types(page) == ("pressrelease",)
+
+
+def test_schema_types_reads_graphs_lists_and_urls() -> None:
+    page = ld('{"@graph": [{"@type": "WebPage"}, {"@type": ["NewsArticle", "Article"]}]}') + ld(
+        '[{"@type": "https://schema.org/OpinionNewsArticle"}]'
+    )
+    assert schema_types(page) == ("article", "newsarticle", "opinionnewsarticle", "webpage")
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        ld("{not json"),
+        ld('{"@type": 7}'),
+        ld('"PressRelease"'),
+        '<script type="text/javascript">{"@type": "PressRelease"}</script>',
+        "",
+    ],
+)
+def test_schema_types_refuses_what_is_not_a_declaration(page) -> None:
+    assert schema_types(page) == ()
+
+
+def test_schema_types_ignores_related_items() -> None:
+    """A list of other articles on the page says nothing about what the page is."""
+    page = ld('{"@type": "WebPage", "relatedLink": [{"@type": "PressRelease"}]}')
+    assert schema_types(page) == ("webpage",)
+
+
+def test_a_declared_release_is_classified_end_to_end() -> None:
+    """Through the real extractor, with the JSON-LD after the body as many sites emit it."""
+    content = (
+        "<!doctype html><html lang='en'><head><title>A line opens</title></head>"
+        f"<body><main><p>{PROSE * 3}</p></main>"
+        + ld('{"@type": "PressRelease"}')
+        + "</body></html>"
+    ).encode()
+    verdict = kind_of(content, "https://firm.example.test/updates/a-line-opens", tier="informal")
+
+    assert (verdict.kind, verdict.rule) == ("press_release", "schema_press_release")
 
 
 # --------------------------------------------------------------------------

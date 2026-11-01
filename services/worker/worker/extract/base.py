@@ -110,6 +110,9 @@ class ExtractedDocument:
     #: head carries scholarly `citation_*` metadata. Evidence for what kind of
     #: document this is; neither is ever guessed from the text.
     og_type: str | None = None
+    #: The schema.org `@type`s its JSON-LD declares for the page itself, lower-cased
+    #: (`B-253`): `pressrelease`, `newsarticle`, `opinionnewsarticle`, ….
+    schema_types: tuple[str, ...] = ()
     scholarly_meta: bool = False
     links: tuple[str, ...] = ()
     citations: tuple[Citation, ...] = ()
