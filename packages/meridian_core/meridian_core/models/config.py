@@ -49,6 +49,9 @@ AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_a
 #: Whether a model's reasoning is asked off for structured tasks (`B-259`): `server` sends
 #: nothing (the server's default), `off` asks an OpenAI-compatible server to answer directly.
 AGENT_THINKING = constrained("server", "off", name="agent_thinking")
+#: Whether a structured task's answer schema is sent with the request (`B-247`): `server`
+#: sends none, `schema` asks an OpenAI-compatible server to hold the answer to it.
+AGENT_STRUCTURED = constrained("server", "schema", name="agent_structured")
 
 
 class TopicConfig(Base):
@@ -333,6 +336,11 @@ class Agent(Base, TimestampMixin):
     #: See docs/features/synthesis.md#local-models.
     thinking: Mapped[str] = mapped_column(
         AGENT_THINKING, nullable=False, default="server", server_default="server"
+    )
+    #: `schema`: extraction and tagging send their answer's JSON Schema, for a server that
+    #: decodes to it (`B-247`). See docs/features/synthesis.md#answer-schema.
+    structured: Mapped[str] = mapped_column(
+        AGENT_STRUCTURED, nullable=False, default="server", server_default="server"
     )
 
     __table_args__ = (Index("ix_agents_enabled_quality", "enabled", "quality_tier"),)

@@ -22,15 +22,21 @@ import pytest
 
 from meridian_core.models.graph import CERTAINTY, COMPARISON_RELATION, NODE_TYPE, STANCE
 from meridian_core.proposals import (
+    EDGE_RARE_KEYS,
+    MAX_ITEMS_PER_PASSAGE,
     MODEL_NODE_TYPES,
     CitationOutOfRange,
     Passage,
+    answer_items,
     chunk_ids_for,
+    edge_schema,
     extract_prompt,
     parse_edges,
     parse_tags,
     tag_prompt,
+    tag_schema,
 )
+from meridian_core.schemas.proposals import EdgeProposal, Mention, TagProposal
 
 # --------------------------------------------------------------------------
 # helpers
@@ -69,6 +75,23 @@ def test_a_plain_array_parses() -> None:
 
     assert len(parsed.accepted) == 2
     assert not parsed.rejected
+
+
+def test_an_empty_list_inside_an_item_is_not_an_empty_answer() -> None:
+    """`B-247`, measured: a model wrote one item with no array round it, carrying an empty
+    `topic_labels`; the parse took that empty list as the answer and reported nothing
+    proposed."""
+    parsed = parse_edges(json.dumps(edge(topic_labels=[])))
+
+    assert len(parsed.accepted) == 1
+    assert not parsed.rejected
+
+
+def test_a_wrapper_holding_an_empty_list_is_an_empty_answer() -> None:
+    for text in ('{"relations": []}', '{"relations": [ ]}\n'):
+        parsed = parse_edges(text)
+        assert (parsed.accepted, parsed.rejected) == ([], []), text
+    assert parse_edges("{}").rejected, "an object with no list is not an answer"
 
 
 def test_a_fenced_answer_parses() -> None:
@@ -480,3 +503,181 @@ def test_topics_are_named_only_when_there_are_any() -> None:
     interpret; leaving it out says nothing, which is what is meant."""
     assert "built around these topics" not in extract_prompt(passages()).system
     assert "walkability" in extract_prompt(passages(), topics=["walkability"]).system
+
+
+# --------------------------------------------------------------------------
+# The answer's schema, sent to a server that decodes to it (`B-247`)
+# --------------------------------------------------------------------------
+
+
+def _fields(model) -> tuple[set[str], set[str]]:
+    """Every field of a DTO, and the required ones, read from the DTO itself."""
+    return set(model.model_fields), {n for n, f in model.model_fields.items() if f.is_required()}
+
+
+@pytest.mark.parametrize(
+    ("schema", "model"),
+    [
+        (lambda: edge_schema(passages=5), EdgeProposal),
+        (lambda: tag_schema(passages=5, attributes=["fare_level"]), TagProposal),
+    ],
+    ids=["edges", "tags"],
+)
+def test_the_schema_is_the_dto_field_for_field(schema, model) -> None:
+    """Drift: a field added to a proposal and not to what the server enforces would be one
+    the model can never write; one in the schema and not the DTO, one the parse refuses."""
+    sent = schema()
+    item = answer_items(sent)
+    every, required = _fields(model)
+    mention_every, mention_required = _fields(Mention)
+
+    def nullable(prop) -> bool:
+        return any(option.get("type") == "null" for option in prop.get("anyOf", []))
+
+    # An object at the root, holding the one array: some engines take no other root.
+    assert (sent["type"], sent["additionalProperties"]) == ("object", False)
+    ((key, answer),) = sent["properties"].items()
+    assert sent["required"] == [key] and answer["type"] == "array"
+    assert parse_edges(json.dumps({key: [edge()]})).accepted, "the parse does not unwrap it"
+    assert set(item["properties"]) == every
+    assert set(item["required"]) >= required, "a key the DTO requires is left optional"
+    for name, prop in item["properties"].items():
+        # A key the DTO lets a model leave out is written as null, unless it is rare.
+        assert (name in item["required"]) == (name not in EDGE_RARE_KEYS), name
+        assert nullable(prop) == (name not in required), name
+        if model.model_fields[name].annotation is Mention:
+            assert set(prop["properties"]) == mention_every
+            assert set(prop["required"]) == mention_every
+            for key, sub in prop["properties"].items():
+                assert nullable(sub) == (key not in mention_required), key
+            assert prop["additionalProperties"] is False
+
+
+def test_the_optional_keys_come_after_every_required_one() -> None:
+    """A grammar writes required keys first. An optional key declared before a required one
+    is a key the model has already passed when it could have written it."""
+    for schema in (edge_schema(passages=3), tag_schema(passages=3, attributes=["a"])):
+        order = list(answer_items(schema)["properties"])
+        flags = [key in answer_items(schema)["required"] for key in order]
+        assert flags == sorted(flags, reverse=True), order
+    assert set(EdgeProposal.model_fields) >= EDGE_RARE_KEYS, "a rare key that is not a field"
+
+
+def test_the_schema_is_self_contained_and_closed() -> None:
+    """No `$ref` (not every engine follows one) and no object left open to invented keys."""
+
+    def walk(node):
+        if isinstance(node, dict):
+            assert "$ref" not in node and "$defs" not in node
+            if node.get("type") == "object":
+                assert node["additionalProperties"] is False
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(edge_schema(passages=3))
+    walk(tag_schema(passages=3, attributes=["a"]))
+
+
+def test_the_schema_offers_the_vocabularies_the_database_accepts() -> None:
+    props = answer_items(edge_schema(passages=3))["properties"]
+
+    def enum(prop):
+        return next(o["enum"] for o in prop["anyOf"] if "enum" in o)
+
+    assert enum(props["stance"]) == list(STANCE.enums)
+    assert enum(props["certainty"]) == list(CERTAINTY.enums)
+    assert props["subject"]["properties"]["node_type"]["enum"] == list(MODEL_NODE_TYPES)
+    assert "annotation" not in props["object"]["properties"]["node_type"]["enum"]
+
+
+def test_citations_are_held_to_the_batch_and_attributes_to_the_active_set() -> None:
+    edges = answer_items(edge_schema(passages=7))["properties"]["citations"]
+    assert (edges["items"]["minimum"], edges["items"]["maximum"], edges["minItems"]) == (1, 7, 1)
+
+    tags = answer_items(tag_schema(passages=2, attributes=["fare_level", "climate"]))
+    assert tags["properties"]["attribute"]["enum"] == ["fare_level", "climate"]
+    unnamed = answer_items(tag_schema(passages=2, attributes=[]))
+    assert "enum" not in unnamed["properties"]["attribute"]
+
+
+def test_the_answer_is_capped_so_the_token_limit_never_cuts_an_item() -> None:
+    """The grammar closes the array at the cap; a model that would have gone on to the token
+    limit loses the surplus, not the item it was writing."""
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = tag_schema(passages=2, attributes=["climate"])
+    one = {
+        "entity": {"name": "A", "node_type": "place", "jurisdiction": None},
+        "attribute": "climate",
+        "value": "arid",
+        "value_numeric": None,
+        "citations": [1],
+        "confidence": None,
+    }
+    cap = MAX_ITEMS_PER_PASSAGE * 2
+    jsonschema.validate({"assignments": [one] * cap}, schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"assignments": [one] * (cap + 1)}, schema)
+
+
+def test_what_the_schema_refuses_the_parse_refuses_too() -> None:
+    """The schema is no looser than the parse on the shapes a local model got wrong: a
+    `jurisdiction` beside the mentions, a stance off the list, a citation past the batch."""
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = edge_schema(passages=3)
+
+    def full(**over) -> dict:
+        """An edge with every key written, as a model held to the schema writes one."""
+        item = {name: None for name in EdgeProposal.model_fields}
+        mention = {"jurisdiction": None}
+        item.update(edge(stance="supports"))
+        item["subject"] = {**mention, **item["subject"], "jurisdiction": "SG"}
+        item["object"] = {**mention, **item["object"]}
+        return {**item, **over}
+
+    good = full()
+    jsonschema.validate({"relations": [good]}, schema)
+    assert len(parse_edges(json.dumps([good])).accepted) == 1
+
+    for bad in (full(jurisdiction="SG"), full(stance="favourable"), full(citations=[])):
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate({"relations": [bad]}, schema)
+        assert parse_edges(json.dumps([bad])).accepted == []
+
+    past_the_batch = full(citations=[4])
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"relations": [past_the_batch]}, schema)
+    with pytest.raises(CitationOutOfRange):
+        chunk_ids_for(parse_edges(json.dumps([past_the_batch])).accepted[0].citations, passages())
+
+
+@pytest.mark.parametrize(
+    ("system", "schema"),
+    [
+        (lambda: extract_prompt(passages()).system, lambda: edge_schema(passages=3)),
+        (
+            lambda: tag_prompt(passages(), attributes=[("climate", None)]).system,
+            lambda: tag_schema(passages=3, attributes=["climate"]),
+        ),
+    ],
+    ids=["edges", "tags"],
+)
+def test_the_schema_asks_for_the_keys_in_the_order_the_prompt_shows_them(system, schema) -> None:
+    """A grammar writes keys in schema order. Out of the prompt's order, a model that had
+    been made to write one key early skipped the ones it would have written before it."""
+    shown = re.findall(r'^ {4}"(\w+)":', system(), flags=re.MULTILINE)
+    order = list(answer_items(schema())["properties"])
+
+    assert len(shown) >= 5, "the prompt's example is no longer read the way this test reads it"
+    assert [key for key in order if key in shown] == shown
+
+
+def test_an_empty_answer_is_still_allowed() -> None:
+    """A batch with nothing supportable answers `[]`; a schema demanding an item would make
+    the model invent one."""
+    jsonschema = pytest.importorskip("jsonschema")
+    jsonschema.validate({"relations": []}, edge_schema(passages=3))
+    jsonschema.validate({"assignments": []}, tag_schema(passages=3, attributes=["a"]))
+    assert parse_edges('{"relations": []}').rejected == [], "an empty wrapper is an answer"

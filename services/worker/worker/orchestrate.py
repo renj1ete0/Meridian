@@ -41,10 +41,12 @@ from meridian_core.proposals import (
     CitationOutOfRange,
     Passage,
     chunk_ids_for,
+    edge_schema,
     extract_prompt,
     parse_edges,
     parse_tags,
     tag_prompt,
+    tag_schema,
 )
 from meridian_core.provider import (
     Completion,
@@ -368,11 +370,12 @@ async def _ask(
     journal: Journal,
     stage: str,
     now: dt.datetime,
+    schema: dict | None = None,
 ) -> Completion:
     """One model call, with the two refusals that end a run and the one that does not.
 
     An unset budget refuses here rather than in the provider, so its message points
-    at Admin rather than at the registry.
+    at Admin rather than at the registry. `schema` goes to rows that take one (`B-247`).
     """
     budget = await load_budget(sess)
     if budget is None:
@@ -389,6 +392,7 @@ async def _ask(
             system=prompt.system,
             token_cap=budget.max_tokens_per_run,
             now=now,
+            schema=schema,
         )
     except (NoAgentAvailable, ProviderError, NotConfigured, BudgetError) as exc:
         # §13.4: a deferred run, not a crash. The run stays resumable and the
@@ -455,6 +459,7 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
         journal=journal,
         stage="extract",
         now=now,
+        schema=edge_schema(passages=len(batch.passages)),
     )
     batch.provenance(completion, await _quality_tier(sess, completion.agent_id))
 
@@ -622,7 +627,16 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
         return
 
     completion = await _ask(
-        sess, run, task_type="tag_attributes", prompt=prompt, journal=journal, stage="tag", now=now
+        sess,
+        run,
+        task_type="tag_attributes",
+        prompt=prompt,
+        journal=journal,
+        stage="tag",
+        now=now,
+        schema=tag_schema(
+            passages=len(batch.passages), attributes=[name for name, _ in attributes]
+        ),
     )
     quality_tier = await _quality_tier(sess, completion.agent_id)
     if not batch.reasoned:

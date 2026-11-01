@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .config import FetchPolicyRead, SteeringLogRead, TopicConfigRead
 from .enums import (
     AgentAvailability,
+    AgentStructured,
     AgentThinking,
     DomainStatus,
     GazetteerEntityType,
@@ -329,6 +330,8 @@ class AgentRowRead(BaseModel):
     api_key_env_var: str | None
     #: `off`: structured tasks ask the model not to reason first (`B-259`).
     thinking: AgentThinking = "server"
+    #: `schema`: extraction and tagging send their answer's JSON Schema (`B-247`).
+    structured: AgentStructured = "server"
     #: Whether the variable this row names is set where the API runs. Not
     #: whether the key *works* — that costs a request, and a screen that made
     #: one per row on every load would be a bill for looking.
@@ -388,7 +391,8 @@ class StatusRead(BaseModel):
 class AgentEdit(BaseModel):
     """What Admin may change on an agent: whether it runs, which model, how it reasons.
 
-    The model since `P6-06`; whether structured tasks ask it not to reason first since `B-259`.
+    The model since `P6-06`; whether structured tasks ask it not to reason first since `B-259`;
+    whether they send their answer's schema since `B-247`.
 
     A `${VARIABLE}` model is read from .env. Endpoints and task types stay in
     `config/agents.yaml`.
@@ -399,6 +403,7 @@ class AgentEdit(BaseModel):
     enabled: bool | None = None
     model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^\S(.*\S)?$")
     thinking: AgentThinking | None = None
+    structured: AgentStructured | None = None
 
 
 class RunRowRead(BaseModel):

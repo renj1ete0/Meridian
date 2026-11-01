@@ -341,6 +341,74 @@ the same kind of batch took 32 to 46 s and gave 20 and 11 accepted relations (`B
   seeded local rows are `off` (`config/agents.yaml`, and the migration for existing rows); Admin
   → Agents changes it per row.
 
+### <a id="answer-schema"></a>Local models held to the answer's schema
+
+A local model's answer is validated after it is written, and every item that does not fit is
+dropped: a field beside the mentions instead of inside one, a stance off the list, an answer cut
+off mid-item. A server that decodes to a schema can make those answers impossible to write
+(`B-247`).
+
+- **`agents.structured`**: `server` sends nothing, as before; `schema` sends relation
+  extraction's and tagging's answer schema as
+  `response_format: {"type": "json_schema", "json_schema": {"name": "answer", "schema": …}}`.
+  llama.cpp compiles it to a grammar; vLLM and SGLang accept the same field. Other structured
+  tasks have no schema yet and send none. The seeded local rows are `schema`; hosted rows stay
+  `server`, since a hosted API may refuse an argument, or a schema, it does not support. Admin →
+  Agents changes it per row.
+- **The schema is the DTO** (`proposals.edge_schema`, `tag_schema`, from `EdgeProposal` and
+  `TagProposal`), not a second copy, and a drift test holds them together. It is narrowed where
+  the parse is narrower than the type: node types to `MODEL_NODE_TYPES`, citations to the
+  passages in the batch (a citation past it otherwise fails the whole proposal), and the
+  attribute to the active set. `$ref`s are inlined and every object is closed.
+- **An object at the root**, `{"relations": [...]}` or `{"assignments": [...]}`: the Strata
+  engine refuses any other root with a 400 ("must accept only JSON objects at its root"), and
+  OpenAI's strict mode has the same rule. The parse already unwraps an object holding one list,
+  so the answer is read the same way.
+- **At most two items per passage** (`MAX_ITEMS_PER_PASSAGE`). The grammar closes the array at
+  the cap, so a model that would have run on to the token limit loses the surplus rather than
+  the item it was writing: Strata, unheld, wrote 145 relations for 20 passages and was cut off
+  at 16,000 tokens.
+- **Key order is the prompt's order.** A grammar makes the model write keys in schema order,
+  required ones first. With only the DTO's required keys required, a model made to write
+  `citations` early skipped the optional `value` it would have written before it: every tag in
+  two batches had no value and was refused. So every key the prompt shows is required (written
+  as `null` when the DTO lets it be absent), and the DTOs declare their fields in the order the
+  prompt's example shows them (a test holds the two together). The keys an edge carries only
+  now and then (`EDGE_RARE_KEYS`: topic labels, a comparison's dimension and disanalogy) stay
+  optional and last: required, every relation paid for three nulls, and the model wrote fewer
+  relations.
+- **The parse still validates.** What a schema cannot say (a comparison's limits, a tag needing
+  a value) is refused as before, and an answer from a server that ignored the field, or kept to
+  it loosely, is parsed the same way. Measuring found one parse fault on the way: an empty list
+  inside an object (an item's `topic_labels: []`) was taken as an empty answer, so a single
+  item written without its wrapper read as "nothing proposed". An empty list now counts as the
+  answer only outside any object, or as a wrapper's only list.
+- **A server that refuses the field is asked again without it.** A 400 or 422 to a request that
+  carried the schema is retried once without it; if that answers, the row is asked without it
+  for the rest of the process (a restart forgets). A request refused both ways fails as before
+  and the row keeps sending it, since nothing showed the schema was the problem. A 500 or 502
+  is retried without it too, and not remembered: Strata checks an answer after writing it and
+  answers 502 `structured_output_failed` when it is not valid JSON, and the plain answer that
+  follows is one the parse can salvage items from. A 503 is waited out, never retried without
+  the schema.
+
+**Measured** on 2026-11-02 against the operator's OpenAI-compatible proxy (seismo serve) on the
+GPU machine, thinking off, with real 40-passage batches (about 11,000 prompt tokens):
+
+| Engine (model) | Takes `response_format`? | Without the schema | With it |
+|---|---|---|---|
+| llama.cpp (Qwen3 27B IQ4_XS) | yes, as a grammar; top-level `json_schema` too | extraction 98 relations in 6 batches, 20–84 s; tagging 24 in 4 | extraction 84 in 4, 26–89 s; tagging 22 in 4; nothing refused either way |
+| TabbyAPI (Qwen3 27B EXL3 4.0 bpw) | yes; top-level `json_schema` too | 16 and 9 relations, 37 and 24 s | 29 and 13, 43 and 25 s |
+| Strata (IQ3_XXS) | only with an object at the root; checks the answer after writing, and ignores `maxLength` | 20 passages: once 145 relations, cut off at 16,000 tokens (299 s); 40 passages: 36 relations (32 s), and once 152 cut off (130 s) | 20 passages: 13 and 18 (20–27 s); 40 passages: 17 (25 s), and once a 502 after 88 s |
+
+On the llama.cpp model, which was already clean, the schema changes little: the same counts
+within run-to-run variation, all with stance and certainty. Its value is on the engines that
+are not clean: Strata, held to it, answered a long batch in a fifth of the time without running
+away. An earlier draft of the schema (only the DTO's required keys required, in the DTO's old
+order) cost every tag in two batches, which is why the key-order rule above exists. Strata's
+earlier failure to answer a 10,000-token prompt within 15 minutes did not recur with thinking
+off: 40 passages answered in 25 to 130 s.
+
 ### Budgets
 
 `budget.py` (`P4-10`, `P4-13`) bounds the one loop nothing else does: gaps emit seeds, seeds grow
@@ -418,8 +486,8 @@ text extraction, and what a model returns is a suggestion the writes may refuse.
 ## Configuration
 
 - Registry rows: **Admin → Agent registry** (model strings, and for an OpenAI-compatible row
-  whether structured tasks skip reasoning, are editable there); seeded from `config/agents.yaml`,
-  disabled.
+  whether structured tasks skip reasoning and whether they send their answer schema, are
+  editable there); seeded from `config/agents.yaml`, disabled.
 - Keys and endpoints: see [reference/environment.md](../reference/environment.md#models-synthesis-and-the-ask-panel).
 - Budget caps: **Admin**, budget screen. Runs refuse until all caps are set.
 

@@ -37,6 +37,7 @@ FIELDS = (
     "task_types",
     "fallback_agent_id",
     "thinking",
+    "structured",
 )
 
 
@@ -87,6 +88,7 @@ class AskedLog(list):
     """Which agents were asked, in order; ``reasoned`` says whether each was left to reason."""
 
     reasoned: list[bool]
+    schemas: list[dict | None]
 
 
 @pytest.fixture
@@ -94,11 +96,15 @@ def answers(monkeypatch):
     """Replace the call shapes. Returns a log of which agents were asked."""
     asked = AskedLog()
     reasoned: list[bool] = []
+    schemas: list[dict | None] = []
 
     def install(**behaviour):
-        async def shape(agent, *, prompt, system, max_tokens, timeout_s, reasoning=True):
+        async def shape(
+            agent, *, prompt, system, max_tokens, timeout_s, reasoning=True, schema=None
+        ):
             asked.append(agent.agent_id)
             reasoned.append(reasoning)
+            schemas.append(schema)
             outcome = behaviour.get(agent.agent_id, behaviour.get("*"))
             if isinstance(outcome, Exception):
                 raise outcome
@@ -108,6 +114,7 @@ def answers(monkeypatch):
             provider_module, "_SHAPES", {"anthropic": shape, "openai_compatible": shape}
         )
         asked.reasoned = reasoned
+        asked.schemas = schemas
         return asked
 
     return install
@@ -354,3 +361,30 @@ async def test_the_local_rows_are_seeded_off_and_the_hosted_rows_left_to_the_ser
     rows = {r.agent_id: r.thinking for r in await sess.scalars(select(Agent))}
     for agent_id, thinking in rows.items():
         assert thinking == ("off" if agent_id.startswith("local-") else "server"), agent_id
+
+
+async def test_the_schema_goes_to_the_rows_set_to_send_it_and_no_others(registry, answers) -> None:
+    """`B-247` through the real chain: the registry row decides, not the caller. A hosted row
+    left at `server` is never sent the schema, whatever the stage hands `complete`."""
+    sess, run = registry
+    schema = {"type": "array"}
+    asked = answers(**{"*": ProviderError("down")})
+
+    with pytest.raises(ProviderError):
+        await complete(
+            sess, run, "relation_extraction", prompt="p", token_cap=100_000, now=NOW, schema=schema
+        )
+
+    rows = {r.agent_id: r for r in await sess.scalars(select(Agent))}
+    assert asked, "the chain asked nobody"
+    for agent_id, sent in zip(asked, asked.schemas, strict=True):
+        assert sent == (schema if rows[agent_id].structured == "schema" else None), agent_id
+
+
+async def test_the_local_rows_are_seeded_to_send_the_schema_and_the_hosted_rows_not(registry):
+    """What the migration set: a hosted API may refuse an argument or a schema it does not
+    support, so only the local rows send it."""
+    sess, _ = registry
+    rows = {r.agent_id: r.structured for r in await sess.scalars(select(Agent))}
+    for agent_id, structured in rows.items():
+        assert structured == ("schema" if agent_id.startswith("local-") else "server"), agent_id

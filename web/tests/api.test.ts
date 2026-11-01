@@ -54,7 +54,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
 import { ANSWER_FIELDS, ANSWER_GROUP_FIELDS, ANSWER_ITEM_FIELDS, ANSWER_PLACE_FIELDS } from '../src/lib/answer'
 // P6-28: the bulk gazetteer decision.
-import { AGENT_THINKING, GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX, SITE_FIELDS } from '../src/lib/api'
+import {
+  AGENT_STRUCTURED,
+  AGENT_THINKING,
+  GAZETTEER_BULK_FIELDS,
+  GAZETTEER_BULK_MAX,
+  SITE_FIELDS,
+} from '../src/lib/api'
 import {
   AREA_BUILD_FIELDS,
   AREA_FIELDS,
@@ -300,6 +306,18 @@ describe('the agent thinking values match the database (B-259)', () => {
 
     expect(inDatabase.length).toBeGreaterThan(1)
     expect([...AGENT_THINKING].sort()).toEqual(inDatabase.sort())
+  })
+})
+
+describe('the agent answer-schema values match the database (B-247)', () => {
+  it('lists exactly the values the CHECK constraint allows', () => {
+    const model = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/config.py'), 'utf8')
+    const declaration = /AGENT_STRUCTURED = constrained\(([\s\S]*?)name="agent_structured"/.exec(model)
+    expect(declaration, 'AGENT_STRUCTURED is no longer declared the way this test reads it').toBeTruthy()
+    const inDatabase = [...declaration![1]!.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
+
+    expect(inDatabase.length).toBeGreaterThan(1)
+    expect([...AGENT_STRUCTURED].sort()).toEqual(inDatabase.sort())
   })
 })
 

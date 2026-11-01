@@ -775,6 +775,11 @@ export function AdminPage() {
                     setAgents(await editAgent(agentId, { thinking }))
                   })
                 }
+                onStructured={(agentId, structured) =>
+                  void steer(agentId, async () => {
+                    setAgents(await editAgent(agentId, { structured }))
+                  })
+                }
               />
             ) : (
               <Loading what="the registry" />

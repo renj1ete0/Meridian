@@ -34,6 +34,7 @@ from meridian_core.models import (
     Run,
     Source,
 )
+from meridian_core.proposals import answer_items
 from meridian_core.provider import Completion, ProviderError
 from meridian_core.routing import NoAgentAvailable
 from meridian_core.runs import begin_or_resume, unfinished
@@ -74,9 +75,11 @@ class FakeModel:
         self.answers = {"relation_extraction": extract, "tag_attributes": tag}
         self.fails = fails
         self.calls: list[str] = []
+        self.schemas: dict[str, dict | None] = {}
 
     async def __call__(self, sess, run, task_type, **kwargs):
         self.calls.append(task_type)
+        self.schemas[task_type] = kwargs.get("schema")
         if self.fails is not None:
             raise self.fails
         return Completion(
@@ -236,6 +239,27 @@ async def test_a_good_answer_becomes_an_edge_with_its_citations(corpus, monkeypa
     )
     assert run.edges_added == 1
     assert "add_edge" in journal.render()
+
+
+async def test_each_stage_hands_the_model_its_answer_schema_for_this_batch(
+    corpus, monkeypatch
+) -> None:
+    """`B-247`: the schema is built for the batch that was sent (citations up to its size)
+    and, for tagging, for the attributes active in the database, not a list in code."""
+    sess, ids, _ = corpus
+    model = FakeModel(extract=answer(relation("A", "B")))
+
+    await drive(sess, ids, model, monkeypatch)
+
+    edges = answer_items(model.schemas["relation_extraction"])
+    assert edges["properties"]["citations"]["items"]["maximum"] == len(ids)
+    active = set(
+        await sess.scalars(
+            select(AttributeDefinition.name).where(AttributeDefinition.status == "active")
+        )
+    )
+    tags = answer_items(model.schemas["tag_attributes"])
+    assert set(tags["properties"]["attribute"]["enum"]) == active
 
 
 async def test_the_edge_records_the_agent_that_produced_it(corpus, monkeypatch) -> None:

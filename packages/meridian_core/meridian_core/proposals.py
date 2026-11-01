@@ -13,7 +13,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from pydantic import ValidationError as PydanticError
 
 from .framing import frame_passages
@@ -30,11 +30,14 @@ __all__ = [
     "Passage",
     "Prompt",
     "Rejection",
+    "answer_items",
     "chunk_ids_for",
+    "edge_schema",
     "extract_prompt",
     "parse_edges",
     "parse_tags",
     "tag_prompt",
+    "tag_schema",
 ]
 
 #: Node types a model may create. Never `annotation`: that is the reader's own notes
@@ -293,6 +296,107 @@ def tag_prompt(
 
 
 # ---------------------------------------------------------------------------
+# The answer's schema, for a server that can hold a model to it (`B-247`)
+# ---------------------------------------------------------------------------
+
+#: Annotations that describe a schema to a person and constrain nothing: noise in a
+#: grammar, and a docstring is not the model's business.
+_PROSE_KEYS: Final[frozenset[str]] = frozenset({"title", "description", "default"})
+
+
+def _inlined(node: Any, defs: Mapping[str, Any]) -> Any:
+    """`node` with every local `$ref` replaced by its definition, and the prose dropped.
+
+    Inlined because not every engine follows `$ref`. Every object is closed, `Mention`
+    included: its parse ignores an unknown key, but a model held to a schema needs none.
+    Every property is required, an optional one written as `null`: a grammar puts required
+    keys first, and a model made to write `citations` early skipped the optional `value`
+    and `stance` it would have written before them. `_answer_schema` relaxes the rare ones.
+    """
+    if isinstance(node, list):
+        return [_inlined(item, defs) for item in node]
+    if not isinstance(node, dict):
+        return node
+    ref = node.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        return _inlined(defs[ref.removeprefix("#/$defs/")], defs)
+    out = {
+        key: _inlined(value, defs)
+        for key, value in node.items()
+        if key not in _PROSE_KEYS and key != "$defs"
+    }
+    if out.get("type") == "object":
+        out["additionalProperties"] = False
+        out["required"] = list(out.get("properties", {}))
+    return out
+
+
+#: Keys an edge carries only now and then: left optional, and declared last, so a grammar
+#: never moves them ahead of a key the model writes every time. Required, every item paid
+#: for three nulls, and a model held to them wrote fewer relations.
+EDGE_RARE_KEYS: Final[frozenset[str]] = frozenset(
+    {"topic_labels", "similarity_dimension", "disanalogy"}
+)
+
+
+#: At most this many items per passage in a schema-held answer. A cap the grammar enforces
+#: closes the array before the token limit cuts an item in half: one engine wrote 145
+#: relations for 20 passages and was cut off at 16,000 tokens.
+MAX_ITEMS_PER_PASSAGE: Final[int] = 2
+
+
+def _answer_schema(
+    model: type[BaseModel],
+    *,
+    key: str,
+    passages: int,
+    rare: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """The JSON Schema of an answer, `{key: [model, ...]}`, read from the DTO itself.
+
+    An object at the root because some engines take nothing else (the parse unwraps it, as
+    it does any model's wrapper). Narrowed where the parse is narrower than the type: node
+    types to `MODEL_NODE_TYPES`, citations to the passages in this batch. What a schema
+    cannot say (a comparison's limits, a tag's value) the parse still refuses.
+    See docs/features/synthesis.md#answer-schema.
+    """
+    raw = TypeAdapter(list[model]).json_schema()
+    answer = _inlined(raw, raw.get("$defs", {}))
+    answer["maxItems"] = MAX_ITEMS_PER_PASSAGE * max(1, passages)
+    answer["items"]["required"] = [k for k in answer["items"]["required"] if k not in rare]
+    item = answer["items"]["properties"]
+    for mention in ("subject", "object", "entity"):
+        if mention in item:
+            item[mention]["properties"]["node_type"]["enum"] = list(MODEL_NODE_TYPES)
+    item["citations"]["items"]["maximum"] = max(1, passages)
+    return {
+        "type": "object",
+        "properties": {key: answer},
+        "required": [key],
+        "additionalProperties": False,
+    }
+
+
+def answer_items(schema: Mapping[str, Any]) -> dict[str, Any]:
+    """The schema of one item of an answer schema made here."""
+    (answer,) = schema["properties"].values()
+    return answer["items"]
+
+
+def edge_schema(*, passages: int) -> dict[str, Any]:
+    """What `parse_edges` accepts, as a JSON Schema, for a batch of `passages`."""
+    return _answer_schema(EdgeProposal, key="relations", passages=passages, rare=EDGE_RARE_KEYS)
+
+
+def tag_schema(*, passages: int, attributes: Sequence[str]) -> dict[str, Any]:
+    """What `parse_tags` accepts, as a JSON Schema, with the attribute held to the active set."""
+    schema = _answer_schema(TagProposal, key="assignments", passages=passages)
+    if attributes:
+        answer_items(schema)["properties"]["attribute"]["enum"] = list(attributes)
+    return schema
+
+
+# ---------------------------------------------------------------------------
 # The parse
 # ---------------------------------------------------------------------------
 
@@ -358,6 +462,7 @@ def _items(text: str) -> tuple[list[Any], list[Rejection]]:
         return [], [Rejection("the model returned nothing")]
 
     array_spans, _ = _scan(text, "[", "]")
+    object_spans, truncated = _scan(text, "{", "}")
     for start, end in array_spans:
         try:
             data = json.loads(text[start:end])
@@ -369,11 +474,16 @@ def _items(text: str) -> tuple[list[Any], list[Rejection]]:
         if isinstance(data, list) and any(isinstance(item, dict) for item in data):
             return data, rejected
         if isinstance(data, list) and not data:
+            if any(o_start < start and end <= o_end for o_start, o_end in object_spans):
+                # Inside an object: an item's empty `topic_labels`, or a wrapper's empty
+                # list, which the object route reads. Taken as the answer, it hid a whole
+                # item written without its wrapper (`B-247`).
+                continue
             # An explicit empty array is an answer: nothing was supportable.
             return [], rejected
 
     items: list[Any] = []
-    object_spans, truncated = _scan(text, "{", "}")
+    answered = False
     if truncated:
         rejected.append(Rejection("the answer stops mid-item; it was probably truncated"))
     for start, end in object_spans:
@@ -385,9 +495,11 @@ def _items(text: str) -> tuple[list[Any], list[Rejection]]:
             continue
         if isinstance(obj, dict):
             unwrapped = _unwrap(obj)
+            # A wrapper holding an empty list is an answer too: `{"relations": []}`.
+            answered = answered or unwrapped is not None
             items.extend(unwrapped if unwrapped is not None else [obj])
 
-    if not items and not rejected:
+    if not items and not rejected and not answered:
         rejected.append(Rejection("no JSON in the answer", text.strip()[:EXCERPT]))
     return items, rejected
 

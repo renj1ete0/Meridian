@@ -30,6 +30,7 @@ function agent(over: Partial<AgentRow> = {}): AgentRow {
     enabled: false,
     fallback_agent_id: null,
     thinking: 'off',
+    structured: 'schema',
     route_order: null,
     endpoint: '${LOCAL_CHAT_LLM_URL}',
     api_key_env_var: null,
@@ -145,6 +146,25 @@ describe('the thinking switch (B-259)', () => {
     expect(onThinking.mock.calls).toEqual([
       ['local-chat', 'server'],
       ['local-llamacpp', 'off'],
+    ])
+  })
+})
+
+describe('the answer-schema switch (B-247)', () => {
+  it('sends the other setting for that row only', () => {
+    const onStructured = vi.fn()
+    render(
+      <AgentsPanel
+        rows={[agent(), agent({ agent_id: 'local-llamacpp', structured: 'server' })]}
+        unserved={[]}
+        onStructured={onStructured}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Stop sending schema: local-chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send schema: local-llamacpp' }))
+    expect(onStructured.mock.calls).toEqual([
+      ['local-chat', 'server'],
+      ['local-llamacpp', 'schema'],
     ])
   })
 })

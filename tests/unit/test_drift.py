@@ -45,6 +45,7 @@ ENUM_PAIRS = [
     ("TokenScope", models.config.TOKEN_SCOPE),
     ("AgentAvailability", models.config.AVAILABILITY),
     ("AgentThinking", models.config.AGENT_THINKING),
+    ("AgentStructured", models.config.AGENT_STRUCTURED),
     ("RunStage", models.runs.RUN_STAGE),
     ("RunStatus", models.runs.RUN_STATUS),
     ("JobStatus", models.runs.JOB_STATUS),

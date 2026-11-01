@@ -91,6 +91,28 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.202.0] — 2026-11-02
+
+### Added
+
+- `B-247`: a local model can be held to the answer's schema while it writes. A per-agent
+  setting, `structured` (`server` or `schema`, Admin → Agents), sends extraction and tagging
+  requests a JSON schema built from the proposal types and narrowed to this batch: node
+  types, citation numbers, the active attributes, at most two items a passage. The seeded
+  local agents start on `schema`; hosted ones stay on `server`. An engine that refuses the
+  schema (400/422) is asked once more without it and then not sent it again; a 500/502 is
+  retried once without it. Measured through the GPU machine: llama.cpp and TabbyAPI apply it
+  as a grammar; Strata checks after writing, and held to the schema it answers a 40-passage
+  batch in under half a minute instead of running on to the token limit.
+  See docs/features/synthesis.md#answer-schema.
+
+### Fixed
+
+- A single proposed item that held an empty list (no topic labels) was read as an empty
+  answer.
+
+**Deploy:** image only (the migration runs on start).
+
 ## [0.201.0] — 2026-11-02
 
 ### Security

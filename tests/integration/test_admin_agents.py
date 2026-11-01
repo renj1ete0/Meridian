@@ -194,6 +194,20 @@ async def test_thinking_can_be_set_from_admin_and_is_shown(
     assert (row["thinking"], row["enabled"]) == ("off", True), "the switch alone changed"
 
 
+async def test_the_answer_schema_can_be_set_from_admin_and_is_shown(
+    client, open_admin, registry, marker: str
+) -> None:
+    """`B-247`: whether extraction and tagging send their schema is a per-row switch."""
+    before = await client.get("/api/admin/agents")
+    assert {r["agent_id"]: r for r in before.json()["rows"]}[marker]["structured"] == "server"
+
+    response = await client.patch(f"/api/admin/agents/{marker}", json={"structured": "schema"})
+
+    assert response.status_code == 200
+    row = {r["agent_id"]: r for r in response.json()["rows"]}[marker]
+    assert (row["structured"], row["thinking"], row["enabled"]) == ("schema", "server", True)
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -204,6 +218,8 @@ async def test_thinking_can_be_set_from_admin_and_is_shown(
         {"task_types": ["chat"]},
         {"thinking": "on"},
         {"thinking": ""},
+        {"structured": "grammar"},
+        {"structured": None, "schema": {"type": "array"}},
     ],
 )
 async def test_what_admin_may_not_write_is_refused(

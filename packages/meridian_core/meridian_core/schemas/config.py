@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .common import CreateBase, QualityTier
 from .enums import (
     AgentAvailability,
+    AgentStructured,
     AgentThinking,
     DomainStatus,
     SeedSource,
@@ -153,6 +154,7 @@ class AgentCreate(CreateBase):
     wake_mac: str | None = None
     api_key_env_var: str | None = None
     thinking: AgentThinking = "server"
+    structured: AgentStructured = "server"
 
 
 class AgentRead(BaseModel):
@@ -175,4 +177,5 @@ class AgentRead(BaseModel):
     wake_mac: str | None
     api_key_env_var: str | None
     thinking: AgentThinking
+    structured: AgentStructured
     created_at: dt.datetime

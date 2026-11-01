@@ -71,10 +71,24 @@ DEFAULT_DOWN_FOR_S: Final[float] = 60.0
 #: Until when each agent, by id, is taken to be down.
 _down_until: dict[str, float] = {}
 
+#: Statuses with which a server refuses a request it cannot take as written: an argument it
+#: does not know, or a schema it cannot compile (`B-247`).
+SCHEMA_REFUSED_STATUSES: Final[frozenset[int]] = frozenset({400, 422})
+
+#: Statuses with which a server took the schema and failed this answer to it: one engine
+#: checks the answer after writing it and returns 502 when it is not valid JSON. Asked again
+#: without the schema, and not remembered: the next answer may keep to it (`B-247`).
+SCHEMA_FAILED_STATUSES: Final[frozenset[int]] = frozenset({500, 502})
+
+#: Agents whose server refused the answer schema and then answered without it, by id: asked
+#: without it for the rest of the process rather than refused once a call (`B-247`).
+_refuses_schema: set[str] = set()
+
 
 def forget_agent_outages() -> None:
-    """Clear every remembered agent outage; for tests."""
+    """Clear every remembered agent outage and schema refusal; for tests."""
     _down_until.clear()
+    _refuses_schema.clear()
 
 
 def _down_for() -> float:
@@ -176,6 +190,7 @@ async def _call_anthropic(
     max_tokens: int,
     timeout_s: float,
     reasoning: bool = True,
+    schema: dict[str, Any] | None = None,
 ) -> tuple[str, int, int]:
     try:
         from anthropic import AsyncAnthropic
@@ -231,16 +246,39 @@ def reasons(agent: Agent, task_type: str) -> bool:
     return not (getattr(agent, "thinking", "server") == "off" and task_type in STRUCTURED_TASKS)
 
 
-def _chat_body(model: str, messages: list[dict], max_tokens: int, *, reasoning: bool) -> dict:
+def schema_for(agent: Agent, schema: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The answer schema to send this agent, or None (`B-247`).
+
+    Only to a row set to `schema`, and not to one whose server has refused it in this process.
+    """
+    if schema is None or getattr(agent, "structured", "server") != "schema":
+        return None
+    return None if agent.agent_id in _refuses_schema else schema
+
+
+def _chat_body(
+    model: str,
+    messages: list[dict],
+    max_tokens: int,
+    *,
+    reasoning: bool,
+    schema: dict[str, Any] | None = None,
+) -> dict:
     """An OpenAI-compatible chat request.
 
     Asked not to reason, it carries the chat template's switch (llama.cpp, vLLM, SGLang read
-    it; a server that does not ignores it). Never sent otherwise: OpenAI's own API refuses
-    arguments it does not know.
+    it; a server that does not ignores it). Given a schema, it asks the server to hold the
+    answer to it (`response_format`, which llama.cpp and vLLM turn into constrained
+    decoding). Neither is sent otherwise: OpenAI's own API refuses arguments it does not know.
     """
     body: dict = {"model": model, "messages": messages, "max_tokens": max_tokens}
     if not reasoning:
         body["chat_template_kwargs"] = {"enable_thinking": False}
+    if schema is not None:
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "answer", "schema": schema, "strict": True},
+        }
     return body
 
 
@@ -252,6 +290,7 @@ async def _call_openai_compatible(
     max_tokens: int,
     timeout_s: float,
     reasoning: bool = True,
+    schema: dict[str, Any] | None = None,
 ) -> tuple[str, int, int]:
     """The local tier (§11.7). Ollama, llama.cpp and vLLM all speak this."""
     import httpx
@@ -269,14 +308,31 @@ async def _call_openai_compatible(
     if key:
         headers["Authorization"] = f"Bearer {key}"
 
+    url = lan_url(f"{endpoint.rstrip('/')}/chat/completions")
     limits = httpx.Timeout(timeout_s, connect=min(CONNECT_TIMEOUT_S, timeout_s))
     try:
         async with httpx.AsyncClient(timeout=limits) as client:
             response = await client.post(
-                lan_url(f"{endpoint.rstrip('/')}/chat/completions"),
-                json=_chat_body(model, messages, max_tokens, reasoning=reasoning),
+                url,
+                json=_chat_body(model, messages, max_tokens, reasoning=reasoning, schema=schema),
                 headers=headers,
             )
+            refused = response.status_code in SCHEMA_REFUSED_STATUSES
+            if schema is not None and (refused or response.status_code in SCHEMA_FAILED_STATUSES):
+                # A server that does not take the schema, or whose answer to it failed: asked
+                # again without it, and the parse validates (and salvages) as it always has.
+                # See docs/features/synthesis.md#answer-schema.
+                log.warning(
+                    "server did not answer to the schema; asking without it",
+                    extra={"agent": agent.agent_id, "status": response.status_code},
+                )
+                response = await client.post(
+                    url,
+                    json=_chat_body(model, messages, max_tokens, reasoning=reasoning),
+                    headers=headers,
+                )
+                if refused and response.is_success:
+                    _refuses_schema.add(agent.agent_id)
             if response.status_code in WAIT_STATUSES:
                 # A server loading the model on request, or busy (`B-248`, ADR 0023): away
                 # for as long as it says, so the run defers and returns, not a failure.
@@ -347,6 +403,7 @@ async def _call_relay(
     max_tokens: int,
     timeout_s: float,
     reasoning: bool = True,
+    schema: dict[str, Any] | None = None,
 ) -> tuple[str, int, int]:
     """A model that answers through files, not a network (`P4-18`).
 
@@ -512,11 +569,14 @@ async def complete(
     token_cap: int | None,
     timeout_s: float = DEFAULT_TIMEOUT_S,
     now: dt.datetime,
+    schema: dict[str, Any] | None = None,
 ) -> Completion:
     """Ask the best agent for this task, falling down the chain on failure.
 
     `token_cap=None` refuses. Raises `NoAgentAvailable` when the registry has nothing to
     offer, and `ProviderError` when every agent in the chain refused (defer, §13.4).
+    `schema` is the answer's JSON Schema, sent only to rows set to `schema` (`B-247`); the
+    answer is validated after either way.
     """
     chain = await chain_for(sess, task_type)
     if not chain:
@@ -546,6 +606,7 @@ async def complete(
                 max_tokens=max_tokens,
                 timeout_s=timeout_s,
                 reasoning=reasons(agent, task_type),
+                schema=schema_for(agent, schema),
             )
         except ProviderError as exc:
             await settle_tokens(sess, run.run_id, reserved=reserved, actual=0)

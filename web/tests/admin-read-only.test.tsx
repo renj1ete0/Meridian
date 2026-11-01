@@ -85,6 +85,7 @@ const agent = (over: Partial<AgentRow> = {}): AgentRow => ({
   endpoint: null,
   api_key_env_var: null,
   thinking: 'server',
+  structured: 'server',
   key_present: true,
   blocked_by: [],
   ...over,

@@ -23,7 +23,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { AgentsPanel, modelNote, rowState, thinkingNote, tierLabel } from '../src/admin/AgentsPanel'
+import { AgentsPanel, modelNote, rowState, structuredNote, thinkingNote, tierLabel } from '../src/admin/AgentsPanel'
 import { RunsPanel, spent, STATUS_NOTES, statusLine, written } from '../src/admin/RunsPanel'
 import type { AgentRow, RunRow } from '../src/lib/api'
 
@@ -52,6 +52,7 @@ function agent(over: Partial<AgentRow> = {}): AgentRow {
     endpoint: null,
     api_key_env_var: 'ANTHROPIC_API_KEY',
     thinking: 'server',
+    structured: 'server',
     key_present: true,
     blocked_by: [],
     ...over,
@@ -267,5 +268,26 @@ describe('how structured tasks are sent to a local model (B-259)', () => {
     )
     expect(html.match(/Let it reason/g)?.length).toBe(1)
     expect(html).not.toMatch(/Skip reasoning/)
+  })
+})
+
+describe('whether a local model is held to the answer schema (B-247)', () => {
+  it('says it only where an OpenAI-compatible server could take it', () => {
+    expect(structuredNote(agent())).toBeNull()
+    expect(structuredNote(agent({ provider: 'openai_compatible', structured: 'schema' }))).toMatch(/holds the model/)
+    expect(structuredNote(agent({ provider: 'openai_compatible', structured: 'server' }))).toMatch(/validated after/)
+  })
+
+  it('offers the switch on a local row and never on a hosted one of another shape', () => {
+    const html = text(
+      renderToStaticMarkup(
+        <AgentsPanel
+          rows={[agent(), agent({ agent_id: 'local-llamacpp', provider: 'openai_compatible', structured: 'schema' })]}
+          unserved={[]}
+        />,
+      ),
+    )
+    expect(html.match(/Stop sending schema/g)?.length).toBe(1)
+    expect(html).not.toMatch(/Send schema/)
   })
 })

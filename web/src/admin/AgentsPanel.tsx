@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { AgentRow, AgentThinking } from '../lib/api'
+import type { AgentRow, AgentStructured, AgentThinking } from '../lib/api'
 import { useEdit } from './editGate'
 import { BUTTON_ROW, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
@@ -19,6 +19,19 @@ export interface AgentsPanelProps {
   onModel?: (agentId: string, model: string) => Promise<boolean>
   /** Whether structured tasks ask this agent not to reason first (`B-259`). */
   onThinking?: (agentId: string, thinking: AgentThinking) => void
+  /** Whether extraction and tagging send this agent their answer's schema (`B-247`). */
+  onStructured?: (agentId: string, structured: AgentStructured) => void
+}
+
+/**
+ * Whether an agent's server is held to the answer's schema, for the rows where it can be
+ * chosen (OpenAI-compatible). Null for the rest. See docs/features/synthesis.md#answer-schema.
+ */
+export function structuredNote(row: Pick<AgentRow, 'provider' | 'structured'>): string | null {
+  if (row.provider !== 'openai_compatible') return null
+  return row.structured === 'schema'
+    ? 'Sent the answer schema: the server holds the model to it.'
+    : 'Sent no answer schema: validated after it answers.'
 }
 
 /**
@@ -140,7 +153,7 @@ export function tierLabel(tier: number | null): string {
   return tier === null ? 'no tier' : `tier ${tier}`
 }
 
-export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinking }: AgentsPanelProps) {
+export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinking, onStructured }: AgentsPanelProps) {
   const edit = useEdit()
   return (
     <section className="flex flex-col gap-5">
@@ -195,6 +208,9 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinkin
                     {thinkingNote(row) ? (
                       <div className="mt-1 whitespace-normal text-[11px] text-text-faint">{thinkingNote(row)}</div>
                     ) : null}
+                    {structuredNote(row) ? (
+                      <div className="whitespace-normal text-[11px] text-text-faint">{structuredNote(row)}</div>
+                    ) : null}
                   </td>
                   <td className={`${TD} text-[12px] text-text-muted`}>
                     {row.api_key_env_var ? (
@@ -236,6 +252,19 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinkin
                           className={BUTTON_ROW}
                         >
                           {row.thinking === 'off' ? 'Let it reason' : 'Skip reasoning'}
+                        </button>
+                      ) : null}
+                      {structuredNote(row) ? (
+                        <button
+                          type="button"
+                          {...edit(busy === row.agent_id)}
+                          aria-label={`${row.structured === 'schema' ? 'Stop sending schema' : 'Send schema'}: ${row.agent_id}`}
+                          onClick={() =>
+                            onStructured?.(row.agent_id, row.structured === 'schema' ? 'server' : 'schema')
+                          }
+                          className={BUTTON_ROW}
+                        >
+                          {row.structured === 'schema' ? 'Stop sending schema' : 'Send schema'}
                         </button>
                       ) : null}
                     </div>

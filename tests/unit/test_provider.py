@@ -716,3 +716,165 @@ async def test_the_switch_reaches_the_server_only_when_asked(bodies) -> None:
     # A hosted OpenAI-compatible API refuses arguments it does not know: never sent unasked.
     assert "chat_template_kwargs" not in default
     assert {k: v for k, v in off.items() if k != "chat_template_kwargs"} == default
+
+
+# --------------------------------------------------------------------------
+# The answer's schema sent to a server that decodes to it (`B-247`)
+# --------------------------------------------------------------------------
+
+ANSWER = {"type": "array", "items": {"type": "object", "additionalProperties": False}}
+CALL = {"prompt": "p", "system": "s", "max_tokens": 10, "timeout_s": 5}
+
+
+def test_every_call_shape_takes_the_schema() -> None:
+    """`complete` passes it to whichever shape routing chose; one that lacked the argument
+    would fail the call with a TypeError instead of ignoring it."""
+    import inspect
+
+    for name, shape in _SHAPES.items():
+        assert "schema" in inspect.signature(shape).parameters, name
+
+
+def test_the_schema_goes_only_to_a_row_set_to_send_it() -> None:
+    from meridian_core.provider import schema_for
+
+    assert schema_for(local(structured="schema"), ANSWER) is ANSWER
+    assert schema_for(local(structured="server"), ANSWER) is None
+    assert schema_for(local(), ANSWER) is None, "a row from before the column"
+    assert schema_for(local(structured="schema"), None) is None, "a task with no schema"
+
+
+async def test_the_schema_reaches_the_server_as_response_format(bodies) -> None:
+    from meridian_core.provider import _call_openai_compatible
+
+    await _call_openai_compatible(local(), schema=ANSWER, **CALL)
+    await _call_openai_compatible(local(), **CALL)
+
+    held, plain = bodies
+    assert held["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "answer", "schema": ANSWER, "strict": True},
+    }
+    # A hosted API refuses arguments it does not know: nothing extra goes out unasked.
+    assert "response_format" not in plain
+    assert {k: v for k, v in held.items() if k != "response_format"} == plain
+
+
+@pytest.fixture
+def refuses_schema(lan):
+    """A server that answers 400 to any request carrying `response_format`."""
+    import json
+
+    import httpx
+
+    sent: list[dict] = []
+
+    def answer(request):
+        if request.url.path.endswith("/chat/completions"):
+            body = json.loads(request.content)
+            sent.append(body)
+            if "response_format" in body:
+                return httpx.Response(400, json={"error": "unknown field response_format"})
+        return chat_answer(request)
+
+    lan.state["handler"] = answer
+    return sent
+
+
+@pytest.mark.parametrize("status", [400, 422])
+async def test_a_server_refusing_the_schema_is_asked_again_without_it(
+    lan, refuses_schema, status
+) -> None:
+    """The run does not fail over an argument the server does not take: the plain request
+    answers, and the parse validates as it always has."""
+    import json
+
+    import httpx
+
+    from meridian_core.provider import _call_openai_compatible
+
+    def answer(request):
+        body = json.loads(request.content)
+        refuses_schema.append(body)
+        if "response_format" in body:
+            return httpx.Response(status, json={"error": "no"})
+        return chat_answer(request)
+
+    lan.state["handler"] = answer
+    text, _, _ = await _call_openai_compatible(local(health_url=None), schema=ANSWER, **CALL)
+
+    assert text == "an answer"
+    assert ["response_format" in b for b in refuses_schema] == [True, False]
+
+
+async def test_a_refusal_is_remembered_so_the_next_call_does_not_pay_for_it(
+    refuses_schema,
+) -> None:
+    from meridian_core.provider import _call_openai_compatible, schema_for
+
+    row = local(health_url=None, structured="schema")
+    await _call_openai_compatible(row, schema=schema_for(row, ANSWER), **CALL)
+    await _call_openai_compatible(row, schema=schema_for(row, ANSWER), **CALL)
+
+    assert ["response_format" in b for b in refuses_schema] == [True, False, False]
+    other = local(agent_id="other-local", structured="schema")
+    assert schema_for(other, ANSWER) is ANSWER, "only the row whose server refused"
+
+
+@pytest.mark.parametrize("status", [500, 502])
+async def test_an_answer_that_failed_the_schema_is_asked_again_and_not_remembered(
+    lan, status
+) -> None:
+    """Measured on an engine that checks the answer after writing it: a long batch came back
+    502 "did not return valid JSON". Asked again without the schema, the parse salvages what
+    it can; the next call still sends the schema, since the server does take it."""
+    import json
+
+    import httpx
+
+    from meridian_core.provider import _call_openai_compatible, schema_for
+
+    sent: list[bool] = []
+
+    def answer(request):
+        body = json.loads(request.content)
+        sent.append("response_format" in body)
+        if "response_format" in body:
+            return httpx.Response(status, json={"error": {"code": "structured_output_failed"}})
+        return chat_answer(request)
+
+    lan.state["handler"] = answer
+    row = local(health_url=None, structured="schema")
+    text, _, _ = await _call_openai_compatible(row, schema=ANSWER, **CALL)
+
+    assert (text, sent) == ("an answer", [True, False])
+    assert schema_for(row, ANSWER) is ANSWER
+
+
+async def test_a_request_refused_with_and_without_the_schema_still_fails(lan) -> None:
+    """A 400 that is not about the schema (a prompt too long) fails as before, and the row
+    keeps sending the schema: nothing showed the server cannot take it."""
+    import httpx
+
+    from meridian_core.provider import _call_openai_compatible, schema_for
+
+    lan.state["handler"] = lambda r: httpx.Response(400, json={"error": "context too long"})
+    row = local(health_url=None, structured="schema")
+
+    with pytest.raises(ProviderError, match="HTTPStatusError"):
+        await _call_openai_compatible(row, schema=ANSWER, **CALL)
+    assert schema_for(row, ANSWER) is ANSWER
+    assert len([p for p, _ in lan if p.endswith("/chat/completions")]) == 2
+
+
+async def test_a_server_loading_the_model_is_not_asked_again_without_the_schema(lan) -> None:
+    """503 is "wait", not "refused": retrying at once without the schema would only meet the
+    same load."""
+    import httpx
+
+    from meridian_core.provider import _call_openai_compatible
+
+    lan.state["handler"] = lambda r: httpx.Response(503, headers={"Retry-After": "30"})
+    with pytest.raises(ProviderError, match="loading or busy"):
+        await _call_openai_compatible(local(health_url=None), schema=ANSWER, **CALL)
+    assert len([p for p, _ in lan if p.endswith("/chat/completions")]) == 1

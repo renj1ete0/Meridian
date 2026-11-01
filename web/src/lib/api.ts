@@ -1926,6 +1926,8 @@ export interface AgentRow {
   api_key_env_var: string | null
   /** `off`: structured tasks ask the model not to reason first (`B-259`). */
   thinking: AgentThinking
+  /** `schema`: extraction and tagging send their answer's JSON Schema (`B-247`). */
+  structured: AgentStructured
   key_present: boolean
   blocked_by: string[]
 }
@@ -1933,6 +1935,10 @@ export interface AgentRow {
 /** Mirrors `AgentThinking` (`B-259`). */
 export const AGENT_THINKING = ['server', 'off'] as const
 export type AgentThinking = (typeof AGENT_THINKING)[number]
+
+/** Mirrors `AgentStructured` (`B-247`). */
+export const AGENT_STRUCTURED = ['server', 'schema'] as const
+export type AgentStructured = (typeof AGENT_STRUCTURED)[number]
 
 export const AGENT_ROW_FIELDS = [
   'agent_id',
@@ -1948,6 +1954,7 @@ export const AGENT_ROW_FIELDS = [
   'endpoint',
   'api_key_env_var',
   'thinking',
+  'structured',
   'key_present',
   'blocked_by',
 ] as const
@@ -2010,6 +2017,7 @@ export interface AgentChange {
   enabled?: boolean
   model?: string
   thinking?: AgentThinking
+  structured?: AgentStructured
 }
 
 /** Change one agent. Returns the whole registry, because `unserved_tasks` is

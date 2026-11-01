@@ -84,6 +84,7 @@ agents:
     route_order: 10
     endpoint: "${LOCAL_LLM_URL}"
     thinking: "off"  # structured tasks answer without reasoning first (B-259)
+    structured: schema  # extraction and tagging send their answer's schema (B-247)
     health_url: "${LOCAL_LLM_HEALTH_URL}"
     availability: opportunistic
     wake_mac: "${LOCAL_LLM_MAC}"
@@ -107,6 +108,7 @@ agents:
     route_order: 10
     endpoint: "${LOCAL_CHAT_LLM_URL}"
     thinking: "off"  # structured tasks answer without reasoning first (B-259)
+    structured: schema  # extraction and tagging send their answer's schema (B-247)
     health_url: null
     availability: opportunistic
     wake_mac: null

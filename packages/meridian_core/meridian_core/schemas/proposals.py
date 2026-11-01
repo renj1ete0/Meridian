@@ -62,9 +62,11 @@ class EdgeProposal(CreateBase):
     model need not guess them.
     """
 
+    # Fields in the order the prompt shows them: a server holding a model to the schema
+    # (`B-247`) makes it write them in this order.
     subject: Mention
-    object: Mention
     relation: str = Field(min_length=1, max_length=MAX_RELATION_TYPE, pattern=RELATION_PATTERN)
+    object: Mention
     citations: Citations
 
     stance: Stance | None = None
@@ -106,12 +108,12 @@ class TagProposal(CreateBase):
     only through `P7-01`.
     """
 
+    # In the prompt's order, as `EdgeProposal`.
     entity: Mention
     attribute: str = Field(min_length=1, max_length=100)
-    citations: Citations
-
     value: str | None = Field(default=None, max_length=500)
     value_numeric: float | None = None
+    citations: Citations
     confidence: Confidence | None = None
 
     @model_validator(mode="after")

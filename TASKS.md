@@ -1964,7 +1964,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       with the least junk. The service runs cross-encoders only; a Qwen3 reranker scores the
       yes/no logits of a causal LM (`meridian-calibration/rerank/rank.py` has it). 33 s per
       question on the integrated GPU, so a discrete card's job (the 3090)
-- [ ] `B-247` **A local model's answers held to the schema while it writes** — side by side with
+- [x] `B-247` **A local model's answers held to the schema while it writes** — side by side with
       Claude, a local Qwen3.6-35B lost 7 of 22 relations to a misplaced field and left stance and
       certainty empty on every on-topic relation. llama.cpp can constrain output to a JSON schema
       (`response_format`); derive it from the proposal models and send it to `openai_compatible`
