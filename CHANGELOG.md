@@ -465,6 +465,8 @@ what it would move, and again with `--apply`.
   `autoupdate` profile pick up through Watchtower). Migration `b262a1c2d3e4` adds the timetable
   row to existing deployments.
 
+**Deploy:** image only; carries a migration, which runs on start.
+
 ## [0.186.1] — 2026-11-01
 
 ### Changed
@@ -472,6 +474,8 @@ what it would move, and again with `--apply`.
 - `B-261`: a fresh server is `docker compose up -d`. `datadirs` runs on every boot and a new
   one-shot, `setup`, migrates and seeds; every service that touches the database waits for it
   to exit successfully.
+
+**Deploy:** `git pull && docker compose up -d` — the compose files changed.
 
 ## [0.186.0] — 2026-11-01
 
@@ -483,6 +487,8 @@ what it would move, and again with `--apply`.
   server's default. The seeded local rows are `off`, hosted rows `server`; Admin → Agent
   registry switches it per OpenAI-compatible row. Migration `b259a1c2d3e4`.
 
+**Deploy:** image only; carries a migration, which runs on start.
+
 ## [0.185.0] — 2026-11-01
 
 ### Added
@@ -491,6 +497,8 @@ what it would move, and again with `--apply`.
   latest-articles page for its article links (a date in the path, a long slug, or a numbered
   series under one parent), each with its headline for the watch's filter, and queues the new
   ones as a feed's entries. `worker.watch add URL --listing`; migration `b255a1c2d3e4`.
+
+**Deploy:** image only; carries a migration, which runs on start.
 
 ## [0.184.0] — 2026-11-01
 
@@ -501,6 +509,8 @@ what it would move, and again with `--apply`.
   unknown kind or a hostless site is refused); `/api/explore/sites` lists sites by source count.
   The filter rail gains Kind (news kinds first) and Site (the most-held sites for the kinds
   chosen, and a box that finds one by name or takes a pasted address).
+
+**Deploy:** image only.
 
 ## [0.183.0] — 2026-11-01
 
@@ -513,6 +523,8 @@ what it would move, and again with `--apply`.
   loses them; `worker.dockind --kind news` re-derives only stored news. The `doc_kind` column
   widens (migration `b253a1c2d3e4`).
 
+**Deploy:** image only; carries a migration, which runs on start.
+
 ## [0.182.0] — 2026-11-01
 
 ### Added
@@ -521,6 +533,8 @@ what it would move, and again with `--apply`.
   an Admin that lists only the sections a person may open and says when one is read-only, the
   signed-in person in Settings, and a page for someone with no access, with the claim form while
   nobody can manage access.
+
+**Deploy:** image only.
 
 ## [0.181.0] — 2026-11-01
 
@@ -538,6 +552,8 @@ what it would move, and again with `--apply`.
   pages included. Set `MERIDIAN_OWNER_EMAILS`, or claim the instance with the code in the API's
   log, then grant others. Without Access nothing changes.
 
+**Deploy:** image only; carries a migration, which runs on start.
+
 ## [0.180.0] — 2026-11-01
 
 ### Added
@@ -547,6 +563,8 @@ what it would move, and again with `--apply`.
   RSS and Atom and keeps each entry's headline (`news:title`, never an image's title); a watch
   files its entries under its topic, or queues only the entries whose headline names one.
   Needs migration `b249a0c1d2e3`.
+
+**Deploy:** image only; carries a migration, which runs on start.
 
 ## [0.179.0] — 2026-11-01
 
@@ -2878,172 +2896,6 @@ what it would move, and again with `--apply`.
   Migration `71de4a6d0c50`; the production scheduler now declares
   `MERIDIAN_EMBEDDER_URL`
 
-## [0.76.3] — 2026-09-20
-
-### Fixed
-
-- `B-12` `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE`; the code reads
-  `MERIDIAN_EMBED_CACHE`. The `/models` volume was therefore never used and
-  2.3 GB of weights re-downloaded on every recreate
-
-### A misspelt variable cannot fail loudly
-
-- `os.environ.get(name, default)` exists in order not to raise, so there is no
-  runtime mechanism that could have caught this — the embedder simply used the
-  library's default cache, on a layer nobody mounted, and worked
-- So the test is the mechanism: every variable name any compose file sets must
-  appear somewhere in the Python sources, with a short exemption list for the
-  ones read by the Postgres entrypoint and the upstream images
-- And a second test that every exemption is still set by some compose file, so
-  the list cannot become a museum of variables that no longer exist — which is
-  how the next real typo would hide
-
-## [0.76.4] — 2026-09-20
-
-### Fixed
-
-- `B-13` Three undeclared imports, each of which dies at container startup and
-  never in development: `meridian_core.embedder` imports `httpx`, declared on
-  `meridian-worker`; `services/api` imports `jwt`, which had been arriving
-  transitively through `mcp`; and `worker.embedserver` imports `fastapi` from
-  the `embed` extra the worker image did not install
-- The worker image now syncs `--extra embed`. `P2-17`'s sidecar is the worker
-  image under a different command, precisely so there is one copy of the model
-  — and without the extra it died at import, which it did, because the sidecar
-  had never once been started from a container
-
-### The rule, third time
-
-- `P1-30` wrote it down: a package declares what it imports, because
-  `uv sync --package X` installs X's closure and nothing the root happens to
-  also pull in. The handover predicted the recurrence. Predicting was not enough
-- Now asserted per workspace member, with both sides derived — imports from the
-  AST, dependencies from the `pyproject.toml` files, siblings followed
-  transitively because that much really is legitimate
-
-## [0.76.5] — 2026-09-20
-
-### Fixed
-
-- `B-14` The embedding sidecar could never obtain its weights. It sits on
-  `internal`, which has no DNS and no route out, and the weights are not in the
-  image — so on a fresh stack it answered `loaded: false` for ever and timed out
-  every embed request. Search stayed lexical-only, in production too
-- The compose comment asserted the weights *were* in the image, two lines above
-  the mount that exists because they are downloaded at runtime
-- The worker now shares the same cache. `P2-19`'s backfill falls back to loading
-  the model in-process when the sidecar does not answer, and without a mount that
-  fallback pulled 2.3 GB into a layer that dies with the container, every run
-
-### Added
-
-- `python -m worker.fetchmodel` — a profile-gated one-shot on `egress` that
-  writes into the volume the sidecar reads, and exits. It loads and encodes
-  rather than only downloading: a cache missing one file downloads
-  "successfully" and fails at the first real batch of a four-hour backfill
-- It refuses a model whose width is not the schema's, for the same reason
-
-### The isolation is kept on purpose
-
-- Giving the sidecar egress would have been one line. It runs corpus text —
-  derived from pages the crawler fetched — through a model, and a route out from
-  there is a route out for anything that ever gets in
-- Baking the weights into the image was the other option: 2.3 GB on every layer
-  push, twice for a multi-arch build, for files that do not change between
-  releases
-
-## [0.76.6] — 2026-09-20
-
-### Fixed
-
-- `B-16` Every page the first containerised crawl fetched was thrown away.
-  Docker creates a missing bind-mount source on the host as **root**; every
-  application image runs as `meridian`, uid 1001, with `cap_drop: ALL`. So the
-  worker fetched a handful of real pages, hundreds of kilobytes each, and could not create
-  `/data/raw/<domain>/`, and settled every task `"outcome": "success",
-  "stored": null` — because the fetch had succeeded
-- The same would have happened on the server. The deploy docs chown
-  `/srv/meridian/app` because that is the checkout, and say nothing about `raw`,
-  `figures` or `models`
-
-### Added
-
-- A `chown` one-shot in both compose files, on `network_mode: none`, run by
-  `make quickstart` and belonging in the runbook before `up`
-- Drift tests tying the uid to the Dockerfiles that create it — three copies of
-  1001 is three chances to move one — and asserting nothing else runs as root
-
-### Two details that were nearly the other way
-
-- The three top-level directories are chowned, not `-R`: what is created beneath
-  them inherits the owner, and a recursive chown over a 100 GB raw store is its
-  own outage
-- `network_mode: none` rather than omitting `networks:`, which silently puts a
-  container on compose's default bridge — that bridge has egress, and this is
-  the only container in the stack running as root
-
-## [0.77.0] — 2026-09-20
-
-**The whole stack, locally, from a fresh clone.**
-
-### Added
-
-- `B-05` `docker-compose.local.yml` — every service built from source, so a
-  fresh clone needs no registry access. Credentials that are not secrets and are
-  not pretending to be, data under the working tree, loopback only
-- `web/Dockerfile` and `web/nginx.conf`. `docker-compose.yml` had referenced
-  `build: { context: ./web }` since it was written and the file was not there,
-  so the production stack could not be brought up whole. Node builds, nginx
-  serves, and the runtime carries no Node at all
-- `deploy/tools/Dockerfile` for Alembic and the config seed. No service image
-  carries either: `alembic` is in the root project's `dev` group and every
-  application image syncs `--no-dev`
-- `make local-up`, `make local-down`, `make local-logs`
-
-### The network split is kept, deliberately
-
-- One bridge would have been easier and wrong. `internal` versus `egress` is
-  `P1-22`'s boundary, `crawl4ai` drives a real browser against hostile pages,
-  and a local stack that flattened it would let someone develop against a
-  topology production does not have
-- One difference, stated rather than implied: `api` and `web` sit on a third
-  `frontdoor` network. **A container on an `internal: true` network cannot
-  publish a port at all** — Docker installs no gateway, so the `ports:` line is
-  silently inert rather than an error. Production does not need it because
-  `cloudflared` proxies inward
-
-### Found by running it
-
-- `api` was never given `MERIDIAN_EMBEDDER_URL`, so every search reported "this
-  deployment has no embedder" a few hundred bytes from a running sidecar. A test
-  now asserts the pairing: a stack that runs the sidecar has to tell its clients
-  where it is
-- `.localdata/` was not gitignored
-
-## [0.78.0] — 2026-09-20
-
-**One command from a fresh clone to a running, seeded Meridian.**
-
-### Added
-
-- `B-06` `make quickstart`. Checks the machine, builds every image from source,
-  brings up Postgres alone, migrates, seeds, chowns the data directories,
-  fetches the embedding weights, starts the rest, waits for the API and prints
-  the URL
-- A "Just run it" section in the README, above the development path, and port
-  `21116` named in the port table
-
-### Idempotent by construction
-
-- Because "run it again" is the only thing anybody is going to try. Compose
-  converges rather than recreating, `alembic upgrade head` is a no-op at head,
-  `seed.py` skips what it has already written (scaffold §1.6), the chown is a
-  chown, and the weights resolve from cache
-- Postgres starts alone and first, so a failed migration is readable rather than
-  interleaved with six services' startup logs
-- `--skip-preflight` and `--rebuild` for the two cases where the default is
-  wrong
-
 ## [0.117.1] — 2026-09-23
 
 ### Fixed
@@ -4429,6 +4281,172 @@ new capability bumps MINOR.
   resolves the service to the Dockerfile that builds it, and checks the invoked
   thing is actually in there. It cannot tell you the command succeeds — only
   that it is not missing, which is what was wrong
+
+## [0.78.0] — 2026-09-20
+
+**One command from a fresh clone to a running, seeded Meridian.**
+
+### Added
+
+- `B-06` `make quickstart`. Checks the machine, builds every image from source,
+  brings up Postgres alone, migrates, seeds, chowns the data directories,
+  fetches the embedding weights, starts the rest, waits for the API and prints
+  the URL
+- A "Just run it" section in the README, above the development path, and port
+  `21116` named in the port table
+
+### Idempotent by construction
+
+- Because "run it again" is the only thing anybody is going to try. Compose
+  converges rather than recreating, `alembic upgrade head` is a no-op at head,
+  `seed.py` skips what it has already written (scaffold §1.6), the chown is a
+  chown, and the weights resolve from cache
+- Postgres starts alone and first, so a failed migration is readable rather than
+  interleaved with six services' startup logs
+- `--skip-preflight` and `--rebuild` for the two cases where the default is
+  wrong
+
+## [0.77.0] — 2026-09-20
+
+**The whole stack, locally, from a fresh clone.**
+
+### Added
+
+- `B-05` `docker-compose.local.yml` — every service built from source, so a
+  fresh clone needs no registry access. Credentials that are not secrets and are
+  not pretending to be, data under the working tree, loopback only
+- `web/Dockerfile` and `web/nginx.conf`. `docker-compose.yml` had referenced
+  `build: { context: ./web }` since it was written and the file was not there,
+  so the production stack could not be brought up whole. Node builds, nginx
+  serves, and the runtime carries no Node at all
+- `deploy/tools/Dockerfile` for Alembic and the config seed. No service image
+  carries either: `alembic` is in the root project's `dev` group and every
+  application image syncs `--no-dev`
+- `make local-up`, `make local-down`, `make local-logs`
+
+### The network split is kept, deliberately
+
+- One bridge would have been easier and wrong. `internal` versus `egress` is
+  `P1-22`'s boundary, `crawl4ai` drives a real browser against hostile pages,
+  and a local stack that flattened it would let someone develop against a
+  topology production does not have
+- One difference, stated rather than implied: `api` and `web` sit on a third
+  `frontdoor` network. **A container on an `internal: true` network cannot
+  publish a port at all** — Docker installs no gateway, so the `ports:` line is
+  silently inert rather than an error. Production does not need it because
+  `cloudflared` proxies inward
+
+### Found by running it
+
+- `api` was never given `MERIDIAN_EMBEDDER_URL`, so every search reported "this
+  deployment has no embedder" a few hundred bytes from a running sidecar. A test
+  now asserts the pairing: a stack that runs the sidecar has to tell its clients
+  where it is
+- `.localdata/` was not gitignored
+
+## [0.76.6] — 2026-09-20
+
+### Fixed
+
+- `B-16` Every page the first containerised crawl fetched was thrown away.
+  Docker creates a missing bind-mount source on the host as **root**; every
+  application image runs as `meridian`, uid 1001, with `cap_drop: ALL`. So the
+  worker fetched a handful of real pages, hundreds of kilobytes each, and could not create
+  `/data/raw/<domain>/`, and settled every task `"outcome": "success",
+  "stored": null` — because the fetch had succeeded
+- The same would have happened on the server. The deploy docs chown
+  `/srv/meridian/app` because that is the checkout, and say nothing about `raw`,
+  `figures` or `models`
+
+### Added
+
+- A `chown` one-shot in both compose files, on `network_mode: none`, run by
+  `make quickstart` and belonging in the runbook before `up`
+- Drift tests tying the uid to the Dockerfiles that create it — three copies of
+  1001 is three chances to move one — and asserting nothing else runs as root
+
+### Two details that were nearly the other way
+
+- The three top-level directories are chowned, not `-R`: what is created beneath
+  them inherits the owner, and a recursive chown over a 100 GB raw store is its
+  own outage
+- `network_mode: none` rather than omitting `networks:`, which silently puts a
+  container on compose's default bridge — that bridge has egress, and this is
+  the only container in the stack running as root
+
+## [0.76.5] — 2026-09-20
+
+### Fixed
+
+- `B-14` The embedding sidecar could never obtain its weights. It sits on
+  `internal`, which has no DNS and no route out, and the weights are not in the
+  image — so on a fresh stack it answered `loaded: false` for ever and timed out
+  every embed request. Search stayed lexical-only, in production too
+- The compose comment asserted the weights *were* in the image, two lines above
+  the mount that exists because they are downloaded at runtime
+- The worker now shares the same cache. `P2-19`'s backfill falls back to loading
+  the model in-process when the sidecar does not answer, and without a mount that
+  fallback pulled 2.3 GB into a layer that dies with the container, every run
+
+### Added
+
+- `python -m worker.fetchmodel` — a profile-gated one-shot on `egress` that
+  writes into the volume the sidecar reads, and exits. It loads and encodes
+  rather than only downloading: a cache missing one file downloads
+  "successfully" and fails at the first real batch of a four-hour backfill
+- It refuses a model whose width is not the schema's, for the same reason
+
+### The isolation is kept on purpose
+
+- Giving the sidecar egress would have been one line. It runs corpus text —
+  derived from pages the crawler fetched — through a model, and a route out from
+  there is a route out for anything that ever gets in
+- Baking the weights into the image was the other option: 2.3 GB on every layer
+  push, twice for a multi-arch build, for files that do not change between
+  releases
+
+## [0.76.4] — 2026-09-20
+
+### Fixed
+
+- `B-13` Three undeclared imports, each of which dies at container startup and
+  never in development: `meridian_core.embedder` imports `httpx`, declared on
+  `meridian-worker`; `services/api` imports `jwt`, which had been arriving
+  transitively through `mcp`; and `worker.embedserver` imports `fastapi` from
+  the `embed` extra the worker image did not install
+- The worker image now syncs `--extra embed`. `P2-17`'s sidecar is the worker
+  image under a different command, precisely so there is one copy of the model
+  — and without the extra it died at import, which it did, because the sidecar
+  had never once been started from a container
+
+### The rule, third time
+
+- `P1-30` wrote it down: a package declares what it imports, because
+  `uv sync --package X` installs X's closure and nothing the root happens to
+  also pull in. The handover predicted the recurrence. Predicting was not enough
+- Now asserted per workspace member, with both sides derived — imports from the
+  AST, dependencies from the `pyproject.toml` files, siblings followed
+  transitively because that much really is legitimate
+
+## [0.76.3] — 2026-09-20
+
+### Fixed
+
+- `B-12` `docker-compose.yml` set `MERIDIAN_EMBEDDER_CACHE`; the code reads
+  `MERIDIAN_EMBED_CACHE`. The `/models` volume was therefore never used and
+  2.3 GB of weights re-downloaded on every recreate
+
+### A misspelt variable cannot fail loudly
+
+- `os.environ.get(name, default)` exists in order not to raise, so there is no
+  runtime mechanism that could have caught this — the embedder simply used the
+  library's default cache, on a layer nobody mounted, and worked
+- So the test is the mechanism: every variable name any compose file sets must
+  appear somewhere in the Python sources, with a short exemption list for the
+  ones read by the Postgres entrypoint and the upstream images
+- And a second test that every exemption is still set by some compose file, so
+  the list cannot become a museum of variables that no longer exist — which is
+  how the next real typo would hide
 
 ## [0.76.2] — 2026-09-20
 
@@ -6970,7 +6988,6 @@ new capability bumps MINOR.
   Neither hardcodes a palette, so a legitimate change is a one-file edit
 - 1234 backend tests pass with a real Postgres, 5 frontend
 
-
 ## [0.28.0] — 2026-09-08
 
 **Two more places to look, and the bug that finding them exposed.**
@@ -7023,7 +7040,6 @@ new capability bumps MINOR.
   rather than disappointing: it is a biomedical index, and it is in the chain for
   the health- and environment-adjacent work this corpus also touches
 
-
 ## [0.27.0] — 2026-09-08
 
 **A paywalled landing page stops being a dead end.** `P1-14`'s resolution chain,
@@ -7072,7 +7088,6 @@ and the citation seeding that gives it something to resolve.
   and the loop's drift tests read the dispatch out of the source rather than
   listing the types, so the next conditional type cannot be added to the claim
   without a branch to receive it
-
 
 ## [0.26.0] — 2026-09-08
 
@@ -7143,7 +7158,6 @@ building it.
   keyed by domain and answers "is this host refusing us", and a search asks one
   internal service about many hosts
 
-
 ## [0.25.0] — 2026-09-08
 
 **The corpus stops keeping every copy of everything.** §6.1's one-line novelty
@@ -7201,7 +7215,6 @@ than a delete.
   index will make this faster without making it exact. Acceptable: a missed
   near-duplicate is a chunk that stays, not one wrongly dropped
 
-
 ## [0.24.0] — 2026-09-07
 
 **The stack gets a topology, and the browser stops being invisible.** Closes the
@@ -7254,7 +7267,6 @@ two items standing between a worker image that runs and a stack that does.
   reaching the LAN. The egress restriction is still the defence that survives an
   application bug
 
-
 ## [0.23.0] — 2026-09-07
 
 **A challenge interstitial gets one bounded chance to clear itself.**
@@ -7293,7 +7305,6 @@ two items standing between a worker image that runs and a stack that does.
   *and* either the mitigation header or one of three machine-generated body
   markers, scanned only in the first 8KB — so an article discussing bot
   challenges does not trip it, the same distinction `P1-23` turns on
-
 
 ## [0.22.0] — 2026-09-07
 
@@ -7379,7 +7390,6 @@ largest runs to several thousand URLs, and every one of them is served as
   about the domain is confused by it — it simply fails, three attempts at a
   time, and `domain_signal` correctly declines to mark it blocked because a 403
   means the server answered
-
 
 ## [0.21.0] — 2026-09-08
 
