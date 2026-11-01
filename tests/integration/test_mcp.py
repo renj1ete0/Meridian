@@ -306,6 +306,7 @@ SITE_TOOLS = (
     "list_gaps",
     "list_contested",
     "corpus_growth",
+    "whats_new",
 )
 
 
@@ -529,3 +530,89 @@ async def test_an_empty_answer_says_what_empty_means(mcp) -> None:
         assert "not evidence" in route["note"]
     contested = await call(mcp, "list_contested")
     assert ("note" in contested) == (contested["pairs"] == [])
+
+
+# --------------------------------------------------------------------------
+# What is new, by topic (`B-237`)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def new_on_a_topic(session_for):
+    """A topic of its own with one cleared and one quarantined source, committed and removed."""
+    import uuid
+
+    from sqlalchemy import delete, update
+
+    from meridian_core.chunks import ChunkWrite, replace_chunks
+    from meridian_core.models import Chunk, Source, TopicConfig
+    from meridian_core.sources import upsert_source
+
+    marker = f"wnt{uuid.uuid4().hex[:10]}"
+    sess = await session_for("rw")
+    sess.add(TopicConfig(topic=marker, weight=0.1))
+    made: dict[str, int] = {}
+    for state in ("cleared", "quarantined"):
+        source, _ = await upsert_source(
+            sess,
+            f"https://{state}.{marker}.test/doc",
+            checksum=f"sha256:{uuid.uuid4().hex}",
+            source_tier="press",
+            title=f"Northfield {state} {marker}",
+        )
+        await replace_chunks(
+            sess,
+            source.source_id,
+            [
+                ChunkWrite(
+                    text=f"{marker} kerbside bays were reallocated in Northfield.", chunk_index=0
+                )
+            ],
+        )
+        await sess.execute(
+            update(Source)
+            .where(Source.source_id == source.source_id)
+            .values(trust_state=state, topic_labels=[marker], doc_kind="news")
+        )
+        made[state] = source.source_id
+    await sess.commit()
+    yield marker, made
+
+    await sess.execute(delete(Chunk).where(Chunk.source_id.in_(list(made.values()))))
+    await sess.execute(delete(Source).where(Source.source_id.in_(list(made.values()))))
+    await sess.execute(delete(TopicConfig).where(TopicConfig.topic == marker))
+    await sess.commit()
+
+
+async def test_whats_new_answers_what_the_page_answers_cleared_only(
+    mcp, session_for, new_on_a_topic
+) -> None:
+    """The page's own function, narrowed to cleared material: a quarantined source is listed
+    to a reader on the site and never handed to an assistant."""
+    import datetime as dt
+
+    from meridian_core.whatsnew import whats_new
+
+    topic, made = new_on_a_topic
+    body = await call(mcp, "whats_new", topic=[topic], days=1, findings=0)
+
+    assert [g["topic"] for g in body["topics"]] == [topic]
+    group = body["topics"][0]
+    assert [s["source_id"] for s in group["sources"]] == [made["cleared"]]
+    assert group["sources"][0]["excerpt"]["text"].startswith(topic)
+    assert group["by_kind"] == [{"doc_kind": "news", "sources": 1}]
+
+    sess = await session_for("ro")
+    since = dt.datetime.fromisoformat(body["since"])
+    as_of = dt.datetime.fromisoformat(body["as_of"])
+    page = await whats_new(
+        sess, since=since, as_of=as_of, topics=[topic], findings=0, cleared_only=True
+    )
+    assert body == page.model_dump(mode="json")
+    reader = await whats_new(sess, since=since, as_of=as_of, topics=[topic], findings=0)
+    assert {s.source_id for s in reader.topics[0].sources} == set(made.values())
+
+
+async def test_whats_new_refuses_a_naive_instant(mcp) -> None:
+    with pytest.raises(Exception, match="since: give an offset"):
+        await mcp.call_tool("whats_new", {"since": "2026-10-01T09:00:00"})

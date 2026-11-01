@@ -5,6 +5,8 @@
  */
 
 const KEY = 'meridian.lastVisit'
+/** The visit before this session's, kept so What's new can measure from it (`B-237`). */
+const PREVIOUS_KEY = 'meridian.previousVisit'
 
 /** The previous visit, or null on a first ever visit. */
 export function readLastVisit(): string | null {
@@ -32,6 +34,26 @@ export function markVisited(at: Date = new Date()): void {
  */
 export function openSession(now: Date = new Date()): string | null {
   const previous = readLastVisit()
+  if (previous !== null) {
+    try {
+      window.localStorage.setItem(PREVIOUS_KEY, previous)
+    } catch {
+      /* As for the stamp itself: not remembered, not an error. */
+    }
+  }
   markVisited(now)
   return previous
+}
+
+/**
+ * The visit before the current session: what the landing's "since you were last here" counted
+ * from. Read-only, so opening What's new never moves it. Null before a second visit.
+ */
+export function readPreviousVisit(): string | null {
+  try {
+    const stored = window.localStorage.getItem(PREVIOUS_KEY)
+    return stored && !Number.isNaN(Date.parse(stored)) ? stored : null
+  } catch {
+    return null
+  }
 }

@@ -47,6 +47,9 @@ never repaints the others. Past eight topics, a topic is drawn in the neutral "o
 - **Fetch attempts are pruned after 30 days**, so for older days a day counts as crawled if a
   page was kept that day.
 
+What arrived, rather than how much, is [What's new](whats-new.md): the sources and findings
+themselves, by topic and kind.
+
 ## Operating it
 
 - The page is `/growth` (top bar, beside Map and Gaps).

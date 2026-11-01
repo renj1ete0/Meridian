@@ -38,6 +38,8 @@ READ_TOOLS: frozenset[str] = frozenset(
         "list_gaps",
         "list_contested",
         "corpus_growth",
+        # What is new, by topic (`B-237`).
+        "whats_new",
     }
 )
 

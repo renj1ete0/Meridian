@@ -10,6 +10,7 @@ import { GrowthPage } from './explore/GrowthPage'
 import { MapPage } from './explore/MapPage'
 import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
+import { WhatsNewPage } from './explore/WhatsNewPage'
 import { displaySettings } from './lib/api'
 import { MeProvider, useMe } from './lib/me'
 import { focusSearch, isCommandK } from './lib/hotkeys'
@@ -25,7 +26,11 @@ import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
  */
 export function sectionOf(route: Route): Section | null {
   if (route.name === 'about') return null
-  return route.name === 'admin' || route.name === 'map' || route.name === 'gaps' || route.name === 'growth'
+  return route.name === 'admin' ||
+    route.name === 'map' ||
+    route.name === 'gaps' ||
+    route.name === 'growth' ||
+    route.name === 'new'
     ? route.name
     : 'explore'
 }
@@ -135,6 +140,7 @@ function Shell({
             {!locked && route.name === 'map' ? <MapPage /> : null}
             {!locked && route.name === 'gaps' ? <GapsPage /> : null}
             {!locked && route.name === 'growth' ? <GrowthPage /> : null}
+            {!locked && route.name === 'new' ? <WhatsNewPage /> : null}
             {!locked && route.name === 'about' ? <AboutPage /> : null}
             {!locked && route.name === 'contested' ? <ContestedPage /> : null}
             {!locked && route.name === 'explore' ? <ExplorePage /> : null}

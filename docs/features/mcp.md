@@ -32,6 +32,7 @@ Meridian holds the corpus and its provenance; it generates nothing here.
 | `list_gaps` | What the corpus cannot answer yet, with reasons |
 | `list_contested` | Claims sources disagree about, both sides kept |
 | `corpus_growth` | How the corpus grew, day by day, for 7 days, 30 days or all time, by topic |
+| `whats_new` | What is new since a time (or in the last N days), by topic and kind: newest sources with their best passage, and new links and tags with their citations; cleared material only ([whats-new.md](whats-new.md)) |
 
 Each site tool calls the function its page calls, so an assistant and the site cannot
 disagree; a test compares them. `search_chunks` embeds the query with the same service as
@@ -139,6 +140,10 @@ calling every tool in-process):
   (`results` and `framed`), about 3 KB a passage, which is one reason for the cap.
 - An empty `find_route` or `list_contested` carries a `note` saying what empty means: not
   evidence that subjects are unrelated, or that sources agree.
+
+`list_new_since` is a synthesis session's walker and carries no date or topic; a reader's "what is
+new on my topics" is `whats_new` (`B-237`), which calls the What's new page's own function with
+`cleared_only=True`.
 
 `list_new_since` walks the corpus by `chunk_id` (§6.3's mark, §11.1a): ids are monotonic, so
 "everything after N" cannot skip a row that arrived mid-read or return one twice, and the path

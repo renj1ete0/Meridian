@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #E6EBF5; text-decoration: none; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #7C8AAB; }
+    .seg { display: flex; border: 1px solid #2A3654; }
+    .seg span { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #9BA8C4; padding: 5px 10px; }
+    .seg span.on { background: #1E2942; color: #E6EBF5; }
+    .topic { background: #151E33; border: 1px solid #2A3654; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+    .tname { font-size: 15px; font-weight: 600; letter-spacing: -0.004em; color: #E6EBF5; }
+    .count { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #7C8AAB; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .kind { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10px; color: #9BA8C4; border: 1px solid #2A3654; padding: 1px 6px; }
+    .chip { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #7C8AAB; border: 1px solid #2A3654; padding: 1px 6px; white-space: nowrap; }
+    .row { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid #1E2942; }
+    .title { font-size: 13.5px; font-weight: 500; color: #E6EBF5; }
+    .meta { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #7C8AAB; }
+    .ex { font-size: 12.5px; line-height: 1.5; color: #9BA8C4; }
+    .act { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: #49D0DA; }
+  </style>
+</helmet>
+<!-- B-237: "what is new on my topics since I last looked", answered by topic and kind, newest
+     first, each source with its best passage; then what the graph learned, each with its
+     citation. Names, sites and figures are made up. -->
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #0D1424; box-sizing: border-box;">
+
+  <div style="position: absolute; left: 0; right: 0; top: 0; height: 54px; z-index: 2; border-bottom: 1px solid #2A3654; background: rgba(21,30,51,0.90); display: flex; align-items: center; gap: 20px; padding: 0 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <svg viewBox="0 0 100 100" width="22" height="22" fill="none" style="display: block;">
+        <circle cx="50" cy="50" r="38" stroke="#E6EBF5" stroke-width="3.6"></circle>
+        <ellipse cx="50" cy="50" rx="17" ry="38" stroke="#E6EBF5" stroke-width="3.6"></ellipse>
+        <circle cx="50" cy="88" r="5" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="50" r="6" fill="#E6EBF5"></circle>
+        <circle cx="50" cy="12" r="7" fill="#49D0DA"></circle>
+      </svg>
+      <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.004em; color: #E6EBF5;">Meridian</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #2A3654;"></div>
+    <div style="display: flex; gap: 4px;">
+      <span style="font-size: 12.5px; color: #7C8AAB; padding: 6px 12px;">Explore</span>
+      <span style="font-size: 12.5px; color: #E6EBF5; background: #1E2942; padding: 6px 12px;">What's new</span>
+      <span style="font-size: 12.5px; color: #7C8AAB; padding: 6px 12px;">Map</span>
+      <span style="font-size: 12.5px; color: #7C8AAB; padding: 6px 12px;">Gaps</span>
+      <span style="font-size: 12.5px; color: #7C8AAB; padding: 6px 12px;">Growth</span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 160px; width: 1120px; top: 86px; display: flex; flex-direction: column; gap: 22px;">
+
+    <!-- Header: the question, the window it answers for, and how to change it. -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #E6EBF5;">What's new</div>
+        <div style="font-size: 13px; color: #9BA8C4;">Sources added since you were last here, 3 days ago &middot; 2026-10-29 09:14 GMT+8</div>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <div class="seg"><span class="on">Since last visit</span><span>7 days</span><span>30 days</span></div>
+        <div class="seg"><span class="on">Added</span><span>Published</span></div>
+      </div>
+    </div>
+
+    <div class="m" style="font-size: 11.5px; color: #9BA8C4;"><span style="color: #E6EBF5;">+46</span> sources on 2 topics &middot; 12 on none of them &middot; <span style="color: #E6EBF5;">5</span> new findings</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start;">
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+
+        <div class="topic">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px;">
+            <span class="tname">Kerbside access</span>
+            <span class="count">+31 sources</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span class="kind">News 14</span><span class="kind">Reports 7</span><span class="kind">Press releases 5</span><span class="kind">Papers 3</span><span class="kind">Listings 2</span>
+          </div>
+          <div>
+            <div class="row">
+              <div style="display: flex; gap: 8px; align-items: baseline;"><span class="chip">Report</span><a class="title">Northfield kerb allocation review, year one</a></div>
+              <div class="meta">northfield.example &middot; Northfield Council &middot; 30 Oct 2026</div>
+              <div class="ex">Loading bays on the high street were reallocated over a year; delivery dwell time fell while cycle-lane conflicts were logged at every site&hellip;</div>
+            </div>
+            <div class="row">
+              <div style="display: flex; gap: 8px; align-items: baseline;"><span class="chip">News</span><a class="title">Drop-off zones trialled outside three Eastvale schools</a></div>
+              <div class="meta">eastvale-courier.example &middot; 30 Oct 2026 &middot; also Heat and shade</div>
+              <div class="ex">The trial moved parent drop-off a block from each gate and measured how many children walked the final stretch&hellip;</div>
+            </div>
+            <div class="row">
+              <div style="display: flex; gap: 8px; align-items: baseline;"><span class="chip">Press release</span><a class="title">Freight operators back consolidated kerb booking</a></div>
+              <div class="meta">freightforum.example &middot; Freight Forum &middot; 29 Oct 2026</div>
+              <div class="ex">Members committed to a shared booking window for kerbside loading in the central district from spring&hellip;</div>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 18px;">
+            <span class="count">3 of 31 listed &middot; listings are counted, not listed</span>
+            <span class="act">Find in this topic &rarr;</span>
+          </div>
+        </div>
+
+        <div class="topic">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px;">
+            <span class="tname">Heat and shade</span>
+            <span class="count">+15 sources</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span class="kind">Papers 6</span><span class="kind">News 5</span><span class="kind">Opinion 4</span>
+          </div>
+          <div>
+            <div class="row">
+              <div style="display: flex; gap: 8px; align-items: baseline;"><span class="chip">Paper</span><a class="title">Canopy cover and pavement temperature in mid-sized towns</a></div>
+              <div class="meta">journal.example &middot; 2026 &middot; added 31 Oct</div>
+              <div class="ex">Across forty streets, each ten points of canopy cover lowered afternoon surface temperature by about two degrees&hellip;</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- A topic with nothing new: said, not padded or hidden. -->
+        <div class="topic" style="flex-direction: row; justify-content: space-between; align-items: baseline;">
+          <span class="tname" style="color: #9BA8C4;">Bus priority</span>
+          <span class="count">nothing new</span>
+        </div>
+      </div>
+
+      <!-- What the graph learned in the window, each with the passage it came from. -->
+      <div class="topic">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <span class="lbl">New findings &middot; 5</span>
+        </div>
+        <div>
+          <div class="row" style="border-top: none;">
+            <div style="font-size: 13px; color: #E6EBF5;">Loading bays <span class="m" style="font-size: 11px; color: #7C8AAB;">reduces</span> Delivery dwell time</div>
+            <div class="meta">Kerbside access &middot; from <a style="color: #C3CCE0;">Northfield kerb allocation review</a>, p. 4</div>
+            <div class="ex" style="font-size: 12px;">&ldquo;Dwell time fell by a fifth where bays were reallocated&hellip;&rdquo;</div>
+          </div>
+          <div class="row">
+            <div style="font-size: 13px; color: #E6EBF5;">Street trees <span class="m" style="font-size: 11px; color: #7C8AAB;">cools</span> Pavement surface</div>
+            <div class="meta">Heat and shade &middot; from <a style="color: #C3CCE0;">Canopy cover and pavement temperature</a></div>
+            <div class="ex" style="font-size: 12px;">&ldquo;Each ten points of canopy cover lowered surface temperature&hellip;&rdquo;</div>
+          </div>
+          <div class="row">
+            <div style="font-size: 13px; color: #E6EBF5;">Eastvale <span class="m" style="font-size: 11px; color: #7C8AAB;">school drop-off zones</span> 3</div>
+            <div class="meta">Kerbside access &middot; tag &middot; from <a style="color: #C3CCE0;">Drop-off zones trialled outside three&hellip;</a></div>
+          </div>
+        </div>
+        <span class="count">3 of 5 listed</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

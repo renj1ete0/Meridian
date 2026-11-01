@@ -1940,7 +1940,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-236` **Bibliographies and mirrored copies crowd search results** (review) — 4 of 8 MCP results
       for one question were reference lists (`B-171` keeps them out of synthesis only), and one
       report appeared three times through mirrors. Down-rank reference passages, fold copies
-- [ ] `B-237` **Nothing answers "what is new"** (review) — Growth is crawl volume; no view or MCP tool
+- [x] `B-237` **Nothing answers "what is new"** (review) — Growth is crawl volume; no view or MCP tool
       by publication date; `list_new_since` starts at passage 1 with no date or topic. A "what's
       new" view and tool by publication date per topic, and a freshness line on Home
 - [x] `B-238` **Topics have no front door** (review) — Home lists no topics; their descriptions live

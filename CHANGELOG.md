@@ -91,6 +91,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.197.0] — 2026-11-02
+
+### Added
+
+- `B-237`: What's new (`/new`, `GET /api/explore/new`, MCP `whats_new`): the sources that
+  arrived since your last visit or in a chosen window, grouped by topic with counts by kind
+  (news, press release, opinion, report, paper …), each with its best passage as a one-line
+  excerpt, plus the graph findings added in the window with their citations. The landing's
+  since-last-visit line links to it.
+
+**Deploy:** image only.
+
 ## [0.196.1] — 2026-11-02
 
 ### Fixed

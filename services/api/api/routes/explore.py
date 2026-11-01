@@ -87,12 +87,20 @@ from meridian_core.schemas.search import (
 from meridian_core.schemas.settings import DisplaySettingsRead
 from meridian_core.schemas.source import ChunkRead, SourcePageRead
 from meridian_core.schemas.views import SavedViewRead, SavedViewsRead
+from meridian_core.schemas.whatsnew import NewBasis, WhatsNewRead
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for, site_key
 from meridian_core.sites import DEFAULT_SITES, MAX_SITES, site_counts
 from meridian_core.stats import corpus_stats
 from meridian_core.timefmt import display_zone, zone_label
 from meridian_core.topiccards import topic_cards
 from meridian_core.topicoverlaps import topic_overlaps
+from meridian_core.whatsnew import (
+    DEFAULT_FINDINGS,
+    DEFAULT_PER_TOPIC,
+    MAX_FINDINGS,
+    MAX_PER_TOPIC,
+    whats_new,
+)
 
 from ..cache import KeptByKey
 from ..deps import ReadSession, require
@@ -346,6 +354,45 @@ async def explore_topic_overlaps(sess: ReadSession) -> TopicOverlapsRead:
 async def explore_topics(sess: ReadSession) -> TopicCardsRead:
     """The topics collected for, with what each holds (`B-238`): the landing's front door."""
     return await topic_cards(sess)
+
+
+#: The window "what is new" opens on when no instant is given: a week.
+DEFAULT_NEW_WINDOW = dt.timedelta(days=7)
+
+
+@router.get("/new", response_model=WhatsNewRead)
+async def explore_new(
+    sess: ReadSession,
+    since: Annotated[
+        dt.datetime | None,
+        Query(description="From this instant, ISO 8601 with an offset. Default: a week ago."),
+    ] = None,
+    basis: Annotated[
+        NewBasis, Query(description="`added` to the corpus, or `published` in the window.")
+    ] = "added",
+    topic: Annotated[list[str] | None, Query(description="Only these topics.")] = None,
+    doc_kind: Annotated[list[DocKind] | None, Query(description="Only these kinds.")] = None,
+    per_topic: Annotated[int, Query(ge=0, le=MAX_PER_TOPIC)] = DEFAULT_PER_TOPIC,
+    findings: Annotated[int, Query(ge=0, le=MAX_FINDINGS)] = DEFAULT_FINDINGS,
+) -> WhatsNewRead:
+    """What is new in the evidence since an instant, by topic and kind (`B-237`)."""
+    now = dt.datetime.now(dt.UTC)
+    start = since if since is not None else now - DEFAULT_NEW_WINDOW
+    if start.tzinfo is None:
+        raise HTTPException(422, "since needs an offset, such as Z or +08:00")
+    try:
+        return await whats_new(
+            sess,
+            since=min(start, now),
+            as_of=now,
+            basis=basis,
+            topics=topic,
+            doc_kinds=doc_kind,
+            per_topic=per_topic,
+            findings=findings,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/settings", response_model=DisplaySettingsRead)

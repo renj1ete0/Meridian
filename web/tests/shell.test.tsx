@@ -499,7 +499,7 @@ describe('a reader is shown the reading, not the crawl (B-239)', () => {
       within(nav)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Explore', 'Map', 'Gaps', 'Growth'])
+    ).toEqual(['Explore', "What's new", 'Map', 'Gaps', 'Growth'])
     // Settings stays: the theme and who is signed in are anybody's.
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
   })

@@ -735,6 +735,151 @@ export function getTopicCards(init?: RequestInit): Promise<TopicCards> {
   return request<TopicCards>('/api/explore/topics', init)
 }
 
+/** What "new" is measured by (`NewBasis`): entered the corpus, or dated, in the window. */
+export type NewBasis = 'added' | 'published'
+
+/** Mirrors `NewExcerptRead` (`B-237`): a source's best passage, on one line. */
+export interface NewExcerpt {
+  chunk_id: number
+  text: string
+  page_or_offset: number | null
+}
+
+/** Mirrors `NewSourceRead` (`B-237`): one new source. */
+export interface NewSource {
+  source_id: number
+  title: string | null
+  url: string
+  /** The host, `www.` dropped. */
+  site: string | null
+  publisher: string | null
+  doc_kind: DocKind | null
+  source_tier: SourceTier
+  /** A calendar date (`YYYY-MM-DD`), never shifted (ADR 0009). */
+  published: string | null
+  /** When it entered the corpus: an instant with an offset. */
+  added: string
+  /** Its other shown topics; it is listed once, under its leading one. */
+  other_topics: string[]
+  excerpt: NewExcerpt | null
+}
+
+/** Mirrors `NewKindCountRead` (`B-237`); `doc_kind` null is unclassified. */
+export interface NewKindCount {
+  doc_kind: DocKind | null
+  sources: number
+}
+
+/** Mirrors `NewTopicRead` (`B-237`): one topic's new sources. */
+export interface NewTopic {
+  topic: string
+  description: string | null
+  /** Every new source led by this topic, listed or not. */
+  total: number
+  by_kind: NewKindCount[]
+  /** The newest few; listings are counted, never listed. */
+  sources: NewSource[]
+}
+
+/** Mirrors `NewCitationRead` (`B-237`): the passage a finding was derived from. */
+export interface NewCitation {
+  chunk_id: number
+  source_id: number
+  title: string | null
+  url: string
+  page_or_offset: number | null
+  text: string
+}
+
+/** Mirrors `NewFindingRead` (`B-237`): a link or tag added in the window. */
+export interface NewFinding {
+  kind: 'link' | 'tag'
+  finding_id: number
+  subject_id: number
+  subject: string
+  /** The relation's type for a link, the attribute's name for a tag. */
+  relation: string
+  object_id: number | null
+  /** The other concept for a link, the value for a tag. */
+  object: string | null
+  topic: string | null
+  added: string
+  citation: NewCitation
+}
+
+/** Mirrors `WhatsNewRead` (`B-237`): what is new since an instant, by topic. */
+export interface WhatsNew {
+  since: string
+  as_of: string
+  basis: NewBasis
+  topics: NewTopic[]
+  /** New sources on none of the shown topics: off-topic, or not labelled yet. */
+  elsewhere: number
+  findings: NewFinding[]
+  findings_total: number
+}
+
+export const NEW_EXCERPT_FIELDS = ['chunk_id', 'text', 'page_or_offset'] as const
+export const NEW_SOURCE_FIELDS = [
+  'source_id',
+  'title',
+  'url',
+  'site',
+  'publisher',
+  'doc_kind',
+  'source_tier',
+  'published',
+  'added',
+  'other_topics',
+  'excerpt',
+] as const
+export const NEW_KIND_COUNT_FIELDS = ['doc_kind', 'sources'] as const
+export const NEW_TOPIC_FIELDS = ['topic', 'description', 'total', 'by_kind', 'sources'] as const
+export const NEW_CITATION_FIELDS = ['chunk_id', 'source_id', 'title', 'url', 'page_or_offset', 'text'] as const
+export const NEW_FINDING_FIELDS = [
+  'kind',
+  'finding_id',
+  'subject_id',
+  'subject',
+  'relation',
+  'object_id',
+  'object',
+  'topic',
+  'added',
+  'citation',
+] as const
+export const WHATS_NEW_FIELDS = [
+  'since',
+  'as_of',
+  'basis',
+  'topics',
+  'elsewhere',
+  'findings',
+  'findings_total',
+] as const
+
+export type AssertNewExcerpt = Expect<Equal<keyof NewExcerpt, (typeof NEW_EXCERPT_FIELDS)[number]>>
+export type AssertNewSource = Expect<Equal<keyof NewSource, (typeof NEW_SOURCE_FIELDS)[number]>>
+export type AssertNewKindCount = Expect<Equal<keyof NewKindCount, (typeof NEW_KIND_COUNT_FIELDS)[number]>>
+export type AssertNewTopic = Expect<Equal<keyof NewTopic, (typeof NEW_TOPIC_FIELDS)[number]>>
+export type AssertNewCitation = Expect<Equal<keyof NewCitation, (typeof NEW_CITATION_FIELDS)[number]>>
+export type AssertNewFinding = Expect<Equal<keyof NewFinding, (typeof NEW_FINDING_FIELDS)[number]>>
+export type AssertWhatsNew = Expect<Equal<keyof WhatsNew, (typeof WHATS_NEW_FIELDS)[number]>>
+
+/** What is new since an instant, by topic and kind (`B-237`). No `since`: the last week. */
+export function getWhatsNew(
+  params: { since?: string | null; basis?: NewBasis; topics?: string[]; kinds?: DocKind[] } = {},
+  init?: RequestInit,
+): Promise<WhatsNew> {
+  const query = new URLSearchParams()
+  if (params.since) query.set('since', params.since)
+  if (params.basis && params.basis !== 'added') query.set('basis', params.basis)
+  for (const topic of params.topics ?? []) query.append('topic', topic)
+  for (const kind of params.kinds ?? []) query.append('doc_kind', kind)
+  const suffix = query.size ? `?${query}` : ''
+  return request<WhatsNew>(`/api/explore/new${suffix}`, init)
+}
+
 export function getSource(sourceId: number, init?: RequestInit): Promise<SourceWithPage> {
   return request<SourceWithPage>(`/api/explore/sources/${sourceId}`, init)
 }

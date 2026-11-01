@@ -37,6 +37,9 @@ import { Mark, WORDMARK } from './Mark'
 
 export const NAV = [
   { path: '/', label: 'Explore', name: 'explore' },
+  // `B-237`: what is new since the last visit, by topic. Not on a phone's bar, which five
+  // sections already fill; the landing's since-last-visit line links it there.
+  { path: '/new', label: "What's new", name: 'new', wide: true },
   { path: '/map', label: 'Map', name: 'map' },
   { path: '/gaps', label: 'Gaps', name: 'gaps' },
   // `B-140`, ADR 0010: its own section, beside Map and Gaps.
@@ -187,17 +190,17 @@ function Bar({ section, translucent, theme, onTheme, slotRef, data }: TopBarProp
       <span aria-hidden="true" className="hidden h-[22px] w-px shrink-0 bg-line sm:block" />
 
       <nav className="flex shrink-0 gap-0.5 sm:gap-1" aria-label="Sections">
-        {navFor(can).map(({ path, label, name }) => (
+        {navFor(can).map((item) => (
           <a
-            key={path}
-            href={path}
-            onClick={onInternalClick(path)}
-            aria-current={section === name ? 'page' : undefined}
+            key={item.path}
+            href={item.path}
+            onClick={onInternalClick(item.path)}
+            aria-current={section === item.name ? 'page' : undefined}
             className={`px-1.5 py-1.5 sm:px-3 font-sans text-[12.5px] leading-[1.35] ${
-              section === name ? 'bg-surface-raised text-text' : 'text-text-faint hover:text-text-muted'
-            }`}
+              section === item.name ? 'bg-surface-raised text-text' : 'text-text-faint hover:text-text-muted'
+            } ${'wide' in item ? 'hidden sm:inline-block' : ''}`}
           >
-            {label}
+            {item.label}
           </a>
         ))}
       </nav>

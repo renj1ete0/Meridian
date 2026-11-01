@@ -18,6 +18,7 @@ import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
 import { TopicCards } from './TopicCards'
+import { newHref } from './WhatsNewPage'
 import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
 import { getTermNeighbourhood, worthShowing } from './neighbourhood/api'
 import { FiltersButton, FindRail } from './FindRail'
@@ -653,7 +654,14 @@ export function ExplorePage() {
             ) : null
           }
           delta={
-            stats ? <SinceLastVisit newSources={stats.new_sources} newChunks={stats.new_chunks} since={since} /> : null
+            stats ? (
+              <SinceLastVisit
+                newSources={stats.new_sources}
+                newChunks={stats.new_chunks}
+                since={since}
+                href={since ? newHref({ window: 'last', basis: 'added', since }) : undefined}
+              />
+            ) : null
           }
           savedViews={views.slice(0, VIEWS_ON_LANDING).map((view) => ({
             id: String(view.view_id),

@@ -20,7 +20,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 from sqlalchemy import select
 
-from meridian_core import areaview, graphview, neighbourhood
+from meridian_core import areaview, graphview, neighbourhood, whatsnew
 from meridian_core import route as routing
 from meridian_core.db import guest_configured, session_guest, session_ro
 from meridian_core.framing import frame_passages
@@ -31,8 +31,10 @@ from meridian_core.readonly_query import run_readonly_query as execute_readonly
 from meridian_core.rerank import RERANK_DEPTH, rerank_hits
 from meridian_core.schemas.enums import DocKind, SourceTier
 from meridian_core.schemas.graphview import GraphFilters
+from meridian_core.schemas.whatsnew import NewBasis
 from meridian_core.search import SearchFilters, readable_passage_conditions, search, site_key
 from meridian_core.stats import corpus_stats
+from meridian_core.whatsnew import MAX_FINDINGS, MAX_PER_TOPIC, MAX_WINDOW
 
 from ..auth import require_tool, sees_notes
 from ..search_service import embed_query, reranker
@@ -555,6 +557,72 @@ def build_mcp(
             return {"error": f"range must be one of {', '.join(RANGES)}"}
         topics = tuple(sorted({t for t in topic or [] if t.strip()}))
         found = await KEPT_GROWTH.get((range, topics), lambda: compute_growth(range, topics))
+        return found.model_dump(mode="json")
+
+    @mcp.tool()
+    async def whats_new(
+        since: Annotated[
+            dt.datetime | None,
+            Field(
+                description="From this instant, ISO 8601 with an offset (2026-10-01T09:00:00Z), "
+                "such as when you last asked. Overrides `days`."
+            ),
+        ] = None,
+        days: Annotated[
+            int,
+            Field(ge=1, le=MAX_WINDOW.days, description="Or the last this many days."),
+        ] = 7,
+        basis: Annotated[
+            NewBasis,
+            Field(
+                description="`added`: entered the corpus in the window. `published`: dated in "
+                "the window, whenever it was collected."
+            ),
+        ] = "added",
+        topic: Annotated[
+            list[str] | None,
+            Field(description="Only these topics, as corpus_overview names them."),
+        ] = None,
+        doc_kind: Annotated[
+            list[DocKind] | None,
+            Field(description="Only these kinds: news, press_release, opinion, report, paper, …"),
+        ] = None,
+        per_topic: Annotated[
+            int, Field(ge=0, le=MAX_PER_TOPIC, description="Newest sources listed per topic.")
+        ] = 5,
+        findings: Annotated[
+            int, Field(ge=0, le=MAX_FINDINGS, description="Newest graph findings listed.")
+        ] = 10,
+    ) -> dict[str, Any]:
+        """What is new in the evidence since a time, by topic and by kind of document.
+
+        For each topic: how many sources arrived (or were published) in the window, how many
+        of each kind, and the newest few, each with its title, site, date and the passage
+        that best represents it. Then links and tags the knowledge graph gained in the
+        window, each with the passage it was derived from. Cite the passage, not the summary.
+
+        Each source is listed once, under the first of its topics. `elsewhere` counts new
+        sources on none of the topics shown: off-topic, or not yet labelled.
+        """
+        require_tool("whats_new")
+        now = dt.datetime.now(dt.UTC)
+        start = since if since is not None else now - dt.timedelta(days=days)
+        if start.tzinfo is None:
+            raise ToolError("since: give an offset, such as 2026-10-01T09:00:00Z")
+        async with session_ro() as sess:
+            found = await whatsnew.whats_new(
+                sess,
+                since=min(start, now),
+                as_of=now,
+                basis=basis,
+                topics=topic or None,
+                doc_kinds=doc_kind or None,
+                per_topic=per_topic,
+                findings=findings,
+                # Cleared material only: this is a path into a prompt. See
+                # docs/features/mcp.md#what-reaches-a-model.
+                cleared_only=True,
+            )
         return found.model_dump(mode="json")
 
     return mcp

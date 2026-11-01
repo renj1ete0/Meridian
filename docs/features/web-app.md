@@ -19,6 +19,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/map` | `MapPage` | Areas and topics as nested circles, zoom by level, bridges, steering | `Main.dc.html` |
 | `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
 | `/growth` | `GrowthPage` | How the corpus grew: pages per topic per day, passages, sites, graph, map; 7 days, 30 days or all, filterable by topic | `CorpusGrowth.dc.html` |
+| `/new` | `WhatsNewPage` | What is new since the last visit, or in 7 or 30 days, by added or published date: sources by topic and kind with their best passage, and new findings with citations ([whats-new.md](whats-new.md)) | `WhatsNew.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
 | `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, possible duplicates, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), people & permissions, display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminPeople.dc.html`, `AdminDisplay.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |
@@ -285,6 +286,11 @@ in a single call (`openSession`): the delta means "since you were last here", an
 while the page is read. Reading and writing in two places is how the stamp ends up advanced
 before it is read, and the symptom, a delta that is always zero, looks exactly like a corpus
 where nothing happened.
+
+The line links to [What's new](whats-new.md) when something arrived, carrying the instant it
+counted from (`/new?since=`), and `openSession` keeps the stamp it replaced as
+`meridian.previousVisit`, so What's new opened later in the session still measures from the
+previous visit rather than from the landing's own fresh stamp (`B-237`).
 
 The stamp is per viewer and per browser, and that is correct: two people looking at the same
 instance have different answers to "what is new to me", so it belongs in `localStorage`, not

@@ -1,3 +1,4 @@
+import { onInternalClick } from '../lib/route'
 import { ago } from '../lib/status'
 
 /**
@@ -13,9 +14,11 @@ export interface SinceLastVisitProps {
   /** When the previous visit was, for "3 days ago". Omitted: no time is named. */
   since?: string | null
   now?: Date
+  /** Where the sources are listed by topic (`B-237`); omitted, the line links nowhere. */
+  href?: string
 }
 
-export function SinceLastVisit({ newSources, newChunks, since = null, now }: SinceLastVisitProps) {
+export function SinceLastVisit({ newSources, newChunks, since = null, now, href }: SinceLastVisitProps) {
   if (newSources === null || newChunks === null) {
     // First visit. Not an error and not a zero — there is genuinely no
     // previous moment to measure from.
@@ -37,6 +40,14 @@ export function SinceLastVisit({ newSources, newChunks, since = null, now }: Sin
       Since you were last here{when} — <span className="text-text">{newSources.toLocaleString('en')}</span>{' '}
       {newSources === 1 ? 'source' : 'sources'} and <span className="text-text">{newChunks.toLocaleString('en')}</span>{' '}
       {newChunks === 1 ? 'passage' : 'passages'}.
+      {href && newSources > 0 ? (
+        <>
+          {' '}
+          <a href={href} onClick={onInternalClick(href)} className="text-accent-graph hover:underline">
+            What's new →
+          </a>
+        </>
+      ) : null}
     </p>
   )
 }

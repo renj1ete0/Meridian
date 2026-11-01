@@ -219,6 +219,7 @@ MINIMAL_ARGS = {
     "list_gaps": {},
     "list_contested": {},
     "corpus_growth": {},
+    "whats_new": {},
 }
 
 
