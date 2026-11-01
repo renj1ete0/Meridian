@@ -4,29 +4,38 @@ Pure: hits are built by hand, no database. The claims worth checking are the
 ones a reader relies on without being able to see them — that a city is counted
 once for its country, that a group of five items is five documents, that the
 coverage verdict follows its stated rule at the boundary, and that a source
-never examined for places is not presented as one about nowhere.
+never examined for places is not presented as one about nowhere. And that a question about
+no place is not grouped by the countries the collection happens to be about (`B-241`).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import typing
 
 import pytest
 
 from meridian_core import answer
 from meridian_core.answer import (
+    ABSENT_PLACES,
     COVERAGE_RULE,
     PRIMARY_TIERS,
     STRONG_MIN_PUBLISHERS,
     AnswerGroup,
     AnswerItem,
+    GroupedBy,
     countries_of,
     coverage_of,
+    coverage_rule_for,
     group_hits,
+    grouping_for,
+    one_list,
 )
 from meridian_core.models.source import SOURCE_TIER
-from meridian_core.schemas.answer import AnswerGroupRead, AnswerItemRead
+from meridian_core.placenames import AMBIGUOUS, COUNTRIES
+from meridian_core.places import Vocabulary, countries_named
+from meridian_core.schemas.answer import AnswerGroupRead, AnswerItemRead, AnswerRead
 from meridian_core.search import SearchHit
 
 _chunk = iter(range(1, 10_000))
@@ -340,3 +349,133 @@ def test_leading_topics_count_sources_not_passages() -> None:
     assert answer.leading_topics([a1, a2, a3, b, c]) == ["y", "x", "z"]
     assert answer.leading_topics([a1, b, c], n=1) == ["y"]
     assert answer.leading_topics([hit(4)]) == []
+
+
+# --------------------------------------------------------------------------
+# Grouped by place, or one list (`B-241`)
+# --------------------------------------------------------------------------
+
+VOCAB = Vocabulary.build()
+
+
+def grouping(question: str, filtered: list[str] | None = None):
+    return grouping_for(question, countries_named(question, VOCAB), filtered)
+
+
+def test_the_grouping_values_are_the_wire_values() -> None:
+    assert set(typing.get_args(GroupedBy)) == set(
+        typing.get_args(AnswerRead.model_fields["grouped_by"].annotation)
+    )
+
+
+def test_a_question_about_no_place_is_one_list_however_concentrated_the_pool() -> None:
+    """The review's case: most sources about one country, and a question naming none."""
+    hits = [hit(i, places=["US"], tier="government") for i in range(85)]
+    hits += [hit(100 + i, places=["SG"]) for i in range(5)]
+    decided = grouping("Does lowering speed limits reduce crashes?")
+    assert decided.by == "none"
+    assert decided.places_named == []
+    assert "names no place" in decided.reason
+    listed = one_list(hits)
+    assert listed is not None and listed.sources == 90
+    assert listed.code is None
+
+
+@pytest.mark.parametrize(
+    ("question", "codes", "words"),
+    [
+        ("How has Singapore regulated vehicle trials?", ["SG"], "Singapore"),
+        ("How walkable is London compared with Paris?", ["FR", "GB"], "France and United Kingdom"),
+        ("Compare China and the United States", ["CN", "US"], "China and United States"),
+    ],
+)
+def test_a_question_naming_places_is_grouped_and_says_which(question, codes, words) -> None:
+    decided = grouping(question)
+    assert decided.by == "place"
+    assert decided.places_named == codes
+    assert decided.reason.endswith(f"names {words}.")
+
+
+def test_a_place_filter_groups_by_place_and_a_city_filter_names_its_country() -> None:
+    decided = grouping("Does lowering speed limits reduce crashes?", ["DEBER"])
+    assert decided.by == "place"
+    assert decided.places_named == [], "the filter is not the question's words"
+    assert decided.reason.endswith("narrowed to Germany.")
+    assert grouping("crash reduction", []).by == "none"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Which countries allow driverless taxis?",
+        "How do countries compare on road deaths?",
+        "Where are on-demand buses deployed?",
+        "Which cities have the most walkable streets?",
+        "Compare vehicle regulation across jurisdictions",
+        "How does each country fund transit?",
+        "speed cameras worldwide",
+    ],
+)
+def test_a_question_asking_about_places_in_general_is_grouped(question) -> None:
+    decided = grouping(question)
+    assert decided.by == "place"
+    assert decided.places_named == []
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # "where" past the opening introduces a clause, not a place question.
+        "What happens in cases where crashes fell?",
+        # A city as an adjective, not a question about cities.
+        "How safe is city driving?",
+        "What international standards apply to robots?",
+        # Lower case is not a name: the matcher is case-sensitive, so a common noun stays one.
+        "Does turkey consumption rise in winter?",
+    ],
+)
+def test_words_that_only_look_like_places_do_not_group(question) -> None:
+    assert grouping(question).by == "none"
+
+
+def test_an_ambiguous_name_in_a_question_is_not_a_place() -> None:
+    ambiguous_countries = [n for names in COUNTRIES.values() for n in names if n in AMBIGUOUS]
+    assert ambiguous_countries, "the guard below would test nothing"
+    for name in ambiguous_countries:
+        assert grouping(f"What did {name} find about crashes?").by == "none", name
+
+
+def test_the_rule_shown_names_absent_countries_only_when_grouped() -> None:
+    assert coverage_rule_for("place") == f"{COVERAGE_RULE} {ABSENT_PLACES}"
+    assert coverage_rule_for("none") == COVERAGE_RULE
+    assert "country" not in coverage_rule_for("none")
+
+
+def test_one_list_holds_every_source_the_groups_hold_once_each() -> None:
+    hits = [
+        hit(1, places=["DE", "FR"], text="Trials in Germany and in France were long enough."),
+        hit(1, places=["DE", "FR"]),
+        hit(2, places=["DE"]),
+        hit(3, places=[]),
+        hit(4, places=None),
+    ]
+    groups, unplaced = group_hits(hits, named=lambda text: countries_named(text, VOCAB))
+    grouped = {i.source_id for g in groups for i in g.items}
+    grouped |= {i.source_id for i in unplaced.items} if unplaced else set()
+    listed = one_list(hits)
+    assert listed is not None
+    assert {i.source_id for i in listed.items} == grouped == {1, 2, 3, 4}
+    assert listed.sources == 4
+    assert next(i for i in listed.items if i.source_id == 1).passages == 2
+
+
+def test_one_list_caps_items_not_counts_and_follows_the_coverage_rule() -> None:
+    hits = [hit(i, tier="peer_reviewed" if i == 0 else "press") for i in range(15)]
+    listed = one_list(hits, top=4)
+    assert listed is not None
+    assert len(listed.items) == 4
+    assert listed.sources == listed.publishers == 15
+    assert listed.coverage == "strong"
+    press_only = one_list([hit(i) for i in range(15)])
+    assert press_only is not None and press_only.coverage == "thin"
+    assert one_list([]) is None

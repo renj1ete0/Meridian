@@ -377,6 +377,13 @@ export function ExplorePage() {
     run(asked, next, 'keep', 'passages')
   }
 
+  /** The one-list answer, as passages (`B-241`): the same words and filters. */
+  function readAll() {
+    modeChosen.current = true
+    window.history.pushState({}, '', findLink(asked, filters, 'passages'))
+    run(asked, filters, 'keep', 'passages')
+  }
+
   /** A filter changed: kept for the next search, and the current one re-run with it. */
   function narrow(next: FindFilters) {
     setFilters(next)
@@ -488,6 +495,7 @@ export function ExplorePage() {
                   question={asked}
                   filters={filters}
                   onReadPlace={readPlace}
+                  onReadAll={readAll}
                   onWordsOnly={setAnswerWordsOnly}
                 />
               ) : null}

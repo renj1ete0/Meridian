@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * The answer page: evidence grouped by country, coverage stated against its
- * rule, and "find more" queuing exactly the search it says it will.
+ * The answer page: evidence grouped by country when the question is about places and one list
+ * when it is not (`B-241`), coverage stated against its rule, and "find more" queuing exactly
+ * the search it says it will.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -9,11 +10,21 @@ import { join } from 'node:path'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AnswerBody, AnswerView, briefName, countLine, mixLine, thinReason } from '../src/explore/AnswerView'
+import {
+  AnswerBody,
+  AnswerView,
+  briefName,
+  countLine,
+  mixLine,
+  placesMissing,
+  thinReason,
+} from '../src/explore/AnswerView'
 import { answerBrief } from '../src/lib/brief'
 import { ExplorePage, ModeSwitch } from '../src/explore/ExplorePage'
 import { NO_FILTERS } from '../src/lib/find'
 import {
+  GROUPED_BY,
+  coverageWord,
   findMoreQuery,
   initialMode,
   looksLikeQuestion,
@@ -75,6 +86,10 @@ function group(over: Partial<AnswerGroup> = {}): AnswerGroup {
 function answer(over: Partial<Answer> = {}): Answer {
   return {
     query: QUESTION,
+    grouped_by: 'place',
+    grouping_reason: 'Grouped by country: the question asks about places.',
+    places_named: [],
+    ungrouped: null,
     groups: [
       group(),
       group({
@@ -98,7 +113,7 @@ function answer(over: Partial<Answer> = {}): Answer {
       items: [item({ source_id: 31, chunk_id: 301, source_tier: 'informal', title: 'A blog post' })],
     }),
     coverage_rule:
-      'Strong means at least 3 sources from different publishers, including at least one government or peer-reviewed source. Anything less is thin. A country with no matching source is not listed.',
+      'Well-sourced means at least 3 sources from different publishers, including at least one government or peer-reviewed source; anything short of that is marked with what it lacks. A country with no matching source is not listed.',
     strong_min_publishers: 3,
     strong_needs_tiers: ['government', 'peer_reviewed'],
     topics: ['trading'],
@@ -146,18 +161,21 @@ describe('the grouped answer', () => {
     expect([...chips].map((c) => c.getAttribute('data-coverage'))).toEqual(['strong', 'thin', 'unplaced'])
     expect(chips[0]!.textContent).toContain('Germany')
     expect(chips[0]!.textContent).toContain('4')
-    expect(chips[0]!.textContent).toContain('strong')
-    // Thin is dashed, not only differently coloured.
+    expect(chips[0]!.textContent).toContain('well-sourced')
+    // Thin is dashed, not only differently coloured, and says what it lacks.
     expect(chips[1]!.className).toContain('border-dashed')
-    expect(chips[1]!.textContent).toContain('thin')
+    expect(chips[1]!.textContent).toContain('few sources')
     expect(chips[2]!.textContent).toContain('with no place')
     expect(chips[2]!.textContent).toContain('5')
     // Each chip jumps to its section.
     expect(chips[0]!.getAttribute('href')).toBe('#answer-DE')
     expect(document.getElementById('answer-DE')).not.toBeNull()
     // The rule is on the page, in words.
-    expect(strip.textContent).toContain('Strong means at least 3 sources')
-    expect(strip.textContent).toContain('2 countries · 1 strong · 1 thin · from 11 sources')
+    expect(strip.textContent).toContain('Well-sourced means at least 3 sources')
+    expect(strip.textContent).toContain('2 countries · 1 well-sourced · from 11 sources')
+    // Why it is grouped is said, and the words strong and thin are gone (`B-241`).
+    expect(strip.textContent).toContain('Grouped by country: the question asks about places.')
+    expect(document.body.textContent).not.toMatch(/\b(strong|thin)\b/i)
   })
 
   it('gives each country a count line and items linking to the source page', () => {
@@ -177,7 +195,9 @@ describe('the grouped answer', () => {
   it('says why a thin country is thin and offers to find more', () => {
     render(<AnswerBody answer={answer()} question={QUESTION} topic="trading" />)
     const fr = screen.getByRole('region', { name: 'France' })
-    expect(fr.textContent).toContain('Thin: 2 publishers, fewer than 3; no government or peer-reviewed source.')
+    expect(fr.textContent).toContain(
+      'Not yet well-sourced: 2 publishers, fewer than 3; no government or peer-reviewed source.',
+    )
     expect(within(fr).getByRole('button', { name: 'Find more about France' })).toBeTruthy()
   })
 
@@ -221,10 +241,10 @@ describe('the grouped answer', () => {
   it('reads the thin reason off the rule it was given, not a copy of it', () => {
     const one = group({ publishers: 1, tier_mix: { government: 1 }, coverage: 'thin' })
     expect(thinReason(one, { strong_min_publishers: 3, strong_needs_tiers: ['government'] })).toBe(
-      'Thin: one publisher, fewer than 3.',
+      'Not yet well-sourced: one publisher, fewer than 3.',
     )
     expect(thinReason(one, { strong_min_publishers: 1, strong_needs_tiers: ['peer_reviewed'] })).toBe(
-      'Thin: no peer-reviewed source.',
+      'Not yet well-sourced: no peer-reviewed source.',
     )
   })
 
@@ -386,6 +406,14 @@ describe('the rule the client shows is the server’s', () => {
     expect(answer().strong_min_publishers).toBe(min)
     expect(source).toMatch(/PRIMARY_TIERS[^=]*= frozenset\(\{"government", "peer_reviewed"\}\)/)
   })
+
+  it('knows the same ways of arranging an answer as the server', () => {
+    const repo = join(process.cwd(), '..')
+    const schema = readFileSync(join(repo, 'packages/meridian_core/meridian_core/schemas/answer.py'), 'utf8')
+    const literal = schema.match(/^\s*grouped_by: Literal\[([^\]]+)\]/m)![1]!
+    const values = [...literal.matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    expect([...values].sort()).toEqual([...GROUPED_BY].sort())
+  })
 })
 
 describe('the rest of a country (B-175)', () => {
@@ -448,8 +476,9 @@ describe('the answer as a brief (B-206)', () => {
     expect(brief.startsWith(`# ${QUESTION}\n`)).toBe(true)
     expect(brief).toContain('nothing is generated')
     expect(brief).toContain(`> ${answer().coverage_rule}`)
-    expect(brief).toContain('## Germany: strong')
-    expect(brief).toContain('## France: thin')
+    expect(brief).toContain('## Germany: well-sourced')
+    expect(brief).toContain('## France: few sources')
+    expect(brief).toContain(`> ${answer().grouping_reason}`)
     expect(brief).toContain('## No place named')
     expect(brief).toContain('4 sources from 3 publishers, 2 shown.')
     // Each item: the words, where from, and the way back to that passage.
@@ -470,5 +499,162 @@ describe('the answer as a brief (B-206)', () => {
     const link = screen.getByRole('link', { name: 'download as a brief (.md)' })
     expect(link.getAttribute('href')).toBe('blob:brief')
     expect(link.getAttribute('download')).toMatch(/^meridian-.*\.md$/)
+  })
+})
+
+// --------------------------------------------------------------------------
+// One list when the question names no place (B-241)
+// --------------------------------------------------------------------------
+
+const ONE_LIST_REASON =
+  "One list: the question names no place, so grouping by country would show where the collection's sources are about, not an answer."
+
+function oneList(over: Partial<Answer> = {}): Answer {
+  return answer({
+    grouped_by: 'none',
+    grouping_reason: ONE_LIST_REASON,
+    coverage_rule:
+      'Well-sourced means at least 3 sources from different publishers, including at least one government or peer-reviewed source; anything short of that is marked with what it lacks.',
+    ungrouped: group({
+      code: null,
+      name: 'All matching sources',
+      sources: 11,
+      publishers: 10,
+      tier_mix: { government: 1, press: 5, informal: 5 },
+      coverage: 'strong',
+    }),
+    ...over,
+  })
+}
+
+describe('the answer to a question about no place', () => {
+  it('is one list, says why, and tallies places without grading them', () => {
+    const onReadPlace = vi.fn()
+    render(<AnswerBody answer={oneList()} question={QUESTION} topic={null} onReadPlace={onReadPlace} />)
+    expect(screen.queryByRole('region', { name: 'Coverage by country' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Germany' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'No place named' })).toBeNull()
+
+    const strip = screen.getByRole('region', { name: 'The evidence' })
+    expect(strip.textContent).toContain('11 sources · 10 publishers · well-sourced')
+    expect(strip.textContent).toContain(ONE_LIST_REASON)
+    const tally = strip.querySelector('[data-tally="places"]')!
+    expect(tally.textContent).toBe('About: Germany 4 · France 2 · 5 with no place')
+    // A count is not a verdict: no coverage word beside a country.
+    expect(tally.textContent).not.toMatch(/well-sourced|few|strong|thin/)
+    fireEvent.click(within(strip).getByRole('button', { name: 'France 2' }))
+    expect(onReadPlace).toHaveBeenCalledWith('FR')
+
+    const list = screen.getByRole('region', { name: 'All matching sources' })
+    expect(list.textContent).toContain('well-sourced')
+    expect(list.textContent).not.toContain('names no country')
+    expect(
+      within(list)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href')),
+    ).toEqual(['/sources/11?passage=101', '/sources/12?passage=102'])
+  })
+
+  it('opens the rest of the list as passages, not narrowed to any place', () => {
+    const onReadAll = vi.fn()
+    const onReadPlace = vi.fn()
+    render(
+      <AnswerBody
+        answer={oneList()}
+        question={QUESTION}
+        topic={null}
+        onReadPlace={onReadPlace}
+        onReadAll={onReadAll}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '9 more sources: read all 11 as passages →' }))
+    expect(onReadAll).toHaveBeenCalledTimes(1)
+    expect(onReadPlace).not.toHaveBeenCalled()
+  })
+
+  it('when not well-sourced, says what it lacks and queues the question alone', async () => {
+    const fetchMock = server({ '/api/admin/seeds': { status: 201, body: QUEUED } })
+    const thin = oneList({
+      ungrouped: group({ code: null, name: 'All matching sources', sources: 2, publishers: 2, coverage: 'thin' }),
+    })
+    render(<AnswerBody answer={thin} question={QUESTION} topic="trading" />)
+    const list = screen.getByRole('region', { name: 'All matching sources' })
+    expect(list.textContent).toContain('few sources')
+    expect(list.textContent).toContain('Not yet well-sourced: 2 publishers, fewer than 3.')
+    fireEvent.click(within(list).getByRole('button', { name: 'Find more on this question' }))
+    await screen.findByText('Queued — results arrive as the crawler fetches them.')
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))
+    expect(body.url_or_query).toBe(QUESTION)
+    expect(body.reason).toContain('the whole question')
+  })
+
+  it('takes away as a brief of the one list, not of countries', () => {
+    const brief = answerBrief(oneList(), QUESTION, 'https://m.example', '2026-10-10')
+    expect(brief).toContain('11 sources from 10 publishers, well-sourced.')
+    expect(brief).toContain(`> ${ONE_LIST_REASON}`)
+    expect(brief).toContain('## All matching sources: well-sourced')
+    expect(brief).not.toContain('## Germany')
+    expect(brief).not.toContain('## No place named')
+  })
+
+  it('in Find, opens Passages with the same filters and no place added', async () => {
+    const fetchMock = server({
+      '/api/explore/answer': { body: oneList() },
+      '/api/explore/search': {
+        body: {
+          hits: [],
+          arms: ['lexical', 'vector'],
+          degraded: false,
+          degraded_reason: null,
+          limit: 20,
+          offset: 0,
+          has_more: false,
+          candidate_pool: 100,
+          lexical_candidates: 0,
+          vector_candidates: 0,
+          reranked: false,
+        },
+      },
+    })
+    window.history.pushState({}, '', `/?q=${encodeURIComponent(QUESTION)}&view=answer`)
+    await act(async () => {
+      render(<ExplorePage />)
+    })
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: /read all 11 as passages/ }))
+    })
+    const params = new URLSearchParams(window.location.search)
+    expect(params.getAll('place')).toEqual([])
+    expect(params.get('view')).toBe('passages')
+    const searched = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.startsWith('/api/explore/search'))
+    expect(searched.length).toBeGreaterThan(0)
+    expect(new URL(searched.at(-1)!, 'http://x').searchParams.get('q')).toBe(QUESTION)
+    window.history.pushState({}, '', '/')
+  })
+})
+
+describe('coverage in words (B-241)', () => {
+  const rule = { strong_min_publishers: 3 }
+  it('says well-sourced, else the first thing missing', () => {
+    expect(coverageWord({ coverage: 'strong', sources: 9, publishers: 4 }, rule)).toBe('well-sourced')
+    expect(coverageWord({ coverage: 'thin', sources: 2, publishers: 2 }, rule)).toBe('few sources')
+    expect(coverageWord({ coverage: 'thin', sources: 8, publishers: 2 }, rule)).toBe('few publishers')
+    expect(coverageWord({ coverage: 'thin', sources: 8, publishers: 5 }, rule)).toBe('no primary source')
+  })
+
+  it('names a country the question asks about that no source is about', () => {
+    const asked = answer({
+      places_named: [
+        { code: 'JP', name: 'Japan' },
+        { code: 'DE', name: 'Germany' },
+      ],
+    })
+    expect(placesMissing(asked)).toEqual(['Japan'])
+    render(<AnswerBody answer={asked} question={QUESTION} topic={null} />)
+    const strip = screen.getByRole('region', { name: 'Coverage by country' })
+    expect(strip.textContent).toContain('No source here is about Japan, which the question names.')
+    cleanup()
+    render(<AnswerBody answer={answer()} question={QUESTION} topic={null} />)
+    expect(document.body.textContent).not.toContain('which the question names')
   })
 })

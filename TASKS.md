@@ -1951,7 +1951,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-240` **Counts disagree between pages** (review) — sources 97,198 vs 116,392, passages five
       different figures, labelled sources 10,239 vs ~97k implied, bell 50 vs "All 102". One
       counting definition, shown where counted
-- [ ] `B-241` **Answer groups by country on questions about no place** (review) — "United States 85
+- [x] `B-241` **Answer groups by country on questions about no place** (review) — "United States 85
       strong" on a question about crash reduction reads as a verdict. Group by place only when
       the question names one; "well-sourced / few sources" rather than strong/thin
 - [x] `B-245` `v0.177.4`. **The tagging prompt never listed the node types the parser enforces** —

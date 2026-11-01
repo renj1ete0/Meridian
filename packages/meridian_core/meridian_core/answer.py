@@ -1,7 +1,8 @@
-"""A question answered as grouped evidence, with coverage stated per place.
+"""A question answered as evidence, grouped by place when the question is about places.
 
-One search's candidate pool, grouped by country with one item per source, and coverage
-stated as a count. No model is called and nothing is summarised. See
+One search's candidate pool, one item per source, coverage stated as a count. Grouped by
+country when the question or its filters name a place or it asks about places; otherwise one
+list (`B-241`). No model is called and nothing is summarised. See
 docs/features/search.md#the-answer-page.
 """
 
@@ -9,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import re
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from typing import Literal
 
@@ -27,6 +29,10 @@ PRIMARY_TIERS: frozenset[str] = frozenset({"government", "peer_reviewed"})
 #: Items shown per group, by default.
 DEFAULT_TOP = 5
 MAX_TOP = 20
+
+#: Items shown when the answer is one list rather than groups: a group's worth is too few
+#: to stand for a whole question.
+DEFAULT_LIST_TOP = 10
 
 #: How deep the answer's single search reaches. Deeper than a results page
 #: (100), because grouping by place needs the long tail: the tenth country is
@@ -51,12 +57,77 @@ REPEAT_PUBLISHER_FACTOR = 0.5
 
 #: The rule in words a reader can be shown. Built from the constants above.
 COVERAGE_RULE = (
-    f"Strong means at least {STRONG_MIN_PUBLISHERS} sources from different publishers, "
-    "including at least one government or peer-reviewed source. Anything less is thin. "
-    "A country with no matching source is not listed."
+    f"Well-sourced means at least {STRONG_MIN_PUBLISHERS} sources from different publishers, "
+    "including at least one government or peer-reviewed source; anything short of that is "
+    "marked with what it lacks."
 )
 
+#: Added to the rule when the answer is grouped by place.
+ABSENT_PLACES = "A country with no matching source is not listed."
+
 Coverage = Literal["strong", "thin"]
+
+GroupedBy = Literal["place", "none"]
+
+#: Words by which a question asks about places in general rather than naming one: "which
+#: countries", "across jurisdictions", or a question that opens with "where". See
+#: docs/features/search.md#the-answer-page.
+ASKS_ABOUT_PLACES = re.compile(
+    r"\b(?:countries|nations|cities|jurisdictions|worldwide|internationally|globally"
+    r"|around the world"
+    r"|(?:which|what|each|every|per|by|across|other|different) (?:country|city|jurisdiction))\b"
+    r"|^\s*where\b",
+    re.IGNORECASE,
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class Grouping:
+    """Whether an answer is grouped by place, and the sentence that says why."""
+
+    by: GroupedBy
+    reason: str
+    #: The countries the question's own words name, as ISO codes, sorted.
+    places_named: list[str]
+
+
+def _names(codes: Sequence[str]) -> str:
+    names = [display_name(code) for code in codes]
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def grouping_for(
+    query: str, named: Collection[str], filtered: Sequence[str] | None = None
+) -> Grouping:
+    """Group by place only when the question is about places.
+
+    ``named`` is the countries the question's text names; ``filtered`` the place filter's
+    codes. A question about no place is one list: grouping it would rank the countries the
+    collection is mostly about, not answer it. See docs/features/search.md#the-answer-page.
+    """
+    places_named = countries_of(sorted(named))
+    if places_named:
+        return Grouping(
+            "place", f"Grouped by country: the question names {_names(places_named)}.", places_named
+        )
+    narrowed = countries_of(filtered)
+    if narrowed:
+        return Grouping(
+            "place", f"Grouped by country: the search is narrowed to {_names(narrowed)}.", []
+        )
+    if ASKS_ABOUT_PLACES.search(query):
+        return Grouping("place", "Grouped by country: the question asks about places.", [])
+    return Grouping(
+        "none",
+        "One list: the question names no place, so grouping by country would only show which "
+        "countries this collection holds most about.",
+        [],
+    )
+
+
+def coverage_rule_for(by: GroupedBy) -> str:
+    """The rule as the page shows it for an answer grouped one way or the other."""
+    return f"{COVERAGE_RULE} {ABSENT_PLACES}" if by == "place" else COVERAGE_RULE
 
 
 @dataclasses.dataclass(frozen=True)
@@ -221,6 +292,15 @@ def leading_topics(hits: Iterable[SearchHit], n: int = 3) -> list[str]:
         for topic in hit.topic_labels or []:
             counts[topic] = counts.get(topic, 0) + 1
     return sorted(counts, key=lambda t: (-counts[t], t))[:n]
+
+
+def one_list(hits: Sequence[SearchHit], *, top: int = DEFAULT_LIST_TOP) -> AnswerGroup | None:
+    """Every source in the pool as one group, each shown by its best passage; None if empty."""
+    best, counts = _best_per_source(hits)
+    if not best:
+        return None
+    entries = [(sid, best[sid]) for sid in sorted(best, key=lambda s: (-best[s].score, s))]
+    return _group(None, "All matching sources", entries, counts, top)
 
 
 def group_hits(

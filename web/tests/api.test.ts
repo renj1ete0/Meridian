@@ -52,7 +52,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
-import { ANSWER_FIELDS, ANSWER_GROUP_FIELDS, ANSWER_ITEM_FIELDS } from '../src/lib/answer'
+import { ANSWER_FIELDS, ANSWER_GROUP_FIELDS, ANSWER_ITEM_FIELDS, ANSWER_PLACE_FIELDS } from '../src/lib/answer'
 // P6-28: the bulk gazetteer decision.
 import { AGENT_THINKING, GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX, SITE_FIELDS } from '../src/lib/api'
 import {
@@ -211,6 +211,7 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['MapSteerRead', 'areas.py', MAP_STEER_FIELDS],
     ['AnswerItemRead', 'answer.py', ANSWER_ITEM_FIELDS],
     ['AnswerGroupRead', 'answer.py', ANSWER_GROUP_FIELDS],
+    ['AnswerPlaceRead', 'answer.py', ANSWER_PLACE_FIELDS],
     ['AnswerRead', 'answer.py', ANSWER_FIELDS],
     ['ChatCitationRead', 'chat.py', CHAT_CITATION_FIELDS],
     ['ChatNodeRead', 'chat.py', CHAT_NODE_FIELDS],

@@ -271,17 +271,21 @@ async def explore_answer(
         int,
         Query(ge=1, le=1000, description="How deep the one search goes before grouping."),
     ] = DEFAULT_ANSWER_CANDIDATES,
-    top: Annotated[int, Query(ge=1, le=MAX_TOP, description="Sources shown per place.")] = (
-        DEFAULT_TOP
-    ),
+    top: Annotated[
+        int,
+        Query(
+            ge=1, le=MAX_TOP, description="Sources shown per place; the one list shows at least 10."
+        ),
+    ] = (DEFAULT_TOP),
     rerank: Annotated[
         bool, Query(description="As on `/search`: the top 30 of the pool, before grouping.")
     ] = False,
 ) -> AnswerRead:
-    """A question answered as evidence grouped by country, with coverage per country.
+    """A question answered as evidence, by country when it is about places, else one list.
 
     The same search `/search` runs, over the whole candidate pool rather than a
-    page, grouped by the places its sources are about. Nothing is generated:
+    page, grouped by the places its sources are about when the question or the place
+    filter names a place or it asks about places (`grouped_by` says which). Nothing is generated:
     each item is a source's best-matching passage. See `meridian_core.answer`
     for the grouping and the coverage rule.
     """

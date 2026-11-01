@@ -53,12 +53,29 @@ class AnswerGroupRead(BaseModel):
     several_places: int = 0
 
 
+class AnswerPlaceRead(BaseModel):
+    """A country the question names."""
+
+    code: str
+    name: str
+
+
 class AnswerRead(BaseModel):
     """A question answered as grouped evidence. No text here is generated."""
 
     query: str
+    #: ``place`` when the question or its filters name a place or it asks about places;
+    #: ``none`` when it is about no place, and ``ungrouped`` is the answer (`B-241`).
+    grouped_by: Literal["place", "none"]
+    #: Why, in a sentence the page shows.
+    grouping_reason: str
+    places_named: list[AnswerPlaceRead] = Field(default_factory=list)
+    #: By country. Filled either way: when ``grouped_by`` is ``none`` they are a tally of
+    #: where the sources are about, not the answer's structure.
     groups: list[AnswerGroupRead] = Field(default_factory=list)
     unplaced: AnswerGroupRead | None = None
+    #: The whole pool as one list, when ``grouped_by`` is ``none``.
+    ungrouped: AnswerGroupRead | None = None
     #: The coverage rule, in words the page shows beside the verdicts.
     coverage_rule: str
     strong_min_publishers: int

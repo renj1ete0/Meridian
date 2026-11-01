@@ -71,11 +71,33 @@ export const ANSWER_GROUP_FIELDS = [
   'several_places',
 ] as const
 
+/** Mirrors `AnswerPlaceRead`: a country the question names. */
+export interface AnswerPlace {
+  code: string
+  name: string
+}
+
+export const ANSWER_PLACE_FIELDS = ['code', 'name'] as const
+
+/**
+ * How the answer is arranged (`B-241`): by country when the question or its filters name a
+ * place or it asks about places, else one list.
+ */
+export const GROUPED_BY = ['place', 'none'] as const
+export type GroupedBy = (typeof GROUPED_BY)[number]
+
 /** Mirrors `AnswerRead`. */
 export interface Answer {
   query: string
+  grouped_by: GroupedBy
+  /** Why it is arranged so, in a sentence the page shows. */
+  grouping_reason: string
+  places_named: AnswerPlace[]
+  /** By country. When `grouped_by` is `none`, a tally of where the sources are about. */
   groups: AnswerGroup[]
   unplaced: AnswerGroup | null
+  /** The whole pool as one list, when `grouped_by` is `none`. */
+  ungrouped: AnswerGroup | null
   coverage_rule: string
   strong_min_publishers: number
   strong_needs_tiers: SourceTier[]
@@ -92,8 +114,12 @@ export interface Answer {
 
 export const ANSWER_FIELDS = [
   'query',
+  'grouped_by',
+  'grouping_reason',
+  'places_named',
   'groups',
   'unplaced',
+  'ungrouped',
   'coverage_rule',
   'strong_min_publishers',
   'strong_needs_tiers',
@@ -109,7 +135,22 @@ export const ANSWER_FIELDS = [
 
 export type AssertAnswerItem = Expect<Equal<keyof AnswerItem, (typeof ANSWER_ITEM_FIELDS)[number]>>
 export type AssertAnswerGroup = Expect<Equal<keyof AnswerGroup, (typeof ANSWER_GROUP_FIELDS)[number]>>
+export type AssertAnswerPlace = Expect<Equal<keyof AnswerPlace, (typeof ANSWER_PLACE_FIELDS)[number]>>
 export type AssertAnswer = Expect<Equal<keyof Answer, (typeof ANSWER_FIELDS)[number]>>
+
+/**
+ * A group's coverage in a reader's words: "well-sourced", else what it lacks first. The wire
+ * keeps `strong` and `thin`; a "strong" beside a country read as a verdict on it (`B-241`).
+ */
+export function coverageWord(
+  group: Pick<AnswerGroup, 'coverage' | 'sources' | 'publishers'>,
+  answer: Pick<Answer, 'strong_min_publishers'>,
+): string {
+  if (group.coverage === 'strong') return 'well-sourced'
+  if (group.sources < answer.strong_min_publishers) return 'few sources'
+  if (group.publishers < answer.strong_min_publishers) return 'few publishers'
+  return 'no primary source'
+}
 
 export interface AnswerParams {
   q: string
@@ -196,7 +237,7 @@ export function queueFindMore(
       url_or_query: findMoreQuery(question, place),
       task_type: 'query',
       topic,
-      reason: `Find more from an answer: ${place}`,
+      reason: `Find more from an answer: ${place || 'the whole question'}`,
     },
     init,
   )

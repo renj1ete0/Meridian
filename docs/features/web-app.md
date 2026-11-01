@@ -712,14 +712,20 @@ have the same attempt count and want opposite reactions.
 
 ### The answer view
 
-A question answered as evidence grouped by country. Nothing on it is written by a model: each
-item is a source's own best passage, and each country's heading is a count of how many sources,
-from how many publishers, of which kinds, and how recent. Coverage is a count against a stated
-rule, shown in words beside the verdicts, not a judgement of any source (design-system §4).
-**Thin is marked by form as well as colour**: a thin country's chip is dashed and says "thin";
-the brass is the flag the Map uses for a weak area, and the word survives without it (§5). **A
-country with no evidence is absent, and the page says so**, with a way to ask for any country by
-name.
+A question answered as evidence, grouped by country when the question is about places and one
+list when it is not (`B-241`, see [search.md](search.md#the-answer-page)); the strip under the
+search says which, and why. Nothing on it is written by a model: each item is a source's own
+best passage, and each heading is a count of how many sources, from how many publishers, of
+which kinds, and how recent. Coverage is a count against a stated rule, shown in words beside
+the verdicts, not a judgement of any source (design-system §4): "well-sourced", else what is
+lacking ("few sources", "few publishers", "no primary source"). **Short of well-sourced is
+marked by form as well as colour**: the chip is dashed and says what it lacks; the brass is the
+flag the Map uses for a weak area, and the words survive without it (§5). **A country with no
+evidence is absent, and the page says so**, naming any country the question asked about that
+no source is about, with a way to ask for any country by name. **One list** ("The evidence")
+replaces the country strip with the list's counts and a plain tally of where its sources are
+about, each country a link into its passages and none graded; there is no mock for this view,
+so it reuses the country strip's frame.
 
 ### Gaps
 

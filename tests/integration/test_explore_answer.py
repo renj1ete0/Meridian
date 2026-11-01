@@ -21,7 +21,7 @@ import pytest
 from sqlalchemy import delete, update
 
 from api.main import create_app
-from meridian_core.answer import COVERAGE_RULE, STRONG_MIN_PUBLISHERS
+from meridian_core.answer import COVERAGE_RULE, STRONG_MIN_PUBLISHERS, coverage_rule_for
 from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.db import dispose_engines
 from meridian_core.models import Source
@@ -132,9 +132,44 @@ async def test_groups_by_country_with_cities_rolled_up(client, corpus, marker, s
     assert rest["unexamined"] == 1
     assert rest["several_places"] == 1, "the two-country source whose passages name neither"
 
-    assert body["coverage_rule"] == COVERAGE_RULE
+    # The marker names no place: one list is the answer, the groups only a tally (`B-241`).
+    assert body["grouped_by"] == "none"
+    assert body["places_named"] == []
+    assert "names no place" in body["grouping_reason"]
+    everything = body["ungrouped"]
+    assert everything["code"] is None
+    assert everything["sources"] == len(LAYOUT)
+    assert len({item["source_id"] for item in everything["items"]}) == len(LAYOUT)
+    assert body["coverage_rule"] == coverage_rule_for("none") == COVERAGE_RULE
     assert body["sources_considered"] == len(LAYOUT)
     assert body["passages_considered"] == 2 * len(LAYOUT)
+
+
+async def test_a_question_naming_a_country_is_grouped_by_place(client, corpus, marker, scope):
+    """Only the source whose passages say "Germany" matches both words; grouped, and named."""
+    body = (
+        await client.get(
+            "/api/explore/answer", params={"q": f"{marker} Germany", "language": scope}
+        )
+    ).json()
+    assert body["grouped_by"] == "place"
+    assert body["places_named"] == [{"code": "DE", "name": "Germany"}]
+    assert body["grouping_reason"].endswith("names Germany.")
+    assert body["ungrouped"] is None
+    assert {g["code"] for g in body["groups"]} == {"DE", "FR"}
+    assert body["coverage_rule"] == coverage_rule_for("place") != COVERAGE_RULE
+
+
+async def test_a_place_filter_groups_by_place(client, corpus, marker, scope) -> None:
+    body = (
+        await client.get(
+            "/api/explore/answer", params={"q": marker, "language": scope, "place": "DEBER"}
+        )
+    ).json()
+    assert body["grouped_by"] == "place"
+    assert body["places_named"] == []
+    assert body["grouping_reason"].endswith("narrowed to Germany.")
+    assert body["ungrouped"] is None
 
 
 async def test_filters_reach_the_search(client, corpus, marker, scope) -> None:
@@ -192,6 +227,7 @@ async def test_empty_question_is_an_empty_answer_not_an_error(client) -> None:
     body = (await client.get("/api/explore/answer", params={"q": ""})).json()
     assert body["groups"] == []
     assert body["unplaced"] is None
+    assert body["ungrouped"] is None
     assert body["degraded_reason"]
 
 

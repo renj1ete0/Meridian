@@ -91,6 +91,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.189.0] — 2026-11-01
+
+### Changed
+
+- `B-241`: an answer is grouped by country only when the question names a place, a place
+  filter is set, or the question asks about places; otherwise it is one list, with the
+  countries its sources are about as a tally beside it. The response says which and why
+  (`grouped_by`, `grouping_reason`, `places_named`, `ungrouped`). Coverage reads as
+  "well-sourced" or what is lacking, not strong/thin.
+
+**Deploy:** image only.
+
 ## [0.188.2] — 2026-11-01
 
 ### Changed

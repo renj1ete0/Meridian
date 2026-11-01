@@ -12,17 +12,22 @@ from collections.abc import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.answer import (
-    COVERAGE_RULE,
+    DEFAULT_LIST_TOP,
+    MAX_TOP,
     PRIMARY_TIERS,
     STRONG_MIN_PUBLISHERS,
+    coverage_rule_for,
     group_hits,
+    grouping_for,
     leading_topics,
+    one_list,
 )
 from meridian_core.embedder import EmbeddingUnavailable, RemoteEmbedder, RerankingOff
 from meridian_core.logging import get_logger
+from meridian_core.placenames import display_name
 from meridian_core.places import countries_named, load_vocabulary
 from meridian_core.rerank import RERANK_DEPTH, Scorer, rerank_hits
-from meridian_core.schemas.answer import AnswerGroupRead, AnswerRead
+from meridian_core.schemas.answer import AnswerGroupRead, AnswerPlaceRead, AnswerRead
 from meridian_core.schemas.search import SearchHitRead, SearchResponse
 from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, search
 
@@ -209,7 +214,7 @@ async def answer_search(
     top: int,
     rerank: bool = False,
 ) -> AnswerRead:
-    """The whole candidate pool, grouped by place (see `meridian_core.answer`).
+    """The whole candidate pool, by place or as one list (see `meridian_core.answer`).
 
     One search, not one per country: the grouping reads `places` off the hits
     the fused ranking already produced, so the answer and the passage list are
@@ -233,6 +238,12 @@ async def answer_search(
     # Read per request: it is small, and an approved gazetteer term counts at once.
     vocab = await load_vocabulary(sess)
     groups, unplaced = group_hits(hits, top=top, named=lambda text: countries_named(text, vocab))
+    grouping = grouping_for(query, countries_named(query, vocab), filters.places)
+    ungrouped = (
+        one_list(hits, top=min(MAX_TOP, max(top, DEFAULT_LIST_TOP)))
+        if grouping.by == "none"
+        else None
+    )
     log.info(
         "explore answer",
         extra={
@@ -240,13 +251,20 @@ async def answer_search(
             "arms": sorted(result.arms),
             "hits": len(result.hits),
             "groups": len(groups),
+            "grouped_by": grouping.by,
         },
     )
     return AnswerRead(
         query=query,
+        grouped_by=grouping.by,
+        grouping_reason=grouping.reason,
+        places_named=[
+            AnswerPlaceRead(code=code, name=display_name(code)) for code in grouping.places_named
+        ],
         groups=[AnswerGroupRead.model_validate(group) for group in groups],
         unplaced=AnswerGroupRead.model_validate(unplaced) if unplaced else None,
-        coverage_rule=COVERAGE_RULE,
+        ungrouped=AnswerGroupRead.model_validate(ungrouped) if ungrouped else None,
+        coverage_rule=coverage_rule_for(grouping.by),
         strong_min_publishers=STRONG_MIN_PUBLISHERS,
         strong_needs_tiers=sorted(PRIMARY_TIERS),
         topics=leading_topics(result.hits),

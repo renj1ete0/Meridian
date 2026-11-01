@@ -25,11 +25,11 @@ query ──► lexical arm: websearch_to_tsquery over chunks.search_vector
       ──► one page of hits, each with source, ranks per arm, age and decay factor
 ```
 
-**The answer page** (`/api/explore/answer`) groups the candidate pool of one search by
-country, with one item per source (its best passage, plus how many passages matched).
-Coverage is stated per place as a count: which places have evidence, how much, and which
-are thin. Hits with no place are split into "examined, about no place" and "not examined".
-No model writes anything on this page.
+**The answer page** (`/api/explore/answer`) arranges the candidate pool of one search, one
+item per source (its best passage, plus how many passages matched). A question about places
+is grouped by country, with coverage stated per place as a count; a question about no place
+is one list (`B-241`). Hits with no place are split into "examined, about no place" and "not
+examined". No model writes anything on this page.
 
 **Watched questions** (`P6-43`). A saved view counts what has arrived since it was last opened
 that matches its own words and every filter it stores, using the lexical arm only, so the count
@@ -361,6 +361,36 @@ their head. `answer.py` does that grouping mechanically over one search's candid
 the page shows where the evidence is, how much there is, and where it is thin. No model is
 called and nothing is summarised: every item is a passage a source actually contains.
 
+- **Grouped by place only when the question is about places** (`B-241`). `grouping_for`
+  groups by country when the question's words name a country, city or jurisdiction-tagged
+  gazetteer term (`countries_named`, the matcher documents are tagged with), when the place
+  filter is set, or when the question asks about places in general (`ASKS_ABOUT_PLACES`:
+  "countries", "cities", "jurisdictions", "worldwide", "which country", a question opening
+  with "where"). Otherwise the answer is one list (`ungrouped`, all sources by the same lead
+  order, ten shown), and the groups travel only as a tally of where the sources are about.
+  The response says which (`grouped_by`), why in a sentence (`grouping_reason`), and which
+  countries the question named (`places_named`), so the page can say "no source here is about
+  Japan" when a named country has none. Why: grouped, a question about no place answered
+  "United States 85, strong" first, which read as a verdict about the United States when it
+  only restated the collection's make-up. **Measured** on 2026-11-01 over a real corpus
+  (lexical arm, 300 candidates, 39 questions written for this, none from the held-out set):
+  in all 20 questions naming no place the leading country was the United States, at
+  0.9–1.45× its share of all placed sources (2× only in pools of under ten), so the
+  concentration was the collection's, not the question's; a "group when concentrated" rule
+  was rejected because the small countries that did stand out (a lift of 10–180×) did so on
+  one or two sources. The rule put all 20 in one list, grouped 11 of the 14 that name a
+  place and all 5 that ask about places in general. Of 400 sampled crawl searches, 60
+  grouped, 54 of those through a gazetteer term alone, all programmes or terms specific to
+  the place they named. **Limits:** names match case-sensitively, so "singapore walkability"
+  is one list; demonyms ("German regulators"), `AMBIGUOUS` names ("Korea", "Georgia"), cities
+  missing from `placenames.CITIES` and the bare abbreviation "EU" do not group. Each fails
+  towards one list, the honest default; a false group is the failure this rule exists to
+  prevent.
+- **Coverage is said as "well-sourced", else what is lacking** (`B-241`): "few sources",
+  "few publishers" or "no primary source" (`coverageWord` in `web/src/lib/answer.ts`). The wire
+  keeps `strong` and `thin`; the words changed because "strong" beside a country read as a
+  verdict on it. The one list carries the same rule over the whole pool.
+
 - **Grouping is by country.** A source about one country counts towards it, whichever of its
   passages matched, and a city rolls up into its country, so a source about two cities in one
   country is one source for it. A source about **several** countries counts towards one only
@@ -384,10 +414,13 @@ called and nothing is summarised: every item is a passage a source actually cont
 - **The rest of a country is one click away** (`B-175`). A group shows its top five sources;
   "N more sources: read all M as passages" opens Find's Passages tab with the same words
   narrowed to that country, as a new history entry so Back returns to the answer. The
-  unplaced group has no code to narrow by and keeps its count as words.
+  unplaced group has no code to narrow by and keeps its count as words. The one list opens
+  as Passages with the same words and filters, and each country in its tally as that
+  country's passages.
 - **Coverage is a count, not a verdict on credibility** (design-system.md §4).
   `COVERAGE_RULE` is the sentence the interface shows, built from the constants the rule uses,
-  so the words cannot drift from the arithmetic.
+  so the words cannot drift from the arithmetic. `coverage_rule_for` adds "a country with no
+  matching source is not listed" only when the answer is grouped by place.
 
 ### Watched questions
 

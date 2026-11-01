@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { BUTTON_SECONDARY, FIELD } from '../admin/ui'
 import { ApiError } from '../lib/api'
 import {
+  coverageWord,
+  findMoreQuery,
   getAnswer,
   queueFindMore,
   type Answer,
@@ -18,9 +20,9 @@ import { hrefForSource, onInternalClick } from '../lib/route'
 import { TierChip, type SourceTier } from '../ui/Tier'
 
 /**
- * A question answered as evidence grouped by country: each source's own best passage, and
- * each country's heading a count. Nothing is written by a model.
- * See docs/features/web-app.md#the-answer-view.
+ * A question answered as evidence: each source's own best passage, grouped by country when
+ * the question is about places and one list when it is not (`B-241`), each heading a count.
+ * Nothing is written by a model. See docs/features/web-app.md#the-answer-view.
  */
 
 /** Plain words for tiers, in running text. */
@@ -65,7 +67,7 @@ export function countLine(group: AnswerGroup): string {
   return parts.join(' · ')
 }
 
-/** Why a thin group is thin, naming each part of the rule it misses. */
+/** Why a group is not well-sourced, naming each part of the rule it misses. */
 export function thinReason(
   group: AnswerGroup,
   answer: Pick<Answer, 'strong_min_publishers' | 'strong_needs_tiers'>,
@@ -80,7 +82,7 @@ export function thinReason(
   if (!primary) {
     missing.push(`no ${answer.strong_needs_tiers.map((t) => TIER_WORDS[t] ?? t).join(' or ')} source`)
   }
-  return `Thin: ${missing.join('; ')}.`
+  return `Not yet well-sourced: ${missing.join('; ')}.`
 }
 
 function anchor(group: AnswerGroup): string {
@@ -97,13 +99,15 @@ export interface AnswerViewProps {
   filters: FindFilters
   /** Read one country's sources as passages (`B-175`): the same search, narrowed to it. */
   onReadPlace?: (code: string) => void
+  /** Read the whole one-list answer as passages: the same search, not narrowed. */
+  onReadAll?: () => void
   /** Told whether each answer matched words only, so the search field can say so. */
   onWordsOnly?: (wordsOnly: boolean) => void
 }
 
 type State = { phase: 'loading' } | { phase: 'done'; answer: Answer } | { phase: 'failed'; message: string }
 
-export function AnswerView({ question, filters, onReadPlace, onWordsOnly }: AnswerViewProps) {
+export function AnswerView({ question, filters, onReadPlace, onReadAll, onWordsOnly }: AnswerViewProps) {
   const [state, setState] = useState<State>({ phase: 'loading' })
   // Serialised, so a new object with the same filters does not refetch.
   const wireKey = JSON.stringify(searchFilters(filters))
@@ -128,7 +132,7 @@ export function AnswerView({ question, filters, onReadPlace, onWordsOnly }: Answ
   }, [state, onWordsOnly])
 
   if (state.phase === 'loading') {
-    return <p className="font-mono text-[10.5px] text-text-faint">Grouping the evidence by country.</p>
+    return <p className="font-mono text-[10.5px] text-text-faint">Gathering the evidence.</p>
   }
   if (state.phase === 'failed') {
     return <p className="border border-line-strong bg-surface p-4 text-[13px] text-text">{state.message}</p>
@@ -139,6 +143,7 @@ export function AnswerView({ question, filters, onReadPlace, onWordsOnly }: Answ
       question={question}
       topic={filters.topics[0] ?? state.answer.topics[0] ?? null}
       onReadPlace={onReadPlace}
+      onReadAll={onReadAll}
     />
   )
 }
@@ -152,14 +157,17 @@ export function AnswerBody({
   question,
   topic,
   onReadPlace,
+  onReadAll,
 }: {
   answer: Answer
   question: string
   /** What a find-more search is filed under. */
   topic: string | null
   onReadPlace?: (code: string) => void
+  onReadAll?: () => void
 }) {
-  const nothing = answer.groups.length === 0 && answer.unplaced === null
+  const nothing = answer.groups.length === 0 && answer.unplaced === null && answer.ungrouped === null
+  const listed = answer.grouped_by === 'none' ? answer.ungrouped : null
 
   return (
     <div className="flex flex-col gap-6" data-view="answer">
@@ -171,23 +179,33 @@ export function AnswerBody({
         <p className="text-[13.5px] text-text-muted">No source matched {`"${question}"`}.</p>
       ) : (
         <>
-          <CoverageStrip answer={answer} />
+          {listed ? (
+            <EvidenceStrip answer={answer} listed={listed} onReadPlace={onReadPlace} />
+          ) : (
+            <CoverageStrip answer={answer} />
+          )}
           <BriefLink answer={answer} question={question} />
         </>
       )}
 
-      {answer.groups.map((group) => (
-        <GroupSection
-          key={group.code}
-          group={group}
-          answer={answer}
-          question={question}
-          topic={topic}
-          onReadPlace={onReadPlace}
-        />
-      ))}
+      {listed ? (
+        <GroupSection group={listed} answer={answer} question={question} topic={topic} rated onReadAll={onReadAll} />
+      ) : null}
 
-      {answer.unplaced ? (
+      {listed
+        ? null
+        : answer.groups.map((group) => (
+            <GroupSection
+              key={group.code}
+              group={group}
+              answer={answer}
+              question={question}
+              topic={topic}
+              onReadPlace={onReadPlace}
+            />
+          ))}
+
+      {answer.unplaced && !listed ? (
         <GroupSection group={answer.unplaced} answer={answer} question={question} topic={topic} />
       ) : null}
 
@@ -232,21 +250,38 @@ export function briefName(question: string): string {
   return slug ? `meridian-${slug}` : 'meridian-brief'
 }
 
+/** Countries the question names that no source here is about, by name. */
+export function placesMissing(answer: Pick<Answer, 'places_named' | 'groups'>): string[] {
+  const present = new Set(answer.groups.map((g) => g.code))
+  return answer.places_named.filter((place) => !present.has(place.code)).map((place) => place.name)
+}
+
+function namesLine(names: readonly string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
 export function CoverageStrip({ answer }: { answer: Answer }) {
   const strong = answer.groups.filter((g) => g.coverage === 'strong').length
+  const missing = placesMissing(answer)
   return (
     <section aria-label="Coverage by country" className="flex flex-col gap-2.5 border border-line bg-surface px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className={LABEL}>Where the evidence is</p>
         <p className="font-mono text-[10.5px] text-text-faint">
-          {plural(answer.groups.length, 'country', 'countries')} · {strong} strong · {answer.groups.length - strong}{' '}
-          thin · from {plural(answer.sources_considered, 'source')}
+          {plural(answer.groups.length, 'country', 'countries')} · {strong} well-sourced · from{' '}
+          {plural(answer.sources_considered, 'source')}
         </p>
       </div>
+      <p className="text-[12.5px] text-text-muted">{answer.grouping_reason}</p>
+      {missing.length > 0 ? (
+        <p className="text-[12.5px] text-text">
+          No source here is about {namesLine(missing)}, which the question names.
+        </p>
+      ) : null}
       <ul className="flex flex-wrap gap-1.5">
         {answer.groups.map((group) => (
           <li key={group.code}>
-            <CoverageChip group={group} />
+            <CoverageChip group={group} answer={answer} />
           </li>
         ))}
         {answer.unplaced ? (
@@ -266,7 +301,57 @@ export function CoverageStrip({ answer }: { answer: Answer }) {
   )
 }
 
-function CoverageChip({ group }: { group: AnswerGroup }) {
+/**
+ * The answer as one list (`B-241`): its counts, why it is not grouped, and where its sources
+ * are about as a plain tally, each country a way into its passages rather than a verdict.
+ */
+export function EvidenceStrip({
+  answer,
+  listed,
+  onReadPlace,
+}: {
+  answer: Answer
+  listed: AnswerGroup
+  onReadPlace?: (code: string) => void
+}) {
+  return (
+    <section aria-label="The evidence" className="flex flex-col gap-2.5 border border-line bg-surface px-5 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className={LABEL}>The evidence</p>
+        <p className="font-mono text-[10.5px] text-text-faint">
+          {plural(listed.sources, 'source')} · {plural(listed.publishers, 'publisher')} · {coverageWord(listed, answer)}
+        </p>
+      </div>
+      <p className="text-[12.5px] text-text-muted">{answer.grouping_reason}</p>
+      {answer.groups.length > 0 ? (
+        <p className="font-mono text-[10.5px] leading-[1.6] text-text-faint" data-tally="places">
+          About:{' '}
+          {answer.groups.map((group, index) => (
+            <span key={group.code}>
+              {index > 0 ? ' · ' : null}
+              {onReadPlace && group.code ? (
+                <button
+                  type="button"
+                  onClick={() => onReadPlace(group.code!)}
+                  title={`Read the ${group.name} sources as passages`}
+                  className="hover:text-accent-graph hover:underline"
+                >
+                  {group.name} {group.sources}
+                </button>
+              ) : (
+                `${group.name} ${group.sources}`
+              )}
+            </span>
+          ))}
+          {answer.unplaced ? ` · ${answer.unplaced.sources} with no place` : null}
+        </p>
+      ) : null}
+      <p className="max-w-[80ch] text-[12px] leading-[1.5] text-text-muted">{answer.coverage_rule}</p>
+    </section>
+  )
+}
+
+function CoverageChip({ group, answer }: { group: AnswerGroup; answer: Answer }) {
   const strong = group.coverage === 'strong'
   return (
     <a
@@ -279,7 +364,7 @@ function CoverageChip({ group }: { group: AnswerGroup }) {
     >
       <span className="font-sans text-[12px]">{group.name}</span>
       <span className="tabular-nums">{group.sources}</span>
-      <span className={strong ? 'text-accent-graph' : 'text-accent-attention'}>{group.coverage}</span>
+      <span className={strong ? 'text-accent-graph' : 'text-accent-attention'}>{coverageWord(group, answer)}</span>
     </a>
   )
 }
@@ -311,35 +396,41 @@ function GroupSection({
   answer,
   question,
   topic,
+  rated = group.code !== null,
   onReadPlace,
+  onReadAll,
 }: {
   group: AnswerGroup
   answer: Answer
   question: string
   topic: string | null
+  /** Whether the coverage rule is stated for it: a country, or the one-list answer. */
+  rated?: boolean
   onReadPlace?: (code: string) => void
+  onReadAll?: () => void
 }) {
   const placed = group.code !== null
-  const thin = placed && group.coverage === 'thin'
+  const thin = rated && group.coverage === 'thin'
   const more = group.sources - group.items.length
+  const readAll = placed && onReadPlace ? () => onReadPlace(group.code!) : rated ? onReadAll : undefined
   return (
     <section id={anchor(group)} aria-label={group.name} className="scroll-mt-20 border border-line bg-surface">
       <header className="flex flex-col gap-1 border-b border-line/60 px-5 py-3.5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h3 className="font-sans text-[16px] font-semibold leading-snug text-text">{group.name}</h3>
-          {placed ? (
+          {rated ? (
             <span
               className={`font-mono text-[10px] uppercase tracking-[0.1em] ${
                 thin ? 'text-accent-attention' : 'text-accent-graph'
               }`}
             >
-              {group.coverage}
+              {coverageWord(group, answer)}
             </span>
           ) : null}
         </div>
         <p className="font-mono text-[10.5px] text-text-faint">{countLine(group)}</p>
         {thin ? <p className="text-[12.5px] text-text-muted">{thinReason(group, answer)}</p> : null}
-        {!placed ? <p className="text-[12.5px] text-text-muted">{unplacedNote(group)}</p> : null}
+        {!placed && !rated ? <p className="text-[12.5px] text-text-muted">{unplacedNote(group)}</p> : null}
       </header>
 
       <ol className="divide-y divide-line/60">
@@ -350,12 +441,12 @@ function GroupSection({
 
       {more > 0 || thin ? (
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 px-5 py-3">
-          {more > 0 && group.code !== null && onReadPlace ? (
-            // The rest of this country, as the ranked passages of the same search (`B-175`).
-            // The unplaced group has no code to narrow by, so it keeps the plain count.
+          {more > 0 && readAll ? (
+            // The rest of this country, or of the one list, as the ranked passages of the same
+            // search (`B-175`). The unplaced group has no code to narrow by: a plain count.
             <button
               type="button"
-              onClick={() => onReadPlace(group.code!)}
+              onClick={readAll}
               className="font-mono text-[10.5px] text-accent-graph hover:underline"
             >
               {plural(more, 'more source')}: read all {group.sources} as passages →
@@ -365,7 +456,7 @@ function GroupSection({
               {more > 0 ? `${plural(more, 'more source')} not shown` : ''}
             </span>
           )}
-          {thin ? <FindMore question={question} place={group.name} topic={topic} /> : null}
+          {thin ? <FindMore question={question} place={placed ? group.name : ''} topic={topic} /> : null}
         </footer>
       ) : null}
     </section>
@@ -455,9 +546,9 @@ export function FindMore({ question, place, topic }: { question: string; place: 
         className={BUTTON_SECONDARY}
         disabled={sent.phase === 'sending'}
         onClick={() => send(place)}
-        title={`Queues a web search for “${question} ${place}”${topic ? `, filed under ${topic}` : ''}`}
+        title={`Queues a web search for “${findMoreQuery(question, place)}”${topic ? `, filed under ${topic}` : ''}`}
       >
-        Find more about {place}
+        {place ? `Find more about ${place}` : 'Find more on this question'}
       </button>
     </div>
   )
@@ -475,7 +566,7 @@ function FindMoreAnywhere({ question, topic }: { question: string; topic: string
       }}
     >
       <label htmlFor="find-more-place" className="text-[12.5px] text-text-muted">
-        A country missing, or thin? Queue a search for more about it.
+        A country missing, or not well-sourced? Queue a search for more about it.
       </label>
       <div className="flex flex-wrap gap-2">
         <input
