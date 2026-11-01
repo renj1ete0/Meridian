@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.202.1] — 2026-11-02
+
+### Fixed
+
+- CI names `astral-sh/setup-uv` by its exact release; the project publishes no floating
+  major tag, so `@v10` did not resolve and every run failed at setup.
+
+**Deploy:** nothing to deploy (CI only).
+
 ## [0.202.0] — 2026-11-02
 
 ### Added
