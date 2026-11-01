@@ -36,7 +36,8 @@ deployment without Telegram still has monitoring.
 
 **The Telegram bot** (optional) long-polls, so it needs no inbound port. Messages from any
 chat but `TELEGRAM_CHAT_ID` get no reply at all. Commands: `/status`, `/weights`, `/pause`,
-`/boost`, `/seed`. Commands that need synthesis refuse by name. Nothing reachable deletes.
+`/boost`, `/seed`, `/contested [topic]`, `/tiers`. Commands that cannot work yet (`/run`,
+`/reprocess`, `/enrich`) refuse by name. Nothing reachable deletes.
 The update backlog is dropped at start-up, because a command is an instruction about now.
 
 **Liveness.** The worker and scheduler touch a heartbeat file each iteration; the container
@@ -176,6 +177,13 @@ monitoring without the fact of it.
   reachable deletes (§10.2): the worst a compromised chat can do is misweight the crawl, visibly
   and reversibly. Every change is logged with `actor="telegram"`, since a weight moved from a
   phone at midnight is reviewed differently from one changed in Admin.
+- **`/contested [topic]` and `/tiers` read the graph.** `/contested` lists the ten nodes with
+  the most contested claims (each claim counted once per node, withdrawn and merged nodes left
+  out), within one topic's claims when named; an unknown topic says so rather than answering
+  "nothing contested". `/tiers` counts nodes, relations and tags by the agent, model and tier
+  that wrote them. `/run` still refuses: the orchestrator starts runs on its own timer and
+  nothing can wake it early, and a second orchestrator started from the bot could claim the
+  same work.
 
 ### Liveness
 

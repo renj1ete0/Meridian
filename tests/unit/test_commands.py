@@ -241,7 +241,7 @@ def test_every_parseable_command_has_a_handler() -> None:
         # loses the name it was given.
         assert "Unknown" not in (parse(f"/{name}").error or "")
 
-    for name in ("status", "weights", "pause", "boost", "seed"):
+    for name in ("status", "weights", "pause", "boost", "seed", "contested", "tiers"):
         assert name in module._HANDLERS, f"/{name} parses but nothing executes it"
 
 
@@ -255,3 +255,25 @@ def test_a_refusal_carries_no_silent_success() -> None:
     # `ok` is derived from `error`, so the two cannot disagree.
     assert Command("status").ok
     assert not Command("status", error="no").ok
+
+
+# --------------------------------------------------------------------------
+# /contested and /tiers
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("text", ["/contested", "/contested walkability", "/tiers"])
+def test_the_graph_readouts_parse(text) -> None:
+    assert parse(text).ok
+
+
+def test_contested_takes_at_most_one_topic() -> None:
+    command = parse("/contested walkability transit")
+    assert not command.ok and "Usage: /contested [topic]" in (command.error or "")
+
+
+def test_run_still_says_what_it_waits_for() -> None:
+    """Synthesis exists now, so the old reason ("nothing can start a synthesis run") was false;
+    what is missing is a way to wake the running orchestrator."""
+    error = parse("/run").error or ""
+    assert "wake the orchestrator" in error and "phase 4" not in error

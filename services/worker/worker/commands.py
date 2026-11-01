@@ -13,23 +13,26 @@ import datetime as _dt
 import shlex
 from collections.abc import Awaitable, Callable
 
+from sqlalchemy import and_, func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core import steering
 from meridian_core.logging import get_logger
+from meridian_core.models import AttributeValue, Edge, Entity
 from meridian_core.queueing import enqueue
 from meridian_core.stats import corpus_stats
 from meridian_core.validation import ValidationError, check_seed_allowed
 
 log = get_logger(__name__)
 
-#: Commands §13.3 lists that need phase 4, with what they are waiting for.
+#: Commands §13.3 lists that cannot work yet, with what they are waiting for.
 #: Named rather than omitted: "/run is not a command" and "/run exists and does
 #: nothing" are indistinguishable from a phone, and only one is the truth.
 NOT_YET = {
-    "run": "the orchestrator (phase 4) — nothing can start a synthesis run yet",
-    "contested": "edges, which phase 4 writes — nothing has written one",
-    "tiers": "artifacts from a synthesis run, which phase 4 produces",
+    "run": (
+        "a way to wake the orchestrator early — it starts runs on its own timer, and a "
+        "second one started from here could take the same work"
+    ),
     "reprocess": "artifacts to re-derive (`P7-08`)",
     "enrich": "the enrichment passes (`P7-07`)",
 }
@@ -88,7 +91,12 @@ def parse(text: str) -> Command:
     if name in NOT_YET:
         return Command(name, args, error=f"/{name} is not available yet: it needs {NOT_YET[name]}.")
 
-    if name in {"status", "weights"}:
+    if name in {"status", "weights", "tiers"}:
+        return Command(name, args)
+
+    if name == "contested":
+        if len(args) > 1:
+            return Command(name, args, error="Usage: /contested [topic]")
         return Command(name, args)
 
     if name == "pause":
@@ -203,6 +211,73 @@ async def _seed(sess: AsyncSession, command: Command, _actor: str) -> str:
     return f"Queued {task_type}: {target}" + (f" (topic: {topic})" if topic else "")
 
 
+#: How many nodes `/contested` lists: a phone screen, not the Contested page.
+TOP_CONTESTED = 10
+
+
+async def _contested(sess: AsyncSession, command: Command, _actor: str) -> str:
+    """The nodes with the most contested claims (§13.3), optionally within one topic."""
+    topic = command.args[0] if command.args else None
+    if topic is not None and topic not in {row.topic for row in await steering.topics(sess)}:
+        return f"No topic named {topic}."
+    marked = and_(Edge.contested_with.is_not(None), func.cardinality(Edge.contested_with) > 0)
+    if topic is not None:
+        marked = and_(marked, Edge.topic_labels.contains([topic]))
+    ends = union_all(
+        select(Edge.from_node.label("node"), Edge.edge_id).where(marked),
+        select(Edge.to_node.label("node"), Edge.edge_id).where(marked),
+    ).subquery()
+    claims = func.count(func.distinct(ends.c.edge_id)).label("claims")
+    rows = (
+        await sess.execute(
+            select(Entity.canonical_name, Entity.node_type, claims)
+            .join(ends, ends.c.node == Entity.entity_id)
+            .where(Entity.withdrawn_at.is_(None), Entity.redirects_to.is_(None))
+            .group_by(Entity.entity_id)
+            .order_by(claims.desc(), Entity.canonical_name)
+            .limit(TOP_CONTESTED)
+        )
+    ).all()
+    where = f" in {topic}" if topic else ""
+    if not rows:
+        return f"Nothing contested{where}."
+    lines = [
+        f"{name} ({kind}): {n} contested claim{'s' if n != 1 else ''}" for name, kind, n in rows
+    ]
+    return f"Most contested{where}:\n" + "\n".join(lines)
+
+
+async def _tiers(sess: AsyncSession, _command: Command, _actor: str) -> str:
+    """What each model has written (§13.3): nodes, relations and tags by agent, model and tier."""
+    counts: dict[tuple, dict[str, int]] = {}
+    for table, label in ((Entity, "node"), (Edge, "relation"), (AttributeValue, "tag")):
+        rows = await sess.execute(
+            select(table.produced_by, table.model, table.quality_tier, func.count()).group_by(
+                table.produced_by, table.model, table.quality_tier
+            )
+        )
+        for agent, model, tier, n in rows:
+            counts.setdefault((agent, model, tier), {})[label] = n
+    if not counts:
+        return "Nothing written yet."
+
+    def order(key: tuple) -> tuple:
+        agent, model, tier = key
+        return (tier is None, tier or 0, agent or "", model or "")
+
+    lines = []
+    for key in sorted(counts, key=order):
+        agent, model, tier = key
+        who = f"{agent} · {model}" if agent and model else agent or model or "no model recorded"
+        what = ", ".join(
+            f"{n:,} {k}{'s' if n != 1 else ''}"
+            for k in ("node", "relation", "tag")
+            if (n := counts[key].get(k)) is not None
+        )
+        lines.append(f"tier {tier if tier is not None else '?'} {who}: {what}")
+    return "\n".join(lines)
+
+
 def _now() -> _dt.datetime:
     return _dt.datetime.now(_dt.UTC)
 
@@ -215,4 +290,6 @@ _HANDLERS: dict[str, Handler] = {
     "pause": _pause,
     "boost": _boost,
     "seed": _seed,
+    "contested": _contested,
+    "tiers": _tiers,
 }

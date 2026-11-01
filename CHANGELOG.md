@@ -91,6 +91,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.206.0] — 2026-11-02
+
+### Added
+
+- `B-272`: Telegram answers `/contested [topic]` with the ten nodes holding the most contested
+  claims (within one topic when named; withdrawn and merged nodes left out), and `/tiers` with
+  what each agent and model has written: nodes, relations and tags by tier. Both said "needs
+  phase 4" long after synthesis existed. `/run` still refuses, now with the true reason:
+  nothing can wake the orchestrator early. See docs/features/operations.md#telegram.
+
+**Deploy:** image only.
+
 ## [0.205.1] — 2026-11-02
 
 ### Fixed

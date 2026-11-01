@@ -2135,6 +2135,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       server's port); (b) judge headlines in a process already on `lan` (the scheduler's watch
       pass), holding unjudged entries in a table (a schema change); (c) an internal-only
       embedding relay on a `lan` service the worker can call over `internal`. Operator's call
+- [x] `B-272` **Telegram's `/contested` and `/tiers`** (from `P7-05`) — both refused with
+      "needs phase 4" long after synthesis existed. `/contested [topic]` lists the ten most
+      contested nodes, `/tiers` what each agent and model wrote; `/run` keeps refusing, now
+      with the true reason (nothing can wake the orchestrator early)
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published

@@ -439,9 +439,10 @@ docker compose logs bot | tail -5
 ```
 
 Then message the bot `/status`. `/weights`, `/boost <topic> <x> <weeks>`,
-`/pause <topic>` and `/seed <url or query> [topic]` are the rest; the commands
-that need phase 4 answer with what they are waiting for rather than staying
-silent.
+`/pause <topic>`, `/seed <url or query> [topic]`, `/contested [topic]` (the ten nodes with
+the most contested claims) and `/tiers` (what each model has written) are the rest; `/run`
+and the other commands that cannot work yet answer with what they are waiting for rather
+than staying silent.
 
 Three behaviours to expect, all deliberate:
 
