@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.197.1] — 2026-11-02
+
+### Fixed
+
+- A search that falls back to words only while the GPU machine is away no longer tells an
+  assistant semantic search is "unavailable on this deployment"; it says "right now", which
+  is true and does not invite the conclusion that it never will be.
+
+**Deploy:** image only.
+
 ## [0.197.0] — 2026-11-02
 
 ### Added

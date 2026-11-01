@@ -83,7 +83,7 @@ Rules for using it well:
 #: Wording that travels with a degraded search, phrased for a model to act on: a
 #: flag alone will not make it try synonyms.
 LEXICAL_ONLY = (
-    "Matched on words only. Semantic search is unavailable on this deployment, "
+    "Matched on words only. Semantic search is unavailable right now, "
     "so passages about this topic phrased in different words were NOT searched. "
     "Do not conclude the corpus lacks this topic — retry with alternative "
     "wordings, synonyms, and narrower or broader terms before saying so."
