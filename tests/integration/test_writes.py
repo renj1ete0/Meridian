@@ -22,7 +22,7 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from meridian_core.models import (
     AttributeDefinition,
@@ -403,6 +403,169 @@ async def test_a_comparison_must_state_its_limits(world) -> None:
             now=NOW,
             **BY,
         )
+
+
+# --------------------------------------------------------------------------
+# add_edge and contradictions (`P7-05`, §9)
+# --------------------------------------------------------------------------
+
+
+async def _assert(world, relation: str, chunk: int, **over):
+    sess, run, left, right, _attr, _chunks, _m = world
+    fields = {**BY, **over}
+    return await add_edge(
+        sess,
+        run,
+        from_node=fields.pop("from_node", left.entity_id),
+        to_node=fields.pop("to_node", right.entity_id),
+        relation_type=relation,
+        supporting_chunk_ids=[chunk],
+        now=NOW,
+        **fields,
+    )
+
+
+async def test_an_assertion_against_a_held_claim_is_a_second_edge_marked_on_both(world) -> None:
+    """§9: "When sources conflict, store both edges and mark the pair contested."
+
+    Before `P7-05` the opposing passage was folded into the claim as a citation and
+    its stance dropped, so the disagreement left no trace.
+    """
+    sess, run, _l, _r, _attr, chunks, _m = world
+    edges_before = run.edges_added
+    held = await _assert(world, "reduces", chunks[0], stance="supports")
+    against = await _assert(world, "reduces", chunks[1], stance="opposes")
+
+    assert against.created and against.row_id != held.row_id
+    assert f"contested with edge(s) {held.row_id}" in against.detail
+    assert run.edges_added == edges_before + 2, "a contradiction is knowledge, and counts"
+    first, second = await sess.get(Edge, held.row_id), await sess.get(Edge, against.row_id)
+    assert first.contested_with == [against.row_id]
+    assert second.contested_with == [held.row_id]
+    assert first.supporting_chunk_ids == [chunks[0]], "each side keeps only its own evidence"
+    assert second.supporting_chunk_ids == [chunks[1]]
+    assert (first.stance, second.stance) == ("supports", "opposes")
+
+
+async def test_a_better_model_arguing_the_other_side_does_not_overwrite_the_claim(world) -> None:
+    """Replacing the held stance with a higher tier's opposite would resolve the
+    contradiction silently, which §9 forbids; the tier rule governs one side only."""
+    sess, _run, _l, _r, _attr, chunks, _m = world
+    held = await _assert(
+        world,
+        "reduces",
+        chunks[0],
+        stance="supports",
+        produced_by="hosted-mid",
+        model="mid-v1",
+        quality_tier=3,
+    )
+    against = await _assert(world, "reduces", chunks[1], stance="opposes")
+
+    assert against.row_id != held.row_id
+    edge = await sess.get(Edge, held.row_id)
+    assert (edge.stance, edge.quality_tier) == ("supports", 3)
+
+
+@pytest.mark.parametrize("stance", ["mixed", "neutral", "unclear", None])
+async def test_a_stance_that_takes_no_side_corroborates_and_marks_nothing(world, stance) -> None:
+    """Only `opposes` argues against a claim; anything else is one more citation for it.
+    Marking these would fill the contested list with non-disagreements."""
+    sess, _run, _l, _r, _attr, chunks, _m = world
+    held = await _assert(world, "reduces", chunks[0], stance="supports")
+    again = await _assert(world, "reduces", chunks[1], stance=stance)
+
+    assert again.row_id == held.row_id and not again.created
+    assert "contested" not in again.detail
+    assert not (await sess.get(Edge, held.row_id)).contested_with
+
+
+async def test_a_second_opposing_passage_corroborates_the_opposed_edge(world) -> None:
+    """Each side is one claim with its own citations; a repeated mark is not added twice."""
+    sess, _run, _l, _r, _attr, chunks, _m = world
+    held = await _assert(world, "reduces", chunks[0], stance="supports")
+    against = await _assert(world, "reduces", chunks[1], stance="opposes")
+    again = await _assert(world, "reduces", chunks[0], stance="opposes")
+
+    assert again.row_id == against.row_id and not again.created
+    assert "contested" not in again.detail, "nothing newly marked"
+    edge = await sess.get(Edge, against.row_id)
+    assert edge.supporting_chunk_ids == sorted(chunks)
+    assert edge.contested_with == [held.row_id]
+    count = await sess.scalar(
+        select(func.count()).select_from(Edge).where(Edge.from_node == edge.from_node)
+    )
+    assert count == 2
+
+
+async def test_opposite_relations_argued_for_are_marked(world) -> None:
+    """`increases` and `reduces` between one subject and one object cannot both hold."""
+    sess, _run, _l, _r, _attr, chunks, _m = world
+    up = await _assert(world, "increases", chunks[0], stance="supports")
+    down = await _assert(world, "reduces", chunks[1])
+
+    assert f"contested with edge(s) {up.row_id}" in down.detail
+    assert (await sess.get(Edge, up.row_id)).contested_with == [down.row_id]
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        {"relation": "reduces", "stance": "opposes"},  # "does not reduce" agrees
+        {"relation": "funds", "stance": "supports"},  # not an opposite
+        {"relation": "reduces", "stance": "supports", "reversed": True},  # other direction
+    ],
+)
+async def test_relations_that_do_not_contradict_are_left_unmarked(world, second) -> None:
+    sess, _run, left, right, _attr, chunks, _m = world
+    first = await _assert(world, "increases", chunks[0], stance="supports")
+    ends = (
+        {"from_node": right.entity_id, "to_node": left.entity_id} if second.get("reversed") else {}
+    )
+    other = await _assert(world, second["relation"], chunks[1], stance=second["stance"], **ends)
+
+    assert "contested" not in other.detail
+    assert not (await sess.get(Edge, first.row_id)).contested_with
+    assert not (await sess.get(Edge, other.row_id)).contested_with
+
+
+async def test_the_database_refuses_a_second_row_for_one_side_of_a_claim(world) -> None:
+    """The claim's key gained its side, not lost its uniqueness: two opposed rows for
+    one claim are still refused at the database."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    sess, _run, left, right, _attr, chunks, _m = world
+    await _assert(world, "reduces", chunks[0], stance="opposes")
+    with pytest.raises(IntegrityError, match="uq_edges_claim"):
+        async with sess.begin_nested():
+            sess.add(
+                Edge(
+                    from_node=left.entity_id,
+                    to_node=right.entity_id,
+                    relation_type="reduces",
+                    stance="opposes",
+                    supporting_chunk_ids=[chunks[1]],
+                    produced_at=NOW,
+                    **BY,
+                )
+            )
+            await sess.flush()
+            await sess.execute(text("SET CONSTRAINTS uq_edges_claim IMMEDIATE"))
+
+
+async def test_the_generated_side_agrees_with_the_rule_for_every_stance(world) -> None:
+    """Drift: the database's `opposed` and `contested.opposed` are two statements of
+    one rule. Every stance the schema allows is written and read back."""
+    from meridian_core import contested
+    from meridian_core.models.graph import STANCE
+
+    sess, run, _l, _r, _attr, chunks, _m = world
+    for i, stance in enumerate([*STANCE.enums, None]):
+        result = await _assert(world, f"zz_side_{i}", chunks[0], stance=stance)
+        edge = await sess.get(Edge, result.row_id)
+        await sess.refresh(edge)
+        assert edge.opposed is contested.opposed(stance), stance
 
 
 # --------------------------------------------------------------------------

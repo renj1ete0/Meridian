@@ -13,6 +13,15 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-11-02 — `P7-05`: a claim is held once per side.** `edges.opposed` is a generated column
+> (stance `opposes`) in `uq_edges_claim`, so a lookup of "the" edge for a subject, relation and
+> object must say which side, or it can find two rows. Never write `opposed`: `revive` skips
+> generated columns, and a new fold or snapshot path must too. A merge's contradiction marks are
+> logged in `merge_log.combined` as `"kind": "contested"` records beside the folds; code reading
+> `combined` must not assume every record is a fold. Run `python -m worker.contested --apply`
+> once on a deployed corpus. See
+> [knowledge-graph.md](features/knowledge-graph.md#contradictions).
+
 > **2026-11-01 — `B-240`: counts.** A new count of sources or passages takes its predicate from
 > `meridian_core.stats` (`kept_sources()`, `searchable_passages()`), never a fresh `WHERE`: five
 > pages had each written their own and disagreed by up to a fifth. A narrower subset gets its own

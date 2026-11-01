@@ -3004,7 +3004,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `P7-02` Monthly attribute audit with hysteresis before retirement
 - [ ] `P7-03` Schema evolution backfill, amortised across runs
 - [ ] `P7-04` Analogical expansion with disanalogies recorded on every comparison edge
-- [ ] `P7-05` Contradiction tracking and contested-pair marking
+- [x] `P7-05` Contradiction tracking and contested-pair marking
 - [ ] `P7-06` Temporal decay flags in gap analysis
 - [ ] `P7-07` Enrichment queue: figure VLM, quality-tier OCR, chart OCR — user-triggered
 - [ ] `P7-08` Reprocessing, downgrade guard, old-vs-new disagreement logging

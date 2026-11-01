@@ -91,6 +91,24 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.203.0] — 2026-11-02
+
+### Added
+
+- `P7-05`: contradictions are recorded instead of folded away. A passage asserting against a
+  held claim used to be folded into it as one more citation, its stance dropped or, from a
+  higher tier, overwriting the claim's. A claim is now held once per side (`edges.opposed`, in
+  the claim's unique key), each side with its own citations and tier, and the two are marked
+  `contested_with` each other. Listed opposite relations (increases/reduces, improves/worsens
+  and a few more) between the same subject and object are marked too. Merges mark opposite
+  sides rather than fold them, and reversing a merge takes back exactly its marks. The
+  contested page, node panel, canvas filter and `list_contested` now have something to show.
+  `python -m worker.contested` reports pairs written before this release; `--apply` marks them.
+  See docs/features/knowledge-graph.md#contradictions.
+
+**Deploy:** image only; carries a migration, which runs on start. Then run
+`docker compose exec worker python -m worker.contested --apply` once.
+
 ## [0.202.1] — 2026-11-02
 
 ### Fixed

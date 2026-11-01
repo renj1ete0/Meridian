@@ -123,6 +123,8 @@ class EdgeRead(BaseModel):
     stance: Stance | None
     certainty: Certainty | None
     contested_with: list[int] | None
+    #: Whether the passages argue against the claim; generated from `stance` (`P7-05`).
+    opposed: bool
     similarity_dimension: str | None
     disanalogy: str | None
     valid_from: dt.date | None

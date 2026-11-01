@@ -9,12 +9,13 @@ time: a node page, its evidence, routes between nodes, the neighbourhood of a fr
 and the list of contested pairs.
 
 - **Code:** `packages/meridian_core/meridian_core/models/graph.py`, `writes.py`,
-  `validation.py`, `resolution.py`, `mentions.py`, `graphview.py`, `route.py`,
+  `validation.py`, `contested.py`, `resolution.py`, `mentions.py`, `graphview.py`, `route.py`,
   `neighbourhood.py`, `annotations.py`, `duplicates.py`, `export.py`;
+  `services/worker/worker/contested.py`;
   `services/api/api/routes/graph.py`, `connect.py`, `neighbourhood.py`, `admin.py` (notes and
   possible duplicates)
 - **Tasks:** `P4-01`–`P4-05`, `P4-16`, `P6-01`–`P6-05`, `P6-10`, `P6-15`, `P6-32`, `P6-33`,
-  `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
+  `P7-05`, `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md),
   [ADR 0003](../adr/0003-external-assistants-over-mcp.md),
   [ADR 0020](../adr/0020-a-note-is-withdrawn-not-deleted.md)
@@ -31,7 +32,8 @@ the tables.
 - every edge has non-empty `supporting_chunk_ids`, because a claim without provenance cannot
   be asserted (§2 principle 3);
 - contradictions are kept, not resolved. Both edges stay and are marked `contested_with`
-  (§9).
+  (§9). A passage arguing against a held claim becomes its own edge rather than a citation
+  of the claim, so each side keeps its own evidence ([Contradictions](#contradictions)).
 
 Each edge also records its producing agent, model, `quality_tier` and schema version, and
 optionally a stance and a certainty (observable properties of the text, not verdicts).
@@ -41,7 +43,8 @@ through four tools: `add_edge`, `tag_entity`, `enqueue_seed`, and `advance_mark`
 high-water mark). Validation lives below them,
 so the orchestrator, an MCP client and a CLI all meet the same rules. Every guard refuses by
 raising, never by returning a boolean. The same claim found again is corroboration (a citation
-added to the edge, not a second edge). A lower quality tier never overwrites a higher one.
+added to the edge, not a second edge), unless it argues the other side. A lower quality tier
+never overwrites a higher one.
 
 **Resolution** (`resolution.py`, `mentions.py`). A name a model read becomes a node at write
 time, in four steps: normalise, block (never across node types or stated jurisdictions),
@@ -83,6 +86,8 @@ omitted, never guessed.
   merge, so undoing the merge splits them again.
 - **A unique constraint on edges would break merges** (`B-60`), so merge re-points edge by
   edge and the uniqueness check is deferred.
+- **A claim is held once per side** (`P7-05`): for, and against. Folding an opposing passage
+  into the claim it opposes would resolve the disagreement by discarding one side's stance.
 
 ### Storage
 
@@ -194,8 +199,9 @@ prompting will eventually be talked around."
 - **The same claim twice is corroboration.** Same subject, relation and object is one relation
   with more citations; inserting both would make contested pairs, coverage and the digest's
   "edges added" count extraction passes rather than knowledge. Confidence, stance and certainty
-  are replaced only by a *strictly* better tier: an equal tier disagreeing with itself is a
-  contradiction to record (`P7-05`), not a value to overwrite. `WriteResult.created` separates a
+  are replaced only by a *strictly* better tier, and only within one side of the claim: a
+  passage arguing against it is a contradiction to record (`P7-05`, [below](#contradictions)),
+  not a value to overwrite, whatever its tier. `WriteResult.created` separates a
   new row from a corroborated one, and only new rows count towards `edges_added`, so a model is
   told when it is re-asserting what the corpus holds.
 - **`tag_entity` needs an active attribute.** Creating a definition on first use would route
@@ -307,9 +313,61 @@ already redirects, and into one that redirects (no chains to follow).
   it; a group no merge explains is reported and left, since a fold that cannot be undone is the
   one thing this module never does. Idempotent.
 
+- **A merge marks the contradictions it creates** (`P7-05`). Two spellings of one subject,
+  one argued for and one against, become one claim held on both sides; the merge never folds
+  them, marks the pair instead, and logs each mark in `merge_log.combined` (`"kind":
+  "contested"`) so the reversal takes back exactly those marks and keeps any made since.
+
 <a id="logging-extra-keys"></a>**Trap:** a log call's `extra` key may not shadow a `LogRecord`
 attribute (`name`, for one). `logging` raises rather than dropping it, and only once logging is
 configured, so it passes in isolation and fails in the suite. Hence `entity_name`.
+
+### Contradictions
+
+§9: "Contradictions are signal, not error. When sources conflict, store both edges and mark
+the pair contested." Until `P7-05` nothing marked a pair: the contested list (`P6-10`) and
+every surface reading `contested_with` were built, but the write path folded an opposing
+passage into the claim it opposed as one more citation, and its stance was dropped (equal
+tier) or replaced the held one (higher tier). Either way the disagreement left no trace. On
+the local corpus at the time, over a third of edges had been corroborated by more than one passage
+and none was marked contested; how many of those folds hid a disagreement cannot be recovered
+without re-reading the passages, which `P7-08` will.
+
+`contested.py` holds the rule; `add_edge`, `merge` and the sweep apply it. Two edges
+contradict when they join the **same subject to the same object** and either:
+
+- **assert the same relation from opposite sides.** `edges.opposed` is a generated column,
+  true when the stance is `opposes`, and it is part of the claim's key (`uq_edges_claim`), so a
+  claim can be held once for and once against, each with its own citations, confidence and
+  tier. `mixed`, `neutral`, `unclear` and no stance take no side: they corroborate the claim as
+  stated. Generated rather than written by the code, so the key cannot disagree with the stance;
+  a test writes every stance the schema allows and compares the column with
+  `contested.opposed`.
+- **assert opposite relations, both argued for.** `OPPOSITE_RELATIONS` lists directional
+  pairs extraction produces (`increases`/`reduces`, `improves`/`worsens`, `enables`/`obstructs`
+  and a few more). Relations are open (§5.4), so an unlisted antonym is simply not detected.
+  Denials are left alone: "does not increase" agrees with "reduces", and two denials can both
+  be true.
+
+The other direction (`Y reduces X`) and another object are not contradictions. Both edges stay
+and each names the other in `contested_with`; marking is additive and idempotent, and nothing
+ever removes a mark.
+
+- **At write time.** `add_edge` marks every edge the new or corroborated one contradicts, and
+  its `detail` ends "contested with edge(s) …" so the model, and the run's journal, see it. An
+  opposing edge is a new edge and counts toward `edges_added`: a disagreement is knowledge.
+- **A cheaper model may oppose a better one.** The tier rule stops a lower tier overwriting a
+  judgement; an opposing assertion overwrites nothing, so a tier-2 model's "against" sits beside
+  a tier-4 "for" as a contested pair. The contested list shows each side's stance and certainty,
+  not its tier.
+- **The sweep**, `python -m worker.contested` (report; `--apply` marks), finds pairs written
+  before the rule existed. It reads only subject-object pairs holding more than one edge, and
+  it reports, never removes, a mark the rule does not explain. On the local corpus at the time
+  it found no pair: only one subject-object pair held two edges, and they did not contradict.
+- **Downgrading the migration** refuses while any claim is held on both sides; the old key
+  cannot hold them, and folding one side would be resolving them.
+- **Observations** carry `contested_with` too (§9's contested figures), but nothing writes an
+  observation yet, so nothing marks one.
 
 ### Deciding a possible duplicate
 
@@ -444,7 +502,8 @@ being configured (ADR 0002).
 `test_resolution.py`, `test_mentions.py`, `test_merge_folds.py`, `test_graph_workspace.py`,
 `test_graph_store.py`, `test_route.py`, `test_neighbourhood.py`, `test_annotations.py`,
 `test_duplicates.py`;
-`tests/unit/test_edge_schema.py`, `test_export.py`, `test_neighbourhood.py`.
+`tests/unit/test_edge_schema.py`, `test_export.py`, `test_neighbourhood.py`,
+`test_contested.py`.
 
 ## In the web app
 

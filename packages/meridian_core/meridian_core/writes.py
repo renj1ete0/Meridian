@@ -18,6 +18,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import contested
 from .logging import get_logger
 from .models import AttributeDefinition, AttributeValue, Edge, Run
 from .models.graph import COMPARISON_RELATION
@@ -88,7 +89,9 @@ async def add_edge(
     """Assert one relation, with the chunks that justify it (§11.6, §11.8).
 
     Validated first by `check_edge`. An existing claim gains the new chunks as citations;
-    confidence, stance and certainty are replaced only by a strictly better tier.
+    confidence, stance and certainty are replaced only by a strictly better tier. An
+    assertion arguing against a held claim (or for one held as opposed) is its own edge,
+    and every edge it contradicts is marked contested with it (§9, `P7-05`).
     """
     await check_edge(
         sess,
@@ -115,6 +118,7 @@ async def add_edge(
             Edge.from_node == from_node,
             Edge.to_node == to_node,
             Edge.relation_type == relation_type,
+            Edge.opposed.is_(contested.opposed(stance)),
         )
         .with_for_update()
     )
@@ -135,7 +139,10 @@ async def add_edge(
             existing.produced_at = now
         await sess.flush()
         return WriteResult(
-            existing.edge_id, False, f"corroborated with {added} further citation(s)"
+            existing.edge_id,
+            False,
+            f"corroborated with {added} further citation(s)"
+            + _contested_note(await contested.mark(sess, existing), existing.edge_id),
         )
 
     edge = Edge(
@@ -197,7 +204,19 @@ async def add_edge(
             _retry=True,
         )
     await record(sess, run, edges=1)
-    return WriteResult(edge.edge_id, True, "edge created")
+    return WriteResult(
+        edge.edge_id,
+        True,
+        "edge created" + _contested_note(await contested.mark(sess, edge), edge.edge_id),
+    )
+
+
+def _contested_note(changes: list[dict], edge_id: int) -> str:
+    """The suffix telling the caller which edges a write was marked against."""
+    others = sorted(c["edge_id"] for c in changes if c["edge_id"] != edge_id)
+    if not others:
+        return ""
+    return "; contested with edge(s) " + ", ".join(str(i) for i in others)
 
 
 async def tag_entity(

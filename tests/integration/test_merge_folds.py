@@ -237,7 +237,7 @@ async def test_the_tier_never_goes_down(sess, trio, held_tier, moved_tier, winne
         sess, target.entity_id, other.entity_id, tier=held_tier, stance="supports", confidence=0.4
     )
     await an_edge(
-        sess, source.entity_id, other.entity_id, tier=moved_tier, stance="opposes", confidence=0.9
+        sess, source.entity_id, other.entity_id, tier=moved_tier, stance="mixed", confidence=0.9
     )
 
     await merge(sess, source.entity_id, target.entity_id, decided_by="auto")
@@ -245,7 +245,7 @@ async def test_the_tier_never_goes_down(sess, trio, held_tier, moved_tier, winne
 
     expected = held_tier if winner == "held" else moved_tier
     assert held.quality_tier == expected
-    assert held.stance == ("supports" if winner == "held" else "opposes")
+    assert held.stance == ("supports" if winner == "held" else "mixed")
     assert held.model == (f"model-t{expected}")
     assert held.supporting_chunk_ids == [1]
 
@@ -514,6 +514,11 @@ async def test_a_snapshot_covers_every_column_and_revives_exactly(sess, trio, mo
     assert set(snap) == {c.key for c in model.__table__.columns}
     revived = revive(model, snap)
     for column in model.__table__.columns:
+        if column.computed is not None:
+            # The database computes it and refuses a value; revived, it would
+            # make the restoring insert fail.
+            assert column.key not in revived, column.key
+            continue
         assert revived[column.key] == getattr(row, column.key), column.key
 
 
@@ -629,3 +634,109 @@ async def test_a_colliding_merge_and_its_reversal_satisfy_the_claim_constraint(s
 
     await reverse(sess, entry.merge_id, reversed_by="auto")
     await sess.execute(text("SET CONSTRAINTS uq_edges_claim IMMEDIATE"))
+
+
+# --- contradictions a merge brings together (`P7-05`, §9) --------------------
+
+
+async def test_a_merge_marks_a_claim_now_held_for_and_against_and_never_folds_it(
+    sess, trio
+) -> None:
+    """Two spellings of one subject, one argued for and one against: after the merge
+    the same claim is held on both sides. Folding them would resolve the contradiction;
+    §9 keeps both and marks the pair. Reversal takes back exactly the marks it made."""
+    source, target, other = trio
+    held = await an_edge(sess, target.entity_id, other.entity_id, stance="supports")
+    moved = await an_edge(sess, source.entity_id, other.entity_id, chunks=(2,), stance="opposes")
+    before = await state(sess, source.entity_id, target.entity_id, other.entity_id)
+
+    entry = await merge(sess, source.entity_id, target.entity_id, decided_by="auto")
+    kinds = sorted(r.get("kind", "fold") for r in entry.combined)
+    assert kinds == ["contested", "contested"], "logged, so reversal can unmark"
+    assert await sess.get(Edge, moved.edge_id) is not None, (
+        "an opposed assertion is not a duplicate"
+    )
+    await sess.refresh(held)
+    await sess.refresh(moved)
+    assert (held.contested_with, moved.contested_with) == ([moved.edge_id], [held.edge_id])
+    assert held.supporting_chunk_ids == [1], "the sides' evidence stays apart"
+
+    await reverse(sess, entry.merge_id, reversed_by="user")
+    assert await state(sess, source.entity_id, target.entity_id, other.entity_id) == before
+
+
+async def test_reversal_keeps_a_mark_gained_after_the_merge(sess, trio) -> None:
+    """`_restore_fields` takes back only what the merge added: a contradiction recorded
+    since is somebody else's finding."""
+    source, target, other = trio
+    held = await an_edge(sess, target.entity_id, other.entity_id, stance="supports")
+    moved = await an_edge(sess, source.entity_id, other.entity_id, chunks=(2,), stance="opposes")
+    entry = await merge(sess, source.entity_id, target.entity_id, decided_by="auto")
+    later = await an_edge(sess, other.entity_id, target.entity_id, relation_type="later")
+    row = await sess.get(Edge, held.edge_id)
+    row.contested_with = sorted({*(row.contested_with or ()), later.edge_id})
+    await sess.flush()
+
+    await reverse(sess, entry.merge_id, reversed_by="user")
+    await sess.refresh(held)
+    await sess.refresh(moved)
+    assert held.contested_with == [later.edge_id]
+    assert not moved.contested_with
+
+
+# --- the sweep: contradictions written before `P7-05` ------------------------
+
+
+async def test_the_sweep_reports_then_marks_an_unmarked_contradiction(sess, trio) -> None:
+    from worker.contested import run_pass as contested_pass
+
+    _source, target, other = trio
+    t, o = target.entity_id, other.entity_id
+    up = await an_edge(sess, t, o, relation_type="increases", stance="supports")
+    down = await an_edge(sess, t, o, relation_type="reduces", chunks=(2,))
+    against = await an_edge(sess, t, o, relation_type="increases", chunks=(3,), stance="opposes")
+    await an_edge(sess, t, o, relation_type="funds")  # crowds the pair, contradicts nothing
+
+    @asynccontextmanager
+    async def factory():
+        sess.commit = sess.flush
+        yield sess
+
+    report = await contested_pass(apply=False, session_factory=factory)
+    expected = sorted([(up.edge_id, down.edge_id), (up.edge_id, against.edge_id)])
+    assert report.pairs == expected
+    assert report.unmarked == expected
+    await sess.refresh(up)
+    assert not up.contested_with, "a report writes nothing"
+
+    await contested_pass(apply=True, session_factory=factory)
+    for row in (up, down, against):
+        await sess.refresh(row)
+    assert up.contested_with == sorted([down.edge_id, against.edge_id])
+    assert down.contested_with == [up.edge_id]
+    # "Does not increase" and "reduces" agree; they are not a pair.
+    assert against.contested_with == [up.edge_id]
+
+    again = await contested_pass(apply=True, session_factory=factory)
+    assert (again.pairs, again.unmarked) == (expected, []), "idempotent"
+
+
+async def test_the_sweep_reports_a_mark_it_cannot_explain_and_leaves_it(sess, trio) -> None:
+    """Removing a mark would be resolving a disagreement (§9); the sweep only adds."""
+    from meridian_core.contested import reconcile
+
+    _source, target, other = trio
+    first = await an_edge(sess, target.entity_id, other.entity_id, relation_type="funds")
+    second = await an_edge(
+        sess,
+        other.entity_id,
+        target.entity_id,
+        relation_type="audits",
+        contested_with=[first.edge_id],
+    )
+
+    report = await reconcile(sess, apply=True)
+    assert report.pairs == []
+    assert report.unexplained == [(first.edge_id, second.edge_id)]
+    await sess.refresh(second)
+    assert second.contested_with == [first.edge_id]

@@ -90,6 +90,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.novelty` | always | Near-duplicate passages |
 | `worker.docdupes` | `--apply` | Copies of earlier sources |
 | `worker.edgedupes` | `--apply` | Folds repeated edges left by old merges |
+| `worker.contested` | `--apply` | Marks contradicting edges written before `P7-05` |
 | `worker.areas` | always (`--report` dry) | Map areas; `--name-only` renames the newest build |
 | `worker.boilerplate` | always (`--report` dry) | Repeated lines per site |
 | `worker.rechunk` | `--apply` | Re-cuts stored sources with furniture removed |

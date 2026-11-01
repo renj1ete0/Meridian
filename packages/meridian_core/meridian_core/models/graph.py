@@ -12,7 +12,9 @@ import datetime as dt
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
+    Computed,
     Date,
     DateTime,
     Float,
@@ -55,6 +57,8 @@ NODE_TYPE = constrained(
 # Observable properties, not verdicts (§8). The model is never asked whether a
 # source is biased or true — it reports the position argued and how hedged it is.
 STANCE = constrained("supports", "opposes", "mixed", "neutral", "unclear", name="stance")
+#: The stance that argues against a claim; the others corroborate it as stated (`P7-05`).
+OPPOSED_STANCE = "opposes"
 CERTAINTY = constrained("hedged", "qualified", "asserted", "measured", name="certainty")
 
 # The relation used for analogical expansion (§7.2). Named as a constant because
@@ -157,6 +161,15 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
     # a graph that silently resolves conflicts hides the interesting part (§9).
     contested_with: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
 
+    # Whether the passages argue against the claim. Part of the claim's key, so an
+    # opposed assertion is its own row rather than an overwrite (`P7-05`). See
+    # docs/features/knowledge-graph.md#contradictions.
+    opposed: Mapped[bool] = mapped_column(
+        Boolean,
+        Computed(f"coalesce(stance = '{OPPOSED_STANCE}', false)", persisted=True),
+        nullable=False,
+    )
+
     # A comparison is meaningful only with its axis and where it breaks down (§7.2).
     similarity_dimension: Mapped[str | None] = mapped_column(Text)
     disanalogy: Mapped[str | None] = mapped_column(Text)
@@ -172,12 +185,13 @@ class Edge(Base, TimestampMixin, ProvenanceMixin):
         # Traversal in both directions, for recursive-CTE neighbourhood queries.
         Index("ix_edges_from", "from_node", "relation_type"),
         Index("ix_edges_to", "to_node", "relation_type"),
-        # One row per claim (`B-60`), deferred to commit because a merge moves edges
-        # before it folds the duplicates that makes (`_fold_edges`).
+        # One row per claim and side (`B-60`, `P7-05`), deferred to commit because a
+        # merge moves edges before it folds the duplicates that makes (`_fold_edges`).
         UniqueConstraint(
             "from_node",
             "relation_type",
             "to_node",
+            "opposed",
             name="uq_edges_claim",
             deferrable=True,
             initially="DEFERRED",

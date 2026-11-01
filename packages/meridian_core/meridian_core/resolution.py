@@ -19,6 +19,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import contested
 from .logging import get_logger
 from .models import (
     AttributeDefinition,
@@ -436,6 +437,7 @@ async def merge(
         )
 
     combined += await _fold_edges(sess, moved["edges"], folded_by=decided_by)
+    combined += await _mark_contradictions(sess, moved["edges"], marked_by=decided_by)
 
     target_fields = ("aliases", "merged_from", "supporting_chunk_ids")
     target_before = snapshot(target, target_fields)
@@ -475,7 +477,8 @@ async def merge(
             "target_entity_id": target_id,
             "decided_by": decided_by,
             "edges": len(moved["edges"]),
-            "folded": len(combined),
+            "folded": sum(1 for r in combined if r.get("kind") != "contested"),
+            "contested": sum(1 for r in combined if r.get("kind") == "contested"),
         },
     )
     return entry
@@ -616,10 +619,15 @@ def snapshot(row, fields: Sequence[str] | None = None) -> dict[str, Any]:
 
 
 def revive(model, snap: dict[str, Any]) -> dict[str, Any]:
-    """The inverse of `snapshot`: column values ready for the model."""
+    """The inverse of `snapshot`: column values ready for the model.
+
+    A generated column is left out: the database computes it, and refuses a value.
+    """
     out: dict[str, Any] = {}
     for name, value in snap.items():
-        column = model.__table__.columns[name]
+        column = model.__table__.columns.get(name)
+        if column is None or column.computed is not None:
+            continue
         try:
             kind = column.type.python_type
         except NotImplementedError:  # pragma: no cover - types without one
@@ -738,10 +746,12 @@ async def _fold_edges(
         return []
     moved = set(moved_ids)
     rows = (await sess.execute(select(Edge).where(Edge.edge_id.in_(moved)))).scalars().all()
-    triples = sorted({(row.from_node, row.relation_type, row.to_node) for row in rows})
+    # The claim's key includes its side: an opposed assertion is a contradiction to mark,
+    # never a duplicate to fold (`P7-05`).
+    claims = sorted({(row.from_node, row.relation_type, row.to_node, row.opposed) for row in rows})
 
     records: list[dict[str, Any]] = []
-    for from_node, relation_type, to_node in triples:
+    for from_node, relation_type, to_node, side in claims:
         group = (
             (
                 await sess.execute(
@@ -750,6 +760,7 @@ async def _fold_edges(
                         Edge.from_node == from_node,
                         Edge.relation_type == relation_type,
                         Edge.to_node == to_node,
+                        Edge.opposed.is_(side),
                     )
                     .order_by(Edge.edge_id)
                     .with_for_update()
@@ -829,9 +840,45 @@ async def _fold_attribute_values(
     return records
 
 
+async def _mark_contradictions(
+    sess: AsyncSession, moved_ids: Sequence[int], *, marked_by: str
+) -> list[dict[str, Any]]:
+    """Mark what a merge brought into contradiction, logged so `reverse` unmarks it.
+
+    Moved edges that were folded away are skipped; their survivors are already held. One
+    record per marked edge, in `merge_log.combined` beside the folds (`P7-05`).
+    """
+    records: list[dict[str, Any]] = []
+    for edge_id in sorted(set(moved_ids)):
+        edge = await sess.get(Edge, edge_id)
+        if edge is None:
+            continue
+        for change in await contested.mark(sess, edge):
+            records.append(
+                {
+                    "table": "edges",
+                    "kind": "contested",
+                    "survivor_id": change["edge_id"],
+                    "survivor_before": {"contested_with": change["before"]},
+                    "survivor_after": {"contested_with": change["after"]},
+                    "folded_by": marked_by,
+                    "at": dt.datetime.now(dt.UTC).isoformat(),
+                }
+            )
+    return records
+
+
 async def _unfold(sess: AsyncSession, record: dict[str, Any]) -> None:
-    """Split one fold: the survivor as it was, the folded row back whole."""
+    """Split one fold: the survivor as it was, the folded row back whole.
+
+    A contradiction the merge marked is unmarked, keeping any mark gained since.
+    """
     model, _ = _REFERENCES[record["table"]]
+    if record.get("kind") == "contested":
+        row = await sess.get(model, record["survivor_id"], with_for_update=True)
+        _restore_fields(row, record["survivor_before"], record["survivor_after"])
+        await sess.flush()
+        return
     survivor = await sess.get(model, record["survivor_id"], with_for_update=True)
     _restore_fields(survivor, record["survivor_before"], record["survivor_after"])
 
@@ -886,7 +933,7 @@ async def fold_repeated_edges(
                 Edge.to_node,
                 func.array_agg(aggregate_order_by(Edge.edge_id, Edge.edge_id)),
             )
-            .group_by(Edge.from_node, Edge.relation_type, Edge.to_node)
+            .group_by(Edge.from_node, Edge.relation_type, Edge.to_node, Edge.opposed)
             .having(func.count() > 1)
             .order_by(func.min(Edge.edge_id))
         )
