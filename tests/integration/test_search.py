@@ -597,3 +597,119 @@ async def test_a_words_only_search_reports_no_floor(session_for, scope, term, cl
     result = await search(sess, term, filters=only(scope))
 
     assert result.floor is None and result.nearest is None and result.below_floor == 0
+
+
+# --------------------------------------------------------------------------
+# Reference lists and copies (`B-236`)
+# --------------------------------------------------------------------------
+
+
+def bibliography(term: str) -> str:
+    """A reference list whose every entry carries the query's word, so it ranks first."""
+    return (
+        f"Quillon, T. (2019). {term} services in small towns. Journal of Transit Fables, "
+        "12, 33–49.\n"
+        f"Varnet, A., & Osk, B. (2020). Booking windows for {term}. Review of Imagined "
+        "Mobility, 4, 101–120.\n"
+        f"Telmar, R. (2021). The cost of {term} pilots. Letters on Invented Roads, 7, 9–18."
+    )
+
+
+def report(term: str) -> str:
+    return (
+        f"The {term} pilot ran for eighteen months across three districts of Velmora and "
+        "carried forty-one thousand passengers. Average wait times fell from twenty-two "
+        "minutes to eleven once the booking window was shortened, and the operating cost per "
+        "trip settled near nine units after the second fleet expansion."
+    )
+
+
+async def test_a_bibliography_matching_the_words_does_not_take_a_slot(
+    session_for, scope, term, cleanup
+) -> None:
+    """Four of eight results for one question were reference lists. A passage that states
+    something comes first; the list is set back, counted, and still findable on request."""
+    sess = await session_for("rw")
+    await a_source(sess, scope, [bibliography(term), report(term)], [at(0.3, 3), at(0.3, 4)])
+
+    widened = await search(sess, term, filters=only(scope, include_reference_lists=True), limit=1)
+    assert widened.hits[0].text == bibliography(term), "the premise: the list outranks"
+    assert widened.set_back == 0
+
+    result = await search(sess, term, filters=only(scope), limit=1)
+    assert [h.text for h in result.hits] == [report(term)]
+    assert result.set_back == 1
+
+
+async def test_both_arms_set_a_bibliography_back(session_for, scope, cleanup) -> None:
+    """The step runs on the fused list, so a list found by meaning alone is treated as one
+    found by its words: the arms must not disagree about what a search returns."""
+    sess = await session_for("rw")
+    words = "nothingmatcheshere"
+    await a_source(sess, scope, [bibliography(words), report(words)], [at(0.99, 3), at(0.9, 4)])
+
+    widened = await search(
+        sess, "", query_vector=QUERY, filters=only(scope, include_reference_lists=True)
+    )
+    result = await search(sess, "", query_vector=QUERY, filters=only(scope))
+
+    assert [h.text for h in widened.hits] == [bibliography(words), report(words)]
+    assert [h.text for h in result.hits] == [report(words), bibliography(words)], (
+        "set back, not dropped: on a page with room for it, it comes last"
+    )
+    assert result.set_back == 0, "nothing was moved off the page"
+    assert result.hits[1].score > result.hits[0].score, "listed last despite its score"
+
+
+async def test_a_passage_that_cites_as_it_argues_is_not_set_back(
+    session_for, scope, term, cleanup
+) -> None:
+    sess = await session_for("rw")
+    citing = (
+        f"Eleven of the twelve {term} schemes reported shorter waits (Quillon 2019; Varnet "
+        f"and Osk 2020). Two {term} schemes found none, and the third measured only one "
+        f"district, which its authors describe as a limit of the design (Telmar 2021)."
+    )
+    await a_source(sess, scope, [citing, report(term)], [at(0.3, 3), at(0.3, 4)])
+
+    result = await search(sess, term, filters=only(scope), limit=1)
+
+    assert [h.text for h in result.hits] == [citing]
+    assert result.set_back == 0
+
+
+async def test_a_mirrored_copy_collapses_into_one_result(session_for, scope, term, cleanup) -> None:
+    """The same report on two hosts, cut and headed differently, is one piece of evidence.
+    The better-ranked copy is kept and says how many it absorbed; the other is reachable."""
+    sess = await session_for("rw")
+    first = await a_source(sess, scope, [report(term)], [at(0.95, 3)])
+    mirrored = "Republished from the Velmora transit office\n" + report(term).upper()
+    second = await a_source(sess, scope, [mirrored], [at(0.94, 4)])
+
+    for result in (
+        await search(sess, term, filters=only(scope)),
+        await search(sess, "", query_vector=QUERY, filters=only(scope)),
+        await search(sess, term, query_vector=QUERY, filters=only(scope)),
+    ):
+        assert [h.source_id for h in result.hits] == [first.source_id]
+        assert result.hits[0].copies == 1
+        assert result.folded == 1
+
+    widened = await search(sess, term, filters=only(scope, include_duplicates=True))
+    assert {h.source_id for h in widened.hits} == {first.source_id, second.source_id}
+    assert widened.folded == 0 and all(h.copies == 0 for h in widened.hits)
+
+
+async def test_two_reports_on_one_subject_are_not_folded(session_for, scope, term, cleanup) -> None:
+    sess = await session_for("rw")
+    other = (
+        f"In Quorran the {term} service was withdrawn after nine months. The council found "
+        "that wait times rose to thirty minutes at peak and that the cost per trip exceeded "
+        "the fixed route it replaced by a factor of four."
+    )
+    await a_source(sess, scope, [report(term)], [at(0.95, 3)])
+    await a_source(sess, scope, [other], [at(0.94, 4)])
+
+    result = await search(sess, term, filters=only(scope))
+
+    assert len(result.hits) == 2 and result.folded == 0

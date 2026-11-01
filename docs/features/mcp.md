@@ -19,7 +19,7 @@ Meridian holds the corpus and its provenance; it generates nothing here.
 
 | Tool | Returns |
 |---|---|
-| `search_chunks` | Hybrid search, each hit with its citation and the caveats an assistant must keep; re-ordered by the cross-encoder when the embedding service has one (`reranked`); `below_floor` counts passages left out as not close in meaning ([similarity floor](search.md#similarity-floor)) |
+| `search_chunks` | Hybrid search, each hit with its citation and the caveats an assistant must keep; re-ordered by the cross-encoder when the embedding service has one (`reranked`); `below_floor` counts passages left out as not close in meaning ([similarity floor](search.md#similarity-floor)); reference lists come after the rest unless `include_reference_lists`, and a passage another page repeats is one result whose `copies` says how many were folded (`set_back`, `folded`; [copies and reference lists](search.md#copies-and-reference-lists)) |
 | `get_source_metadata` | One source: title, publisher, tier, date, URL |
 | `list_new_since` | Passages added after a mark, for an assistant keeping up with the corpus |
 | `corpus_overview` | Counts and topics |

@@ -41,6 +41,16 @@ QUERY = at(1.0, 1)
 FILLER = " is the subject of this passage, written out at some length about the matter."
 
 
+def own_words(text: str) -> str:
+    """`text` padded with FILLER, each word tagged so no two fixtures share a phrase.
+
+    Search folds a passage whose phrases another source already holds (`B-236`); these
+    fixtures are different documents, so their padding must not read as one copied text.
+    """
+    tag = uuid.uuid4().hex[:6]
+    return text + " " + " ".join(f"{word}{tag}" for word in FILLER.split())
+
+
 @pytest.fixture
 def run() -> str:
     """Scopes this run: the language every fixture carries, and the stem of its hosts."""
@@ -70,7 +80,7 @@ async def a_source(sess, scope: str, url: str, text: str, axis: int, **fields) -
     source, _ = await upsert_source(
         sess, url, checksum=f"sha256:{uuid.uuid4().hex}", language=scope, **fields
     )
-    await replace_chunks(sess, source.source_id, [ChunkWrite(text=text + FILLER, chunk_index=0)])
+    await replace_chunks(sess, source.source_id, [ChunkWrite(text=own_words(text), chunk_index=0)])
     chunk = await sess.scalar(select(Chunk).where(Chunk.source_id == source.source_id))
     await store_embeddings(sess, {chunk.chunk_id: at(0.95, axis)})
     await sess.flush()

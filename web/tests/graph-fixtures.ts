@@ -154,6 +154,7 @@ export function hit(over: Partial<SearchHit> = {}): SearchHit {
     age_days: null,
     decay: 1,
     score_before_decay: 0,
+    copies: 0,
     ...over,
   }
 }

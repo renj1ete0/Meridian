@@ -186,6 +186,20 @@ async def test_an_empty_search_still_carries_the_caveat(mcp) -> None:
     # `B-235`: how many near-meaning passages the floor left out, so an empty answer can be
     # told apart from one where something close exists and was filtered.
     assert body["below_floor"] == 0
+    # `B-236`: what was moved down or folded rides on every answer, empty or not.
+    assert body["set_back"] == 0 and body["folded"] == 0
+
+
+async def test_a_search_says_what_it_folded_and_each_result_how_many_copies(mcp) -> None:
+    """`folded` is the sum of the results' `copies`, so an agent can tell five sources from
+    one passage seen five times."""
+    body = await call(mcp, "search_chunks", query="transport", limit=10)
+    if not body["results"]:
+        pytest.skip("dev corpus has no match for the probe term")
+
+    assert all(isinstance(hit["copies"], int) for hit in body["results"])
+    assert body["folded"] == sum(hit["copies"] for hit in body["results"])
+    assert body["set_back"] >= 0
 
 
 def test_the_degraded_wording_tells_the_model_what_to_do(mcp) -> None:

@@ -6,13 +6,14 @@ reciprocal rank. Filters (topic, place, source tier, language, publication date)
 both arms. Every hit
 carries its source, its age, and the rank each arm gave it. A search that could run only one
 arm says so, and vector neighbours under a similarity floor are set aside and counted rather
-than offered as matches.
+than offered as matches. Reference lists come after every other match, and a passage whose
+words another page already gave is folded into it; both are counted.
 
-- **Code:** `packages/meridian_core/meridian_core/search.py`, `answer.py`, `watch.py`,
-  `stats.py`, `ageing.py`; `services/api/api/search_service.py`,
+- **Code:** `packages/meridian_core/meridian_core/search.py`, `copies.py`, `answer.py`,
+  `watch.py`, `stats.py`, `ageing.py`; `services/api/api/search_service.py`,
   `routes/explore.py`
 - **Tasks:** `P2-06`, `P2-07`, `P2-17`, `P2-20`, `B-65`, `P6-43`, `B-152`, `B-168`, `B-173`,
-  `B-174`, `B-175`, `B-178`, `B-190`, `B-194`, `B-206`, `B-235`
+  `B-174`, `B-175`, `B-178`, `B-190`, `B-194`, `B-206`, `B-235`, `B-236`
 
 ## How it works
 
@@ -23,7 +24,10 @@ query ──► lexical arm: websearch_to_tsquery over chunks.search_vector
             over the half-precision index (vectorindex.indexed_distance);
             neighbours under the similarity floor (0.55) set aside and counted
       ──► the same filter predicate inside both (search._conditions)
-      ──► reciprocal rank fusion (k = 60), then ageing decay per source tier
+      ──► reciprocal rank fusion (k = 60)
+      ──► reference lists set back after the rest, copies folded into the first copy
+            (copies.py), both counted; then the per-source cap, if asked for
+      ──► ageing decay per source tier
       ──► one page of hits, each with source, ranks per arm, age and decay factor
 ```
 
@@ -326,6 +330,72 @@ cap, and puts those back at the end only if the page would otherwise be short. H
 displaced is returned and shown, because a demoted result is otherwise one the reader cannot
 audit.
 
+<a id="copies-and-reference-lists"></a>
+### Copies and reference lists
+
+A result list should be distinct evidence (`B-236`). Two kinds of passage took slots without
+being any: a paper's bibliography, whose entry titles repeat the query's words more densely
+than any passage that argues, and the same document fetched twice, as an HTML page and a PDF
+or on a mirror, whose copies the [duplicate passes](duplicates.md#what-escapes) do not catch.
+Both are handled after fusion, on the fused list, so a passage is treated the same whichever
+arm found it; neither is a predicate inside the arms, and the arms still narrow identically.
+
+- **Reference lists are set back, not excluded.** A passage `references.is_reference_list`
+  accepts (the [synthesis rule](synthesis.md#reference-lists): three entry lines and 60% of
+  the characters) moves after every other candidate, keeping its order among the others like
+  it. On a page with room it still appears, last, whatever its score; the final sort keeps it
+  there. `include_reference_lists` (on `/search`, `/answer` and MCP `search_chunks`) ranks
+  them with the rest, for a reader who wants what a subject's literature cites.
+  `SearchResult.set_back` counts the lists that fused within the page and were moved off it.
+- **Copies are folded into the first.** `copies.fold_copies` walks the ranking and folds a
+  passage when at least half of its word 5-grams (`MIN_COVERAGE`) are already in the passages
+  kept from *one* other source, together. Together, because a PDF and an HTML page are cut at
+  different boundaries: a PDF passage straddles two of the page's, each holding about half of
+  it. One source, because words found half in one page and half in another make a passage that
+  combines two sources, not a copy. Passages of one source never fold into each other (that is
+  the per-source cap's concern), and passages under 12 shingles (a heading, a table row) never
+  fold. Words are runs of letters and digits, so Chinese, Japanese and Korean text, written
+  without spaces, makes few shingles and is not folded. The kept hit carries `copies`, how many were folded into it; the result's `folded` is
+  their sum on the page. `include_duplicates` turns folding off with the gate's marks, since
+  both answer "show me the copies".
+- **Query time, not ingest.** A mark at ingest would need a pass comparing every new passage's
+  words with every passage of every plausible twin, a migration for the mark, and a re-judge
+  whenever the rule moves; the gate exists and misses these because it compares vectors of
+  passages that do not line up. At query time the comparison is over a hundred-odd candidates
+  already in memory, through an inverted index on shingles: measured on the local corpus, the
+  median search took 34 ms against 22 ms before, p90 110 ms against 85.
+- **On for every caller**, the question set and the benchmark included, unlike ageing and the
+  cap: neither step judges relevance, they remove what is not evidence. Checked against the
+  held-out set (41 questions, same vectors, top 10): 401 of 410 hits unchanged, every proposed
+  grade unchanged; the nine that left were five reference lists and four folded copies.
+
+**Measured** on 2026-11-02 on the local corpus (1.37M live passages), with 30 short questions
+on the corpus's subjects written for the purpose (not the held-out set), embedded by bge-m3,
+MCP's filters (cleared only), and the fused order. A mirror is a hit whose source shares at
+least half of its whole text with the source of a hit above it (on these 539 candidate pairs
+the shares are bimodal: 21 at 0.5 or more, the rest nearly all under 0.3).
+
+| fused order | reference lists in top 8 | in top 30 | copies folded | top-8 slots from a mirror |
+|---|---|---|---|---|
+| before | 5 of 240 (2.1%) | 14 of 899 | 0 | 15 (6.2%) |
+| after | 0 | 0 | 34 | 13 (5.4%) |
+
+Reference lists were few in the fused top 8 but sat in the top 30 that MCP hands the
+cross-encoder. Re-ordered by `bge-reranker-v2-m3` as MCP does (23 of the 30 questions; the
+shared GPU was too busy for the rest), the top 8 held 1 reference list of 184 slots before and
+none after, and 11 mirror slots before against 9 after. The 4-in-8 the task was opened on was
+not reproduced on these questions; the lists were 1.6% of every top 30 before and none after,
+against 1.3% of passages in a random sample of 20,000. Folding removed every passage repeating words already
+shown, but most mirror slots that remain are *different* passages of a mirrored document (the
+PDF's passage on one finding, the HTML page's on another): one question gave six of its top
+eight to one paper through its two copies. That is one document filling a page, which the
+per-source cap answers and which is off by default; counting a mirror as the same source for
+the cap is the next step if that is wanted. Of 22 folds at the chosen threshold, 20 were between
+sources sharing most of their text; the other two were paragraphs one document reuses from
+another (two chapters of one online encyclopedia, two project reports sharing boilerplate),
+which are the same words. At 0.4 the folds rose to 33 with three
+outside mirrors, at 0.3 to 44 with ten.
+
 ### Ageing and the baseline
 
 The per-source cap and ageing decay (`P2-20`, §9) are both **off by default**. Each changes
@@ -563,6 +633,11 @@ and forgotten in the DTO fails rather than being dropped on the way out.
 - **`below_floor`, `nearest_similarity` and `similarity_floor`** say what the
   [similarity floor](#similarity-floor) set aside, so an empty page can say "nothing close"
   and how far the nearest passage was, rather than "nothing matched".
+- **`set_back`, `folded` and each hit's `copies`** say what
+  [copies and reference lists](#copies-and-reference-lists) moved or merged. `set_back` is
+  counted against the window the service asked for (one page and one more), `folded` against
+  the page itself. Find's summary line adds "N reference lists moved down" and "N copies
+  folded".
 - **Age is published with its factor.** `age_days` is None for an undated document and `decay`
   is then 1.0, a guess in neither direction: around a third of crawled pages have no extractable
   date, and either default is wrong for the other kind.
@@ -649,5 +724,5 @@ next bind.
 
 `tests/integration/test_search.py`, `test_search_candidates.py`, `test_search_index.py`,
 `test_explore_api.py`, `test_explore_answer.py`, `test_watch.py`;
-`tests/unit/test_search.py`, `test_answer.py`, `test_similarity_floor.py`;
+`tests/unit/test_search.py`, `test_answer.py`, `test_similarity_floor.py`, `test_copies.py`;
 `web/tests/explore-page.test.tsx`.

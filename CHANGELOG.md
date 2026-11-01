@@ -91,6 +91,24 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.199.0] — 2026-11-02
+
+### Changed
+
+- `B-236`: reference lists and mirrored copies no longer crowd search results.
+  - **Reference lists** (a bibliography whose entry titles repeat the query's words) are
+    moved after every other candidate rather than removed; `include_reference_lists` turns
+    this off, and `set_back` counts the ones moved off the page.
+  - **Copies** of one document held twice (an HTML page and its PDF, a mirror on another host)
+    fold into the better-ranked one when at least half of a passage's five-word phrases are
+    already in the passages kept from one other source. Each hit says how many `copies`
+    folded into it, the result says how many were `folded`, and `include_duplicates` turns it
+    off. Both run on the fused list, at query time, for the HTTP search and answer routes and
+    MCP `search_chunks`; Find's summary line says what was moved and folded.
+  See docs/features/search.md#copies-and-reference-lists.
+
+**Deploy:** image only.
+
 ## [0.198.0] — 2026-11-02
 
 ### Changed

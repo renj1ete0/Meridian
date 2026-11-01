@@ -204,7 +204,15 @@ async def explore_search(
         bool,
         Query(
             description="Near-duplicates are excluded by default — the novelty gate marked "
-            "them for a reason. Include them to see why something is missing."
+            "them for a reason. Include them to see why something is missing. Also keeps "
+            "copies of a ranked passage that would otherwise be folded into it (`folded`)."
+        ),
+    ] = False,
+    include_reference_lists: Annotated[
+        bool,
+        Query(
+            description="Rank bibliography and glossary passages with the rest. By default "
+            "they come after every other match (`set_back` counts those moved off the page)."
         ),
     ] = False,
     include_junk: Annotated[
@@ -253,6 +261,7 @@ async def explore_search(
         doc_kinds=doc_kind,
         sites=_sites(site),
         include_duplicates=include_duplicates,
+        include_reference_lists=include_reference_lists,
         include_junk=include_junk,
     )
     try:
@@ -299,6 +308,7 @@ async def explore_answer(
         bool, Query(description="As on `/search`: the top 30 of the pool, before grouping.")
     ] = False,
     floor: Annotated[bool, Query(description="As on `/search`.")] = True,
+    include_reference_lists: Annotated[bool, Query(description="As on `/search`.")] = False,
 ) -> AnswerRead:
     """A question answered as evidence, by country when it is about places, else one list.
 
@@ -318,6 +328,7 @@ async def explore_answer(
         published_before=published_before,
         doc_kinds=doc_kind,
         sites=_sites(site),
+        include_reference_lists=include_reference_lists,
     )
     return await answer_search(
         sess, q, filters=filters, candidates=candidates, top=top, rerank=rerank, floor=floor

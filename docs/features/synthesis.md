@@ -197,6 +197,9 @@ qualify, nearly all bibliographies, endnote lists and abbreviation sections. Bec
 picks what `pull` puts in a batch, a run deferred on a relay prompt before this change can
 re-pull a different batch and write a new prompt; an answer filed under the old one is not used.
 
+Search uses the same rule to put reference lists after every other match (`B-236`,
+[search](search.md#copies-and-reference-lists)), so a change to it moves search results too.
+
 ### Resuming
 
 A run that defers (no model answered) stays unfinished at that stage, and the next wake resumes

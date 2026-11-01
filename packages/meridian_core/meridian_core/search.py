@@ -2,8 +2,9 @@
 
 Filters are one predicate (`_conditions`) applied inside both arms. A missing arm is
 reported on the result, near-duplicates are excluded by default but counted, and vector
-candidates under a similarity floor are set aside and counted (`B-235`). See
-docs/features/search.md for the design and its reasons.
+candidates under a similarity floor are set aside and counted (`B-235`). After fusion,
+reference lists are set back and copies of a passage already ranked are folded into it, both
+counted (`B-236`). See docs/features/search.md for the design and its reasons.
 """
 
 from __future__ import annotations
@@ -20,9 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import cjk
 from .ageing import age_in_days, decay_factor
 from .chunks import host_of
+from .copies import fold_copies, set_back
 from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
 from .passagetopics import carries_all_topics, on_topic_passage
+from .references import is_reference_list
 from .trust import READABLE_STATES
 from .vectorindex import MAX_SCAN_TUPLES, indexed_distance, scan_past_filtered
 
@@ -102,8 +105,13 @@ class SearchFilters:
     #: Match a source on any of these sites (`B-254`): a host as `site_key` writes it, which
     #: also matches its subdomains, so `example.org` keeps `news.example.org`.
     sites: Sequence[str] | None = None
-    #: Near-duplicates are out unless asked for. The gate marked them for a reason.
+    #: Near-duplicates are out unless asked for. The gate marked them for a reason. Off also
+    #: folds copies the gate missed at query time (`B-236`).
     include_duplicates: bool = False
+    #: Reference lists rank on their own merits rather than after every other passage
+    #: (`B-236`). Not a predicate: they are set back after fusion, never excluded. See
+    #: docs/features/search.md#copies-and-reference-lists.
+    include_reference_lists: bool = False
     #: §5.4's junk tier is material a sweep will eventually drop; it should not
     #: be answering questions in the meantime.
     include_junk: bool = False
@@ -174,6 +182,10 @@ class SearchHit:
     #: one they have to trust rather than check. None means never examined.
     places: list[str] | None = None
 
+    #: How many lower-ranked passages were folded into this one as copies of it (`B-236`):
+    #: the same words, usually the same document on another host. Not independent evidence.
+    copies: int = 0
+
 
 @dataclasses.dataclass(frozen=True)
 class SearchResult:
@@ -195,6 +207,10 @@ class SearchResult:
     nearest: float | None = None
     #: The similarity floor applied; None when the caller turned it off or no vector arm ran.
     floor: float | None = None
+    #: Reference lists that fused within ``limit`` and were set back off the page (`B-236`).
+    set_back: int = 0
+    #: Copies folded into the hits returned: the sum of their ``copies`` (`B-236`).
+    folded: int = 0
 
     @property
     def degraded(self) -> bool:
@@ -516,21 +532,39 @@ async def search(
 
     # Ties broken by chunk_id so a repeated search returns a stable order.
     ranked = sorted(scores, key=lambda cid: (-scores[cid], cid))
+    fused_page = set(ranked[:limit])
+    flagged: set[int] = set()
+    copies: dict[int, int] = {}
+    source_of: dict[int, int] = {}
     held_back = 0
+    if max_per_source is not None or not (
+        filters.include_reference_lists and filters.include_duplicates
+    ):
+        # One indexed lookup over the fused candidates, because the steps below need each
+        # candidate's source and text *before* the page is cut. They run on the fused list,
+        # so a passage is treated the same whichever arm found it.
+        meta = (
+            await sess.execute(
+                select(Chunk.chunk_id, Chunk.source_id, Chunk.text).where(
+                    Chunk.chunk_id.in_(ranked)
+                )
+            )
+        ).all()
+        source_of = {chunk_id: source_id for chunk_id, source_id, _ in meta}
+        texts = {chunk_id: text for chunk_id, _, text in meta}
+        # See docs/features/search.md#copies-and-reference-lists.
+        if not filters.include_reference_lists:
+            flagged = {cid for cid in ranked if is_reference_list(texts.get(cid) or "")}
+            ranked = set_back(ranked, flagged)
+        if not filters.include_duplicates:
+            ranked, copies = fold_copies(ranked, texts, source_of, limit=len(ranked))
+
     if max_per_source is None:
         ordered = ranked[:limit]
     else:
-        # One indexed lookup over the fused candidates, because the cap needs
-        # each candidate's source *before* the page is cut — the row join below
-        # happens after, and by then the decision is made.
-        source_of = dict(
-            (
-                await sess.execute(
-                    select(Chunk.chunk_id, Chunk.source_id).where(Chunk.chunk_id.in_(ranked))
-                )
-            ).all()
-        )
         ordered, held_back = cap_per_source(ranked, source_of, cap=max_per_source, limit=limit)
+    set_back_count = len((flagged & fused_page) - set(ordered))
+    folded = sum(copies.get(cid, 0) for cid in ordered)
 
     rows = (
         await sess.execute(
@@ -572,13 +606,15 @@ async def search(
                 score_before_decay=scores[chunk_id],
                 lexical_rank=lexical_at.get(chunk_id),
                 vector_rank=vector_at.get(chunk_id),
+                copies=copies.get(chunk_id, 0),
             )
         )
 
     # Re-sorted, because the decay is applied after fusion and a hit that
     # dropped below the one under it would otherwise be listed above it — a
     # result list whose order disagrees with its own scores.
-    hits.sort(key=lambda hit: hit.score, reverse=True)
+    # A reference list set back stays after the rest, whatever its score.
+    hits.sort(key=lambda hit: (hit.chunk_id in flagged, -hit.score))
 
     return SearchResult(
         hits,
@@ -589,6 +625,8 @@ async def search(
         below_floor=below_floor,
         nearest=nearest,
         floor=floor,
+        set_back=set_back_count,
+        folded=folded,
     )
 
 

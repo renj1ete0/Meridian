@@ -122,6 +122,8 @@ def _cite(chunk: Any) -> dict[str, Any]:
         "source_id": chunk.source_id,
         "chunk_id": chunk.chunk_id,
         "duplicate_of": chunk.duplicate_of,
+        # Identical passages elsewhere folded into this one (`B-236`).
+        "copies": chunk.copies,
     }
 
 
@@ -188,6 +190,13 @@ def build_mcp(
         include_duplicates: Annotated[
             bool, Field(description="Include passages the corpus marked as copies of others.")
         ] = False,
+        include_reference_lists: Annotated[
+            bool,
+            Field(
+                description="Rank bibliographies and glossaries with the rest; by default they "
+                "come after every other match. Set it when you want sources cited on a subject."
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """Search the corpus for passages, with the source of each.
 
@@ -195,6 +204,9 @@ def build_mcp(
         When it says word-matching, absence of results is not evidence of
         absence, and you should retry with different wording. `below_floor`
         counts passages left out as not close in meaning to the query.
+        `set_back` counts reference lists moved below the results, and a
+        result's `copies` how many identical passages on other pages were
+        folded into it: one piece of evidence, not several.
 
         `topic` keeps sources carrying any of the named topics. Documents
         crawled before topics were recorded carry none and are excluded by it,
@@ -213,6 +225,7 @@ def build_mcp(
             doc_kinds=doc_kind or None,
             sites=site or None,
             include_duplicates=include_duplicates,
+            include_reference_lists=include_reference_lists,
             # Cleared material only (`P4-14`, §11.8): this is the path into a prompt.
             # See docs/features/mcp.md#what-reaches-a-model.
             cleared_only=True,
@@ -243,6 +256,10 @@ def build_mcp(
             # Near-meaning candidates under the similarity floor, left out (`B-235`). Results
             # empty and this above zero: the corpus holds nothing close to the query.
             "below_floor": result.below_floor,
+            # Reference lists moved below the results, and copies folded into the ones
+            # returned (`B-236`). See docs/features/search.md#copies-and-reference-lists.
+            "set_back": result.set_back,
+            "folded": sum(hit.copies for hit in hits),
             # Structured `results` for rendering citations, and `framed` (`P4-06`) to
             # paste into a prompt. See docs/features/mcp.md#what-reaches-a-model.
             "framed": frame_passages(hits, detailed=True),

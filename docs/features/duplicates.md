@@ -146,6 +146,16 @@ go: a translation points at its English version, a near copy at the older one. W
 loop came back to where it began and marked a page a copy of itself. A loop now gets one root
 for all its members, the smallest id, and that page stays unmarked.
 
+<a id="what-escapes"></a>**What escapes all three** (`B-236`). Measured on the local corpus on
+2026-11-02, the copies that still reached search results were nearly all one document as an
+HTML page and a PDF (or on a second host). Their passages are cut at different boundaries, so
+paired passages sit at cosines of 0.79–0.94, under the gate's 0.95, and fewer than 90% of them
+match exactly. The near rule then fails on the title: a publisher's prefix on the HTML title,
+a PDF whose metadata title is a file code, a plural. One pair with the same title and a 0.994
+mean cosine is left alone because both copies are cited. Search folds such copies at query
+time instead ([copies and reference lists](search.md#copies-and-reference-lists)); nothing is
+marked.
+
 ## Operating it
 
 - Jobs: `novelty` (hourly), `docdupes` (daily, disabled in the seed; enable it in the

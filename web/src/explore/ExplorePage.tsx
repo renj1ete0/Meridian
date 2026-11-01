@@ -786,6 +786,11 @@ export function summaryLine(results: SearchResponse): string {
   if (results.arms.includes('lexical')) parts.push(`${count(results.lexical_candidates)} matched the words`)
   if (results.arms.includes('vector')) parts.push(`${count(results.vector_candidates)} near in meaning`)
   if (results.below_floor > 0) parts.push(`${results.below_floor.toLocaleString('en')} set aside as not close`)
+  // `B-236`: what was moved or merged is said, so a missing result can be accounted for.
+  if (results.set_back > 0) {
+    parts.push(`${results.set_back} ${results.set_back === 1 ? 'reference list' : 'reference lists'} moved down`)
+  }
+  if (results.folded > 0) parts.push(`${results.folded} ${results.folded === 1 ? 'copy' : 'copies'} folded`)
   return parts.join(' · ')
 }
 

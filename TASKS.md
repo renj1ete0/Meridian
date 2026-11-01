@@ -1937,7 +1937,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       query returns 20 passages; the top ones were PDF text with broken font maps (a 3-letter
       shift, ~0.09% of passages). Detect and drop such text at extraction; say "no good matches"
       under a floor
-- [ ] `B-236` **Bibliographies and mirrored copies crowd search results** (review) — 4 of 8 MCP results
+- [x] `B-236` **Bibliographies and mirrored copies crowd search results** (review) — 4 of 8 MCP results
       for one question were reference lists (`B-171` keeps them out of synthesis only), and one
       report appeared three times through mirrors. Down-rank reference passages, fold copies
 - [x] `B-237` **Nothing answers "what is new"** (review) — Growth is crawl volume; no view or MCP tool

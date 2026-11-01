@@ -99,6 +99,8 @@ export interface SearchHit {
   age_days: number | null
   decay: number
   score_before_decay: number
+  /** Lower-ranked passages folded into this one as copies of its words (`B-236`). */
+  copies: number
 }
 
 export const SEARCH_HIT_FIELDS = [
@@ -124,6 +126,7 @@ export const SEARCH_HIT_FIELDS = [
   'age_days',
   'decay',
   'score_before_decay',
+  'copies',
 ] as const
 
 /** Mirrors `SearchResponse`. */
@@ -146,6 +149,10 @@ export interface SearchResponse {
   nearest_similarity: number | null
   /** The floor applied; null when off or when the vector arm did not run. */
   similarity_floor: number | null
+  /** Reference lists set back below every other match, off this window (`B-236`). */
+  set_back: number
+  /** Copies folded into this page's hits: the sum of their `copies` (`B-236`). */
+  folded: number
 }
 
 export const SEARCH_RESPONSE_FIELDS = [
@@ -163,6 +170,8 @@ export const SEARCH_RESPONSE_FIELDS = [
   'below_floor',
   'nearest_similarity',
   'similarity_floor',
+  'set_back',
+  'folded',
 ] as const
 
 /** Mirrors `CorpusStatsRead`. */

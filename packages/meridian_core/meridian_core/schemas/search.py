@@ -70,6 +70,8 @@ class SearchHitRead(BaseModel):
     age_days: int | None = None
     decay: float = 1.0
     score_before_decay: float = 0.0
+    #: Lower-ranked passages folded into this one as copies of its words (`B-236`).
+    copies: int = 0
 
 
 class SearchResponse(BaseModel):
@@ -110,6 +112,10 @@ class SearchResponse(BaseModel):
     nearest_similarity: float | None = None
     #: The floor applied, or None when it was turned off or the vector arm did not run.
     similarity_floor: float | None = None
+    #: Reference lists set back below the rest, and copies folded into the hits shown
+    #: (`B-236`). See docs/features/search.md#copies-and-reference-lists.
+    set_back: int = 0
+    folded: int = 0
 
 
 class PlaceRead(BaseModel):

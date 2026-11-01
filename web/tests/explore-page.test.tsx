@@ -61,6 +61,7 @@ function hit(over: Partial<SearchHit> = {}): SearchHit {
     age_days: null,
     decay: 1,
     score_before_decay: 0,
+    copies: 0,
     ...over,
   }
 }
@@ -81,6 +82,8 @@ function response(over: Partial<SearchResponse> = {}): SearchResponse {
     below_floor: 0,
     nearest_similarity: null,
     similarity_floor: null,
+    set_back: 0,
+    folded: 0,
     ...over,
   }
 }
@@ -353,6 +356,16 @@ describe('the results summary', () => {
       '1 passage shown · 2 matched the words · 3 near in meaning · 97 set aside as not close',
     )
     expect(summaryLine(response({ arms: ['lexical', 'vector'], vector_candidates: 100 }))).not.toContain('set aside')
+  })
+
+  it('says what was moved down or folded (B-236), and nothing when none was', () => {
+    expect(summaryLine(response({ set_back: 1, folded: 3 }))).toBe(
+      '1 passage shown · 9 matched the words · 1 reference list moved down · 3 copies folded',
+    )
+    expect(summaryLine(response({ set_back: 2, folded: 1 }))).toBe(
+      '1 passage shown · 9 matched the words · 2 reference lists moved down · 1 copy folded',
+    )
+    expect(summaryLine(response())).not.toMatch(/moved down|folded/)
   })
 })
 

@@ -40,6 +40,7 @@ function hit(chunk: number): SearchHit {
     age_days: null,
     decay: 1,
     score_before_decay: 0,
+    copies: 0,
   }
 }
 
@@ -59,6 +60,8 @@ function page(from: number, count: number, over: Partial<SearchResponse> = {}): 
     below_floor: 0,
     nearest_similarity: null,
     similarity_floor: null,
+    set_back: 0,
+    folded: 0,
     ...over,
   }
 }

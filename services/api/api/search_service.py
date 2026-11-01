@@ -187,6 +187,8 @@ async def paged_search(
             "lexical_candidates": result.lexical_candidates,
             "vector_candidates": result.vector_candidates,
             "below_floor": result.below_floor,
+            "set_back": result.set_back,
+            "folded": result.folded,
         },
     )
 
@@ -209,6 +211,9 @@ async def paged_search(
         below_floor=result.below_floor,
         nearest_similarity=result.nearest,
         similarity_floor=result.floor,
+        set_back=result.set_back,
+        # The page's own, not the window's: the window holds the next page's first hit.
+        folded=sum(hit.copies for hit in page),
     )
 
 
