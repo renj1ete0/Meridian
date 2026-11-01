@@ -1999,7 +1999,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       too — 1, 16 and 64 passages of ~260 tokens took 4.6, 12 and 48 s with the language model
       idle (1.3 passages/s, an eighth of the earlier rate), while the crawl stores ~400 passages a
       minute, so the backlog only grows. Check where the model manager placed `bge-m3` (the
-      earlier rate was measured with it alone on a card); operator side, then re-measure
+      earlier rate was measured with it alone on a card); operator side, then re-measure.
+      **Hour-long run, same day:** 2,300 passages embedded in 60 minutes with two outages (about
+      0.6 a second); 16 and 64 passages took 14 and 43 s afterwards with nothing else asking. The
+      crawl paused itself at minute 9 (embedding backlog over its 20,000 ceiling, working as
+      designed) and stayed paused, so embedding speed is now what limits the whole pipeline.
+      The model manager keeps the embedder and reranker together on the 6700 XT by design;
+      measure `bge-m3` alone on the 3090 to tell the card from the setup
 - [x] `B-261` **One command to deploy** (operator, 2026-11-01) — first boot was five commands
       (`up postgres`, `datadirs`, migrate, seed, `up`). `datadirs` and a new `setup` one-shot
       run on every `up`, and the database services wait for `setup`; tested on a fresh data
@@ -2095,7 +2101,18 @@ deploy runbook whose first two commands could not work (`B-17`).
       / news / opinion). Pilot: hand-judge ~100 passages on two or three transport policies and
       compare with the operator's server model (Qwen Flash Next through seismo once it is
       registered; else the 27B, said so). Only if agreement is good: a stance-over-time strip on
-      node pages, a Find filter, one-sided evidence as a gap, an MCP tool
+      node pages, a Find filter, one-sided evidence as a gap, an MCP tool.
+      **Pilot, 2026-11-02 (Strata, thinking off, schema-held, end-to-end corpus):** 101 passages
+      on road pricing, lower speed limits, shared e-scooters and autonomous vehicles, judged by
+      hand first. 86% agreement but Cohen's κ 0.40: the model called 6 of the 18 *for* passages
+      *for* and almost everything else neutral, treating reported benefits ("will make paths
+      safer", "99% would recommend") as description. A definition that counts a stated benefit
+      or an agency's stated purpose as *for* raised κ to 0.53 (11 of 18), tuned on the same
+      passages, so in-sample. **Not good enough to build on.** The sample also had no *against*
+      passage at all (one government site supplied most of it), so the class that matters for
+      one-sided evidence was not measured. Next: on the real corpus, draw the passages by
+      speaker (press release / news / opinion, `B-253`) so each class is present, freeze the
+      second definition, hand-judge a fresh set, and build only if κ reaches about 0.6
 - [x] `B-269` **Search fell back to words while pages were embedded** (found by the
       end-to-end run, 2026-11-01) — the backfill's 256-passage requests held a reader's query
       past its timeout on a one-slot model server; the client now asks in slices of 16
