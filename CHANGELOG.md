@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.205.1] — 2026-11-02
+
+### Fixed
+
+- The scheduled-jobs reference had no row for `runs-report`, the six-hourly synthesis report.
+  A test now holds the reference to the timetable: every job has one row, and each row's
+  command, interval and seeded state match `config/schedule.yaml`.
+
+**Deploy:** nothing to do; documentation and a test.
+
 ## [0.205.0] — 2026-11-02
 
 ### Added
