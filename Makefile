@@ -137,10 +137,11 @@ promote:
 # Build, push and promote the current commit in one go (`B-262`): servers with the
 # `autoupdate` profile pull it within WATCHTOWER_POLL_INTERVAL, migrate, and restart what
 # changed. Refuses a dirty tree (build_and_push.sh). `MERIDIAN_PLATFORMS=linux/amd64` skips
-# the arm64 build when every server is x86.
+# the arm64 build when every server is x86. The commit is read once, before the build: a
+# commit made during a long build must not be what gets promoted.
 release:
-	./scripts/build_and_push.sh
-	./scripts/promote.sh $$(git rev-parse --short HEAD)
+	@sha=$$(git rev-parse --short HEAD); \
+	./scripts/build_and_push.sh && ./scripts/promote.sh $$sha
 
 # Build the worker image locally, for the host's own architecture. The build
 # context is the repo root because the services share a uv workspace; multi-arch

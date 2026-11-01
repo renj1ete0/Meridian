@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.188.1] — 2026-11-01
+
+### Fixed
+
+- `B-262`: `make release` promotes the commit it built, read once before the build (a commit
+  made during the build was promoted instead, and nothing matched), and `promote.sh` says it
+  promoted nothing rather than printing the channel as moved.
+
+**Deploy:** nothing on the server; the build machine's tooling.
+
 ## [0.188.0] — 2026-11-01
 
 ### Added

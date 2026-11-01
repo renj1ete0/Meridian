@@ -48,8 +48,13 @@ for name in "${WANTED[@]}"; do
 done
 
 [ "$DRY_RUN" = 1 ] && exit 0
+if [ ${#promoted[@]} -eq 0 ]; then
+  # Nothing moved: saying "stable → <sha>" here once hid a release that promoted nothing.
+  echo "meridian: nothing promoted — no image is tagged ${SHA} (was it built and pushed?)" >&2
+  exit 1
+fi
 echo "meridian: ${CHANNEL} → ${SHA}"
-[ ${#promoted[@]} -gt 0 ] && printf '  promoted  %s\n' "${promoted[@]}"
+printf '  promoted  %s\n' "${promoted[@]}"
 [ ${#missing[@]} -gt 0 ] && printf '  not built %s (left as they were)\n' "${missing[@]}"
 echo "  Servers running Watchtower pick this up within WATCHTOWER_POLL_INTERVAL."
 [ ${#promoted[@]} -gt 0 ]
