@@ -2139,6 +2139,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       "needs phase 4" long after synthesis existed. `/contested [topic]` lists the ten most
       contested nodes, `/tiers` what each agent and model wrote; `/run` keeps refusing, now
       with the true reason (nothing can wake the orchestrator early)
+- [ ] `B-273` **The graph audit cannot see a match made at resolution** (from `P7-10`) — the
+      audit samples `merge_log`, which only `resolution.merge` writes (Possible duplicates).
+      A mention the high band resolves to an existing node (`mentions.py`) is the same
+      decision, "these are one thing", made with no log row; its score reaches only the run
+      journal's text, so §14.1's "conflation must be looked for deliberately" misses the
+      commonest case. Record each high-band match (mention, node, score, signals, run) where
+      the draw can sample it, and add it to the draw as a third kind
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published
