@@ -1986,6 +1986,16 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-258` **Controls disabled where a person may view but not change** — `B-257` hides
       sections and says when one is read-only; the buttons inside still answer with the server's
       403. Disable them (with the permission named) panel by panel, via `useMe().can`
+- [ ] `B-259` **Thinking off for structured tasks on local models** (measured 2026-11-01) — a
+      Qwen3 27B behind an OpenAI-compatible server spent the whole 16,000-token answer reasoning on
+      relation extraction (281–328 s a batch, one answer cut off, one empty); with
+      `chat_template_kwargs.enable_thinking=false` the same batches took 32–46 s and gave 20 and 11
+      accepted relations. Send it from `_call_openai_compatible` for extraction and tagging (an
+      agent setting, default on for `openai_compatible`), keep reasoning for chat; test that the
+      body carries it and that a server ignoring it still answers
+- [ ] `B-260` **Reranker speed on the GPU machine** — 22 s for 30 real passages on the 6700 XT
+      (embedding there is fast: ~16 passages/s). Find whether it is the card, one slot (`-np 1`) or
+      the batch size; Find's rerank waits on it
 - [x] `B-257` `v0.182.0`; screenshotted against the mock at 1440 and 390 wide. **People & permissions page, and an Admin that shows only what one may do** —
       the web half of `B-252`: Admin → People & permissions as `docs/design/AdminPeople.dc.html`
       (add, profile, per-permission Profile/On/Off, revoke, show revoked); `/api/me` drives the
