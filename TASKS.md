@@ -1928,7 +1928,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       arXiv sources carry `peer_reviewed`, which the tier filter and Answer's "strong" rest on. A
       `preprint` tier for arXiv, SSRN, OSF and the like, and peer review only on venue evidence
       (a journal DOI, OpenAlex `journal-article`). Needs a migration for the CHECK constraint
-- [ ] `B-234` **Source metadata is thin and sometimes wrong** (review) — of 97,198 kept sources 21%
+- [x] `B-234` **Source metadata is thin and sometimes wrong** (review) — of 97,198 kept sources 21%
       have no date, 74% no author, 97% no DOI; titles such as a journal name or a file name lead
       results and exports cite "n.d.". Resolve from identifiers (arXiv ID gives year and month:
       500 arXiv sources undated; DOI via Crossref/OpenAlex), reject placeholder titles; `B-220`

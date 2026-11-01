@@ -1031,6 +1031,15 @@ Two consequences worth holding on to:
   (they come from the DOM, not the text) and a page's own identifier survives
   (meta tags), but a bare DOI in a sidebar does not.
 
+### A parser tested on a format the tool never prints
+
+For weeks no PDF had a publication date and every HTML publisher was its address (`B-234`).
+Both parsers had passing tests: the PDF date parser was fed `D:20190314…`, which `pdfinfo`
+never prints (it prints `Fri Mar 14 … 2019 UTC` unless given `-isodates`), and the publisher
+read trafilatura's `sitename` key, which its JSON calls `source-hostname`. A test of a parser
+for another tool's output should run that tool, or at least check the key against a real
+answer. See [extraction.md](features/extraction.md#source-metadata).
+
 ### `extra={"module": ...}` raises at runtime — and `as_dict()` hides it
 
 `logging` refuses to let an `extra` key shadow a `LogRecord` attribute, and it

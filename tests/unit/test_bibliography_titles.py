@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 from worker.extract.base import ExtractedDocument
 from worker.main import _bibliography
 
@@ -37,3 +39,38 @@ def test_a_real_title_goes_through_without_a_note() -> None:
     fields = _bibliography(doc("Road Traffic Act - Section 5"), url="https://example.org/")
     assert fields["title"] == "Road Traffic Act - Section 5"
     assert "extra" not in fields
+
+
+def test_where_author_publisher_and_date_came_from_is_stored_beside_them() -> None:
+    """`B-234`: provenance in `extra`, under the names `title_from` set the pattern for."""
+    fields = _bibliography(
+        doc(
+            "Ferry waits fall",
+            author="Mira Castellan",
+            publisher="Velde Gazette",
+            publication_date=dt.date(2021, 3, 9),
+            metadata_from={"author": "jsonld", "publisher": "meta", "publication_date": "jsonld"},
+            metadata_rejected={"publication_date": "2026-01-01"},
+        ),
+        url="https://news.velde.example/a",
+    )
+    assert fields["extra"]["author_from"] == "jsonld"
+    assert fields["extra"]["publisher_from"] == "meta"
+    assert fields["extra"]["date_from"] == "jsonld"
+    assert fields["extra"]["rejected_metadata"] == {"publication_date": "2026-01-01"}
+
+
+def test_no_provenance_is_written_for_a_field_left_empty() -> None:
+    fields = _bibliography(
+        doc("Ferry waits fall", metadata_from={"publication_date": "inferred"}),
+        url="https://news.velde.example/a",
+    )
+    assert "extra" not in fields
+
+
+def test_a_title_filled_from_declared_metadata_says_which() -> None:
+    fields = _bibliography(
+        doc("Wait times on a harbour ferry", metadata_from={"title": "citation"}),
+        url="https://news.velde.example/a",
+    )
+    assert fields["extra"]["title_from"] == "citation"

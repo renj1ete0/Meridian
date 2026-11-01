@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.ageing import HALF_LIFE_DAYS
 from meridian_core.attempts import DEFAULT_RETENTION_DAYS, fetch_health, prune_attempts
+from meridian_core.bibliography import FROM_KEY
 from meridian_core.boilerplate import host_key
 from meridian_core.chunks import as_writes, chunk_count, embedding_backlog, replace_chunks
 from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
@@ -2280,8 +2281,16 @@ def _bibliography(
     )
     if title is None and (title := title_from_text(document.text)) is not None:
         extra["title_from"] = "text"
+    elif title is not None and (title_source := document.metadata_from.get("title")):
+        extra["title_from"] = title_source
     if document.title and title != document.title:
         extra["declared_title"] = document.title
+    # `B-234`: where the author, publisher and date came from, and what a rule refused.
+    for field in ("author", "publisher", "publication_date"):
+        if getattr(document, field) is not None and field in document.metadata_from:
+            extra[FROM_KEY[field]] = document.metadata_from[field]
+    if document.metadata_rejected:
+        extra["rejected_metadata"] = dict(document.metadata_rejected)
     # `B-153`: an undeclared language is read from the text, and marked as such.
     language = document.language
     if language is None and (language := detect_language(document.text)) is not None:

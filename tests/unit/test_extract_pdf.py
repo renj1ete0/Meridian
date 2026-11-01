@@ -14,6 +14,7 @@ enters the corpus as "extracted, nothing found" and nobody looks again.
 
 from __future__ import annotations
 
+import datetime as dt
 import shutil
 import subprocess
 from pathlib import Path
@@ -26,9 +27,11 @@ from worker.extract.pdf import (
     SCAN_CHARS_PER_PAGE,
     PdfText,
     PdftotextMissing,
-    _pdf_date,
     available,
     extract_pdf,
+    metadata_from_info,
+    pdf_date,
+    pdf_info,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -42,7 +45,9 @@ BODY = (
 )
 
 
-def build_pdf(tmp_path: Path, pages: list[str], *, title: str = "") -> bytes:
+def build_pdf(
+    tmp_path: Path, pages: list[str], *, title: str = "", info: dict[str, str] | None = None
+) -> bytes:
     """A real PDF with a real text layer, one PostScript page per entry.
 
     The title goes in through a `pdfmark`, which is how PostScript names the
@@ -63,6 +68,8 @@ def build_pdf(tmp_path: Path, pages: list[str], *, title: str = "") -> bytes:
     header = f"%!PS-Adobe-3.0\n%%Pages: {len(pages)}\n"
     if title:
         header += f"[ /Title ({title}) /DOCINFO pdfmark\n"
+    for key, value in (info or {}).items():
+        header += f"[ /{key} ({value}) /DOCINFO pdfmark\n"
     source = tmp_path / "in.ps"
     source.write_text(header + body + "%%EOF\n")
 
@@ -267,18 +274,65 @@ async def test_a_title_is_read_from_the_document(tmp_path: Path) -> None:
 )
 def test_the_pdf_date_format_is_parsed(raw: str, expected: tuple[int, int, int]) -> None:
     """`D:20260314090000+08'00'` is what the PDF spec calls a date."""
-    import datetime as dt
-
-    assert _pdf_date(raw) == dt.date(*expected)
+    assert pdf_date(raw) == dt.date(*expected)
 
 
 @pytest.mark.parametrize(
-    "raw", [None, "", "2026-03-14", "D:2026", "D:20261332", "nonsense", "D:00000000"]
+    "raw", [None, "", "2026-03", "D:2026", "D:20261332", "nonsense", "D:00000000", "Fri Sep 22"]
 )
 def test_a_date_that_is_not_a_full_day_is_discarded(raw: str | None) -> None:
     """`publication_date` is a DATE citations are built from, so a fabricated
     day is worse than a missing one."""
-    assert _pdf_date(raw) is None
+    assert pdf_date(raw) is None
+
+
+async def test_the_creation_date_becomes_the_publication_date(tmp_path: Path) -> None:
+    """`B-234`: pdfinfo's default date format matched nothing, so no PDF had a date.
+
+    Through the real `pdfinfo`, which is where the defect lived: the parser was tested
+    on a format the tool never printed.
+    """
+    content = build_pdf(
+        tmp_path,
+        [f"Page 1. {BODY}"],
+        info={"CreationDate": "D:20190314090000Z", "Author": "Velde Transit Authority"},
+    )
+
+    document = await extract_pdf(content)
+
+    assert document.publication_date == dt.date(2019, 3, 14)
+    assert document.author == "Velde Transit Authority"
+    assert document.metadata_from == {"publication_date": "pdfinfo", "author": "pdfinfo"}
+
+
+async def test_pdfinfo_dates_come_back_in_iso_form(tmp_path: Path) -> None:
+    content = build_pdf(tmp_path, [f"Page 1. {BODY}"], info={"CreationDate": "D:20190314090000Z"})
+
+    assert (await pdf_info(content))["creationdate"].startswith("2019-03-14")
+
+
+def test_a_pdf_rendered_on_request_has_no_publication_date() -> None:
+    """A PDF made on the day it was fetched was generated for the request."""
+    fields = {"creationdate": "2026-06-15T10:00:00Z"}
+    metadata = metadata_from_info(fields, fetched=dt.date(2026, 6, 15))
+
+    assert "publication_date" not in metadata
+    assert metadata["metadata_rejected"] == {"publication_date": "2026-06-15"}
+
+
+@pytest.mark.parametrize("created", ["1989-04-01T00:00:00Z", "2031-01-01T00:00:00Z"])
+def test_impossible_creation_dates_are_refused(created: str) -> None:
+    metadata = metadata_from_info({"creationdate": created}, fetched=dt.date(2026, 6, 15))
+    assert "publication_date" not in metadata
+
+
+@pytest.mark.parametrize("author", ["Microsoft Office User", "Administrator", "jdoe"])
+def test_an_office_suites_default_author_is_refused(author: str) -> None:
+    metadata = metadata_from_info({"author": author, "creationdate": "2019-03-14T09:00:00Z"})
+
+    assert "author" not in metadata
+    assert metadata["metadata_rejected"]["author"] == author
+    assert metadata["publication_date"] == dt.date(2019, 3, 14)
 
 
 async def test_metadata_can_be_skipped(tmp_path: Path) -> None:

@@ -9,11 +9,11 @@ location (page or character offset) that a reader can follow back into the store
   `pdftables.py`, `figures.py`, `clean.py`, `chunk.py`, `dockind.py`, `errorpage.py`,
   `injection.py`, `language.py`, `readable.py`), `cleancut.py`, `rawstore.py`, `ocr_queue.py`,
   `boilerplate.py`, `rechunk.py`, `retable.py`, `dockind.py`, `retitle.py`, `relanguage.py`,
-  `unreadable.py`;
+  `unreadable.py`, `remeta.py`, `extract/declared.py`;
   `packages/meridian_core/meridian_core/chunks.py`, `sources.py`, `boilerplate.py`, `titles.py`,
-  `figures.py`
+  `figures.py`, `bibliography.py`
 - **Tasks:** `P1-07`–`P1-13`, `P2-02`, `B-42`–`B-45`, `B-59`, `B-69`, `B-153`, `B-191`, `B-195`,
-  `B-214`, `B-215`, `B-235`
+  `B-214`, `B-215`, `B-234`, `B-235`
 - **Decisions:** [ADR 0019](../adr/0019-stored-pdfs-re-extracted-for-their-tables.md)
 
 ## How it works
@@ -118,7 +118,10 @@ Other details:
 - Figures are read from the raw HTML, because precision filtering strips `<figure>` wrappers
   (`P1-10`).
 - A publication date must be a full ISO day; a partial date is discarded rather than
-  completed, since `publication_date` is a column citations are built from.
+  completed, since `publication_date` is a column citations are built from. Author, publisher
+  and date are read first from what the page declares, then from trafilatura, each judged
+  ([Source metadata](#source-metadata)).
+
 - Trailing spaces before a newline are collapsed: they come from HTML indentation far more often
   than from an author, and would make chunk boundaries depend on formatting.
 - The English alternate (`B-57`) is read from `<link rel="alternate" hreflang="en…">` in the
@@ -176,7 +179,9 @@ queued for OCR and stays metadata-only.
   name another process could reach. Title, author and date come from `pdfinfo` in a separate
   process (official reports set the title more often than they are given credit for, and a PDF
   without one cites as a URL); its failure does not fail the document. A date is taken only when
-  all of year, month and day are present.
+  all of year, month and day are present, and `pdfinfo` is run with `-isodates`: until `B-234`
+  it printed `Fri Sep 22 14:06:39 2017 UTC`, the parser expected `D:20170922…`, and no PDF in
+  the corpus had a date. The parser's test fed it the format the tool never printed.
 
 <a id="pdf-tables"></a>**Tables keep their rows** (`B-214`). Reading order writes a table column
 by column: every row label, then each column's values as a list of their own, so a passage holds
@@ -578,6 +583,94 @@ language moves to or from another language has its own and its passages' topic l
 for relabelling. On the local corpus (2026-10-07) it read 7,629 of 12,272 undeclared sources,
 321 of them in another language.
 
+### Source metadata
+
+Author, publisher and date are what citations and exports are built from, so a wrong one is
+worse than none (`B-234`). Measured on the local corpus (2026-11-01, kept sources), the gaps
+and the errors had four mechanical causes, none of them a page that declared nothing:
+
+- **No PDF had a date.** `pdfinfo` prints dates as `Fri Sep 22 14:06:39 2017 UTC` unless asked
+  for `-isodates`; the parser expected the PDF's own `D:2017…` form and matched nothing.
+- **Every HTML publisher was the address.** trafilatura's JSON names the site `source-hostname`;
+  the code read `sitename`, which is never there, and fell back to `hostname` on every page.
+- **A copyright line became a publication date.** trafilatura's date search, given a footer's
+  "© 2026", returns 1 January 2026; a page header's clock or "last updated" stamp returns the
+  fetch day. About one stored HTML date in six was one or the other.
+- **trafilatura rewrites authors.** It splits on "and" and "of" and drops words: "Department of
+  Health in X County" becomes "Department", "Surname, Given" becomes "Surname; Given".
+
+**Precedence: declared, then inferred, never guessed.** `worker/extract/declared.py` reads what
+the page declares about itself: Highwire `citation_*` tags, the page's own JSON-LD items (not
+the site's, its organisation's or a breadcrumb's; an article beats a generic `WebPage`; `@id`
+references are followed), Open Graph `article:published_time`, Dublin Core, plain
+`<meta name="author">` and `og:site_name`, and microdata `datePublished` when every one on the
+page agrees (a listing marks up each item). Meta tags are read from the head only, as for the
+page's own DOI. In each field the first source that passes the rules wins, in the order
+`citation`, `jsonld`, `article`, `dc`, `meta`, `microdata`. Only when the page declares nothing
+usable does trafilatura's value stand, judged more strictly. A declared title or language
+fills one trafilatura did not find and never replaces one. For a PDF, `pdfinfo`'s creation date
+and author are the declared values.
+
+**Rules** (`meridian_core/bibliography.py`), each returning the name of the rule that refused:
+
+| Field | Rule | Refuses |
+|---|---|---|
+| date | `future` | after the fetch (a day of slack for time zones) |
+| date | `placeholder` | before 1900, or 1970-01-01 |
+| date | `year only` | 1 January from an inferred source (a declared full day stands) |
+| date | `fetch day` | an inferred date within a day of a fetch: server clocks, "last updated" |
+| date | `made on request` | a PDF created within a day of being fetched |
+| date | `before pdf` | a PDF created before 1993 |
+| author | `placeholder` | "Author", "Admin", "Microsoft Office User", "Staff Writer", a month name, … |
+| author | `site credit` | "Government Websites by …", "Powered by …", a template credit |
+| author | `address` / `contact` | a URL or email; a postal or telephone block |
+| author | `login name` | one lower-case token ("jdoe", "first.last") |
+| publisher | `platform` | the CMS ("WordPress", "Drupal", …) or the page's `generator` |
+| publisher | `address` | an IP address, or a host glued to a scheme ("example.orghttps:") |
+
+A bracketed email after a name and an office account suffix ("Surname, Given@AGENCY") are
+trimmed, not refused. Rejected and kept narrow: an `og:site_name` equal to the page title
+(on a sample of 99 such pages, 45 were home pages whose title is rightly the site's name).
+
+**Measured.** The year-only rule on 60 cleared dates: 27 were copyright lines, 26 other
+footer or path years, 2 a 1 January that was not the page's (a date range, a script
+constant), none a real publication date. The fetch-day rule on 400 dates within a day of the
+fetch: where the page declared a date, 45 of 58 agreed (and those are kept, being declared);
+of the 342 that declared none, 257 had the date on the page as a server timestamp,
+page-generation stamp, "as of" or "last updated" line, and 85 nowhere visible.
+
+**Provenance** sits beside each value in `extra`, named as `title_from` and `language_from`
+already were: `author_from`, `publisher_from`, `date_from` hold `citation`, `jsonld`, `article`,
+`dc`, `meta`, `microdata` or `pdfinfo` (declared), or `inferred`, `trafilatura`, `host`. A value
+a rule refused is kept in `extra['rejected_metadata']`; `title_from` gains the declared source
+when a title came from declared metadata.
+
+**Stored sources** get the same through `worker.remeta`, from the raw file (the PDF through
+`pdfinfo`, against the source's own fetch days). A declared value replaces a stored one of
+unknown or inferred provenance; a stored value already from a declared source is left; with
+nothing declared, the stored value is judged (an unmarked HTML date as `inferred`) and cleared
+if a rule refuses it. Nothing inferred replaces anything. Replaced and cleared values are kept
+in `extra['replaced_metadata']`. A source with no raw file has only its stored values judged.
+
+The report over the local corpus (2026-11-01, 110,037 non-junk sources, 98,147 raw files
+read):
+
+| Field | Filled before | After | What changed |
+|---|---|---|---|
+| date | 87,522 (79.5%) | 75,791 (68.9%) | 8,073 filled (7,501 PDFs); 6,152 inferred replaced by declared; 19,804 cleared (15,771 year only, 4,033 fetch day) |
+| author | 26,879 (24.4%) | 28,448 (25.9%) | 3,205 filled; 4,886 replaced by declared (mostly mangled names restored); 1,636 cleared (989 placeholder, 459 login name, 97 site credit) |
+| publisher | 91,900 (83.5%) | 93,210 (84.7%) | 38,181 addresses replaced by a declared name; 1,342 filled; 32 cleared |
+| language | 94.0% | 94.0% | 63 filled |
+| title | 90.7% | 90.9% | 201 filled |
+
+The date's fill rate falls because about 20,000 of the dates it had were wrong. Declared dates a
+rule refused: 37 placeholders, 37 citation dates after the fetch, 33 PDFs made on request.
+
+Not done here: resolving dates from identifiers (an arXiv identifier gives only year and month,
+which `publication_date` refuses) and from Crossref or OpenAlex, which the DOI resolver calls
+but does not keep metadata from. Site-wide titles (one title on many pages of a host) are
+`worker.retitle`'s territory.
+
 ### The source row
 
 One row per URL, created on first fetch and updated on every fetch.
@@ -618,6 +711,10 @@ One row per URL, created on first fetch and updated on every fetch.
   cited or not, since a superseded passage still resolves.
 - `relanguage` is a one-off pass too, reporting by default and writing with `--apply`; it
   changes only a source's language and marks labels for relabelling ([Language](#language)).
+- `remeta` re-reads stored sources' author, publisher and date (and fills a missing title or
+  language) from their raw files, and clears stored values a rule refuses
+  ([Source metadata](#source-metadata)). Report by default, `--apply` writes; `--limit` and
+  `--after` bound a run. The old value is kept in `extra['replaced_metadata']`.
 - `pdftotext` (poppler) is required in the worker image. Without it every PDF fails loudly,
   by design.
 
@@ -636,8 +733,9 @@ One row per URL, created on first fetch and updated on every fetch.
 
 `tests/unit/test_chunk*.py`, `test_clean*.py`, `test_extract_html.py`,
 `test_extract_pdf.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
+`test_bibliography.py`, `test_bibliography_titles.py`, `test_declared_metadata.py`, `test_remeta_decide.py`,
 `test_injection_screen.py`, `test_rawstore*.py`, `test_pdf_garbled.py`, `test_language_detection.py`,
 `test_storable.py`, `test_readable.py`; `tests/integration/test_chunks*.py`, `test_rechunk*.py`,
 `test_retable.py`, `test_unreadable.py`,
-`test_relanguage.py`, `test_retitle.py`, `test_dockind_backfill.py`, `test_boilerplate.py`,
+`test_relanguage.py`, `test_retitle.py`, `test_remeta.py`, `test_dockind_backfill.py`, `test_boilerplate.py`,
 `test_nul_bytes.py`.

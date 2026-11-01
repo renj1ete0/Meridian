@@ -130,6 +130,11 @@ class ExtractedDocument:
     needs_ocr: bool = False
     #: Tables kept as rows (`B-214`): how many a PDF's pages gained.
     tables: int = 0
+    #: Where each metadata field's value came from (`B-234`), by field name:
+    #: `jsonld`, `citation`, `pdfinfo`, … (declared) or `inferred`, `host`, `trafilatura`.
+    metadata_from: dict[str, str] = dataclasses.field(default_factory=dict)
+    #: Values a rule refused, by field name, kept so the refusal can be checked.
+    metadata_rejected: dict[str, str] = dataclasses.field(default_factory=dict)
 
     @property
     def char_count(self) -> int:

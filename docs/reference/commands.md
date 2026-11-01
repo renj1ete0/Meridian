@@ -101,6 +101,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.retier` | `--apply` | Re-tiers `peer_reviewed` pages whose scholarly tier came only from their domain, and preprint-server pages to `preprint` (`B-233`) |
 | `worker.retitle` | `--apply` | Cleans stored titles |
 | `worker.relanguage` | `--apply` | Reads the language of stored sources that declared none; sends those in another language back for topic labels (`B-153`) |
+| `worker.remeta` | `--apply`; `--limit N`, `--after ID` | Re-reads the author, publisher, date, and a missing title or language that stored sources declare in their raw files; clears values a rule refuses (`B-234`) |
 | `worker.harvest` | always | Acronym harvest |
 | `worker.translate` | always | Other-language vocabulary |
 | `worker.seedsearch` | always (`--report` dry) | Search seeds |

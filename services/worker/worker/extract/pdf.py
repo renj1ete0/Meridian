@@ -15,6 +15,7 @@ import re
 import shutil
 import unicodedata
 
+from meridian_core.bibliography import judge_author, judge_date, parse_day
 from meridian_core.logging import get_logger
 from meridian_core.titles import plain_letters
 
@@ -50,9 +51,6 @@ FORM_FEED = "\f"
 #: pdfinfo emits `Key:  value` lines. Only a few are worth keeping — the rest is
 #: producer strings and page geometry.
 _INFO_RE = re.compile(r"^([A-Za-z][A-Za-z ]*):\s+(.*)$")
-
-#: `D:20260314090000+08'00'` — the PDF date format, which is nobody's ISO 8601.
-_PDF_DATE_RE = re.compile(r"^D:(\d{4})(\d{2})(\d{2})")
 
 
 class PdftotextMissing(RuntimeError):
@@ -264,31 +262,58 @@ async def _with_tables(
     return dataclasses.replace(extracted, pages=tuple(pages)), tables
 
 
+async def pdf_info(content: bytes, timeout_s: int = DEFAULT_TIMEOUT_S) -> dict[str, str]:
+    """`pdfinfo`'s fields, keys lower-cased, dates in ISO 8601; empty when it fails.
+
+    ``-isodates``: without it the dates come out as `Fri Sep 22 14:06:39 2017 UTC`, which
+    no date reader here understood, and no PDF ever had a date (`B-234`).
+    """
+    output = await _capture([PDFINFO, "-isodates", "-enc", "UTF-8", "-"], content, timeout_s)
+    fields: dict[str, str] = {}
+    for line in (output or "").splitlines():
+        match = _INFO_RE.match(line)
+        if match:
+            fields[match.group(1).strip().lower()] = match.group(2).strip()
+    return fields
+
+
+def metadata_from_info(
+    fields: dict[str, str], *, fetched: dt.date | None = None, also_fetched: dt.date | None = None
+) -> dict[str, object]:
+    """The `ExtractedDocument` fields `pdfinfo`'s answer fills, each judged.
+
+    CreationDate over ModDate: a report re-saved later was still published when it was.
+    See docs/features/extraction.md#source-metadata.
+    """
+    metadata: dict[str, object] = {}
+    chosen: dict[str, str] = {}
+    rejected: dict[str, str] = {}
+    if title := fields.get("title"):
+        metadata["title"] = title
+    if raw_author := fields.get("author"):
+        if (author := judge_author(raw_author).value) is not None:
+            metadata["author"], chosen["author"] = author, "pdfinfo"
+        else:
+            rejected["author"] = raw_author
+    if (created := pdf_date(fields.get("creationdate"))) is not None:
+        verdict = judge_date(created, source="pdfinfo", fetched=fetched, also_fetched=also_fetched)
+        if verdict.value is not None:
+            metadata["publication_date"], chosen["publication_date"] = verdict.value, "pdfinfo"
+        else:
+            rejected["publication_date"] = created.isoformat()
+    if chosen:
+        metadata["metadata_from"] = chosen
+    if rejected:
+        metadata["metadata_rejected"] = rejected
+    return metadata
+
+
 async def _metadata(content: bytes, timeout_s: int) -> dict[str, object]:
     """Title, author and date from `pdfinfo`, for the fields a citation needs.
 
     A separate process; failure here is not failure of the document.
     """
-    output = await _capture([PDFINFO, "-enc", "UTF-8", "-"], content, timeout_s)
-    if output is None:
-        return {}
-
-    fields: dict[str, str] = {}
-    for line in output.splitlines():
-        match = _INFO_RE.match(line)
-        if match:
-            fields[match.group(1).strip().lower()] = match.group(2).strip()
-
-    metadata: dict[str, object] = {}
-    if title := fields.get("title"):
-        metadata["title"] = title
-    if author := fields.get("author"):
-        metadata["author"] = author
-    # CreationDate over ModDate: a report re-saved in 2026 was still published
-    # when it was published, and `publication_date` is what citations show.
-    if date := _pdf_date(fields.get("creationdate")):
-        metadata["publication_date"] = date
-    return metadata
+    return metadata_from_info(await pdf_info(content, timeout_s))
 
 
 async def _capture(argv: list[str], stdin: bytes, timeout_s: int) -> str | None:
@@ -330,18 +355,10 @@ async def _capture(argv: list[str], stdin: bytes, timeout_s: int) -> str | None:
     return out.decode("utf-8", "replace")
 
 
-def _pdf_date(value: str | None) -> dt.date | None:
-    """A date from the PDF's own format, or None. Never a guess.
+def pdf_date(value: str | None) -> dt.date | None:
+    """A day from a PDF date, or None. Only a full day; never a guess.
 
-    `D:20260314090000+08'00'`: only the day is taken, and only when all three
-    components are there.
+    `pdfinfo -isodates` writes `2017-09-22T14:06:39Z`; the file itself `D:20170922…`.
     """
-    if not value:
-        return None
-    match = _PDF_DATE_RE.match(value.strip())
-    if not match:
-        return None
-    try:
-        return dt.date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
-    except ValueError:
-        return None
+    day = parse_day(value)
+    return day if day is not None and day.year > 0 else None

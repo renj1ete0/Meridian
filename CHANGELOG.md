@@ -91,6 +91,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.196.0] — 2026-11-02
+
+### Fixed
+
+- `B-234`: source metadata. PDFs get their dates (the PDF tool's date format was never
+  parsed), web pages their publisher's name rather than their address (a field name the
+  extractor never produces was read), and what a page declares (citation tags, its own
+  JSON-LD, article and Dublin Core meta) now wins over what the extractor infers. Wrong values
+  are refused by named rules: a copyright year or a fetch-day stamp taken for a publication
+  date, placeholder and login-name authors, CMS names as publishers. Each field records where
+  it came from. `worker.remeta` applies this to stored sources (reports by default).
+
+**Deploy:** image only; then `docker compose run --rm worker python -m worker.remeta` to see
+what it would change, and again with `--apply`.
+
 ## [0.195.0] — 2026-11-02
 
 ### Added

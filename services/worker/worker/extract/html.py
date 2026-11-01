@@ -19,9 +19,11 @@ import trafilatura
 from lxml import etree
 from lxml import html as lxml_html
 
+from meridian_core.bibliography import judge_author, judge_date, judge_publisher
 from meridian_core.logging import get_logger
 
 from .base import TEXT_FLOOR, Citation, ExtractedDocument
+from .declared import read_declared
 from .figures import figures_from_html
 
 log = get_logger(__name__)
@@ -63,6 +65,7 @@ _DOI_META_NAMES = ("citation_doi", "dc.identifier", "dc.identifier.doi", "prism.
 _ARXIV_DOI_PREFIX = "10.48550/arxiv."
 
 _WS_RE = re.compile(r"[ \t]*\n[ \t]*")
+_HOST_NAME = re.compile(r"(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+")
 
 
 def extract_html(
@@ -70,12 +73,14 @@ def extract_html(
     url: str,
     *,
     browser_payload: dict[str, Any] | None = None,
+    fetched: dt.date | None = None,
 ) -> ExtractedDocument:
     """Extract text, metadata and citations from one HTML document.
 
     ``browser_payload`` is Crawl4AI's result dict when the browser path ran.
     Both paths extract with the same tool at the same precision — see
-    :func:`_from_browser` for why that is not what this used to do.
+    :func:`_from_browser` for why that is not what this used to do. ``fetched`` is
+    the day the page was fetched (today when None), against which dates are judged.
     """
     html_text = content.decode("utf-8", "replace") if isinstance(content, bytes) else content
 
@@ -87,6 +92,8 @@ def extract_html(
     links = document.links or _links_from_html(html_text, url)
     own_doi = _own_doi(html_text, url)
     citations = _citations(document.text, links, exclude=_self_identifiers(own_doi, url))
+
+    document = with_declared(document, html_text, fetched=fetched)
 
     return dataclasses.replace(
         document,
@@ -102,6 +109,74 @@ def extract_html(
         og_type=og_type(html_text),
         schema_types=schema_types(html_text),
         scholarly_meta=has_scholarly_meta(html_text),
+    )
+
+
+def with_declared(
+    document: ExtractedDocument, html_text: str, *, fetched: dt.date | None = None
+) -> ExtractedDocument:
+    """The document with its author, publisher and date chosen by precedence (`B-234`).
+
+    What the page declares wins over what trafilatura inferred; every value is judged,
+    and where each came from is recorded in ``metadata_from``. A title or language the
+    page declares fills one trafilatura did not find. See
+    docs/features/extraction.md#source-metadata.
+    """
+    declared = read_declared(html_text)
+    chosen: dict[str, str] = {}
+    rejected: dict[str, str] = {}
+
+    date = None
+    if declared.publication_date is not None:
+        found = declared.publication_date
+        verdict = judge_date(found.value, source=found.source, fetched=fetched)
+        if verdict.value is not None:
+            date, chosen["publication_date"] = verdict.value, found.source
+        else:
+            rejected["publication_date"] = found.value.isoformat()
+    if date is None and document.publication_date is not None:
+        verdict = judge_date(document.publication_date, source="inferred", fetched=fetched)
+        if verdict.value is not None:
+            date, chosen["publication_date"] = verdict.value, "inferred"
+        else:
+            rejected.setdefault("publication_date", document.publication_date.isoformat())
+
+    author = None
+    if declared.author is not None:
+        author, chosen["author"] = declared.author.value, declared.author.source
+    elif document.author is not None:
+        author = judge_author(document.author).value
+        if author is not None:
+            chosen["author"] = "trafilatura"
+        else:
+            rejected["author"] = document.author
+
+    publisher = None
+    if declared.publisher is not None:
+        publisher, chosen["publisher"] = declared.publisher.value, declared.publisher.source
+    elif document.publisher is not None:
+        publisher = judge_publisher(document.publisher, generator=declared.generator).value
+        if publisher is not None:
+            chosen["publisher"] = document.metadata_from.get("publisher", "trafilatura")
+        else:
+            rejected["publisher"] = document.publisher
+
+    title = document.title
+    if title is None and declared.title is not None:
+        title, chosen["title"] = declared.title.value, declared.title.source
+    language = document.language
+    if language is None and declared.language is not None:
+        language = declared.language.value
+
+    return dataclasses.replace(
+        document,
+        title=title,
+        author=author,
+        publisher=publisher,
+        publication_date=date,
+        language=language,
+        metadata_from=chosen,
+        metadata_rejected=rejected,
     )
 
 
@@ -204,12 +279,19 @@ def _from_html(content: bytes | str, url: str) -> ExtractedDocument:
         log.warning("html extraction returned unparseable output", extra={"url": url})
         return ExtractedDocument(extractor="failed")
 
+    sitename, hostname = _clean(fields.get("source-hostname")), _clean(fields.get("hostname"))
+    if sitename and _HOST_NAME.fullmatch(sitename.lower()):
+        # trafilatura falls back to the full host name when the page names no site.
+        sitename = None
+    publisher = sitename or hostname
     return ExtractedDocument(
         extractor="trafilatura",
         text=_normalise(fields.get("text") or ""),
         title=_clean(fields.get("title")),
         author=_clean(fields.get("author")),
-        publisher=_clean(fields.get("sitename")) or _clean(fields.get("hostname")),
+        # trafilatura's JSON names the site `source-hostname`; `hostname` is the address.
+        publisher=publisher,
+        metadata_from={"publisher": "trafilatura" if sitename else "host"} if publisher else {},
         publication_date=_as_date(fields.get("date")),
         language=_clean(fields.get("language")),
         excerpt=_clean(fields.get("excerpt")),
