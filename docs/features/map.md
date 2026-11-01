@@ -264,13 +264,33 @@ exactly.
 The arithmetic behind the Map's screens lives in `web/src/lib/areas.ts`, `corpusmap.ts` and
 `topicweb.ts`, apart from the SVG and WebGL so it is tested without a browser.
 
-### Circles do not overlap; lines cross them
+### Circles do not overlap; lines pass behind them
 
-Reported as overlapping fields (`B-157`): measured on the live build at 1440 and 390 px, every
-pair of field circles keeps the 14 px gap `placeAreas` gives it. What reads as overlap is the
-links drawn across the circles' translucent fills and the faint globe outline behind them.
-Drawing links behind opaque fills, or stopping them at the circles they pass, is a design
-question left open.
+Reported twice as overlapping fields (`B-157`, `B-221`). Measured on the live build and on a
+fixture of the same shape at 1440 and 390 px, every pair of field circles keeps the 14 px gap
+(`ROOT_GAP`) the layout gives it: the collision radius is the drawn radius, and the outline's
+widest stroke is well inside the gap. What read as overlap was drawing, not layout:
+
+- **Lines showed through the circles.** A link between two far fields runs under the circles
+  between them, and the fills are translucent, so a solid line crossed each of those circles
+  and the names on it, and stacked circles looked merged. Each circle now sits on an opaque disc
+  of the ground colour under its tint, as nodes are opaque over edges in the design mock
+  (`docs/design/Explore.dc.html`): a line visibly goes behind a circle and comes out the other
+  side.
+- **Names were drawn with their own circle.** A circle drawn later covered the name of one drawn
+  before it. Names and captions are now one layer over every circle and line; clicks pass
+  through it to the circle underneath.
+- **The caption was not measured.** An inside label's box held the name only, so a "12
+  subfields inside" wider than the name ran past the rim unmeasured, and the fit was checked
+  only across the circle's middle while the caption sits below it. The box now holds the
+  caption, and every corner of it must lie within the rim; a caption that does not fit is
+  dropped, then a smaller size is tried.
+- **A name hung below a small circle cleared other circles only on a crowded map.** It is now
+  refused wherever it would touch another circle, however few there are; hovering names it.
+
+`placeRoot` is the one function that lays out the root level as drawn (size, gap, the key kept
+clear), so `web/tests/areas-geometry.test.ts` checks exactly what the screen draws: circles apart
+by the gap and labels clear of other circles, at 1440×900 and phone width.
 
 ### Circle sizes
 

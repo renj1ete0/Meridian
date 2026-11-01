@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.193.1] — 2026-11-01
+
+### Fixed
+
+- `B-221`: the Map's field circles read as apart and their names stay legible: each circle is
+  drawn opaque over the lines that pass behind it, names and captions sit in one layer above
+  every circle and line, an inside label's box includes its caption, and a name hung below a
+  small circle is always kept clear of its neighbours.
+
+**Deploy:** image only.
+
 ## [0.193.0] — 2026-11-01
 
 ### Changed

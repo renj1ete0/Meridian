@@ -5,6 +5,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  boxHitsCircle,
+  boxInCircle,
+  fitLabels,
+  keyBoxFor,
+  placeRoot,
+  ROOT_GAP,
   keyValues,
   keyValuesAtScale,
   edgeToEdge,
@@ -177,6 +183,120 @@ describe('lines between circles', () => {
     const covered = passages.reduce((sum, p) => sum + Math.PI * radiusOf(p, scale) ** 2, 0)
     expect(covered).toBeLessThanOrEqual(0.25 * 800 * 600 + 1)
     expect(fitRadius(passages, 800, 600, { fill: 1, cap: 0.1 })).toBe(60)
+  })
+})
+
+describe('the field level as drawn (B-221)', () => {
+  // A dozen fields of similar size, two clusters at the edges, as a real build
+  // has them: the case where neighbours were reported overlapping.
+  const FIELDS: [string, number, number, number, number][] = [
+    ['Open Questions', 117000, -0.34, 0.01, 9],
+    ['Harbour Logistics', 98000, 0.14, -0.31, 8],
+    ['Public Ledgers', 94000, 0.27, -0.4, 8],
+    ['Number Craft', 93000, -0.88, -0.19, 8],
+    ['Toll Economics and Ferry Pricing', 89000, 0.41, -0.41, 8],
+    ['Civic Behaviour', 83000, -0.46, -0.15, 7],
+    ['Stone Engineering', 71000, -0.39, 0.35, 6],
+    ['Grants and Allowances', 62000, 0.95, -0.04, 6],
+    ['Lantern Medicine', 54000, -0.96, -0.09, 5],
+    ['Notice Boards and Old Records', 53000, 1, 0.3, 5],
+    ['Canal Science and Harbour Craft', 50000, 0.47, 0.82, 5],
+    ['Tally Keeping and Harbour Logistics', 47000, -0.85, -0.37, 4],
+    ['Data', 6000, -0.8, -0.3, 2],
+    ['Quiet Arts', 900, 0.9, -0.85, 1],
+  ]
+  const fields = FIELDS.map(([name, passages, x, y, children], i) =>
+    area({ area_id: i + 1, name, passages, x, y, children }),
+  )
+  // The drawing's size in the app (the canvas less the controls above and
+  // the key's line below): a 1440×900 window and a phone, measured.
+  const SIZES: [string, number, number][] = [
+    ['1440×900', 1440, 698],
+    ['phone', 390, 510],
+  ]
+  // The widest a circle's outline is drawn (highlighted).
+  const STROKE = 2.4
+
+  for (const [name, width, height] of SIZES) {
+    describe(`at ${name}`, () => {
+      const { placed } = placeRoot(fields, width, height)
+      const labels = fitLabels(placed, { width, captions: true, reserved: [keyBoxFor(width, height)] })
+
+      it('keeps every pair of circles apart by the gap, measured on the drawn radii', () => {
+        for (let i = 0; i < placed.length; i++)
+          for (let j = i + 1; j < placed.length; j++) {
+            const a = placed[i]!
+            const b = placed[j]!
+            const apart = Math.hypot(a.x - b.x, a.y - b.y) - a.r - b.r
+            expect(apart, `${a.area.name} and ${b.area.name}`).toBeGreaterThanOrEqual(ROOT_GAP - 0.5)
+            expect(apart).toBeGreaterThan(STROKE)
+          }
+      })
+
+      it('keeps every circle inside the drawing and out of the key', () => {
+        const key = keyBoxFor(width, height)
+        for (const p of placed) {
+          expect(p.x - p.r).toBeGreaterThanOrEqual(0)
+          expect(p.x + p.r).toBeLessThanOrEqual(width)
+          expect(p.y - p.r).toBeGreaterThanOrEqual(0)
+          expect(p.y + p.r).toBeLessThanOrEqual(height)
+          expect(boxHitsCircle(key, p), p.area.name).toBe(false)
+        }
+      })
+
+      it('names most fields, and no name or caption touches another circle', () => {
+        expect(labels.size).toBeGreaterThanOrEqual(placed.length / 2)
+        for (const p of placed) {
+          const label = labels.get(p.area.area_id)
+          if (!label) continue
+          // Inside, the whole box stays within the rim, caption and all.
+          expect(!label.inside || boxInCircle(label.box, p), p.area.name).toBe(true)
+          for (const o of placed) {
+            if (o === p) continue
+            expect(boxHitsCircle(label.box, o), `${p.area.name}'s name over ${o.area.name}`).toBe(false)
+          }
+        }
+      })
+
+      it('makes room in the box for a caption wider than the name above it', () => {
+        for (const p of placed) {
+          const label = labels.get(p.area.area_id)
+          if (!label?.caption) continue
+          const captionWidth = `${p.area.children} subfields inside`.length * 6.4
+          expect(label.box.w, p.area.name).toBeGreaterThanOrEqual(captionWidth)
+        }
+      })
+    })
+  }
+
+  it('keeps a hung name off a neighbour even where circles are few', () => {
+    // A small circle whose name will not fit inside, a large one just below.
+    const small = { area: area({ area_id: 1, name: 'Data', children: 4 }), x: 400, y: 200, r: 10 }
+    const large = { area: area({ area_id: 2, name: 'Wide', children: 0 }), x: 400, y: 270, r: 50 }
+    const labels = fitLabels([small, large], { width: 800, captions: true })
+    expect(labels.has(1)).toBe(false)
+    expect(labels.get(2)?.inside).toBe(true)
+    // With the neighbour moved away, the same name is hung below.
+    const clear = fitLabels([small, { ...large, x: 700 }], { width: 800, captions: true })
+    expect(clear.get(1)?.inside).toBe(false)
+  })
+
+  it('never lets a caption inside a circle cross its rim, at any size', () => {
+    // The caption is the box's bottom line, centred; a caption too wide for
+    // where it sits is dropped, never left to spill (`B-221`).
+    let captioned = 0
+    for (const name of ['Data', 'Fen Survey', 'Moor Craft and Old Fen Survey Records']) {
+      for (let r = 12; r <= 140; r += 0.5) {
+        const p = { area: area({ area_id: 1, name, children: 12 }), x: 300, y: 300, r }
+        const label = fitLabels([p], { width: 600, captions: true }).get(1)
+        if (!label?.inside || !label.caption) continue
+        captioned++
+        const w = '12 subfields inside'.length * 6.4
+        const caption = { x: p.x - w / 2, y: label.box.y + label.box.h - 13, w, h: 13 }
+        expect(boxInCircle(caption, p), `${name} at r ${r}`).toBe(true)
+      }
+    }
+    expect(captioned).toBeGreaterThan(100)
   })
 })
 

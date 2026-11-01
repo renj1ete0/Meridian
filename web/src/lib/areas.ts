@@ -368,6 +368,40 @@ export function placeAreas(
   return { placed, scale }
 }
 
+/** Space kept between two circles of the root level, and between a circle and the canvas's edge. */
+export const ROOT_GAP = 14
+export const ROOT_PAD = 28
+
+/** Below this canvas width the size key is one short row. */
+export const COMPACT_KEY_BELOW = 640
+const KEY_BOX = { w: 230, h: 150 }
+const KEY_BOX_COMPACT = { w: 170, h: 44 }
+
+/** Where the size key sits, bottom left of the drawing: circles and labels keep out of it. */
+export function keyBoxFor(width: number, height: number): Rect {
+  const k = width < COMPACT_KEY_BELOW ? KEY_BOX_COMPACT : KEY_BOX
+  return { x: 0, y: height - k.h, w: k.w, h: k.h }
+}
+
+/**
+ * The root level as the Map draws it in a `width` × `height` drawing: sized to
+ * leave room ({@link fitRadius}), spaced {@link ROOT_GAP} apart and kept out
+ * of the size key. One function, so a test lays out exactly what is drawn.
+ */
+export function placeRoot(areas: readonly Area[], width: number, height: number): { placed: Placed[]; scale: number } {
+  const maxRadius = fitRadius(
+    areas.map((a) => a.passages),
+    width,
+    height,
+  )
+  return placeAreas(areas, width, height, {
+    maxRadius,
+    gap: ROOT_GAP,
+    pad: ROOT_PAD,
+    avoid: [keyBoxFor(width, height)],
+  })
+}
+
 /**
  * Push overlapping circles apart, keep them out of `avoid` and inside the
  * box; with `targets`, also draw each back towards its own target by `pull`
@@ -996,19 +1030,28 @@ function insideAt(
     ? wrapped.map((line) => (line.length > maxChars ? `${line.slice(0, maxChars - 1).trimEnd()}…` : line))
     : wrapped
   const longest = Math.max(...lines.map((line) => line.length))
-  const width = longest * fontSize * CHAR_WIDTH + 6
-  const height = lines.length * lineHeight + (caption ? 13 : 0)
-  if (width > across || height > p.r * 2 * 0.78) return null
-  const y = p.y - height / 2 + fontSize * 0.85
-  return {
-    lines,
-    fontSize,
-    lineHeight,
-    y,
-    inside: true,
-    caption,
-    box: { x: p.x - width / 2, y: y - fontSize, w: width, h: height },
+  const nameWidth = longest * fontSize * CHAR_WIDTH + 6
+  // With its caption if the whole fits, else without: the box holds the
+  // caption too, which is often wider than the name above it (`B-221`).
+  for (const withCaption of caption ? [true, false] : [false]) {
+    const width = Math.max(nameWidth, withCaption ? captionChars * CAPTION_CHAR + 6 : 0)
+    const height = lines.length * lineHeight + (withCaption ? 13 : 0)
+    if (width > across || height > p.r * 2 * 0.78) continue
+    const y = p.y - height / 2 + fontSize * 0.85
+    const box = { x: p.x - width / 2, y: y - fontSize, w: width, h: height }
+    // Every corner inside the rim, not only the band across the middle: the
+    // caption sits below the centre, where the circle is narrower.
+    if (!boxInCircle(box, p)) continue
+    return { lines, fontSize, lineHeight, y, inside: true, caption: withCaption, box }
   }
+  return null
+}
+
+/** Whether every corner of `box` lies within the circle, so all of it does. */
+export function boxInCircle(box: Rect, c: { x: number; y: number; r: number }): boolean {
+  const xs = [box.x - c.x, box.x + box.w - c.x]
+  const ys = [box.y - c.y, box.y + box.h - c.y]
+  return xs.every((dx) => ys.every((dy) => Math.hypot(dx, dy) <= c.r))
 }
 
 /** The length of "7 subfields inside" or "1,234 passages", near enough to size a box. */
@@ -1020,7 +1063,8 @@ function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
-function boxHitsCircle(box: Rect, c: { x: number; y: number; r: number }): boolean {
+/** Whether `box` and the circle share any point. */
+export function boxHitsCircle(box: Rect, c: { x: number; y: number; r: number }): boolean {
   const nx = Math.min(box.x + box.w, Math.max(box.x, c.x))
   const ny = Math.min(box.y + box.h, Math.max(box.y, c.y))
   return Math.hypot(c.x - nx, c.y - ny) < c.r
@@ -1029,19 +1073,14 @@ function boxHitsCircle(box: Rect, c: { x: number; y: number; r: number }): boole
 /**
  * The labels that can be drawn without one covering another: largest circle
  * first, each kept only if its box is clear of every label already kept and
- * of `reserved`, and inside the canvas's width. Where circles are dense
- * (`crowded`), a label hung below its circle must also clear every other
- * circle, or it would read as that circle's name. The rest are read by
- * hovering.
+ * of `reserved`, and inside the canvas's width. A label inside its circle
+ * stays within the rim; one hung below must clear every other circle, however
+ * sparse the map, or it runs under a neighbour and reads as its name
+ * (`B-221`). The rest are read by hovering.
  */
 export function fitLabels(
   placed: readonly Placed[],
-  {
-    width,
-    captions,
-    crowded = placed.length > 40,
-    reserved = [],
-  }: { width: number; captions: boolean; crowded?: boolean; reserved?: readonly Rect[] },
+  { width, captions, reserved = [] }: { width: number; captions: boolean; reserved?: readonly Rect[] },
 ): Map<number, Label> {
   const order = [...placed].sort((a, b) => b.r - a.r || a.area.area_id - b.area.area_id)
   const kept = new Map<number, Label>()
@@ -1051,7 +1090,7 @@ export function fitLabels(
     const box = label.box
     if (box.x < 0 || box.x + box.w > width) continue
     if (boxes.some((b) => overlaps(b, box))) continue
-    if (crowded && !label.inside && placed.some((o) => o !== p && boxHitsCircle(box, o))) continue
+    if (!label.inside && placed.some((o) => o !== p && boxHitsCircle(box, o))) continue
     kept.set(p.area.area_id, label)
     boxes.push(box)
   }

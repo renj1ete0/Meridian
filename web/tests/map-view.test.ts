@@ -179,7 +179,7 @@ describe('names inside a circle', () => {
     const p: Placed = { area: area({ area_id: 1, name }), x: 200, y: 200, r: 34 }
     // A neighbour close below, so a name hung under the circle is refused.
     const below: Placed = { area: area({ area_id: 2, name: 'x' }), x: 200, y: 262, r: 26 }
-    const labels = fitLabels([p, below], { width: W, captions: false, crowded: true })
+    const labels = fitLabels([p, below], { width: W, captions: false })
     const label = labels.get(1)
     expect(label?.inside).toBe(true)
     // The start of the name, cut where it had to be, and inside the rim.

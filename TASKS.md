@@ -2106,7 +2106,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       pointed at `api:8000` (no web app), and the MCP discovery document a 401 names at the root
       answered only below `/mcp`: no assistant could have found where to sign in. Served at the
       root, exempt from Access, forwarded by nginx with `/health`; setup §8 rewritten
-- [ ] `B-221` **Map circles overlap at the field level** (UX sweep 2026-10-11) — at 1440×900,
+- [x] `B-221` **Map circles overlap at the field level** (UX sweep 2026-10-11) — at 1440×900,
       Data, Mathematics, Social Sciences and Transportation overlap, and their "N subfields
       inside" lines run under neighbours and under the solid links. Check the layout's
       collision radius against the drawn radius, and whether labels should sit above links

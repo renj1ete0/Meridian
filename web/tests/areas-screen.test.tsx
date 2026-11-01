@@ -99,7 +99,7 @@ describe('areas on the canvas', () => {
     expect(law.getAttribute('data-share')).toBe('0.005')
     expect(law.getAttribute('aria-label')).toContain('under 1% on a topic')
     expect(transport.getAttribute('aria-label')).toContain('70% on a topic')
-    const fill = (g: Element) => Number(g.querySelector('circle')!.getAttribute('fill-opacity'))
+    const fill = (g: Element) => Number(g.querySelector('circle[data-tint]')!.getAttribute('fill-opacity'))
     expect(fill(law)).toBeLessThan(fill(transport))
   })
 
@@ -107,7 +107,7 @@ describe('areas on the canvas', () => {
     const { container } = render(<AreasView level={level()} onLevel={() => {}} />)
     const g = container.querySelector('[data-area="1"]')!
     expect(g.getAttribute('data-share')).toBeNull()
-    expect(g.querySelector('circle')!.getAttribute('fill-opacity')).toBe('0.3')
+    expect(g.querySelector('circle[data-tint]')!.getAttribute('fill-opacity')).toBe('0.3')
   })
 
   it('zooms into an area that has areas inside', () => {

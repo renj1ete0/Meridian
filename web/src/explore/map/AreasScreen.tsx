@@ -19,13 +19,15 @@ import {
   levelNoun,
   linkWidth,
   loadedTo,
-  placeAreas,
   placeNested,
   prefersReducedMotion,
   rowsAt,
   edgeToEdge,
-  fitRadius,
+  keyBoxFor,
+  placeRoot,
   radiusOf,
+  COMPACT_KEY_BELOW,
+  ROOT_GAP,
   splitMorph,
   zoomCaption,
   routeBetween,
@@ -639,7 +641,7 @@ const CANVAS_BOTTOM = 40
  */
 const SHRINK = [1, 0.98, 0.9]
 const SPREAD = [0, 0.95, 0.85]
-const GAPS = [14, 5, 2.5]
+const GAPS = [ROOT_GAP, 5, 2.5]
 
 type Morph = {
   items: MorphItem[]
@@ -696,23 +698,14 @@ function Canvas({
   // Room at the bottom for the key.
   const bottom = CANVAS_BOTTOM
   const drawHeight = Math.max(200, height - top - bottom)
-  const maxRadius = fitRadius(
-    level.areas.map((a) => a.passages),
-    width,
-    drawHeight,
-  )
-
   // Where the size key sits, bottom left: circles and labels keep out of it.
-  const keyBox = useMemo<Rect>(() => {
-    const k = width < COMPACT_KEY_BELOW ? KEY_BOX_COMPACT : KEY_BOX
-    return { x: 0, y: drawHeight - k.h, w: k.w, h: k.h }
-  }, [drawHeight, width])
+  const keyBox = useMemo<Rect>(() => keyBoxFor(width, drawHeight), [drawHeight, width])
 
   // Every loaded level laid out once per size: the root's by its stored
   // positions, each finer one composed into the level above it.
   const layouts = useMemo(() => {
     const avoid: Rect[] = [keyBox]
-    const first = placeAreas(level.areas, width, drawHeight, { maxRadius, gap: GAPS[0], pad: 28, avoid })
+    const first = placeRoot(level.areas, width, drawHeight)
     let current: Layout = { level: level.level, ...first }
     const out = new Map<number, Layout>([[level.level, current]])
     const childrenOf = new Map([...byParent].map(([id, children]) => [id, children.areas]))
@@ -730,7 +723,7 @@ function Canvas({
       out.set(l, current)
     }
     return out
-  }, [level, byParent, width, drawHeight, maxRadius, keyBox])
+  }, [level, byParent, width, drawHeight, keyBox])
 
   const layout = layouts.get(shown) ?? layouts.get(level.level)!
   useEffect(() => onScale(layout.scale * view.k), [layout.scale, view.k, onScale])
@@ -795,7 +788,6 @@ function Canvas({
       fitLabels(placed, {
         width,
         captions: placed.length <= 40,
-        crowded: placed.length > 40 || width < 640,
         reserved: [keyBox, ...outlines.filter((o) => o.named).map((o) => o.box)],
       }),
     [placed, width, outlines, keyBox],
@@ -1001,8 +993,6 @@ function Canvas({
                 <AreaCircle
                   key={p.area.area_id}
                   placed={p}
-                  label={labels.get(p.area.area_id)}
-                  childNoun={childNoun}
                   hovered={hover === p.area.area_id}
                   highlighted={highlight === p.area.area_id}
                   onHover={onHover}
@@ -1030,6 +1020,18 @@ function Canvas({
                   />
                 ) : null
               })}
+              {/* Names in a layer of their own, over every circle and line
+                  (`B-221`): drawn with their own circle, a name hung below it
+                  went under the next circle drawn. Clicks pass through to
+                  the circle underneath. */}
+              <g aria-hidden className="pointer-events-none" data-labels="">
+                {placed.map((p) => {
+                  const label = labels.get(p.area.area_id)
+                  return label ? (
+                    <AreaLabel key={p.area.area_id} placed={p} label={label} childNoun={childNoun} />
+                  ) : null
+                })}
+              </g>
               {/* Over the circles, so the halo keeps a name legible where
                   another field's circles pass under it. */}
               <g aria-hidden className="pointer-events-none">
@@ -1062,13 +1064,13 @@ function Canvas({
 }
 
 /**
- * One circle and, where {@link fitLabels} found it room, its name. Memoised:
- * a finer level draws hundreds, and hovering one should not redraw the rest.
+ * One circle, on an opaque disc of the ground so a line passing under it is
+ * hidden rather than seen through the tint (`B-221`). Its name is drawn apart,
+ * by {@link AreaLabel}. Memoised: a finer level draws hundreds, and hovering
+ * one should not redraw the rest.
  */
 const AreaCircle = memo(function AreaCircle({
   placed,
-  label,
-  childNoun,
   hovered,
   highlighted,
   onHover,
@@ -1078,8 +1080,6 @@ const AreaCircle = memo(function AreaCircle({
   shadeMax = 1,
 }: {
   placed: Placed
-  label: Label | undefined
-  childNoun: string
   hovered: boolean
   highlighted: boolean
   onHover: (id: number | null) => void
@@ -1094,12 +1094,8 @@ const AreaCircle = memo(function AreaCircle({
   const share = onTopicShare(area)
   const raw = shadeOf(area, shade)
   const fill = raw === null ? null : Math.min(1, raw / (shadeMax > 0 ? shadeMax : 1))
-  // Muted names mean "not about your topics", whatever the fill is showing.
+  // A muted outline, like a muted name, means "not about your topics".
   const background = share !== null && share < OFF_TOPIC_BELOW
-  const caption =
-    area.children > 0
-      ? `${area.children} ${childNoun}${area.children === 1 ? '' : 's'} inside`
-      : `${area.passages.toLocaleString('en')} passages`
   const press = useLongPress((point) =>
     onMenu({ ...point, preventDefault() {}, stopPropagation() {} } as unknown as React.MouseEvent, area),
   )
@@ -1134,7 +1130,9 @@ const AreaCircle = memo(function AreaCircle({
       data-share={share === null ? undefined : share.toFixed(3)}
       data-shade={raw === null ? undefined : raw.toFixed(3)}
     >
+      <circle cx={x} cy={y} r={r} fill="var(--ground-deep)" />
       <circle
+        data-tint=""
         cx={x}
         cy={y}
         r={r}
@@ -1145,7 +1143,34 @@ const AreaCircle = memo(function AreaCircle({
         strokeWidth={highlighted ? 2.4 : r < 12 ? 1 : 1.2}
         strokeDasharray={flagged ? (r < 12 ? '3 2' : '5 4') : undefined}
       />
-      {label?.lines.map((line, i) => (
+    </g>
+  )
+})
+
+/**
+ * A circle's name, and the caption under it, where {@link fitLabels} found it
+ * room. Drawn in a layer over every circle and line, so nothing crosses it.
+ */
+const AreaLabel = memo(function AreaLabel({
+  placed,
+  label,
+  childNoun,
+}: {
+  placed: Placed
+  label: Label
+  childNoun: string
+}) {
+  const { area, x } = placed
+  const share = onTopicShare(area)
+  // Muted names mean "not about your topics", whatever the fill is showing.
+  const background = share !== null && share < OFF_TOPIC_BELOW
+  const caption =
+    area.children > 0
+      ? `${area.children} ${childNoun}${area.children === 1 ? '' : 's'} inside`
+      : `${area.passages.toLocaleString('en')} passages`
+  return (
+    <g data-label={area.area_id}>
+      {label.lines.map((line, i) => (
         <text
           key={i}
           x={x}
@@ -1162,7 +1187,7 @@ const AreaCircle = memo(function AreaCircle({
           {line}
         </text>
       ))}
-      {label?.caption ? (
+      {label.caption ? (
         <text
           x={x}
           y={label.y + label.lines.length * label.lineHeight + 2}
@@ -1271,11 +1296,6 @@ function SizeKey({ areas, scale, compact = false }: { areas: readonly Area[]; sc
 /** The largest circle the key will draw, and on a phone. */
 const KEY_RADIUS = 34
 const KEY_RADIUS_COMPACT = 11
-/** Below this canvas width the key is one short row. */
-export const COMPACT_KEY_BELOW = 640
-/** The room the key takes over the canvas, which circles keep out of. */
-const KEY_BOX = { w: 230, h: 150 }
-const KEY_BOX_COMPACT = { w: 170, h: 44 }
 
 function AreaTip({ area }: { area: Area }) {
   return (
