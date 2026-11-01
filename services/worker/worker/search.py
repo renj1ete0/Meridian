@@ -45,7 +45,6 @@ THROTTLE_WORDS = ("suspended", "captcha", "too many requests", "access denied", 
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 
 
-
 #: How far back a news query looks (`B-244`). Without a range SearXNG returned news of any age
 #: by relevance, so a query repeated every few days found the same old articles. A week, not a
 #: day: not every news engine honours `day`, and the daily repeat covers the overlap.
@@ -58,6 +57,7 @@ def search_params(query: str) -> dict[str, str]:
     if query.lstrip().startswith(NEWS_BANG):
         params["time_range"] = NEWS_TIME_RANGE
     return params
+
 
 class SearchError(RuntimeError):
     """The backend could not be reached or did not answer usefully."""
