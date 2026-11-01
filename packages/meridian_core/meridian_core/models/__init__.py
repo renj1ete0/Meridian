@@ -17,6 +17,7 @@ from .config import (
     SteeringLog,
     SteeringProposal,
     TopicConfig,
+    Watch,
 )
 from .gazetteer import GazetteerTerm
 from .graph import AttributeDefinition, AttributeValue, Edge, Entity, MergeLog, Observation
@@ -87,6 +88,7 @@ __all__ = [
     "MergeLog",
     "GrantAudit",
     "ScheduledJob",
+    "Watch",
     "SteeringLog",
     "SteeringProposal",
     "TimestampMixin",

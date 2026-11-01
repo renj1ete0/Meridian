@@ -53,6 +53,7 @@ ENUM_PAIRS = [
     ("TrustState", models.mixins.TRUST_STATE),
     ("SubjectKind", models.config.SUBJECT_KIND),
     ("GrantProfile", models.config.GRANT_PROFILE),
+    ("WatchKind", models.config.WATCH_KIND),
     ("ProposalKind", models.config.PROPOSAL_KIND),
     ("ProposalStatus", models.config.PROPOSAL_STATUS),
     ("ChatRole", models.chat.CHAT_ROLE),

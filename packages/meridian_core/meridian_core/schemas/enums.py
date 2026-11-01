@@ -18,6 +18,7 @@ from meridian_core.models.config import (
     SUBJECT_KIND,
     TOKEN_SCOPE,
     TOPIC_STATUS,
+    WATCH_KIND,
 )
 from meridian_core.models.gazetteer import GAZETTEER_ENTITY_TYPE, GAZETTEER_SOURCE
 from meridian_core.models.graph import (
@@ -84,6 +85,8 @@ SubjectKind = Literal[*SUBJECT_KIND.enums]
 #: A named set of tools, never a free-form list — a per-person tool list is how
 #: somebody ends up holding a write tool nobody remembers granting (§3).
 GrantProfile = Literal[*GRANT_PROFILE.enums]
+#: What a watched address is (`B-249`).
+WatchKind = Literal[*WATCH_KIND.enums]
 AgentAvailability = Literal[*AVAILABILITY.enums]
 
 #: What a steering proposal changes, and where it is in its life (`P6-38`).

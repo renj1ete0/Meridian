@@ -23,6 +23,7 @@ page about one of the topics.
 | **Search** | `seedsearch` every 3 h | `diversity` (the query), `search` (its results) | Queries above every link; results by source tier |
 | **Followed links** | the fetch loop, as each page is stored | `frontier` | Source tier, adjusted by the host's score and the parent page's labels |
 | **Sitemaps** | `sitemapmine` hourly, for proven hosts | `sitemap` | Paths matching a topic's vocabulary first; the rest at the bottom |
+| **Watched sources** | `watch` every 5 min, for each news sitemap or feed the operator watches | `watch` | The read level with an operator's seed (100), its new entries just behind (90) |
 | **Cited papers** | the fetch loop (DOIs on a page) | `doi`, `citation` | By the citing page: on-topic page high, off-topic floor, unjudged modest |
 | **Diversity** | `seedsearch`, from the graph | `diversity` | Like search queries, capped per run |
 
@@ -436,6 +437,40 @@ queued a hundred untopiced sitemaps and fetched none; one left pending with no t
 the next pass. URLs come from the cached robots.txt, so the pass makes no request; a host that
 advertises none gets `/sitemap.xml`. `already_queued` sees any status, so the pass is
 idempotent.
+
+### <a id="watched-sources"></a>Watched sources (`B-249`)
+
+A news sitemap or a feed lists only what was published in the last day or two, so read once,
+as a discovered sitemap is, it shows one moment of an outlet and nothing after. Measured on
+2026-10-24: news reached the corpus a median 57 days after publication. A **watch** is an
+address read again on its own interval (15 minutes unless set; never under 5): `worker.watch`
+queues a `sitemap` read of each watch that is due, and the fetch loop reads it with the same
+parser and defences as any sitemap, then queues the entries it has not seen.
+
+- **What it reads.** Sitemaps, Google News sitemaps (each entry's `news:title` is kept as its
+  headline), RSS 2.0, RSS 1.0 and Atom. An entry's `image:` and `video:` children are not the
+  entry: a real news sitemap put `image:title` (a file name) after `news:title`, and an image
+  block placed first must not lend its address. Same-site entries only, as for sitemaps.
+- **Read again, not stacked.** A read still waiting is not queued a second time, so a crawl
+  that is behind does not pile up reads of one list. A watched *index* reads its files again
+  (a news index keeps its file names and changes their contents), where a discovered index's
+  files are queued once ever.
+- **The operator chose the site**, so entries skip the followed-link host cap; politeness and
+  robots.txt still apply at the fetch.
+- **Topic or headline filter.** A watch with a topic files every entry under it. A general
+  outlet is watched with the headline filter: an entry is queued only when its headline or
+  path names a topic's vocabulary, filed under the topic it names (and, when the watch has a
+  topic too, only under that one). The table refuses a watch with neither, which would queue
+  everything an outlet publishes.
+- **Measured, the filter is thin** (2026-11-01, five general news sitemaps, 592 headlines):
+  with the current vocabulary (68 phrases) one headline matched, wrongly, through a one-word
+  term in its path. Embedding headlines against the topic prototypes separated better but not
+  cleanly (31 above a 0.30 floor, a handful on a topic). Until `B-251`, watch an outlet's
+  **section** feeds or sitemaps (transport, property) with a topic, and keep the headline
+  filter for outlets whose topical vocabulary is rich.
+
+`python -m worker.watch add <url> [--feed] [--topic T] [--headlines] [--every S]`, `list`,
+`enable`, `disable`.
 
 ### Cited papers
 

@@ -132,6 +132,16 @@ jobs:
     interval_seconds: 3600
     enabled: true
 
+  - name: watch
+    module: worker.watch
+    args: ["--apply"]
+    # `B-249`: queues a read of each watched news sitemap or feed whose interval
+    # has passed (watches set their own, 15 minutes by default). Every five
+    # minutes so a short interval is honoured; a pass with nothing due is one
+    # small query.
+    interval_seconds: 300
+    enabled: true
+
   - name: seedsearch
     module: worker.seedsearch
     args: ["--once"]

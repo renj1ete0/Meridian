@@ -572,3 +572,46 @@ class ScheduledJob(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<ScheduledJob {self.name} every {self.interval_seconds}s>"
+
+
+#: What a watched address is (`B-249`): a news sitemap (or any sitemap) or an RSS/Atom feed.
+WATCH_KIND = constrained("sitemap", "feed", name="watch_kind")
+
+#: The shortest interval a watch may poll at; a news sitemap holds about two days.
+MIN_WATCH_INTERVAL_S = 300
+
+
+class Watch(Base, TimestampMixin):
+    """An address read again on an interval for what it newly lists (`B-249`).
+
+    A news sitemap or feed lists only the latest items, so reading it once, as a
+    discovered sitemap is read, misses everything after. See
+    docs/features/discovery.md#watched-sources.
+    """
+
+    __tablename__ = "watches"
+
+    watch_id: Mapped[int] = pk()
+    url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(WATCH_KIND, nullable=False, default="sitemap")
+    #: Filed under this topic. None for a general outlet: each entry is matched by its
+    #: headline instead.
+    topic: Mapped[str | None] = mapped_column(Text)
+    #: Queue only entries whose headline (or path) matches a topic's vocabulary: a
+    #: general outlet lists sport and celebrity news beside what a topic wants.
+    headline_filter: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
+    interval_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=900, server_default=text("900")
+    )
+    enabled: Mapped[bool] = mapped_column(default=True, server_default=text("true"), nullable=False)
+    #: When a read was last queued; due again ``interval_seconds`` after.
+    last_queued_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint(f"interval_seconds >= {MIN_WATCH_INTERVAL_S}", name="watch_interval_floor"),
+        # Untopiced and unfiltered would queue everything an outlet publishes.
+        CheckConstraint("topic IS NOT NULL OR headline_filter", name="watch_topic_or_filter"),
+    )

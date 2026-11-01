@@ -375,6 +375,14 @@ form, `0 */6 * * *` is a support question. A job that must land at a time of day
 a shell string, because a row editable from a UI that could name a shell command would make the
 table a remote execution surface. See [scheduled-jobs.md](scheduled-jobs.md).
 
+### Watches
+
+`watches` (`B-249`): an address read again on an interval. `url` is unique; `kind` is
+`sitemap` or `feed`; `topic` files its entries, or with `headline_filter` each entry is filed by
+the topic its headline names (CHECK: a topic, or the filter). `interval_seconds` is at least 300
+(CHECK); `last_queued_at` is when a read was last queued. Reads and entries carry `seed_source =
+'watch'`, a value of both seed-source CHECKs (`queue`, `fetch_policy`).
+
 ## Saved views
 
 A saved view (`P6-09`, §12.5) is a filter set plus a focus node. It is a table because it is a

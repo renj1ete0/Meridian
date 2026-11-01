@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.180.0] — 2026-11-01
+
+### Added
+
+- `B-249`: watched news sitemaps and feeds, read again on their own interval
+  (`python -m worker.watch add …`; the `watch` job every 5 minutes). The sitemap parser reads
+  RSS and Atom and keeps each entry's headline (`news:title`, never an image's title); a watch
+  files its entries under its topic, or queues only the entries whose headline names one.
+  Needs migration `b249a0c1d2e3`.
+
 ## [0.179.0] — 2026-11-01
 
 ### Added

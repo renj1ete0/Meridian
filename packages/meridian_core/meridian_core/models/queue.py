@@ -45,6 +45,7 @@ SEED_SOURCE = constrained(
     "model",
     "user",
     "diversity",
+    "watch",
     name="seed_source",
 )
 

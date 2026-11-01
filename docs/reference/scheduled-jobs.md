@@ -17,6 +17,7 @@ it is not caught up.
 | `novelty` | `worker.novelty --once` | 1 h | on | Marks near-duplicate passages | [duplicates](../features/duplicates.md) |
 | `hostscore` | `worker.hostscore --once` | 1 h | on | Rebuilds per-host relevance; blocks domains that refuse everything | [discovery](../features/discovery.md) |
 | `sitemapmine` | `worker.sitemapmine --apply` | 1 h | on | Queues the sitemaps of proven hosts | [discovery](../features/discovery.md) |
+| `watch` | `worker.watch --apply` | 5 min | on | Queues a read of each watched news sitemap or feed that is due | [discovery](../features/discovery.md#watched-sources) |
 | `requeue_links` | `worker.requeue_links --apply` | 1 h | on | Moves links from off-topic pages down; raises those from on-topic pages and into vouched-for hosts | [discovery](../features/discovery.md) |
 | `requeue` | `worker.requeue --apply` | 1 h | on | Applies host verdicts to links already queued (daily until `B-155`) | [discovery](../features/discovery.md) |
 | `requeue_dois` | `worker.requeue_dois --apply` | 1 h | off | Ranks queued papers by the pages that cite them | [discovery](../features/discovery.md) |

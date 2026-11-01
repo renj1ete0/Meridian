@@ -3,6 +3,9 @@
 A sitemap is untrusted XML: a DTD is refused before parsing and entities are not
 expanded. Only same-site URLs are accepted, and an index's entries become further
 `sitemap` tasks rather than being followed inline. See docs/features/discovery.md#sitemaps.
+
+RSS and Atom feeds are read by the same parser (`B-249`), and each entry's headline is kept
+where the document gives one (a news sitemap's ``news:title``, a feed item's ``title``).
 """
 
 from __future__ import annotations
@@ -71,10 +74,40 @@ class ParsedSitemap:
     urls: tuple[str, ...] = ()
     truncated: bool = False
     dropped: Mapping[str, int] = dataclasses.field(default_factory=dict)
+    #: Each entry's headline, by URL, where the document gave one (`B-249`).
+    titles: Mapping[str, str] = dataclasses.field(default_factory=dict)
 
     @property
     def is_index(self) -> bool:
         return self.kind == "sitemapindex"
+
+
+#: Roots that are read, and what their entries become. A feed's entries are pages.
+_ROOT_KINDS = {
+    "urlset": "urlset",
+    "sitemapindex": "sitemapindex",
+    "rss": "feed",
+    "RDF": "feed",
+    "feed": "feed",
+}
+
+#: The element wrapping one entry, in each kind of document.
+_ENTRY_TAGS = frozenset({"url", "sitemap", "item", "entry"})
+
+#: Headlines are for matching against a vocabulary; past this they are not headlines.
+_MAX_TITLE_LENGTH = 500
+
+#: Extensions whose ``loc``, ``link`` and ``title`` describe an image, a video or a
+#: translation, not the entry: an ``image:title`` is a file name (`B-249`).
+_FOREIGN = ("sitemap-image", "sitemap-video", "/mrss", "xhtml")
+
+#: A news sitemap's headline, which wins over any other title in the entry.
+_NEWS = "sitemap-news"
+
+
+def _namespace(tag: object) -> str:
+    """The namespace of an element's tag, or "" when it has none."""
+    return tag[1 : tag.index("}")] if isinstance(tag, str) and tag.startswith("{") else ""
 
 
 def local_name(tag: object) -> str:
@@ -129,7 +162,13 @@ def parse_sitemap(
 
     kind = ""
     urls: dict[str, None] = {}
+    titles: dict[str, str] = {}
     truncated = False
+    # The entry being read: its address and headline, set by its children and taken
+    # when it closes. Outside an entry (a feed's channel title and link) nothing is.
+    in_entry = False
+    entry_url: str | None = None
+    entry_title: str | None = None
 
     # iterparse with `.clear()` keeps the peak to one element. `resolve_entities=False`
     # is the second entity defence, behind the pre-scan.
@@ -151,26 +190,49 @@ def parse_sitemap(
 
             if event == "start":
                 if not kind:
-                    if name not in ("urlset", "sitemapindex"):
+                    if name not in _ROOT_KINDS:
                         raise SitemapError("not_a_sitemap", name or "unknown root")
-                    kind = name
+                    kind = _ROOT_KINDS[name]
+                elif name in _ENTRY_TAGS:
+                    in_entry, entry_url, entry_title = True, None, None
                 continue
 
-            if name != "loc":
-                # Free the finished <url>/<sitemap> wrapper; its <loc> has
-                # already been read on this same pass.
-                if name in ("url", "sitemap"):
-                    element.clear()
+            if not in_entry:
                 continue
+
+            space = _namespace(element.tag)
+            if any(marker in space for marker in _FOREIGN):
+                continue
+
+            if name in ("loc", "link") and entry_url is None and _NEWS not in space:
+                # Atom's address is an attribute, preferring the page over its
+                # enclosures and comments; RSS's and a sitemap's is the text.
+                rel = element.get("rel")
+                raw = element.get("href") if element.get("href") is not None else element.text
+                if rel in (None, "alternate"):
+                    entry_url = raw if raw is not None else ""
+                element.clear()
+                continue
+
+            if name == "title":
+                text = " ".join((element.text or "").split())
+                if text and (entry_title is None or _NEWS in space):
+                    entry_title = text[:_MAX_TITLE_LENGTH]
+                element.clear()
+                continue
+
+            if name not in _ENTRY_TAGS:
+                continue
+
+            # The entry closed: take it.
+            in_entry = False
+            element.clear()
 
             if len(urls) >= max_entries:
                 truncated = True
-                element.clear()
                 break
 
-            candidate = _clean_loc(element.text, base_url=base_url)
-            element.clear()
-
+            candidate = _clean_loc(entry_url, base_url=base_url)
             if candidate is None:
                 drop("unusable")
                 continue
@@ -183,6 +245,8 @@ def parse_sitemap(
                 drop("duplicate")
                 continue
             urls[candidate] = None
+            if entry_title:
+                titles[candidate] = entry_title
     except etree.XMLSyntaxError as exc:
         # A truncated or malformed document. Anything already read is still
         # good — a sitemap cut off halfway is a partial frontier, not a lost
@@ -196,7 +260,9 @@ def parse_sitemap(
     if not kind:
         raise SitemapError("not_a_sitemap", "no root element")
 
-    return ParsedSitemap(kind=kind, urls=tuple(urls), truncated=truncated, dropped=dict(dropped))
+    return ParsedSitemap(
+        kind=kind, urls=tuple(urls), truncated=truncated, dropped=dict(dropped), titles=titles
+    )
 
 
 def _dtd_scan_window(data: bytes) -> int:

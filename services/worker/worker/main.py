@@ -24,6 +24,7 @@ from contextlib import AbstractAsyncContextManager
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.ageing import HALF_LIFE_DAYS
@@ -37,7 +38,7 @@ from meridian_core.figures import FigureWrite, replace_figures
 from meridian_core.hostscores import Decision, HostPolicy, Standing, record_vouches
 from meridian_core.hostscores import load as load_host_scores
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
-from meridian_core.models import QueueTask, Source
+from meridian_core.models import QueueTask, Source, Watch
 from meridian_core.novelty import novelty_health
 from meridian_core.policy import frontier_settings, source_tier_map
 from meridian_core.queueing import (
@@ -85,7 +86,7 @@ from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
 from .liveness import beat
 from .ocr_queue import enqueue_ocr, mark_scanned
-from .prefilter import Prefilter
+from .prefilter import Prefilter, normalise_url
 from .ratelimit import DomainLimiter
 from .rawstore import StoredRaw
 from .resolve_doi import (
@@ -100,6 +101,7 @@ from .resolve_doi import (
 from .search import SearchError, SearchResults, SearxClient
 from .sitemaps import ParsedSitemap, SitemapError, parse_sitemap
 from .topicmatch import TopicVocabulary, load_topic_vocabulary
+from .watch import WATCH_PRIORITY
 
 log = get_logger(__name__)
 
@@ -129,6 +131,27 @@ PDF_MEDIA_TYPES = frozenset({"application/pdf"})
 #: Where a sitemap URL that matched no topic goes in the queue: below every tier,
 #: so it is drained only when nothing else waits. See docs/features/discovery.md#sitemaps.
 UNMATCHED_SITEMAP_PRIORITY = -10
+
+#: A watched outlet's new entries (`B-249`): just behind an operator's seed, ahead of
+#: the crawl's own work, because news ages by the hour.
+WATCH_ENTRY_PRIORITY = 90
+
+
+def watch_topic(
+    watch: Watch, url: str, title: str | None, vocabulary: TopicVocabulary
+) -> str | None:
+    """The topic a watched entry is filed under, or None when it is not queued (`B-249`).
+
+    Without a headline filter, the watch's topic. With one, the topics the headline and
+    the path imply; a watch with a topic keeps only entries matching it.
+    """
+    if not watch.headline_filter:
+        return watch.topic or vocabulary.best_topic(url)
+    found = (*vocabulary.topics_for_text(title or ""), *vocabulary.topics_for(url))
+    if watch.topic is not None:
+        return watch.topic if watch.topic in found else None
+    return found[0] if found else None
+
 
 #: Added to a declared English version's priority (`B-57`), so it is fetched
 #: ahead of the other links on the page that declared it.
@@ -855,6 +878,9 @@ class Worker:
             return 0
 
         async with self._session_factory() as sess:
+            watch = await sess.scalar(select(Watch).where(Watch.url == claim.url))
+            if watch is not None:
+                return await self._queue_watch_entries(sess, claim, watch, parsed)
             if parsed.is_index:
                 # Deduplicated against the queue by hand, since the prefilter is
                 # the wrong tool here and re-enqueueing an index on every crawl
@@ -921,6 +947,75 @@ class Worker:
                 },
             )
         return len(candidates)
+
+    async def _queue_watch_entries(
+        self, sess: AsyncSession, claim: Claim, watch: Watch, parsed: ParsedSitemap
+    ) -> int:
+        """A watched sitemap's or feed's entries (`B-249`); commits.
+
+        Unlike a discovered sitemap: an index's files are read again unless a read is
+        waiting (a news index keeps its file names and changes their contents); entries
+        skip the followed-link host cap, since the operator chose the site; and with a
+        headline filter only entries whose headline or path matches a topic are queued.
+        See docs/features/discovery.md#watched-sources.
+        """
+        if parsed.is_index:
+            waiting = set(
+                (
+                    await sess.scalars(
+                        select(QueueTask.url_or_query).where(
+                            QueueTask.url_or_query.in_(list(parsed.urls)),
+                            QueueTask.task_type == "sitemap",
+                            QueueTask.status == "pending",
+                        )
+                    )
+                ).all()
+            )
+            files = [url for url in parsed.urls if url not in waiting]
+            for url in files:
+                await enqueue(
+                    sess,
+                    url,
+                    topic=watch.topic,
+                    seed_source="watch",
+                    task_type="sitemap",
+                    priority=WATCH_PRIORITY,
+                )
+            await sess.commit()
+            return len(files)
+
+        if self._prefilter is None:
+            return 0
+        verdict = await self._prefilter.keep(sess, parsed.urls)
+        titles = {normalise_url(url): title for url, title in parsed.titles.items()}
+        queued = skipped = 0
+        for url in verdict.kept:
+            topic = watch_topic(watch, url, titles.get(url), self._topics)
+            if topic is None:
+                skipped += 1
+                continue
+            await enqueue(
+                sess,
+                url,
+                topic=topic,
+                seed_source="watch",
+                task_type="url",
+                priority=WATCH_ENTRY_PRIORITY,
+            )
+            queued += 1
+        await sess.commit()
+        log.info(
+            "watch entries queued",
+            extra={
+                "url": claim.url,
+                "watch_id": watch.watch_id,
+                "entries": len(parsed.urls),
+                "new": len(verdict.kept),
+                "queued": queued,
+                "off_topic": skipped,
+            },
+        )
+        return queued
 
     async def _process_query(self, claim: Claim) -> None:
         """Run one search and turn its results into queue rows (`P1-34`, §6.4).

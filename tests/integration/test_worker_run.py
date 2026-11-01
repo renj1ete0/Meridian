@@ -3361,3 +3361,175 @@ def test_lookups_are_a_kind_the_worker_handles() -> None:
 
     assert LOOKUP_TASK_TYPES and set(HANDLED_TASK_TYPES) >= LOOKUP_TASK_TYPES
     assert set(HANDLED_TASK_TYPES) - LOOKUP_TASK_TYPES, "no page work left to claim"
+
+
+# --------------------------------------------------------------------------
+# Watched news sitemaps and feeds (`B-249`)
+# --------------------------------------------------------------------------
+
+
+def news_sitemap(domain: str, *entries: tuple[str, str]) -> bytes:
+    """A Google News sitemap: each entry's headline in `news:title`."""
+    body = "".join(
+        f"<url><loc>https://{domain}{path}</loc><news:news><news:publication>"
+        f"<news:name>Paper</news:name></news:publication>"
+        f"<news:title>{title}</news:title></news:news></url>"
+        for path, title in entries
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">'
+        f"{body}</urlset>"
+    ).encode()
+
+
+@pytest.fixture
+async def watched(session_for, run_domain, cleanup):
+    """A watch on the run's domain, removed afterwards; call it with the watch's fields."""
+    from meridian_core.models import Watch
+
+    made: list[str] = []
+
+    async def make(path: str = "/news-sitemap.xml", **fields) -> Watch:
+        sess = await session_for("rw")
+        watch = Watch(url=f"https://{run_domain}{path}", **fields)
+        sess.add(watch)
+        # Committed: the worker reads it from its own transaction.
+        await sess.commit()
+        made.append(watch.url)
+        return watch
+
+    yield make
+    sess = await session_for("rw")
+    await sess.execute(delete(Watch).where(Watch.url.in_(made)))
+    await sess.commit()
+
+
+async def test_a_watched_news_sitemap_queues_only_matching_headlines(
+    session_for, resolve, raw_store, run_domain, run_topic, watched
+) -> None:
+    """A general outlet's news sitemap lists sport beside policy; with a headline
+    filter only the entries a topic's vocabulary names are queued, filed under it."""
+    from worker.topicmatch import TopicVocabulary
+
+    sess = await session_for("rw")
+    await watched(headline_filter=True)
+    await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/news-sitemap.xml",
+        task_type="sitemap",
+        seed_source="watch",
+    )
+    body = news_sitemap(
+        run_domain,
+        ("/a/1", "New road safety rules for school zones"),
+        ("/a/2", "Football: late winner seals the derby"),
+        ("/road-safety/3", "Ministers meet"),  # the path matches though the headline does not
+    )
+    worker, _ = with_frontier(
+        sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    worker._topics = TopicVocabulary(phrases={"road safety": (run_topic,)})
+    await worker.run()
+
+    queued = await rows_for(sess, run_domain, "watch")
+    pages = {row.url_or_query: row for row in queued if row.task_type == "url"}
+    assert set(pages) == {f"https://{run_domain}/a/1", f"https://{run_domain}/road-safety/3"}
+    assert all(row.topic == run_topic for row in pages.values())
+    assert all(row.priority == 90 for row in pages.values())
+
+
+async def test_a_watched_sitemap_read_again_queues_only_what_is_new(
+    session_for, resolve, raw_store, run_domain, run_topic, watched
+) -> None:
+    """The point of watching: the second read finds yesterday's entries queued."""
+    sess = await session_for("rw")
+    await watched(topic=run_topic)
+    for body in (
+        urlset(run_domain, "/a/1", "/a/2"),
+        urlset(run_domain, "/a/2", "/a/3"),
+    ):
+        await enqueue(
+            sess,
+            run_domain,
+            run_topic,
+            path="/news-sitemap.xml",
+            task_type="sitemap",
+            seed_source="watch",
+            # As a watch read is: ahead of the entries the first read queued.
+            priority=100,
+        )
+        worker, _ = with_frontier(
+            sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+        )
+        await worker.run()
+
+    pages = [
+        r.url_or_query for r in await rows_for(sess, run_domain, "watch") if r.task_type == "url"
+    ]
+    assert sorted(pages) == [f"https://{run_domain}/a/{n}" for n in (1, 2, 3)]
+
+
+async def test_a_watched_index_reads_its_files_again(
+    session_for, resolve, raw_store, run_domain, run_topic, watched
+) -> None:
+    """A news index keeps its file names and changes their contents, so a discovered
+    index's rule (queued once, ever) would read each file once and never again."""
+    sess = await session_for("rw")
+    await watched(path="/news-index.xml", headline_filter=True)
+    index = sitemap_index(run_domain, "/news-1.xml")
+    for _ in range(2):
+        await enqueue(
+            sess,
+            run_domain,
+            run_topic,
+            path="/news-index.xml",
+            task_type="sitemap",
+            seed_source="watch",
+        )
+        worker, _ = with_frontier(
+            sess, serve_xml(index), run_domain, run_topic, resolver=resolve, max_tasks=1
+        )
+        await worker.run()
+        # The file's read is done before the index is read again.
+        await sess.execute(
+            QueueTask.__table__.update()
+            .where(QueueTask.url_or_query == f"https://{run_domain}/news-1.xml")
+            .values(status="done")
+        )
+
+    files = [
+        r
+        for r in await rows_for(sess, run_domain, "watch")
+        if r.url_or_query.endswith("news-1.xml")
+    ]
+    assert len(files) == 2
+    assert all(r.task_type == "sitemap" for r in files)
+
+
+async def test_a_watched_feed_queues_its_items(
+    session_for, resolve, raw_store, run_domain, run_topic, watched
+) -> None:
+    sess = await session_for("rw")
+    await watched(path="/feed", kind="feed", topic=run_topic)
+    await enqueue(
+        sess, run_domain, run_topic, path="/feed", task_type="sitemap", seed_source="watch"
+    )
+    feed = (
+        '<?xml version="1.0"?><rss version="2.0"><channel><title>Paper</title>'
+        f"<link>https://{run_domain}/</link>"
+        f"<item><title>One</title><link>https://{run_domain}/story/1</link></item>"
+        f"<item><title>Two</title><link>https://{run_domain}/story/2</link></item>"
+        "</channel></rss>"
+    ).encode()
+    worker, _ = with_frontier(
+        sess, serve_xml(feed), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    rows = await rows_for(sess, run_domain, "watch")
+    pages = {r.url_or_query for r in rows if r.task_type == "url"}
+    assert pages == {f"https://{run_domain}/story/1", f"https://{run_domain}/story/2"}

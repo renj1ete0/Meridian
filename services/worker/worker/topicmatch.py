@@ -73,7 +73,14 @@ class TopicVocabulary:
 
         On whole tokens, so ``pub`` does not match ``public``.
         """
-        haystack = f" {normalise_path(url)} "
+        return self._topics_in(normalise_path(url))
+
+    def topics_for_text(self, text: str) -> tuple[str, ...]:
+        """Every topic a headline implies, most specific match first (`B-249`)."""
+        return self._topics_in(_normalise_term(text))
+
+    def _topics_in(self, tokens: str) -> tuple[str, ...]:
+        haystack = f" {tokens} "
         if not haystack.strip():
             return ()
 

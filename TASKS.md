@@ -1962,7 +1962,20 @@ deploy runbook whose first two commands could not work (`B-17`).
       machine known only by its `.local` name was unreachable from the api and orchestrator.
       `lan-resolver` (host network, URL settings only) writes the answers to a file the clients
       read (docs/features/lan-names.md)
-- [ ] `B-249` **Singapore news by news sitemap, not only feeds** — operator: feeds list only the
+- [ ] `B-252` **Fine-grained permissions for the web Admin, editable there** (operator,
+      2026-11-01) — Admin is all-or-nothing behind Cloudflare Access. Permissions per area (view,
+      topics, gazetteer, duplicates, fetch policy, budget, models, watches, notes and views,
+      seeds, access), roles as presets with per-person overrides, an Admin → Access page, every
+      admin route declaring its permission (a test fails on one that does not). The first owner
+      from `MERIDIAN_OWNER_EMAILS` (never removable from the UI); with none, a one-time code in
+      the API's log claims it. Mock first (docs/design)
+- [ ] `B-251` **A headline filter that works on general outlets** — measured 2026-11-01 on five
+      general news sitemaps (592 headlines): the vocabulary filter matched 1, wrongly (a
+      one-word term in a path); bge-m3 against the topic prototypes put 31 above 0.30, a handful
+      on a topic. Try: the embedder on headlines with a floor fitted on graded headlines, or
+      richer topic vocabulary; until then watch section feeds with a topic
+- [x] `B-249` `v0.180.0`; parser and filter run on five live news sitemaps, worker path in
+      integration tests; no watch added on a running stack yet. **Singapore news by news sitemap, not only feeds** — operator: feeds list only the
       latest items. 33 outlets probed: news sitemaps (every article of the last ~2 days) on
       Straits Times (423 today), Business Times (154), 8world (227), CNA, AsiaOne, Tech in Asia
       (~50), Berita Harian (59), Tamil Murasu (120), The Independent (34); full dated sitemaps on

@@ -104,6 +104,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.translate` | always | Other-language vocabulary |
 | `worker.seedsearch` | always (`--report` dry) | Search seeds |
 | `worker.sitemapmine` | `--apply` | Sitemaps of proven hosts |
+| `worker.watch` | `--apply`; `add URL [--feed] [--topic T] [--headlines] [--every S]`, `list`, `enable ID`, `disable ID` | Watched news sitemaps and feeds (`B-249`) |
 | `worker.hostscore` | always (`--report` dry) | Host scores |
 | `worker.requeue`, `worker.requeue_links`, `worker.requeue_dois` | `--apply` | Re-rank pending queue rows |
 | `worker.steerproposals` | always (`--report` dry) | Steering proposals |
