@@ -2099,6 +2099,17 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-269` **Search fell back to words while pages were embedded** (found by the
       end-to-end run, 2026-11-01) — the backfill's 256-passage requests held a reader's query
       past its timeout on a one-slot model server; the client now asks in slices of 16
+- [ ] `B-271` **Ask can find nothing when the vector arm falls under the floor** (found by the
+      2026-11-02 end-to-end run) — the synthesis panel asked "What does the corpus say about
+      walking to transit stops?" and answered that the corpus held nothing, while Find returned
+      five passages for "public transport walking". Two decisions meet: a question finds nothing
+      lexically by design ([search.md#questions](docs/features/search.md#questions), the OR
+      fallback measured and rejected), and the similarity floor (`B-235`) set aside all 100
+      vector candidates (nearest 0.48 under 0.55) on a corpus with a fifth of its passages
+      embedded. Find whether this happens on the real corpus with every passage embedded
+      (held-out questions: count those with zero passages after the floor). If it does, the
+      candidates are a rarity-weighted relaxation (the measured next step) or a floor that
+      yields to the best few when nothing passes; measure either as `B-235` measured the floor
 - [ ] `B-270` ⚑ human **How the worker reaches a model server on another machine** (from
       `B-251`) — the headline filter embeds in the worker, which the split layout keeps off
       `lan` because it fetches the open web, so there it falls back to vocabulary. Options:
