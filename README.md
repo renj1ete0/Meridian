@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0D6F7C"></a>
-  <img alt="Version 0.171" src="https://img.shields.io/badge/version-0.171-0D6F7C">
+  <img alt="Version 0.187" src="https://img.shields.io/badge/version-0.187-0D6F7C">
   <img alt="Status: running, pre-acceptance" src="https://img.shields.io/badge/status-running%2C%20pre--acceptance-805A28">
 </p>
 
@@ -34,9 +34,10 @@ not just what it knows, but where the evidence is thin, stale, or contradictory.
 > steers the crawl and decides what needs a person.
 >
 > What is not done, and is the honest headline: **the long unattended acceptance run has not
-> happened** (`P1-16`), **remote access waits on a Cloudflare account**, and **synthesis at
-> corpus scale needs a model**: with no hosted key or local endpoint configured, the graph
-> grows only as fast as a relay agent answers batches by hand.
+> happened** (`P1-16`) and **remote access waits on a Cloudflare account**. Synthesis needs a
+> model: a hosted key, or a local one on a GPU machine on your network, which Meridian loads
+> when it needs it and leaves free when it does not (tested with a Qwen3 27B, see
+> [Deploy it on a server](#deploy-it-on-a-server)).
 >
 > See [docs/guides/setup.md](docs/guides/setup.md) to run it, the [roadmap](docs/roadmap.md)
 > for where it is going, [TASKS.md](TASKS.md) for what is next, and
@@ -157,6 +158,90 @@ It starts **empty**, by design (scaffold §1.7) — the crawl begins from the se
 in `config/` and there is nothing to search for the first hour. `make preflight`
 alone checks whether this machine is up to it without building anything.
 
+## Deploy it on a server
+
+On the always-on machine, with Docker and Compose v2. Everything runs in containers.
+
+```bash
+git clone https://github.com/renj1ete0/Meridian.git /srv/meridian/app
+cd /srv/meridian/app
+cp .env.example .env && chmod 600 .env
+```
+
+Fill in `.env`: the checklist at its top says what, in order, and every setting has a
+comment. The database passwords and the browser token can be generated:
+
+```bash
+for v in PG_PASSWORD PG_RW_PASSWORD PG_RO_PASSWORD PG_GUEST_PASSWORD CRAWL4AI_TOKEN; do
+  sed -i "s|^$v=.*|$v=$(openssl rand -hex 24)|" .env
+done
+. ./.env
+sed -i "s|^PG_RW_URL=.*|PG_RW_URL=postgresql://meridian_rw:$PG_RW_PASSWORD@postgres:5432/meridian|" .env
+sed -i "s|^PG_RO_URL=.*|PG_RO_URL=postgresql://meridian_ro:$PG_RO_PASSWORD@postgres:5432/meridian|" .env
+sed -i "s|^PG_MIGRATION_URL=.*|PG_MIGRATION_URL=postgresql://meridian:$PG_PASSWORD@postgres:5432/meridian|" .env
+```
+
+Then start it:
+
+```bash
+docker compose up -d
+```
+
+That is all of it. The first run builds the images (ten to twenty minutes); before anything
+touches the database, `setup` migrates and seeds, and `docker compose logs setup` says why if
+it cannot. The database passwords are read once, at that first start.
+
+```bash
+docker compose ps                    # what runs
+docker compose logs -f worker        # watch it crawl
+docker compose logs setup            # the migration and seed
+docker compose down                  # stop (the data stays in DATA_ROOT)
+```
+
+**Opening it.** The stack publishes no port by itself: the way in is the Cloudflare tunnel
+(`CLOUDFLARE_TUNNEL_TOKEN`, with `CF_ACCESS_*` and `MERIDIAN_OWNER_EMAILS`). On the LAN, add
+`deploy/lan/publish-web.yml` to `COMPOSE_FILE` and set `WEB_BIND=0.0.0.0`, then open
+`http://<server>:8080`; with nobody else on that network, `MERIDIAN_ADMIN_ALLOW_ANONYMOUS=true`
+lets you into Admin without signing in.
+
+**The models on a GPU machine.** Run [seismo](https://github.com/renj1ete0/seismo)'s
+`serve` there (`proxy_host = "0.0.0.0"`, port 8090 open in its firewall), uncomment
+`COMPOSE_FILE` in `.env`, and fill in the embedder, reranker and local model lines from the
+examples beside them. The server finds the machine by its `.local` name, waits while it is
+off, and catches up when it wakes: embedding queues, synthesis defers, search answers on
+words meanwhile.
+
+**After the first start, in Admin:** enable `local-llamacpp` with its model, enable
+`local-chat`, set a budget, and choose topics and seed sources or watches; the crawl starts
+from those.
+
+**Updating.** By hand:
+
+```bash
+git pull && docker compose up -d --build     # migrates by itself before the stack starts
+```
+
+Or let the server update itself: set `COMPOSE_PROFILES=autoupdate`, `GHCR_READ_USER` and
+`GHCR_READ_PAT` in `.env`, start it with `docker compose pull && docker compose up -d`, and
+release from your own machine:
+
+```bash
+MERIDIAN_PLATFORMS=linux/amd64 make release  # build, push, and move `stable` to this commit
+make promote SHA=<older commit>              # roll back
+```
+
+Watchtower ([nickfedor/watchtower](https://github.com/nickfedor/watchtower)) picks up a release
+within `WATCHTOWER_POLL_INTERVAL`, runs any new migration, and restarts only what changed;
+Postgres, the browser and the search engine are never touched.
+
+**Telegram.** With `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` set (how to get both is in
+`.env`), a chat gets the daily digest, a synthesis report every six hours, alerts when a
+problem lasts, and Watchtower's update notices (`WATCHTOWER_NOTIFICATION_URL`).
+
+Details, and the egress check to run before leaving it unattended:
+[docs/guides/deployment.md](docs/guides/deployment.md); on Fedora CoreOS with podman,
+[docs/guides/deploy-podman.md](docs/guides/deploy-podman.md).
+
 ## Getting started
 
 Developing Meridian rather than running it — application services native, infra
@@ -179,8 +264,9 @@ uv run python -m worker.main                        # ingestion loop
 cd web && npm run dev                               # UI on :21115
 ```
 
-Production runs the whole stack in containers behind `cloudflared`
-(`docker compose up -d`), supervised by [`deploy/meridian.service`](deploy/meridian.service).
+Production runs the whole stack in containers (`docker compose up -d`, see
+[Deploy it on a server](#deploy-it-on-a-server)), supervised by
+[`deploy/meridian.service`](deploy/meridian.service).
 `make build-worker` builds the ingestion image locally. Full sequence:
 [scaffold doc](docs/spec/meridian-project-scaffold.md) §6.
 
@@ -264,7 +350,8 @@ directory only it can reach.
 ## FAQ
 
 **Can I run it today?**
-Yes. `make quickstart` gives you a running, empty stack; the worker crawls unattended and
+Yes. `make quickstart` gives you a running, empty stack on this machine, and
+[Deploy it on a server](#deploy-it-on-a-server) is one `docker compose up -d` on another; the worker crawls unattended and
 the corpus is searchable through the web interface, the HTTP API and MCP. The graph fills
 as the synthesis pass runs, which needs a model: a hosted key, a local endpoint, or a relay
 agent answering batches. Without one, crawling and search carry on and synthesis defers.
