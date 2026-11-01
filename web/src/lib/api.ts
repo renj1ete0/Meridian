@@ -170,15 +170,18 @@ export interface CorpusStats {
   /** When the counts were taken (`P2-18`) — a client cannot otherwise tell a
    *  cached figure from a fresh one. ISO 8601. */
   as_of: string
-  /** Every source row, junk and copies included. */
-  sources: number
-  /** Documents a reader can find: not junk, not a copy (`B-156`). What the landing shows. */
+  /** Every source row the crawl fetched, junk and copies included. Not "the corpus" (`B-240`). */
+  fetched_sources: number
+  /** The corpus's sources: not junk, not a copy (`B-156`). Every page's "sources kept". */
   kept_sources: number
+  /** Live passages, copies and junk included. */
   chunks: number
   embedded_chunks: number
   duplicate_chunks: number
-  /** Deliberately distinct from `chunks`: collected-and-filtered is not uncollected. */
+  /** What Find can return with no filter: every page's "searchable passages" (`B-240`). */
   searchable_chunks: number
+  /** Searchable passages from cleared sources: what an assistant's search reaches. */
+  readable_chunks: number
   entities: number
   edges: number
   contested_edges: number
@@ -209,12 +212,13 @@ export const PLACE_FIELDS = ['code', 'name'] as const
 
 export const CORPUS_STATS_FIELDS = [
   'as_of',
-  'sources',
+  'fetched_sources',
   'kept_sources',
   'chunks',
   'embedded_chunks',
   'duplicate_chunks',
   'searchable_chunks',
+  'readable_chunks',
   'entities',
   'edges',
   'contested_edges',
@@ -668,10 +672,13 @@ export const TOPIC_OVERLAP_FIELDS = ['topics', 'sources'] as const
  */
 export interface TopicOverlaps {
   overlaps: TopicOverlap[]
+  /** Kept sources carrying at least one topic: what the sets sum to. */
   labelled_sources: number
+  /** Every kept source, the whole the labelled ones are a part of (`B-240`). */
+  kept_sources: number
 }
 
-export const TOPIC_OVERLAPS_FIELDS = ['overlaps', 'labelled_sources'] as const
+export const TOPIC_OVERLAPS_FIELDS = ['overlaps', 'labelled_sources', 'kept_sources'] as const
 
 export type AssertTopicOverlap = Expect<Equal<keyof TopicOverlap, (typeof TOPIC_OVERLAP_FIELDS)[number]>>
 export type AssertTopicOverlaps = Expect<Equal<keyof TopicOverlaps, (typeof TOPIC_OVERLAPS_FIELDS)[number]>>

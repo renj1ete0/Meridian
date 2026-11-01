@@ -339,6 +339,11 @@ def build_mcp(
         Check this first. A corpus of thirty passages and one of thirty thousand
         support very different claims, and nothing else here would tell you
         which you are talking to.
+
+        Quote ``kept_sources`` as the corpus's sources and ``searchable_chunks`` as
+        its passages: the figures the site shows. ``readable_chunks`` is the part
+        ``search_chunks`` reaches (cleared sources only). ``fetched_sources`` and
+        ``chunks`` include junk and copies, and are not the corpus.
         """
         require_tool("corpus_overview")
 

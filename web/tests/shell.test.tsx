@@ -246,6 +246,19 @@ describe('the bell’s count', () => {
     expect(bellState(items, '2026-09-24T00:00:00Z').count).toBe(0)
   })
 
+  it('says the count is a floor when every listed row is new and the server holds more (B-240)', () => {
+    // The badge read 50 over a panel saying "All 102": the list is the newest fifty, so
+    // fifty new of fifty listed is "50 or more", and fewer than the page is exact.
+    const items = Array.from({ length: 3 }, (_, i) =>
+      note({ notification_id: i + 1, created_at: `2026-09-2${i + 1}T08:00:00Z` }),
+    )
+    expect(bellState(items, null, 102)).toMatchObject({ count: 3, more: true })
+    expect(bellState(items, null, 3)).toMatchObject({ count: 3, more: false })
+    expect(bellState(items, null)).toMatchObject({ count: 3, more: false })
+    expect(bellState(items, '2026-09-21T12:00:00Z', 102)).toMatchObject({ count: 2, more: false })
+    expect(bellState([], null, 5)).toMatchObject({ count: 0, more: false })
+  })
+
   it('is cyan for completions and brass when the new ones hold an alert', () => {
     const job = note()
     const alert = note({ notification_id: 2, notification_type: 'alert' })
@@ -256,7 +269,7 @@ describe('the bell’s count', () => {
   it('does not stay brass for an alert the reader has already seen', () => {
     const old = note({ notification_type: 'alert', created_at: '2026-09-20T00:00:00Z' })
     const fresh = note({ notification_id: 2, created_at: '2026-09-23T08:00:00Z' })
-    expect(bellState([fresh, old], '2026-09-21T00:00:00Z')).toEqual({ count: 1, tone: 'graph' })
+    expect(bellState([fresh, old], '2026-09-21T00:00:00Z')).toEqual({ count: 1, more: false, tone: 'graph' })
   })
 
   it('shows the count on the bell, in the tone it earned', () => {
@@ -271,6 +284,24 @@ describe('the bell’s count', () => {
     })
     const bell = screen.getByRole('button', { name: /Notifications, 2 new, including an alert/ })
     expect(bell.querySelector('[data-tone="attention"]')?.textContent).toBe('2')
+  })
+
+  it('shows a floor on the bell, and the panel it opens names the same rows (B-240)', () => {
+    bar({
+      data: data({
+        notifications: {
+          notifications: [note(), note({ notification_id: 2 })],
+          counts_by_type: { job_complete: 102 },
+          unread: 102,
+        },
+      }),
+    })
+    const bell = screen.getByRole('button', { name: 'Notifications, 2 or more new' })
+    expect(bell.querySelector('[data-tone]')?.textContent).toBe('2+')
+    fireEvent.click(bell)
+    const panel = screen.getByRole('dialog', { name: 'Notifications' })
+    expect(within(panel).getByRole('button', { name: 'All 2' })).toBeTruthy()
+    expect(within(panel).getByText('The newest 2 of 102.')).toBeTruthy()
   })
 
   it('opens the panel and clears the badge — the panel itself stays filtered by type only', () => {
@@ -435,7 +466,7 @@ describe('a deliberate pause is not a stall (B-203)', () => {
     const markup = renderToStaticMarkup(<StatusPill progress={paused} runs={null} />)
     expect(markup).toContain('paused for embedding')
     expect(markup).not.toContain('crawl stalled')
-    expect(statusDetail(paused, 'ok', null)).toContain('27,258 passages wait for a vector')
+    expect(statusDetail(paused, 'ok', null)).toContain('27,258 passages in the first and then tiers wait for a vector')
   })
 })
 

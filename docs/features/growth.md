@@ -23,7 +23,7 @@ be linked.
 |---|---|
 | Pages kept on a topic, per day | Sources created that day, not junk, not copies, labelled with a shown topic. A page about one shown topic counts for it; a page about two or more counts once, as "two or more", so a day's stack adds up to pages |
 | A gap | A day with no fetch attempt and no kept page: drawn as a dashed baseline, never as zero |
-| Passages on a topic | Live passages whose own labels carry a shown topic (`chunk_topics`) |
+| Passages on a topic | Searchable passages (`stats.searchable_passages()`, what Find returns) whose own labels carry a shown topic (`chunk_topics`). Copies and passages of junk or copied sources counted here until `B-240`, about a fifth too many on a real corpus |
 | Sources kept | Kept sources (labelled with a shown topic when filtered) |
 | Sites | Hosts by the day their first kept page arrived |
 | Knowledge graph | Concepts (not notes, not merged away) and links. Not narrowed by topic |

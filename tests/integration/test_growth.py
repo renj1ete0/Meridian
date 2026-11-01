@@ -251,7 +251,7 @@ async def test_the_landing_counts_what_growth_counts(sess, topics) -> None:
         .values(duplicate_of=original.source_id, duplicate_reason="exact")
     )
     after = await corpus_stats(sess)
-    assert after.sources - before.sources == 3, "every row is still counted as fetched"
+    assert after.fetched_sources - before.fetched_sources == 3, "every row is counted as fetched"
     assert after.kept_sources - before.kept_sources == 1, "a reader can find one of them"
 
     everything = await growth(

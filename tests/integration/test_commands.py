@@ -82,10 +82,12 @@ async def test_status_answers_with_the_counts_that_decide_whether_to_worry(steer
 
     reply = await run(sess, "/status")
 
-    # Chunks and embedded chunks separately: §12.5's point is that "we have not
+    # Stored and embedded passages separately: §12.5's point is that "we have not
     # collected this" and "we collected it and have not embedded it" are
-    # different findings, and one number would erase the distinction.
-    assert "chunks" in reply and "embedded" in reply
+    # different findings, and one number would erase the distinction. The headline
+    # figures use the site's words for them (`B-240`).
+    assert "stored" in reply and "embedded" in reply
+    assert "sources kept" in reply and "searchable passages" in reply
 
 
 async def test_weights_reports_the_share_rather_than_the_stored_weight(steered) -> None:

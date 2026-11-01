@@ -18,14 +18,17 @@ import os
 import time
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.alerts import DEFAULT_COOLDOWN_HOURS, due_alerts, record_alert
 from meridian_core.attempts import SUCCESS_OUTCOMES, fetch_health
+from meridian_core.chunks import embedding_backlog
 from meridian_core.db import dispose_engines, session, session_ro
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import Chunk, Notification, Run, Source
 from meridian_core.novelty import novelty_health
 from meridian_core.queueing import queue_depth
+from meridian_core.stats import kept_sources, searchable_passages
 
 from .rawstore import raw_root
 from .telegram import Telegram
@@ -91,30 +94,43 @@ async def _corpus_lines(now: dt.datetime | None = None) -> list[str]:
 
     The three questions the morning message is read for.
     """
-    now = now or dt.datetime.now(dt.UTC)
-    day = now - dt.timedelta(hours=24)
     async with session_ro() as sess:
-        sources = await sess.scalar(select(func.count()).where(Source.created_at > day))
-        passages = await sess.scalar(
-            select(func.count()).where(Chunk.created_at > day, Chunk.superseded_at.is_(None))
+        return await corpus_lines(sess, now or dt.datetime.now(dt.UTC))
+
+
+async def corpus_lines(sess: AsyncSession, now: dt.datetime) -> list[str]:
+    """:func:`_corpus_lines` on a session the caller holds. Reads only."""
+    day = now - dt.timedelta(hours=24)
+    # The definitions every page counts with (`B-240`), so the morning message and the
+    # site never quote two numbers for one thing.
+    sources = await sess.scalar(
+        select(func.count()).select_from(Source).where(Source.created_at > day, *kept_sources())
+    )
+    passages = await sess.scalar(
+        select(func.count())
+        .select_from(Chunk)
+        .join(Source, Source.source_id == Chunk.source_id)
+        .where(Chunk.created_at > day, *searchable_passages())
+    )
+    waiting = await embedding_backlog(sess)
+    holding = await embedding_backlog(sess, valuable_only=True) if waiting else 0
+    runs = (
+        await sess.execute(
+            select(
+                func.count(),
+                func.coalesce(func.sum(Run.edges_added), 0),
+                func.coalesce(func.sum(Run.tags_added), 0),
+                func.coalesce(func.sum(Run.tokens_used), 0),
+            ).where(Run.completed_at > day, Run.status == "done")
         )
-        waiting = await sess.scalar(
-            select(func.count()).where(Chunk.embedding.is_(None), Chunk.superseded_at.is_(None))
-        )
-        runs = (
-            await sess.execute(
-                select(
-                    func.count(),
-                    func.coalesce(func.sum(Run.edges_added), 0),
-                    func.coalesce(func.sum(Run.tags_added), 0),
-                    func.coalesce(func.sum(Run.tokens_used), 0),
-                ).where(Run.completed_at > day, Run.status == "done")
-            )
-        ).one()
-    lines = [f"corpus: +{sources or 0} sources, +{passages or 0} passages"]
+    ).one()
+    lines = [f"corpus: +{sources or 0} sources kept, +{passages or 0} searchable passages"]
     # The GPU machine may sleep; a backlog that grows for a day is the sign it has not woken.
+    # The second figure is the one Crawl health's pause counts (`B-240`).
     lines.append(
-        f"embedding: {waiting or 0} passages waiting" if waiting else "embedding: none waiting"
+        f"embedding: {waiting} passages waiting, {holding} of them in the first and then tiers"
+        if waiting
+        else "embedding: none waiting"
     )
     count, edges, tags, tokens = runs
     lines.append(

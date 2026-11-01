@@ -1,7 +1,8 @@
 """How the corpus grew, day by day (task `B-140`, ADRs 0005 and 0010).
 
 Counts what the database holds, by calendar day in the display zone (ADR 0009). Searchable
-material only: no junk, no copies, no superseded passages. A page about one topic counts for
+material only, by the definitions every page counts with (`B-240`): kept sources and searchable
+passages, so no junk, no copies, no superseded passages. A page about one topic counts for
 it; a page about two or more of the shown topics counts once, as "multi", so a day's stack adds
 up to pages rather than labels. A day the crawl fetched nothing is flagged, so it is drawn as a
 gap rather than read as a day that found nothing. See docs/features/growth.md.
@@ -35,7 +36,7 @@ from .schemas.growth import (
     MapSize,
     TopicGrowth,
 )
-from .stats import kept_sources, live_entities
+from .stats import kept_sources, live_entities, searchable_passages
 
 #: Windows the page offers; None is all time.
 WINDOWS: tuple[int | None, ...] = (7, 30, None)
@@ -155,9 +156,9 @@ async def growth(
         for when in calendar
     ]
 
-    # Passages on a topic: live passages carrying a label, per topic and in all.
+    # Passages on a topic: searchable passages carrying a label, per topic and in all.
     passage_filter = [
-        Chunk.superseded_at.is_(None),
+        *searchable_passages(),
         func.cardinality(ChunkTopics.topic_labels) > 0,
         Chunk.created_at <= now,
     ]
@@ -167,6 +168,7 @@ async def growth(
         select(*counts(Chunk.created_at))
         .select_from(ChunkTopics)
         .join(Chunk, Chunk.chunk_id == ChunkTopics.chunk_id)
+        .join(Source, Source.source_id == Chunk.source_id)
         .where(*passage_filter)
     )
     passages_total, passages_window = (await sess.execute(base)).one()
@@ -174,8 +176,10 @@ async def growth(
     label = func.unnest(ChunkTopics.topic_labels).label("label")
     inner = (
         select(label, Chunk.created_at.label("created"))
+        .select_from(ChunkTopics)
         .join(Chunk, Chunk.chunk_id == ChunkTopics.chunk_id)
-        .where(Chunk.superseded_at.is_(None), Chunk.created_at <= now)
+        .join(Source, Source.source_id == Chunk.source_id)
+        .where(*searchable_passages(), Chunk.created_at <= now)
         .subquery()
     )
     per_label = await sess.execute(

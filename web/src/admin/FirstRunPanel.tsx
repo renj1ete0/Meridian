@@ -51,7 +51,7 @@ export function FirstRunPanel({ run, busy = null, adding = false, error = null, 
         <p className="max-w-[74ch] text-[13px] leading-[1.55] text-text-muted">
           {run.is_first_run
             ? 'Nothing has been crawled yet. These are the pages and searches the crawl starts from — everything else is reached by following links, sitemaps and citations out of them. Seed quality propagates, so this is the one list worth thinking about.'
-            : `${run.sources.toLocaleString()} documents so far. Seeds still waiting can be changed; the crawl has moved past the rest.`}
+            : `${run.sources.toLocaleString()} documents fetched so far. Seeds still waiting can be changed; the crawl has moved past the rest.`}
         </p>
       </header>
 

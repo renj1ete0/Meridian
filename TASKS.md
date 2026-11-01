@@ -1948,7 +1948,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-239` **Operator diagnostics on reader pages** (review) — Gaps opens on question-set items and
       search tasks; the header pill and notifications speak crawler ("paused for embedding");
       MCP tool descriptions cite spec sections. Move to Admin; reader Gaps about evidence
-- [ ] `B-240` **Counts disagree between pages** (review) — sources 97,198 vs 116,392, passages five
+- [x] `B-240` **Counts disagree between pages** (review) — sources 97,198 vs 116,392, passages five
       different figures, labelled sources 10,239 vs ~97k implied, bell 50 vs "All 102". One
       counting definition, shown where counted
 - [x] `B-241` **Answer groups by country on questions about no place** (review) — "United States 85

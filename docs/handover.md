@@ -13,6 +13,13 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-11-01 — `B-240`: counts.** A new count of sources or passages takes its predicate from
+> `meridian_core.stats` (`kept_sources()`, `searchable_passages()`), never a fresh `WHERE`: five
+> pages had each written their own and disagreed by up to a fifth. A narrower subset gets its own
+> name in the response and the UI. `tests/integration/test_counts_agree.py` holds the surfaces
+> together; add a new surface to it. `CorpusStats.sources` is now `fetched_sources`. See
+> [search.md](features/search.md#one-definition).
+
 > **2026-11-01 — `v0.178.0`–`v0.182.0`, committed locally, not pushed** (the operator asked that
 > their GPU machine's name stay out of GitHub; confirm before pushing). Built: embedding and
 > reranking from any OpenAI-compatible server (`B-248`, ADR 0023), `.local` names inside

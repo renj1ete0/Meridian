@@ -505,20 +505,44 @@ be two queries that can disagree.
 - **Counted, not estimated.** `count(*)` at this scale is milliseconds, and a rounded or cached
   count would make "nothing crawled since Tuesday" look like "the count is stale". If these
   stop being cheap, the fix is a materialised view with its refresh time displayed beside it.
+- <a id="one-definition"></a>**One definition per quantity** (`B-240`). A review found one
+  corpus quoted with two source counts a fifth apart, five passage figures, a "labelled
+  sources" figure a tenth of the corpus read as the whole, and a bell of 50 over a panel saying
+  "All 102". Each page had written its own predicate. Now each quantity has one function in `meridian_core.stats`, and every page,
+  the digest, `/status` and the assistant's `corpus_overview` count with it:
+
+  | Quantity | Field | Definition | Shown as |
+  |---|---|---|---|
+  | Sources | `kept_sources` | `kept_sources()`: not junk, not a copy of another source | "sources kept" (landing, About, Growth, topic web, digest) |
+  | Passages | `searchable_chunks` | `searchable_passages()` = search's `passage_conditions(SearchFilters())`: live, not a copied passage, from a kept source | "searchable passages" (About, digest, `/status`) |
+  | Passages an assistant reaches | `readable_chunks` | `readable_passage_conditions()`: searchable, from a cleared source | `corpus_overview` only |
+  | Rows fetched | `fetched_sources` | every source row, junk and copies included | first-run panel ("documents fetched"), `/status` in brackets |
+  | Passages stored | `chunks` | every live passage, copies and junk included | `/status` ("stored") |
+
+  A page that shows a narrower set names it: Growth's "Passages on a topic" are searchable
+  passages carrying a label; the topic web's labelled sources are kept sources carrying a
+  topic, shown as "N of M sources kept carry a topic"; the map's passages are searchable and
+  embedded, counted when the map was built. On a real corpus About's passage figure fell by
+  about 6% (it had counted passages of junk and copied sources) and Growth's passages on a
+  topic by about a fifth (copies and junk included). `tests/integration/test_counts_agree.py` builds a
+  corpus with junk, copies, a superseded and an unlabelled row, and holds every surface to
+  these functions and to the passages a word search actually returns.
 - **`searchable` is not `chunks`.** A chunk is lexically searchable as soon as it exists, but
-  the vector half needs an embedding and the novelty gate may mark it a duplicate; a reader
-  must be able to tell "not collected" from "collected and filtered" (§12.5).
+  the novelty gate may mark it a duplicate and its source may be junk or a copy; a reader must
+  be able to tell "not collected" from "collected and filtered" (§12.5).
 - **"New since" is None when nobody asked** (`P6-11`), not 0: 0 answers a question about a
-  moment when nothing changed, and a returning reader shown "0 new" would believe it.
+  moment when nothing changed, and a returning reader shown "0 new" would believe it. When
+  asked, it counts kept sources and searchable passages, as the totals do.
 - **Documents are the kept ones** (`B-156`). `kept_sources` counts sources that are neither junk
   nor a copy of another, by `stats.kept_sources()`, the predicate Growth counts with; the
-  landing, About and "new since" use it. `sources` stays as every row, for operator surfaces
-  where what was fetched and judged junk matters. Before this the landing counted a fifth
-  more documents than Growth.
+  landing, About and "new since" use it. Every row stays in the payload as `fetched_sources`
+  (named `sources` until `B-240`, which the assistant's overview quoted as the corpus). Before
+  this the landing counted a fifth more documents than Growth.
 - **Topics come from `topic_config`** (`P6-24`), most-attended first, on the stats response so
   Explore needs no second request on first paint. Reading the labels present on sources would
   need `DISTINCT unnest(topic_labels)` over the whole corpus, which no GIN index answers.
-- **Unexamined sources are counted** (`topic_labels IS NULL`). A topic filter excludes them,
+- **Unexamined sources are counted** (kept sources with `topic_labels IS NULL`; places alike).
+  A topic filter excludes them,
   correctly and invisibly, and this count lets the filter say how many documents nobody has
   looked at. It is a plain COUNT with no index; if `sources` reaches millions it is the landing
   number that will be felt first.

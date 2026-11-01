@@ -406,12 +406,13 @@ describe('what the entry cards claim', () => {
   function stats(over: Partial<CorpusStats> = {}): CorpusStats {
     return {
       as_of: '2026-09-23T00:00:00Z',
-      sources: 10,
+      fetched_sources: 10,
       kept_sources: 8,
       chunks: 100,
       embedded_chunks: 100,
       duplicate_chunks: 0,
       searchable_chunks: 100,
+      readable_chunks: 1,
       entities: 5,
       edges: 4,
       contested_edges: 0,

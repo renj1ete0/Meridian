@@ -52,6 +52,7 @@ const DATA: TopicOverlaps = {
     { topics: ['c', 'd'], sources: 1 },
   ],
   labelled_sources: 32,
+  kept_sources: 320,
 }
 
 /** Brute force: expand every exact set into one entry per source, then filter. */
@@ -173,9 +174,12 @@ describe('the view', () => {
     return document.querySelector('[data-role="readout"]')!.textContent!.replace(/\s+/g, ' ').trim()
   }
 
-  it('shows every labelled source before anything is chosen', () => {
+  it('shows every labelled source before anything is chosen, as a part of every source kept (B-240)', () => {
     render(<TopicsView data={DATA} />)
-    expect(readout()).toBe('32 labelled sources')
+    // A reader saw the labelled figure beside ten times as many sources kept elsewhere and read
+    // it as the corpus: the whole is now on the same line, and the rest is said in words.
+    expect(readout()).toBe(`32 of ${DATA.kept_sources} sources kept carry a topic`)
+    expect(document.body.textContent).toContain(`The other ${DATA.kept_sources - DATA.labelled_sources} were read`)
     expect(screen.getByRole('button', { name: 'Search where these meet' })).toHaveProperty('disabled', true)
   })
 
@@ -230,8 +234,10 @@ describe('the view', () => {
 
   it('has readout sentences that agree in number', () => {
     expect(readoutLine(1, ['a', 'b'])).toBe('source carries all of: a, b')
-    expect(readoutLine(0, [])).toBe('labelled sources')
-    expect(readoutLine(1, [])).toBe('labelled source')
+    expect(readoutLine(0, [])).toBe('sources carry a topic')
+    expect(readoutLine(1, [])).toBe('source carries a topic')
+    expect(readoutLine(1, [], 1200)).toBe('of 1,200 sources kept carries a topic')
+    expect(readoutLine(5, [], 1200)).toBe('of 1,200 sources kept carry a topic')
   })
 })
 
@@ -267,11 +273,13 @@ describe('Find carries topic and topic_match', () => {
   function stubbed() {
     const stats = {
       as_of: '2026-09-23T00:00:00Z',
-      sources: 10,
+      fetched_sources: 10,
+      kept_sources: 10,
       chunks: 100,
       embedded_chunks: 100,
       duplicate_chunks: 0,
       searchable_chunks: 100,
+      readable_chunks: 100,
       entities: 5,
       edges: 4,
       contested_edges: 0,

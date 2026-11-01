@@ -137,9 +137,13 @@ monitoring without the fact of it.
   run: the daemon finishes one a minute while it works, and a channel that noisy stops being
   read. Nothing is sent when nothing ended and nothing waits. Each report is a `run_summary`
   row in `notifications`, and the next one starts at its time.
-- **The digest's last three lines** (`B-262`): sources and passages added in the day, passages
-  still waiting for a vector (a backlog that grows all day is a GPU machine that has not woken),
-  and what synthesis wrote.
+- **The digest's last three lines** (`B-262`): sources kept and searchable passages added in
+  the day, by the definitions the site counts with (`B-240`,
+  [search.md](search.md#one-definition)); passages still waiting for a vector (a backlog that
+  grows all day is a GPU machine that has not woken), with how many of them are in the first
+  and then tiers, the figure Crawl health's pause counts; and what synthesis wrote. `/status`
+  says "sources kept (fetched)" and "searchable passages (stored, embedded)" for the same
+  reason.
 
 ### Telegram
 

@@ -298,7 +298,8 @@ export function Bell({ notifications }: { notifications: Notifications | null })
   const close = useCallback(() => setOpen(false), [])
   const ref = useDismiss(open, close)
 
-  const { count, tone } = bellState(notifications?.notifications ?? [], seenAt)
+  const held = Object.values(notifications?.counts_by_type ?? {}).reduce((sum, n) => sum + n, 0)
+  const { count, more, tone } = bellState(notifications?.notifications ?? [], seenAt, held)
   const alert = tone === 'attention'
 
   function toggle() {
@@ -313,7 +314,9 @@ export function Bell({ notifications }: { notifications: Notifications | null })
   }
 
   const label =
-    count === 0 ? 'Notifications, nothing new' : `Notifications, ${count} new${alert ? ', including an alert' : ''}`
+    count === 0
+      ? 'Notifications, nothing new'
+      : `Notifications, ${count}${more ? ' or more' : ''} new${alert ? ', including an alert' : ''}`
 
   return (
     <div ref={ref} className="relative">
@@ -334,7 +337,7 @@ export function Bell({ notifications }: { notifications: Notifications | null })
               alert ? 'bg-accent-attention' : 'bg-accent-graph'
             }`}
           >
-            {count > 99 ? '99+' : count}
+            {count > 99 ? '99+' : more ? `${count}+` : count}
           </span>
         ) : null}
       </button>

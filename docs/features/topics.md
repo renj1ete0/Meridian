@@ -55,8 +55,11 @@ count (run once a minute) and left the tier queries unchanged. `triage_floor()` 
 `long_sources()` are the one definition, shared by the hold rule and the `retopic` report.
 
 **Overlaps** (`B-72`). Because a source can carry several topics, the corpus is a web rather
-than a partition. `topicoverlaps` counts sources by exact combination, and search can require
-all selected topics (`topic_match=all`).
+than a partition. `topicoverlaps` counts kept sources (`stats.kept_sources()`) by exact
+combination, and search can require all selected topics (`topic_match=all`). It also returns
+every kept source, so the topic web says "N of M sources kept carry a topic" rather
+than a bare figure a reader took for the corpus (`B-240`): most sources are read and found
+about none of the topics.
 
 ## Design choices
 

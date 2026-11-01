@@ -624,9 +624,10 @@ async def test_stats_separates_collected_from_searchable(client, corpus) -> None
     distinction that makes absence visible."""
     body = (await client.get("/api/explore/stats")).json()
 
-    assert body["chunks"] >= body["searchable_chunks"]
-    assert body["searchable_chunks"] == body["chunks"] - body["duplicate_chunks"]
-    assert body["sources"] >= len(corpus)
+    assert body["chunks"] >= body["searchable_chunks"] >= body["readable_chunks"]
+    assert body["chunks"] - body["duplicate_chunks"] >= body["searchable_chunks"]
+    assert body["fetched_sources"] >= body["kept_sources"]
+    assert body["fetched_sources"] >= len(corpus)
 
 
 # --------------------------------------------------------------------------

@@ -316,6 +316,13 @@ shown](#reader-and-operator)).
   rather than the server's `unread`, which nothing in the product clears and so only grows.
   Opening the panel is the acknowledgement; §8 has the panel filter by type, not read state,
   so the stamp only ever moves the badge.
+- <a id="bell-and-list"></a>**The bell and the list it opens count the same rows** (`B-240`).
+  The panel lists the newest 50; its filters ("All", "Jobs", "Approvals", "Alerts") count
+  those listed rows, so each opens on as many as it names, and when the server holds more
+  the panel says "The newest 50 of 102." beside them. It had labelled the filters with every
+  row ever recorded, so "All 102" sat over fifty rows and "Approvals 3" could open on none. The
+  badge counts new rows among the listed ones; when every listed row is new and more are held,
+  it reads "50+" ("50 or more new"), because the count is then a floor.
 - **Notification kinds** are §8's three (jobs, approvals, alerts) over the types the database
   records. The map mirrors `NOTIFICATION_TYPE` in `models/runs.py` and `tests/shell.test.tsx`
   compares them, because a type in one and not the other would fall into no filter: the one
@@ -569,8 +576,10 @@ colour-blind to brass would otherwise lose the distinction. Both only above zero
 (`B-156`): the landing, About and the since-your-last-visit delta count `stats.kept_sources`,
 documents that are neither junk nor a copy of another, as Growth does. They had counted every
 source row, a fifth more than Growth, and a reader moving between the two saw two answers to
-"how much is here". The raw row count (`sources`) stays in the payload for operator surfaces,
-where fetched-but-junk matters.
+"how much is here". The raw row count (`fetched_sources`) stays in the payload for operator
+surfaces, where fetched-but-junk matters. The landing and About label the figure "sources
+kept", Growth's word, and About's "searchable passages" is what Find can return (`B-240`; see
+[search.md](search.md#one-definition)).
 
 ### Where you were
 
@@ -1197,7 +1206,9 @@ it stalled: the pill turned brass with "crawl stalled", and Crawl health told th
 check the worker was running, while it was waiting by design for a CPU embedder to catch up.
 Liveness now counts the backlog when it would otherwise say stalled, and if it is over the
 resume point the state is `paused`, carrying the backlog and the ceiling: "Paused for
-embedding — N passages wait for a vector … resumes by itself under M". The pill stays calm and
+embedding — N passages in the first and then tiers wait for a vector … resumes by itself
+under M". The tiers are named because the digest's backlog counts every tier, and the two
+figures must not read as one (`B-240`). The pill stays calm and
 says "paused for embedding" in words. The ceiling has one definition (`crawlhealth`), read by
 the worker and by liveness, and the local compose passes the same variable to the API; a test
 holds the two services' values together.

@@ -93,7 +93,7 @@ export function verdict(live: Liveness, stallAfterSeconds: number): string {
       const backlog = live.embed_backlog ?? 0
       const ceiling = live.embed_ceiling ?? 0
       const resume = Math.floor(ceiling * 0.8).toLocaleString()
-      const waiting = `${backlog.toLocaleString()} passages wait for a vector`
+      const waiting = `${backlog.toLocaleString()} passages in the first and then tiers wait for a vector`
       const where =
         backlog > ceiling
           ? `${waiting}, over the ${ceiling.toLocaleString()} the crawl stops at`

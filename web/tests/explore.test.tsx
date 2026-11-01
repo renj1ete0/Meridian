@@ -114,7 +114,8 @@ describe('the corpus counts', () => {
     const markup = text(renderToStaticMarkup(<CorpusCounts counts={null} />))
 
     // Reader words on the landing (P6-44); graph terms stay in Admin.
-    expect(markup).toContain('Sources')
+    // The words Growth and About use for the same figure (B-240).
+    expect(markup).toContain('Sources kept')
     expect(markup).toContain('Concepts')
     expect(markup).toContain('Stated links')
     expect(markup).not.toMatch(/>(Nodes|Edges|Documents)</)

@@ -91,6 +91,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.193.0] — 2026-11-01
+
+### Changed
+
+- `B-240`: every page counts sources and passages by one definition each. A source is a kept
+  source (not junk, not a copy); a passage is one Find can return (`stats.searchable_passages`,
+  which is search's own predicate). `CorpusStats.sources` is renamed `fetched_sources` (in
+  `/api/explore/stats` and the MCP `corpus_overview`), `readable_chunks` is added, the topic web
+  says what share of kept sources carry a topic, Growth and the digest count the same way, and
+  the notification bell and its list agree ("the newest 50 of N").
+
+**Deploy:** image only. An MCP client reading `corpus_overview.sources` should read
+`kept_sources` (the corpus) or `fetched_sources` (every row).
+
 ## [0.192.1] — 2026-11-01
 
 ### Fixed

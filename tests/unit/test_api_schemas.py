@@ -52,15 +52,20 @@ def test_the_hit_dto_invents_no_fields() -> None:
     assert not invented, f"SearchHitRead fields with no backing attribute: {sorted(invented)}"
 
 
-def test_the_stats_dto_exposes_every_count_including_the_derived_one() -> None:
-    """`searchable_chunks` is a property rather than a field, and a completeness
-    check that only looked at `dataclasses.fields` would miss it — which would
-    be the wrong kind of pass, because it is the count §12.5 actually turns on."""
+def test_the_stats_dto_mirrors_the_dataclass_exactly() -> None:
+    """Both directions: a count the DTO lacks is dropped, and one it invents has no definition.
+
+    `searchable_chunks` was once a property derived from two other counts and disagreed with
+    what search returns (`B-240`); it is now a counted field like the rest, so the MCP overview
+    (which serialises the dataclass) and the route carry the same set.
+    """
     on_dataclass = {f.name for f in dataclasses.fields(CorpusStats)}
     on_dto = set(CorpusStatsRead.model_fields)
 
-    assert not (on_dataclass - on_dto), sorted(on_dataclass - on_dto)
-    assert "searchable_chunks" in on_dto
+    assert on_dataclass == on_dto, sorted(on_dataclass ^ on_dto)
+    assert not [n for n, v in vars(CorpusStats).items() if isinstance(v, property)], (
+        "a derived count on CorpusStats is invisible to the MCP overview"
+    )
 
 
 def test_a_hit_validates_from_the_dataclass() -> None:
@@ -300,11 +305,13 @@ def test_nobody_asked_and_nothing_arrived_are_different_answers() -> None:
 
     never_asked = CorpusStats(
         as_of=dt.datetime.now(dt.UTC),
-        sources=1,
+        fetched_sources=1,
         kept_sources=1,
         chunks=1,
         embedded_chunks=1,
         duplicate_chunks=0,
+        searchable_chunks=1,
+        readable_chunks=1,
         entities=0,
         edges=0,
         contested_edges=0,

@@ -134,8 +134,10 @@ async def execute(sess: AsyncSession, command: Command, *, actor: str = "telegra
 async def _status(sess: AsyncSession, _command: Command, _actor: str) -> str:
     stats = await corpus_stats(sess)
     return (
-        f"{stats.sources:,} sources · {stats.chunks:,} chunks · "
-        f"{stats.embedded_chunks:,} embedded · {stats.entities:,} entities · "
+        f"{stats.kept_sources:,} sources kept ({stats.fetched_sources:,} fetched) · "
+        f"{stats.searchable_chunks:,} searchable passages "
+        f"({stats.chunks:,} stored, {stats.embedded_chunks:,} of them embedded) · "
+        f"{stats.entities:,} entities · "
         f"{stats.edges:,} edges"
     )
 

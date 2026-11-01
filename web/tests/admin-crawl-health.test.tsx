@@ -414,7 +414,9 @@ describe('a pause in words (B-203)', () => {
     verdict(liveness({ state: 'paused', embed_backlog: backlog, embed_ceiling: 20000, quiet_seconds: 900 }), 600)
 
   it('says the backlog is over the line only when it is', () => {
-    expect(paused(27258)).toContain('27,258 passages wait for a vector, over the 20,000 the crawl stops at')
+    expect(paused(27258)).toContain(
+      '27,258 passages in the first and then tiers wait for a vector, over the 20,000 the crawl stops at',
+    )
     expect(paused(19197)).toContain('the crawl stopped when they passed 20,000')
     expect(paused(19197)).not.toContain('over the')
     expect(paused(19197)).toContain('resumes by itself under 16,000')

@@ -298,9 +298,17 @@ export function Web({
 
 const LABEL = 'font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint'
 
-/** "N sources carry all of: A, B" — or, with nothing chosen, what the whole is. */
-export function readoutLine(count: number, selection: readonly string[]): string {
-  if (selection.length === 0) return `${count === 1 ? 'labelled source' : 'labelled sources'}`
+/**
+ * "N sources carry all of: A, B" — or, with nothing chosen, what the whole is: the labelled
+ * sources as a part of every source kept (`B-240`), so the figure is not read as the corpus.
+ */
+export function readoutLine(count: number, selection: readonly string[], kept?: number): string {
+  if (selection.length === 0) {
+    const noun = count === 1 ? 'source carries' : 'sources carry'
+    return kept === undefined
+      ? `${noun} a topic`
+      : `of ${fmt(kept)} sources kept ${count === 1 ? 'carries' : 'carry'} a topic`
+  }
   const noun = count === 1 ? 'source carries' : 'sources carry'
   if (selection.length === 1) return `${noun} ${selection[0]}`
   return `${noun} all of: ${selection.join(', ')}`
@@ -356,11 +364,16 @@ function Readout({
 
       <p data-role="readout" className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-mono text-[29px] leading-[1.15] text-text">{fmt(count)}</span>{' '}
-        <span className="text-[length:var(--text-body)] text-text">{readoutLine(count, selection)}</span>
+        <span className="text-[length:var(--text-body)] text-text">
+          {readoutLine(count, selection, data.kept_sources)}
+        </span>
       </p>
 
       {selection.length === 0 ? (
         <p className="text-[length:var(--text-small)] leading-[var(--leading-small)] text-text-muted">
+          {data.kept_sources > count
+            ? `The other ${fmt(data.kept_sources - count)} were read and found about none of the topics, or are not read yet. `
+            : null}
           Choose circles, or the line between two, to see how many sources lie in all of them.
         </p>
       ) : none ? (

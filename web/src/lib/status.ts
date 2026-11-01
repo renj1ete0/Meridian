@@ -90,7 +90,7 @@ export function statusDetail(progress: CrawlProgress | null, health: RunHealth, 
       parts.push(`The crawl has stalled: ${quiet}, with ${live.ready.toLocaleString('en')} pages ready.`)
     } else if (live?.state === 'paused') {
       parts.push(
-        `The crawl is paused while ${(live.embed_backlog ?? 0).toLocaleString('en')} passages wait for a vector; ` +
+        `The crawl is paused while ${(live.embed_backlog ?? 0).toLocaleString('en')} passages in the first and then tiers wait for a vector; ` +
           'it resumes by itself as embedding catches up.',
       )
     } else if (live?.state === 'waiting') {
@@ -148,16 +148,20 @@ export function countsByKind(countsByType: Readonly<Record<string, number>>): Re
 
 /**
  * The bell's count and tone: what arrived after `seenAt`, the moment this reader last
- * opened the panel, rather than the server's ever-growing `unread`.
+ * opened the panel, rather than the server's ever-growing `unread`. Counted over the listed
+ * rows, which are what the panel opens on (`B-240`); `more` when every listed row is new and
+ * the server holds more than were listed (`held`), so the count is a floor, not a total.
  */
 export function bellState(
   notifications: readonly Notification[],
   seenAt: string | null,
-): { count: number; tone: 'graph' | 'attention' } {
+  held: number = notifications.length,
+): { count: number; more: boolean; tone: 'graph' | 'attention' } {
   const since = seenAt === null ? Number.NEGATIVE_INFINITY : Date.parse(seenAt)
   const fresh = notifications.filter((item) => Date.parse(item.created_at) > since)
   return {
     count: fresh.length,
+    more: fresh.length > 0 && fresh.length === notifications.length && held > notifications.length,
     tone: fresh.some((item) => kindOf(item.notification_type) === 'alerts') ? 'attention' : 'graph',
   }
 }

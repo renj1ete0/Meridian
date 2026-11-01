@@ -10,7 +10,9 @@ import type { NotificationItem } from '../lib/api'
  */
 
 export interface NotificationsPanelProps {
+  /** The newest rows, as the API listed them. Every count on a filter is of these. */
   notifications: readonly NotificationItem[]
+  /** Every row the server holds, by type: only how many there are in all (`B-240`). */
   countsByType: Readonly<Record<string, number>>
   /** The kind shown, or null for all of them. */
   active?: NotificationKind | null
@@ -90,8 +92,14 @@ export function NotificationsPanel({
   onFilter,
   now = new Date(),
 }: NotificationsPanelProps) {
-  const totals = countsByKind(countsByType)
-  const all = totals.jobs + totals.approvals + totals.alerts
+  // The filters count what is listed, so "Alerts 2" opens two rows and "All 50" fifty
+  // (`B-240`); how many the server holds in all is said once, beside them.
+  const totals = countsByKind(listedByType(notifications))
+  const all = notifications.length
+  const held = Math.max(
+    all,
+    Object.values(countsByType).reduce((sum, n) => sum + n, 0),
+  )
   const shown =
     active === null ? notifications : notifications.filter((item) => kindOf(item.notification_type) === active)
 
@@ -129,6 +137,11 @@ export function NotificationsPanel({
               </FilterButton>
             ))}
           </div>
+          {held > all ? (
+            <p data-role="listed" className="mt-2 font-mono text-[10px] text-text-faint">
+              The newest {all} of {held.toLocaleString('en')}.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -160,6 +173,13 @@ export function NotificationsPanel({
       </footer>
     </section>
   )
+}
+
+/** How many of the listed rows are of each type. */
+function listedByType(notifications: readonly NotificationItem[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const item of notifications) counts[item.notification_type] = (counts[item.notification_type] ?? 0) + 1
+  return counts
 }
 
 function FilterButton({

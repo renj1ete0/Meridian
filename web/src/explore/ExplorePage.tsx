@@ -221,7 +221,7 @@ export function ExplorePage() {
 
   // An empty corpus shows what the crawl is doing instead of three entry
   // points into nothing (`B-09`). Asked for only when it is empty.
-  const empty = stats !== null && stats.sources === 0
+  const empty = stats !== null && stats.fetched_sources === 0
   useEffect(() => {
     if (!empty) return
     const controller = new AbortController()

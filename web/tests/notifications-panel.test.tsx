@@ -90,10 +90,11 @@ describe('what it shows', () => {
   it('counts every kind, not only the filtered one', () => {
     // A panel reading "Approvals 0" while three seed proposals wait is the
     // filter hiding the thing the reader came for.
+    const seeds = [2, 3, 4].map((id) => item({ notification_id: id, notification_type: 'seed_proposal' }))
     const rendered = text(
       renderToStaticMarkup(
         <NotificationsPanel
-          notifications={[item()]}
+          notifications={[item(), ...seeds]}
           countsByType={{ alert: 1, seed_proposal: 3 }}
           active="alerts"
           now={NOW}
@@ -103,6 +104,38 @@ describe('what it shows', () => {
 
     expect(rendered).toContain('Approvals 3')
     expect(rendered).toContain('All 4')
+    expect(rendered).not.toContain('The newest')
+  })
+
+  it('counts what it lists, and says how many the server holds beside it (B-240)', () => {
+    // The panel said "All 102" over a list of fifty, and "Approvals 3" over none: every
+    // filter now opens on as many rows as it names, and the whole is said once.
+    const listed = [
+      item(),
+      item({ notification_id: 2, notification_type: 'seed_proposal' }),
+      item({ notification_id: 3, notification_type: 'job_complete' }),
+    ]
+    const markup = renderToStaticMarkup(
+      <NotificationsPanel
+        notifications={listed}
+        countsByType={{ alert: 40, seed_proposal: 50, job_complete: 12 }}
+        now={NOW}
+      />,
+    )
+    const rendered = text(markup)
+
+    for (const label of ['All 3', 'Jobs 1', 'Approvals 1', 'Alerts 1']) expect(rendered).toContain(label)
+    expect(rendered).toContain('The newest 3 of 102.')
+    expect(rendered).not.toContain('All 102')
+    expect(markup.match(/<li /g)).toHaveLength(listed.length)
+  })
+
+  it('names no larger whole when it lists everything there is', () => {
+    const rendered = text(
+      renderToStaticMarkup(<NotificationsPanel notifications={[item()]} countsByType={{}} now={NOW} />),
+    )
+    expect(rendered).toContain('All 1')
+    expect(rendered).not.toContain('The newest')
   })
 
   it('shows only the chosen kind when filtered', () => {

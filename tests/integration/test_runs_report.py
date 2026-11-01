@@ -163,6 +163,6 @@ async def test_the_daily_digest_says_growth_backlog_and_synthesis() -> None:
     finally:
         await dispose_engines()
 
-    assert lines[0] == "corpus: +0 sources, +0 passages"
+    assert lines[0] == "corpus: +0 sources kept, +0 searchable passages"
     assert lines[1].startswith("embedding: ")
     assert lines[2] == "synthesis: no run finished"

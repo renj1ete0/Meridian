@@ -155,6 +155,10 @@ The walker sees what was readable as it went by; a search finds the rest.
 
 `corpus_overview` is §12.5's "absence is visible" as the first
 thing an assistant can check: thirty passages and thirty thousand support very different claims.
+It returns the landing's counts with their definitions in its description (`B-240`):
+`kept_sources` and `searchable_chunks` are the figures the site shows, `readable_chunks` is the
+part `search_chunks` reaches (cleared sources), and `fetched_sources` and `chunks` include junk
+and copies. The first was called `sources` and was what an assistant quoted as the corpus.
 
 ### Authentication
 

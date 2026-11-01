@@ -122,26 +122,34 @@ class PlaceRead(BaseModel):
 
 
 class CorpusStatsRead(BaseModel):
-    """Mirrors ``meridian_core.stats.CorpusStats``, plus its derived count."""
+    """Mirrors ``meridian_core.stats.CorpusStats``.
+
+    One definition per name (`B-240`); see docs/features/search.md#corpus-counts.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     #: When these numbers were counted (`P2-18`). A client cannot
     #: otherwise tell a cached count from a fresh one.
     as_of: dt.datetime
-    #: Every source row, junk and copies included.
-    sources: int
-    #: Documents a reader can find: not junk, not a copy (`B-156`). What the landing shows.
+    #: Every source row the crawl fetched, junk and copies included. Not "the corpus".
+    fetched_sources: int
+    #: The corpus's sources: not junk, not a copy (`B-156`). What every page calls "sources".
     kept_sources: int
+    #: Live passages, copies and junk included.
     chunks: int
     embedded_chunks: int
     duplicate_chunks: int
+    #: What Find can return with no filter: what every page calls "passages" (`B-240`).
     searchable_chunks: int
+    #: Searchable passages from cleared sources: what an assistant's search reaches.
+    readable_chunks: int
     entities: int
     edges: int
     contested_edges: int
 
-    #: The delta a returning reader asked for (`P6-11`), in kept documents (`B-156`). None
+    #: The delta a returning reader asked for (`P6-11`), in kept sources and searchable
+    #: passages (`B-156`, `B-240`). None
     #: means they did not ask; 0 means nothing arrived, and a landing page must not show the
     #: first as the second.
     new_sources: int | None = None
@@ -152,7 +160,7 @@ class CorpusStatsRead(BaseModel):
     #: offered and filters to nothing, which is the true answer.
     topics: list[str] = Field(default_factory=list)
 
-    #: Sources nothing has examined for topics (`P6-24`). What lets a topic
+    #: Kept sources nothing has examined for topics (`P6-24`). What lets a topic
     #: filter tell a reader that narrowing may be hiding unexamined material.
     sources_without_topics: int = 0
 
@@ -160,7 +168,7 @@ class CorpusStatsRead(BaseModel):
     #: configuration rather than a scan of the corpus.
     places: list[PlaceRead] = Field(default_factory=list)
 
-    #: Sources nothing has examined for places (`P2-23`) — excluded by a place
+    #: Kept sources nothing has examined for places (`P2-23`) — excluded by a place
     #: filter, as unexamined sources are by a topic filter.
     sources_without_places: int = 0
 
@@ -405,7 +413,11 @@ class TopicOverlapsRead(BaseModel):
     """
 
     overlaps: list[TopicOverlapRead]
+    #: Kept sources carrying at least one topic: what the sets sum to.
     labelled_sources: int
+    #: Every kept source, the whole the labelled ones are a part of (`B-240`). Most sources
+    #: are read and found about none of the topics, which a share of this says.
+    kept_sources: int
 
 
 class TopicFieldRead(BaseModel):
