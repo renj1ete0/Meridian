@@ -21,6 +21,16 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-11-01 — `v0.178.0`–`v0.182.0`, committed locally, not pushed.** Built: any
+> OpenAI-compatible model server for embedding and reranking, waiting out a loading model
+> (`B-248`, ADR 0023); `.local` names inside containers (`B-250`); watched news sitemaps and feeds
+> (`B-249`); permissions per area, owners from the environment, a claim code for a fresh instance,
+> and Admin → People & permissions (`B-252`, `B-257`, ADR 0024). Measured: the headline filter on
+> general outlets (`B-251`). Filed: `B-253`–`B-256` (press releases, Find by kind and outlet,
+> listing-page watches, paywall stubs), `B-258`. **Resume with:** testing against the operator's
+> GPU machine (their model manager's proxy is on a local branch in its repo), then `B-253`,
+> `B-254`, `B-255`, `B-251`; confirm before pushing. Remind: `B-163`/`B-205` wait for a paid model.
+
 > **2026-10-24 (late) — `v0.174.5`–`v0.177.4`, pushed.** Deployment: mini PC (16 GB, i5 10th gen)
 > on Fedora CoreOS + podman with the same compose files (ADR 0022, `deploy-podman.md`, Zincati
 > window); Windows GPU machine with a 3090 and a 6700 XT. Built: the stack waits cheaply for an

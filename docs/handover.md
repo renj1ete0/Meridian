@@ -13,6 +13,32 @@ add it here.
 
 ## 0. In flight at the end of 2026-09-24 — read before starting
 
+> **2026-11-01 — `v0.178.0`–`v0.182.0`, committed locally, not pushed** (the operator asked that
+> their GPU machine's name stay out of GitHub; confirm before pushing). Built: embedding and
+> reranking from any OpenAI-compatible server (`B-248`, ADR 0023), `.local` names inside
+> containers (`B-250`), watched news sitemaps and feeds (`B-249`), permissions per area with an
+> Admin page (`B-252`, `B-257`, ADR 0024). The operator's model manager lives in its own repo;
+> its load-on-request proxy is on a local branch there (`proxy`), unpushed. Traps:
+> - **llama.cpp names whatever model a request names**, so checking the response's model passes
+>   against any server; check `/v1/models` instead. Its router mode refuses a request with no
+>   model, and every server refuses an input longer than its batch (`-ub`) instead of cutting it.
+>   `/tokenize` with `add_special` gives the tokens sentence-transformers would see.
+> - **FastAPI 0.14x keeps an included router as one lazy wrapper in `app.routes`**: a walk over
+>   `APIRoute`s finds `/health` alone. Use `effective_route_contexts()` (see
+>   `tests/unit/test_route_permissions.py`), and assert the walk found routes.
+> - **`.local` resolves on this host (nss-mdns) but never in a container**; a host-network
+>   container can ask by multicast (Docker and rootless podman both measured).
+> - **News sitemaps carry `image:title` after `news:title`**; a parser matching by local name
+>   took the file name as the headline.
+> - **The Write tool replaces an existing file without warning.** A new test named
+>   `test_watch.py` overwrote the saved-view tests of that name (restored from git). Check the
+>   name is free first.
+> - **Screenshots:** Playwright is not installed; a throwaway venv with `pip install playwright`
+>   and `executable_path` pointing at `~/.cache/ms-playwright/chromium_headless_shell-1248/…`
+>   works. Web tests use plain matchers (`toBeTruthy`), not jest-dom.
+> - **The headline filter is thin on general outlets** (`B-251`, measured): watch section feeds
+>   with a topic until it is fixed.
+
 > **2026-10-24 (late) — experiments and their traps.** Artefacts in
 > `meridian-calibration/2026-10-24/` (README there).
 > - **Comparing models on synthesis:** `tagcmp/pull.py` builds the real extract and tag prompts
