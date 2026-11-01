@@ -42,6 +42,7 @@ __all__ = [
     "add_edge",
     "advance_mark",
     "enqueue_seed",
+    "tag_candidate",
     "tag_entity",
 ]
 
@@ -262,6 +263,92 @@ async def tag_entity(
             f"{attribute!r} is {definition.status}, not active; it cannot be assigned.",
         )
 
+    return await _upsert_value(
+        sess,
+        run,
+        definition,
+        entity_id=entity_id,
+        supporting_chunk_ids=supporting_chunk_ids,
+        produced_by=produced_by,
+        model=model,
+        quality_tier=quality_tier,
+        value=value,
+        value_numeric=value_numeric,
+        value_json=value_json,
+        confidence=confidence,
+        now=now,
+    )
+
+
+async def tag_candidate(
+    sess: AsyncSession,
+    run: Run | None,
+    definition: AttributeDefinition,
+    *,
+    entity_id: int,
+    supporting_chunk_ids: Sequence[int],
+    produced_by: str | None,
+    model: str | None,
+    quality_tier: int | None,
+    value: str | None = None,
+    value_numeric: float | None = None,
+    confidence: float | None = None,
+    now: dt.datetime,
+) -> WriteResult:
+    """Record one value of a *proposed* attribute: evidence for `P7-01`'s gate (§7.3).
+
+    Validated and stored exactly as a tag, so the value is the attribute's own once it is
+    activated. Refuses an attribute that is not `proposed`: an active one is tagged with
+    `tag_entity`, and a retired one comes back only by being restored.
+    """
+    check_provenance(produced_by=produced_by, model=model, quality_tier=quality_tier)
+    if value is None and value_numeric is None:
+        raise ValidationError("attribute_value", f"{definition.name!r} was tagged with no value.")
+    if definition.status != "proposed":
+        raise ValidationError(
+            "attribute_proposed",
+            f"{definition.name!r} is {definition.status}, not proposed; it takes no candidate "
+            "values.",
+        )
+    await check_nodes_exist(sess, [entity_id])
+    await check_chunks_resolve(sess, supporting_chunk_ids)
+    return await _upsert_value(
+        sess,
+        run,
+        definition,
+        entity_id=entity_id,
+        supporting_chunk_ids=supporting_chunk_ids,
+        produced_by=produced_by,
+        model=model,
+        quality_tier=quality_tier,
+        value=value,
+        value_numeric=value_numeric,
+        value_json=None,
+        confidence=confidence,
+        now=now,
+        counts_as_tag=False,
+    )
+
+
+async def _upsert_value(
+    sess: AsyncSession,
+    run: Run | None,
+    definition: AttributeDefinition,
+    *,
+    entity_id: int,
+    supporting_chunk_ids: Sequence[int],
+    produced_by: str | None,
+    model: str | None,
+    quality_tier: int | None,
+    value: str | None,
+    value_numeric: float | None,
+    value_json: dict[str, Any] | None,
+    confidence: float | None,
+    now: dt.datetime,
+    counts_as_tag: bool = True,
+) -> WriteResult:
+    """One value per entity, attribute and schema version: a re-tag updates, guarded by tier."""
+    attribute = definition.name
     existing = await sess.scalar(
         select(AttributeValue)
         .where(
@@ -309,7 +396,8 @@ async def tag_entity(
     # being adopted fastest.
     definition.usage_count += 1
     await sess.flush()
-    await record(sess, run, tags=1)
+    if counts_as_tag and run is not None:
+        await record(sess, run, tags=1)
     return WriteResult(row.value_id, True, f"{attribute} tagged")
 
 

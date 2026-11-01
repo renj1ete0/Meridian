@@ -2319,6 +2319,17 @@ for ever. Roll the test's session back before teardown (`finally: await sess.rol
 A worker given nothing it can claim also never returns on `max_tasks`: stop it with
 `loop.call_later(…, worker.stop)`.
 
+### The attribute audit judges use only when something was tagged
+
+`worker.attributes` (`P7-01`, `P7-02`) fails an attribute for going unused only when other
+attributes were tagged in the same 30 days. Without that rule, a deployment whose synthesis is
+idle (no model configured, the usual state) would fail every attribute every month and retire
+the whole schema in three. The audit is spaced 28 days per attribute however often the pass runs,
+so running it by hand twice does not count two failures. Retiring keeps every value; `--restore
+NAME` undoes it. Its tests run in a rolled-back transaction because `run_pass` audits every
+active attribute in the database, not only the test's. See
+[the attribute schema](features/knowledge-graph.md#attribute-schema).
+
 ## 4. What is verified live, and what is only tested
 
 Tests are hermetic by design, so "the tests pass" and "it works against the real web"

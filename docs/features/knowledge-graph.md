@@ -10,12 +10,12 @@ and the list of contested pairs.
 
 - **Code:** `packages/meridian_core/meridian_core/models/graph.py`, `writes.py`,
   `validation.py`, `contested.py`, `resolution.py`, `mentions.py`, `graphview.py`, `route.py`,
-  `neighbourhood.py`, `annotations.py`, `duplicates.py`, `export.py`;
-  `services/worker/worker/contested.py`;
+  `neighbourhood.py`, `annotations.py`, `duplicates.py`, `export.py`, `attributeschema.py`;
+  `services/worker/worker/contested.py`, `attributes.py`;
   `services/api/api/routes/graph.py`, `connect.py`, `neighbourhood.py`, `admin.py` (notes and
   possible duplicates)
 - **Tasks:** `P4-01`–`P4-05`, `P4-16`, `P6-01`–`P6-05`, `P6-10`, `P6-15`, `P6-32`, `P6-33`,
-  `P7-05`, `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
+  `P7-01`, `P7-02`, `P7-05`, `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md),
   [ADR 0003](../adr/0003-external-assistants-over-mcp.md),
   [ADR 0020](../adr/0020-a-note-is-withdrawn-not-deleted.md)
@@ -118,7 +118,7 @@ usually leaves it.
 - **Attribute definitions are capped** at roughly a dozen active (§7.1, §7.3), with the
   lowest-utility one retired when a stronger candidate qualifies, and only after failing two or
   three consecutive audits: every schema change costs a backfill, so slow-moving schema is a
-  feature.
+  feature. See [the attribute schema](#attribute-schema).
 
 **Observations** (`observations`) hold measured quantities: `(metric, value, unit, denominator,
 geography, period)`. They were added after the §14.3 design exercise found the schema could not
@@ -132,6 +132,86 @@ periods into one. Kept in the graph, observations are reached by edges, conteste
 traversal unchanged. Their breakdown dimensions (segment, time of day, purpose) are open-ended
 JSONB qualifiers: a column per dimension does not scale, and pushing them into the subject name
 would again multiply near-identical nodes.
+
+<a id="attribute-schema"></a>
+### The attribute schema: gate, audit and retirement
+
+`attributeschema.py` (`P7-01`, `P7-02`, §7.3) decides which attributes are active. No model is
+called and no person is asked; every decision is a row in `attribute_events` with the numbers it
+was made on (`signals`), so a retirement can be read back against what caused it.
+
+**Where a proposal comes from.** The tagging prompt lists the active attributes as a closed set.
+When a model tags with a name off that list anyway, the tag is no longer dropped: the name is
+spelled the schema's way (`Canopy Cover` → `canopy_cover`), a `proposed` definition is created
+on first sight (global, no description; event `proposed`), and the value is stored on it like any
+tag, with its chunk and full provenance (`writes.tag_candidate`). A name that only differs from
+an active one in case or punctuation is tagged to the active one. A retired name is refused, so
+retiring a junk proposal by hand keeps it rejected. A local model held to the answer's schema
+(`B-247`) can name only active attributes, so proposals come from models that are not held.
+
+**The gate** (`judge`), run after each tagging batch over the candidates it touched, and daily
+over every proposed attribute:
+
+| Check | Rule | On failure |
+|---|---|---|
+| Evidence | values cite passages from at least `EVIDENCE_SOURCES` (3) distinct sources, a copy folded into its original (`B-44`) | `refused`, stays proposed |
+| Enough to judge | at least `MIN_ENTITIES` (4) entities carry a value | `refused`, stays proposed |
+| Discrimination | normalised entropy of the values over entities ≥ `MIN_DISCRIMINATION` (0.5) | `refused`, stays proposed |
+| Cap | fewer than `CAP` (12) active attributes apply where it would | see below |
+
+A refused candidate stays `proposed` so evidence keeps accumulating, and a refusal is logged only
+when its reason changes. **The cap counts what applies to one topic**: the globals plus that
+topic's own, at the fullest topic for a global candidate. The seeded schema has 27 active
+attributes across five topics but at most 11 apply to any one, which is the reading of "~12
+active" under which the seeded schema is not already over it. **At the cap**, a candidate may
+displace the lowest-utility attribute *of its own scope* (a global only a global; a topic-local
+attribute only one of the same topic), and only one that has already failed at least one audit,
+and only with a higher utility. Otherwise it is `held`. Displacing on utility alone would let one
+good week of a new name retire an attribute that has never failed, which is the churn §7.3 calls
+expensive.
+
+**Discrimination** is Shannon entropy over the value classes, divided by its maximum for the
+classes seen: one value everywhere is 0, an even split is 1. Text values are compared without
+case or spacing; a number is classed by sign and order of magnitude, since every distinct reading
+would otherwise be its own class. When there are more classes than half the entities the score is
+scaled down to 0 at one class per entity: values all worded differently split nothing (`B-170`),
+though their raw entropy is the maximum.
+
+**Utility**, used to rank at the cap: `discrimination × ln(1 + entities) + coverage + 2 ×
+ln(1 + explanatory)`. Coverage is the share of entities carrying any attribute that applies here
+that carry this one. Explanatory power counts comparison edges whose dimension or disanalogy names
+the attribute (`fleet size`, `fleet_size`, `fleet-size`), and is weighted as the strongest signal
+(§7.3). Contradiction resolutions, the other half of §7.3's explanatory power, do not exist yet
+(`P7-05`).
+
+**The audit** (`audit_one`, run by `worker.attributes --once`, daily on the timetable). An active
+attribute is audited when it has not been in the last `AUDIT_GAP` (28 days), so the pass can run
+daily, or twice by hand, and hysteresis still counts months. An audit:
+
+- passes during a `GRACE` (30 days) after activation or restoration: measured, not judged;
+- passes when the attribute appears in any comparison;
+- fails when its values do not split its entities (discrimination below the bar, with enough
+  entities to judge);
+- fails when it had no values written in the last 30 days while other attributes did. When
+  nothing at all was tagged in the window, use is not judged: an idle synthesis (no model
+  configured, a month without runs) is no evidence of disuse, and judging it would retire the
+  whole schema;
+- otherwise passes.
+
+A pass resets `consecutive_audit_failures`; a failure increments it. **A topic-local attribute
+is retired after 2 consecutive failures, a global after 3** (`RETIRE_AFTER`; §7.1 gives globals
+the higher bar). The pass audits before it judges, so a retirement opens the slot a held
+candidate is then judged against.
+
+**Retirement deletes nothing.** It sets `status = 'retired'`: the attribute leaves the tagging
+prompt and `tag_entity` refuses it, but every value stays where it is, with its citations. Values
+of a proposed attribute become the attribute's own when it is activated, so no evidence is spent
+twice. `python -m worker.attributes --restore NAME` brings a retired attribute back with its
+values (refused when the cap is full); `--retire NAME` retires one by hand, proposed ones
+included. Both are logged.
+
+**Thresholds are constants** in `attributeschema.py`, not settings: they are the gate's
+definition, and changing one is a decision to record, not a field to edit.
 
 ### Writes and validation
 
@@ -204,9 +284,10 @@ prompting will eventually be talked around."
   not a value to overwrite, whatever its tier. `WriteResult.created` separates a
   new row from a corroborated one, and only new rows count towards `edges_added`, so a model is
   told when it is re-asserting what the corpus holds.
-- **`tag_entity` needs an active attribute.** Creating a definition on first use would route
-  around the cap and `P7-01`'s gate. One value per entity, attribute and schema version, so a
-  re-tag updates.
+- **`tag_entity` needs an active attribute.** Creating an *active* definition on first use would
+  route around the cap and `P7-01`'s gate; a tag off the list becomes evidence for a `proposed`
+  one instead ([the attribute schema](#attribute-schema)). One value per entity, attribute and
+  schema version, so a re-tag updates.
 - **`advance_mark` is a tool** because moving the high-water mark is a claim ("everything to
   here has been reasoned over") that deserves the same refusals, and `runs.mark` refuses while
   writes are unflushed.
@@ -501,9 +582,9 @@ being configured (ADR 0002).
 `tests/integration/test_edges.py`, `test_writes.py`, `test_validation.py`,
 `test_resolution.py`, `test_mentions.py`, `test_merge_folds.py`, `test_graph_workspace.py`,
 `test_graph_store.py`, `test_route.py`, `test_neighbourhood.py`, `test_annotations.py`,
-`test_duplicates.py`;
+`test_duplicates.py`, `test_attribute_schema.py`;
 `tests/unit/test_edge_schema.py`, `test_export.py`, `test_neighbourhood.py`,
-`test_contested.py`.
+`test_contested.py`, `test_attributeschema.py`.
 
 ## In the web app
 

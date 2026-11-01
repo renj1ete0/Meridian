@@ -10,7 +10,7 @@ nothing else.
   `packages/meridian_core/meridian_core/runs.py` (state), `proposals.py` (prompts and
   parsing), `framing.py`, `routing.py`, `provider.py`, `budget.py`, `writes.py`,
   `validation.py`, `trust.py`
-- **Tasks:** `P4-04`–`P4-18`, `B-36`, `B-40`, `B-63`, `B-137`, `B-162`, `B-170`, `B-171`, `B-204`
+- **Tasks:** `P4-04`–`P4-18`, `B-36`, `B-40`, `B-63`, `B-137`, `B-162`, `B-170`, `B-171`, `B-204`, `P7-01`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md),
   [ADR 0004](../adr/0004-hosted-claude-generation.md)
 
@@ -30,7 +30,10 @@ at a time (a unique partial index). A heartbeat tells a crashed run from a live 
   (`B-170`): the prompt asked for "the same wording for the same value" but never showed the
   wording, and after a few dozen values single attributes held two wordings of one value (a
   term and the same term with a qualifier, or two synonyms). An attribute whose values
-  are all phrased differently discriminates nothing.
+  are all phrased differently discriminates nothing. A tag naming an attribute off the list is
+  kept as evidence for a *proposed* attribute rather than dropped, and the gate judges every
+  candidate the batch touched before the stage ends (`P7-01`,
+  [the attribute schema](knowledge-graph.md#attribute-schema)). It counts no tag on the run.
 - `score`, `analogies`, `gap` and `seed` are named stages that say which task builds them.
 
 `python -m worker.orchestrate` runs cycles until one makes no progress (`--max-cycles` caps

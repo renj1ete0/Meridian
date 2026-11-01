@@ -30,8 +30,8 @@ topic_local:
       description: Physical sidewalk/footpath width relative to pedestrian volume
   # Drafted 2026-09-24 at the operator's request, for the topics that had none.
   # Framed the way the question set frames these topics (in relation to walking
-  # and transport); retire or rename any of them in Admin, where the monthly
-  # audit (P7-02) will also judge them on use.
+  # and transport); retire any of them with `python -m worker.attributes --retire`,
+  # and the monthly audit (P7-02) judges them on use.
   on-demand-bus:
     - name: booking_mode
       description: How a trip is requested — app, phone, stop-based, or fixed schedule on demand

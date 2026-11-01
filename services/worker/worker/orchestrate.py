@@ -21,6 +21,7 @@ from typing import Final
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meridian_core.attributeschema import judge, normalise_name, propose_from_tag
 from meridian_core.budget import BudgetError, load_budget
 from meridian_core.db import dispose_engines, get_sessionmaker
 from meridian_core.embedder import RemoteEmbedder
@@ -653,6 +654,8 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
     vectors = await _mention_vectors(
         sess, [p.entity.name for p in parsed.accepted], journal=journal, stage="tag"
     )
+    active = {name for name, _ in attributes}
+    candidates: dict[int, AttributeDefinition] = {}
     for proposal in parsed.accepted:
         try:
             cited = chunk_ids_for(proposal.citations, batch.passages)
@@ -674,17 +677,47 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
                 embedding=vectors.get(proposal.entity.name.strip()),
                 now=now,
             )
+            attribute = proposal.attribute
+            if attribute not in active and normalise_name(attribute) in active:
+                attribute = normalise_name(attribute)
+            if attribute not in active:
+                # Off the closed list: evidence for a proposed attribute, judged by the gate
+                # once the batch is written (`P7-01`). See
+                # docs/features/knowledge-graph.md#attribute-schema.
+                journal.call(
+                    "propose_from_tag",
+                    entity_id=entity.entity.entity_id,
+                    attribute=proposal.attribute,
+                    supporting_chunk_ids=cited,
+                )
+                definition, result = await propose_from_tag(
+                    sess,
+                    run,
+                    attribute=proposal.attribute,
+                    entity_id=entity.entity.entity_id,
+                    supporting_chunk_ids=cited,
+                    produced_by=completion.agent_id,
+                    model=completion.model,
+                    quality_tier=quality_tier,
+                    value=proposal.value,
+                    value_numeric=proposal.value_numeric,
+                    confidence=proposal.confidence,
+                    now=now,
+                )
+                candidates[definition.attribute_id] = definition
+                journal.note("tag", f"{definition.name} (proposed): {result.detail}")
+                continue
             journal.call(
                 "tag_entity",
                 entity_id=entity.entity.entity_id,
-                attribute=proposal.attribute,
+                attribute=attribute,
                 supporting_chunk_ids=cited,
             )
             result = await tag_entity(
                 sess,
                 run,
                 entity_id=entity.entity.entity_id,
-                attribute=proposal.attribute,
+                attribute=attribute,
                 supporting_chunk_ids=cited,
                 produced_by=completion.agent_id,
                 model=completion.model,
@@ -698,6 +731,14 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
             journal.note("tag", f"refused — {exc}")
             continue
         journal.note("tag", result.detail)
+
+    for definition in candidates.values():
+        try:
+            verdict = await judge(sess, definition, now=now, run=run)
+        except ValidationError as exc:
+            journal.note("tag", f"not judged — {exc}")
+            continue
+        journal.note("tag", f"{verdict.name}: {verdict.kind} — {verdict.reason}")
 
 
 #: The stages that are built, and what runs them. Never also in `BUILT_BY`.

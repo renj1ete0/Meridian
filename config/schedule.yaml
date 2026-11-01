@@ -28,6 +28,17 @@ jobs:
     interval_seconds: 21600        # every 6 hours
     enabled: true
 
+  - name: attributes
+    module: worker.attributes
+    args: ["--once"]
+    # `P7-01`, `P7-02`, §7.3: the attribute schema's gate and audit. Judges every
+    # proposed attribute (evidence, discrimination, the cap), and audits each
+    # active one at most once a month however often this runs, so a missed day
+    # costs nothing and hysteresis counts months, not runs. Retiring marks an
+    # attribute retired and keeps every value; `--restore NAME` undoes it.
+    interval_seconds: 86400        # daily; each attribute's audit is monthly
+    enabled: true
+
   - name: embed
     module: worker.embed
     args: ["--once"]

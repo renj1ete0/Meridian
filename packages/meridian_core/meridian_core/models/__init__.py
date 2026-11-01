@@ -21,7 +21,15 @@ from .config import (
     Watch,
 )
 from .gazetteer import GazetteerTerm
-from .graph import AttributeDefinition, AttributeValue, Edge, Entity, MergeLog, Observation
+from .graph import (
+    AttributeDefinition,
+    AttributeEvent,
+    AttributeValue,
+    Edge,
+    Entity,
+    MergeLog,
+    Observation,
+)
 from .mixins import (
     CURRENT_SCHEMA_VERSION,
     QUALITY_TIER_MAX,
@@ -62,6 +70,7 @@ __all__ = [
     "AreaMember",
     "AgentToken",
     "AttributeDefinition",
+    "AttributeEvent",
     "AttributeValue",
     "BoilerplateLine",
     "Chunk",

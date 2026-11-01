@@ -23,6 +23,7 @@ it is not caught up.
 | `requeue_dois` | `worker.requeue_dois --apply` | 1 h | off | Ranks queued papers by the pages that cite them | [discovery](../features/discovery.md) |
 | `steerproposals` | `worker.steerproposals --once` | 1 h | on | Proposes steering changes and applies unopposed ones | [steering](../features/steering.md) |
 | `seedsearch` | `worker.seedsearch --once` | 3 h | on | Queues new search queries per topic and from the graph | [discovery](../features/discovery.md) |
+| `attributes` | `worker.attributes --once` | 1 d | on | Judges proposed attributes; audits each active one monthly and retires one that keeps failing (values kept) | [knowledge-graph](../features/knowledge-graph.md#attribute-schema) |
 | `digest` | `worker.digest` | 1 d | on | Health line and sustained-condition alerts | [operations](../features/operations.md) |
 | `areas` | `worker.areas --once` | 1 d | on | Rebuilds the map's areas and names them | [map](../features/map.md) |
 | `boilerplate` | `worker.boilerplate --once` | 1 d | on | Recomputes the lines each site repeats | [extraction](../features/extraction.md) |

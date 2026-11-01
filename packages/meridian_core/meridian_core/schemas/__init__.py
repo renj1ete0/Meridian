@@ -58,6 +58,7 @@ from .gazetteer import GazetteerTermCreate, GazetteerTermRead
 from .graph import (
     AttributeDefinitionCreate,
     AttributeDefinitionRead,
+    AttributeEventRead,
     AttributeValueCreate,
     AttributeValueRead,
     EdgeCreate,
@@ -151,6 +152,7 @@ __all__ = [
     "EdgeRead",
     "AttributeDefinitionCreate",
     "AttributeDefinitionRead",
+    "AttributeEventRead",
     "AttributeValueCreate",
     "AttributeValueRead",
     # gazetteer

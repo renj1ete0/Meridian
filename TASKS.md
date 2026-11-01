@@ -3000,8 +3000,8 @@ deploy runbook whose first two commands could not work (`B-17`).
 
 *Checkpoint: the analytical layer the whole thing was for.*
 
-- [ ] `P7-01` Attribute proposal gate: evidence requirement, discrimination test, hard cap
-- [ ] `P7-02` Monthly attribute audit with hysteresis before retirement
+- [x] `P7-01` Attribute proposal gate: evidence requirement, discrimination test, hard cap
+- [x] `P7-02` Monthly attribute audit with hysteresis before retirement
 - [ ] `P7-03` Schema evolution backfill, amortised across runs
 - [ ] `P7-04` Analogical expansion with disanalogies recorded on every comparison edge
 - [x] `P7-05` Contradiction tracking and contested-pair marking

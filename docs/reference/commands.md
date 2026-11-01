@@ -111,6 +111,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.hostscore` | always (`--report` dry) | Host scores |
 | `worker.requeue`, `worker.requeue_links`, `worker.requeue_dois` | `--apply` | Re-rank pending queue rows |
 | `worker.steerproposals` | always (`--report` dry) | Steering proposals |
+| `worker.attributes` | `--once` (`--report` dry); `--restore NAME`, `--retire NAME` | The attribute schema's gate and monthly audit; restore or retire one attribute by hand (`P7-01`, `P7-02`) |
 | `worker.digest` | always | Digest and alerts |
 | `worker.sweep` | `--apply` | Retention sweep (the only pass that deletes files) |
 | `worker.liveness` | — | The container healthcheck: exits 1 when the heartbeat file is missing or stale |

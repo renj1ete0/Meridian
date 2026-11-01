@@ -325,6 +325,15 @@ like any other change. **At most one pending proposal per topic and kind**, by a
 index: two pending boosts would apply one after the other, and the second would be a decision
 nobody saw.
 
+### Attribute events
+
+The attribute schema's log (`P7-01`, `P7-02`, §7.3 "all schema changes logged"): one row per
+proposal first seen, gate refusal or hold, activation, audit, retirement and restoration, with
+`signals` holding the measurements the decision was made on and `passed` set only on audits.
+Append-only; a retirement is a status on `attribute_definitions` and never touches
+`attribute_values`. Not readable by the guest role: it is the operator's view of how the schema
+moved. See [the attribute schema](../features/knowledge-graph.md#attribute-schema).
+
 ### Fetch policy
 
 - **Learned rendering** (`P1-27`). `render_js: auto` fetches statically and re-fetches through
@@ -553,8 +562,9 @@ the rules.
 - **`stance` and `certainty` are optional** (§8): observable properties, not verdicts. A model
   that must guess one will, and an invented stance is worse than none, since the graph reads a
   missing value as unknown and a wrong one as fact.
-- **A tag names an attribute the prompt listed as active**, which `tag_entity` checks; it is not
-  a proposal of new schema. `P7-01` is the only route to a new attribute.
+- **A tag names an attribute the prompt listed as active**, which `tag_entity` checks. A tag off
+  the list is not written as a tag: synthesis keeps it as evidence for a `proposed` attribute,
+  and `P7-01`'s gate is the only route from there to an active one.
 - **`comparable_to` states its limits three times**: a CHECK constraint, `add_edge`, and this
   schema. The constraint cannot be bypassed; the schema names the rule while the batch is parsed,
   so one comparison that forgot its disanalogy does not lose the whole batch.

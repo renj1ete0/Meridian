@@ -68,6 +68,18 @@ COMPARISON_RELATION = "comparable_to"
 
 ATTRIBUTE_SCOPE = constrained("global", "topic_local", name="attribute_scope")
 ATTRIBUTE_STATUS = constrained("active", "proposed", "retired", name="attribute_status")
+# What happened to an attribute definition (`P7-01`, `P7-02`, §7.3 "all schema changes
+# logged"). See docs/features/knowledge-graph.md#attribute-schema.
+ATTRIBUTE_EVENT = constrained(
+    "proposed",
+    "refused",
+    "held",
+    "activated",
+    "audited",
+    "retired",
+    "restored",
+    name="attribute_event",
+)
 
 
 class Entity(Base, TimestampMixin, ProvenanceMixin):
@@ -312,6 +324,39 @@ class AttributeDefinition(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<AttributeDefinition {self.name} {self.scope} {self.status}>"
+
+
+class AttributeEvent(Base, TimestampMixin):
+    """One entry in the attribute schema's log: a proposal judged, an audit, a status change.
+
+    Append-only. ``signals`` holds the measurements the decision was made on, so a
+    retirement can be read back months later against the numbers that caused it.
+    """
+
+    __tablename__ = "attribute_events"
+
+    event_id: Mapped[int] = pk()
+    attribute_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("attribute_definitions.attribute_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(ATTRIBUTE_EVENT, nullable=False)
+    #: For `audited`: whether the attribute passed. Null for every other kind.
+    passed: Mapped[bool | None] = mapped_column(Boolean)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    signals: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    #: The synthesis run that caused it, when one did (a proposal from tagging).
+    run_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("runs.run_id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (Index("ix_attribute_events_attribute", "attribute_id", "event_id"),)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<AttributeEvent a={self.attribute_id} {self.kind}>"
 
 
 class AttributeValue(Base, TimestampMixin, ProvenanceMixin):

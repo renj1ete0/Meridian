@@ -24,7 +24,7 @@ log = get_logger(__name__)
 
 #: The newest migration in this release. `tests/unit/test_schemaready.py` holds it to the
 #: head of `migrations/versions`, so adding a migration without changing this fails a test.
-EXPECTED_REVISION = "c705a1b2c3d4"
+EXPECTED_REVISION = "p701a1c2d3e4"
 
 #: How long a service waits before starting anyway, loudly: a database *ahead* of the image
 #: (a rollback to an older release) never matches, and an additive schema serves old code.

@@ -24,6 +24,7 @@ from meridian_core.models.config import (
 )
 from meridian_core.models.gazetteer import GAZETTEER_ENTITY_TYPE, GAZETTEER_SOURCE
 from meridian_core.models.graph import (
+    ATTRIBUTE_EVENT,
     ATTRIBUTE_SCOPE,
     ATTRIBUTE_STATUS,
     CERTAINTY,
@@ -71,6 +72,7 @@ Stance = Literal[*STANCE.enums]
 Certainty = Literal[*CERTAINTY.enums]
 AttributeScope = Literal[*ATTRIBUTE_SCOPE.enums]
 AttributeStatus = Literal[*ATTRIBUTE_STATUS.enums]
+AttributeEventKind = Literal[*ATTRIBUTE_EVENT.enums]
 
 # gazetteer.py
 GazetteerEntityType = Literal[*GAZETTEER_ENTITY_TYPE.enums]

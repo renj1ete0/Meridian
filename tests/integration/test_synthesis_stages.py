@@ -25,6 +25,7 @@ from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.models import (
     Agent,
     AttributeDefinition,
+    AttributeEvent,
     AttributeValue,
     BudgetConfig,
     Chunk,
@@ -347,6 +348,54 @@ async def test_a_tag_lands_on_the_entity_extraction_created(corpus, monkeypatch)
     ).one()
     assert value.value == "high"
     assert run.tags_added == 1
+
+
+async def test_a_tag_off_the_schema_is_kept_as_evidence_and_judged_not_tagged(
+    corpus, monkeypatch
+) -> None:
+    """`P7-01`: a model naming an attribute the schema lacks proposes it. The value is kept,
+    with provenance, on a `proposed` definition; the gate refuses it on one source; and the
+    run counts no tag, because nothing was tagged."""
+    sess, ids, marker = corpus
+    model = FakeModel(
+        tag=answer(
+            {
+                "entity": {"name": f"{marker} Agency", "node_type": "organisation"},
+                "attribute": f"{marker} Canopy",
+                "value": "dense",
+                "citations": [1],
+            }
+        ),
+    )
+
+    run, journal, _ = await drive(sess, ids, model, monkeypatch)
+
+    definition = (
+        await sess.scalars(
+            select(AttributeDefinition).where(AttributeDefinition.name == f"{marker}_canopy")
+        )
+    ).one()
+    assert definition.status == "proposed"
+    value = (
+        await sess.scalars(
+            select(AttributeValue).where(AttributeValue.attribute_id == definition.attribute_id)
+        )
+    ).one()
+    assert (value.value, value.produced_by, value.supporting_chunk_ids) == (
+        "dense",
+        AGENT,
+        [ids[0]],
+    )
+    assert run.tags_added == 0
+    events = list(
+        await sess.scalars(
+            select(AttributeEvent.kind)
+            .where(AttributeEvent.attribute_id == definition.attribute_id)
+            .order_by(AttributeEvent.event_id)
+        )
+    )
+    assert events == ["proposed", "refused"]
+    assert "evidence from 1 of 3 independent sources" in journal.render()
 
 
 async def test_the_tagging_prompt_carries_the_wordings_already_in_use(corpus, monkeypatch) -> None:

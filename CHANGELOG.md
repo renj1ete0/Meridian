@@ -91,6 +91,27 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.204.0] — 2026-11-02
+
+### Added
+
+- `P7-01`, `P7-02`: the attribute schema changes by rule, not by hand-editing.
+  - **Entry:** a tag naming an attribute off the list becomes a `proposed` attribute with its
+    values kept. A daily pass activates it only with at least 3 independent sources, 4 tagged
+    entities and a discrimination score of 0.5 (how evenly its values split the entities);
+    under that it stays proposed while evidence builds. At the cap (about 12 applying to any
+    one topic) it may displace only an attribute that has already failed an audit and scores
+    lower.
+  - **Exit:** each attribute is audited at most every 28 days, after 30 days' grace; a poor
+    split, or no values while others were tagged, is a failure. Topic attributes retire after
+    2 consecutive failures, global ones after 3; retiring never touches values, and
+    `python -m worker.attributes --restore NAME` brings one back.
+  - Every decision is logged with its measurements in `attribute_events`.
+  See docs/features/knowledge-graph.md#attribute-schema.
+
+**Deploy:** image only; carries a migration, which runs on start and adds the daily
+`attributes` job.
+
 ## [0.203.0] — 2026-11-02
 
 ### Added

@@ -13,7 +13,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from meridian_core.models.graph import COMPARISON_RELATION
 
 from .common import Confidence, CreateBase, ProvenanceFields, QualityTier, SupportingChunkIds
-from .enums import AttributeScope, AttributeStatus, Certainty, NodeType, Stance
+from .enums import (
+    AttributeEventKind,
+    AttributeScope,
+    AttributeStatus,
+    Certainty,
+    NodeType,
+    Stance,
+)
 
 
 class EntityCreate(ProvenanceFields):
@@ -168,6 +175,21 @@ class AttributeDefinitionRead(BaseModel):
     usage_count: int
     consecutive_audit_failures: int
     last_audited_at: dt.datetime | None
+    created_at: dt.datetime
+
+
+class AttributeEventRead(BaseModel):
+    """One entry in the attribute schema's log (`P7-01`, `P7-02`, §7.3)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    event_id: int
+    attribute_id: int
+    kind: AttributeEventKind
+    passed: bool | None
+    reason: str
+    signals: dict[str, Any]
+    run_id: int | None
     created_at: dt.datetime
 
 
