@@ -1694,9 +1694,15 @@ export interface AgentRow {
   route_order: number | null
   endpoint: string | null
   api_key_env_var: string | null
+  /** `off`: structured tasks ask the model not to reason first (`B-259`). */
+  thinking: AgentThinking
   key_present: boolean
   blocked_by: string[]
 }
+
+/** Mirrors `AgentThinking` (`B-259`). */
+export const AGENT_THINKING = ['server', 'off'] as const
+export type AgentThinking = (typeof AGENT_THINKING)[number]
 
 export const AGENT_ROW_FIELDS = [
   'agent_id',
@@ -1711,6 +1717,7 @@ export const AGENT_ROW_FIELDS = [
   'route_order',
   'endpoint',
   'api_key_env_var',
+  'thinking',
   'key_present',
   'blocked_by',
 ] as const
@@ -1772,6 +1779,7 @@ export function getAgents(init?: RequestInit): Promise<Agents> {
 export interface AgentChange {
   enabled?: boolean
   model?: string
+  thinking?: AgentThinking
 }
 
 /** Change one agent. Returns the whole registry, because `unserved_tasks` is

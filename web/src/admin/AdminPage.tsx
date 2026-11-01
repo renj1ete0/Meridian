@@ -766,6 +766,11 @@ export function AdminPage() {
                   setAgents(await editAgent(agentId, { model }))
                 })
               }
+              onThinking={(agentId, thinking) =>
+                void steer(agentId, async () => {
+                  setAgents(await editAgent(agentId, { thinking }))
+                })
+              }
             />
           ) : (
             <Loading what="the registry" />

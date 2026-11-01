@@ -179,6 +179,7 @@ async def seed_agents(sess) -> tuple[int, int]:
                 # (§11.11). A row that omits it reads as "needs no key", which
                 # is how a local endpoint is configured.
                 api_key_env_var=row.get("api_key_env_var"),
+                thinking=row.get("thinking", "server"),
             )
         )
         added += 1

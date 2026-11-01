@@ -10,6 +10,7 @@ from typing import Literal
 
 from meridian_core.models.chat import CHAT_ROLE
 from meridian_core.models.config import (
+    AGENT_THINKING,
     AVAILABILITY,
     DOMAIN_STATUS,
     GRANT_PROFILE,
@@ -88,6 +89,7 @@ GrantProfile = Literal[*GRANT_PROFILE.enums]
 #: What a watched address is (`B-249`).
 WatchKind = Literal[*WATCH_KIND.enums]
 AgentAvailability = Literal[*AVAILABILITY.enums]
+AgentThinking = Literal[*AGENT_THINKING.enums]
 
 #: What a steering proposal changes, and where it is in its life (`P6-38`).
 ProposalKind = Literal[*PROPOSAL_KIND.enums]

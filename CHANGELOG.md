@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.186.0] — 2026-11-01
+
+### Added
+
+- `B-259`: local models answer structured tasks without reasoning first. `agents.thinking`
+  (`server` or `off`); with `off`, relation extraction, attribute tagging, translation, triage
+  and extraction fallback send `chat_template_kwargs.enable_thinking=false`, chat keeps the
+  server's default. The seeded local rows are `off`, hosted rows `server`; Admin → Agent
+  registry switches it per OpenAI-compatible row. Migration `b259a1c2d3e4`.
+
 ## [0.185.0] — 2026-11-01
 
 ### Added

@@ -54,7 +54,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
 import { ANSWER_FIELDS, ANSWER_GROUP_FIELDS, ANSWER_ITEM_FIELDS } from '../src/lib/answer'
 // P6-28: the bulk gazetteer decision.
-import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX, SITE_FIELDS } from '../src/lib/api'
+import { AGENT_THINKING, GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX, SITE_FIELDS } from '../src/lib/api'
 import {
   AREA_BUILD_FIELDS,
   AREA_FIELDS,
@@ -265,6 +265,18 @@ describe('the document kinds match the database (B-59)', () => {
 
     expect(inDatabase.length).toBeGreaterThan(1)
     expect([...DOC_KINDS].sort()).toEqual(inDatabase.sort())
+  })
+})
+
+describe('the agent thinking values match the database (B-259)', () => {
+  it('lists exactly the values the CHECK constraint allows', () => {
+    const model = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/models/config.py'), 'utf8')
+    const declaration = /AGENT_THINKING = constrained\(([\s\S]*?)name="agent_thinking"/.exec(model)
+    expect(declaration, 'AGENT_THINKING is no longer declared the way this test reads it').toBeTruthy()
+    const inDatabase = [...declaration![1]!.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
+
+    expect(inDatabase.length).toBeGreaterThan(1)
+    expect([...AGENT_THINKING].sort()).toEqual(inDatabase.sort())
   })
 })
 

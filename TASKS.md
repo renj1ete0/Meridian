@@ -1986,7 +1986,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-258` **Controls disabled where a person may view but not change** — `B-257` hides
       sections and says when one is read-only; the buttons inside still answer with the server's
       403. Disable them (with the permission named) panel by panel, via `useMe().can`
-- [ ] `B-259` **Thinking off for structured tasks on local models** (measured 2026-11-01) — a
+- [x] `B-259` **Thinking off for structured tasks on local models** (measured 2026-11-01) — a
       Qwen3 27B behind an OpenAI-compatible server spent the whole 16,000-token answer reasoning on
       relation extraction (281–328 s a batch, one answer cut off, one empty); with
       `chat_template_kwargs.enable_thinking=false` the same batches took 32–46 s and gave 20 and 11

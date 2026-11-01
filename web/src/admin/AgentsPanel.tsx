@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { AgentRow } from '../lib/api'
+import type { AgentRow, AgentThinking } from '../lib/api'
 import { BUTTON_ROW, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
@@ -16,6 +16,20 @@ export interface AgentsPanelProps {
   onToggle?: (agentId: string, enabled: boolean) => void
   /** Save a new model string; resolves `true` once the server took it. */
   onModel?: (agentId: string, model: string) => Promise<boolean>
+  /** Whether structured tasks ask this agent not to reason first (`B-259`). */
+  onThinking?: (agentId: string, thinking: AgentThinking) => void
+}
+
+/**
+ * How structured tasks are sent to an agent, for the rows where it can be chosen: an
+ * OpenAI-compatible server reads the switch, and a hosted API of another shape has none.
+ * Null for those. See docs/features/synthesis.md#local-models.
+ */
+export function thinkingNote(row: Pick<AgentRow, 'provider' | 'thinking'>): string | null {
+  if (row.provider !== 'openai_compatible') return null
+  return row.thinking === 'off'
+    ? 'Extraction and tagging: answers without reasoning first.'
+    : 'Extraction and tagging: reasons as its server decides.'
 }
 
 /**
@@ -123,7 +137,7 @@ export function tierLabel(tier: number | null): string {
   return tier === null ? 'no tier' : `tier ${tier}`
 }
 
-export function AgentsPanel({ rows, unserved, busy, onToggle, onModel }: AgentsPanelProps) {
+export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinking }: AgentsPanelProps) {
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Agent registry">
@@ -174,6 +188,9 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel }: AgentsP
                     {row.provider} · {tierLabel(row.quality_tier)}
                     {row.cost_tier ? ` · ${row.cost_tier}` : ''}
                     {row.route_order != null ? ` · tried ${row.route_order}` : ''}
+                    {thinkingNote(row) ? (
+                      <div className="mt-1 whitespace-normal text-[11px] text-text-faint">{thinkingNote(row)}</div>
+                    ) : null}
                   </td>
                   <td className={`${TD} text-[12px] text-text-muted`}>
                     {row.api_key_env_var ? (
@@ -197,14 +214,27 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel }: AgentsP
                     {state.label}
                   </td>
                   <td className={`${TD} text-right`}>
-                    <button
-                      type="button"
-                      disabled={busy === row.agent_id}
-                      onClick={() => onToggle?.(row.agent_id, !row.enabled)}
-                      className={BUTTON_ROW}
-                    >
-                      {row.enabled ? 'Disable' : 'Enable'}
-                    </button>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <button
+                        type="button"
+                        disabled={busy === row.agent_id}
+                        onClick={() => onToggle?.(row.agent_id, !row.enabled)}
+                        className={BUTTON_ROW}
+                      >
+                        {row.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      {thinkingNote(row) ? (
+                        <button
+                          type="button"
+                          disabled={busy === row.agent_id}
+                          aria-label={`${row.thinking === 'off' ? 'Let reason' : 'Skip reasoning'}: ${row.agent_id}`}
+                          onClick={() => onThinking?.(row.agent_id, row.thinking === 'off' ? 'server' : 'off')}
+                          className={BUTTON_ROW}
+                        >
+                          {row.thinking === 'off' ? 'Let it reason' : 'Skip reasoning'}
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               )

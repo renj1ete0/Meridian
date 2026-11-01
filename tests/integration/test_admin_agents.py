@@ -180,6 +180,20 @@ async def test_the_model_can_be_chosen_from_admin(
     )
 
 
+async def test_thinking_can_be_set_from_admin_and_is_shown(
+    client, open_admin, registry, marker: str
+) -> None:
+    """`B-259`: structured tasks may ask a local model not to reason first; the row says so."""
+    before = await client.get("/api/admin/agents")
+    assert {r["agent_id"]: r for r in before.json()["rows"]}[marker]["thinking"] == "server"
+
+    response = await client.patch(f"/api/admin/agents/{marker}", json={"thinking": "off"})
+
+    assert response.status_code == 200
+    row = {r["agent_id"]: r for r in response.json()["rows"]}[marker]
+    assert (row["thinking"], row["enabled"]) == ("off", True), "the switch alone changed"
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -188,6 +202,8 @@ async def test_the_model_can_be_chosen_from_admin(
         {"model": "x" * 201},
         {"endpoint": "http://elsewhere"},
         {"task_types": ["chat"]},
+        {"thinking": "on"},
+        {"thinking": ""},
     ],
 )
 async def test_what_admin_may_not_write_is_refused(

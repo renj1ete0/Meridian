@@ -28,6 +28,7 @@ from .config import (
 from .corpusmap import CorpusMapRead, MapPointRead
 from .enums import (
     AgentAvailability,
+    AgentThinking,
     AttributeScope,
     AttributeStatus,
     Certainty,
@@ -99,6 +100,7 @@ __all__ = [
     "SupportingChunkIds",
     # enums (Literal aliases)
     "AgentAvailability",
+    "AgentThinking",
     "AttributeScope",
     "AttributeStatus",
     "Certainty",

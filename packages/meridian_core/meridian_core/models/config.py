@@ -46,6 +46,9 @@ GRANT_PROFILE = constrained("reader", "analyst", "operator", name="grant_profile
 _PERMISSION_LIST = ", ".join(f"'{name}'" for name in _PERMISSION_NAMES)
 
 AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_availability")
+#: Whether a model's reasoning is asked off for structured tasks (`B-259`): `server` sends
+#: nothing (the server's default), `off` asks an OpenAI-compatible server to answer directly.
+AGENT_THINKING = constrained("server", "off", name="agent_thinking")
 
 
 class TopicConfig(Base):
@@ -325,6 +328,12 @@ class Agent(Base, TimestampMixin):
 
     # The NAME of the environment variable holding the key — never the key.
     api_key_env_var: Mapped[str | None] = mapped_column(Text)
+    #: `off`: extraction, tagging and the other structured tasks ask the model not to reason
+    #: first (`B-259`); chat keeps the server's default.
+    #: See docs/features/synthesis.md#local-models.
+    thinking: Mapped[str] = mapped_column(
+        AGENT_THINKING, nullable=False, default="server", server_default="server"
+    )
 
     __table_args__ = (Index("ix_agents_enabled_quality", "enabled", "quality_tier"),)
 

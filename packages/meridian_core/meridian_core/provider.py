@@ -169,7 +169,13 @@ def effort() -> str:
 
 
 async def _call_anthropic(
-    agent: Agent, *, prompt: str, system: str | None, max_tokens: int, timeout_s: float
+    agent: Agent,
+    *,
+    prompt: str,
+    system: str | None,
+    max_tokens: int,
+    timeout_s: float,
+    reasoning: bool = True,
 ) -> tuple[str, int, int]:
     try:
         from anthropic import AsyncAnthropic
@@ -212,8 +218,40 @@ async def _call_anthropic(
     return text, message.usage.input_tokens, message.usage.output_tokens
 
 
+#: Tasks whose answer is a structure Meridian validates, not prose (`B-259`). A model that
+#: reasons first spent a whole 16,000-token answer doing so on extraction and returned
+#: nothing; asked not to, it answered in a tenth of the time. Chat and drafting keep it.
+STRUCTURED_TASKS: Final[frozenset[str]] = frozenset(
+    {"relation_extraction", "tag_attributes", "translation", "triage", "extraction_fallback"}
+)
+
+
+def reasons(agent: Agent, task_type: str) -> bool:
+    """Whether this call leaves the model's reasoning as its server sets it (`B-259`)."""
+    return not (getattr(agent, "thinking", "server") == "off" and task_type in STRUCTURED_TASKS)
+
+
+def _chat_body(model: str, messages: list[dict], max_tokens: int, *, reasoning: bool) -> dict:
+    """An OpenAI-compatible chat request.
+
+    Asked not to reason, it carries the chat template's switch (llama.cpp, vLLM, SGLang read
+    it; a server that does not ignores it). Never sent otherwise: OpenAI's own API refuses
+    arguments it does not know.
+    """
+    body: dict = {"model": model, "messages": messages, "max_tokens": max_tokens}
+    if not reasoning:
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+    return body
+
+
 async def _call_openai_compatible(
-    agent: Agent, *, prompt: str, system: str | None, max_tokens: int, timeout_s: float
+    agent: Agent,
+    *,
+    prompt: str,
+    system: str | None,
+    max_tokens: int,
+    timeout_s: float,
+    reasoning: bool = True,
 ) -> tuple[str, int, int]:
     """The local tier (§11.7). Ollama, llama.cpp and vLLM all speak this."""
     import httpx
@@ -236,7 +274,7 @@ async def _call_openai_compatible(
         async with httpx.AsyncClient(timeout=limits) as client:
             response = await client.post(
                 lan_url(f"{endpoint.rstrip('/')}/chat/completions"),
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+                json=_chat_body(model, messages, max_tokens, reasoning=reasoning),
                 headers=headers,
             )
             if response.status_code in WAIT_STATUSES:
@@ -302,7 +340,13 @@ def relay_key(prompt: str, system: str | None) -> str:
 
 
 async def _call_relay(
-    agent: Agent, *, prompt: str, system: str | None, max_tokens: int, timeout_s: float
+    agent: Agent,
+    *,
+    prompt: str,
+    system: str | None,
+    max_tokens: int,
+    timeout_s: float,
+    reasoning: bool = True,
 ) -> tuple[str, int, int]:
     """A model that answers through files, not a network (`P4-18`).
 
@@ -496,7 +540,12 @@ async def complete(
         await reserve_tokens(sess, run.run_id, reserved, cap=token_cap)
         try:
             text, input_tokens, output_tokens = await shape(
-                agent, prompt=prompt, system=system, max_tokens=max_tokens, timeout_s=timeout_s
+                agent,
+                prompt=prompt,
+                system=system,
+                max_tokens=max_tokens,
+                timeout_s=timeout_s,
+                reasoning=reasons(agent, task_type),
             )
         except ProviderError as exc:
             await settle_tokens(sess, run.run_id, reserved=reserved, actual=0)
@@ -550,7 +599,12 @@ async def ask(
         shape = _SHAPES[agent.provider]
         try:
             text, input_tokens, output_tokens = await shape(
-                agent, prompt=prompt, system=system, max_tokens=max_tokens, timeout_s=timeout_s
+                agent,
+                prompt=prompt,
+                system=system,
+                max_tokens=max_tokens,
+                timeout_s=timeout_s,
+                reasoning=reasons(agent, task_type),
             )
         except ProviderError as exc:
             log.warning("agent could not answer", extra={"agent": agent.agent_id})

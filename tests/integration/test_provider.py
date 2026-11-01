@@ -29,7 +29,15 @@ from meridian_core.runs import begin_or_resume, unfinished
 pytestmark = pytest.mark.usefixtures("require_db")
 
 NOW = dt.datetime(2026, 9, 20, 12, 0, tzinfo=dt.UTC)
-FIELDS = ("enabled", "model", "provider", "api_key_env_var", "task_types", "fallback_agent_id")
+FIELDS = (
+    "enabled",
+    "model",
+    "provider",
+    "api_key_env_var",
+    "task_types",
+    "fallback_agent_id",
+    "thinking",
+)
 
 
 @pytest.fixture
@@ -75,14 +83,22 @@ async def registry(session_for) -> AsyncIterator:
     await sess.commit()
 
 
+class AskedLog(list):
+    """Which agents were asked, in order; ``reasoned`` says whether each was left to reason."""
+
+    reasoned: list[bool]
+
+
 @pytest.fixture
 def answers(monkeypatch):
     """Replace the call shapes. Returns a log of which agents were asked."""
-    asked: list[str] = []
+    asked = AskedLog()
+    reasoned: list[bool] = []
 
     def install(**behaviour):
-        async def shape(agent, *, prompt, system, max_tokens, timeout_s):
+        async def shape(agent, *, prompt, system, max_tokens, timeout_s, reasoning=True):
             asked.append(agent.agent_id)
+            reasoned.append(reasoning)
             outcome = behaviour.get(agent.agent_id, behaviour.get("*"))
             if isinstance(outcome, Exception):
                 raise outcome
@@ -91,6 +107,7 @@ def answers(monkeypatch):
         monkeypatch.setattr(
             provider_module, "_SHAPES", {"anthropic": shape, "openai_compatible": shape}
         )
+        asked.reasoned = reasoned
         return asked
 
     return install
@@ -311,3 +328,29 @@ async def test_a_missing_key_takes_that_agent_out_rather_than_the_run(
     result = await complete(sess, run, "tag_attributes", prompt="x", token_cap=100_000, now=NOW)
 
     assert result.agent_id != "hosted-mid"
+
+
+async def test_the_task_decides_whether_an_agent_set_off_is_asked_to_reason(
+    registry, answers
+) -> None:
+    """`B-259` through the real chain: the registry row says `off`, and extraction goes out
+    without reasoning while drafting keeps the server's default."""
+    sess, run = registry
+    for row in await sess.scalars(select(Agent)):
+        row.thinking = "off"
+    await sess.flush()
+    asked = answers()
+
+    await complete(sess, run, "relation_extraction", prompt="p", token_cap=100_000, now=NOW)
+    await complete(sess, run, "drafting", prompt="p", token_cap=100_000, now=NOW)
+
+    assert asked.reasoned == [False, True]
+
+
+async def test_the_local_rows_are_seeded_off_and_the_hosted_rows_left_to_the_server(registry):
+    """What the migration set: hosted OpenAI-compatible APIs refuse the switch, so only the
+    local rows send it."""
+    sess, _ = registry
+    rows = {r.agent_id: r.thinking for r in await sess.scalars(select(Agent))}
+    for agent_id, thinking in rows.items():
+        assert thinking == ("off" if agent_id.startswith("local-") else "server"), agent_id

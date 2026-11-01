@@ -1230,7 +1230,8 @@ async def edit_agent(
 ) -> AgentsRead:
     """Enable or disable one agent, and return the whole registry.
 
-    The whole registry, because `unserved_tasks` spans rows. Only `enabled` is writable.
+    The whole registry, because `unserved_tasks` spans rows. `enabled`, `model` and
+    `thinking` are writable.
     """
     agent = await sess.get(Agent, agent_id)
     if agent is None:
@@ -1252,6 +1253,13 @@ async def edit_agent(
             extra={"agent": agent_id, "was": agent.model, "now": body.model},
         )
         agent.model = body.model
+        await sess.flush()
+    if body.thinking is not None and agent.thinking != body.thinking:
+        log.info(
+            "agent thinking changed from admin",
+            extra={"agent": agent_id, "was": agent.thinking, "now": body.thinking},
+        )
+        agent.thinking = body.thinking
         await sess.flush()
     await sess.commit()
     return await list_agents(_, sess)

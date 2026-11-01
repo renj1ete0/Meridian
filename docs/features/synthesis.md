@@ -317,6 +317,24 @@ when it is off.
 - Measured against an address that drops packets: probe 3.08 s, then 0.00 s while remembered; a
   call without a `health_url` 3.01 s, where before it waited the full timeout.
 
+### <a id="local-models"></a>Local models answer structured tasks without reasoning first
+
+A reasoning model (Qwen3 and its kind) thinks before it answers unless asked not to. On
+structured work that is all cost: measured on 2026-11-01 with a Qwen3 27B behind the operator's
+OpenAI-compatible server, a 40-passage extraction batch took 281 to 328 s, spent the whole
+16,000-token answer reasoning, and came back once cut off and once empty. Asked not to reason,
+the same kind of batch took 32 to 46 s and gave 20 and 11 accepted relations (`B-259`).
+
+- **`agents.thinking`**: `server` sends nothing, the server's own default, as before; `off` adds
+  `chat_template_kwargs: {"enable_thinking": false}` to the request for the structured tasks
+  (`provider.STRUCTURED_TASKS`: relation extraction, attribute tagging, translation, triage,
+  extraction fallback). Chat, drafting and gap analysis keep the server's default even then: a
+  reader's question is where reasoning earns its time.
+- **Only for rows that ask.** llama.cpp, vLLM and SGLang read the switch, and Ollama ignores it,
+  but OpenAI's own API refuses arguments it does not know, so a hosted row stays `server`. The
+  seeded local rows are `off` (`config/agents.yaml`, and the migration for existing rows); Admin
+  → Agents changes it per row.
+
 ### Budgets
 
 `budget.py` (`P4-10`, `P4-13`) bounds the one loop nothing else does: gaps emit seeds, seeds grow
@@ -393,8 +411,9 @@ text extraction, and what a model returns is a suggestion the writes may refuse.
 
 ## Configuration
 
-- Registry rows: **Admin → Agent registry** (model strings are editable there); seeded from
-  `config/agents.yaml`, disabled.
+- Registry rows: **Admin → Agent registry** (model strings, and for an OpenAI-compatible row
+  whether structured tasks skip reasoning, are editable there); seeded from `config/agents.yaml`,
+  disabled.
 - Keys and endpoints: see [reference/environment.md](../reference/environment.md#models-synthesis-and-the-ask-panel).
 - Budget caps: **Admin**, budget screen. Runs refuse until all caps are set.
 

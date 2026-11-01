@@ -650,3 +650,69 @@ async def test_a_model_loading_on_request_is_away_for_as_long_as_it_says(lan, st
     assert "not asked again" in reason
     left = provider._down_until["local"] - time.monotonic()
     assert 200 < left <= 240, "the server's own wait was not the one taken"
+
+
+# --------------------------------------------------------------------------
+# Reasoning asked off for structured tasks (`B-259`)
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def bodies(lan):
+    """The JSON bodies the chat endpoint was sent."""
+    import json
+
+    sent: list[dict] = []
+
+    def answer(request):
+        if request.url.path.endswith("/chat/completions"):
+            sent.append(json.loads(request.content))
+        return chat_answer(request)
+
+    lan.state["handler"] = answer
+    return sent
+
+
+@pytest.mark.parametrize(
+    "task", sorted(__import__("meridian_core.provider").provider.STRUCTURED_TASKS)
+)
+def test_an_agent_set_off_answers_every_structured_task_without_reasoning(task) -> None:
+    from meridian_core.provider import reasons
+
+    assert reasons(local(thinking="off"), task) is False
+
+
+@pytest.mark.parametrize("task", ["chat", "drafting", "gap_analysis", "analogical_expansion"])
+def test_prose_tasks_keep_the_servers_reasoning_even_when_set_off(task) -> None:
+    from meridian_core.provider import reasons
+
+    assert reasons(local(thinking="off"), task) is True
+
+
+def test_an_agent_left_to_the_server_is_never_asked_anything() -> None:
+    from meridian_core.provider import reasons
+
+    assert reasons(local(thinking="server"), "relation_extraction") is True
+    assert reasons(local(), "relation_extraction") is True, "a row from before the column"
+
+
+def test_every_structured_task_is_a_task_the_registry_knows() -> None:
+    """Drift: a task renamed in routing would silently fall out of the set and reason again."""
+    from meridian_core.provider import STRUCTURED_TASKS
+    from meridian_core.routing import TASK_TYPES
+
+    assert set(TASK_TYPES) >= STRUCTURED_TASKS
+
+
+async def test_the_switch_reaches_the_server_only_when_asked(bodies) -> None:
+    from meridian_core.provider import _call_openai_compatible
+
+    kw = {"prompt": "p", "system": "s", "max_tokens": 10, "timeout_s": 5}
+    await _call_openai_compatible(local(), reasoning=False, **kw)
+    await _call_openai_compatible(local(), **kw)
+
+    off, default = bodies
+    assert off["chat_template_kwargs"] == {"enable_thinking": False}
+    # A hosted OpenAI-compatible API refuses arguments it does not know: never sent unasked.
+    assert "chat_template_kwargs" not in default
+    assert {k: v for k, v in off.items() if k != "chat_template_kwargs"} == default

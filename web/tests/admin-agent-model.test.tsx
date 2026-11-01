@@ -29,6 +29,7 @@ function agent(over: Partial<AgentRow> = {}): AgentRow {
     availability: 'opportunistic',
     enabled: false,
     fallback_agent_id: null,
+    thinking: 'off',
     route_order: null,
     endpoint: '${LOCAL_CHAT_LLM_URL}',
     api_key_env_var: null,
@@ -126,5 +127,24 @@ describe('editAgent', () => {
     // An `enabled: undefined` beside a model edit would be dropped by JSON,
     // but a `false` default would silently switch the agent off.
     expect(bodies).toEqual([{ model: 'llama3' }, { enabled: true }])
+  })
+})
+
+describe('the thinking switch (B-259)', () => {
+  it('sends the other setting for that row only', () => {
+    const onThinking = vi.fn()
+    render(
+      <AgentsPanel
+        rows={[agent(), agent({ agent_id: 'local-llamacpp', thinking: 'server' })]}
+        unserved={[]}
+        onThinking={onThinking}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Let reason: local-chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip reasoning: local-llamacpp' }))
+    expect(onThinking.mock.calls).toEqual([
+      ['local-chat', 'server'],
+      ['local-llamacpp', 'off'],
+    ])
   })
 })
