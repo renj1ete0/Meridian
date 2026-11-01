@@ -21,6 +21,7 @@ from typing import Literal
 import httpx
 
 from .httpwait import WAIT_STATUSES, retry_after_s
+from .lanhosts import LanTransport
 from .logging import get_logger
 
 log = get_logger(__name__)
@@ -197,7 +198,10 @@ class RemoteEmbedder:
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self._limits(self._timeout))
+            # `.local` names reach the address the resolver found (`B-250`).
+            self._client = httpx.AsyncClient(
+                timeout=self._limits(self._timeout), transport=LanTransport()
+            )
         return self._client
 
     def _limits(self, read_s: float) -> httpx.Timeout:

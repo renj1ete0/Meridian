@@ -42,6 +42,7 @@ the Ask panel.
 | Reason | [synthesis.md](synthesis.md) | The orchestrator, model routing and providers, budgets, prompt framing |
 | Access | [api-and-access.md](api-and-access.md) | Explore and Admin routes, database roles, Cloudflare Access, caching |
 | Access | [mcp.md](mcp.md) | The MCP surface for external assistants, tokens, grants, read-only SQL |
+| Operate | [lan-names.md](lan-names.md) | `.local` names of LAN machines, resolved for the containers |
 | Operate | [operations.md](operations.md) | The scheduler, health, alerts and digest, the Telegram bot, liveness |
 | Evaluate | [question-set.md](question-set.md) | The held-out question set and its runner |
 | Interface | [web-app.md](web-app.md) | The reader and Admin surfaces, and how the web package is organised |

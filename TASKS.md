@@ -1957,6 +1957,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       0.794), 7.9/10 overlap. `RemoteEmbedder` learns OpenAI `/v1/embeddings` and llama.cpp
       `/v1/rerank` beside its own API, keeping the model check (`/v1/models`) and the outage
       memory. Artefacts: `meridian-calibration/2026-10-24/`
+- [x] `B-250` `v0.179.0`; resolver run in Docker and rootless podman against a Windows machine.
+      **`.local` names inside containers** — mDNS does not cross a bridge network, so a GPU
+      machine known only by its `.local` name was unreachable from the api and orchestrator.
+      `lan-resolver` (host network, URL settings only) writes the answers to a file the clients
+      read (docs/features/lan-names.md)
 - [ ] `B-249` **Singapore news by news sitemap, not only feeds** — operator: feeds list only the
       latest items. 33 outlets probed: news sitemaps (every article of the last ~2 days) on
       Straits Times (423 today), Business Times (154), 8world (227), CNA, AsiaOne, Tech in Asia

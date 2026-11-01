@@ -157,8 +157,47 @@ def test_every_service_declares_its_networks(compose: dict) -> None:
     the one container here that runs as root a route to the internet.
     """
     for name, service in compose["services"].items():
-        declared = service.get("networks") or service.get("network_mode") == "none"
+        declared = service.get("networks") or service.get("network_mode") in ("none", "host")
         assert declared, f"{name} declares no networks"
+
+
+#: The only services allowed the host's network, and why (`B-250`).
+HOST_NETWORK = {"lan-resolver": "mDNS is multicast on the LAN and does not cross a bridge"}
+
+
+def test_only_the_lan_resolver_shares_the_hosts_network(compose: dict) -> None:
+    on_host = {n for n, s in compose["services"].items() if s.get("network_mode") == "host"}
+    assert on_host == set(HOST_NETWORK)
+
+
+def test_the_lan_resolver_holds_no_secrets_and_no_privileges(compose: dict) -> None:
+    """On the host's network it can reach everything the host can, so it holds nothing
+    worth taking: the URL settings only, never `.env`, read-only, no capabilities."""
+    svc = compose["services"]["lan-resolver"]
+    assert "env_file" not in svc
+    names = set(svc["environment"])
+    assert all(n.endswith(("_URL", "_NAMES")) for n in names), names
+    assert svc.get("read_only") is True
+    assert svc.get("cap_drop") == ["ALL"]
+    assert "no-new-privileges:true" in svc.get("security_opt", [])
+    assert all(not str(v).startswith("/var/run") for v in svc.get("volumes", []))
+
+
+def test_every_service_that_calls_the_gpu_machine_reads_the_resolvers_answers(
+    compose: dict,
+) -> None:
+    """A `.local` URL in a service without the file fails as "name not known", which
+    reads exactly like a machine that is off."""
+    from meridian_core.lanhosts import DEFAULT_HOSTS_FILE
+
+    folder = DEFAULT_HOSTS_FILE.rsplit("/", 1)[0]
+    writer = compose["services"]["lan-resolver"]
+    assert any(str(v).endswith(f":{folder}") for v in writer["volumes"])
+    for name, svc in compose["services"].items():
+        env = svc.get("environment") or {}
+        if name == "lan-resolver" or "MERIDIAN_EMBEDDER_URL" not in env:
+            continue
+        assert any(str(v).endswith(f":{folder}:ro") for v in svc.get("volumes", [])), name
 
 
 # --------------------------------------------------------------------------

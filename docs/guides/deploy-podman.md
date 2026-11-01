@@ -214,7 +214,8 @@ llama.cpp's Vulkan build, and the way to free the card's memory when idle.
    MERIDIAN_EMBEDDER_TOKEN=<token>
    ```
 
-   The firewall's `lan_allow` needs its address and port.
+   `<gpu machine>` may be its `.local` name: `lan-resolver` answers it for the containers
+   (docs/features/lan-names.md). The firewall's `lan_allow` still needs its address and port.
    Check: `curl -H "Authorization: Bearer <token>" http://<gpu machine>:8101/v1/models` lists
    both names; `GET /api/admin/status` shows the embedder up (`loaded: false` until the first
    batch loads it).

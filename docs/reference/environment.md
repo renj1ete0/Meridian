@@ -64,6 +64,9 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `MERIDIAN_RERANKER_URL` | the embedder's | Where reranking is asked, when it is another server |
 | `MERIDIAN_EMBEDDER_MODEL` | `MERIDIAN_EMBED_MODEL` | With `openai`: the server's name for the embedding model, sent with every request and checked against `/v1/models` |
 | `MERIDIAN_RERANKER_MODEL` | unset | With `openai`: the server's name for the reranker; required by a server holding several models |
+| `MERIDIAN_LAN_NAMES` | unset | Further `.local` names for `lan-resolver` (`B-250`, docs/features/lan-names.md) |
+| `MERIDIAN_LAN_RESOLVE_EVERY_S` | 60 | How often `lan-resolver` asks |
+| `MERIDIAN_LAN_HOSTS_FILE` | `/run/meridian-lan/hosts.json` | Where `lan-resolver` writes and the clients read |
 | `MERIDIAN_RERANK_MAX_TOKENS` | 1024 | Question and passage together, for the client's cut before a llama.cpp rerank |
 | `MERIDIAN_EMBEDDER_TIMEOUT_S` | 30 | Query timeout (batch calls scale it by size) |
 | `MERIDIAN_EMBEDDER_CONNECT_TIMEOUT_S` | 3 | How long to wait for the sidecar's machine to accept a connection (`B-223`) |

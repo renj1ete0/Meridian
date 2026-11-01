@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .budget import reserve_tokens, settle_tokens
 from .framing import without_delimiters
 from .httpwait import WAIT_STATUSES, retry_after_s
+from .lanhosts import lan_url
 from .logging import get_logger
 from .models import Agent, Run
 from .routing import NoAgentAvailable, chain_for
@@ -234,7 +235,7 @@ async def _call_openai_compatible(
     try:
         async with httpx.AsyncClient(timeout=limits) as client:
             response = await client.post(
-                f"{endpoint.rstrip('/')}/chat/completions",
+                lan_url(f"{endpoint.rstrip('/')}/chat/completions"),
                 json={"model": model, "messages": messages, "max_tokens": max_tokens},
                 headers=headers,
             )
@@ -394,7 +395,7 @@ async def not_up(agent: Any) -> str | None:
     limits = httpx.Timeout(HEALTH_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
     try:
         async with httpx.AsyncClient(timeout=limits) as client:
-            response = await client.get(url)
+            response = await client.get(lan_url(url))
     except httpx.HTTPError as exc:
         _mark_down(agent)
         return f"{agent.agent_id}: health check failed ({type(exc).__name__})"

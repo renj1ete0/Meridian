@@ -225,8 +225,9 @@ services:
     # omitting the key puts it on compose's default bridge — which has a route
     # out, and this is the one container here running as root.
     network_mode: none
-    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay /data/eval-runs"]
+    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay /data/eval-runs /lan"]
     volumes:
+      - ${DATA_ROOT:-/srv/meridian}/lan:/lan
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
       - ${DATA_ROOT:-/srv/meridian}/models:/models
@@ -256,6 +257,29 @@ services:
       - ${DATA_ROOT:-/srv/meridian}/models:/models
     restart: "no"
     logging: *logging
+
+  # `.local` names for the services that call the GPU machine (`B-250`): mDNS does not
+  # cross a bridge network, so this one looks them up on the host's network and writes
+  # them to a file the others read. It is given the URL settings only, never `.env`
+  # (docs/features/lan-names.md). With no `.local` URL it sleeps.
+  lan-resolver:
+    <<: *common
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-worker:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }
+    command: ["python", "-m", "worker.lanresolve"]
+    network_mode: host
+    environment:
+      MERIDIAN_EMBEDDER_URL: ${MERIDIAN_EMBEDDER_URL:-http://embedder:8100}
+      MERIDIAN_RERANKER_URL: ${MERIDIAN_RERANKER_URL:-}
+      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
+      LOCAL_LLM_HEALTH_URL: ${LOCAL_LLM_HEALTH_URL:-}
+      LOCAL_CHAT_LLM_URL: ${LOCAL_CHAT_LLM_URL:-}
+      MERIDIAN_LAN_NAMES: ${MERIDIAN_LAN_NAMES:-}
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/lan:/run/meridian-lan
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
 
   worker:
     <<: *common
@@ -356,6 +380,7 @@ services:
       # resolve before reading the cache it had all along.
       HF_HUB_OFFLINE: "1"
     volumes:
+      - ${DATA_ROOT:-/srv/meridian}/lan:/run/meridian-lan:ro   # `B-250`
       - ${DATA_ROOT:-/srv/meridian}/models:/models
     read_only: true
     tmpfs: [/tmp]
@@ -416,6 +441,7 @@ services:
       # every hour, and every new source stays unlabelled.
       MERIDIAN_EMBEDDER_URL: ${MERIDIAN_EMBEDDER_URL:-http://embedder:8100}
     volumes:
+      - ${DATA_ROOT:-/srv/meridian}/lan:/run/meridian-lan:ro   # `B-250`
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
       - ${DATA_ROOT:-/srv/meridian}/models:/models
@@ -487,6 +513,7 @@ services:
       # thing became separate nodes that no person was ever asked about.
       MERIDIAN_EMBEDDER_URL: ${MERIDIAN_EMBEDDER_URL:-http://embedder:8100}
     volumes:
+      - ${DATA_ROOT:-/srv/meridian}/lan:/run/meridian-lan:ro   # `B-250`
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       # Written by this container as uid 1001. An answer is written into it
       # with `docker exec`, so supplying one takes the operator's Docker access.
@@ -516,6 +543,7 @@ services:
     environment:
       MERIDIAN_EVAL_RUNS_DIR: /data/eval-runs
     volumes:
+      - ${DATA_ROOT:-/srv/meridian}/lan:/run/meridian-lan:ro   # `B-250`
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw:ro
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures:ro
       # The question-set run files (`P6-37`), read-only: Gaps reads the newest

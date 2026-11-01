@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.179.0] — 2026-11-01
+
+### Added
+
+- `B-250`: a `.local` name in a GPU machine's URL works inside the containers. `lan-resolver`, on
+  the host's network with no secrets and no privileges, answers mDNS names into a file the
+  embedder client and the local model calls read; a machine that stops answering keeps its
+  last address, a moved one is followed.
+
 ## [0.178.0] — 2026-11-01
 
 ### Added
