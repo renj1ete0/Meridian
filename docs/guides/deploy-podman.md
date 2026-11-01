@@ -166,3 +166,60 @@ Not yet run on the card; each step below has a check, and the order matters.
    mirrored networking is the alternative to the port proxy on Windows 11.
 
 Then `GET /api/admin/status` on the stack shows both as up.
+
+## <a id="a-second-card-with-llamacpp"></a>Embedding on a model server, e.g. a second card (`B-248`)
+
+The embedder and reranker can come from any OpenAI-compatible server instead of the node's
+`embedder` container ([ADR 0023](../adr/0023-model-servers-are-openai-compatible-endpoints.md)):
+llama.cpp, Ollama, LM Studio, vLLM, or a model manager in front of them. This is the way to
+use a card PyTorch cannot reach on Windows (an AMD Radeon such as the 6700 XT), through
+llama.cpp's Vulkan build, and the way to free the card's memory when idle.
+
+1. **The server.** For example llama.cpp's router, one process serving both models and
+   loading each on the first request (`models.ini`):
+
+   ```ini
+   [BAAI/bge-m3]
+   hf-repo = gpustack/bge-m3-GGUF:FP16
+   embeddings = true
+   ubatch-size = 1024
+   batch-size = 1024
+
+   [BAAI/bge-reranker-v2-m3]
+   hf-repo = gpustack/bge-reranker-v2-m3-GGUF:FP16
+   reranking = true
+   ubatch-size = 2048
+   batch-size = 2048
+   ```
+
+   `llama-server --models-preset models.ini --host 0.0.0.0 --port 8101 --api-key <token>
+   --sleep-idle-seconds 600 --device <the card>`; `llama-server --list-devices` names the
+   cards. The section names are what Meridian asks for; the batch sizes must hold its longest
+   input (embedding.md#a-llamacpp-server). On Windows, start it from Task Scheduler at log on.
+2. **Reachable from the LAN**, from an elevated PowerShell on Windows:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Meridian models" -Direction Inbound -Protocol TCP `
+     -LocalPort 8101 -RemoteAddress <mini pc address> -Action Allow
+   ```
+
+   A process listening on `0.0.0.0` needs no port proxy; one inside the podman machine does
+   (above).
+3. **On the mini PC**, in `.env`:
+
+   ```sh
+   MERIDIAN_EMBEDDER_API=openai
+   MERIDIAN_EMBEDDER_URL=http://<gpu machine>:8101
+   MERIDIAN_RERANKER_MODEL=BAAI/bge-reranker-v2-m3      # reranking; leave unset for none
+   MERIDIAN_EMBEDDER_TOKEN=<token>
+   ```
+
+   The firewall's `lan_allow` needs its address and port.
+   Check: `curl -H "Authorization: Bearer <token>" http://<gpu machine>:8101/v1/models` lists
+   both names; `GET /api/admin/status` shows the embedder up (`loaded: false` until the first
+   batch loads it).
+
+The stored vectors stay: bge-m3 FP16 in llama.cpp reproduces them (embedding.md#a-llamacpp-server).
+A server that loads on request answers "loading" in the standard way, and Meridian waits for it
+(embedding.md#a-server-that-loads-on-request).
+

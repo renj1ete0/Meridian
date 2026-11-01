@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.178.0] — 2026-11-01
+
+### Added
+
+- `B-248`: embedding and reranking from any OpenAI-compatible server
+  (`MERIDIAN_EMBEDDER_API=openai`; ADR 0023), for a card PyTorch cannot reach on Windows or a
+  model manager that loads on request. Every request names its model, checked against the
+  server's `/v1/models`; long texts are cut by llama.cpp's `/tokenize` as the worker cuts them
+  (stored vectors still match), or left to the server without one. A `503`/`429` with
+  `Retry-After` is waited out, for embedding and for the local language model alike.
+
 ## [0.177.4] — 2026-10-24
 
 ### Fixed

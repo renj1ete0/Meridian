@@ -4,16 +4,23 @@ A query vector must come from the model the corpus was embedded with, so the API
 the sidecar rather than loading a model or accepting a caller's vector. No
 `MERIDIAN_EMBEDDER_URL` is a supported state (lexical-only search, reported as
 `degraded`). See docs/features/embedding.md#the-service.
+
+Two APIs (`B-248`): Meridian's own sidecar (``/embed``, ``/rerank``), and an
+OpenAI-compatible server such as llama.cpp (``/v1/embeddings``, ``/v1/rerank``). See
+docs/features/embedding.md#a-llamacpp-server.
 """
 
 from __future__ import annotations
 
+import math
 import os
 import time
 from collections.abc import Sequence
+from typing import Literal
 
 import httpx
 
+from .httpwait import WAIT_STATUSES, retry_after_s
 from .logging import get_logger
 
 log = get_logger(__name__)
@@ -41,9 +48,21 @@ DEFAULT_DOWN_FOR_S = 30.0
 _down_until: dict[str, float] = {}
 
 
+#: What each OpenAI-compatible server lists at ``/v1/models``, by URL, and when it was read.
+_listed: dict[str, tuple[float, frozenset[str]]] = {}
+
+#: Servers found to have no ``/tokenize`` (anything but llama.cpp), by URL.
+_no_tokenizer: set[str] = set()
+
+#: How long a server's model list is trusted before it is read again.
+LISTED_FOR_S = 300.0
+
+
 def forget_outages() -> None:
     """Clear every remembered outage; for tests, and for an operator's shell."""
     _down_until.clear()
+    _listed.clear()
+    _no_tokenizer.clear()
 
 
 #: A query is one short string. This cap is about batch calls from a backfill,
@@ -70,6 +89,21 @@ class RerankingOff(RuntimeError):
     """The sidecar answers, and has no reranker configured (`B-167`). Not an outage."""
 
 
+#: The APIs a remote embedder can speak (`B-248`).
+type EmbedderApi = Literal["meridian", "openai"]
+EMBEDDER_APIS: tuple[EmbedderApi, ...] = ("meridian", "openai")
+
+#: Tokens one text is cut to, special tokens included: the worker's own limit
+#: (`worker.embeddings.DEFAULT_MAX_TOKENS`), so a vector made elsewhere matches the
+#: stored ones. A llama.cpp server refuses a longer input rather than cutting it.
+DEFAULT_MAX_TOKENS = 1024
+
+#: Tokens of question and passage together for a rerank, as in `worker.rerank`.
+DEFAULT_RERANK_MAX_TOKENS = 1024
+
+#: Room left in a rerank pair for the separators a server adds around the two texts.
+RERANK_PAIR_MARGIN = 8
+
 #: How long a rerank may take. Generous: on an integrated GPU 30 passages took about
 #: 5 s, on a CPU about 14 s (docs/features/search.md#reranking).
 DEFAULT_RERANK_TIMEOUT_S = 60.0
@@ -94,8 +128,22 @@ class RemoteEmbedder:
         rerank_timeout_s: float = DEFAULT_RERANK_TIMEOUT_S,
         connect_timeout_s: float = DEFAULT_CONNECT_TIMEOUT_S,
         down_for_s: float = DEFAULT_DOWN_FOR_S,
+        api: EmbedderApi = "meridian",
+        rerank_url: str | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        rerank_max_tokens: int = DEFAULT_RERANK_MAX_TOKENS,
+        served_model: str | None = None,
+        rerank_model: str | None = None,
     ) -> None:
+        if api not in EMBEDDER_APIS:
+            raise ValueError(f"unknown embedder API {api!r}; expected one of {EMBEDDER_APIS}")
         self.base_url = base_url.rstrip("/")
+        self.api: EmbedderApi = api
+        #: Where reranking is asked: the embedder itself unless named apart, since a
+        #: llama.cpp server serves one model (`B-248`).
+        self.rerank_url = (rerank_url or base_url).rstrip("/")
+        self._max_tokens = max_tokens
+        self._rerank_max_tokens = rerank_max_tokens
         #: Sent as a bearer token when the sidecar asks for one (`P3-12`).
         self._headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._timeout = timeout_s
@@ -107,6 +155,11 @@ class RemoteEmbedder:
         #: Which model this corpus was embedded with. When set, a sidecar naming a
         #: different one is refused rather than used.
         self.expect_model = expect_model
+        #: The names an OpenAI-compatible server knows the two models by (`B-248`); a
+        #: server can call bge-m3 something else. Sent with every request, since a
+        #: server holding several models routes by it.
+        self.served_model = served_model or expect_model
+        self.rerank_model = rerank_model
 
     @classmethod
     def from_env(cls) -> RemoteEmbedder | None:
@@ -131,6 +184,15 @@ class RemoteEmbedder:
                 "MERIDIAN_EMBEDDER_CONNECT_TIMEOUT_S", DEFAULT_CONNECT_TIMEOUT_S
             ),
             down_for_s=_float_env("MERIDIAN_EMBEDDER_DOWN_FOR_S", DEFAULT_DOWN_FOR_S),
+            api=_api_env(),
+            rerank_url=os.environ.get("MERIDIAN_RERANKER_URL", "").strip() or None,
+            # The worker's own setting, so both sides cut a text at the same place.
+            max_tokens=int(_float_env("MERIDIAN_EMBED_MAX_TOKENS", DEFAULT_MAX_TOKENS)),
+            rerank_max_tokens=int(
+                _float_env("MERIDIAN_RERANK_MAX_TOKENS", DEFAULT_RERANK_MAX_TOKENS)
+            ),
+            served_model=os.environ.get("MERIDIAN_EMBEDDER_MODEL", "").strip() or None,
+            rerank_model=os.environ.get("MERIDIAN_RERANKER_MODEL", "").strip() or None,
         )
 
     def _http(self) -> httpx.AsyncClient:
@@ -142,26 +204,27 @@ class RemoteEmbedder:
         """``read_s`` for the answer, and the short connect timeout for the machine."""
         return httpx.Timeout(read_s, connect=min(self._connect_timeout, read_s))
 
-    def _refuse_if_down(self) -> None:
+    def _refuse_if_down(self, url: str | None = None) -> None:
         """Fail at once while this sidecar is remembered as down (`B-223`)."""
-        until = _down_until.get(self.base_url)
+        url = url or self.base_url
+        until = _down_until.get(url)
         if until is None:
             return
         left = until - time.monotonic()
         if left <= 0:
-            _down_until.pop(self.base_url, None)
+            _down_until.pop(url, None)
             return
         raise EmbeddingUnavailable(
-            f"{self.base_url}: did not accept a connection; not asked again for {left:.0f} s"
+            f"{url}: did not accept a connection; not asked again for {left:.0f} s"
         )
 
-    def _note(self, exc: httpx.HTTPError) -> None:
+    def _note(self, exc: httpx.HTTPError, url: str | None = None) -> None:
         """Remember the sidecar as down when its machine did not accept a connection.
 
         Only then: a slow answer or an error status is a sidecar that is up.
         """
         if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)) and self._down_for > 0:
-            _down_until[self.base_url] = time.monotonic() + self._down_for
+            _down_until[url or self.base_url] = time.monotonic() + self._down_for
 
     async def aclose(self) -> None:
         if self._owns_client and self._client is not None:
@@ -178,6 +241,8 @@ class RemoteEmbedder:
         question that matters: a sidecar running a different model is up, and
         using it is worse than having none.
         """
+        if self.api == "openai":
+            return await self._describe_openai()
         # Always asked, even while remembered as down: this is how it comes back.
         try:
             response = await self._http().get(f"{self.base_url}/health", timeout=self._limits(5.0))
@@ -205,6 +270,8 @@ class RemoteEmbedder:
         if len(texts) > MAX_TEXTS:
             raise ValueError(f"{len(texts)} texts exceeds the {MAX_TEXTS} cap for one request")
         self._refuse_if_down()
+        if self.api == "openai":
+            return await self._embed_openai(texts)
 
         try:
             response = await self._http().post(
@@ -264,31 +331,318 @@ class RemoteEmbedder:
             return []
         if len(texts) > MAX_TEXTS:
             raise ValueError(f"{len(texts)} texts exceeds the {MAX_TEXTS} cap for one request")
-        self._refuse_if_down()
+        self._refuse_if_down(self.rerank_url)
+        if self.api == "openai":
+            return await self._rerank_openai(query, texts)
         try:
             response = await self._http().post(
-                f"{self.base_url}/rerank",
+                f"{self.rerank_url}/rerank",
                 json={"query": query, "texts": list(texts)},
                 headers=self._headers,
                 timeout=self._limits(self._rerank_timeout),
             )
             if response.status_code == 404:
-                raise RerankingOff(f"{self.base_url} has no reranker configured")
+                raise RerankingOff(f"{self.rerank_url} has no reranker configured")
             response.raise_for_status()
             body = response.json()
         except httpx.HTTPError as exc:
-            self._note(exc)
-            raise EmbeddingUnavailable(f"{self.base_url}: {exc}") from exc
+            self._note(exc, self.rerank_url)
+            raise EmbeddingUnavailable(f"{self.rerank_url}: {exc}") from exc
         except ValueError as exc:
-            raise EmbeddingUnavailable(f"{self.base_url}: unreadable response") from exc
+            raise EmbeddingUnavailable(f"{self.rerank_url}: unreadable response") from exc
         scores = body.get("scores")
         if not isinstance(scores, list) or len(scores) != len(texts):
             # The same alignment check as `embed`: a misaligned score reorders silently.
             raise EmbeddingUnavailable(
-                f"{self.base_url}: asked for {len(texts)} scores, got "
+                f"{self.rerank_url}: asked for {len(texts)} scores, got "
                 f"{len(scores) if isinstance(scores, list) else 'none'}"
             )
         return [float(score) for score in scores]
+
+    # -- an OpenAI-compatible server (`B-248`, ADR 0023) ----------------------------
+
+    async def _call(
+        self, method: str, url: str, path: str, *, json: object = None, read_s: float
+    ) -> httpx.Response:
+        """One request; an unreachable machine or a server still loading is remembered.
+
+        A server that loads on request answers 503 or 429 with ``Retry-After``: it is
+        away until then, not failed, and nothing in this process asks it again sooner.
+        """
+        try:
+            response = await self._http().request(
+                method,
+                f"{url}{path}",
+                json=json,
+                headers=self._headers,
+                timeout=self._limits(read_s),
+            )
+        except httpx.HTTPError as exc:
+            self._note(exc, url)
+            raise EmbeddingUnavailable(f"{url}: {exc}") from exc
+        if response.status_code in WAIT_STATUSES:
+            wait = retry_after_s(response.headers, self._down_for)
+            if wait > 0:
+                _down_until[url] = time.monotonic() + wait
+            raise EmbeddingUnavailable(
+                f"{url}: busy or loading ({response.status_code}); not asked again for {wait:.0f} s"
+            )
+        return response
+
+    @staticmethod
+    def _body(url: str, response: httpx.Response) -> dict:
+        """The JSON object a successful response holds, or an outage."""
+        try:
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            raise EmbeddingUnavailable(f"{url}: {exc}") from exc
+        except ValueError as exc:
+            raise EmbeddingUnavailable(f"{url}: unreadable response") from exc
+        if not isinstance(body, dict):
+            raise EmbeddingUnavailable(f"{url}: unreadable response")
+        return body
+
+    @staticmethod
+    def _named(payload: dict[str, object], model: str | None) -> dict[str, object]:
+        return {**payload, "model": model} if model else payload
+
+    async def _tokens(
+        self, url: str, model: str | None, text: str, *, special: bool
+    ) -> list[int] | None:
+        """The server's own tokens for ``text``, or None when it has no ``/tokenize``.
+
+        ``/tokenize`` is llama.cpp's; any other server truncates for itself.
+        """
+        if url in _no_tokenizer:
+            return None
+        response = await self._call(
+            "POST",
+            url,
+            "/tokenize",
+            json=self._named({"content": text, "add_special": special}, model),
+            read_s=self._timeout,
+        )
+        if response.status_code in (404, 405, 501):
+            _no_tokenizer.add(url)
+            return None
+        tokens = self._body(url, response).get("tokens")
+        if not isinstance(tokens, list) or not all(isinstance(t, int) for t in tokens):
+            raise EmbeddingUnavailable(f"{url}: /tokenize returned no tokens")
+        return tokens
+
+    async def _embedding_input(self, text: str) -> str | list[int]:
+        """``text``, or its first tokens when it may be longer than the model is fed.
+
+        Cut as sentence-transformers cuts: the leading tokens and the closing special
+        token, so the vector matches one the worker made. A text no longer than the limit
+        in characters cannot exceed it in tokens, and is sent as it is.
+        """
+        if len(text) + 3 <= self._max_tokens:
+            return text
+        tokens = await self._tokens(self.base_url, self.served_model, text, special=True)
+        if tokens is None or len(tokens) <= self._max_tokens:
+            return text
+        return tokens[: self._max_tokens - 1] + tokens[-1:]
+
+    async def _listed_models(self, url: str) -> frozenset[str] | None:
+        """The model names ``url`` lists, read at most every :data:`LISTED_FOR_S`."""
+        cached = _listed.get(url)
+        if cached and time.monotonic() - cached[0] < LISTED_FOR_S:
+            return cached[1]
+        response = await self._call("GET", url, "/v1/models", read_s=5.0)
+        if response.status_code != 200:
+            return None
+        try:
+            body = response.json()
+        except ValueError:
+            return None
+        rows = body.get("data") if isinstance(body, dict) else None
+        names = frozenset(
+            row["id"]
+            for row in rows or []
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        )
+        _listed[url] = (time.monotonic(), names)
+        return names
+
+    async def _check_listed(self) -> None:
+        """Refuse a server that does not list the model this corpus is embedded with.
+
+        Read from the server's list, not from a response: llama.cpp names whatever model
+        the request named, so a response passes against any server.
+        """
+        if not self.served_model:
+            return
+        names = await self._listed_models(self.base_url)
+        if names and self.served_model not in names:
+            raise EmbedderMismatch(
+                f"{self.base_url} lists {sorted(names)!r}, not {self.served_model!r}; this "
+                f"corpus is embedded with {self.expect_model or self.served_model!r}. Mixed "
+                "vectors rank nonsense. Name the model on the server (llama.cpp: --alias), "
+                "or set MERIDIAN_EMBEDDER_MODEL to the server's name for it."
+            )
+
+    async def _embed_openai(self, texts: Sequence[str]) -> list[list[float]]:
+        await self._check_listed()
+        inputs = [await self._embedding_input(text) for text in texts]
+        response = await self._call(
+            "POST",
+            self.base_url,
+            "/v1/embeddings",
+            json=self._named({"input": inputs}, self.served_model),
+            read_s=self._batch_timeout(len(texts)),
+        )
+        body = self._body(self.base_url, response)
+        data = body.get("data")
+        rows = data if isinstance(data, list) else []
+        by_index = {row.get("index"): row.get("embedding") for row in rows if isinstance(row, dict)}
+        if len(rows) != len(texts) or set(by_index) != set(range(len(texts))):
+            # The alignment check, by index: a server may answer in any order.
+            raise EmbeddingUnavailable(
+                f"{self.base_url}: asked for {len(texts)} vectors, got {len(rows) or 'none'}"
+            )
+        return [_unit(by_index[i], self.base_url) for i in range(len(texts))]
+
+    async def _rerank_document(self, query: str, text: str) -> str:
+        """``text`` cut so that the pair fits the reranker's limit; most already do.
+
+        Without ``/tokenize`` the text goes whole, and the server truncates.
+        """
+        if len(query) + len(text) + RERANK_PAIR_MARGIN <= self._rerank_max_tokens:
+            return text
+        url, model = self.rerank_url, self.rerank_model
+        question = await self._tokens(url, model, query, special=False)
+        tokens = await self._tokens(url, model, text, special=False)
+        if question is None or tokens is None:
+            return text
+        budget = self._rerank_max_tokens - len(question) - RERANK_PAIR_MARGIN
+        if len(tokens) <= budget:
+            return text
+        if budget <= 0:
+            raise ValueError("the question alone is longer than the reranker reads")
+        response = await self._call(
+            "POST",
+            url,
+            "/detokenize",
+            json=self._named({"tokens": tokens[:budget]}, model),
+            read_s=self._timeout,
+        )
+        content = self._body(url, response).get("content")
+        if not isinstance(content, str):
+            raise EmbeddingUnavailable(f"{url}: /detokenize returned no text")
+        return content
+
+    async def _rerank_openai(self, query: str, texts: Sequence[str]) -> list[float]:
+        documents = [await self._rerank_document(query, text) for text in texts]
+        response = await self._call(
+            "POST",
+            self.rerank_url,
+            "/v1/rerank",
+            json=self._named(
+                {"query": query, "documents": documents, "top_n": len(documents)},
+                self.rerank_model,
+            ),
+            read_s=self._rerank_timeout,
+        )
+        if response.status_code in (404, 501):
+            # llama.cpp answers 501 when the server was started without `--reranking`.
+            raise RerankingOff(f"{self.rerank_url} serves no reranker")
+        body = self._body(self.rerank_url, response)
+        results = body.get("results")
+        rows = results if isinstance(results, list) else []
+        scores: dict[int, float] = {}
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("index"), int):
+                score = row.get("relevance_score")
+                if isinstance(score, (int, float)):
+                    scores[row["index"]] = float(score)
+        if len(rows) != len(texts) or set(scores) != set(range(len(texts))):
+            # Results come sorted by score; each must name its text exactly once.
+            raise EmbeddingUnavailable(
+                f"{self.rerank_url}: asked for {len(texts)} scores, got {len(rows) or 'none'}"
+            )
+        return [scores[i] for i in range(len(texts))]
+
+    async def _model_entry(self, url: str, wanted: str | None) -> dict | None | Literal[False]:
+        """``wanted``'s row in ``url``'s ``/v1/models`` (else the first), or False when down.
+
+        Always asked, even while remembered as down: this is how a server comes back.
+        """
+        try:
+            response = await self._http().get(
+                f"{url}/v1/models", headers=self._headers, timeout=self._limits(5.0)
+            )
+            if response.status_code != 200:
+                return False
+            body = response.json()
+        except httpx.HTTPError as exc:
+            self._note(exc, url)
+            return False
+        except ValueError:
+            return False
+        rows = body.get("data") if isinstance(body, dict) else None
+        rows = [
+            row for row in rows or [] if isinstance(row, dict) and isinstance(row.get("id"), str)
+        ]
+        _listed[url] = (time.monotonic(), frozenset(row["id"] for row in rows))
+        if _down_until.get(url, 0) <= time.monotonic():
+            _down_until.pop(url, None)
+        for row in rows:
+            if row["id"] == wanted:
+                return row
+        return rows[0] if rows and not wanted else None
+
+    async def _describe_openai(self) -> dict | None:
+        """The sidecar's ``/health`` shape, built from ``/v1/models``.
+
+        Up means the server answers. A server that loads on request lists a model it has
+        not loaded (llama.cpp's router marks it ``"status": {"value": "unloaded"}``);
+        ``loaded`` says so, and the first request loads it.
+        """
+        entry = await self._model_entry(self.base_url, self.served_model)
+        if entry is False:
+            return None
+        rerank = None
+        if self.rerank_url != self.base_url or self.rerank_model:
+            found = await self._model_entry(self.rerank_url, self.rerank_model)
+            rerank = found or None
+        return {
+            "status": "ok",
+            "model": entry["id"] if entry else None,
+            "loaded": _loaded(entry),
+            "rerank_model": rerank["id"] if rerank else None,
+            "rerank_loaded": _loaded(rerank),
+        }
+
+
+def _unit(vector: object, url: str) -> list[float]:
+    """``vector`` scaled to length one, as the worker stores them; refused if not a vector."""
+    if not isinstance(vector, list) or not vector:
+        raise EmbeddingUnavailable(f"{url}: a response row holds no vector")
+    values = [float(v) for v in vector]
+    norm = math.sqrt(sum(v * v for v in values))
+    if not norm or not math.isfinite(norm):
+        raise EmbeddingUnavailable(f"{url}: a zero or non-finite vector")
+    return [v / norm for v in values]
+
+
+def _loaded(entry: dict | None) -> bool:
+    """Whether a ``/v1/models`` row is loaded: True unless its status says otherwise."""
+    if not entry:
+        return False
+    status = entry.get("status")
+    value = status.get("value") if isinstance(status, dict) else status
+    return value is None or value == "loaded"
+
+
+def _api_env() -> EmbedderApi:
+    raw = os.environ.get("MERIDIAN_EMBEDDER_API", "").strip().lower() or "meridian"
+    for api in EMBEDDER_APIS:
+        if raw == api:
+            return api
+    # Refused, not defaulted: the wrong API reads every answer as an outage.
+    raise ValueError(f"MERIDIAN_EMBEDDER_API={raw!r}; expected one of {EMBEDDER_APIS}")
 
 
 def _float_env(name: str, default: float) -> float:

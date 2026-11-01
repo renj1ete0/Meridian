@@ -334,6 +334,72 @@ for days. `B-222` makes that a wait, not a stream of failures.
   Measured against an address that drops packets: the first search took 3.05 s, the next ones
   0.00 s; before, 30 s each.
 
+### <a id="a-llamacpp-server"></a>An OpenAI-compatible server (`B-248`)
+
+`MERIDIAN_EMBEDDER_API=openai` points the same client at any server that speaks the
+OpenAI-compatible API, instead of the sidecar ([ADR 0023](../adr/0023-model-servers-are-openai-compatible-endpoints.md)):
+`POST /v1/embeddings` for vectors, `POST /v1/rerank` (the Jina/Cohere shape: llama.cpp, vLLM,
+Infinity, LocalAI) for scores, `GET /v1/models` for health and the model check. The reranker
+may live elsewhere (`MERIDIAN_RERANKER_URL`, default the embedder's). The reason was hardware:
+PyTorch has no route to an AMD card on Windows, and llama.cpp's Vulkan build does; the same
+setting serves Ollama, LM Studio, vLLM or a model manager in front of them.
+
+Measured with llama.cpp on 2026-10-24 and 2026-11-01 (artefacts in
+`meridian-calibration/2026-10-24/`):
+
+- **No re-embedding.** bge-m3 FP16 GGUF against 300 stored vectors: min cosine 0.9993,
+  median 0.99993, top-5 neighbours 98.5%. Through llama.cpp's router (both models behind one
+  port, loaded on the first request) the same texts gave the same vectors.
+- **bge-reranker-v2-m3 FP16** agrees 9.5 of 10 top places with PyTorch at a third of the
+  time; graded nDCG@10 0.697 against PyTorch's 0.709.
+
+What the client does that the sidecar did for it:
+
+- **Names the model in every request** (`MERIDIAN_EMBEDDER_MODEL`, default
+  `MERIDIAN_EMBED_MODEL`; `MERIDIAN_RERANKER_MODEL`): a server holding several models routes
+  by it, and llama.cpp's router refuses a request without one.
+- **Checks the model against the server's list**, read from `/v1/models` at most every five
+  minutes, not against the response: a one-model llama.cpp server names in its answer
+  whatever model the request named, so a check on the response passed against any server. A
+  server that does not list the name is refused before it embeds anything; start llama.cpp
+  with `--alias BAAI/bge-m3`, or set `MERIDIAN_EMBEDDER_MODEL` to the server's own name for
+  bge-m3 (Ollama's is `bge-m3`). The name is all the check can see: the weights behind it
+  are the operator's to match.
+- **Cuts long texts when the server can say where.** llama.cpp refuses an input longer than
+  its batch (`input (3202 tokens) is too large to process`) rather than truncating. For a
+  text that could exceed `MERIDIAN_EMBED_MAX_TOKENS` (1024, the worker's own limit) the client
+  asks llama.cpp's `/tokenize` and sends the leading tokens plus the closing special token,
+  which is how sentence-transformers cuts: a 2,103-token text came out at cosine 0.9993
+  against PyTorch's vector. A text no longer than the limit in characters cannot exceed it in
+  tokens and skips the call. A server without `/tokenize` (404) is noted and sent whole
+  texts, which it truncates itself. Rerank passages are cut through `/detokenize` to fit
+  `MERIDIAN_RERANK_MAX_TOKENS`. Give llama.cpp `--ubatch-size` and `--batch-size` of at least
+  1024 (embedding) and 2048 (reranking).
+- **Scales vectors to length one**, as the worker stores them; maps results back by `index`,
+  since rerank results arrive sorted by score.
+- **Reads 404 or 501 from `/v1/rerank` as reranking off**, not an outage: 501 is a llama.cpp
+  server started without `--reranking`.
+- The token is sent as a bearer token on every route (llama.cpp's `--api-key`); the outage
+  memory is kept per URL, so a reranker that is off does not stop embedding.
+
+### <a id="a-server-that-loads-on-request"></a>A server that loads on request
+
+A model manager (llama.cpp's router, Ollama, llama-swap, or the operator's own) can keep the
+GPU's memory free and load a model when a request names it. The contract (ADR 0023):
+
+| The server | Meridian |
+|---|---|
+| `GET /v1/models` answers while the server runs, listing models it has not loaded | up; `loaded: false` in Admin's status |
+| a request for an unloaded model: held while a short load finishes | waits, within its timeouts |
+| a longer load: `503` (or `429`) with `Retry-After` | not asked again until then, by any client in the process; the backfill waits, a search falls back to words only, a synthesis run defers |
+| idle: the model is unloaded | nothing |
+
+`Retry-After` is read in seconds, as an HTTP date, or as `retry-after-ms`, and capped at ten
+minutes (`meridian_core.httpwait`). For the language model the same applies, and its health
+check (`LOCAL_LLM_HEALTH_URL`) must point at the server's own `/health`, not at a loaded
+model: a check that waits for a loaded model and a server that waits for a request would
+wait for each other for ever.
+
 ### Fetching the weights
 
 The sidecar sits on `internal`, which has no gateway, DNS or route out, and the weights are not

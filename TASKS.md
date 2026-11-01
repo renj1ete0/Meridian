@@ -1948,7 +1948,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       certainty empty on every on-topic relation. llama.cpp can constrain output to a JSON schema
       (`response_format`); derive it from the proposal models and send it to `openai_compatible`
       rows that declare support
-- [ ] `B-248` **Embedding and reranking from a llama.cpp server** (the operator's GPU plan
+- [x] `B-248` `v0.178.0`; measured against llama.cpp (single-model and router), not yet against the GPU machine. **Embedding and reranking from a llama.cpp server** (the operator's GPU plan
       2026-10-24: the LLM on the 3090, bge-m3 and the reranker on the 6700 XT; PyTorch has no route
       to that card on Windows, llama.cpp's Vulkan build does). Measured locally on AMD:
       bge-m3 FP16 GGUF reproduces the stored vectors (300 sampled: min cosine 0.9993, top-5

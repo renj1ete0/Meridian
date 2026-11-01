@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .budget import reserve_tokens, settle_tokens
 from .framing import without_delimiters
+from .httpwait import WAIT_STATUSES, retry_after_s
 from .logging import get_logger
 from .models import Agent, Run
 from .routing import NoAgentAvailable, chain_for
@@ -83,8 +84,8 @@ def _down_for() -> float:
         return DEFAULT_DOWN_FOR_S
 
 
-def _mark_down(agent: Agent) -> None:
-    window = _down_for()
+def _mark_down(agent: Agent, window: float | None = None) -> None:
+    window = _down_for() if window is None else window
     if window > 0:
         _down_until[agent.agent_id] = time.monotonic() + window
 
@@ -237,8 +238,19 @@ async def _call_openai_compatible(
                 json={"model": model, "messages": messages, "max_tokens": max_tokens},
                 headers=headers,
             )
+            if response.status_code in WAIT_STATUSES:
+                # A server loading the model on request, or busy (`B-248`, ADR 0023): away
+                # for as long as it says, so the run defers and returns, not a failure.
+                wait = retry_after_s(response.headers, _down_for())
+                _mark_down(agent, wait)
+                raise ProviderError(
+                    f"{agent.agent_id}: loading or busy ({response.status_code}); "
+                    f"not asked again for {wait:.0f} s"
+                )
             response.raise_for_status()
             body = response.json()
+    except ProviderError:
+        raise
     except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
         # The machine is off or unreachable: the next call would wait the same way.
         _mark_down(agent)
@@ -387,8 +399,8 @@ async def not_up(agent: Any) -> str | None:
         _mark_down(agent)
         return f"{agent.agent_id}: health check failed ({type(exc).__name__})"
     if response.status_code != 200:
-        # llama.cpp answers 503 while it loads the model.
-        _mark_down(agent)
+        # llama.cpp answers 503 while it loads the model; a server may say for how long.
+        _mark_down(agent, retry_after_s(response.headers, _down_for()))
         return f"{agent.agent_id}: not ready (health check answered {response.status_code})"
     return None
 

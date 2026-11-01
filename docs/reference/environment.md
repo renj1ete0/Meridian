@@ -60,6 +60,11 @@ reads. When you add a variable, add it here and to `.env.example`.
 |---|---|---|
 | `MERIDIAN_EMBEDDER_URL` | unset | The embedding service; unset means lexical-only search |
 | `MERIDIAN_EMBEDDER_TOKEN` | unset | Shared secret when the service is on another machine |
+| `MERIDIAN_EMBEDDER_API` | `meridian` | `openai` for an OpenAI-compatible server such as llama.cpp (`/v1/embeddings`, `/v1/rerank`); anything else is refused (`B-248`) |
+| `MERIDIAN_RERANKER_URL` | the embedder's | Where reranking is asked, when it is another server |
+| `MERIDIAN_EMBEDDER_MODEL` | `MERIDIAN_EMBED_MODEL` | With `openai`: the server's name for the embedding model, sent with every request and checked against `/v1/models` |
+| `MERIDIAN_RERANKER_MODEL` | unset | With `openai`: the server's name for the reranker; required by a server holding several models |
+| `MERIDIAN_RERANK_MAX_TOKENS` | 1024 | Question and passage together, for the client's cut before a llama.cpp rerank |
 | `MERIDIAN_EMBEDDER_TIMEOUT_S` | 30 | Query timeout (batch calls scale it by size) |
 | `MERIDIAN_EMBEDDER_CONNECT_TIMEOUT_S` | 3 | How long to wait for the sidecar's machine to accept a connection (`B-223`) |
 | `MERIDIAN_EMBEDDER_DOWN_FOR_S` | 30 | After a refused connection, how long nothing in the process asks again; 0 is off (`B-223`) |
@@ -69,7 +74,7 @@ reads. When you add a variable, add it here and to `.env.example`.
 | `MERIDIAN_EMBED_DEVICE` | auto | `cpu`, `cuda`, `cuda:N`, `mps` |
 | `MERIDIAN_EMBED_DTYPE` | by hardware | `float32` or `bfloat16` |
 | `MERIDIAN_EMBED_BATCH_SIZE` | by hardware | Passages per model call; overrides automatic sizing |
-| `MERIDIAN_EMBED_MAX_TOKENS` | 1024 | Truncation length |
+| `MERIDIAN_EMBED_MAX_TOKENS` | 1024 | Truncation length; also where the client cuts before a llama.cpp server (`B-248`) |
 | `MERIDIAN_EMBED_CACHE` | library default | Where model weights are cached |
 | `MERIDIAN_EMBED_CHUNK_BATCH` | 256 | Passages the backfill draws per batch (split into requests of 256) |
 | `MERIDIAN_EMBED_IDLE_SLEEP_S` | 60 | Backfill sleep when nothing waits |

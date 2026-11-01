@@ -628,3 +628,25 @@ async def test_a_call_that_fails_after_connecting_does_not_mark_it_down(lan) -> 
             local(health_url=None), prompt="p", system=None, max_tokens=10, timeout_s=600.0
         )
     assert await not_up(local(health_url=None)) is None
+
+
+@pytest.mark.parametrize("status", [503, 429])
+async def test_a_model_loading_on_request_is_away_for_as_long_as_it_says(lan, status) -> None:
+    """ADR 0023: a server that loads on request answers 503 with Retry-After. That is the
+    model away until then, so the run defers and returns, not a failed agent."""
+    import time
+
+    import httpx
+
+    from meridian_core import provider
+    from meridian_core.provider import _call_openai_compatible, not_up
+
+    lan.state["handler"] = lambda r: httpx.Response(status, headers={"Retry-After": "240"})
+    with pytest.raises(ProviderError, match="loading or busy"):
+        await _call_openai_compatible(
+            local(health_url=None), prompt="p", system=None, max_tokens=10, timeout_s=600.0
+        )
+    reason = await not_up(local(health_url=None)) or ""
+    assert "not asked again" in reason
+    left = provider._down_until["local"] - time.monotonic()
+    assert 200 < left <= 240, "the server's own wait was not the one taken"
