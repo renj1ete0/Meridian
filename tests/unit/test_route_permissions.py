@@ -162,3 +162,23 @@ def test_the_web_labels_every_permission_as_the_catalogue_does() -> None:
     source = (ROOT / "web" / "src" / "lib" / "permissionLabels.ts").read_text()
     web = dict(re.findall(r"'([a-z_.]+)': '([^']*)'", source))
     assert web == {p.name: p.label for p in PERMISSIONS}
+
+
+def test_each_admin_section_disables_on_a_permission_some_write_route_needs(routes) -> None:
+    """Drift: a section's `edits` (what B-258 disables its controls on) is a write's permission.
+
+    A section gated on a permission no write route requires would disable controls the server
+    lets through, and leave enabled the ones it refuses.
+    """
+    import re
+
+    source = (ROOT / "web" / "src" / "admin" / "sections.ts").read_text()
+    edits = set(re.findall(r"edits: '([a-z_.]+)'", source))
+    assert len(edits) > 5, "the parse found too few sections; the pattern is broken"
+    written = {
+        name
+        for route in routes
+        if route.path.startswith("/api/") and route.methods - {"GET", "HEAD"}
+        for name in permissions_of(route)
+    }
+    assert edits <= written, f"no write route needs: {sorted(edits - written)}"

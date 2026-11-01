@@ -131,6 +131,7 @@ export function Filters<K extends string | null>({
         <button
           key={label}
           type="button"
+          data-view
           onClick={() => onChange?.(key)}
           aria-pressed={value === key}
           className={`h-[30px] border-r border-line px-3 font-mono text-[10.5px] last:border-r-0 ${

@@ -1983,7 +1983,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       machine known only by its `.local` name was unreachable from the api and orchestrator.
       `lan-resolver` (host network, URL settings only) writes the answers to a file the clients
       read (docs/features/lan-names.md)
-- [ ] `B-258` **Controls disabled where a person may view but not change** — `B-257` hides
+- [x] `B-258` **Controls disabled where a person may view but not change** — `B-257` hides
       sections and says when one is read-only; the buttons inside still answer with the server's
       403. Disable them (with the permission named) panel by panel, via `useMe().can`
 - [x] `B-259` **Thinking off for structured tasks on local models** (measured 2026-11-01) — a

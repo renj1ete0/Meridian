@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { AgentRow, AgentThinking } from '../lib/api'
+import { useEdit } from './editGate'
 import { BUTTON_ROW, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
@@ -64,6 +65,7 @@ function ModelField({
   onModel?: (agentId: string, model: string) => Promise<boolean>
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const edit = useEdit()
   // The exact string, because `P4-15` found the seeded registry shipping a
   // placeholder — and a placeholder is only recognisable if it is shown as
   // written.
@@ -77,7 +79,7 @@ function ModelField({
         {onModel ? (
           <button
             type="button"
-            disabled={busy}
+            {...edit(busy)}
             onClick={() => setDraft(row.model ?? '')}
             className="font-mono text-[11px] text-accent-graph hover:underline disabled:opacity-45"
             aria-label={`Change the model for ${row.agent_id}`}
@@ -104,15 +106,16 @@ function ModelField({
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         aria-label={`Model for ${row.agent_id}`}
+        {...edit()}
         className="h-[26px] w-full border border-line-strong bg-surface px-2 font-mono text-[11.5px] text-text"
         autoFocus
       />
       {problem ? <span className="text-[11px] text-accent-attention">{problem}</span> : null}
       <span className="flex gap-1.5">
-        <button type="submit" disabled={busy || problem !== null} className={BUTTON_ROW}>
+        <button type="submit" {...edit(busy || problem !== null)} className={BUTTON_ROW}>
           Save
         </button>
-        <button type="button" onClick={() => setDraft(null)} className={BUTTON_ROW}>
+        <button type="button" data-view onClick={() => setDraft(null)} className={BUTTON_ROW}>
           Cancel
         </button>
       </span>
@@ -138,6 +141,7 @@ export function tierLabel(tier: number | null): string {
 }
 
 export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinking }: AgentsPanelProps) {
+  const edit = useEdit()
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Agent registry">
@@ -217,7 +221,7 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinkin
                     <div className="flex flex-col items-end gap-1.5">
                       <button
                         type="button"
-                        disabled={busy === row.agent_id}
+                        {...edit(busy === row.agent_id)}
                         onClick={() => onToggle?.(row.agent_id, !row.enabled)}
                         className={BUTTON_ROW}
                       >
@@ -226,7 +230,7 @@ export function AgentsPanel({ rows, unserved, busy, onToggle, onModel, onThinkin
                       {thinkingNote(row) ? (
                         <button
                           type="button"
-                          disabled={busy === row.agent_id}
+                          {...edit(busy === row.agent_id)}
                           aria-label={`${row.thinking === 'off' ? 'Let reason' : 'Skip reasoning'}: ${row.agent_id}`}
                           onClick={() => onThinking?.(row.agent_id, row.thinking === 'off' ? 'server' : 'off')}
                           className={BUTTON_ROW}

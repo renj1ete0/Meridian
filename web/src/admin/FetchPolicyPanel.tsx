@@ -1,4 +1,5 @@
 import type { DomainStatus, FetchPolicyRow } from '../lib/api'
+import { useEdit } from './editGate'
 import { BUTTON_ROW, FIELD, Filters, PAGER, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
@@ -74,6 +75,7 @@ export function FetchPolicyPanel({
   onQuery,
   onPage,
 }: FetchPolicyPanelProps) {
+  const edit = useEdit()
   const shown: Record<string, number> = {
     all: counts.active + counts.paused + counts.blocked,
     active: counts.active,
@@ -97,6 +99,7 @@ export function FetchPolicyPanel({
         />
         <input
           type="search"
+          data-view
           className={`${FIELD} h-[30px] w-64 font-mono text-[12px]`}
           value={query}
           placeholder="find a domain"
@@ -113,13 +116,20 @@ export function FetchPolicyPanel({
           </span>
           <button
             type="button"
+            data-view
             className={PAGER}
             disabled={offset === 0}
             onClick={() => onPage?.(Math.max(offset - pageSize, 0))}
           >
             Previous
           </button>
-          <button type="button" className={PAGER} disabled={!hasMore} onClick={() => onPage?.(offset + pageSize)}>
+          <button
+            type="button"
+            data-view
+            className={PAGER}
+            disabled={!hasMore}
+            onClick={() => onPage?.(offset + pageSize)}
+          >
             Next
           </button>
         </div>
@@ -191,7 +201,7 @@ export function FetchPolicyPanel({
                       {blocked ? (
                         <button
                           type="button"
-                          disabled={busy === row.policy.domain}
+                          {...edit(busy === row.policy.domain)}
                           onClick={() => onUnblock?.(row.policy.domain)}
                           className={BUTTON_ROW}
                         >
@@ -201,7 +211,7 @@ export function FetchPolicyPanel({
                       {learned ? (
                         <button
                           type="button"
-                          disabled={busy === row.policy.domain}
+                          {...edit(busy === row.policy.domain)}
                           onClick={() => onForgetRender?.(row.policy.domain)}
                           className={BUTTON_ROW}
                         >

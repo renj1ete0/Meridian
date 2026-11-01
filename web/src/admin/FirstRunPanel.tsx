@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { FirstRun, QueueTask } from '../lib/api'
+import { useEdit } from './editGate'
 import { BUTTON_PRIMARY, BUTTON_ROW, FIELD, ROW, TD, TDM, TH, TableCard, stamp } from './ui'
 
 /**
@@ -27,6 +28,7 @@ export function FirstRunPanel({ run, busy = null, adding = false, error = null, 
   const [draft, setDraft] = useState('')
   const [type, setType] = useState<'url' | 'query'>('url')
   const [topic, setTopic] = useState('')
+  const edit = useEdit()
 
   const submit = () => {
     const trimmed = draft.trim()
@@ -74,6 +76,7 @@ export function FirstRunPanel({ run, busy = null, adding = false, error = null, 
             onChange={(event) => setDraft(event.target.value)}
             placeholder={type === 'url' ? 'https://example.gov/' : 'a search to run'}
             aria-label="Seed URL or search"
+            {...edit()}
           />
         </label>
         <label className="flex flex-col gap-1.5">
@@ -83,6 +86,7 @@ export function FirstRunPanel({ run, busy = null, adding = false, error = null, 
             value={type}
             onChange={(event) => setType(event.target.value as 'url' | 'query')}
             aria-label="Seed kind"
+            {...edit()}
           >
             {/* A site root, not a deep link: §6.4 prefers letting discovery
                 work outward from an organisation's front door, which rots far
@@ -99,9 +103,10 @@ export function FirstRunPanel({ run, busy = null, adding = false, error = null, 
             onChange={(event) => setTopic(event.target.value)}
             placeholder="optional"
             aria-label="Seed topic"
+            {...edit()}
           />
         </label>
-        <button type="submit" className={BUTTON_PRIMARY} disabled={adding || !draft.trim()}>
+        <button type="submit" className={BUTTON_PRIMARY} {...edit(adding || !draft.trim())}>
           {adding ? 'Adding…' : 'Add'}
         </button>
       </form>
@@ -136,7 +141,7 @@ export function FirstRunPanel({ run, busy = null, adding = false, error = null, 
                     type="button"
                     className={BUTTON_ROW}
                     onClick={() => onRemove?.(seed.task_id)}
-                    disabled={busy === seed.task_id}
+                    {...edit(busy === seed.task_id)}
                     aria-label={`Remove ${seed.url_or_query}`}
                   >
                     {busy === seed.task_id ? '…' : 'Remove'}

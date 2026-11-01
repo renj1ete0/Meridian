@@ -110,6 +110,7 @@ export function RunsPanel({ rows, total, active, onOlder, loadingOlder = false }
       {onOlder && rows.length < total ? (
         <button
           type="button"
+          data-view
           onClick={onOlder}
           disabled={loadingOlder}
           className="self-start border border-line-strong bg-surface-raised px-3 py-1.5 font-sans text-[12.5px] text-text/85 hover:text-text disabled:opacity-50"

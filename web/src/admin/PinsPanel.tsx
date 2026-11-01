@@ -1,5 +1,6 @@
 import type { TopicRow } from '../lib/api'
 import { BoostsTable, type BoostChange } from './BoostsTable'
+import { useEdit } from './editGate'
 import { weight } from './Reweight'
 import { BUTTON_ROW, Badge, PageHeader, ROW, SubHeading, TD, TDM, TH, TableCard } from './ui'
 
@@ -19,6 +20,7 @@ export function PinsPanel({
   onPinned?: (topic: string, pinned: boolean) => void
   onBoost?: (topic: string, change: BoostChange) => void
 }) {
+  const edit = useEdit()
   const current = rows.filter((row) => row.topic.status !== 'archived')
   return (
     <section className="flex flex-col gap-6">
@@ -62,7 +64,7 @@ export function PinsPanel({
                     <button
                       type="button"
                       className={BUTTON_ROW}
-                      disabled={busy === row.topic.topic}
+                      {...edit(busy === row.topic.topic)}
                       onClick={() => onPinned?.(row.topic.topic, !row.topic.pinned)}
                     >
                       {row.topic.pinned ? 'Unpin' : 'Pin'}

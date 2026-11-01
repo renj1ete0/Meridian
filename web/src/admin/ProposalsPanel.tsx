@@ -25,6 +25,7 @@ import {
   TableCard,
   stamp,
 } from './ui'
+import { useEdit } from './editGate'
 
 /**
  * Steering proposals (task P6-38, spec §10.1, §10.2), led by when each applies by itself;
@@ -127,6 +128,7 @@ function PendingCard({
 }) {
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
+  const edit = useEdit()
   const facts = evidenceFacts(p.evidence)
 
   return (
@@ -178,13 +180,14 @@ function PendingCard({
               maxLength={500}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              disabled={busy}
+              {...edit(busy)}
             />
-            <button type="submit" className={BUTTON_SECONDARY} disabled={busy}>
+            <button type="submit" className={BUTTON_SECONDARY} {...edit(busy)}>
               Reject
             </button>
             <button
               type="button"
+              data-view
               className="h-[34px] px-2 text-[12.5px] text-text-muted hover:text-text"
               onClick={() => {
                 setRejecting(false)
@@ -197,10 +200,10 @@ function PendingCard({
           </form>
         ) : (
           <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
-            <button type="button" className={BUTTON_PRIMARY} disabled={busy} onClick={() => onAccept?.(p.proposal_id)}>
+            <button type="button" className={BUTTON_PRIMARY} {...edit(busy)} onClick={() => onAccept?.(p.proposal_id)}>
               Accept now
             </button>
-            <button type="button" className={BUTTON_SECONDARY} disabled={busy} onClick={() => setRejecting(true)}>
+            <button type="button" className={BUTTON_SECONDARY} {...edit(busy)} onClick={() => setRejecting(true)}>
               Reject…
             </button>
             <span className="ml-auto font-mono text-[10.5px] text-text-faint">

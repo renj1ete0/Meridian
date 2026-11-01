@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.188.2] — 2026-11-01
+
+### Changed
+
+- `B-258`: in an Admin section a person may view but not change, every control that changes
+  something is disabled, with a title naming the permission it needs; controls that only read
+  stay live. One mechanism (`admin/editGate.tsx`), and a test that fails for any control
+  marked neither as an edit nor as a view.
+
+**Deploy:** image only.
+
 ## [0.188.1] — 2026-11-01
 
 ### Fixed

@@ -1030,8 +1030,21 @@ empty app, and the server refuses what a person may not do either way.
 - **Admin's nav** lists only the sections a person may open (`sections.ts`: `needs`, default
   `admin.view`; Assistant access and People need `access.manage`). A linked section they may not
   open says which permission it needs. A section they may view but not change (`edits`) says so
-  above its content; its controls still answer with the server's named refusal. Without
-  `admin.view` or `access.manage`, `/admin` is one line saying the access covers the reader pages.
+  above its content. Without `admin.view` or `access.manage`, `/admin` is one line saying the
+  access covers the reader pages.
+- **Controls inside a read-only section** (`B-258`) are disabled, not hidden, and each one's
+  title says which permission it needs ("Needs the Topics and steering permission, …"). One
+  mechanism, `admin/editGate.tsx`: `AdminPage` wraps the page in `EditGate` with the open
+  section's `edits`, and every control that changes something takes its props from `useEdit()`
+  (`{...edit(busy)}` in place of `disabled={busy}`; a control's own title passes through while it
+  is unlocked). A keyboard shortcut that decides (the gazetteer's `a`/`d`/`u`) asks `useEditLock()`.
+  Controls that only read (filters, paging, search, folding, a dialog's Cancel) carry `data-view`
+  and stay live. `tests/admin-read-only.test.tsx` renders every section with `edits` for a
+  viewer and fails on any control that is neither `data-edit` nor `data-view`, or not disabled;
+  it also fails for a new section with `edits` and no panel in its table. A section's `edits` is
+  the one permission its write routes require (each section's writes share one), and
+  `tests/unit/test_route_permissions.py` holds every `edits` to a write route that needs it. A
+  panel rendered outside `EditGate` (as most panel tests do) is unaffected.
 - **Settings** shows who is signed in and as what.
 - `lib/permissionLabels.ts` copies each permission's label so a refusal can be named without
   the people list; a Python test holds it to `meridian_core.permissions`.

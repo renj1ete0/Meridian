@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { SteeringEntry, TopicRow, TopicStatus, Topics } from '../lib/api'
 import { BoostsTable, type BoostChange } from './BoostsTable'
+import { useEdit } from './editGate'
 import { weight } from './Reweight'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, Badge, Card, LABEL, LINK_ACTION, PageHeader } from './ui'
 import { shortDayOf } from '../lib/time'
@@ -126,6 +127,7 @@ export function WeightSlider({
 }) {
   const fill = tone === 'attention' ? 'bg-accent-attention' : tone === 'muted' ? 'bg-text-faint' : 'bg-accent-graph'
   const at = (v: number) => `${Math.min(Math.max(v, 0), 1) * 100}%`
+  const edit = useEdit()
 
   return (
     <div className="relative h-1 bg-surface-raised" data-slider={topic}>
@@ -142,7 +144,7 @@ export function WeightSlider({
         max={Math.round(ceiling * 100)}
         step={1}
         value={Math.round(value * 100)}
-        disabled={disabled}
+        {...edit(disabled)}
         aria-label={`Weight for ${topic}`}
         aria-valuetext={weight(value)}
         onChange={(event) => onChange?.(Number(event.currentTarget.value) / 100)}
@@ -172,6 +174,7 @@ function RowMenu({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLSpanElement>(null)
+  const edit = useEdit()
   const { topic, status, pinned } = row.topic
 
   useEffect(() => {
@@ -205,7 +208,7 @@ function RowMenu({
         aria-label={`Actions for ${topic}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={disabled}
+        {...edit(disabled)}
         onClick={() => setOpen((v) => !v)}
         className="flex gap-[2.5px] px-1 py-2 disabled:opacity-45"
       >
@@ -221,6 +224,7 @@ function RowMenu({
           <button
             role="menuitem"
             type="button"
+            {...edit()}
             className={`${item} text-text`}
             onClick={pick(() => onPinned?.(topic, !pinned))}
           >
@@ -231,7 +235,7 @@ function RowMenu({
               <button
                 role="menuitem"
                 type="button"
-                title={hint('paused')}
+                {...edit(false, hint('paused'))}
                 className={`${item} text-text`}
                 onClick={pick(() => onStatus?.(topic, 'paused'))}
               >
@@ -240,7 +244,7 @@ function RowMenu({
               <button
                 role="menuitem"
                 type="button"
-                title={hint('maintenance')}
+                {...edit(false, hint('maintenance'))}
                 className={`${item} text-text`}
                 onClick={pick(() => onStatus?.(topic, 'maintenance'))}
               >
@@ -251,7 +255,7 @@ function RowMenu({
             <button
               role="menuitem"
               type="button"
-              title={hint('active')}
+              {...edit(false, hint('active'))}
               className={`${item} text-text`}
               onClick={pick(() => onStatus?.(topic, 'active'))}
             >
@@ -261,6 +265,7 @@ function RowMenu({
           <button
             role="menuitem"
             type="button"
+            {...edit()}
             className={`${item} text-accent-attention`}
             onClick={pick(() => onArchive?.(topic))}
           >
@@ -293,6 +298,7 @@ export function DescriptionLine({
 }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(description ?? '')
+  const edit = useEdit()
   useEffect(() => {
     if (!editing) setText(description ?? '')
   }, [description, editing])
@@ -311,7 +317,7 @@ export function DescriptionLine({
           <button
             type="button"
             className={`${LINK_ACTION} shrink-0`}
-            disabled={disabled}
+            {...edit(disabled)}
             aria-label={`Describe ${topic}`}
             onClick={() => setEditing(true)}
           >
@@ -328,6 +334,7 @@ export function DescriptionLine({
     <div className="flex flex-col gap-2">
       <textarea
         aria-label={`Description for ${topic}`}
+        {...edit()}
         className="min-h-[58px] w-full resize-y border border-line-strong bg-surface px-2.5 py-2 text-[12.5px] leading-[1.5] text-text"
         value={text}
         maxLength={1000}
@@ -338,13 +345,13 @@ export function DescriptionLine({
           Saving re-labels every page against the new wording, within the hour.
         </span>
         <span className="flex shrink-0 gap-3">
-          <button type="button" className={LINK_ACTION} onClick={() => setEditing(false)}>
+          <button type="button" data-view className={LINK_ACTION} onClick={() => setEditing(false)}>
             Cancel
           </button>
           <button
             type="button"
             className={LINK_ACTION}
-            disabled={disabled || unchanged}
+            {...edit(disabled || unchanged)}
             onClick={() => {
               setEditing(false)
               onDescribe?.(topic, next || null)
@@ -381,6 +388,7 @@ export function TopicPanel({
   onDescribe,
 }: TopicPanelProps) {
   const [archivedOpen, setArchivedOpen] = useState(false)
+  const edit = useEdit()
   const current = rows.filter((row) => row.topic.status !== 'archived')
   const archived = rows.filter((row) => row.topic.status === 'archived')
   const drawing = current.filter((row) => row.topic.status === 'active').length
@@ -394,13 +402,13 @@ export function TopicPanel({
         title="Topics"
         actions={
           <>
-            <button type="button" className={BUTTON_SECONDARY} disabled={!draft} onClick={onRevert}>
+            <button type="button" className={BUTTON_SECONDARY} {...edit(!draft)} onClick={onRevert}>
               Revert
             </button>
             <button
               type="button"
               className={BUTTON_PRIMARY}
-              disabled={!draft || !preview || busy !== null}
+              {...edit(!draft || !preview || busy !== null)}
               onClick={onApply}
             >
               Apply
@@ -418,7 +426,7 @@ export function TopicPanel({
             Active · {drawing}
             {held ? ` · held · ${held}` : ''}
           </span>
-          <button type="button" className={LINK_ACTION} onClick={onAddTopic}>
+          <button type="button" className={LINK_ACTION} {...edit()} onClick={onAddTopic}>
             + Add topic
           </button>
         </div>
@@ -517,6 +525,7 @@ export function TopicPanel({
       <Card className="flex flex-col gap-3 px-[18px] py-3.5">
         <button
           type="button"
+          data-view
           className="flex items-center gap-2.5 text-left"
           aria-expanded={archivedOpen}
           onClick={() => setArchivedOpen((v) => !v)}
@@ -554,7 +563,7 @@ export function TopicPanel({
                   <button
                     type="button"
                     className={LINK_ACTION}
-                    disabled={busy === row.topic.topic}
+                    {...edit(busy === row.topic.topic)}
                     onClick={() => onStatus?.(row.topic.topic, 'active')}
                   >
                     Restore

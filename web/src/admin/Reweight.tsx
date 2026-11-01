@@ -208,7 +208,7 @@ export function Dialog({
         <div className="flex flex-wrap items-center gap-2.5 border-t border-line bg-surface-raised px-6 py-3.5">
           {footnote ? <span className="font-mono text-[10.5px] text-text-faint">{footnote}</span> : null}
           <span className="ml-auto flex gap-2">
-            <button type="button" className={BUTTON_SECONDARY} onClick={onClose}>
+            <button type="button" data-view className={BUTTON_SECONDARY} onClick={onClose}>
               Cancel
             </button>
             {actions}

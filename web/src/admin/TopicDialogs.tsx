@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { ApiError, type TopicAddBody, type TopicRow, type Topics } from '../lib/api'
+import { useEdit } from './editGate'
 import { Dialog, ReweightTable } from './Reweight'
 import { BUTTON_PRIMARY, FIELD, LABEL } from './ui'
 
@@ -89,6 +90,7 @@ export function AddTopicDialog({
     ? { ...weights, description: description.trim() ? description.trim() : null }
     : null
   const starts = after?.rows.find((r) => r.topic.topic === topic)?.topic.weight
+  const edit = useEdit()
 
   return (
     <Dialog
@@ -100,7 +102,7 @@ export function AddTopicDialog({
         <button
           type="button"
           className={BUTTON_PRIMARY}
-          disabled={!body || !after || busy}
+          {...edit(!body || !after || busy)}
           onClick={() => body && onAdd(body)}
         >
           {busy ? 'Adding…' : 'Add topic'}
@@ -205,6 +207,7 @@ export function ArchiveDialog({
   onClose: () => void
 }) {
   const { after, refusal } = usePreview(topic, preview)
+  const edit = useEdit()
   return (
     <Dialog
       title={`Archive ${topic}`}
@@ -217,7 +220,7 @@ export function ArchiveDialog({
         <button
           type="button"
           className="inline-flex h-[34px] items-center border border-accent-attention bg-accent-attention px-[13px] text-[12.5px] font-medium text-surface disabled:opacity-45"
-          disabled={!after || busy}
+          {...edit(!after || busy)}
           onClick={onArchive}
         >
           {busy ? 'Archiving…' : 'Archive topic'}

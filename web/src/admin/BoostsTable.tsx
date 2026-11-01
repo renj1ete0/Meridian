@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { TopicRow } from '../lib/api'
+import { useEdit } from './editGate'
 import { BUTTON_PRIMARY, BUTTON_ROW, FIELD, LINK_ACTION, ROW, SubHeading, TD, TDM, TH, TableCard } from './ui'
 import { dayOf, startOfDayIso } from '../lib/time'
 
@@ -44,6 +45,7 @@ export function BoostsTable({
   onBoost?: (topic: string, change: BoostChange) => void
 }) {
   const [adding, setAdding] = useState(false)
+  const edit = useEdit()
   const candidates = rows.filter((row) => row.topic.status !== 'archived')
   const [topic, setTopic] = useState('')
   const [factor, setFactor] = useState('1.5')
@@ -73,7 +75,7 @@ export function BoostsTable({
             type="button"
             className={LINK_ACTION}
             aria-expanded={adding}
-            disabled={candidates.length === 0}
+            {...edit(candidates.length === 0)}
             onClick={() => setAdding((v) => !v)}
           >
             {adding ? 'Close' : '+ Add boost'}
@@ -107,6 +109,7 @@ export function BoostsTable({
               value={chosen}
               onChange={(event) => setTopic(event.target.value)}
               aria-label="Boost topic"
+              {...edit()}
             >
               {candidates.map((row) => (
                 <option key={row.topic.topic} value={row.topic.topic}>
@@ -125,6 +128,7 @@ export function BoostsTable({
               inputMode="decimal"
               onChange={(event) => setFactor(event.target.value)}
               aria-label="Boost multiplier"
+              {...edit()}
             />
           </label>
           <label className="flex flex-col gap-1.5">
@@ -138,12 +142,13 @@ export function BoostsTable({
               min={dayFromNow(1)}
               onChange={(event) => setExpires(event.target.value)}
               aria-label="Boost expires"
+              {...edit()}
             />
           </label>
           <button
             type="submit"
             className={BUTTON_PRIMARY}
-            disabled={!chosen || multiplier === null || !expires || busy !== null}
+            {...edit(!chosen || multiplier === null || !expires || busy !== null)}
           >
             Add boost
           </button>
@@ -193,7 +198,7 @@ export function BoostsTable({
                     <button
                       type="button"
                       className={BUTTON_ROW}
-                      disabled={busy === row.topic.topic}
+                      {...edit(busy === row.topic.topic)}
                       onClick={() => onBoost?.(row.topic.topic, { boost_factor: null, boost_expires_at: null })}
                     >
                       End now
@@ -205,7 +210,7 @@ export function BoostsTable({
                       <button
                         type="button"
                         className={BUTTON_ROW}
-                        disabled={busy !== null || row.topic.status === 'archived'}
+                        {...edit(busy !== null || row.topic.status === 'archived')}
                         onClick={() => runAgain(row)}
                       >
                         Run again
@@ -213,8 +218,10 @@ export function BoostsTable({
                       <button
                         type="button"
                         className={BUTTON_ROW}
-                        disabled={busy === row.topic.topic}
-                        title="Remove the expired boost. The steering log keeps the record."
+                        {...edit(
+                          busy === row.topic.topic,
+                          'Remove the expired boost. The steering log keeps the record.',
+                        )}
                         onClick={() => onBoost?.(row.topic.topic, { boost_factor: null, boost_expires_at: null })}
                       >
                         Clear

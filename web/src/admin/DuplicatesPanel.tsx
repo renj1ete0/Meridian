@@ -4,6 +4,7 @@ import { ApiError } from '../lib/api'
 import type { DuplicateDecided, DuplicatePair, DuplicateSide } from '../lib/duplicates'
 import { readable } from '../lib/readable'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
+import { useEdit } from './editGate'
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, Card, LABEL, PageHeader } from './ui'
 
 /**
@@ -67,6 +68,7 @@ type State =
 
 function Pair({ pair, onDecide, onUndo }: { pair: DuplicatePair } & Pick<DuplicatesPanelProps, 'onDecide' | 'onUndo'>) {
   const [state, setState] = useState<State>({ phase: 'open' })
+  const edit = useEdit()
 
   async function run(work: () => Promise<DuplicateDecided>) {
     setState({ phase: 'busy' })
@@ -94,7 +96,7 @@ function Pair({ pair, onDecide, onUndo }: { pair: DuplicatePair } & Pick<Duplica
             <span role="status" className="font-mono text-[11px] text-accent-graph">
               {state.decision === 'merged' ? 'Merged into the existing node.' : 'Kept apart.'}
             </span>
-            <button type="button" className={BUTTON_SECONDARY} onClick={() => void run(() => onUndo(pair))}>
+            <button type="button" className={BUTTON_SECONDARY} {...edit()} onClick={() => void run(() => onUndo(pair))}>
               Undo
             </button>
           </>
@@ -103,7 +105,7 @@ function Pair({ pair, onDecide, onUndo }: { pair: DuplicatePair } & Pick<Duplica
             <button
               type="button"
               className={BUTTON_PRIMARY}
-              disabled={state.phase === 'busy'}
+              {...edit(state.phase === 'busy')}
               onClick={() => void run(() => onDecide(pair, 'merge'))}
             >
               Same thing: merge
@@ -111,7 +113,7 @@ function Pair({ pair, onDecide, onUndo }: { pair: DuplicatePair } & Pick<Duplica
             <button
               type="button"
               className={BUTTON_SECONDARY}
-              disabled={state.phase === 'busy'}
+              {...edit(state.phase === 'busy')}
               onClick={() => void run(() => onDecide(pair, 'keep'))}
             >
               Different: keep apart

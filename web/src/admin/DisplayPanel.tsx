@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { useEdit } from './editGate'
 import { BUTTON_PRIMARY, Card, LABEL, PageHeader } from './ui'
 import { ApiError, displaySettings, setDisplayTimezone, type DisplaySettings } from '../lib/api'
 import { clockOf, setDisplayZone, zoneLabel } from '../lib/time'
@@ -44,6 +45,7 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
   const [choice, setChoice] = useState(initial?.display_timezone ?? '')
   const [message, setMessage] = useState<string | null>(null)
   const [narrow, setNarrow] = useState('')
+  const edit = useEdit()
 
   useEffect(() => {
     if (initial) return
@@ -90,6 +92,7 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
             <input
               type="search"
               aria-label="Find a zone"
+              {...edit()}
               placeholder="City or GMT+8"
               className="h-[26px] w-44 border border-line-strong bg-surface px-2 font-mono text-[11.5px] text-text placeholder:text-text-faint"
               value={narrow}
@@ -100,6 +103,7 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
             <span className={LABEL}>Time zone</span>
             <select
               aria-label="Time zone"
+              {...edit()}
               className="h-[26px] border border-line-strong bg-surface px-2 font-mono text-[11.5px] text-text"
               value={choice}
               onChange={(e) => setChoice(e.target.value)}
@@ -112,7 +116,7 @@ export function DisplayPanel({ initial, save = setDisplayTimezone }: DisplayPane
               ))}
             </select>
           </label>
-          <button type="submit" className={BUTTON_PRIMARY} disabled={!choice || choice === settings?.display_timezone}>
+          <button type="submit" className={BUTTON_PRIMARY} {...edit(!choice || choice === settings?.display_timezone)}>
             Save
           </button>
           {settings ? (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
 import { GAZETTEER_BULK_MAX, type GazetteerEntityType, type GazetteerRow, type GazetteerState } from '../lib/api'
+import { useEdit, useEditLock } from './editGate'
 import { BUTTON_ROW, Filters, PAGER, PageHeader, ROW, TD, TDM, TH, TableCard } from './ui'
 
 /**
@@ -130,6 +131,8 @@ export function GazetteerQueue({
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
   const [cursor, setCursor] = useState(0)
   const body = useRef<HTMLTableSectionElement>(null)
+  const edit = useEdit()
+  const locked = useEditLock() !== null
 
   // A new page or a refetch is a new set of rows: a selection of ids that are
   // no longer on screen would be decided without being seen.
@@ -202,7 +205,7 @@ export function GazetteerQueue({
       toggle(row.term.term_id)
     } else {
       const decision = keyDecision(event.key, row)
-      if (decision && busy === null && !bulkBusy) {
+      if (decision && busy === null && !bulkBusy && !locked) {
         event.preventDefault()
         onDecide?.(row.term.term_id, decision)
       }
@@ -228,6 +231,7 @@ export function GazetteerQueue({
           {onSearch ? (
             <input
               type="search"
+              data-view
               aria-label="Find a term"
               placeholder="Find a term"
               value={search ?? ''}
@@ -244,6 +248,7 @@ export function GazetteerQueue({
           </span>
           <button
             type="button"
+            data-view
             className={PAGER}
             disabled={offset === 0 || bulkBusy}
             onClick={() => onPage?.(Math.max(offset - PAGE_SIZE, 0))}
@@ -252,6 +257,7 @@ export function GazetteerQueue({
           </button>
           <button
             type="button"
+            data-view
             className={PAGER}
             disabled={!hasMore || bulkBusy}
             onClick={() => onPage?.(offset + PAGE_SIZE)}
@@ -278,7 +284,7 @@ export function GazetteerQueue({
                 <button
                   type="button"
                   className={BULK_DECISION}
-                  disabled={bulkBusy}
+                  {...edit(bulkBusy)}
                   onClick={() => bulk('approve')}
                   data-bulk="approve"
                 >
@@ -287,7 +293,7 @@ export function GazetteerQueue({
                 <button
                   type="button"
                   className={BULK_DECISION}
-                  disabled={bulkBusy}
+                  {...edit(bulkBusy)}
                   onClick={() => bulk('reject')}
                   data-bulk="reject"
                 >
@@ -299,7 +305,7 @@ export function GazetteerQueue({
               <button
                 type="button"
                 className={BULK_DECISION}
-                disabled={bulkBusy}
+                {...edit(bulkBusy)}
                 onClick={() => bulk('restore')}
                 data-bulk="restore"
               >
@@ -321,7 +327,7 @@ export function GazetteerQueue({
                     className="accent-accent-graph"
                     aria-label="Select every term on this page"
                     checked={allChosen}
-                    disabled={bulkBusy}
+                    {...edit(bulkBusy)}
                     onChange={() => setSelected(allChosen ? new Set() : new Set(rows.map((r) => r.term.term_id)))}
                   />
                 </th>
@@ -355,7 +361,7 @@ export function GazetteerQueue({
                         className="accent-accent-graph"
                         aria-label={`Select ${row.term.canonical}`}
                         checked={selected.has(id)}
-                        disabled={bulkBusy}
+                        {...edit(bulkBusy)}
                         onChange={() => toggle(id)}
                       />
                     </td>
@@ -376,7 +382,7 @@ export function GazetteerQueue({
                             one. */}
                         <select
                           value={row.term.entity_type}
-                          disabled={rowBusy}
+                          {...edit(rowBusy)}
                           onChange={(event) => onEdit?.(id, event.target.value as GazetteerEntityType)}
                           className="h-[24px] border border-line-strong bg-surface px-1.5 font-mono text-[11px] text-text"
                         >
@@ -414,7 +420,7 @@ export function GazetteerQueue({
                         {row.term.rejected_at ? (
                           <button
                             type="button"
-                            disabled={rowBusy}
+                            {...edit(rowBusy)}
                             onClick={() => onDecide?.(id, 'restore')}
                             className={DECISION}
                           >
@@ -424,7 +430,7 @@ export function GazetteerQueue({
                           <>
                             <button
                               type="button"
-                              disabled={rowBusy || row.term.approved}
+                              {...edit(rowBusy || row.term.approved)}
                               onClick={() => onDecide?.(id, 'approve')}
                               className={DECISION}
                             >
@@ -432,7 +438,7 @@ export function GazetteerQueue({
                             </button>
                             <button
                               type="button"
-                              disabled={rowBusy}
+                              {...edit(rowBusy)}
                               onClick={() => onDecide?.(id, 'reject')}
                               className={DECISION}
                             >

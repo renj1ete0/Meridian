@@ -12,6 +12,7 @@ import { PinsPanel } from './PinsPanel'
 import { ProposalsPanel } from './ProposalsPanel'
 import { RunsPanel } from './RunsPanel'
 import { DuplicatesPanel } from './DuplicatesPanel'
+import { EditGate } from './editGate'
 import { decideDuplicate, getDuplicates, undoDuplicate, type Duplicates } from '../lib/duplicates'
 import { PeoplePanel } from './PeoplePanel'
 import {
@@ -515,402 +516,412 @@ export function AdminPage() {
   }
 
   return (
-    <div
-      data-theme={theme}
-      data-admin-section={section}
-      className="flex min-h-[calc(100vh-54px)] flex-col bg-ground text-text lg:flex-row"
-    >
-      {/* Below lg, one picker: a strip that scrolled sideways hid eight of twelve sections
+    // `B-258`: inside, a control that changes something is disabled, and says why, for a person
+    // who may open this section but not change it.
+    <EditGate permission={sectionDef?.edits}>
+      <div
+        data-theme={theme}
+        data-admin-section={section}
+        className="flex min-h-[calc(100vh-54px)] flex-col bg-ground text-text lg:flex-row"
+      >
+        {/* Below lg, one picker: a strip that scrolled sideways hid eight of twelve sections
           with no sign they were there (`B-199`). */}
-      <label className="flex items-center gap-2 border-b border-line px-4 py-2.5 lg:hidden">
-        <span className={LABEL}>Section</span>
-        <select
-          aria-label="Admin section"
-          value={section}
-          onChange={(e) => navigate(hrefForSection(e.target.value as Section))}
-          className="h-8 min-w-0 flex-1 border border-line-strong bg-surface-raised px-2 text-[13px] text-text"
+        <label className="flex items-center gap-2 border-b border-line px-4 py-2.5 lg:hidden">
+          <span className={LABEL}>Section</span>
+          <select
+            aria-label="Admin section"
+            value={section}
+            onChange={(e) => navigate(hrefForSection(e.target.value as Section))}
+            className="h-8 min-w-0 flex-1 border border-line-strong bg-surface-raised px-2 text-[13px] text-text"
+          >
+            {(['steering', 'system'] as const).map((group) => (
+              <optgroup key={group} label={group}>
+                {visible
+                  .filter((s) => s.group === group)
+                  .map((def) => (
+                    <option key={def.key} value={def.key}>
+                      {def.label}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+
+        <nav
+          aria-label="Admin sections"
+          className="hidden shrink-0 lg:flex lg:w-[196px] lg:flex-col lg:gap-[3px] lg:border-r lg:border-line lg:py-[18px]"
         >
           {(['steering', 'system'] as const).map((group) => (
-            <optgroup key={group} label={group}>
+            <div key={group} className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch lg:gap-[3px]">
+              <div className={`${LABEL} hidden px-3.5 pb-2.5 lg:block ${group === 'system' ? 'lg:pt-5' : ''}`}>
+                {group}
+              </div>
               {visible
                 .filter((s) => s.group === group)
-                .map((def) => (
-                  <option key={def.key} value={def.key}>
-                    {def.label}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </select>
-      </label>
-
-      <nav
-        aria-label="Admin sections"
-        className="hidden shrink-0 lg:flex lg:w-[196px] lg:flex-col lg:gap-[3px] lg:border-r lg:border-line lg:py-[18px]"
-      >
-        {(['steering', 'system'] as const).map((group) => (
-          <div key={group} className="flex shrink-0 items-center gap-1 lg:flex-col lg:items-stretch lg:gap-[3px]">
-            <div className={`${LABEL} hidden px-3.5 pb-2.5 lg:block ${group === 'system' ? 'lg:pt-5' : ''}`}>
-              {group}
+                .map((def) => {
+                  const href = hrefForSection(def.key)
+                  const on = section === def.key
+                  return (
+                    <a
+                      key={def.key}
+                      href={href}
+                      onClick={onInternalClick(href)}
+                      aria-current={on ? 'page' : undefined}
+                      title={def.unbuilt ? `Not built yet (${def.unbuilt})` : undefined}
+                      className={`whitespace-nowrap px-3 py-2 text-[13px] ${
+                        on
+                          ? 'border-l-2 border-accent-graph bg-surface pl-2.5 font-medium text-text'
+                          : def.unbuilt
+                            ? 'text-text-faint hover:text-text-muted'
+                            : 'text-text-muted hover:text-text'
+                      }`}
+                    >
+                      {def.label}
+                      {def.key === 'topics' && draft && !on ? (
+                        // Kept while elsewhere, so it says it is there.
+                        <span className="ml-1.5 font-mono text-[10px] text-accent-attention">· staged</span>
+                      ) : null}
+                    </a>
+                  )
+                })}
             </div>
-            {visible
-              .filter((s) => s.group === group)
-              .map((def) => {
-                const href = hrefForSection(def.key)
-                const on = section === def.key
-                return (
-                  <a
-                    key={def.key}
-                    href={href}
-                    onClick={onInternalClick(href)}
-                    aria-current={on ? 'page' : undefined}
-                    title={def.unbuilt ? `Not built yet (${def.unbuilt})` : undefined}
-                    className={`whitespace-nowrap px-3 py-2 text-[13px] ${
-                      on
-                        ? 'border-l-2 border-accent-graph bg-surface pl-2.5 font-medium text-text'
-                        : def.unbuilt
-                          ? 'text-text-faint hover:text-text-muted'
-                          : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    {def.label}
-                    {def.key === 'topics' && draft && !on ? (
-                      // Kept while elsewhere, so it says it is there.
-                      <span className="ml-1.5 font-mono text-[10px] text-accent-attention">· staged</span>
-                    ) : null}
-                  </a>
-                )
-              })}
+          ))}
+        </nav>
+
+        {/* Not a second <main>: the app's shell already is one (`B-199`). */}
+        <div data-admin-content className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 sm:px-8 sm:py-7">
+          {error ? (
+            // The API's own sentence, shown as written. For a closed Admin it
+            // names the variables that open it, and replacing it with a generic
+            // line would throw away the only actionable thing in the response.
+            <p
+              role="alert"
+              className="border border-accent-attention bg-surface px-[18px] py-3 text-[12.5px] text-accent-attention"
+            >
+              {error}
+            </p>
+          ) : null}
+          {missing ? (
+            <p role="alert" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
+              This section needs the {BY_NAME_LABEL[missing] ?? missing} permission, which your access does not include.
+            </p>
+          ) : null}
+          {readOnly && !missing ? (
+            <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text-muted">
+              You can see this section but not change it: changes need the {BY_NAME_LABEL[readOnly] ?? readOnly}{' '}
+              permission.
+            </p>
+          ) : null}
+          {added && section === 'topics' ? <AddedTopic topic={added} onDismiss={() => setAdded(null)} /> : null}
+          {notice ? (
+            <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
+              {notice}
+            </p>
+          ) : null}
+
+          {section === 'topics' ? (
+            topics ? (
+              <TopicPanel
+                rows={topics.rows}
+                sumsTo={topics.sums_to}
+                entries={entries}
+                busy={steering}
+                draft={draft}
+                preview={current}
+                refusal={refusal}
+                onDraft={(topic, weight) => setDraft({ topic, weight })}
+                onRevert={() => setDraft(null)}
+                onApply={() => {
+                  if (!draft) return
+                  const { topic, weight } = draft
+                  void steer(topic, async () => {
+                    await editTopic(topic, { weight })
+                    setDraft(null)
+                    await loadTopics()
+                  })
+                }}
+                onStatus={onStatus}
+                onPinned={onPinned}
+                onDescribe={onDescribe}
+                onArchive={(topic) => setArchiving(topic)}
+                onAddTopic={() => setAdding(true)}
+                onBoost={onBoost}
+              />
+            ) : (
+              <Loading what="the topics" />
+            )
+          ) : null}
+
+          {section === 'boosts' ? (
+            topics ? (
+              <PinsPanel rows={topics.rows} busy={steering} onPinned={onPinned} onBoost={onBoost} />
+            ) : (
+              <Loading what="the topics" />
+            )
+          ) : null}
+
+          {section === 'proposals' ? (
+            proposals ? (
+              <ProposalsPanel
+                proposals={proposals}
+                busy={proposalBusy}
+                onAccept={(proposalId) => void decide(proposalId, 'Applied now.', () => acceptProposal(proposalId))}
+                onReject={(proposalId, reason) =>
+                  void decide(proposalId, 'Rejected; it will not apply.', () => rejectProposal(proposalId, reason))
+                }
+              />
+            ) : error ? null : (
+              <Loading what="the proposals" />
+            )
+          ) : null}
+
+          {section === 'seeds' ? (
+            run ? (
+              <FirstRunPanel
+                run={run}
+                busy={seedBusy}
+                adding={seedAdding}
+                onAdd={(url, kind, topic) =>
+                  void (async () => {
+                    setSeedAdding(true)
+                    setError(null)
+                    try {
+                      await addSeed({ url_or_query: url, task_type: kind, topic })
+                      setRun(await getFirstRun())
+                    } catch (cause) {
+                      setError(cause instanceof ApiError ? cause.message : 'That seed was not added.')
+                    } finally {
+                      setSeedAdding(false)
+                    }
+                  })()
+                }
+                onRemove={(taskId) =>
+                  void (async () => {
+                    setSeedBusy(taskId)
+                    setError(null)
+                    try {
+                      await removeSeed(taskId)
+                      setRun(await getFirstRun())
+                    } catch (cause) {
+                      setError(cause instanceof ApiError ? cause.message : 'That seed was not removed.')
+                    } finally {
+                      setSeedBusy(null)
+                    }
+                  })()
+                }
+              />
+            ) : (
+              <Loading what="the seed list" />
+            )
+          ) : null}
+
+          {section === 'domains' ? (
+            policy ? (
+              <FetchPolicyPanel
+                rows={policy.rows}
+                counts={{ active: policy.active, paused: policy.paused, blocked: policy.blocked }}
+                status={domainStatus}
+                busy={steering}
+                query={domainQuery}
+                offset={policy.offset}
+                hasMore={policy.has_more}
+                pageSize={DOMAIN_PAGE}
+                onQuery={setDomainQuery}
+                onPage={setDomainOffset}
+                onStatusFilter={(next) => {
+                  setDomainStatus(next)
+                  setDomainOffset(0)
+                }}
+                onUnblock={(domain) =>
+                  void steer(domain, async () => {
+                    await actOnFetchPolicy(domain, 'unblock')
+                    await loadPolicy(domainStatus, domainSearch, domainOffset)
+                  })
+                }
+                onForgetRender={(domain) =>
+                  void steer(domain, async () => {
+                    await actOnFetchPolicy(domain, 'forget-render')
+                    await loadPolicy(domainStatus, domainSearch, domainOffset)
+                  })
+                }
+              />
+            ) : (
+              <Loading what="fetch policy" />
+            )
+          ) : null}
+
+          {section === 'agents' ? (
+            agents ? (
+              <AgentsPanel
+                rows={agents.rows}
+                unserved={agents.unserved_tasks}
+                busy={steering}
+                onToggle={(agentId, enabled) =>
+                  void steer(agentId, async () => {
+                    // The whole registry comes back, because `unserved_tasks` is
+                    // a fact across rows: disabling the only agent that declares
+                    // a task type changes what every other row's screen says.
+                    setAgents(await editAgent(agentId, { enabled }))
+                  })
+                }
+                onModel={(agentId, model) =>
+                  steer(agentId, async () => {
+                    setAgents(await editAgent(agentId, { model }))
+                  })
+                }
+                onThinking={(agentId, thinking) =>
+                  void steer(agentId, async () => {
+                    setAgents(await editAgent(agentId, { thinking }))
+                  })
+                }
+              />
+            ) : (
+              <Loading what="the registry" />
+            )
+          ) : null}
+
+          {section === 'access' && !missing ? <AssistantAccessPanel /> : null}
+          {section === 'people' && !missing ? <PeoplePanel /> : null}
+          {section === 'display' ? <DisplayPanel /> : null}
+
+          {section === 'health' ? (
+            health ? (
+              <CrawlHealthPanel health={health} />
+            ) : (
+              <Loading what="crawl health" />
+            )
+          ) : null}
+
+          {section === 'duplicates' ? (
+            dupes ? (
+              <DuplicatesPanel
+                pairs={dupes.pairs}
+                total={dupes.total}
+                onDecide={(pair, decision) => decideDuplicate(pair.notification_id, decision)}
+                onUndo={(pair) => undoDuplicate(pair.notification_id)}
+              />
+            ) : (
+              <Loading what="possible duplicates" />
+            )
+          ) : null}
+
+          {section === 'runs' ? (
+            runs ? (
+              <RunsPanel
+                rows={runs.rows}
+                total={runs.total}
+                active={runs.active}
+                loadingOlder={loadingOlder}
+                onOlder={() => {
+                  setLoadingOlder(true)
+                  getRuns({ limit: 25, offset: runs.rows.length })
+                    .then((older) => {
+                      const seen = new Set(runs.rows.map((r) => r.run_id))
+                      setRuns({ ...runs, rows: [...runs.rows, ...older.rows.filter((r) => !seen.has(r.run_id))] })
+                    })
+                    .catch(() => {})
+                    .finally(() => setLoadingOlder(false))
+                }}
+              />
+            ) : (
+              <Loading what="run history" />
+            )
+          ) : null}
+
+          {section === 'enrichment' ? (
+            <PageHeader title="Enrichment queue">
+              Not built yet. The table this screen will read exists, but nothing fills it until{' '}
+              <span className="font-mono">P7-07</span>: figure descriptions, OCR at a higher quality tier and chart
+              reading, each started by a person rather than on a schedule. There is nothing queued to show.
+            </PageHeader>
+          ) : null}
+
+          {section === 'gazetteer' ? (
+            queue ? (
+              <GazetteerQueue
+                rows={queue.rows}
+                state={state}
+                counts={{
+                  pending: queue.pending,
+                  approved: queue.approved,
+                  rejected: queue.rejected,
+                }}
+                busy={busy}
+                bulkBusy={bulkBusy}
+                offset={queue.offset}
+                hasMore={queue.has_more}
+                matched={queue.matched}
+                search={termQuery}
+                onSearch={setTermQuery}
+                onState={(next) => {
+                  setState(next)
+                  setOffset(0)
+                }}
+                onPage={setOffset}
+                onDecide={(termId, decision) => void act(termId, () => decideGazetteerTerm(termId, decision))}
+                onEdit={(termId, entityType: GazetteerEntityType) =>
+                  void act(termId, () => editGazetteerTerm(termId, { entity_type: entityType }))
+                }
+                onBulk={(ids, decision) => void bulk(ids, decision)}
+              />
+            ) : error ? null : (
+              <Loading what="the gazetteer queue" />
+            )
+          ) : null}
+        </div>
+
+        {steeringPage ? (
+          <div className="shrink-0 border-t border-line bg-surface px-[22px] py-7 lg:w-[300px] lg:border-l lg:border-t-0">
+            <SteeringRail entries={entries} runs={recent} />
           </div>
-        ))}
-      </nav>
-
-      {/* Not a second <main>: the app's shell already is one (`B-199`). */}
-      <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 sm:px-8 sm:py-7">
-        {error ? (
-          // The API's own sentence, shown as written. For a closed Admin it
-          // names the variables that open it, and replacing it with a generic
-          // line would throw away the only actionable thing in the response.
-          <p
-            role="alert"
-            className="border border-accent-attention bg-surface px-[18px] py-3 text-[12.5px] text-accent-attention"
-          >
-            {error}
-          </p>
-        ) : null}
-        {missing ? (
-          <p role="alert" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
-            This section needs the {BY_NAME_LABEL[missing] ?? missing} permission, which your access does not include.
-          </p>
-        ) : null}
-        {readOnly && !missing ? (
-          <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text-muted">
-            You can see this section but not change it: changes need the {BY_NAME_LABEL[readOnly] ?? readOnly}{' '}
-            permission.
-          </p>
-        ) : null}
-        {added && section === 'topics' ? <AddedTopic topic={added} onDismiss={() => setAdded(null)} /> : null}
-        {notice ? (
-          <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
-            {notice}
-          </p>
         ) : null}
 
-        {section === 'topics' ? (
-          topics ? (
-            <TopicPanel
-              rows={topics.rows}
-              sumsTo={topics.sums_to}
-              entries={entries}
-              busy={steering}
-              draft={draft}
-              preview={current}
-              refusal={refusal}
-              onDraft={(topic, weight) => setDraft({ topic, weight })}
-              onRevert={() => setDraft(null)}
-              onApply={() => {
-                if (!draft) return
-                const { topic, weight } = draft
-                void steer(topic, async () => {
-                  await editTopic(topic, { weight })
-                  setDraft(null)
+        {adding && topics ? (
+          <AddTopicDialog
+            rows={topics.rows}
+            sumsTo={topics.sums_to}
+            busy={steering !== null}
+            preview={(body, signal) => previewAddTopic(body, { signal })}
+            onClose={() => setAdding(false)}
+            onAdd={(body) =>
+              void (async () => {
+                setDraft(null)
+                const ok = await steer(body.topic, async () => {
+                  await addTopic(body)
                   await loadTopics()
                 })
-              }}
-              onStatus={onStatus}
-              onPinned={onPinned}
-              onDescribe={onDescribe}
-              onArchive={(topic) => setArchiving(topic)}
-              onAddTopic={() => setAdding(true)}
-              onBoost={onBoost}
-            />
-          ) : (
-            <Loading what="the topics" />
-          )
+                if (ok) {
+                  setAdding(false)
+                  setAdded(body.topic)
+                }
+              })()
+            }
+          />
         ) : null}
 
-        {section === 'boosts' ? (
-          topics ? (
-            <PinsPanel rows={topics.rows} busy={steering} onPinned={onPinned} onBoost={onBoost} />
-          ) : (
-            <Loading what="the topics" />
-          )
-        ) : null}
-
-        {section === 'proposals' ? (
-          proposals ? (
-            <ProposalsPanel
-              proposals={proposals}
-              busy={proposalBusy}
-              onAccept={(proposalId) => void decide(proposalId, 'Applied now.', () => acceptProposal(proposalId))}
-              onReject={(proposalId, reason) =>
-                void decide(proposalId, 'Rejected; it will not apply.', () => rejectProposal(proposalId, reason))
-              }
-            />
-          ) : error ? null : (
-            <Loading what="the proposals" />
-          )
-        ) : null}
-
-        {section === 'seeds' ? (
-          run ? (
-            <FirstRunPanel
-              run={run}
-              busy={seedBusy}
-              adding={seedAdding}
-              onAdd={(url, kind, topic) =>
-                void (async () => {
-                  setSeedAdding(true)
-                  setError(null)
-                  try {
-                    await addSeed({ url_or_query: url, task_type: kind, topic })
-                    setRun(await getFirstRun())
-                  } catch (cause) {
-                    setError(cause instanceof ApiError ? cause.message : 'That seed was not added.')
-                  } finally {
-                    setSeedAdding(false)
-                  }
-                })()
-              }
-              onRemove={(taskId) =>
-                void (async () => {
-                  setSeedBusy(taskId)
-                  setError(null)
-                  try {
-                    await removeSeed(taskId)
-                    setRun(await getFirstRun())
-                  } catch (cause) {
-                    setError(cause instanceof ApiError ? cause.message : 'That seed was not removed.')
-                  } finally {
-                    setSeedBusy(null)
-                  }
-                })()
-              }
-            />
-          ) : (
-            <Loading what="the seed list" />
-          )
-        ) : null}
-
-        {section === 'domains' ? (
-          policy ? (
-            <FetchPolicyPanel
-              rows={policy.rows}
-              counts={{ active: policy.active, paused: policy.paused, blocked: policy.blocked }}
-              status={domainStatus}
-              busy={steering}
-              query={domainQuery}
-              offset={policy.offset}
-              hasMore={policy.has_more}
-              pageSize={DOMAIN_PAGE}
-              onQuery={setDomainQuery}
-              onPage={setDomainOffset}
-              onStatusFilter={(next) => {
-                setDomainStatus(next)
-                setDomainOffset(0)
-              }}
-              onUnblock={(domain) =>
-                void steer(domain, async () => {
-                  await actOnFetchPolicy(domain, 'unblock')
-                  await loadPolicy(domainStatus, domainSearch, domainOffset)
+        {archiving && topics ? (
+          <ArchiveDialog
+            topic={archiving}
+            rows={topics.rows}
+            sumsTo={topics.sums_to}
+            busy={steering !== null}
+            preview={(signal) => previewEditTopic(archiving, { status: 'archived' }, { signal })}
+            onClose={() => setArchiving(null)}
+            onArchive={() =>
+              void (async () => {
+                setDraft(null)
+                const ok = await steer(archiving, async () => {
+                  await editTopic(archiving, { status: 'archived' })
+                  await loadTopics()
                 })
-              }
-              onForgetRender={(domain) =>
-                void steer(domain, async () => {
-                  await actOnFetchPolicy(domain, 'forget-render')
-                  await loadPolicy(domainStatus, domainSearch, domainOffset)
-                })
-              }
-            />
-          ) : (
-            <Loading what="fetch policy" />
-          )
-        ) : null}
-
-        {section === 'agents' ? (
-          agents ? (
-            <AgentsPanel
-              rows={agents.rows}
-              unserved={agents.unserved_tasks}
-              busy={steering}
-              onToggle={(agentId, enabled) =>
-                void steer(agentId, async () => {
-                  // The whole registry comes back, because `unserved_tasks` is
-                  // a fact across rows: disabling the only agent that declares
-                  // a task type changes what every other row's screen says.
-                  setAgents(await editAgent(agentId, { enabled }))
-                })
-              }
-              onModel={(agentId, model) =>
-                steer(agentId, async () => {
-                  setAgents(await editAgent(agentId, { model }))
-                })
-              }
-              onThinking={(agentId, thinking) =>
-                void steer(agentId, async () => {
-                  setAgents(await editAgent(agentId, { thinking }))
-                })
-              }
-            />
-          ) : (
-            <Loading what="the registry" />
-          )
-        ) : null}
-
-        {section === 'access' && !missing ? <AssistantAccessPanel /> : null}
-        {section === 'people' && !missing ? <PeoplePanel /> : null}
-        {section === 'display' ? <DisplayPanel /> : null}
-
-        {section === 'health' ? health ? <CrawlHealthPanel health={health} /> : <Loading what="crawl health" /> : null}
-
-        {section === 'duplicates' ? (
-          dupes ? (
-            <DuplicatesPanel
-              pairs={dupes.pairs}
-              total={dupes.total}
-              onDecide={(pair, decision) => decideDuplicate(pair.notification_id, decision)}
-              onUndo={(pair) => undoDuplicate(pair.notification_id)}
-            />
-          ) : (
-            <Loading what="possible duplicates" />
-          )
-        ) : null}
-
-        {section === 'runs' ? (
-          runs ? (
-            <RunsPanel
-              rows={runs.rows}
-              total={runs.total}
-              active={runs.active}
-              loadingOlder={loadingOlder}
-              onOlder={() => {
-                setLoadingOlder(true)
-                getRuns({ limit: 25, offset: runs.rows.length })
-                  .then((older) => {
-                    const seen = new Set(runs.rows.map((r) => r.run_id))
-                    setRuns({ ...runs, rows: [...runs.rows, ...older.rows.filter((r) => !seen.has(r.run_id))] })
-                  })
-                  .catch(() => {})
-                  .finally(() => setLoadingOlder(false))
-              }}
-            />
-          ) : (
-            <Loading what="run history" />
-          )
-        ) : null}
-
-        {section === 'enrichment' ? (
-          <PageHeader title="Enrichment queue">
-            Not built yet. The table this screen will read exists, but nothing fills it until{' '}
-            <span className="font-mono">P7-07</span>: figure descriptions, OCR at a higher quality tier and chart
-            reading, each started by a person rather than on a schedule. There is nothing queued to show.
-          </PageHeader>
-        ) : null}
-
-        {section === 'gazetteer' ? (
-          queue ? (
-            <GazetteerQueue
-              rows={queue.rows}
-              state={state}
-              counts={{
-                pending: queue.pending,
-                approved: queue.approved,
-                rejected: queue.rejected,
-              }}
-              busy={busy}
-              bulkBusy={bulkBusy}
-              offset={queue.offset}
-              hasMore={queue.has_more}
-              matched={queue.matched}
-              search={termQuery}
-              onSearch={setTermQuery}
-              onState={(next) => {
-                setState(next)
-                setOffset(0)
-              }}
-              onPage={setOffset}
-              onDecide={(termId, decision) => void act(termId, () => decideGazetteerTerm(termId, decision))}
-              onEdit={(termId, entityType: GazetteerEntityType) =>
-                void act(termId, () => editGazetteerTerm(termId, { entity_type: entityType }))
-              }
-              onBulk={(ids, decision) => void bulk(ids, decision)}
-            />
-          ) : error ? null : (
-            <Loading what="the gazetteer queue" />
-          )
+                if (ok) setArchiving(null)
+              })()
+            }
+          />
         ) : null}
       </div>
-
-      {steeringPage ? (
-        <div className="shrink-0 border-t border-line bg-surface px-[22px] py-7 lg:w-[300px] lg:border-l lg:border-t-0">
-          <SteeringRail entries={entries} runs={recent} />
-        </div>
-      ) : null}
-
-      {adding && topics ? (
-        <AddTopicDialog
-          rows={topics.rows}
-          sumsTo={topics.sums_to}
-          busy={steering !== null}
-          preview={(body, signal) => previewAddTopic(body, { signal })}
-          onClose={() => setAdding(false)}
-          onAdd={(body) =>
-            void (async () => {
-              setDraft(null)
-              const ok = await steer(body.topic, async () => {
-                await addTopic(body)
-                await loadTopics()
-              })
-              if (ok) {
-                setAdding(false)
-                setAdded(body.topic)
-              }
-            })()
-          }
-        />
-      ) : null}
-
-      {archiving && topics ? (
-        <ArchiveDialog
-          topic={archiving}
-          rows={topics.rows}
-          sumsTo={topics.sums_to}
-          busy={steering !== null}
-          preview={(signal) => previewEditTopic(archiving, { status: 'archived' }, { signal })}
-          onClose={() => setArchiving(null)}
-          onArchive={() =>
-            void (async () => {
-              setDraft(null)
-              const ok = await steer(archiving, async () => {
-                await editTopic(archiving, { status: 'archived' })
-                await loadTopics()
-              })
-              if (ok) setArchiving(null)
-            })()
-          }
-        />
-      ) : null}
-    </div>
+    </EditGate>
   )
 }
 
@@ -944,6 +955,7 @@ export function AddedTopic({ topic, onDismiss }: { topic: string; onDismiss: () 
       </a>
       <button
         type="button"
+        data-view
         onClick={onDismiss}
         className="ml-auto font-mono text-[10.5px] text-text-faint hover:text-text"
       >
