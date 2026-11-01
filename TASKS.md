@@ -1969,6 +1969,21 @@ deploy runbook whose first two commands could not work (`B-17`).
       admin route declaring its permission (a test fails on one that does not). The first owner
       from `MERIDIAN_OWNER_EMAILS` (never removable from the UI); with none, a one-time code in
       the API's log claims it. Mock first (docs/design)
+- [ ] `B-253` **Press releases told apart from news** (operator, 2026-11-01) — `doc_kind = news`
+      holds both: a `/press-releases/` path is news today. Split `news` (journalism) from
+      `press_release` (an organisation speaking for itself; government domain + media-release
+      path, schema.org `PressRelease`), maybe `opinion`; a watched outlet's entries are news.
+      Migration for the CHECK; re-classify stored sources from their raw pages
+- [ ] `B-254` **Find by kind and by outlet** (operator) — Find filters by tier (`press` among
+      them) but not by document kind or publisher. Add both to `SearchFilters`, `/search`,
+      `/answer`, saved views and the filter rail (find.ts is the one model)
+- [ ] `B-255` **Listing pages as watches** — outlets with no news sitemap or feed (several in the
+      2026-10-24 probe) publish a latest-articles page. A third watch kind re-reads it and
+      queues new same-site article links (dated or slug paths, not navigation)
+- [ ] `B-256` **Paywalled news kept as a stub** — the operator asked about paywalls; not bypassed.
+      A paywalled article's headline, time, keywords and teaser from its sitemap/feed entry
+      stored as a source stub that links out, marked as a stub so synthesis never cites it as
+      the article
 - [ ] `B-251` **A headline filter that works on general outlets** — measured 2026-11-01 on five
       general news sitemaps (592 headlines): the vocabulary filter matched 1, wrongly (a
       one-word term in a path); bge-m3 against the topic prototypes put 31 above 0.30, a handful
