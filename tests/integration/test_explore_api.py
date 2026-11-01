@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 from sqlalchemy import delete, select, text
+from sqlalchemy.exc import DBAPIError
 
 from api.deps import read_session
 from api.main import create_app
@@ -130,13 +131,15 @@ async def test_the_explore_session_cannot_write(require_db) -> None:
     agen = read_session()
     sess = await anext(agen)
     try:
-        with pytest.raises(Exception) as caught:
+        with pytest.raises(DBAPIError) as caught:
             await sess.execute(
                 text("INSERT INTO sources (url) VALUES ('https://write.test/refused')")
             )
-        # Naming the error distinguishes the database refusing from SQLAlchemy
-        # declining to build the statement. Only the first is the claim.
-        assert "ReadOnlySQLTransaction" in str(caught.value) or "permission" in str(caught.value)
+        # The SQLSTATE distinguishes the database refusing from SQLAlchemy declining
+        # to build the statement; only the first is the claim. The code, not the
+        # message: SQLAlchemy 2.1 stopped naming the driver's exception class in it.
+        # 25006 is read_only_sql_transaction, 42501 insufficient_privilege.
+        assert caught.value.orig.sqlstate in {"25006", "42501"}, caught.value
     finally:
         await agen.aclose()
         await dispose_engines()

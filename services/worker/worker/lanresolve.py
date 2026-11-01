@@ -143,7 +143,7 @@ def read_hosts(path: str) -> dict[str, dict[str, str]]:
     try:
         with open(path) as fh:
             raw = json.load(fh)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     return raw if isinstance(raw, dict) else {}
 

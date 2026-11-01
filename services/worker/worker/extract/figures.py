@@ -58,7 +58,7 @@ def figures_from_html(content: bytes | str, url: str) -> tuple[ExtractedFigure, 
     """
     try:
         tree = lxml_html.fromstring(content)
-    except (etree.ParserError, ValueError):
+    except etree.ParserError, ValueError:
         return ()
 
     found: list[ExtractedFigure] = []

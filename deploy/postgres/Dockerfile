@@ -22,7 +22,7 @@ ARG PG_MAJOR=17
 ARG AGE_VERSION=1.7.0
 
 # --- builder ---------------------------------------------------------------
-FROM pgvector/pgvector:pg17 AS builder
+FROM pgvector/pgvector:0.8.7-pg17-bookworm AS builder
 
 ARG PG_MAJOR
 ARG AGE_VERSION
@@ -58,7 +58,7 @@ RUN cd "apache-age-${AGE_VERSION}" \
     && make install
 
 # --- runtime ---------------------------------------------------------------
-FROM pgvector/pgvector:pg17 AS runtime
+FROM pgvector/pgvector:0.8.7-pg17-bookworm AS runtime
 
 ARG PG_MAJOR
 ARG AGE_VERSION

@@ -12,11 +12,16 @@
 # (see api/search_service.py). An image that pulled model weights in would add
 # gigabytes and tens of seconds of cold start to a service whose job is
 # answering HTTP in milliseconds.
+#
+# Alpine (`B-266`): every wheel this package resolves to is published for musl on
+# 3.14, so nothing compiles, and the OS layer is a few MB rather than slim's ~80. Builder
+# and runtime must match: the venv's wheels are tagged musllinux.
+# See docs/reference/base-images.md.
 
 # --- builder ---------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-alpine3.24 AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.28 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -39,18 +44,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package meridian-api
 
 # --- runtime ---------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-alpine3.24 AS runtime
 
 # ca-certificates only. The API makes no outbound requests today — compose puts
 # it on `internal`, which has no route out at all — but the certificate store is
 # a few hundred kilobytes and its absence surfaces as a TLS error nobody expects
-# the first time anything here does reach outward.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# the first time anything here does reach outward. tzdata for the display zone
+# (ADR 0009), which `zoneinfo` reads from the system. The Python image carries both
+# today; they are named so that stays true if it stops.
+# `apk upgrade`: fixes Alpine has published since the base image was built.
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
-RUN groupadd --system --gid 1001 meridian \
-    && useradd --system --uid 1001 --gid meridian --create-home meridian
+# The base image's pip goes: the app runs from a uv-built venv, and pip's vendored
+# urllib3, msgpack and pkg_resources are what a scanner flags in it (`B-266`).
+RUN python -m pip uninstall --yes --quiet pip
+
+RUN addgroup -S -g 1001 meridian \
+    && adduser -S -D -u 1001 -G meridian meridian
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

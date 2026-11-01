@@ -96,13 +96,14 @@ bundle and have not been audited package by package — see *What is not covered
 | Component | Licence | Evidence | Verdict |
 |---|---|---|---|
 | **SearXNG** | **AGPL-3.0-or-later** | `org.opencontainers.image.licenses` on `searxng/searxng:latest` | **Conditional — see below** |
-| Crawl4AI 0.9.2 | Apache-2.0 | distribution metadata inside the image | Fine |
+| Crawl4AI 0.9.5 | Apache-2.0 | distribution metadata inside the image | Fine |
 | Playwright | Apache-2.0 | distribution metadata inside the image | Fine |
 | PostgreSQL 17 | PostgreSQL licence | `/usr/share/doc/postgresql-17/copyright` | Fine (permissive, BSD-like) |
 | pgvector | PostgreSQL licence | `/usr/share/doc/pgvector/LICENSE` | Fine |
-| `python:3.12-slim-bookworm` | Debian: a collection, predominantly permissive with GPL **programs** | no image label; Debian base | Fine — see "base images" |
-| `nginx:1.27-alpine` | nginx: BSD-2-Clause; Alpine base | no image label | Fine |
-| `node:22-slim` | Node.js: MIT; Debian base | no image label | Fine |
+| `python:3.14-slim-trixie` | Debian: a collection, predominantly permissive with GPL **programs** | no image label; Debian base | Fine — see "base images" |
+| `python:3.14-alpine3.24`, `alpine:3.24` | Alpine: musl (MIT) and BusyBox (GPL-2.0 **programs**, run unmodified) | no image label; Alpine base | Fine — see "base images" |
+| `nginx:1.30-alpine-slim` | nginx: BSD-2-Clause; Alpine base | no image label | Fine |
+| `node:26-alpine` (build stage only) | Node.js: MIT; Alpine base | no image label | Fine |
 | **Apache AGE 1.7.0** | **Apache-2.0** | the `LICENSE` inside `apache-age-1.7.0-src.tar.gz` from downloads.apache.org, and the copy the image now ships at `/usr/share/doc/apache-age/LICENSE` | Fine |
 | **RUM 1.3.15** (`postgresql-17-rum`, PGDG) | **PostgreSQL** | `/usr/share/doc/postgresql-17-rum/copyright` in the database image (`License: PostgreSQL`) | Fine |
 

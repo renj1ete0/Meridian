@@ -391,7 +391,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 1. **Python wheels.** spaCy, lxml and torch ship arm64 wheels, but any dependency without one falls back to a source build. Under QEMU this is slow; on the RK3588 it is worse. This is the main reason to cross-build on the Fedora box rather than building on the Pi.
 2. **Chromium on arm64.** Playwright supports it, but Crawl4AI v0.9.2 shipped a fix for Playwright headless-shell packaging — evidence the path is less trodden. **Smoke-test rendering on the actual Pi**, not under emulation.
-3. **Base images.** Use known multi-arch bases (`python:3.12-slim-bookworm`, `node:22-slim`). Verify before pinning by digest — digests are architecture-specific, so pin the *manifest list* digest, not a platform-specific one.
+3. **Base images.** Use known multi-arch bases (`python:3.14-alpine3.24` where every wheel exists for musl, `python:3.14-slim-trixie` where one does not, `node:26-alpine`; the current choice per image is in [docs/reference/base-images.md](../reference/base-images.md)). Verify before pinning by digest — digests are architecture-specific, so pin the *manifest list* digest, not a platform-specific one.
 
 #### Rule
 

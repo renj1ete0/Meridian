@@ -66,7 +66,7 @@ def addresses() -> dict[str, str]:
     try:
         with open(path) as fh:
             raw = json.load(fh)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     found = {
         name.lower(): entry["address"]

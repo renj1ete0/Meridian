@@ -2074,6 +2074,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       returns news of any age by relevance, and repeat every 3 days. A day/week `time_range`,
       a daily repeat, and GDELT's free DOC API (keyword per topic, articles from the last hours,
       many languages) as a second news source
+- [x] `B-266` **Dependencies, Python 3.14, Node 26, Alpine where it works** (operator,
+      2026-11-01) — every Python and web dependency current, audited before and after
+      (pip-audit, npm audit, Trivy); Python 3.14 everywhere, Node 26 in CI and the web build;
+      api, tools and web on Alpine, worker and orchestrator on Debian trixie (no musl wheels
+      for torch or onnxruntime), postgres pinned to bookworm until a REINDEX is planned.
+      Not taken, each its own task if wanted: sigma 4 (a rewrite), minimatch 11 (pinned by
+      eslint and Stryker), Postgres on trixie. See ADR 0025, docs/reference/base-images.md
 - [x] `B-267` **GDELT as a second news source** (split from `B-244`) — GDELT's free DOC API:
       a keyword per topic, articles from the last hours, many languages. A provider beside
       SearXNG for news queries, paced, with its results queued like search results

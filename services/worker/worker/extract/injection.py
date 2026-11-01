@@ -183,7 +183,7 @@ def _hidden_findings(html_text: str) -> list[Finding]:
         return []
     try:
         tree = lxml_html.fromstring(html_text)
-    except (etree.ParserError, ValueError):
+    except etree.ParserError, ValueError:
         return []
 
     findings: list[Finding] = []

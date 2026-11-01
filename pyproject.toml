@@ -1,8 +1,8 @@
 [project]
 name = "meridian"
-version = "0.200.0"
+version = "0.201.0"
 description = "Self-hosted autonomous research system"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
@@ -39,7 +39,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 # PEP 8 (E, W, N), PEP 257 docstring layout (D2xx-D4xx), plus the bug and

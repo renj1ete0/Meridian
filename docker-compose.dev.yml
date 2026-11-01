@@ -51,12 +51,12 @@ services:
       - ./scripts/init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
 
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng:2026.11.1-9ded3bec1
     ports: ["21112:8080"]
     volumes: ["./config/searxng:/etc/searxng:ro"]
 
   crawl4ai:
-    image: unclecode/crawl4ai:0.9.2
+    image: unclecode/crawl4ai:0.9.5
     ports: ["21113:11235"]
     shm_size: 1g
     environment:

@@ -324,7 +324,7 @@ def _links_from_html(html_text: str, base: str) -> tuple[str, ...]:
     """
     try:
         tree = lxml_html.fromstring(html_text)
-    except (etree.ParserError, ValueError):
+    except etree.ParserError, ValueError:
         return ()
     hrefs = tree.xpath("//a/@href | //area/@href")
     return _tidy_links([h for h in hrefs if isinstance(h, str)], base)

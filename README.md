@@ -119,7 +119,7 @@ a modest machine still runs it, more slowly.
 | Memory | 8 GB | 16 GB or more |
 | Storage | 100 GB SSD | 500 GB+ NVMe |
 | Runtime | Docker + Compose v2 | same |
-| Native dev extras | `poppler-utils` (PDF extraction) | + `ghostscript` to run the PDF tests |
+| Native dev extras | `uv` (installs Python 3.14 from `.python-version`), Node 26, `poppler-utils` (PDF extraction) | + `ghostscript` to run the PDF tests |
 | Network | Outbound HTTPS | + Cloudflare Tunnel for remote access |
 
 Storage is the figure that grows: extracted text, embeddings, and the graph together

@@ -66,7 +66,7 @@ def _head(source: Source, raw_root: str | os.PathLike[str] | None) -> str | None
         path = rawstore.resolve(source.raw_file_path, raw_root)
         with open(path, "rb") as handle:
             return handle.read(HEAD_BYTES).decode("utf-8", "replace")
-    except (OSError, rawstore.UnsafeRawPath):
+    except OSError, rawstore.UnsafeRawPath:
         return None
 
 

@@ -11,10 +11,12 @@
 # package manager, on a machine that fetches hostile pages.
 #
 # Multi-arch by construction (scaffold §5): both bases publish manifest lists,
-# and nothing in the build is architecture-specific.
+# and nothing in the build is architecture-specific. Both are Alpine: the build's
+# native tools (rolldown, oxlint, Tailwind's engine) publish musl binaries, and the
+# runtime is nginx and static files (`B-266`; docs/reference/base-images.md).
 
 # --- builder ---------------------------------------------------------------
-FROM node:22-slim AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -34,7 +36,17 @@ COPY . .
 RUN npm run build
 
 # --- runtime ---------------------------------------------------------------
-FROM nginx:1.27-alpine AS runtime
+# The stable line (even minor), not mainline; `-slim` leaves out njs, the ACME module
+# and curl, none of which a static site and a proxy use.
+FROM nginx:1.30-alpine-slim AS runtime
+
+# Unprivileged (`B-266`): the server listens on 8080 and needs no root. The stock
+# config starts as root to drop to `nginx`, and writes its pid under /var/run; both
+# go, and the cache directories it writes request bodies to become the user's.
+# `apk upgrade` first: fixes Alpine has published since the base image was built.
+RUN apk upgrade --no-cache \
+    && sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx
 
 # The app calls `/api/...` relative and there is no base URL anywhere in the
 # source (`P2-11`), which is what makes one build correct in every environment.
@@ -44,6 +56,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+USER nginx
 EXPOSE 8080
 
 # Static files and a proxy, so liveness is the whole question — there is no

@@ -12,7 +12,7 @@
 # the one component in this stack whose whole job is rendering hostile content,
 # so the version is pinned here rather than floated, and moving it is a
 # deliberate act with a changelog entry.
-FROM unclecode/crawl4ai:0.9.2
+FROM unclecode/crawl4ai:0.9.5
 
 # The server-side configuration. Untrusted request bodies cannot set the
 # powerful fields — 0.9.x filters them, which is exactly the hardening above —
@@ -22,3 +22,7 @@ COPY config.yml /app/config.yml
 # Documents the port the health check and the worker use. Publishing it is the
 # compose file's decision, and it does not.
 EXPOSE 11235
+
+# The upstream image already runs as `appuser`; named here so that stays true if it changes
+# (`B-266`: a scanner reads this file, not the base).
+USER appuser

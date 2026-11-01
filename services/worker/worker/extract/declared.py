@@ -158,7 +158,7 @@ def _meta(text: str) -> dict[str, list[str]]:
     """
     try:
         tree = lxml_html.fromstring(text)
-    except (etree.ParserError, ValueError):
+    except etree.ParserError, ValueError:
         return {}
     found: dict[str, list[str]] = {}
     head = tree.find("head")

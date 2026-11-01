@@ -91,7 +91,7 @@ services:
 
   searxng:
     <<: *common
-    image: searxng/searxng:latest          # TODO: pin
+    image: searxng/searxng:2026.11.1-9ded3bec1   # dated build; bump deliberately (B-266)
     networks: [egress]                     # scrapes upstream engines
     volumes:
       - ./config/searxng:/etc/searxng:ro
@@ -218,7 +218,7 @@ services:
   # created beneath them inherits the owner, and a `chown -R` over a 100 GB raw
   # store is a different kind of mistake.
   datadirs:
-    image: python:3.12-slim-bookworm
+    image: alpine:3.24                     # a shell and chown are all it needs (B-266)
     # Runs on every `up` (it touches six inodes); `setup`, and through it every service that
     # writes, waits for it.
     user: root                             # the one thing it needs to be
@@ -646,7 +646,7 @@ services:
 
   cloudflared:
     <<: *common
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.10.7
     command: tunnel --no-autoupdate run
     # Both, and unavoidably so: it dials out to Cloudflare and proxies inward to
     # `api`. It holds one credential and terminates no database connection.
@@ -688,7 +688,7 @@ services:
   # and are never touched. Needs a read-only registry token for private images —
   # without one it sees nothing and says nothing (the British-shorthair lesson).
   watchtower:
-    image: nickfedor/watchtower:latest
+    image: nickfedor/watchtower:1.23.2
     profiles: [autoupdate]
     restart: unless-stopped
     networks: [egress]          # the registry and Telegram, nothing else

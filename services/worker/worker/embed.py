@@ -185,7 +185,7 @@ class Backfill:
                     extra={"reason": str(exc), "embedded": stats.embedded},
                 )
                 break
-            except (EmbeddingError, ValueError):
+            except EmbeddingError, ValueError:
                 stats.failed_batches += 1
                 failed.update(chunk_id for chunk_id, _ in batch)
                 log.exception(

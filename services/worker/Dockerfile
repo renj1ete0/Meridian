@@ -10,12 +10,13 @@
 # verify on arm64, never develop under emulation.
 
 # --- builder ---------------------------------------------------------------
-# 3.12 is the floor every pyproject declares, and pinning the image to the floor
+# 3.14 is the floor every pyproject declares, and pinning the image to the floor
 # means a wheel that exists only for a newer interpreter fails here rather than
-# on the Pi at 3am.
-FROM python:3.12-slim-bookworm AS builder
+# on the server at 3am. Debian slim, not Alpine (`B-266`): torch and onnxruntime
+# publish no musl wheels. See docs/reference/base-images.md.
+FROM python:3.14-slim-trixie AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.28 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -60,7 +61,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     fi
 
 # --- runtime ---------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-trixie AS runtime
 
 # poppler-utils is `pdftotext` and `pdfinfo`, which are the PDF extractor
 # (`P1-09`). Not optional: `extract_pdf` raises `PdftotextMissing` rather than
@@ -81,6 +82,10 @@ RUN apt-get update \
 # mount whose ownership has to match something.
 RUN groupadd --system --gid 1001 meridian \
     && useradd --system --uid 1001 --gid meridian --create-home meridian
+
+# The base image's pip goes: the app runs from a uv-built venv, and pip's vendored
+# urllib3, msgpack and pkg_resources are what a scanner flags in it (`B-266`).
+RUN python -m pip uninstall --yes --quiet pip
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

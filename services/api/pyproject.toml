@@ -1,8 +1,8 @@
 [project]
 name = "meridian-api"
-version = "0.200.0"
+version = "0.201.0"
 description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["../../LICENSE"]
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
     # which is the same accident as `P1-30`'s pyyaml wearing a different hat: an
     # import that only resolves because something else happened to install it.
     # `[crypto]` because Access signs with RS256, which needs `cryptography`.
-    "pyjwt[crypto]>=2.9",
+    "pyjwt[crypto]>=2.15",
     # The connector's upload form (`B-264`): FastAPI refuses a `File()` route without it, and
     # it is otherwise here only because `mcp` happens to pull it in.
     "python-multipart>=0.0.20",

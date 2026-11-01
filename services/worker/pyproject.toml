@@ -1,8 +1,8 @@
 [project]
 name = "meridian-worker"
-version = "0.200.0"
+version = "0.201.0"
 description = "Meridian fast loop — fetch, extract, embed. Never calls an LLM (spec §2.1, §6.1)."
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["../../LICENSE"]
 dependencies = [
@@ -17,8 +17,9 @@ dependencies = [
     # with `uv sync --package meridian-worker` gets only what is declared, and
     # meridian_core's undeclared pyyaml died on ModuleNotFoundError at import.
     "lxml>=5.0",
-    "markitdown[docx,outlook,pptx,xlsx]>=0.1.7",
-    "onnxruntime>=1.29",
+    # 0.1.9 is the first to allow magika 1.x, which asks for an onnxruntime with
+    # cp314 wheels (`B-266`; docs/handover.md, "markitdown and onnxruntime").
+    "markitdown[docx,outlook,pptx,xlsx]>=0.1.9",
     "py3langid>=0.3",
 ]
 

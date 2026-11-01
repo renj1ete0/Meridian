@@ -41,6 +41,8 @@ can, and runs as the first step of `make test`.
 
 **Python**
 
+- **Python 3.14**, in development, CI and every image (ADR 0025). ruff targets it, so it
+  writes `except A, B:` without parentheses (PEP 758).
 - **PEP 8** for layout and naming (ruff `E`, `W`, `N`; `ruff format`), with a line length
   of 100.
 - **PEP 257** for docstrings (ruff `D2xx`–`D4xx`, convention `pep257`). The summary is one
@@ -56,6 +58,7 @@ can, and runs as the first step of `make test`.
 
 **TypeScript**
 
+- Node 26 for the build and in CI (ADR 0025).
 - `strict` TypeScript (`tsc -b`), React function components, no `any` without a comment
   saying why.
 - **oxlint** (`web/.oxlintrc.json`) and **Prettier** (`web/.prettierrc.json`: no semicolons,

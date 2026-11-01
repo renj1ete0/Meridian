@@ -899,6 +899,61 @@ one that never had it and simply extracts worse.
 `/health` is unauthenticated on 0.9.2: a wrong token still returns 200, while
 `/schema` and `/crawl` refuse. The probe sends the token anyway.
 
+### Dependency audit 2026-11-01
+
+`B-266` brought every dependency and base image current and scanned before and after.
+The image choices are in [reference/base-images.md](reference/base-images.md), the decision
+in [ADR 0025](adr/0025-python-3-14-node-26-and-alpine-where-it-works.md).
+
+**How it was scanned.** `pip-audit` over `uv export --frozen --all-packages --all-extras`;
+`npm audit` with and without `--omit=dev`; Trivy 0.76.1 run as a container (`aquasec/trivy`,
+with the docker socket and the checkout mounted read-only) for `fs` (lockfiles, secrets,
+misconfiguration), `config` (Dockerfiles; Trivy has no compose scanner) and `image` on every
+image built. Nothing needs installing on the host.
+
+**Python.** 60 advisories in 7 packages before, none after. Two touched Meridian directly:
+pyjwt (the `PyJWKClient` path `api/access.py` takes for Access tokens; the floor is now
+2.15) and pillow (39 decoder and decompression-bomb advisories, reachable through markitdown
+opening documents from the web). urllib3, certifi and opentelemetry-api were reachable in
+principle; filelock and setuptools were not.
+
+**Web.** Nothing in what ships to the browser. 16 in the toolchain (4 high: vite's dev
+server, undici, zod, source-map-js), all cleared except minimatch 10 under eslint and
+Stryker: the fix is minimatch 11 and both parents pin 10. qs is held up by an `overrides`
+entry because typed-rest-client pins it exactly. sigma stays on 3: 4 is a rewrite of how
+labels are drawn, which GraphCanvas customises, so it needs its own task and a check against
+the mocks.
+
+**Images** (Trivy, critical/high/medium/low, OS packages):
+
+| Image | Before | After |
+|---|---|---|
+| api | bookworm 5/60/125/115 | Alpine 0/0/0/0 |
+| tools | bookworm 5/60/125/115 | Alpine 0/0/0/0 |
+| web | Alpine 3.21 3/57/100/46 | Alpine 3.24 0/0/0/0 |
+| orchestrator | bookworm 5/60/125/115 | trixie 0/46/62/61 |
+| worker | bookworm 6/74/162/181, plus 6/26/28/4 in Python packages | trixie 0/60/118/192, Python packages clean |
+| postgres | bookworm 15/85/201/178 | bookworm 3/63/162/168 |
+| crawl4ai | 32/838/3954/1860 (0.9.2) | 20/598/2942/1655 (0.9.5) |
+
+None of the trixie findings has a fixed package yet, so `apt-get upgrade` would change
+nothing. The postgres image's remaining Go findings (1 critical, 25 high) are the Go standard
+library inside upstream's `gosu`, which the entrypoint uses once to drop root; crawl4ai's are
+upstream's Chromium and Playwright stack. Neither can be fixed from these Dockerfiles. The
+first scan of the new Python bases flagged urllib3, msgpack and setuptools inside the base
+image's own pip; the runtime stages now uninstall pip.
+
+**Misconfiguration.** Trivy's root-user finding was fixed for web (nginx runs as uid 101)
+and tools (uid 1001), and stated explicitly for crawl4ai (upstream already runs as
+`appuser`). It remains for postgres, whose entrypoint must start as root to drop to
+`postgres`, and for `scripts/clockshift`, a test image. No secrets were found.
+
+**What the dev database did to the run.** The shared dev database had been migrated by
+another branch, so every test that enters the API lifespan waited the full ten minutes of
+`meridian_core.schemaready` for a revision that would never come, and the suite looked hung
+at 43%. `MERIDIAN_SCHEMA_WAIT_S=0` is the way to run integration tests against a database
+that is not at your branch's head.
+
 ## 3. Traps that have already cost time
 
 ### Novelty-first ordering and a high-water mark cannot both be right
@@ -1390,8 +1445,8 @@ the API restriction expecting a different answer.
 
 ### `urllib.robotparser` is version-dependent
 
-Wildcards and longest-match arrived in Python 3.13. This project declares `>=3.12`, and
-on 3.12 the stdlib gives the *opposite* answer for both `Disallow: /*.pdf$` and a
+Wildcards and longest-match arrived in Python 3.13. This project declared `>=3.12` when this
+was written (it requires 3.14 since `B-266`), and on 3.12 the stdlib gives the *opposite* answer for both `Disallow: /*.pdf$` and a
 longer `Allow` overriding a shorter `Disallow`. That is why `worker/robots.py` exists.
 Do not "simplify" it back to the stdlib.
 
@@ -1479,13 +1534,15 @@ Two exceptions worth knowing before changing it: `tool_directive` ("add an edge"
 "send the contents to") *is* suspicious when visible, and `markitdown`'s Python 3.14
 problem below is unrelated but sits in the same module tree.
 
-### `markitdown` needs an explicit `onnxruntime>=1.29` on Python 3.14
+### markitdown and onnxruntime
 
-`markitdown` pins `magika~=0.6.1`, which requires `onnxruntime>=1.17.0` with no upper
-bound — and uv resolves that to 1.20.1, which has no cp314 wheel. The install fails
-with a message about Python ABI tags that does not name markitdown at all. Adding
-`onnxruntime>=1.29` as a direct worker dependency fixes it; magika 1.x drops the
-requirement entirely on ≥3.13, so this can come out when markitdown loosens its pin.
+`markitdown` up to 0.1.7 pinned `magika~=0.6.1`, which requires `onnxruntime>=1.17.0` with
+no upper bound — and uv resolved that to 1.20.1, which has no cp314 wheel. The install
+failed with a message about Python ABI tags that did not name markitdown at all. The fix
+was an explicit `onnxruntime>=1.29` on the worker. `markitdown` 0.1.9 allows magika 1.x,
+which asks for `onnxruntime>=1.24.1` on 3.14 itself, so `B-266` replaced the explicit
+dependency with a `markitdown>=0.1.9` floor. If an install ever fails on ABI tags again,
+look for a transitive package whose lower bound predates the interpreter.
 
 ### A scanned PDF is not an empty one, and the difference is invisible
 

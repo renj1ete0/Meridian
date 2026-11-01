@@ -29,7 +29,7 @@ decisions behind the design are kept as [decision records](adr/README.md).
 |---|---|---|
 | [`features/`](features/README.md) | One document per feature: what it does, how it works, how to configure, operate and debug it | Explanation and reference |
 | [`guides/`](guides/) | Step-by-step tasks: [setup](guides/setup.md), [deployment](guides/deployment.md), [two-board deployment](guides/deploy-sbc.md), [podman](guides/deploy-podman.md), [adding a source](guides/connectors.md), [connecting an assistant](guides/connecting-an-assistant.md), [measuring the tests](guides/testing.md) | How-to |
-| [`reference/`](reference/) | Exact facts: [environment variables](reference/environment.md), [scheduled jobs](reference/scheduled-jobs.md), [data model](reference/data-model.md), [commands](reference/commands.md), [licences](reference/licences.md) | Reference |
+| [`reference/`](reference/) | Exact facts: [environment variables](reference/environment.md), [scheduled jobs](reference/scheduled-jobs.md), [data model](reference/data-model.md), [commands](reference/commands.md), [licences](reference/licences.md), [base images](reference/base-images.md) | Reference |
 | [`adr/`](adr/README.md) | Decisions the operator made, with context and consequences | Decision records |
 | [`spec/`](spec/) | The architecture as designed, the scaffold, and two focused specs | Design |
 | [`design/`](design/) | Interface mocks (`*.dc.html`) and the design system | Design |

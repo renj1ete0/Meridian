@@ -38,7 +38,7 @@ def retry_after_s(headers: Mapping[str, str], default: float, *, now: float | No
         if wait is None:
             try:
                 when = email.utils.parsedate_to_datetime(raw)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 when = None
             if when is not None and when.tzinfo is not None:
                 wait = when.timestamp() - (time.time() if now is None else now)

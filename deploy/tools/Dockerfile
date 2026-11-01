@@ -17,9 +17,18 @@
 # alternative was worse — the deploy docs told operators to run `alembic` and
 # `scripts/seed.py` in the `worker` image, which carries neither.
 
-FROM python:3.12-slim-bookworm
+# Alpine (`B-266`): meridian-core's wheels all exist for musl on 3.14, and this image
+# runs two short commands. See docs/reference/base-images.md.
+FROM python:3.14-alpine3.24
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.28 /uv /uvx /usr/local/bin/
+# tzdata: the seed and the question-set runner format times in the display zone
+# (ADR 0009). The Python image carries it today; named so that stays true.
+RUN apk upgrade --no-cache && apk add --no-cache tzdata \
+    && python -m pip uninstall --yes --quiet pip \
+    && addgroup -S -g 1001 meridian \
+    && adduser -S -D -u 1001 -G meridian meridian
+
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -56,7 +65,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # lockfile every other image is built against. `tests/unit/test_scripts.py`
 # asserts these match `uv.lock`, so the copy cannot rot silently.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python /app/.venv alembic==1.19.2 pyyaml==6.0.3
+    uv pip install --python /app/.venv alembic==1.20.1 pyyaml==6.0.3
 
 # Everything the two jobs read. `alembic.ini` and `migrations/` for the schema;
 # `scripts/` and `config/` for the seed, which reads `config/*.yaml` at first
@@ -71,6 +80,10 @@ COPY config/ config/
 # only: past run files live in the mounted runs directory, not in the image.
 COPY VERSION ./
 COPY eval/questions.yaml eval/
+
+# Unprivileged, as the service images are (`B-266`): it writes only to the eval-runs
+# directory, which `datadirs` hands to uid 1001.
+USER meridian
 
 # No CMD. This image is only ever run with an explicit command — `alembic
 # upgrade head` or `python scripts/seed.py` — and a default would make it

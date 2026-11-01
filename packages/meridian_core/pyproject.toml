@@ -1,8 +1,8 @@
 [project]
 name = "meridian-core"
-version = "0.200.0"
+version = "0.201.0"
 description = "Shared models, schemas, and database access for Meridian services"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["../../LICENSE"]
 dependencies = [

@@ -66,7 +66,7 @@ def parse_window(raw: object) -> float:
     else:
         try:
             hours = float(raw)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             hours = math.nan
     if not (MIN_WINDOW_HOURS <= hours <= MAX_WINDOW_HOURS):
         log.warning(

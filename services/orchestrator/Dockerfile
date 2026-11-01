@@ -15,11 +15,15 @@
 # moves, this Dockerfile changes one line.
 #
 # Built from the repository root: `-f services/orchestrator/Dockerfile .`
+#
+# Debian slim, not Alpine (`B-266`): markitdown's file sniffing needs onnxruntime,
+# which publishes no musl wheel and no source distribution. See
+# docs/reference/base-images.md.
 
 # --- builder ---------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-slim-trixie AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.28 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -42,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package meridian-worker --extra agent
 
 # --- runtime ---------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-trixie AS runtime
 
 # ca-certificates because every provider call is HTTPS and the slim image ships
 # none. No poppler: this image does not extract documents, and an extraction
@@ -53,6 +57,10 @@ RUN apt-get update \
 
 RUN groupadd --system --gid 1001 meridian \
     && useradd --system --uid 1001 --gid meridian --create-home meridian
+
+# The base image's pip goes: the app runs from a uv-built venv, and pip's vendored
+# urllib3, msgpack and pkg_resources are what a scanner flags in it (`B-266`).
+RUN python -m pip uninstall --yes --quiet pip
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

@@ -57,7 +57,7 @@ services:
     restart: "no"
 
   watchtower:
-    image: nickfedor/watchtower:latest
+    image: nickfedor/watchtower:1.23.2
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

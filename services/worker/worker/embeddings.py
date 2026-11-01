@@ -94,7 +94,7 @@ def visible_memory() -> int | None:
                 if line.startswith("MemTotal:"):
                     found.append(int(line.split()[1]) * 1024)
                     break
-    except (OSError, ValueError, IndexError):
+    except OSError, ValueError, IndexError:
         pass
     return min(found) if found else None
 

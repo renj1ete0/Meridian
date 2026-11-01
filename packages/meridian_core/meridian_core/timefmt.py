@@ -34,7 +34,7 @@ def parse_zone(raw: object) -> str:
         name = raw.strip()
         try:
             ZoneInfo(name)
-        except (ZoneInfoNotFoundError, ValueError):
+        except ZoneInfoNotFoundError, ValueError:
             log.warning("display time zone not recognised; using the default", extra={"zone": name})
         else:
             return name
@@ -45,7 +45,7 @@ def is_zone(name: str) -> bool:
     """Whether ``name`` is an IANA zone this machine knows."""
     try:
         ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
+    except ZoneInfoNotFoundError, ValueError:
         return False
     return True
 

@@ -1,6 +1,6 @@
 # Crawl4AI server configuration for Meridian (`P1-26`, spec §6.4).
 #
-# Taken from the 0.9.2 image and modified. Two things matter here and both are
+# Taken from the 0.9.2 image and modified; compared against 0.9.5's in `B-266`. Two things matter here and both are
 # about the fact that this process renders hostile pages for a living.
 #
 # The host binds 0.0.0.0 because the worker reaches it across a compose
@@ -100,6 +100,9 @@ crawler:
   pool:
     max_pages: 40                          # ← GLOBAL_SEM permits
     idle_ttl_sec: 300                     # ← 30 min janitor cutoff
+    # New in 0.9.5's defaults: replace a pooled browser context after this many pages.
+    # Pages leave cookies and storage in it, which one site could then read from another.
+    max_pages_before_recycle: 200
   browser:
     kwargs:
       headless: true

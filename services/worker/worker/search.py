@@ -161,7 +161,7 @@ class SearxClient:
         """
         try:
             response = await self._http().get(f"{self.base_url}/healthz", timeout=timeout_s)
-        except (httpx.HTTPError, OSError):
+        except httpx.HTTPError, OSError:
             return False
         # `/healthz` is the documented probe, but it is disabled in some
         # deployments and answers 404 rather than refusing the connection. A

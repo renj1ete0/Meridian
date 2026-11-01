@@ -124,7 +124,7 @@ def installed() -> dict[str, str]:
                 for c in (dist.metadata.get_all("Classifier") or [])
                 if c.startswith("License")
             ]
-            expression = "; ".join(classifiers) or expression.splitlines()[0]
+            expression = "; ".join(classifiers) or next(iter(expression.splitlines()), "")
         found[name] = expression
     return found
 

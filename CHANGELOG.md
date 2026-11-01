@@ -91,6 +91,26 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.201.0] — 2026-11-02
+
+### Security
+
+- `B-266`: every dependency and base image moved to its current release and scanned before
+  and after. Python advisories went from 60 in 7 packages to none (pyjwt, which verifies
+  Cloudflare Access tokens, among them); the web toolchain's 4 high advisories are fixed and
+  nothing shipped to the browser had any. Images: api, tools and web on Alpine with no known
+  OS vulnerabilities; worker and orchestrator on Debian trixie; web runs as an unprivileged
+  user; pip is removed from every runtime image. Third-party images (SearXNG, cloudflared,
+  Watchtower, pgvector, crawl4ai 0.9.5) are pinned.
+
+### Changed
+
+- Python 3.14 everywhere and Node 26 for the web build and CI; GitHub Actions on their Node 24
+  releases. See ADR 0025 and docs/reference/base-images.md.
+
+**Deploy:** `git pull && docker compose up -d` — `docker-compose.yml` pins new third-party
+images, which a server pulls on this up.
+
 ## [0.200.0] — 2026-11-02
 
 ### Added
