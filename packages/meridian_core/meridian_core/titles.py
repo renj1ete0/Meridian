@@ -23,7 +23,8 @@ _FILE_NAME = re.compile(r"\.(?:docx?|pdf|pptx?|xlsx?|tex|dvi|indd|rtf|odt|txt)$"
 #: ("J Marlowe, Northfield Transport Lab (Editor)"), a bare "Name et al", or a reference-list entry
 #: ("Varga, D., Holm, P., … 2020 …"). Narrow on purpose: measured on 105,909 stored titles these
 #: shapes matched 6, while a looser name-list pattern also caught headlines ("Halden
-#: Partners, Brook Academy to leave …") and case names ("… COMPANY, et al. v. ARDEN COUNTY, et al.").
+#: Partners, Brook Academy to leave …") and case names ("… COMPANY, et al. v. ARDEN
+#: COUNTY, et al.").
 _AUTHOR_LINE = re.compile(
     r"\((?:eds?|editors?)\.?\)\s*$"
     r"|^(?:\d+\s+)?[A-Z][\w'\u2019-]+(?:\s+[A-Z][\w'\u2019-]+)?\s+et\s+al\.?$"
