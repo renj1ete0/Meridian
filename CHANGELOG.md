@@ -91,6 +91,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.194.0] — 2026-11-01
+
+### Added
+
+- `B-251`: a watched outlet's headlines are judged by embedding, not vocabulary: a headline is
+  queued when it is close to a topic's prototype and nearer that topic's labelled passages
+  than to off-topic ones. On 703 hand-judged headlines it found 79% of the on-topic ones
+  (the vocabulary rule: 27%) and let no sport or celebrity story through. Falls back to the
+  vocabulary rule, with a warning, when no embedder answers; never queues everything.
+
+**Deploy:** image only. On the split layout the worker cannot reach a model server on another
+machine (it is kept off `lan`), so there it falls back to the vocabulary rule until `B-270` is
+decided.
+
 ## [0.193.1] — 2026-11-01
 
 ### Fixed

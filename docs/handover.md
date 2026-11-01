@@ -43,8 +43,10 @@ add it here.
 > - **Screenshots:** Playwright is not installed; a throwaway venv with `pip install playwright`
 >   and `executable_path` pointing at `~/.cache/ms-playwright/chromium_headless_shell-1248/…`
 >   works. Web tests use plain matchers (`toBeTruthy`), not jest-dom.
-> - **The headline filter is thin on general outlets** (`B-251`, measured): watch section feeds
->   with a topic until it is fixed.
+> - **The headline filter judges by embedding** (`B-251`): prototype plus passage-centroid
+>   margin, recall 0.79 with no sport or celebrity through on a judged 703. It needs the worker
+>   to reach the embedder; in the split and GPU layouts the worker is off `lan`, so it falls
+>   back to the vocabulary there (discovery.md#headline-filter).
 
 > **2026-10-24 (late) — experiments and their traps.** Artefacts in
 > `meridian-calibration/2026-10-24/` (README there).

@@ -404,7 +404,7 @@ table a remote execution surface. See [scheduled-jobs.md](scheduled-jobs.md).
 
 `watches` (`B-249`): an address read again on an interval. `url` is unique; `kind` is
 `sitemap`, `feed` or `listing` (a latest-articles page read for its links, `B-255`); `topic` files its entries, or with `headline_filter` each entry is filed by
-the topic its headline names (CHECK: a topic, or the filter). `interval_seconds` is at least 300
+the topic its headline is about (by embedding, `B-251`; CHECK: a topic, or the filter). `interval_seconds` is at least 300
 (CHECK); `last_queued_at` is when a read was last queued. Reads and entries carry `seed_source =
 'watch'`, a value of both seed-source CHECKs (`queue`, `fetch_policy`). `upload` (`B-264`) is the
 other value added to both since.

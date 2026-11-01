@@ -34,6 +34,7 @@ from meridian_core.chunks import as_writes, chunk_count, embedding_backlog, repl
 from meridian_core.citedpapers import FLOOR_PRIORITY, cited_priority
 from meridian_core.crawlhealth import DEFAULT_MAX_EMBED_BACKLOG, EMBED_BACKLOG_ENV, RESUME_SHARE
 from meridian_core.db import dispose_engines, session
+from meridian_core.embedder import RemoteEmbedder
 from meridian_core.figures import FigureWrite, replace_figures
 from meridian_core.hostscores import Decision, HostPolicy, Standing, record_vouches
 from meridian_core.hostscores import load as load_host_scores
@@ -94,6 +95,7 @@ from .extract.injection import Screening, screen
 from .extract.language import detect_language
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
+from .headlines import HeadlineFilter
 from .listingpage import parse_listing
 from .liveness import beat
 from .ocr_queue import enqueue_ocr, mark_scanned
@@ -150,16 +152,25 @@ WATCH_ENTRY_PRIORITY = 90
 
 
 def watch_topic(
-    watch: Watch, url: str, title: str | None, vocabulary: TopicVocabulary
+    watch: Watch,
+    url: str,
+    title: str | None,
+    vocabulary: TopicVocabulary,
+    embedded: tuple[str, ...] | None = None,
 ) -> str | None:
     """The topic a watched entry is filed under, or None when it is not queued (`B-249`).
 
-    Without a headline filter, the watch's topic. With one, the topics the headline and
-    the path imply; a watch with a topic keeps only entries matching it.
+    Without a headline filter, the watch's topic. With one, the topics the headline's
+    embedding found (``embedded``, `B-251`), or when it was not embedded, the topics the
+    headline and the path name in the vocabulary; a watch with a topic keeps only entries
+    matching it.
     """
     if not watch.headline_filter:
         return watch.topic or vocabulary.best_topic(url)
-    found = (*vocabulary.topics_for_text(title or ""), *vocabulary.topics_for(url))
+    if embedded is not None:
+        found = embedded
+    else:
+        found = (*vocabulary.topics_for_text(title or ""), *vocabulary.topics_for(url))
     if watch.topic is not None:
         return watch.topic if watch.topic in found else None
     return found[0] if found else None
@@ -434,6 +445,7 @@ class Worker:
         resolver: DoiResolver | None = None,
         hosts: HostPolicy | None = None,
         inbox: Path | None = None,
+        headlines: HeadlineFilter | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
@@ -460,6 +472,8 @@ class Worker:
         # `B-264`: where the connector keeps handed-in files. None when it is not
         # mounted, and then `upload` rows wait for a worker that has it.
         self._inbox = inbox
+        # `B-251`: None filters watched headlines by the vocabulary alone.
+        self._headlines = headlines
         self._stopping = asyncio.Event()
         self._claims = 0
         self._directed_claims = 0
@@ -1050,9 +1064,10 @@ class Worker:
             return 0
         verdict = await self._prefilter.keep(sess, parsed.urls)
         titles = {normalise_url(url): title for url, title in parsed.titles.items()}
+        embedded, by = await self._embedded_topics(watch, verdict.kept, titles)
         queued = skipped = 0
         for url in verdict.kept:
-            topic = watch_topic(watch, url, titles.get(url), self._topics)
+            topic = watch_topic(watch, url, titles.get(url), self._topics, embedded.get(url))
             if topic is None:
                 skipped += 1
                 continue
@@ -1075,9 +1090,32 @@ class Worker:
                 "new": len(verdict.kept),
                 "queued": queued,
                 "off_topic": skipped,
+                "filter": by,
             },
         )
         return queued
+
+    async def _embedded_topics(
+        self, watch: Watch, urls: Sequence[str], titles: dict[str, str]
+    ) -> tuple[dict[str, tuple[str, ...]], str | None]:
+        """Each titled entry's topics by embedding (`B-251`), and which rule judged the read.
+
+        Empty when the watch has no headline filter, and when embedding is unavailable, so
+        every entry falls back to the vocabulary. See docs/features/discovery.md#headline-filter.
+        """
+        if not watch.headline_filter:
+            return {}, None
+        titled = [url for url in urls if titles.get(url)]
+        if self._headlines is None or not titled:
+            return {}, "vocabulary"
+        found = await self._headlines.topics_for([titles[url] for url in titled])
+        if found is None:
+            log.warning(
+                "headline filter fell back to the vocabulary",
+                extra={"url": watch.url, "watch_id": watch.watch_id, "entries": len(titled)},
+            )
+            return {}, "vocabulary"
+        return dict(zip(titled, found, strict=True)), "embedding"
 
     async def _process_query(self, claim: Claim) -> None:
         """Run one search and turn its results into queue rows (`P1-34`, §6.4).
@@ -2167,6 +2205,11 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
     inbox = inbox_root() if inbox_root().is_dir() else None
     if inbox is None:
         log.info("no connector inbox; upload rows will not be claimed")
+    embedder = RemoteEmbedder.from_env()
+    if embedder is None:
+        # `B-251`: never the local model here; the crawl loop cannot spare the memory.
+        log.warning("no MERIDIAN_EMBEDDER_URL; watched headlines are filtered by vocabulary")
+    headlines = HeadlineFilter(embedder, session_factory=session)
 
     async with Fetcher(browser=browser) as fetcher:
         crawler = Crawler(session, fetcher=fetcher, limiter=DomainLimiter())
@@ -2179,6 +2222,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
             resolver=resolver,
             hosts=hosts,
             inbox=inbox,
+            headlines=headlines,
         )
         await worker.refresh_hosts()
         install_signal_handlers(worker)
@@ -2189,6 +2233,8 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
             if search is not None:
                 await search.aclose()
             await resolver.aclose()
+            if embedder is not None:
+                await embedder.aclose()
 
 
 def main() -> None:

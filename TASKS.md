@@ -2045,7 +2045,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       A paywalled article's headline, time, keywords and teaser from its sitemap/feed entry
       stored as a source stub that links out, marked as a stub so synthesis never cites it as
       the article
-- [ ] `B-251` **A headline filter that works on general outlets** — measured 2026-11-01 on five
+- [x] `B-251` **A headline filter that works on general outlets** — measured 2026-11-01 on five
       general news sitemaps (592 headlines): the vocabulary filter matched 1, wrongly (a
       one-word term in a path); bge-m3 against the topic prototypes put 31 above 0.30, a handful
       on a topic. Try: the embedder on headlines with a floor fitted on graded headlines, or
@@ -2088,6 +2088,14 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-269` **Search fell back to words while pages were embedded** (found by the
       end-to-end run, 2026-11-01) — the backfill's 256-passage requests held a reader's query
       past its timeout on a one-slot model server; the client now asks in slices of 16
+- [ ] `B-270` ⚑ human **How the worker reaches a model server on another machine** (from
+      `B-251`) — the headline filter embeds in the worker, which the split layout keeps off
+      `lan` because it fetches the open web, so there it falls back to vocabulary. Options:
+      (a) the worker joins `lan` with its default route on `egress`; `lan` reaches only the
+      `lan_allow` pairs since `B-230` (a security trade: the crawler gains a route to the model
+      server's port); (b) judge headlines in a process already on `lan` (the scheduler's watch
+      pass), holding unjudged entries in a table (a schema change); (c) an internal-only
+      embedding relay on a `lan` service the worker can call over `internal`. Operator's call
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published

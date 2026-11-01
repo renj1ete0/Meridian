@@ -3447,6 +3447,163 @@ async def test_a_watched_news_sitemap_queues_only_matching_headlines(
     assert all(row.priority == 90 for row in pages.values())
 
 
+class HeadlineEmbedder:
+    """Vectors by meaning for the headline filter (`B-251`), or down.
+
+    1024 wide, as the corpus's are, since the off-topic centroid comes from the dev
+    database's own passages.
+    """
+
+    WIDTH = 1024
+    TRANSIT, OTHER_TOPIC, SPORT, CELEBRITY, GENERIC = 0, 1, 2, 3, 9
+
+    def __init__(self, topic: str, headlines: dict[str, int], *, down: bool = False) -> None:
+        from meridian_core.topiclabels import topic_name
+
+        self.name = topic_name(topic)
+        self.headlines = headlines
+        self.down = down
+
+    def _vector(self, axis_: int | None) -> list[float]:
+        v = [0.0] * self.WIDTH
+        v[self.GENERIC] = 0.8 if axis_ is not None else 1.0
+        if axis_ is not None:
+            v[axis_] = 0.6
+        return v
+
+    async def embed(self, texts):
+        from meridian_core.embedder import EmbeddingUnavailable
+
+        if self.down:
+            raise EmbeddingUnavailable("connection refused")
+        out = []
+        for text in texts:
+            if text in self.headlines:
+                out.append(self._vector(self.headlines[text]))
+            elif text.startswith(f"{self.name}:") or text == self.name:
+                out.append(self._vector(self.TRANSIT))  # this run's topic prototype
+            elif ":" in text:
+                out.append(self._vector(self.OTHER_TOPIC))  # the dev database's own topics
+            else:
+                out.append(self._vector(None))  # the reference texts
+        return out
+
+
+@pytest.fixture
+async def topic_row(session_for, run_topic):
+    """The run's topic as a configured topic, so the headline filter has its prototype."""
+    from meridian_core.models import TopicConfig
+
+    sess = await session_for("rw")
+    sess.add(
+        TopicConfig(
+            topic=run_topic,
+            weight=0.0,
+            floor=0.0,
+            ceiling=1.0,
+            status="active",
+            description="Driverless shuttles and the streets they run on.",
+        )
+    )
+    await sess.commit()
+    yield run_topic
+    sess = await session_for("rw")
+    await sess.execute(delete(TopicConfig).where(TopicConfig.topic == run_topic))
+    await sess.commit()
+
+
+async def test_a_watched_general_outlet_is_filtered_by_headline_embedding(
+    session_for, resolve, raw_store, run_domain, run_topic, watched, topic_row
+) -> None:
+    """With an embedder the headline's meaning decides: the sport and celebrity entries
+    are refused even where the path names the vocabulary, and the on-topic one is filed
+    under the topic it matched (`B-251`)."""
+    from worker.headlines import HeadlineFilter
+    from worker.topicmatch import TopicVocabulary
+
+    sess = await session_for("rw")
+    await watched(headline_filter=True)
+    await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/news-sitemap.xml",
+        task_type="sitemap",
+        seed_source="watch",
+    )
+    e = HeadlineEmbedder
+    fake = HeadlineEmbedder(
+        run_topic,
+        {
+            "Driverless shuttle trial starts in the east": e.TRANSIT,
+            "Late winner seals the derby": e.SPORT,
+            "Actor weds in a private ceremony": e.CELEBRITY,
+        },
+    )
+    body = news_sitemap(
+        run_domain,
+        ("/a/1", "Driverless shuttle trial starts in the east"),
+        ("/a/2", "Late winner seals the derby"),
+        ("/road-safety/3", "Actor weds in a private ceremony"),
+    )
+    worker, _ = with_frontier(
+        sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    worker._topics = TopicVocabulary(phrases={"road safety": (run_topic,)})
+    worker._headlines = HeadlineFilter(fake, session_factory=worker._session_factory)
+    await worker.run()
+
+    pages = {
+        row.url_or_query: row
+        for row in await rows_for(sess, run_domain, "watch")
+        if row.task_type == "url"
+    }
+    assert set(pages) == {f"https://{run_domain}/a/1"}
+    assert pages[f"https://{run_domain}/a/1"].topic == run_topic
+
+
+async def test_a_watched_outlet_falls_back_to_the_vocabulary_when_the_embedder_is_down(
+    session_for, resolve, raw_store, run_domain, run_topic, watched, topic_row
+) -> None:
+    """An embedder that is down is not a reason to queue everything, nor to fail the
+    read: the vocabulary rule judges it, as before `B-251`."""
+    from worker.headlines import HeadlineFilter
+    from worker.topicmatch import TopicVocabulary
+
+    sess = await session_for("rw")
+    await watched(headline_filter=True)
+    task = await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/news-sitemap.xml",
+        task_type="sitemap",
+        seed_source="watch",
+    )
+    fake = HeadlineEmbedder(run_topic, {}, down=True)
+    body = news_sitemap(
+        run_domain,
+        ("/a/1", "New road safety rules for school zones"),
+        ("/a/2", "Late winner seals the derby"),
+        ("/a/3", "Driverless shuttle trial starts in the east"),
+    )
+    worker, _ = with_frontier(
+        sess, serve_xml(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    worker._topics = TopicVocabulary(phrases={"road safety": (run_topic,)})
+    worker._headlines = HeadlineFilter(fake, session_factory=worker._session_factory)
+    await worker.run()
+
+    pages = {
+        row.url_or_query
+        for row in await rows_for(sess, run_domain, "watch")
+        if row.task_type == "url"
+    }
+    assert pages == {f"https://{run_domain}/a/1"}
+    await sess.refresh(task)
+    assert task.status == "done"
+
+
 async def test_a_watched_sitemap_read_again_queues_only_what_is_new(
     session_for, resolve, raw_store, run_domain, run_topic, watched
 ) -> None:

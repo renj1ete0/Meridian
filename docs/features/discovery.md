@@ -462,16 +462,10 @@ parser and defences as any sitemap, then queues the entries it has not seen.
 - **The operator chose the site**, so entries skip the followed-link host cap; politeness and
   robots.txt still apply at the fetch.
 - **Topic or headline filter.** A watch with a topic files every entry under it. A general
-  outlet is watched with the headline filter: an entry is queued only when its headline or
-  path names a topic's vocabulary, filed under the topic it names (and, when the watch has a
-  topic too, only under that one). The table refuses a watch with neither, which would queue
-  everything an outlet publishes.
-- **Measured, the filter is thin** (2026-11-01, five general news sitemaps, 592 headlines):
-  with the current vocabulary (68 phrases) one headline matched, wrongly, through a one-word
-  term in its path. Embedding headlines against the topic prototypes separated better but not
-  cleanly (31 above a 0.30 floor, a handful on a topic). Until `B-251`, watch an outlet's
-  **section** feeds or sitemaps (transport, property) with a topic, and keep the headline
-  filter for outlets whose topical vocabulary is rich.
+  outlet is watched with the headline filter: an entry is queued only when its headline is
+  about a topic, filed under the topic it matched (and, when the watch has a topic too, only
+  under that one); see [the headline filter](#headline-filter). The table refuses a watch
+  with neither, which would queue everything an outlet publishes.
 
 - **A listing page** (`B-255`, kind `listing`). Several outlets publish no news sitemap or
   feed, only a latest-articles page. A listing watch reads that page's links
@@ -490,6 +484,82 @@ parser and defences as any sitemap, then queues the entries it has not seen.
 
 `python -m worker.watch add <url> [--feed | --listing] [--topic T] [--headlines] [--every S]`,
 `list`, `enable`, `disable`.
+
+#### <a id="headline-filter"></a>The headline filter (`B-251`)
+
+The worker embeds each new headline (`worker.headlines`, `meridian_core.headlinetopics`) and
+keeps it for a topic when both hold:
+
+1. its similarity to the topic's **prototype**, measured from the reference point exactly as
+   the topic labeller measures a page ([topics](topics.md#content-not-provenance)), reaches
+   `PROTOTYPE_FLOOR` (0.30); and
+2. it is nearer the topic's **passage centroid** (the mean of a random 2,000 live passages
+   labelled with the topic) than the **off-topic centroid** (passages labelled with no topic)
+   by at least `CENTROID_MARGIN` (0.01).
+
+The second test is what the prototype alone gets wrong: a headline that shares a topic's
+words (a topic called *economics* meets a column on economics as a discipline) clears the
+prototype but sits nearer the corpus's off-topic passages. A topic with fewer than 50 labelled
+passages has no centroid yet and is judged on its prototype alone at `PROTOTYPE_FLOOR_ALONE`
+(0.34). Several topics passing are ordered by prototype score; the first files the entry. An
+entry with no headline is judged by the vocabulary on its path.
+
+- **Cached.** The basis (prototypes, reference, centroids) is built on first use and again
+  after `BASIS_TTL_S` (an hour): one embedding call of about 26 short texts and three sampled
+  queries (2.3 s on the 1.3 M-passage corpus; the off-topic sample reads 1% of
+  `chunk_topics` pages, since a random sort of a million rows took half a minute). A read then
+  embeds only its new headlines, 256 at a time.
+- **Degrades to the vocabulary, never to everything.** No `MERIDIAN_EMBEDDER_URL`, an embedder
+  that refuses or is down, a wrong count of vectors, or no topics: the read is judged by the
+  old rule (headline or path names a topic's vocabulary), with a warning, and the read still
+  settles. After a failed build the vocabulary is used for `RETRY_AFTER_FAILURE_S` (5 min)
+  before the embedder is asked again; a stale basis is kept while a rebuild fails. The read's
+  log line says which rule judged it (`filter`).
+- **Only where the worker can reach the embedder.** The worker never loads a model itself. On
+  one machine it asks the `embedder` sidecar over `internal`. In the split and GPU-machine
+  layouts the worker is deliberately kept off `lan` (`deploy/split/remote-embedder.yml`), so
+  it cannot reach the remote model and every read falls back to the vocabulary until that is
+  decided otherwise.
+
+**Measured** (2026-11-01, bge-m3 on the GPU machine, the live corpus's six topics). A judged set
+of 703 headlines: all 518 from six general outlets' news sitemaps and feeds that day, 57 from
+five transport and planning outlets' feeds, and 128 news headlines from the corpus (sampled per
+topic label, and unlabelled). Each was graded by hand against the topic descriptions: **on**
+(squarely inside a description: robotaxis, on-demand buses, pedestrian streets, fares and
+transport funding, heat and walking health, robots in public space; 67), **related** (transport
+or urban news no topic covers: a crash, a car review, a bus route change, a master-plan
+consultation; 104) or **off** (532, among them every sport, celebrity, politics and markets
+story). Precision is of what was kept; "with related" counts related as acceptable; recall is
+of the 67 on-topic; the last column is what passed of the 518 general headlines (of them off).
+
+| Method | Threshold | Kept | Precision | With related | Recall | General passed (off) |
+|---|---|---|---|---|---|---|
+| Vocabulary (before) | a phrase | 33 | 0.55 | 0.82 | 0.27 | 1 (1) |
+| Prototype alone | 0.32 | 102 | 0.51 | 0.88 | 0.78 | 9 (5) |
+| Prototype alone | 0.36 | 76 | 0.54 | 0.91 | 0.61 | 4 (2) |
+| Passage centroid minus off-topic | 0.02 | 106 | 0.48 | 0.92 | 0.76 | 10 (5) |
+| Nearest 40 passages, share labelled | 0.25 | 75 | 0.55 | 0.92 | 0.61 | 2 (1) |
+| Corpus news titles, centroid minus off-topic | 0.018 | 98 | 0.49 | 0.88 | 0.72 | 5 (4) |
+| Reranker (bge-reranker-v2-m3, logit) after prototype ≥ 0.28 | −9 | 94 | 0.53 | 0.94 | 0.75 | 5 (1) |
+| **Prototype and centroid margin (shipped)** | 0.30, 0.01 | 99 | 0.52 | 0.95 | 0.76 | 8 (2) |
+
+Run end to end through the shipped code (its own centroid sample): 106 kept, precision 0.50,
+0.92 with related, recall 0.79 (53 of 67), 9 of 518 general headlines passed (3 off), and the
+topic it filed under right for 48 of 53. **None of the sport or celebrity headlines passed**
+under any embedding method above; what does pass is a property feature, a markets column, an
+airline's fuel costs. Half of what is kept is related transport news rather than a topic's.
+
+- **What recall costs.** The 14 misses are mostly headlines carried by a name rather than a
+  word (a robotaxi model, a ride-hailing firm at an airport), fare reviews, and a station grant.
+  Lowering the prototype floor to 0.28 recovers some and lets about twice as many off-topic
+  general headlines through.
+- **Why not the reranker.** It was no better than the centroid check at the same recall (0.94
+  against 0.95), costs about 1.4 s a headline against six topic descriptions on the GPU
+  machine (embedding is 0.1–0.25 s), and needs a second model configured. Nearest passages
+  were similar in precision but lost a fifth of the recall.
+- **Not measured.** Non-English headlines (scored as unknown language, unscaled); thresholds
+  were chosen on this set, so expect them to drift by a few hundredths on another day's news.
+  Re-measure before moving any: grade a fresh set the same way.
 
 ### Cited papers
 
@@ -573,6 +643,8 @@ at the floor when nothing recommends it.
 - Seed languages for translations: `search_languages` in the global fetch-policy row.
 - Paper resolution: `MERIDIAN_CONTACT_EMAIL` (Unpaywall, Wikimedia), `CORE_API_KEY`,
   `SEMANTIC_SCHOLAR_API_KEY`.
+- The headline filter: `MERIDIAN_EMBEDDER_URL` (and the embedder variables beside it) in the
+  worker's environment; without it watched headlines are judged by the vocabulary.
 
 ## Operating it
 
@@ -593,12 +665,17 @@ at the floor when nothing recommends it.
   results.
 - **Some sites refuse clients with no contact address.** They end up blocked by `B-114`.
   Once `MERIDIAN_CONTACT_EMAIL` is set, unblock them in Admin.
+- **A headline filter quietly on the vocabulary.** Look for `headline filter fell back to the
+  vocabulary` in the worker's log, and `"filter": "vocabulary"` on `watch entries queued`: the
+  worker cannot reach the embedder (the split and GPU layouts keep it off `lan`).
 
 ## Tests
 
 `tests/unit/test_prefilter*.py`, `test_searchseeds.py`, `test_sitemaps.py`,
 `test_topicmatch.py`, `test_hostscores.py`, `test_cited_paper_rank.py`, `test_resolve_doi.py`,
-`test_vouched_hosts.py`, `test_translations.py`, `test_diversity.py`;
+`test_vouched_hosts.py`, `test_translations.py`, `test_diversity.py`, `test_watched_sources.py`,
+`test_headline_filter.py`;
 `tests/integration/test_requeue*.py`, `test_sitemapmine.py`, `test_seedsearch.py`,
 `test_host_scores.py`, `test_link_vouches.py`, `test_cited_papers.py`, `test_translations.py`,
-`test_diversity_graph.py`.
+`test_diversity_graph.py`, `test_headline_topics.py`, and the watched-source cases in
+`test_worker_run.py`.
