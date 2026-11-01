@@ -153,3 +153,12 @@ def test_owners_are_read_from_the_environment_lower_cased() -> None:
         "b@x.test",
     }
     assert owner_emails({}) == frozenset()
+
+
+def test_the_web_labels_every_permission_as_the_catalogue_does() -> None:
+    """Drift: Admin names a missing permission by the web's copy of its label."""
+    import re
+
+    source = (ROOT / "web" / "src" / "lib" / "permissionLabels.ts").read_text()
+    web = dict(re.findall(r"'([a-z_.]+)': '([^']*)'", source))
+    assert web == {p.name: p.label for p in PERMISSIONS}

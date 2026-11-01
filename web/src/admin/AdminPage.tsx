@@ -13,7 +13,16 @@ import { ProposalsPanel } from './ProposalsPanel'
 import { RunsPanel } from './RunsPanel'
 import { DuplicatesPanel } from './DuplicatesPanel'
 import { decideDuplicate, getDuplicates, undoDuplicate, type Duplicates } from '../lib/duplicates'
-import { DEFAULT_SECTION, SECTIONS, hrefForSection, useAdminTheme, usePathSection, type Section } from './sections'
+import { PeoplePanel } from './PeoplePanel'
+import {
+  DEFAULT_SECTION,
+  SECTIONS,
+  hrefForSection,
+  sectionNeeds,
+  useAdminTheme,
+  usePathSection,
+  type Section,
+} from './sections'
 import { SteeringRail } from './SteeringRail'
 import { AddTopicDialog, ArchiveDialog, PREVIEW_DEBOUNCE_MS } from './TopicDialogs'
 import { TopicPanel, type Draft } from './TopicPanel'
@@ -54,6 +63,8 @@ import {
   type Topics,
 } from '../lib/api'
 import { acceptProposal, getProposals, rejectProposal, type Proposals } from '../lib/proposals'
+import { useMe } from '../lib/me'
+import { BY_NAME_LABEL } from '../lib/permissionLabels'
 import { navigate, onInternalClick } from '../lib/route'
 
 /**
@@ -485,6 +496,24 @@ export function AdminPage() {
 
   const steeringPage = WITH_RAIL.includes(section)
 
+  // `B-257`: list only the sections this person may open; the server refuses the rest anyway.
+  const { can } = useMe()
+  const visible = SECTIONS.filter((def) => can(sectionNeeds(def)))
+  const sectionDef = SECTIONS.find((def) => def.key === section)
+  const missing = sectionDef && !can(sectionNeeds(sectionDef)) ? sectionNeeds(sectionDef) : null
+  const readOnly = sectionDef?.edits && !can(sectionDef.edits) ? sectionDef.edits : null
+
+  if (!can('admin.view') && !can('access.manage')) {
+    return (
+      <div className="mx-auto flex max-w-[640px] flex-col gap-3 px-6 py-16">
+        <PageHeader title="Admin">
+          Your access covers the reader pages, not Admin. Someone who manages access can add the{' '}
+          {BY_NAME_LABEL['admin.view']} permission for you.
+        </PageHeader>
+      </div>
+    )
+  }
+
   return (
     <div
       data-theme={theme}
@@ -503,11 +532,13 @@ export function AdminPage() {
         >
           {(['steering', 'system'] as const).map((group) => (
             <optgroup key={group} label={group}>
-              {SECTIONS.filter((s) => s.group === group).map((def) => (
-                <option key={def.key} value={def.key}>
-                  {def.label}
-                </option>
-              ))}
+              {visible
+                .filter((s) => s.group === group)
+                .map((def) => (
+                  <option key={def.key} value={def.key}>
+                    {def.label}
+                  </option>
+                ))}
             </optgroup>
           ))}
         </select>
@@ -522,32 +553,34 @@ export function AdminPage() {
             <div className={`${LABEL} hidden px-3.5 pb-2.5 lg:block ${group === 'system' ? 'lg:pt-5' : ''}`}>
               {group}
             </div>
-            {SECTIONS.filter((s) => s.group === group).map((def) => {
-              const href = hrefForSection(def.key)
-              const on = section === def.key
-              return (
-                <a
-                  key={def.key}
-                  href={href}
-                  onClick={onInternalClick(href)}
-                  aria-current={on ? 'page' : undefined}
-                  title={def.unbuilt ? `Not built yet (${def.unbuilt})` : undefined}
-                  className={`whitespace-nowrap px-3 py-2 text-[13px] ${
-                    on
-                      ? 'border-l-2 border-accent-graph bg-surface pl-2.5 font-medium text-text'
-                      : def.unbuilt
-                        ? 'text-text-faint hover:text-text-muted'
-                        : 'text-text-muted hover:text-text'
-                  }`}
-                >
-                  {def.label}
-                  {def.key === 'topics' && draft && !on ? (
-                    // Kept while elsewhere, so it says it is there.
-                    <span className="ml-1.5 font-mono text-[10px] text-accent-attention">· staged</span>
-                  ) : null}
-                </a>
-              )
-            })}
+            {visible
+              .filter((s) => s.group === group)
+              .map((def) => {
+                const href = hrefForSection(def.key)
+                const on = section === def.key
+                return (
+                  <a
+                    key={def.key}
+                    href={href}
+                    onClick={onInternalClick(href)}
+                    aria-current={on ? 'page' : undefined}
+                    title={def.unbuilt ? `Not built yet (${def.unbuilt})` : undefined}
+                    className={`whitespace-nowrap px-3 py-2 text-[13px] ${
+                      on
+                        ? 'border-l-2 border-accent-graph bg-surface pl-2.5 font-medium text-text'
+                        : def.unbuilt
+                          ? 'text-text-faint hover:text-text-muted'
+                          : 'text-text-muted hover:text-text'
+                    }`}
+                  >
+                    {def.label}
+                    {def.key === 'topics' && draft && !on ? (
+                      // Kept while elsewhere, so it says it is there.
+                      <span className="ml-1.5 font-mono text-[10px] text-accent-attention">· staged</span>
+                    ) : null}
+                  </a>
+                )
+              })}
           </div>
         ))}
       </nav>
@@ -563,6 +596,17 @@ export function AdminPage() {
             className="border border-accent-attention bg-surface px-[18px] py-3 text-[12.5px] text-accent-attention"
           >
             {error}
+          </p>
+        ) : null}
+        {missing ? (
+          <p role="alert" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text">
+            This section needs the {BY_NAME_LABEL[missing] ?? missing} permission, which your access does not include.
+          </p>
+        ) : null}
+        {readOnly && !missing ? (
+          <p role="status" className="border border-line bg-surface px-[18px] py-3 text-[12.5px] text-text-muted">
+            You can see this section but not change it: changes need the {BY_NAME_LABEL[readOnly] ?? readOnly}{' '}
+            permission.
           </p>
         ) : null}
         {added && section === 'topics' ? <AddedTopic topic={added} onDismiss={() => setAdded(null)} /> : null}
@@ -728,7 +772,8 @@ export function AdminPage() {
           )
         ) : null}
 
-        {section === 'access' ? <AssistantAccessPanel /> : null}
+        {section === 'access' && !missing ? <AssistantAccessPanel /> : null}
+        {section === 'people' && !missing ? <PeoplePanel /> : null}
         {section === 'display' ? <DisplayPanel /> : null}
 
         {section === 'health' ? health ? <CrawlHealthPanel health={health} /> : <Loading what="crawl health" /> : null}

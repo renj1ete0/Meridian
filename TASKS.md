@@ -1962,7 +1962,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       machine known only by its `.local` name was unreachable from the api and orchestrator.
       `lan-resolver` (host network, URL settings only) writes the answers to a file the clients
       read (docs/features/lan-names.md)
-- [ ] `B-257` **People & permissions page, and an Admin that shows only what one may do** —
+- [ ] `B-258` **Controls disabled where a person may view but not change** — `B-257` hides
+      sections and says when one is read-only; the buttons inside still answer with the server's
+      403. Disable them (with the permission named) panel by panel, via `useMe().can`
+- [x] `B-257` `v0.182.0`; screenshotted against the mock at 1440 and 390 wide. **People & permissions page, and an Admin that shows only what one may do** —
       the web half of `B-252`: Admin → People & permissions as `docs/design/AdminPeople.dc.html`
       (add, profile, per-permission Profile/On/Off, revoke, show revoked); `/api/me` drives the
       nav and disables controls a person cannot use; the claim form when `setup_needed`; a page

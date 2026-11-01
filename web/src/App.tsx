@@ -11,10 +11,12 @@ import { MapPage } from './explore/MapPage'
 import { NodePage } from './explore/NodePage'
 import { SourcePage } from './explore/SourcePage'
 import { displaySettings } from './lib/api'
+import { MeProvider, useMe } from './lib/me'
 import { focusSearch, isCommandK } from './lib/hotkeys'
 import { useRoute, type Route } from './lib/route'
 import { applyTheme, readTheme, writeTheme, type Theme } from './lib/theme'
 import { displayZone, setDisplayZone } from './lib/time'
+import { NoAccess } from './ui/NoAccess'
 import { TopBar, TopBarSlotProvider, type Section } from './ui/TopBar'
 
 /**
@@ -80,6 +82,35 @@ export function App() {
   }
 
   return (
+    <MeProvider>
+      <Shell section={section} route={route} theme={theme} onTheme={choose} slot={slot} setSlot={setSlot} zone={zone} />
+    </MeProvider>
+  )
+}
+
+/** The app inside {@link MeProvider}, so it can show a person only what they may see (`B-257`). */
+function Shell({
+  section,
+  route,
+  theme,
+  onTheme,
+  slot,
+  setSlot,
+  zone,
+}: {
+  section: Section | null
+  route: Route
+  theme: Theme
+  onTheme: (next: Theme) => void
+  slot: HTMLElement | null
+  setSlot: (el: HTMLElement | null) => void
+  zone: string
+}) {
+  const { me } = useMe()
+  // Someone Access let in with no permission at all: one page that says so (and, on a fresh
+  // instance, how to claim it), instead of every screen failing in its own words.
+  const locked = me !== null && me.permissions.length === 0
+  return (
     <TopBarSlotProvider value={slot}>
       <AskContextProvider>
         <div className="flex min-h-screen flex-col bg-ground text-text">
@@ -87,7 +118,7 @@ export function App() {
             section={section}
             translucent={section !== 'admin'}
             theme={theme}
-            onTheme={choose}
+            onTheme={onTheme}
             slotRef={setSlot}
           />
 
@@ -97,18 +128,19 @@ export function App() {
           {/* Room at the foot of every reading page for the question toggle, so
             the last content can scroll clear of it (`B-125`). Admin has none. */}
           <main data-zone={zone} className={`relative flex-1 ${section !== 'admin' ? 'pb-20' : ''}`}>
-            {route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
-            {route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
-            {route.name === 'admin' ? <AdminPage /> : null}
-            {route.name === 'map' ? <MapPage /> : null}
-            {route.name === 'gaps' ? <GapsPage /> : null}
-            {route.name === 'growth' ? <GrowthPage /> : null}
-            {route.name === 'about' ? <AboutPage /> : null}
-            {route.name === 'contested' ? <ContestedPage /> : null}
-            {route.name === 'explore' ? <ExplorePage /> : null}
+            {locked ? <NoAccess /> : null}
+            {!locked && route.name === 'source' ? <SourcePage sourceId={route.sourceId} /> : null}
+            {!locked && route.name === 'node' ? <NodePage entityId={route.entityId} /> : null}
+            {!locked && route.name === 'admin' ? <AdminPage /> : null}
+            {!locked && route.name === 'map' ? <MapPage /> : null}
+            {!locked && route.name === 'gaps' ? <GapsPage /> : null}
+            {!locked && route.name === 'growth' ? <GrowthPage /> : null}
+            {!locked && route.name === 'about' ? <AboutPage /> : null}
+            {!locked && route.name === 'contested' ? <ContestedPage /> : null}
+            {!locked && route.name === 'explore' ? <ExplorePage /> : null}
           </main>
           {/* On the reader's screens only: Admin is for configuring, not asking. */}
-          {section !== 'admin' ? <AskPanel /> : null}
+          {section !== 'admin' && !locked ? <AskPanel /> : null}
         </div>
       </AskContextProvider>
     </TopBarSlotProvider>

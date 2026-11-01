@@ -19,6 +19,7 @@ export type Section =
   | 'display'
   | 'access'
   | 'duplicates'
+  | 'people'
 
 export interface SectionDef {
   key: Section
@@ -27,24 +28,45 @@ export interface SectionDef {
   group: 'steering' | 'system'
   /** A section with no backend yet. Listed, and says so when opened. */
   unbuilt?: string
+  /** The permission that shows the section (`B-252`); `admin.view` unless named. */
+  needs?: string
+  /** The permission its changes need, for the "read only" line (`B-257`). */
+  edits?: string
+}
+
+/** The permission a section needs to be listed and opened. */
+export function sectionNeeds(def: SectionDef): string {
+  return def.needs ?? 'admin.view'
 }
 
 export const SECTIONS: readonly SectionDef[] = [
-  { key: 'topics', label: 'Topic weights', path: 'topics', group: 'steering' },
-  { key: 'boosts', label: 'Pins & boosts', path: 'boosts', group: 'steering' },
+  { key: 'topics', label: 'Topic weights', path: 'topics', group: 'steering', edits: 'topics.steer' },
+  { key: 'boosts', label: 'Pins & boosts', path: 'boosts', group: 'steering', edits: 'topics.steer' },
   // `P6-38`. Beside the controls it proposes changes to: a proposal is a boost
   // or a weight that will be set unless somebody says no.
-  { key: 'proposals', label: 'Proposals', path: 'proposals', group: 'steering' },
+  { key: 'proposals', label: 'Proposals', path: 'proposals', group: 'steering', edits: 'topics.steer' },
   // Last in its group, because it is the one section that stops mattering. It
   // is also the first thing anybody needs on a fresh install, which is why
   // Admin opens on it when nothing has been crawled yet.
-  { key: 'seeds', label: 'Seeds', path: 'seeds', group: 'steering' },
+  { key: 'seeds', label: 'Seeds', path: 'seeds', group: 'steering', edits: 'seeds.add' },
   // `P6-23`. Beside Run history in spirit: a run that deferred and the registry
   // row that made it defer are one question asked twice.
-  { key: 'agents', label: 'Agent registry', path: 'agents', group: 'system' },
-  { key: 'gazetteer', label: 'Gazetteer approvals', path: 'gazetteer', group: 'system' },
+  { key: 'agents', label: 'Agent registry', path: 'agents', group: 'system', edits: 'models.edit' },
+  {
+    key: 'gazetteer',
+    label: 'Gazetteer approvals',
+    path: 'gazetteer',
+    group: 'system',
+    edits: 'gazetteer.curate',
+  },
   // `B-202`. Beside the other approvals: a pair resolution could not decide.
-  { key: 'duplicates', label: 'Possible duplicates', path: 'duplicates', group: 'system' },
+  {
+    key: 'duplicates',
+    label: 'Possible duplicates',
+    path: 'duplicates',
+    group: 'system',
+    edits: 'duplicates.decide',
+  },
   {
     key: 'enrichment',
     label: 'Enrichment queue',
@@ -53,14 +75,16 @@ export const SECTIONS: readonly SectionDef[] = [
     unbuilt: 'P7-07',
   },
   { key: 'runs', label: 'Run history', path: 'runs', group: 'system' },
-  { key: 'domains', label: 'Fetch policy', path: 'fetch-policy', group: 'system' },
+  { key: 'domains', label: 'Fetch policy', path: 'fetch-policy', group: 'system', edits: 'fetch_policy.edit' },
   // `P6-25`. Beside Fetch policy because they are read together: an outcome
   // mix full of refusals is answered by that domain's policy row.
   { key: 'health', label: 'Crawl health', path: 'crawl', group: 'system' },
   // `B-146`, ADRs 0003 and 0011: tokens for assistants over MCP.
-  { key: 'access', label: 'Assistant access', path: 'access', group: 'system' },
+  { key: 'access', label: 'Assistant access', path: 'access', group: 'system', needs: 'access.manage' },
+  // `B-257`, ADR 0024: who may read and change what.
+  { key: 'people', label: 'People & permissions', path: 'people', group: 'system', needs: 'access.manage' },
   // `B-145`, ADR 0009: the zone every time is shown in.
-  { key: 'display', label: 'Display', path: 'display', group: 'system' },
+  { key: 'display', label: 'Display', path: 'display', group: 'system', edits: 'settings.edit' },
 ]
 
 /**

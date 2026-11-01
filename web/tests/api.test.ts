@@ -43,6 +43,7 @@ import {
   MAP_SIZE_FIELDS,
   TOPIC_GROWTH_FIELDS,
 } from '../src/lib/growth'
+import { ME_FIELDS, PEOPLE_FIELDS, PERMISSION_FIELDS, PERSON_FIELDS } from '../src/lib/people'
 import { TOKEN_ISSUED_FIELDS, TOKEN_ROW_FIELDS, TOKENS_FIELDS } from '../src/lib/tokens'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -169,6 +170,10 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['TokenRowRead', 'tokens.py', TOKEN_ROW_FIELDS],
     ['TokensRead', 'tokens.py', TOKENS_FIELDS],
     ['TokenIssued', 'tokens.py', TOKEN_ISSUED_FIELDS],
+    ['PermissionRead', 'people.py', PERMISSION_FIELDS],
+    ['MeRead', 'people.py', ME_FIELDS],
+    ['PersonRead', 'people.py', PERSON_FIELDS],
+    ['PeopleRead', 'people.py', PEOPLE_FIELDS],
     ['NotificationRead', 'runs.py', NOTIFICATION_FIELDS],
     ['NotificationItemRead', 'runs.py', NOTIFICATION_ITEM_FIELDS],
     ['DuplicatePassageRead', 'duplicates.py', DUPLICATE_PASSAGE_FIELDS],

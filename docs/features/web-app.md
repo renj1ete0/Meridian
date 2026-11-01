@@ -20,7 +20,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/gaps` | `GapsPage` | The ranked list of gaps with their actions | `Main.dc.html` |
 | `/growth` | `GrowthPage` | How the corpus grew: pages per topic per day, passages, sites, graph, map; 7 days, 30 days or all, filterable by topic | `CorpusGrowth.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
-| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, possible duplicates, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminDisplay.dc.html` |
+| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, possible duplicates, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), people & permissions, display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminPeople.dc.html`, `AdminDisplay.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |
 
 The **Ask panel** (`explore/AskPanel.tsx`) is a toggle on every reading surface except Admin.
@@ -1009,6 +1009,37 @@ A pair entity resolution could not decide is decided here (`B-202`): both nodes 
 with their evidence, then merge or keep apart. A merge is reversible from the same row, and the
 bell's "Decide" opens this section. The mechanism is in
 [knowledge-graph.md](knowledge-graph.md).
+
+### <a id="permissions"></a>Permissions in the app (`B-257`)
+
+`lib/me.tsx` reads `/api/me` once (`MeProvider`, around the whole app) and `useMe().can(name)`
+answers whether the person holds a permission ([api-and-access.md](api-and-access.md#permissions)).
+While the answer is unknown, `can` says yes: hiding everything until it arrives would flash an
+empty app, and the server refuses what a person may not do either way.
+
+- **No permission at all** (Access let them in, no grant): every screen is replaced by
+  `NoAccess`, which says who is signed in; while nobody can manage access it is the claim form
+  for the code in the API's log.
+- **Admin's nav** lists only the sections a person may open (`sections.ts`: `needs`, default
+  `admin.view`; Assistant access and People need `access.manage`). A linked section they may not
+  open says which permission it needs. A section they may view but not change (`edits`) says so
+  above its content; its controls still answer with the server's named refusal. Without
+  `admin.view` or `access.manage`, `/admin` is one line saying the access covers the reader pages.
+- **Settings** shows who is signed in and as what.
+- `lib/permissionLabels.ts` copies each permission's label so a refusal can be named without
+  the people list; a Python test holds it to `meridian_core.permissions`.
+
+### <a id="people-and-permissions"></a>People & permissions (`B-257`)
+
+`PeoplePanel` (mock `AdminPeople.dc.html`): add a person by the email Access reports, with a
+profile and an expiry; the table lists owners (from the environment, never editable), then
+grants with their switches as chips (`+ seeds`, `− ask`); choosing one opens its permissions:
+a Profile / On / Off control per permission, grouped as the catalogue groups them, ✓ for what
+the person would hold with the unsaved changes (`lib/people.ts` `holds`, the server's rule).
+Save sends the profile and the switches (`switchesFor`: On to `allow`, Off to `deny`) and is off
+until something changed. Revoke is on the row. The server's refusals are shown as written, among
+them the one that stops a person removing their own way back. On a phone the permission's
+description drops under its label; beside it the column was a word wide.
 
 ### Assistant access and Display
 

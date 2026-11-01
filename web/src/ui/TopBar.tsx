@@ -23,6 +23,7 @@ import {
   type PillHealth,
   type RunHistory,
 } from '../lib/status'
+import { useMe } from '../lib/me'
 import { THEMES, type Theme } from '../lib/theme'
 import { NotificationsPanel } from '../explore/NotificationsPanel'
 import { Icon } from './Icon'
@@ -349,6 +350,17 @@ export function Bell({ notifications }: { notifications: Notifications | null })
  * once auth stops being Cloudflare Access", so this is a menu rather than a
  * single toggle even while it holds one choice.
  */
+/** Who the app is talking to (`B-257`); nothing on an instance that checks no identity. */
+function SignedIn() {
+  const { me } = useMe()
+  if (!me?.subject) return null
+  return (
+    <p className="mb-3 border-b border-line pb-3 font-mono text-[11px] text-text-muted">
+      <span className="text-text">{me.subject}</span> · {me.owner ? 'owner' : (me.profile ?? 'no access')}
+    </p>
+  )
+}
+
 export function Settings({ theme, onTheme }: { theme: Theme; onTheme: (theme: Theme) => void }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
@@ -369,6 +381,7 @@ export function Settings({ theme, onTheme }: { theme: Theme; onTheme: (theme: Th
 
       {open ? (
         <div role="dialog" aria-label="Settings" className={`${POPOVER} w-[260px] p-4`}>
+          <SignedIn />
           <p
             id="theme-label"
             className="font-mono text-[9px] font-medium uppercase tracking-[var(--tracking-label)] text-text-faint"

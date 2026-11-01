@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.182.0] — 2026-11-01
+
+### Added
+
+- `B-257`: Admin → People & permissions (add, profile, per-permission Profile/On/Off, revoke),
+  an Admin that lists only the sections a person may open and says when one is read-only, the
+  signed-in person in Settings, and a page for someone with no access, with the claim form while
+  nobody can manage access.
+
 ## [0.181.0] — 2026-11-01
 
 ### Added
