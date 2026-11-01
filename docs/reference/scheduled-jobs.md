@@ -30,6 +30,7 @@ it is not caught up.
 | `harvest` | `worker.harvest` | 1 d | on | Harvests acronym definitions from on-topic documents | [places-and-terms](../features/places-and-terms.md) |
 | `translate` | `worker.translate --once` | 1 d | on | Looks up other-language names for the search vocabulary | [discovery](../features/discovery.md) |
 | `docdupes` | `worker.docdupes --apply` | 1 d | off | Marks sources that are copies of earlier ones | [duplicates](../features/duplicates.md) |
+| `graph-audit` | `worker.graphaudit` | 30 d | on | Samples new relations and merges for a person to grade; changes nothing in the graph | [knowledge-graph](../features/knowledge-graph.md#the-graph-audit) |
 | `sweep` | `worker.sweep` | 1 d | on | Retention sweep, report only (deletes only with `--apply`, by hand) | [source-quality](../features/source-quality.md) |
 | `embed` | `worker.embed --once` | 1 h | off | Superseded by the `embed` service, which runs continuously | [embedding](../features/embedding.md) |
 

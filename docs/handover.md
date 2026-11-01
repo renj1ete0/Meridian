@@ -980,6 +980,18 @@ A watermark describes a *prefix*, not a set. So the batch is ordered by
 is the same saving without the hole. Ordering by novelty needs a per-chunk
 "reasoned over" flag, which is a different design and a bigger table.
 
+### `merge_log` is not a record of what resolution decided
+
+It reads like one, and `P7-10` was specified as if it were ("sample recent node merges").
+But `merge_log` gets a row only from `resolution.merge`, whose one caller today is a person
+deciding a possible duplicate. When resolution matches a mention to an existing node at write
+time (`mentions.resolve_mention`, the high band), nothing is merged: the mention becomes that
+node, an alias is appended, and the only trace is a log line. So the graph audit's merge sample
+holds person-made merges, and the unattended decisions where conflation would actually happen
+cannot be sampled until something records them (a row per high-band match whose name differs
+from the node's, with the verdict and signals). See
+[features/knowledge-graph.md](features/knowledge-graph.md#the-graph-audit).
+
 ### An absent signal counted as zero splits every entity it touches
 
 `resolution.score` weights context overlap heaviest — §5.5 is explicit, and the

@@ -31,6 +31,7 @@ from meridian_core.models.graph import (
     NODE_TYPE,
     STANCE,
 )
+from meridian_core.models.graphaudit import AUDIT_GRADE, AUDIT_KIND
 from meridian_core.models.mixins import TRUST_STATE
 from meridian_core.models.queue import (
     FETCH_OUTCOME,
@@ -65,6 +66,10 @@ DocKind = Literal[*DOC_KIND.enums]
 
 # uploads.py — a document handed in through the connector (`B-264`)
 UploadStatus = Literal[*UPLOAD_STATUS.enums]
+
+# graphaudit.py — the graph audit (`P7-10`)
+AuditKind = Literal[*AUDIT_KIND.enums]
+AuditVerdict = Literal[*AUDIT_GRADE.enums]
 
 # graph.py
 NodeType = Literal[*NODE_TYPE.enums]

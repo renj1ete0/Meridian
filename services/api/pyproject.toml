@@ -1,6 +1,6 @@
 [project]
 name = "meridian-api"
-version = "0.204.0"
+version = "0.205.0"
 description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
 requires-python = ">=3.14"
 license = "MIT"

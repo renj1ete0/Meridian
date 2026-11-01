@@ -27,6 +27,16 @@ import {
   DUPLICATES_FIELDS,
 } from '../src/lib/duplicates'
 import {
+  AUDIT_DRAW_DETAIL_FIELDS,
+  AUDIT_DRAW_FIELDS,
+  AUDIT_PRODUCER_FIELDS,
+  AUDIT_SAMPLE_FIELDS,
+  AUDIT_TALLY_FIELDS,
+  EDGE_SHOWN_FIELDS,
+  GRAPH_AUDIT_FIELDS,
+  MERGE_SHOWN_FIELDS,
+} from '../src/lib/graphAudit'
+import {
   CHAT_CITATION_FIELDS,
   CHAT_EXCHANGE_FIELDS,
   CHAT_MESSAGE_FIELDS,
@@ -210,6 +220,12 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['DuplicatePairRead', 'duplicates.py', DUPLICATE_PAIR_FIELDS],
     ['DuplicatesRead', 'duplicates.py', DUPLICATES_FIELDS],
     ['DuplicateDecisionRead', 'duplicates.py', DUPLICATE_DECIDED_FIELDS],
+    ['AuditTallyRead', 'graphaudit.py', AUDIT_TALLY_FIELDS],
+    ['AuditProducerRead', 'graphaudit.py', AUDIT_PRODUCER_FIELDS],
+    ['AuditDrawRead', 'graphaudit.py', AUDIT_DRAW_FIELDS],
+    ['AuditSampleRead', 'graphaudit.py', AUDIT_SAMPLE_FIELDS],
+    ['GraphAuditRead', 'graphaudit.py', GRAPH_AUDIT_FIELDS],
+    ['AuditDrawDetailRead', 'graphaudit.py', AUDIT_DRAW_DETAIL_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
     ['SourcePageRead', 'source.py', SOURCE_PAGE_FIELDS],
     ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],
@@ -263,6 +279,26 @@ describe('the client types match the DTOs across the language boundary', () => {
 
   it.each(pairs)('%s', (className, file, declared) => {
     expect([...declared].sort()).toEqual(pydanticFields(file, className).sort())
+  })
+})
+
+describe('what a sampled item shows matches what the draw writes (P7-10)', () => {
+  // `shown` is a JSON document, not a pydantic model, so the field-list check above cannot
+  // see it. Read the keys of each builder's returned dict out of the Python instead.
+  const source = readFileSync(join(REPO, 'packages/meridian_core/meridian_core/graphaudit.py'), 'utf8')
+  function returnedKeys(fn: string): string[] {
+    const body = source.split(`async def ${fn}(`)[1]!.split('\nasync def ')[0]!
+    const returned = body.slice(body.lastIndexOf('    return {'))
+    return [...returned.matchAll(/^ {8}"([a-z_]+)":/gm)].map((m) => m[1]!)
+  }
+
+  it.each([
+    ['_edge_shown', EDGE_SHOWN_FIELDS],
+    ['_merge_shown', MERGE_SHOWN_FIELDS],
+  ] as const)('%s', (fn, declared) => {
+    const keys = returnedKeys(fn)
+    expect(keys.length).toBeGreaterThan(5)
+    expect([...declared].sort()).toEqual(keys.sort())
   })
 })
 

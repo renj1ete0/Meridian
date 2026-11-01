@@ -42,6 +42,9 @@ PERMISSIONS: tuple[Permission, ...] = (
         "gazetteer.curate", "Gazetteer", "Approve, edit and reject terms", "Steering the crawl"
     ),
     Permission("duplicates.decide", "Duplicates", "Merge or keep apart", "Steering the crawl"),
+    Permission(
+        "graph.audit", "Graph audit", "Grade sampled relations and merges", "Steering the crawl"
+    ),
     Permission("fetch_policy.edit", "Fetch policy", "Politeness and blocks", "The system"),
     Permission("budget.edit", "Budget", "Token and spend caps", "The system"),
     Permission("models.edit", "Models", "Agent registry and routing", "The system"),

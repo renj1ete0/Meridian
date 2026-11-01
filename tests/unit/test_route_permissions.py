@@ -104,13 +104,36 @@ def test_reader_routes_need_reading_and_nothing_more(routes) -> None:
             assert permissions_of(route) == ["explore.read"], route.path
 
 
+def _migration_catalogues() -> list[tuple[str, tuple[str, ...]]]:
+    """Every migration that writes the catalogue out, oldest first, with its copy."""
+    found = []
+    for path in sorted((ROOT / "migrations" / "versions").glob("*.py")):
+        if "PERMISSIONS = " not in path.read_text():
+            continue
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        found.append((path.name, tuple(module.PERMISSIONS)))
+    return found
+
+
 def test_the_migration_holds_the_same_catalogue() -> None:
-    """Drift: the CHECK is built from the migration's copy, the API from the code's."""
-    path = next((ROOT / "migrations" / "versions").glob("*b252a1c2d3e4*.py"))
-    spec = importlib.util.spec_from_file_location("b252", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert tuple(module.PERMISSIONS) == NAMES
+    """Drift: the CHECK is built from the newest migration's copy, the API from the code's.
+
+    A permission added to the code without a migration rewriting the CHECK would be refused
+    by the database the first time somebody switched it on.
+    """
+    catalogues = _migration_catalogues()
+    assert catalogues, "no migration writes the catalogue out; the walk is broken"
+    name, newest = catalogues[-1]
+    assert newest == NAMES, name
+
+
+def test_each_catalogue_rewrite_keeps_what_came_before() -> None:
+    """A permission never silently leaves the CHECK: a grant switched on for it would break."""
+    catalogues = _migration_catalogues()
+    for (_, older), (name, newer) in zip(catalogues, catalogues[1:], strict=False):
+        assert set(older) <= set(newer), name
 
 
 def test_permission_names_are_unique_and_described() -> None:

@@ -91,6 +91,21 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.205.0] — 2026-11-02
+
+### Added
+
+- `P7-10`: the graph is audited by sampling. Every 30 days a reproducible random draw takes up
+  to 30 relations and 20 merges made since the last draw, each with what a grader needs to
+  judge it (names, relation, the passages; both sides of a merge as they stood). Admin › Graph
+  audit grades each correct, wrong or unsure, and shows precision per draw and per agent and
+  model with a 95% interval. A grade never changes the graph. Grading takes the new
+  `graph.audit` permission; the bell links a new draw to the panel, and Telegram says when one
+  is ready. See docs/features/knowledge-graph.md#the-graph-audit.
+
+**Deploy:** image only; carries a migration, which runs on start and adds the monthly
+`graph-audit` job.
+
 ## [0.204.0] — 2026-11-02
 
 ### Added

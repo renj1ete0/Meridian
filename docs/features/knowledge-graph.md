@@ -10,12 +10,12 @@ and the list of contested pairs.
 
 - **Code:** `packages/meridian_core/meridian_core/models/graph.py`, `writes.py`,
   `validation.py`, `contested.py`, `resolution.py`, `mentions.py`, `graphview.py`, `route.py`,
-  `neighbourhood.py`, `annotations.py`, `duplicates.py`, `export.py`, `attributeschema.py`;
-  `services/worker/worker/contested.py`, `attributes.py`;
-  `services/api/api/routes/graph.py`, `connect.py`, `neighbourhood.py`, `admin.py` (notes and
-  possible duplicates)
+  `neighbourhood.py`, `annotations.py`, `duplicates.py`, `graphaudit.py`, `export.py`,
+  `attributeschema.py`; `services/worker/worker/contested.py`, `attributes.py`, `graphaudit.py`;
+  `services/api/api/routes/graph.py`, `connect.py`, `neighbourhood.py`, `admin.py` (notes,
+  possible duplicates and the graph audit)
 - **Tasks:** `P4-01`–`P4-05`, `P4-16`, `P6-01`–`P6-05`, `P6-10`, `P6-15`, `P6-32`, `P6-33`,
-  `P7-01`, `P7-02`, `P7-05`, `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
+  `P7-01`, `P7-02`, `P7-05`, `P7-10`, `B-41`, `B-60`, `B-201`, `B-202`, `B-208`
 - **Decisions:** [ADR 0002](../adr/0002-model-routing.md),
   [ADR 0003](../adr/0003-external-assistants-over-mcp.md),
   [ADR 0020](../adr/0020-a-note-is-withdrawn-not-deleted.md)
@@ -477,6 +477,63 @@ a pair kept apart is not remembered by resolution, so the same two names can be 
 
 The page is Admin › Possible duplicates (`DuplicatesPanel`).
 
+### The graph audit
+
+§14.1 asks for two measurements nothing else takes: "Read 30 random edges monthly, count how
+many are wrong", because a graph with many bad edges cannot ground anything written from it; and
+"sample merges …; conflation is invisible once done, so it must be looked for deliberately".
+`graphaudit.py` (`P7-10`) draws the samples and measures the grades; a person grades. It never
+changes the graph: a relation graded wrong stays, a merge graded wrong is not reversed, and
+what to do about either is a person's call through the tools that already exist (Possible
+duplicates' undo, a re-derivation).
+
+**The draw** (`worker.graphaudit`, on the timetable every 30 days; `graph-audit` row). The window
+is `[since, now)`, `since` being where the last draw ended (30 days back for the first), so no
+relation is in two draws and none falls between them. It samples up to 30 relations created in
+the window and up to 20 merges logged in it (`--edges`, `--merges`), and records them with a
+notification (a `job_complete` row whose payload names the job, so the bell's row says "Grade"
+and opens Admin › Graph audit) and a Telegram message when one is configured. What it leaves out:
+
+- **A reader's own note** (`produced_by = 'human'`): it is the reader's claim, not the corpus's.
+- **A reversed merge**: somebody has judged it wrong already. The draw counts them instead
+  (`merges_reversed`), since "merged then reversed" is a signal in itself.
+
+Guards: a window under a day is refused ("too soon"), so a second run minutes after the first
+does not split a month into two thin samples; the scheduler sees no failure, since refusing is
+what it should do. A window with nothing in it records nothing, and the next draw covers it.
+`window_start` is unique, so two schedulers racing over one period cannot both record a draw.
+
+**Random and repeatable.** Items are ordered by `md5(seed:id)` and the first *n* taken. The seed
+is random per draw unless given (`--seed`), and recorded, so the same seed over the same rows
+draws the same items in the same order: a draw can be checked by drawing it again. A plain
+`ORDER BY random()` could not be.
+
+**What a grader sees is kept with the sample** (`shown`): for a relation, both nodes by name,
+the relation, its stance, certainty, comparison axis and disanalogy, validity period, every cited
+chunk id and the first three passages; for a merge, both sides as they stood (the target's
+passages and aliases from before the merge, from `merge_log.target_fields`, so the source's
+evidence is not shown as the target's own), the score and its signals, who decided, and how many
+links moved. A relation corroborated later, or a merge reversed, does not change what was graded.
+
+**Grades** are `correct`, `wrong` or `unsure`, with an optional note; a grade replaces an earlier
+one (`POST /api/admin/graph-audit/samples/{id}`, permission `graph.audit`). The card does not
+name the producer, so a grade is about the claim and not about a model's reputation.
+
+**Precision** is correct / (correct + wrong); `unsure` is counted and left out, since it is
+neither. Each figure comes with its 95% Wilson interval, because thirty grades say a range, not a
+number: 27 of 30 is "90% (74–97%)". Wilson rather than the plain normal interval, which collapses
+to zero width at 30 of 30 and leaves [0, 1] near the ends. It is reported per draw (the measure
+over time, `GET /api/admin/graph-audit`) and per producer within a draw: an edge's agent and
+model, a merge's `decided_by`. §2.3's provenance exists so this can say *which* model writes bad
+edges.
+
+**What it cannot yet sample.** `merge_log` holds only merges made through `resolution.merge`,
+which today is a person deciding a possible duplicate. When resolution matches a mention to an
+existing node at write time (the high band), the mention simply becomes that node: an alias is
+added and a log line written, and no row records the decision. Those auto-resolutions are where
+conflation would happen unattended, and the audit cannot draw them until they are recorded.
+The near-misses §14.1 also names (pairs kept apart) are not drawn either.
+
 ### Reading the graph
 
 `graphview.py` returns at most one node's neighbourhood, one node's evidence, or one route.
@@ -577,14 +634,18 @@ LaTeX; Markdown into anything.
 The graph is still small, and everything in it came from one attended relay session. It grows when synthesis runs unattended, which waits on a model
 being configured (ADR 0002).
 
+The graph audit is built and on the timetable; no draw has yet been graded on a live corpus, so
+there is no precision figure to quote.
+
 ## Tests
 
 `tests/integration/test_edges.py`, `test_writes.py`, `test_validation.py`,
 `test_resolution.py`, `test_mentions.py`, `test_merge_folds.py`, `test_graph_workspace.py`,
 `test_graph_store.py`, `test_route.py`, `test_neighbourhood.py`, `test_annotations.py`,
-`test_duplicates.py`, `test_attribute_schema.py`;
+`test_duplicates.py`, `test_attribute_schema.py`, `test_graph_audit.py`;
 `tests/unit/test_edge_schema.py`, `test_export.py`, `test_neighbourhood.py`,
-`test_contested.py`, `test_attributeschema.py`.
+`test_contested.py`, `test_attributeschema.py`, `test_graph_audit.py`;
+`web/tests/graph-audit-panel.test.tsx`.
 
 ## In the web app
 

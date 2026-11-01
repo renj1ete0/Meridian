@@ -18,12 +18,14 @@ import { EditGate, lockedReason } from '../src/admin/editGate'
 import { FetchPolicyPanel } from '../src/admin/FetchPolicyPanel'
 import { FirstRunPanel } from '../src/admin/FirstRunPanel'
 import { GazetteerQueue } from '../src/admin/GazetteerQueue'
+import { GraphAuditPanel } from '../src/admin/GraphAuditPanel'
 import { PinsPanel } from '../src/admin/PinsPanel'
 import { ProposalsPanel } from '../src/admin/ProposalsPanel'
 import { SECTIONS, type Section } from '../src/admin/sections'
 import { TopicPanel } from '../src/admin/TopicPanel'
 import type { AgentRow, FetchPolicyRow, FirstRun, GazetteerRow, TopicConfig, TopicRow } from '../src/lib/api'
 import type { DuplicatePair } from '../src/lib/duplicates'
+import type { AuditDrawDetail, GraphAudit } from '../src/lib/graphAudit'
 import { MeProvider } from '../src/lib/me'
 import { BY_NAME_LABEL } from '../src/lib/permissionLabels'
 import type { Me } from '../src/lib/people'
@@ -200,6 +202,51 @@ const RUN: FirstRun = {
   seeds_in_flight: 0,
 }
 
+const AUDIT_TALLY = { drawn: 1, graded: 0, correct: 0, wrong: 0, unsure: 0, precision: null, low: null, high: null }
+const AUDIT_DRAW: AuditDrawDetail = {
+  draw: {
+    draw_id: 1,
+    drawn_at: '2026-10-01T00:00:00Z',
+    window_start: '2026-09-01T00:00:00Z',
+    window_end: '2026-10-01T00:00:00Z',
+    seed: 's',
+    drawn_by: 'scheduler',
+    edge_population: 1,
+    merge_population: 0,
+    merges_reversed: 0,
+    edges: AUDIT_TALLY,
+    merges: { ...AUDIT_TALLY, drawn: 0 },
+    by_producer: [],
+  },
+  samples: [
+    {
+      sample_id: 1,
+      draw_id: 1,
+      kind: 'edge',
+      item_id: 1,
+      position: 0,
+      shown: {
+        from: { entity_id: 1, name: 'one', node_type: 'concept' },
+        relation: 'relates_to',
+        to: { entity_id: 2, name: 'two', node_type: 'concept' },
+        stance: null,
+        certainty: null,
+        similarity_dimension: null,
+        disanalogy: null,
+        valid_from: null,
+        valid_to: null,
+        chunk_ids: [],
+        passages: [],
+      },
+      grade: null,
+      note: null,
+      graded_by: null,
+      graded_at: null,
+    },
+  ],
+}
+const AUDIT: GraphAudit = { draws: [AUDIT_DRAW.draw], ungraded: 1 }
+
 /** Each section that has changes, as AdminPage renders it. A section added with `edits` needs one here. */
 const PANELS: Partial<Record<Section, () => ReactElement>> = {
   topics: () => <TopicPanel rows={TOPICS} sumsTo={1} onDescribe={vi.fn()} />,
@@ -217,6 +264,7 @@ const PANELS: Partial<Record<Section, () => ReactElement>> = {
     />
   ),
   duplicates: () => <DuplicatesPanel pairs={[PAIR]} total={1} onDecide={vi.fn()} onUndo={vi.fn()} />,
+  audit: () => <GraphAuditPanel initial={AUDIT} initialDraw={AUDIT_DRAW} grade={vi.fn()} />,
   domains: () => (
     <FetchPolicyPanel
       rows={[

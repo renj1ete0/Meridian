@@ -30,6 +30,7 @@ from .graph import (
     MergeLog,
     Observation,
 )
+from .graphaudit import GraphAuditDraw, GraphAuditSample
 from .mixins import (
     CURRENT_SCHEMA_VERSION,
     QUALITY_TIER_MAX,
@@ -82,6 +83,8 @@ __all__ = [
     "FetchPolicy",
     "Figure",
     "GazetteerTerm",
+    "GraphAuditDraw",
+    "GraphAuditSample",
     "HostScore",
     "LinkVouch",
     "Notification",

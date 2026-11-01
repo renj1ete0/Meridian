@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
-from meridian_core import annotations, chat, duplicates, mapsteer, steering
+from meridian_core import annotations, chat, duplicates, graphaudit, mapsteer, steering
 from meridian_core.areaview import AreaNotFound
 from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.chunks import embedding_backlog
@@ -95,6 +95,12 @@ from meridian_core.schemas.duplicates import (
 )
 from meridian_core.schemas.enums import DomainStatus
 from meridian_core.schemas.gazetteer import GazetteerTermRead
+from meridian_core.schemas.graphaudit import (
+    AuditDrawDetailRead,
+    AuditGrade,
+    AuditSampleRead,
+    GraphAuditRead,
+)
 from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.schemas.queue import QueueTaskRead
 from meridian_core.schemas.settings import DisplaySettingsRead, DisplayZoneEdit
@@ -105,6 +111,7 @@ from meridian_core.validation import ValidationError, check_seed_allowed
 
 from ..deps import (
     CanAsk,
+    CanAuditGraph,
     CanCurate,
     CanDecideDuplicates,
     CanEditBudget,
@@ -891,6 +898,49 @@ async def undo_duplicate(
     await sess.commit()
     log.info("duplicate decision undone", extra={"notification_id": notification_id})
     return undone
+
+
+# ---------------------------------------------------------------------------
+# Graph audit (task P7-10, spec §14.1)
+# ---------------------------------------------------------------------------
+#
+# The scheduler draws; a person grades here. A grade changes only the sample, never the
+# relation or merge it judges. See docs/features/knowledge-graph.md#the-graph-audit.
+
+
+@router.get("/graph-audit", response_model=GraphAuditRead)
+async def graph_audit(
+    _: CanViewAdmin, sess: WriteSession, limit: Annotated[int, Query(ge=1, le=120)] = 24
+) -> GraphAuditRead:
+    """Every draw, newest first, with its precision: the measure over time."""
+    return await graphaudit.report(sess, limit=limit)
+
+
+@router.get("/graph-audit/{draw_id}", response_model=AuditDrawDetailRead)
+async def graph_audit_draw(
+    draw_id: int, _: CanViewAdmin, sess: WriteSession
+) -> AuditDrawDetailRead:
+    """One draw and every sampled item in it, in the order drawn."""
+    try:
+        return await graphaudit.draw_detail(sess, draw_id)
+    except graphaudit.AuditRefused as refused:
+        raise HTTPException(status_code=404, detail=str(refused)) from refused
+
+
+@router.post("/graph-audit/samples/{sample_id}", response_model=AuditSampleRead)
+async def grade_audit_sample(
+    sample_id: int, body: AuditGrade, _: CanAuditGraph, sess: WriteSession
+) -> AuditSampleRead:
+    """Grade one sampled relation or merge: correct, wrong or unsure. Replaces an earlier one."""
+    try:
+        graded = await graphaudit.grade(
+            sess, sample_id, body.grade, note=body.note, graded_by=ACTOR
+        )
+    except graphaudit.AuditRefused as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from refused
+    await sess.commit()
+    log.info("audit sample graded", extra={"sample_id": sample_id, "grade": body.grade})
+    return graded
 
 
 # ---------------------------------------------------------------------------

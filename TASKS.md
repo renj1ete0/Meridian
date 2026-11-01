@@ -3009,7 +3009,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `P7-07` Enrichment queue: figure VLM, quality-tier OCR, chart OCR — user-triggered
 - [ ] `P7-08` Reprocessing, downgrade guard, old-vs-new disagreement logging
 - [ ] `P7-09` Report generation with coverage pre-flight (spec §11.13)
-- [ ] `P7-10` Edge precision sampling and entity resolution audit as routine
+- [x] `P7-10` Edge precision sampling and entity resolution audit as routine
 
 ---
 

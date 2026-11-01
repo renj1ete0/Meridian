@@ -76,7 +76,8 @@ export const ACTION_FOR_TYPE: Record<string, (item: NotificationItem) => { label
     return href ? { label: 'Look', href } : null
   },
   run_summary: () => ({ label: 'Run log', href: '/admin/runs' }),
-  job_complete: () => null,
+  // A finished job has no page, except the graph audit's draw, which waits to be graded (`P7-10`).
+  job_complete: (item) => (item.payload?.job === 'graph-audit' ? { label: 'Grade', href: '/admin/graph-audit' } : null),
 }
 
 function actionFor(item: NotificationItem): { label: string; href: string } | null {

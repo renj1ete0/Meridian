@@ -21,7 +21,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 | `/growth` | `GrowthPage` | How the corpus grew: pages per topic per day, passages, sites, graph, map; 7 days, 30 days or all, filterable by topic | `CorpusGrowth.dc.html` |
 | `/new` | `WhatsNewPage` | What is new since the last visit, or in 7 or 30 days, by added or published date: sources by topic and kind with their best passage, and new findings with citations ([whats-new.md](whats-new.md)) | `WhatsNew.dc.html` |
 | `/contested` | `ContestedPage` | Pairs of claims that disagree | `ContestedMark.dc.html` |
-| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, possible duplicates, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), people & permissions, display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminPeople.dc.html`, `AdminDisplay.dc.html` |
+| `/admin/*` | `AdminPage` | Topic weights, pins and boosts, proposals, seeds, agent registry, gazetteer approvals, possible duplicates, graph audit, enrichment queue, run history, fetch policy, crawl health, assistant access (MCP tokens), people & permissions, display (time zone) | `AdminLight.dc.html`, `AdminAssistantAccess.dc.html`, `AdminPeople.dc.html`, `AdminDisplay.dc.html` |
 | `/about` | `AboutPage` | What the project is | `About.dc.html` |
 
 The **Ask panel** (`explore/AskPanel.tsx`) is a toggle on every reading surface except Admin.
@@ -1077,6 +1077,19 @@ A pair entity resolution could not decide is decided here (`B-202`): both nodes 
 with their evidence, then merge or keep apart. A merge is reversible from the same row, and the
 bell's "Decide" opens this section. The mechanism is in
 [knowledge-graph.md](knowledge-graph.md).
+
+### Graph audit
+
+The monthly sample of new relations and merges is graded here (`P7-10`). The page has no mock:
+it follows Possible duplicates' structure (page header, a table card, evidence cards with
+buttons). A table of draws, newest first, gives each one's precision with its 95% interval and
+how much is graded, so the measure over time is the first thing on the page; under it, for the
+open draw, precision by agent and model, then a card per sampled item with the passages it cites
+(for a merge, both sides) and three grades: correct, wrong, unsure. "To grade" lists what is
+left, keeping a card graded while the page is open so a slip can be corrected; "All" lists the
+whole draw. A card shows no producer, so a grade is not a verdict on a model's name. There is no
+other action: a grade changes nothing in the graph. The bell's row for a draw says "Grade" and
+opens this section. The mechanism is in [knowledge-graph.md](knowledge-graph.md#the-graph-audit).
 
 ### <a id="permissions"></a>Permissions in the app (`B-257`)
 

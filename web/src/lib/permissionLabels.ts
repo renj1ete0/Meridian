@@ -12,6 +12,7 @@ export const BY_NAME_LABEL: Readonly<Record<string, string>> = {
   'seeds.add': 'Seeds',
   'gazetteer.curate': 'Gazetteer',
   'duplicates.decide': 'Duplicates',
+  'graph.audit': 'Graph audit',
   'fetch_policy.edit': 'Fetch policy',
   'budget.edit': 'Budget',
   'models.edit': 'Models',

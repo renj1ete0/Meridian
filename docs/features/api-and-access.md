@@ -148,13 +148,14 @@ closed (503, as before) unless `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` makes the local 
 | Permission | Opens | reader | analyst | operator |
 |---|---|:-:|:-:|:-:|
 | `explore.read` | every `/api/explore` route | ✓ | ✓ | ✓ |
-| `admin.view` | Admin's reads: status, runs, topics, fetch policy, budget, agents, duplicates, proposals | | ✓ | ✓ |
+| `admin.view` | Admin's reads: status, runs, topics, fetch policy, budget, agents, duplicates, proposals, the graph audit | | ✓ | ✓ |
 | `work.write` | notes and saved views | | ✓ | ✓ |
 | `chat.ask` | Ask (spends the budget) | | ✓ | ✓ |
 | `topics.steer` | topics, previews, proposals, map steering, gap boosts | | | ✓ |
 | `seeds.add` | seeds, gap seeds, map suggestions | | | ✓ |
 | `gazetteer.curate` | approving, editing, rejecting terms | | | ✓ |
 | `duplicates.decide` | merging and undoing | | | ✓ |
+| `graph.audit` | grading the graph audit's sampled relations and merges | | | ✓ |
 | `fetch_policy.edit` | politeness, blocks, render learning | | | ✓ |
 | `budget.edit` | caps | | | ✓ |
 | `models.edit` | the agent registry | | | ✓ |

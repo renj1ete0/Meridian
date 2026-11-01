@@ -39,6 +39,14 @@ jobs:
     interval_seconds: 86400        # daily; each attribute's audit is monthly
     enabled: true
 
+  - name: graph-audit
+    module: worker.graphaudit
+    # `P7-10`, §14.1: a reproducible random sample of the relations and merges made since
+    # the last draw, for a person to grade in Admin › Graph audit. Samples and measures;
+    # never changes the graph. Monthly, as the spec reads it.
+    interval_seconds: 2592000      # every 30 days
+    enabled: true
+
   - name: embed
     module: worker.embed
     args: ["--once"]

@@ -61,6 +61,8 @@ ENUM_PAIRS = [
     ("ProposalStatus", models.config.PROPOSAL_STATUS),
     ("ChatRole", models.chat.CHAT_ROLE),
     ("UploadStatus", models.uploads.UPLOAD_STATUS),
+    ("AuditKind", models.graphaudit.AUDIT_KIND),
+    ("AuditVerdict", models.graphaudit.AUDIT_GRADE),
 ]
 
 

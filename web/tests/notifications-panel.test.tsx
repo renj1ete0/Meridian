@@ -15,6 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { ACTION_FOR_TYPE, ALERT_SECTION, NotificationsPanel } from '../src/explore/NotificationsPanel'
+import { sectionFromPath } from '../src/admin/sections'
 import { KIND_OF_TYPE, countsByKind, dayHeading } from '../src/lib/status'
 import { DAGGER } from '../src/ui/Contested'
 import { StatusPill } from '../src/ui/TopBar'
@@ -310,6 +311,18 @@ describe('every notification leads where it can be acted on (B-181)', () => {
     expect(hrefOf({ notification_type: 'merge_adjudication', payload: { created: 95, candidate: 46 } })).toBe(
       '/admin/duplicates',
     )
+  })
+
+  it('sends the graph audit draw to where it is graded, and other finished jobs nowhere (P7-10)', () => {
+    // The job name is read from the worker that writes it, so a rename there cannot leave
+    // the bell's row pointing at nothing.
+    const worker = readFileSync(join(REPO, 'services/worker/worker/graphaudit.py'), 'utf8')
+    const job = /^JOB = "([a-z-]+)"/m.exec(worker)![1]!
+    const href = hrefOf({ notification_type: 'job_complete', payload: { job, draw_id: 3 } })
+    expect(href).toBe('/admin/graph-audit')
+    expect(sectionFromPath(href!)).toBe('audit')
+    expect(hrefOf({ notification_type: 'job_complete', payload: { job: 'areas' } })).toBeNull()
+    expect(hrefOf({ notification_type: 'job_complete', payload: null })).toBeNull()
   })
 
   it('sends an alert to its section, and one with no page to none', () => {

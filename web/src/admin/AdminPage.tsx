@@ -7,6 +7,7 @@ import { AssistantAccessPanel } from './AssistantAccessPanel'
 import { DisplayPanel } from './DisplayPanel'
 import { FetchPolicyPanel } from './FetchPolicyPanel'
 import { FirstRunPanel } from './FirstRunPanel'
+import { GraphAuditPanel } from './GraphAuditPanel'
 import { GazetteerQueue, PAGE_SIZE } from './GazetteerQueue'
 import { PinsPanel } from './PinsPanel'
 import { ProposalsPanel } from './ProposalsPanel'
@@ -789,6 +790,7 @@ export function AdminPage() {
           {section === 'access' && !missing ? <AssistantAccessPanel /> : null}
           {section === 'people' && !missing ? <PeoplePanel /> : null}
           {section === 'display' ? <DisplayPanel /> : null}
+          {section === 'audit' ? <GraphAuditPanel /> : null}
 
           {section === 'health' ? (
             health ? (

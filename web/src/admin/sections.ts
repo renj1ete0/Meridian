@@ -19,6 +19,7 @@ export type Section =
   | 'display'
   | 'access'
   | 'duplicates'
+  | 'audit'
   | 'people'
 
 export interface SectionDef {
@@ -67,6 +68,8 @@ export const SECTIONS: readonly SectionDef[] = [
     group: 'system',
     edits: 'duplicates.decide',
   },
+  // `P7-10`. Beside duplicates: both judge what resolution and synthesis wrote.
+  { key: 'audit', label: 'Graph audit', path: 'graph-audit', group: 'system', edits: 'graph.audit' },
   {
     key: 'enrichment',
     label: 'Enrichment queue',
