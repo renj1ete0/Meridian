@@ -21,6 +21,17 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **2026-11-01 (later) — `v0.183.0`–`v0.185.0`, committed locally, not pushed** (v0.182.0 was
+> pushed). Built: press releases and opinion told apart from news (`B-253`; stored sources not yet
+> re-derived: `worker.dockind --kind news --apply` in the worker image once the local stack is
+> migrated), Find by kind and by site (`B-254`), listing pages as watches (`B-255`). Tested live
+> against the operator's GPU machine through their model manager's proxy: every chat model loads
+> on request, 503 + Retry-After is honoured end to end by Meridian's client; one model fails to
+> start on their side; the embedder and reranker are not registered there yet, so the vector
+> comparison (a scratch script, 24 stored passages) has not run. Their proxy's fixes are on a
+> local branch in its repo, not pushed. **Resume with:** embedder and reranker parity once they
+> are registered, then `B-251`, `B-256`; confirm before pushing either repo.
+
 > **2026-11-01 — `v0.178.0`–`v0.182.0`, committed locally, not pushed.** Built: any
 > OpenAI-compatible model server for embedding and reranking, waiting out a loading model
 > (`B-248`, ADR 0023); `.local` names inside containers (`B-250`); watched news sitemaps and feeds
