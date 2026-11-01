@@ -84,6 +84,7 @@ from .extract.injection import Screening, screen
 from .extract.language import detect_language
 from .extract.pdf import PdftotextMissing, extract_pdf
 from .fetch import Crawl4aiClient, Fetcher, FetchResult
+from .listingpage import parse_listing
 from .liveness import beat
 from .ocr_queue import enqueue_ocr, mark_scanned
 from .prefilter import Prefilter, normalise_url
@@ -833,7 +834,11 @@ class Worker:
         if disposition == "fetched":
             base = result.final_url or claim.url
             try:
-                parsed = parse_sitemap(result.content, base_url=base)
+                if await self._watch_kind(claim.url) == "listing":
+                    # A watched latest-articles page (`B-255`): its links, not XML.
+                    parsed = parse_listing(result.content, base_url=base)
+                else:
+                    parsed = parse_sitemap(result.content, base_url=base)
             except SitemapError as exc:
                 # Unreadable is a refusal, not a failure: it reads the same next time.
                 disposition = "abandon"
@@ -867,6 +872,11 @@ class Worker:
                 "queued": queued,
             },
         )
+
+    async def _watch_kind(self, url: str) -> str | None:
+        """The kind of the watch on ``url``, or None when nobody watches it."""
+        async with self._session_factory() as sess:
+            return await sess.scalar(select(Watch.kind).where(Watch.url == url))
 
     async def _queue_sitemap_entries(self, claim: Claim, parsed: ParsedSitemap, base: str) -> int:
         """Turn a parsed sitemap's URLs into queue rows.

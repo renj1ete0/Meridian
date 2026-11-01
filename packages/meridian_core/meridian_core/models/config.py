@@ -613,7 +613,8 @@ class ScheduledJob(Base, TimestampMixin):
 
 
 #: What a watched address is (`B-249`): a news sitemap (or any sitemap) or an RSS/Atom feed.
-WATCH_KIND = constrained("sitemap", "feed", name="watch_kind")
+#: `listing` is a latest-articles page read for its article links (`B-255`).
+WATCH_KIND = constrained("sitemap", "feed", "listing", name="watch_kind")
 
 #: The shortest interval a watch may poll at; a news sitemap holds about two days.
 MIN_WATCH_INTERVAL_S = 300

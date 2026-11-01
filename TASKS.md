@@ -1996,7 +1996,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [x] `B-254` **Find by kind and by outlet** (operator) — Find filters by tier (`press` among
       them) but not by document kind or publisher. Add both to `SearchFilters`, `/search`,
       `/answer`, saved views and the filter rail (find.ts is the one model)
-- [ ] `B-255` **Listing pages as watches** — outlets with no news sitemap or feed (several in the
+- [x] `B-255` **Listing pages as watches** — outlets with no news sitemap or feed (several in the
       2026-10-24 probe) publish a latest-articles page. A third watch kind re-reads it and
       queues new same-site article links (dated or slug paths, not navigation)
 - [ ] `B-256` **Paywalled news kept as a stub** — the operator asked about paywalls; not bypassed.

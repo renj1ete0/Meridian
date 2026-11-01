@@ -3533,3 +3533,92 @@ async def test_a_watched_feed_queues_its_items(
     rows = await rows_for(sess, run_domain, "watch")
     pages = {r.url_or_query for r in rows if r.task_type == "url"}
     assert pages == {f"https://{run_domain}/story/1", f"https://{run_domain}/story/2"}
+
+
+def listing_page(domain: str, *links: tuple[str, str]) -> bytes:
+    """A latest-articles page: navigation around a list of story links."""
+    stories = "".join(f'<li><a href="{href}">{text}</a></li>' for href, text in links)
+    return (
+        "<!doctype html><html><body><header>"
+        f'<a href="https://{domain}/">Home</a><a href="/singapore">Singapore</a>'
+        '<a href="/tag/transport">Transport</a><a href="https://elsewhere.test/x">Ad</a>'
+        f"</header><main><ul>{stories}</ul></main></body></html>"
+    ).encode()
+
+
+def serve_html(body: bytes):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return streamed(200, headers={"content-type": "text/html"}, chunks=[body])
+
+    return handler
+
+
+async def test_a_watched_listing_page_queues_new_matching_articles(
+    session_for, resolve, raw_store, run_domain, run_topic, watched
+) -> None:
+    """`B-255`: an outlet with no feed. Its page is read for article links, filtered by
+    headline like a feed, and a second read queues only what the first did not."""
+    from worker.topicmatch import TopicVocabulary
+
+    sess = await session_for("rw")
+    await watched(path="/singapore", kind="listing", headline_filter=True)
+    reads = (
+        listing_page(
+            run_domain,
+            ("/singapore/new-road-safety-rules-for-school-zones", "New road safety rules"),
+            ("/sport/late-winner-seals-the-derby-again", "Late winner seals the derby"),
+        ),
+        listing_page(
+            run_domain,
+            ("/singapore/new-road-safety-rules-for-school-zones", "New road safety rules"),
+            ("/2026/11/01/road-safety-cameras-expanded/", "Road safety cameras expanded"),
+        ),
+    )
+    for body in reads:
+        await enqueue(
+            sess,
+            run_domain,
+            run_topic,
+            path="/singapore",
+            task_type="sitemap",
+            seed_source="watch",
+            priority=100,
+        )
+        worker, _ = with_frontier(
+            sess, serve_html(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+        )
+        worker._topics = TopicVocabulary(phrases={"road safety": (run_topic,)})
+        await worker.run()
+
+    pages = {
+        r.url_or_query: r for r in await rows_for(sess, run_domain, "watch") if r.task_type == "url"
+    }
+    assert set(pages) == {
+        f"https://{run_domain}/singapore/new-road-safety-rules-for-school-zones",
+        f"https://{run_domain}/2026/11/01/road-safety-cameras-expanded/",
+    }
+    assert all(row.topic == run_topic for row in pages.values())
+
+
+async def test_a_sitemap_watch_does_not_read_an_html_page_for_links(
+    session_for, resolve, raw_store, run_domain, run_topic, watched
+) -> None:
+    """Only a listing watch is read as a page: a sitemap watch that returns HTML is an
+    unreadable sitemap, as before, rather than a source of guessed links."""
+    sess = await session_for("rw")
+    await watched(path="/news-sitemap.xml", topic=run_topic)
+    await enqueue(
+        sess,
+        run_domain,
+        run_topic,
+        path="/news-sitemap.xml",
+        task_type="sitemap",
+        seed_source="watch",
+    )
+    body = listing_page(run_domain, ("/2026/11/01/a-story-about-roads/", "A story"))
+    worker, _ = with_frontier(
+        sess, serve_html(body), run_domain, run_topic, resolver=resolve, max_tasks=1
+    )
+    await worker.run()
+
+    assert [r for r in await rows_for(sess, run_domain, "watch") if r.task_type == "url"] == []

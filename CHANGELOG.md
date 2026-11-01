@@ -91,6 +91,15 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.185.0] — 2026-11-01
+
+### Added
+
+- `B-255`: listing pages as watches. A third watch kind, `listing`, reads an outlet's
+  latest-articles page for its article links (a date in the path, a long slug, or a numbered
+  series under one parent), each with its headline for the watch's filter, and queues the new
+  ones as a feed's entries. `worker.watch add URL --listing`; migration `b255a1c2d3e4`.
+
 ## [0.184.0] — 2026-11-01
 
 ### Added

@@ -150,7 +150,7 @@ async def test_add_refuses_an_address_already_watched(sess) -> None:
     [
         ("sitemap", None, True, 299),
         ("sitemap", None, False, 900),
-        ("listing", None, True, 900),
+        ("page", None, True, 900),
     ],
 )
 async def test_the_table_refuses_what_the_code_refuses(
@@ -193,3 +193,14 @@ def test_due_reads_the_interval() -> None:
     assert is_due(watch, NOW)
     watch.enabled = False
     assert not is_due(watch, NOW)
+
+
+async def test_the_table_takes_a_listing_watch_and_add_watch_refuses_an_unknown_kind(sess):
+    """`B-255`: the third kind is in the CHECK, and a kind outside it is refused by name
+    before the insert rather than as a constraint error."""
+    url = address().replace("news-sitemap.xml", "latest")
+    watch = await add_watch(sess, url, kind="listing", headline_filter=True)
+    assert watch.kind == "listing"
+
+    with pytest.raises(WatchRefused, match="no watch kind 'page'"):
+        await add_watch(sess, address(), kind="page", headline_filter=True)

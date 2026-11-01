@@ -1,12 +1,13 @@
-"""Watched news sitemaps and feeds, read again on an interval (`B-249`).
+"""Watched news sitemaps, feeds and listing pages, read again on an interval (`B-249`).
 
 A discovered sitemap is read once. A news sitemap or a feed lists only what was
 published in the last day or two, so it is queued again whenever its interval has
-passed; the worker reads it as any sitemap and queues the entries it has not seen.
+passed; the worker reads it as any sitemap and queues the entries it has not seen. A
+listing watch (`B-255`) is an outlet's latest-articles page, read for its article links.
 See docs/features/discovery.md#watched-sources.
 
     python -m worker.watch --apply                         # the scheduled pass
-    python -m worker.watch add URL [--feed] [--topic T] [--headlines] [--every 900]
+    python -m worker.watch add URL [--feed|--listing] [--topic T] [--headlines] [--every 900]
     python -m worker.watch list
     python -m worker.watch enable|disable WATCH_ID
 """
@@ -26,7 +27,7 @@ from sqlalchemy import select
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
 from meridian_core.models import QueueTask, TopicConfig, Watch
-from meridian_core.models.config import MIN_WATCH_INTERVAL_S
+from meridian_core.models.config import MIN_WATCH_INTERVAL_S, WATCH_KIND
 from meridian_core.queueing import enqueue
 
 log = get_logger(__name__)
@@ -124,6 +125,8 @@ async def add_watch(
     split = urlsplit(url.strip())
     if split.scheme not in ("http", "https") or not split.hostname:
         raise WatchRefused(f"not an http(s) address: {url!r}")
+    if kind not in WATCH_KIND.enums:
+        raise WatchRefused(f"no watch kind {kind!r}; expected one of {', '.join(WATCH_KIND.enums)}")
     if interval_seconds < MIN_WATCH_INTERVAL_S:
         raise WatchRefused(f"an interval under {MIN_WATCH_INTERVAL_S} s is refused")
     if topic is not None and await sess.get(TopicConfig, topic) is None:
@@ -150,9 +153,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--apply", action="store_true", help="queue the due reads")
     sub = parser.add_subparsers(dest="command")
-    add = sub.add_parser("add", help="watch a news sitemap or feed")
+    add = sub.add_parser("add", help="watch a news sitemap, a feed or a latest-articles page")
     add.add_argument("url")
-    add.add_argument("--feed", action="store_true", help="an RSS or Atom feed")
+    kinds = add.add_mutually_exclusive_group()
+    kinds.add_argument("--feed", action="store_true", help="an RSS or Atom feed")
+    kinds.add_argument(
+        "--listing", action="store_true", help="a latest-articles page, read for its links"
+    )
     add.add_argument("--topic")
     add.add_argument("--headlines", action="store_true", help="queue only matching headlines")
     add.add_argument("--every", type=int, default=900, help="seconds between reads")
@@ -185,7 +192,7 @@ async def _run(args: argparse.Namespace) -> int:
                 watch = await add_watch(
                     sess,
                     args.url,
-                    kind="feed" if args.feed else "sitemap",
+                    kind="feed" if args.feed else "listing" if args.listing else "sitemap",
                     topic=args.topic,
                     headline_filter=args.headlines,
                     interval_seconds=args.every,

@@ -469,8 +469,23 @@ parser and defences as any sitemap, then queues the entries it has not seen.
   **section** feeds or sitemaps (transport, property) with a topic, and keep the headline
   filter for outlets whose topical vocabulary is rich.
 
-`python -m worker.watch add <url> [--feed] [--topic T] [--headlines] [--every S]`, `list`,
-`enable`, `disable`.
+- **A listing page** (`B-255`, kind `listing`). Several outlets publish no news sitemap or
+  feed, only a latest-articles page. A listing watch reads that page's links
+  (`worker.listingpage`) and treats them as a feed's entries: same site or a subdomain, never
+  the home page, a section, tag, author, pagination, video or about page, nor a media file.
+  A link counts as an article for a date in its path (`/2026/11/01/`), a slug of four or more
+  words (`new-bus-lanes-open-east-6506081`), or as one of five or more numbered siblings under
+  one parent (an agency's `/news/media/pr26-67/`, which has neither). Its headline is the
+  longest anchor text among the page's links to it, since a story is usually linked as an
+  image, a section label and a headline. At most 200 links a read; more is an archive.
+  Measured on seven real latest-articles pages (2026-11-01): 11 to 64 articles each, every one
+  with a headline, and the section and navigation links (29 to 386 a page) left out; before the
+  series rule an agency's release page yielded nothing. Only a listing watch is read this way:
+  a sitemap watch that returns HTML stays an unreadable sitemap, never a source of guessed
+  links.
+
+`python -m worker.watch add <url> [--feed | --listing] [--topic T] [--headlines] [--every S]`,
+`list`, `enable`, `disable`.
 
 ### Cited papers
 
