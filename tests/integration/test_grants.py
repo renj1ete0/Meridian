@@ -232,7 +232,28 @@ def test_a_guest_asking_only_for_what_they_lack_gets_nothing(clean=None) -> None
 
 
 def test_a_tier_ceiling_admits_that_tier_and_above() -> None:
-    assert tiers_allowed("academic") == ("government", "academic")
+    assert tiers_allowed("government") == ("peer_reviewed", "government")
+    assert tiers_allowed("informal") == TIER_ORDER
+
+
+def test_the_tier_order_is_the_databases_tiers_by_rank() -> None:
+    """Drift (`B-265`): the order once named `academic` and `industry`, which no source has,
+    so every grant searched without peer-reviewed, institutional or preprint sources."""
+    from meridian_core.models.source import SOURCE_TIER
+    from meridian_core.sources import SOURCE_TIER_RANK
+
+    assert set(TIER_ORDER) == set(SOURCE_TIER.enums)
+    ranks = [SOURCE_TIER_RANK[t] for t in TIER_ORDER]
+    assert ranks == sorted(ranks, reverse=True)
+
+
+def test_a_grant_without_a_ceiling_sees_peer_reviewed_sources() -> None:
+    """The failure itself: `filters_for` narrows every grant to `tiers_allowed`."""
+    from meridian_core.grants import ResolvedGrant, filters_for
+
+    fields = {f: None for f in ResolvedGrant.__dataclass_fields__}
+    grant = ResolvedGrant(**{**fields, "topics": (), "max_source_tier": None})
+    assert "peer_reviewed" in (filters_for(grant).source_tiers or ())
 
 
 def test_no_ceiling_admits_every_tier() -> None:

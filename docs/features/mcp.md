@@ -209,6 +209,12 @@ thing an assistant can check: thirty passages and thirty thousand support very d
   `entities`, which the graph questions SQL exists for need.
 - **Filters intersect.** A guest may narrow further, and nothing they send widens the grant.
   `cleared_only` is forced on, as for the MCP surface.
+- **A tier ceiling is a floor in the database's own order** (`B-265`). `max_source_tier`
+  admits that tier and every tier above it, in `sources.SOURCE_TIER_RANK` order (peer reviewed,
+  government, preprint, institutional, press, informal); no ceiling admits all of them. The
+  order was once a hand-written list naming tiers no source has, and since every grant is
+  narrowed to it, shared assistants never saw a peer-reviewed, institutional or preprint
+  source. It is now derived from the rank, with a drift test.
 - **Raw files need the grant and the deployment** (`MERIDIAN_SERVE_RAW`). The raw store is a
   research archive of third-party material (§14.2); serving it is redistribution, unlike sharing
   passages, metadata and the URL, which is a citation. A grant cannot overrule the operator's

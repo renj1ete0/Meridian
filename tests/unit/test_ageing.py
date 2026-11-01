@@ -93,7 +93,7 @@ def test_a_future_date_does_not_boost_a_document() -> None:
 # The curve
 
 
-@pytest.mark.parametrize("tier", ["press", "government", "informal", "industry", "academic"])
+@pytest.mark.parametrize("tier", ["press", "government", "informal", "institutional", "preprint"])
 def test_one_half_life_halves_the_score(tier: str) -> None:
     half_life = HALF_LIFE_DAYS[tier]
     assert half_life is not None
@@ -112,12 +112,12 @@ def test_the_tiers_are_ordered_the_way_the_task_argues() -> None:
     ages, so government sits well above press without being exempt."""
     at_five_years = {
         tier: decay_factor(days_ago(5 * 365), tier, today=TODAY)
-        for tier in ("informal", "press", "industry", "government", "academic")
+        for tier in ("informal", "press", "institutional", "government", "preprint")
     }
 
     assert at_five_years["informal"] <= at_five_years["press"]
     assert at_five_years["press"] < at_five_years["government"]
-    assert at_five_years["government"] <= at_five_years["academic"]
+    assert at_five_years["government"] <= at_five_years["preprint"]
 
 
 # --------------------------------------------------------------------------
@@ -129,13 +129,13 @@ def test_a_topic_override_beats_the_tier() -> None:
     depending on what the document is about."""
     fast = decay_factor(
         days_ago(365),
-        "academic",
+        "preprint",
         topics=["av-acceptance"],
         overrides={"av-acceptance": 180},
         today=TODAY,
     )
 
-    assert fast < decay_factor(days_ago(365), "academic", today=TODAY)
+    assert fast < decay_factor(days_ago(365), "preprint", today=TODAY)
 
 
 def test_a_topic_can_exempt_itself_from_ageing() -> None:
@@ -186,9 +186,9 @@ def test_a_fast_rotting_source_is_fetched_sooner() -> None:
     from meridian_core.tiering import urgency_for_tier
 
     press = urgency_for_tier("press", HALF_LIFE_DAYS)
-    academic = urgency_for_tier("academic", HALF_LIFE_DAYS)
+    preprint = urgency_for_tier("preprint", HALF_LIFE_DAYS)
 
-    assert press > academic
+    assert press > preprint
 
 
 def test_something_that_does_not_rot_gains_no_urgency() -> None:
@@ -236,3 +236,11 @@ def test_the_crawl_uses_the_urgency_aware_priority() -> None:
     ).read_text()
 
     assert "priority_with_urgency(url, tiers, HALF_LIFE_DAYS)" in body
+
+
+def test_every_tier_the_database_holds_has_a_half_life_and_no_other() -> None:
+    """Drift (`B-265`): a tier missing here decays at the default, and a name here that is no
+    tier (two stood here for months) is a rule nothing ever reaches."""
+    from meridian_core.models.source import SOURCE_TIER
+
+    assert set(HALF_LIFE_DAYS) == set(SOURCE_TIER.enums)

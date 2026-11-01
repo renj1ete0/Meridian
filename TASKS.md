@@ -2008,7 +2008,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       restarts services in no particular order, so the worker could start on the new image
       before `migrate` finished. Services wait for the expected revision at start; changelog
       entries say whether a release needs `docker compose up -d` (a compose change)
-- [ ] `B-265` **Grant tier ceilings name tiers that do not exist** (found by `B-233`) —
+- [x] `B-265` **Grant tier ceilings name tiers that do not exist** (found by `B-233`) —
       `grants.TIER_ORDER` is `government, academic, industry, press, informal`, which are not
       the database's tiers, so `tiers_allowed` can never admit peer_reviewed, preprint or
       institutional for a sharing grant, and the grants CHECK cannot store academic/industry.

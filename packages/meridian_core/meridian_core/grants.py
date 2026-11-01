@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .logging import get_logger
 from .models import AgentToken, Grant, GrantAudit
 from .search import SearchFilters
+from .sources import SOURCE_TIER_RANK
 from .tiering import DEFAULT_TIER  # noqa: F401  (documents where tiers come from)
 
 log = get_logger(__name__)
@@ -49,10 +50,13 @@ PROFILE_TOOLS: dict[str, frozenset[str]] = {
     "operator": READ_TOOLS | {"run_readonly_query"},
 }
 
-#: Source tiers, most to least authoritative. `max_source_tier` names a floor
-#: in this order: naming `academic` admits `government` and `academic` and
-#: excludes everything below.
-TIER_ORDER = ("government", "academic", "industry", "press", "informal")
+#: Source tiers, most to least authoritative, from `sources.SOURCE_TIER_RANK` so the two
+#: cannot disagree (`B-265`: this once named tiers the database does not have, and every
+#: grant was narrowed to them). `max_source_tier` names a floor in this order: naming
+#: `government` admits `peer_reviewed` and `government` and excludes everything below.
+TIER_ORDER: tuple[str, ...] = tuple(
+    sorted(SOURCE_TIER_RANK, key=SOURCE_TIER_RANK.__getitem__, reverse=True)
+)
 
 __all__ = [
     "PROFILE_TOOLS",

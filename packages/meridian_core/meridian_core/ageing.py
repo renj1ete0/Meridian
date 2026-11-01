@@ -20,10 +20,8 @@ log = get_logger(__name__)
 HALF_LIFE_DAYS: dict[str, int | None] = {
     "peer_reviewed": None,
     "preprint": 3650,
-    "academic": 3650,
     "government": 1825,
     "institutional": 1825,
-    "industry": 730,
     "press": 365,
     "informal": 180,
 }

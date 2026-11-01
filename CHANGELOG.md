@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.189.1] — 2026-11-01
+
+### Fixed
+
+- `B-265`: shared assistants (grants) see every tier again. The tier order a grant is narrowed
+  by named tiers the database does not have, so every grant, ceiling or not, searched without
+  peer-reviewed, institutional and preprint sources. It is now derived from the tier rank. The
+  ageing table loses two such names as well.
+
+**Deploy:** image only.
+
 ## [0.189.0] — 2026-11-01
 
 ### Changed
