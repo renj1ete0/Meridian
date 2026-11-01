@@ -91,6 +91,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.181.0] — 2026-11-01
+
+### Added
+
+- `B-252`: permissions per area for each person (ADR 0024). Every route names the permission it
+  needs; a grant's profile is a preset, and `allow`/`deny` switch single permissions; owners come
+  from `MERIDIAN_OWNER_EMAILS`; every grant change is recorded with who made it. `/api/me`,
+  `/api/admin/people`, and `/api/setup/claim` with a one-time code from the API's log when
+  nobody can manage access. Needs migration `b252a1c2d3e4`.
+
+### Changed (breaking)
+
+- With Cloudflare Access configured, a person without a live grant now sees nothing, the reader
+  pages included. Set `MERIDIAN_OWNER_EMAILS`, or claim the instance with the code in the API's
+  log, then grant others. Without Access nothing changes.
+
 ## [0.180.0] — 2026-11-01
 
 ### Added

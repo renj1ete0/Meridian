@@ -1,8 +1,9 @@
 """`/api/admin/*` — the control surface (task P6-13, spec §12.6, §5.6).
 
-The only routes that change anything. `WriteSession` and `AdminAllowed` both come from
-`deps`, so no route here gets a session without the gate. Approving a term reports what
-the matcher will do with it, and nothing here deletes except a saved view.
+The only routes that change anything. `WriteSession` and the `Can*` permission annotations
+both come from `deps`, so no route here gets a session without the gate (`B-252`).
+Approving a term reports what the matcher will do with it, and nothing here deletes except a
+saved view.
 See docs/features/api-and-access.md#admin-routes.
 """
 
@@ -101,7 +102,20 @@ from meridian_core.search import SearchFilters
 from meridian_core.timefmt import ZONE_KEY, zone_label
 from meridian_core.validation import ValidationError, check_seed_allowed
 
-from ..deps import AdminAllowed, WriteSession
+from ..deps import (
+    CanAsk,
+    CanCurate,
+    CanDecideDuplicates,
+    CanEditBudget,
+    CanEditFetchPolicy,
+    CanEditModels,
+    CanEditSettings,
+    CanSeed,
+    CanSteer,
+    CanViewAdmin,
+    CanWriteWork,
+    WriteSession,
+)
 from ..search_service import embed_query, reranker
 
 log = get_logger(__name__)
@@ -174,7 +188,7 @@ async def _rows_for(sess, terms: list[GazetteerTerm]) -> list[GazetteerRowRead]:
 
 @router.get("/gazetteer", response_model=GazetteerQueueRead)
 async def gazetteer_queue(
-    _: AdminAllowed,
+    _: CanViewAdmin,
     sess: WriteSession,
     state: Annotated[QueueState, Query()] = "pending",
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -242,7 +256,7 @@ async def _decided(sess, term: GazetteerTerm) -> GazetteerRowRead:
 
 
 @router.post("/gazetteer/{term_id}/approve", response_model=GazetteerRowRead)
-async def approve_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> GazetteerRowRead:
+async def approve_term(term_id: int, _: CanCurate, sess: WriteSession) -> GazetteerRowRead:
     """Let this term override statistical NER.
 
     Clears any rejection, which the harvest would otherwise still read.
@@ -259,7 +273,7 @@ async def approve_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> Gaz
 
 
 @router.post("/gazetteer/{term_id}/reject", response_model=GazetteerRowRead)
-async def reject_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> GazetteerRowRead:
+async def reject_term(term_id: int, _: CanCurate, sess: WriteSession) -> GazetteerRowRead:
     """Turn this term down, and keep the row so it stays down.
 
     The row is kept as a tombstone, or the next harvest pass re-creates it.
@@ -272,7 +286,7 @@ async def reject_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> Gaze
 
 
 @router.post("/gazetteer/{term_id}/restore", response_model=GazetteerRowRead)
-async def restore_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> GazetteerRowRead:
+async def restore_term(term_id: int, _: CanCurate, sess: WriteSession) -> GazetteerRowRead:
     """Put a rejected term back in the queue, undecided.
 
     Not the same as approving it. A judgement made on two occurrences is worth
@@ -287,7 +301,7 @@ async def restore_term(term_id: int, _: AdminAllowed, sess: WriteSession) -> Gaz
 
 @router.patch("/gazetteer/{term_id}", response_model=GazetteerRowRead)
 async def edit_term(
-    term_id: int, edit: GazetteerTermEdit, _: AdminAllowed, sess: WriteSession
+    term_id: int, edit: GazetteerTermEdit, _: CanCurate, sess: WriteSession
 ) -> GazetteerRowRead:
     """Correct a term before deciding on it.
 
@@ -343,7 +357,7 @@ async def _topics_read(sess) -> TopicsRead:
 
 
 @router.get("/topics", response_model=TopicsRead)
-async def list_topics(_: AdminAllowed, sess: WriteSession) -> TopicsRead:
+async def list_topics(_: CanViewAdmin, sess: WriteSession) -> TopicsRead:
     """The vector, with what each topic is actually drawing beside what it stores."""
     return await _topics_read(sess)
 
@@ -357,9 +371,7 @@ def _refused(exc: Exception) -> HTTPException:
 
 
 @router.patch("/topics/{topic}", response_model=TopicsRead)
-async def edit_topic(
-    topic: str, edit: TopicEdit, _: AdminAllowed, sess: WriteSession
-) -> TopicsRead:
+async def edit_topic(topic: str, edit: TopicEdit, _: CanSteer, sess: WriteSession) -> TopicsRead:
     """Steer one topic. Returns the whole vector, because changing one moves all."""
     fields = await _steer(sess, topic, edit)
     await sess.commit()
@@ -414,7 +426,7 @@ async def _steer(sess, topic: str, edit: TopicEdit) -> list[str]:
 
 
 @router.post("/topics", response_model=TopicsRead, status_code=201)
-async def add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> TopicsRead:
+async def add_topic(body: TopicAdd, _: CanSteer, sess: WriteSession) -> TopicsRead:
     """§10.2's `add_topic` — insert and re-normalise."""
     await _add(sess, body)
     await sess.commit()
@@ -445,7 +457,7 @@ async def _add(sess, body: TopicAdd) -> None:
 
 @router.get("/steering-log", response_model=SteeringLogPage)
 async def steering_log(
-    _: AdminAllowed,
+    _: CanViewAdmin,
     sess: WriteSession,
     topic: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -527,7 +539,7 @@ def _row_read(row: FetchPolicy, glob: FetchPolicy | None) -> FetchPolicyRowRead:
 
 @router.get("/fetch-policy", response_model=FetchPolicyPage)
 async def list_fetch_policy(
-    _: AdminAllowed,
+    _: CanViewAdmin,
     sess: WriteSession,
     status: Annotated[DomainStatus | None, Query()] = None,
     q: Annotated[str | None, Query(description="Substring of the domain.")] = None,
@@ -586,7 +598,7 @@ async def _policy_row(sess, domain: str) -> FetchPolicy:
 
 @router.put("/settings/display-timezone", response_model=DisplaySettingsRead)
 async def set_display_timezone(
-    edit: DisplayZoneEdit, _: AdminAllowed, sess: WriteSession
+    edit: DisplayZoneEdit, _: CanEditSettings, sess: WriteSession
 ) -> DisplaySettingsRead:
     """Change the zone times are shown in (`B-145`, ADR 0009). Stored times do not move."""
     row = await sess.get(FetchPolicy, GLOBAL_DOMAIN)
@@ -605,7 +617,7 @@ async def set_display_timezone(
 
 @router.patch("/fetch-policy/{domain}", response_model=FetchPolicyRowRead)
 async def edit_fetch_policy(
-    domain: str, edit: FetchPolicyEdit, _: AdminAllowed, sess: WriteSession
+    domain: str, edit: FetchPolicyEdit, _: CanEditFetchPolicy, sess: WriteSession
 ) -> FetchPolicyRowRead:
     """Change one domain's politeness, patience, or render mode.
 
@@ -671,7 +683,9 @@ def _first_error(exc: PydanticValidationError) -> str:
 
 
 @router.post("/fetch-policy/{domain}/unblock", response_model=FetchPolicyRowRead)
-async def unblock_domain(domain: str, _: AdminAllowed, sess: WriteSession) -> FetchPolicyRowRead:
+async def unblock_domain(
+    domain: str, _: CanEditFetchPolicy, sess: WriteSession
+) -> FetchPolicyRowRead:
     """Put an auto-blocked domain back in the crawl, and clear the count.
 
     Both together; either alone looks like the unblock did not work.
@@ -689,7 +703,7 @@ async def unblock_domain(domain: str, _: AdminAllowed, sess: WriteSession) -> Fe
 
 @router.post("/fetch-policy/{domain}/forget-render", response_model=FetchPolicyRowRead)
 async def forget_render_learning(
-    domain: str, _: AdminAllowed, sess: WriteSession
+    domain: str, _: CanEditFetchPolicy, sess: WriteSession
 ) -> FetchPolicyRowRead:
     """Discard what the crawl learned about needing a browser (`P1-27`).
 
@@ -714,7 +728,7 @@ async def forget_render_learning(
 
 
 @router.post("/views", response_model=SavedViewRead, status_code=201)
-async def create_view(body: SavedViewCreate, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
+async def create_view(body: SavedViewCreate, _: CanWriteWork, sess: WriteSession) -> SavedViewRead:
     """Save a filter set under a name.
 
     The filters are validated against what will apply them, so a view cannot store one
@@ -767,7 +781,7 @@ def _validated_filters(filters: dict, *, node: bool) -> None:
 
 @router.patch("/views/{view_id}", response_model=SavedViewRead)
 async def edit_view(
-    view_id: int, edit: SavedViewEdit, _: AdminAllowed, sess: WriteSession
+    view_id: int, edit: SavedViewEdit, _: CanWriteWork, sess: WriteSession
 ) -> SavedViewRead:
     """Rename a view, re-note it, or point it somewhere else."""
     view = await sess.get(SavedView, view_id)
@@ -793,7 +807,7 @@ async def edit_view(
 
 
 @router.post("/views/{view_id}/opened", response_model=SavedViewRead)
-async def mark_view_opened(view_id: int, _: AdminAllowed, sess: WriteSession) -> SavedViewRead:
+async def mark_view_opened(view_id: int, _: CanWriteWork, sess: WriteSession) -> SavedViewRead:
     """Record that somebody returned to this view.
 
     What orders the landing screen. A separate call: listing is not returning.
@@ -808,7 +822,7 @@ async def mark_view_opened(view_id: int, _: AdminAllowed, sess: WriteSession) ->
 
 
 @router.delete("/views/{view_id}", status_code=204)
-async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None:
+async def delete_view(view_id: int, _: CanWriteWork, sess: WriteSession) -> None:
     """Remove a view.
 
     The one delete on this surface: a view holds no evidence and nothing depends on it.
@@ -832,7 +846,7 @@ async def delete_view(view_id: int, _: AdminAllowed, sess: WriteSession) -> None
 
 @router.get("/duplicates", response_model=DuplicatesRead)
 async def list_duplicates(
-    _: AdminAllowed, sess: WriteSession, limit: Annotated[int, Query(ge=1, le=50)] = 20
+    _: CanViewAdmin, sess: WriteSession, limit: Annotated[int, Query(ge=1, le=50)] = 20
 ) -> DuplicatesRead:
     """Undecided possible duplicates, newest first, with both nodes and their evidence."""
     return await duplicates.open_pairs(sess, limit=limit)
@@ -840,7 +854,7 @@ async def list_duplicates(
 
 @router.post("/duplicates/{notification_id}", response_model=DuplicateDecisionRead)
 async def decide_duplicate(
-    notification_id: int, body: DuplicateDecision, _: AdminAllowed, sess: WriteSession
+    notification_id: int, body: DuplicateDecision, _: CanDecideDuplicates, sess: WriteSession
 ) -> DuplicateDecisionRead:
     """Merge the created node into the one it might be, or keep them apart."""
     try:
@@ -857,7 +871,7 @@ async def decide_duplicate(
 
 @router.post("/duplicates/{notification_id}/undo", response_model=DuplicateDecisionRead)
 async def undo_duplicate(
-    notification_id: int, _: AdminAllowed, sess: WriteSession
+    notification_id: int, _: CanDecideDuplicates, sess: WriteSession
 ) -> DuplicateDecisionRead:
     """Reverse a decision: split the merge exactly, or reopen a pair kept apart."""
     try:
@@ -879,7 +893,7 @@ async def undo_duplicate(
 
 @router.post("/annotations", response_model=AnnotationRead, status_code=201)
 async def write_annotation(
-    body: AnnotationCreate, _: AdminAllowed, sess: WriteSession
+    body: AnnotationCreate, _: CanWriteWork, sess: WriteSession
 ) -> AnnotationRead:
     """Write one of the reader's own notes.
 
@@ -901,7 +915,7 @@ async def write_annotation(
 
 @router.patch("/annotations/{entity_id}", response_model=AnnotationRead)
 async def rewrite_annotation(
-    entity_id: int, change: AnnotationEdit, _: AdminAllowed, sess: WriteSession
+    entity_id: int, change: AnnotationEdit, _: CanWriteWork, sess: WriteSession
 ) -> AnnotationRead:
     """Rewrite a note, or re-point what it is about.
 
@@ -921,7 +935,7 @@ async def rewrite_annotation(
 
 @router.post("/annotations/{entity_id}/withdraw", response_model=AnnotationRead)
 async def withdraw_annotation(
-    entity_id: int, _: AdminAllowed, sess: WriteSession
+    entity_id: int, _: CanWriteWork, sess: WriteSession
 ) -> AnnotationRead:
     """Withdraw a note (`B-201`): it leaves every list and the graph, and is kept.
 
@@ -936,7 +950,7 @@ async def withdraw_annotation(
 
 
 @router.post("/annotations/{entity_id}/restore", response_model=AnnotationRead)
-async def restore_annotation(entity_id: int, _: AdminAllowed, sess: WriteSession) -> AnnotationRead:
+async def restore_annotation(entity_id: int, _: CanWriteWork, sess: WriteSession) -> AnnotationRead:
     """Put a withdrawn note back where it was (`B-201`)."""
     try:
         note = await annotations.withdraw(sess, entity_id, withdrawn=False)
@@ -983,13 +997,13 @@ CAP_FIELDS = frozenset(BudgetEdit.model_fields)
 
 
 @router.get("/budget", response_model=BudgetRead)
-async def read_budget(_: AdminAllowed, sess: WriteSession) -> BudgetRead:
+async def read_budget(_: CanViewAdmin, sess: WriteSession) -> BudgetRead:
     """The caps, the month's spend, and whether a run could start right now."""
     return await _budget_read(sess)
 
 
 @router.put("/budget", response_model=BudgetRead)
-async def set_budget(edit: BudgetEdit, _: AdminAllowed, sess: WriteSession) -> BudgetRead:
+async def set_budget(edit: BudgetEdit, _: CanEditBudget, sess: WriteSession) -> BudgetRead:
     """Set or change the caps.
 
     A partial `PUT` on the singleton: omitted fields are kept, an explicit `null`
@@ -1030,7 +1044,7 @@ async def set_budget(edit: BudgetEdit, _: AdminAllowed, sess: WriteSession) -> B
 
 
 @router.get("/first-run", response_model=FirstRunRead)
-async def read_first_run(_: AdminAllowed, sess: WriteSession) -> FirstRunRead:
+async def read_first_run(_: CanViewAdmin, sess: WriteSession) -> FirstRunRead:
     """Whether anything has been crawled yet, and what is still queued."""
     sources = int(await sess.scalar(select(func.count()).select_from(Source)) or 0)
 
@@ -1064,7 +1078,7 @@ async def read_first_run(_: AdminAllowed, sess: WriteSession) -> FirstRunRead:
 
 
 @router.post("/seeds", response_model=QueueTaskRead, status_code=201)
-async def add_seed(seed: SeedCreate, _: AdminAllowed, sess: WriteSession) -> QueueTaskRead:
+async def add_seed(seed: SeedCreate, _: CanSeed, sess: WriteSession) -> QueueTaskRead:
     """Add a cold-start seed from the interface.
 
     `seed_source="user"`, so `P4-12` allows the domain at once; validated by
@@ -1108,7 +1122,7 @@ async def add_seed(seed: SeedCreate, _: AdminAllowed, sess: WriteSession) -> Que
 
 
 @router.delete("/seeds/{task_id}", status_code=204)
-async def drop_seed(task_id: int, _: AdminAllowed, sess: WriteSession) -> None:
+async def drop_seed(task_id: int, _: CanSeed, sess: WriteSession) -> None:
     """Remove a cold-start seed that has not been fetched yet.
 
     Only while `pending` and unclaimed (a claim is a lease, `P1-01`); the 409 says which
@@ -1177,7 +1191,7 @@ def _blocked_by(agent: Agent, *, key_present: bool) -> list[str]:
 
 
 @router.get("/agents", response_model=AgentsRead)
-async def list_agents(_: AdminAllowed, sess: WriteSession) -> AgentsRead:
+async def list_agents(_: CanViewAdmin, sess: WriteSession) -> AgentsRead:
     """The registry, with the reason each row is or is not routable.
 
     `unserved_tasks` lists task types no enabled row declares: stages that defer every
@@ -1202,7 +1216,7 @@ async def list_agents(_: AdminAllowed, sess: WriteSession) -> AgentsRead:
 
 @router.patch("/agents/{agent_id}", response_model=AgentsRead)
 async def edit_agent(
-    agent_id: str, body: AgentEdit, _: AdminAllowed, sess: WriteSession
+    agent_id: str, body: AgentEdit, _: CanEditModels, sess: WriteSession
 ) -> AgentsRead:
     """Enable or disable one agent, and return the whole registry.
 
@@ -1261,7 +1275,7 @@ async def _model_status(agent: Agent) -> LocalModelStatusRead:
 
 
 @router.get("/status", response_model=StatusRead)
-async def status(_: AdminAllowed, sess: WriteSession) -> StatusRead:
+async def status(_: CanViewAdmin, sess: WriteSession) -> StatusRead:
     """The embedder and each enabled local model, asked now, and the embedding backlog.
 
     The probes run together, each bounded by its own short timeouts (`B-223`, `B-224`).
@@ -1286,7 +1300,7 @@ async def status(_: AdminAllowed, sess: WriteSession) -> StatusRead:
 
 @router.get("/runs", response_model=RunsRead)
 async def list_runs(
-    _: AdminAllowed,
+    _: CanViewAdmin,
     sess: WriteSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 25,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -1330,7 +1344,7 @@ async def _preview(sess) -> TopicsRead:
 
 
 @router.post("/topics/preview", response_model=TopicsRead)
-async def preview_add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession) -> TopicsRead:
+async def preview_add_topic(body: TopicAdd, _: CanSteer, sess: WriteSession) -> TopicsRead:
     """What `POST /topics` would leave the vector as, without leaving it so.
 
     Refused exactly as the write would be, with the same sentence, so a dialog
@@ -1342,7 +1356,7 @@ async def preview_add_topic(body: TopicAdd, _: AdminAllowed, sess: WriteSession)
 
 @router.post("/topics/{topic}/preview", response_model=TopicsRead)
 async def preview_edit_topic(
-    topic: str, edit: TopicEdit, _: AdminAllowed, sess: WriteSession
+    topic: str, edit: TopicEdit, _: CanSteer, sess: WriteSession
 ) -> TopicsRead:
     """What `PATCH /topics/{topic}` would leave the vector as, without leaving it so."""
     await _steer(sess, topic, edit)
@@ -1351,7 +1365,7 @@ async def preview_edit_topic(
 
 @router.post("/gazetteer/decide", response_model=GazetteerBulkRead)
 async def decide_terms(
-    body: GazetteerBulkDecision, _: AdminAllowed, sess: WriteSession
+    body: GazetteerBulkDecision, _: CanCurate, sess: WriteSession
 ) -> GazetteerBulkRead:
     """One verdict for up to a page of terms, all or none.
 
@@ -1412,7 +1426,7 @@ def _steer_refused(exc: Exception) -> HTTPException:
 
 @router.post("/map/areas/{area_id}/steer", response_model=MapSteerRead)
 async def steer_area(
-    area_id: int, body: MapSteerCreate, _: AdminAllowed, sess: WriteSession
+    area_id: int, body: MapSteerCreate, _: CanSteer, sess: WriteSession
 ) -> MapSteerRead:
     """More, less or watch one area of the map."""
     try:
@@ -1426,7 +1440,7 @@ async def steer_area(
 
 
 @router.post("/map/noise/{mark}/restore", response_model=NoiseRestoreRead)
-async def restore_noise(mark: str, _: AdminAllowed, sess: WriteSession) -> NoiseRestoreRead:
+async def restore_noise(mark: str, _: CanSteer, sess: WriteSession) -> NoiseRestoreRead:
     """Undo one "this is noise" marking: every source it moved goes back (`P6-42`)."""
     restored = await mapsteer.restore_noise(sess, mark, actor=ACTOR, now=_now())
     if restored == 0:
@@ -1438,9 +1452,7 @@ async def restore_noise(mark: str, _: AdminAllowed, sess: WriteSession) -> Noise
 
 
 @router.post("/map/suggest", response_model=MapSteerRead, status_code=201)
-async def suggest_search(
-    body: MapSuggestCreate, _: AdminAllowed, sess: WriteSession
-) -> MapSteerRead:
+async def suggest_search(body: MapSuggestCreate, _: CanSeed, sess: WriteSession) -> MapSteerRead:
     """Queue something new to search for, from empty space on the map."""
     try:
         result = await mapsteer.suggest_seed(
@@ -1460,7 +1472,7 @@ async def suggest_search(
 
 
 @router.post("/chat/ask", response_model=ChatExchangeRead)
-async def ask_the_graph(body: ChatAsk, _: AdminAllowed, sess: WriteSession) -> ChatExchangeRead:
+async def ask_the_graph(body: ChatAsk, _: CanAsk, sess: WriteSession) -> ChatExchangeRead:
     """One question answered from the corpus, both turns stored.
 
     Under Admin because it writes a thread and spends tokens. A model that cannot

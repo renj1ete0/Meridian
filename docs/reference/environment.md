@@ -119,7 +119,8 @@ or `model`); see [features/synthesis.md](../features/synthesis.md).
 | Variable | Default | Meaning |
 |---|---|---|
 | `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | unset | Verify Cloudflare Access assertions; unset disables the middleware |
-| `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` | off | Allow `/api/admin/*` without verified identity (local use only) |
+| `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` | off | Allow `/api/admin/*` without verified identity (local use only); the local user is an owner (`B-252`) |
+| `MERIDIAN_OWNER_EMAILS` | unset | Owners, comma-separated Access emails: every permission, never removable from the web (`B-252`, ADR 0024). Unset with Access on, the API logs a one-time setup code |
 | `MERIDIAN_MCP_ALLOW_ANONYMOUS` | off | Allow MCP tools without a token (local use only) |
 | `MERIDIAN_MCP_ISSUER_URL`, `MERIDIAN_MCP_RESOURCE_URL` | `http://localhost`, `…/mcp` | Name this server in OAuth metadata; set to the public URL behind the tunnel. Tokens verify either way (`B-138`) |
 | `WEB_BIND`, `WEB_PORT` | `127.0.0.1`, 8080 | Where `deploy/lan/publish-web.yml` publishes the web front door (and `/mcp`) |

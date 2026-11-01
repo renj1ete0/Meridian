@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from meridian_core import gaps
 from meridian_core.db import session_ro
 from meridian_core.logging import get_logger
+from meridian_core.permissions import EXPLORE_READ
 from meridian_core.schemas.gaps import (
     GapActionResult,
     GapBoost,
@@ -24,11 +25,13 @@ from meridian_core.schemas.gaps import (
 from meridian_core.timefmt import display_zone, format_instant
 
 from ..cache import Kept
-from ..deps import AdminAllowed, WriteSession
+from ..deps import CanSeed, CanSteer, WriteSession, require
 
 log = get_logger(__name__)
 
-explore_router = APIRouter(prefix="/api/explore", tags=["explore"])
+explore_router = APIRouter(
+    prefix="/api/explore", tags=["explore"], dependencies=[Depends(require(EXPLORE_READ))]
+)
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
@@ -74,7 +77,7 @@ def _refuse(exc: Exception) -> HTTPException:
 
 
 @admin_router.post("/gaps/seed", response_model=GapActionResult, status_code=201)
-async def seed_from_gap(body: GapSeed, _: AdminAllowed, sess: WriteSession) -> GapActionResult:
+async def seed_from_gap(body: GapSeed, _: CanSeed, sess: WriteSession) -> GapActionResult:
     try:
         task = await gaps.seed_query(
             sess, topic=body.topic, query=body.query, gap_id=body.gap_id, now=_now()
@@ -94,7 +97,7 @@ async def seed_from_gap(body: GapSeed, _: AdminAllowed, sess: WriteSession) -> G
 
 
 @admin_router.post("/gaps/boost", response_model=GapActionResult)
-async def boost_from_gap(body: GapBoost, _: AdminAllowed, sess: WriteSession) -> GapActionResult:
+async def boost_from_gap(body: GapBoost, _: CanSteer, sess: WriteSession) -> GapActionResult:
     from meridian_core import steering
 
     try:

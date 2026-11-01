@@ -353,6 +353,11 @@ someone searched for is the audit, what came back is the corpus, and copying it 
 second store without the first one's retention rules (§5.4). `rows` says how much. High volume,
 pruned like `fetch_attempts`.
 
+`grants.allow` and `grants.deny` (`B-252`) switch single web permissions on or off on top of
+the profile; each holds names from `meridian_core.permissions`, by CHECK. `grant_changes` holds
+one row per change to a grant's access: `actor` (the Access email, or `setup`), `before` and
+`after` as JSON. See [api-and-access.md](../features/api-and-access.md#permissions).
+
 ### Budget config
 
 The caps, and the fact that somebody set them (`P4-10`, §16, §11.9). §16 calls runaway cost

@@ -33,6 +33,7 @@ from .routes import (
     graph,
     growth,
     neighbourhood,
+    people,
     steering_proposals,
     tokens,
 )
@@ -184,6 +185,9 @@ def create_app() -> FastAPI:
     app.include_router(steering_proposals.router)
     app.include_router(growth.router)
     app.include_router(tokens.router)
+    # Who is asking and people's permissions (`B-252`, ADR 0024).
+    app.include_router(people.me_router)
+    app.include_router(people.router)
 
     # The MCP surface (`P3-01`), on the same app: one corpus, role and validation
     # layer (§11.1b). Authentication is `P3-03`; see docs/features/mcp.md.

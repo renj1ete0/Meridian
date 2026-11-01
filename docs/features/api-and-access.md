@@ -121,6 +121,65 @@ RFC 9728 places it and as the 401's `resource_metadata` names it; under the `/mc
 answered only at `/mcp/.well-known/…`, and a client following the header found nothing. nginx in
 `web` forwards both, so one public hostname at `web` serves everything.
 
+### <a id="permissions"></a>Permissions (`B-252`)
+
+Past Cloudflare Access, every request is resolved to a person and what they may do
+([ADR 0024](../adr/0024-fine-grained-permissions-for-people.md)). `api.deps.current_caller`
+reads the verified Access email (never the header) and asks `meridian_core.people.resolve`:
+
+1. **An owner**, named in `MERIDIAN_OWNER_EMAILS` (comma-separated, any case), holds every
+   permission. Nothing in the web can remove or reduce an owner, so no edit locks the operator
+   out; an owner cannot also be given a grant.
+2. **A person with a live grant** (not revoked, not expired) holds their profile's permissions,
+   plus the grant's `allow` switches, minus its `deny` switches. Both allowed and denied is
+   denied.
+3. **Anyone else Access lets in** holds nothing: the reader pages answer 403 too. Reaching the
+   site is Cloudflare's decision; reading the corpus is Meridian's.
+
+Without Access configured there is nobody to look up: the reader pages stay open, and Admin is
+closed (503, as before) unless `MERIDIAN_ADMIN_ALLOW_ANONYMOUS` makes the local user an owner.
+
+**The catalogue** is `meridian_core.permissions.PERMISSIONS`: one area and one verb each.
+
+| Permission | Opens | reader | analyst | operator |
+|---|---|:-:|:-:|:-:|
+| `explore.read` | every `/api/explore` route | ✓ | ✓ | ✓ |
+| `admin.view` | Admin's reads: status, runs, topics, fetch policy, budget, agents, duplicates, proposals | | ✓ | ✓ |
+| `work.write` | notes and saved views | | ✓ | ✓ |
+| `chat.ask` | Ask (spends the budget) | | ✓ | ✓ |
+| `topics.steer` | topics, previews, proposals, map steering, gap boosts | | | ✓ |
+| `seeds.add` | seeds, gap seeds, map suggestions | | | ✓ |
+| `gazetteer.curate` | approving, editing, rejecting terms | | | ✓ |
+| `duplicates.decide` | merging and undoing | | | ✓ |
+| `fetch_policy.edit` | politeness, blocks, render learning | | | ✓ |
+| `budget.edit` | caps | | | ✓ |
+| `models.edit` | the agent registry | | | ✓ |
+| `settings.edit` | the display time zone | | | ✓ |
+| `access.manage` | people and permissions, assistant tokens | | | |
+
+`operator` holds everything but `access.manage`: handing out access is an owner's, or a switch
+someone chose to give. MCP tokens keep their profile's tool set; switches apply to the web.
+
+**Every route names its permission** through one `Can*` annotation (`CanSteer`, `CanSeed`, …);
+the reader routers carry `explore.read` as a router dependency. `tests/unit/test_route_permissions.py`
+walks every route (FastAPI 0.14x keeps included routers as lazy wrappers, which a walk over
+`app.routes` alone misses) and fails on a route with none or two, on an Admin change behind a
+read permission, and on an exemption for a route that no longer exists. Exempt by name:
+`/api/me` and `/api/setup/claim`. A refusal is a 403 naming the permission.
+
+**Switches** are names from the catalogue, held to it by CHECKs on `grants.allow` and
+`grants.deny` (the migration writes the list out; a test compares). Every change to a grant's
+profile, switches, expiry or revocation is written to `grant_changes` with who made it, before
+and after. A change that would take `access.manage` from the person making it is refused, so
+nobody removes their own way back.
+
+**Claiming a fresh instance.** With Access configured, no owner named and no live grant holding
+`access.manage`, `/api/me` says `setup_needed` and the API writes a one-time code to its log
+(`nobody can manage access yet`, field `setup_code`). The first person to post it to
+`/api/setup/claim` is granted `operator` with `access.manage` for a year (an existing grant of
+theirs is raised instead); the code is then spent, and the route refuses while anyone can
+manage access. A restart writes a new code. Setting `MERIDIAN_OWNER_EMAILS` ends the question.
+
 ### Admin routes
 
 `/api/admin/*` (`P6-13`) is the only surface that changes anything.

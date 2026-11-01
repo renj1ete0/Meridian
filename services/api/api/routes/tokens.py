@@ -16,7 +16,7 @@ from meridian_core.models import AgentToken
 from meridian_core.schemas.tokens import TokenIssue, TokenIssued, TokenRowRead, TokensRead
 from meridian_core.tokens import issue_token, list_tokens, revoke_token
 
-from ..deps import AdminAllowed, WriteSession
+from ..deps import CanManageAccess, WriteSession
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -53,7 +53,7 @@ def row_of(token: AgentToken, now: dt.datetime) -> TokenRowRead:
 
 
 @router.get("/tokens", response_model=TokensRead)
-async def tokens_list(_: AdminAllowed, sess: WriteSession, all: bool = False) -> TokensRead:  # noqa: A002
+async def tokens_list(_: CanManageAccess, sess: WriteSession, all: bool = False) -> TokensRead:  # noqa: A002
     """Issued tokens, newest first; revoked ones only when asked."""
     now = dt.datetime.now(dt.UTC)
     rows = await list_tokens(sess, include_revoked=all)
@@ -66,7 +66,7 @@ async def tokens_list(_: AdminAllowed, sess: WriteSession, all: bool = False) ->
 
 
 @router.post("/tokens", response_model=TokenIssued, status_code=201)
-async def tokens_issue(body: TokenIssue, _: AdminAllowed, sess: WriteSession) -> TokenIssued:
+async def tokens_issue(body: TokenIssue, _: CanManageAccess, sess: WriteSession) -> TokenIssued:
     """Issue a token. The response is the only place its secret ever appears."""
     if body.profile not in PROFILE_TOOLS:
         raise HTTPException(status_code=422, detail=f"No profile {body.profile!r}.")
@@ -85,7 +85,7 @@ async def tokens_issue(body: TokenIssue, _: AdminAllowed, sess: WriteSession) ->
 
 
 @router.post("/tokens/{token_id}/revoke", response_model=TokenRowRead)
-async def tokens_revoke(token_id: int, _: AdminAllowed, sess: WriteSession) -> TokenRowRead:
+async def tokens_revoke(token_id: int, _: CanManageAccess, sess: WriteSession) -> TokenRowRead:
     """Turn a token off. It stays listed under revoked, for the record."""
     if not await revoke_token(sess, token_id):
         raise HTTPException(status_code=404, detail=f"No token {token_id}.")

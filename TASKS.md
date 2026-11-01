@@ -1962,7 +1962,13 @@ deploy runbook whose first two commands could not work (`B-17`).
       machine known only by its `.local` name was unreachable from the api and orchestrator.
       `lan-resolver` (host network, URL settings only) writes the answers to a file the clients
       read (docs/features/lan-names.md)
-- [ ] `B-252` **Fine-grained permissions for the web Admin, editable there** (operator,
+- [ ] `B-257` **People & permissions page, and an Admin that shows only what one may do** —
+      the web half of `B-252`: Admin → People & permissions as `docs/design/AdminPeople.dc.html`
+      (add, profile, per-permission Profile/On/Off, revoke, show revoked); `/api/me` drives the
+      nav and disables controls a person cannot use; the claim form when `setup_needed`; a page
+      for someone Access let in with no grant
+- [x] `B-252` `v0.181.0`, the API half; end to end through the Access middleware with a local
+      key, not yet behind a real Cloudflare team. **Fine-grained permissions for the web Admin, editable there** (operator,
       2026-11-01) — Admin is all-or-nothing behind Cloudflare Access. Permissions per area (view,
       topics, gazetteer, duplicates, fetch policy, budget, models, watches, notes and views,
       seeds, access), roles as presets with per-person overrides, an Admin → Access page, every

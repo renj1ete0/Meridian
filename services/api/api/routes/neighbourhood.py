@@ -9,15 +9,18 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from meridian_core import graphview, neighbourhood
+from meridian_core.permissions import EXPLORE_READ
 from meridian_core.schemas.neighbourhood import TermNeighbourhoodRead
 
-from ..deps import ReadSession
+from ..deps import ReadSession, require
 from ..search_service import embed_query
 
-router = APIRouter(prefix="/api/explore", tags=["explore", "graph"])
+router = APIRouter(
+    prefix="/api/explore", tags=["explore", "graph"], dependencies=[Depends(require(EXPLORE_READ))]
+)
 
 
 @router.get("/neighbourhood", response_model=TermNeighbourhoodRead)

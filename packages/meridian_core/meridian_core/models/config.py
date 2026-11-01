@@ -26,6 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from meridian_core.db import Base
 
+from ..permissions import NAMES as _PERMISSION_NAMES
 from .mixins import TRUST_STATE, TimestampMixin, constrained, pk
 from .queue import SEED_SOURCE
 from .source import SOURCE_TIER
@@ -41,6 +42,9 @@ SUBJECT_KIND = constrained("person", "service", name="subject_kind")
 # A named set of tools, never a free-form list (§3). A per-person tool list
 # is how somebody ends up holding a write tool nobody remembers granting.
 GRANT_PROFILE = constrained("reader", "analyst", "operator", name="grant_profile")
+#: The permission catalogue as SQL, for the grants' CHECKs.
+_PERMISSION_LIST = ", ".join(f"'{name}'" for name in _PERMISSION_NAMES)
+
 AVAILABILITY = constrained("always", "on_demand", "opportunistic", name="agent_availability")
 
 
@@ -376,15 +380,49 @@ class Grant(Base, TimestampMixin):
     #: answer a year later, and the one nobody can reconstruct.
     note: Mapped[str | None] = mapped_column(Text)
 
+    #: Permissions switched on or off for this person on top of the profile (`B-252`,
+    #: ADR 0024). Names from `meridian_core.permissions`, held to that list by CHECKs.
+    allow: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+    deny: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+
     __table_args__ = (
         CheckConstraint(
             "subject_kind <> 'person' OR expires_at IS NOT NULL",
             name="person_grants_expire",
         ),
+        CheckConstraint(f"allow <@ ARRAY[{_PERMISSION_LIST}]::text[]", name="grant_allow_known"),
+        CheckConstraint(f"deny <@ ARRAY[{_PERMISSION_LIST}]::text[]", name="grant_deny_known"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Grant {self.grant_id} {self.subject} {self.profile}>"
+
+
+class GrantChange(Base):
+    """One change to a grant's access, and who made it (`B-252`, ADR 0024).
+
+    Switches let two people with one profile hold different permissions; this is how a list
+    of them is answered a year later.
+    """
+
+    __tablename__ = "grant_changes"
+
+    change_id: Mapped[int] = pk()
+    grant_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("grants.grant_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: The Access identity that made the change, or `setup` for a claim by code.
+    actor: Mapped[str] = mapped_column(Text, nullable=False)
+    changed_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    #: The grant's profile, switches, expiry and revocation before and after.
+    before: Mapped[dict | None] = mapped_column(JSONB)
+    after: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
 
 class GrantAudit(Base):

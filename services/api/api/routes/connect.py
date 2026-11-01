@@ -10,16 +10,19 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from meridian_core import graphview
 from meridian_core import route as routing
+from meridian_core.permissions import EXPLORE_READ
 from meridian_core.schemas.route import Allow, RouteRead
 
-from ..deps import ReadSession
+from ..deps import ReadSession, require
 from ..search_service import embed_query
 
-router = APIRouter(prefix="/api/explore", tags=["explore", "graph"])
+router = APIRouter(
+    prefix="/api/explore", tags=["explore", "graph"], dependencies=[Depends(require(EXPLORE_READ))]
+)
 
 
 def _end(entity_id: int | None, term: str | None, which: str) -> routing.Endpoint:

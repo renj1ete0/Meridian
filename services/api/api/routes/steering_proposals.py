@@ -18,7 +18,7 @@ from meridian_core.schemas.steering_proposals import (
     SteeringProposalsRead,
 )
 
-from ..deps import AdminAllowed, WriteSession
+from ..deps import CanSteer, CanViewAdmin, WriteSession
 
 log = get_logger(__name__)
 
@@ -43,7 +43,7 @@ def _refuse(exc: Exception) -> HTTPException:
 
 @router.get("/proposals", response_model=SteeringProposalsRead)
 async def list_proposals(
-    _: AdminAllowed,
+    _: CanViewAdmin,
     sess: WriteSession,
     recent: int = Query(default=20, ge=0, le=100),
 ) -> SteeringProposalsRead:
@@ -64,7 +64,7 @@ async def list_proposals(
 
 @router.post("/proposals/{proposal_id}/accept", response_model=SteeringProposalRead)
 async def accept_proposal(
-    proposal_id: int, _: AdminAllowed, sess: WriteSession
+    proposal_id: int, _: CanSteer, sess: WriteSession
 ) -> SteeringProposalRead:
     try:
         proposal = await steering_proposals.accept(sess, proposal_id, actor=ACTOR, now=_now())
@@ -81,7 +81,7 @@ async def accept_proposal(
 @router.post("/proposals/{proposal_id}/reject", response_model=SteeringProposalRead)
 async def reject_proposal(
     proposal_id: int,
-    _: AdminAllowed,
+    _: CanSteer,
     sess: WriteSession,
     body: SteeringProposalReject | None = None,
 ) -> SteeringProposalRead:

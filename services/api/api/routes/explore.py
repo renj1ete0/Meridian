@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import desc as sql_desc
 from sqlalchemy import func, or_, select
@@ -44,6 +44,7 @@ from meridian_core.models import (
     SteeringProposal,
 )
 from meridian_core.passagetopics import passage_topics_for
+from meridian_core.permissions import EXPLORE_READ
 from meridian_core.provider import answerable
 from meridian_core.queueing import queue_depth
 from meridian_core.schemas.annotations import AnnotationsRead
@@ -90,10 +91,12 @@ from meridian_core.timefmt import display_zone, zone_label
 from meridian_core.topicoverlaps import topic_overlaps
 
 from ..cache import KeptByKey
-from ..deps import ReadSession
+from ..deps import ReadSession, require
 from ..search_service import WindowTooDeep, answer_search, paged_search
 
-router = APIRouter(prefix="/api/explore", tags=["explore"])
+router = APIRouter(
+    prefix="/api/explore", tags=["explore"], dependencies=[Depends(require(EXPLORE_READ))]
+)
 
 #: How many sources one export may name. A bibliography is assembled by hand
 #: from results somebody read; a request for a thousand is a client looping over

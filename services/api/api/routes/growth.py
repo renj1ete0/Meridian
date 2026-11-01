@@ -9,16 +9,20 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from meridian_core.db import session_ro
 from meridian_core.growth import growth
+from meridian_core.permissions import EXPLORE_READ
 from meridian_core.schemas.growth import GrowthRead
 from meridian_core.timefmt import display_zone
 
 from ..cache import KeptByKey
+from ..deps import require
 
-router = APIRouter(prefix="/api/explore", tags=["explore"])
+router = APIRouter(
+    prefix="/api/explore", tags=["explore"], dependencies=[Depends(require(EXPLORE_READ))]
+)
 
 Range = Literal["7d", "30d", "all"]
 RANGES: dict[str, int | None] = {"7d": 7, "30d": 30, "all": None}

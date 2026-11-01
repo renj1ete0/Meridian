@@ -11,9 +11,10 @@ from __future__ import annotations
 import datetime as dt
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from meridian_core import graphview
+from meridian_core.permissions import EXPLORE_READ
 from meridian_core.schemas.enums import SourceTier
 from meridian_core.schemas.graphview import (
     ContestedListRead,
@@ -24,9 +25,13 @@ from meridian_core.schemas.graphview import (
     PathRead,
 )
 
-from ..deps import ReadSession
+from ..deps import ReadSession, require
 
-router = APIRouter(prefix="/api/explore/graph", tags=["explore", "graph"])
+router = APIRouter(
+    prefix="/api/explore/graph",
+    tags=["explore", "graph"],
+    dependencies=[Depends(require(EXPLORE_READ))],
+)
 
 
 @router.get("/contested", response_model=ContestedListRead)

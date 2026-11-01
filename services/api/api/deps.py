@@ -4,6 +4,10 @@ One dependency per database role, chosen by route prefix: `/api/explore/*` reads
 `meridian_ro`, which Postgres keeps read-only; `/api/admin/*` gets the only writable
 session, behind the admin gate. The role boundary is this one file.
 See docs/features/api-and-access.md#design-choices.
+
+Every route also names the permission it needs (`B-252`, ADR 0024), through one of the
+``Can*`` annotations below; `tests/unit/test_route_permissions.py` refuses a route without
+one. See docs/features/api-and-access.md#permissions.
 """
 
 from __future__ import annotations
@@ -12,10 +16,12 @@ import os
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meridian_core.db import session, session_ro
+from meridian_core.people import Caller, resolve
+from meridian_core.permissions import BY_NAME, EXPLORE_READ
 
 #: The strings that count as "yes". Anything else — including "0" and "no" — is
 #: not an opt-out, because a variable set to a typo must not read as consent.
@@ -46,15 +52,18 @@ def admin_is_unprotected() -> bool:
     return (os.environ.get("MERIDIAN_ADMIN_ALLOW_ANONYMOUS") or "").strip().lower() in TRUTHY
 
 
+def identity_is_checked() -> bool:
+    """Whether Access assertions are verified, so a request names a person (`P3-08`)."""
+    return bool(os.environ.get("CF_ACCESS_TEAM_DOMAIN") and os.environ.get("CF_ACCESS_AUD"))
+
+
 def admin_is_allowed() -> None:
     """Refuse admin entirely unless callers are identified, or the opt-out is set.
 
     Identity is a verified Access assertion (`CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`,
     `P3-08`). With neither that nor the opt-out, answers 503 naming the fix.
     """
-    if admin_is_unprotected():
-        return
-    if os.environ.get("CF_ACCESS_TEAM_DOMAIN") and os.environ.get("CF_ACCESS_AUD"):
+    if admin_is_unprotected() or identity_is_checked():
         return
     raise HTTPException(
         status_code=503,
@@ -78,4 +87,60 @@ async def write_session() -> AsyncIterator[AsyncSession]:
 #: The annotation admin routes use. The gate is a dependency rather than a check
 #: inside each handler so that a new route cannot be added without it.
 WriteSession = Annotated[AsyncSession, Depends(write_session)]
-AdminAllowed = Annotated[None, Depends(admin_is_allowed)]
+
+
+async def current_caller(request: Request) -> Caller:
+    """Who is asking and what they may do; resolved once per request."""
+    found = getattr(request.state, "caller", None)
+    if found is None:
+        async with session_ro() as sess:
+            found = await resolve(
+                sess,
+                getattr(request.state, "access_subject", None),
+                identity_checked=identity_is_checked(),
+                anonymous_admin=admin_is_unprotected(),
+            )
+        request.state.caller = found
+    return found
+
+
+CurrentCaller = Annotated[Caller, Depends(current_caller)]
+
+
+def require(permission: str):
+    """A dependency refusing a caller without ``permission``: 403, naming it.
+
+    Anything beyond reading is closed (503, as `admin_is_allowed`) on an instance with no
+    identity and no opt-out, so a misconfigured deployment is not an open one.
+    """
+    if permission not in BY_NAME:
+        raise ValueError(f"unknown permission {permission!r}")
+
+    async def check(caller: CurrentCaller) -> Caller:
+        if permission != EXPLORE_READ:
+            admin_is_allowed()
+        if not caller.may(permission):
+            raise HTTPException(
+                status_code=403,
+                detail=f"This needs the {BY_NAME[permission].label!r} permission ({permission}).",
+            )
+        return caller
+
+    check.permission = permission  # type: ignore[attr-defined]  # read by the route test
+    return check
+
+
+#: One annotation per permission; a route takes the one it needs as ``_``.
+CanRead = Annotated[Caller, Depends(require("explore.read"))]
+CanViewAdmin = Annotated[Caller, Depends(require("admin.view"))]
+CanWriteWork = Annotated[Caller, Depends(require("work.write"))]
+CanAsk = Annotated[Caller, Depends(require("chat.ask"))]
+CanSteer = Annotated[Caller, Depends(require("topics.steer"))]
+CanSeed = Annotated[Caller, Depends(require("seeds.add"))]
+CanCurate = Annotated[Caller, Depends(require("gazetteer.curate"))]
+CanDecideDuplicates = Annotated[Caller, Depends(require("duplicates.decide"))]
+CanEditFetchPolicy = Annotated[Caller, Depends(require("fetch_policy.edit"))]
+CanEditBudget = Annotated[Caller, Depends(require("budget.edit"))]
+CanEditModels = Annotated[Caller, Depends(require("models.edit"))]
+CanEditSettings = Annotated[Caller, Depends(require("settings.edit"))]
+CanManageAccess = Annotated[Caller, Depends(require("access.manage"))]
