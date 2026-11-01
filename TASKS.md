@@ -2077,6 +2077,14 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-267` **GDELT as a second news source** (split from `B-244`) — GDELT's free DOC API:
       a keyword per topic, articles from the last hours, many languages. A provider beside
       SearXNG for news queries, paced, with its results queued like search results
+- [ ] `B-268` **Stance toward a named target, pilot first** (operator, 2026-11-01) — not tone
+      sentiment (news is negative events, papers are neutral, a tone score answers nothing), but
+      for / against / neutral on a node the graph holds (a policy, an intervention, a
+      technology), with its passage as the citation, split by who speaks (B-253's press release
+      / news / opinion). Pilot: hand-judge ~100 passages on two or three transport policies and
+      compare with the operator's server model (Qwen Flash Next through seismo once it is
+      registered; else the 27B, said so). Only if agreement is good: a stance-over-time strip on
+      node pages, a Find filter, one-sided evidence as a gap, an MCP tool
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published
