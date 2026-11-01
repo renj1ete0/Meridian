@@ -21,6 +21,7 @@ services:
   embed:
     depends_on: !override
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
     networks: !override [internal, lan]
     environment:
       # Never load the model on this board, even when board 2 is down: that is

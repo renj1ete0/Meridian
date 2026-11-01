@@ -83,13 +83,19 @@ For private images, log in once as root: `sudo podman login ghcr.io` with a read
 Every command runs as root against podman's socket:
 
 ```bash
+sudo systemctl restart meridian      # compose up -d: datadirs, setup (migrate + seed), the stack
+```
+
+`setup` migrates and seeds before anything that touches the database starts (`B-261`,
+deployment.md §3). To run the steps by hand instead:
+
+```bash
 export DOCKER_HOST=unix:///run/podman/podman.sock
 alias dc='sudo -E /usr/local/bin/docker-compose'
 dc up -d postgres
 dc run --rm datadirs
 dc run --rm tools alembic upgrade head
 dc run --rm tools python scripts/seed.py
-sudo systemctl restart meridian
 ```
 
 No `modelfetch` here: the weights live on the GPU machine. Then the smoke run and the egress

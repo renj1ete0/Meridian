@@ -146,8 +146,9 @@ def test_the_release_script_covers_every_application_image() -> None:
     # 2.3 GB of weights is the whole design (`P2-17`, `B-14`), the scheduler
     # spawns `python -m` entry points out of that same tree (`B-15`), and
     # `bot` and `embed` are two more of those entry points (`P5-07`, `B-25`) —
-    # so none of them is a separate thing to push.
-    built_by_compose -= {"crawl4ai", "embedder", "modelfetch", "scheduler", "bot", "embed"}
+    # so none of them is a separate thing to push. `setup` is the tools image under its
+    # first-boot command (`B-261`).
+    built_by_compose -= {"crawl4ai", "embedder", "modelfetch", "scheduler", "bot", "embed", "setup"}
 
     named_by_script = set(re.findall(r'^\s*"(\w+)\|', build_script(), flags=re.MULTILINE))
 

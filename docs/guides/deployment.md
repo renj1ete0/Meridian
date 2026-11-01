@@ -157,6 +157,27 @@ directory is empty. Changing them later changes nothing until you delete
 ## 3. First boot
 
 ```bash
+docker compose up -d
+```
+
+That is the whole of it (`B-261`). Compose builds the images, starts Postgres, then runs two
+one-shots before anything that touches the database: `datadirs` (the bind mounts owned by the
+services' uid) and `setup` (`alembic upgrade head`, then the seed). The application services
+wait for `setup` to exit successfully; if it fails, they do not start, and `docker compose logs
+setup` says why. Every boot runs them again, harmlessly: the migration does nothing at head,
+the seed skips rows it already wrote, and `datadirs` touches six directories. Measured on a
+fresh data directory: 13 s to migrate and seed, 2 s on the next boot.
+
+With the embedder on another machine, set `COMPOSE_FILE` in `.env` (compose reads it), and
+`docker compose up -d` uses the overlay too:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:deploy/split/remote-embedder.yml
+```
+
+The steps one at a time, for when something fails and you want to see which:
+
+```bash
 docker compose up -d postgres       # builds first: see below
 docker compose logs -f postgres     # wait for "database system is ready"
 ```

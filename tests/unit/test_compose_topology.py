@@ -682,3 +682,26 @@ def test_postgres_has_room_for_a_parallel_index_build(path) -> None:
     match = re.search(r"maintenance_work_mem=(\$\{[^}]+\}|\S+)", command)
     work_mem = _default(match.group(1)) if match else "64MB"
     assert _bytes(_default(str(shm))) > _bytes(work_mem)
+
+
+def test_every_service_that_touches_the_database_waits_for_setup() -> None:
+    """`B-261`: a fresh server is `docker compose up -d`. A service that reads or writes the
+    database and starts before `setup` has migrated meets a schema that is not there yet, and
+    on a first boot that is every table. Read from compose: any service with `.env` (which is
+    where the database URLs are) and a dependency on postgres must wait for setup too."""
+    doc = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+    services = doc["services"]
+
+    def deps(service: dict) -> dict:
+        d = service.get("depends_on") or {}
+        return d if isinstance(d, dict) else {name: {} for name in d}
+
+    for name, service in services.items():
+        if name in {"setup", "tools"} or not isinstance(service, dict):
+            continue
+        needs_db = "postgres" in deps(service) and service.get("env_file")
+        if needs_db:
+            waits = deps(service).get("setup", {})
+            assert waits.get("condition") == "service_completed_successfully", name
+    assert deps(services["setup"])["datadirs"]["condition"] == "service_completed_successfully"
+    assert "profiles" not in services["setup"] and "profiles" not in services["datadirs"]

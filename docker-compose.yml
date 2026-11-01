@@ -219,7 +219,8 @@ services:
   # store is a different kind of mistake.
   datadirs:
     image: python:3.12-slim-bookworm
-    profiles: [tools]
+    # Runs on every `up` (it touches six inodes); `setup`, and through it every service that
+    # writes, waits for it.
     user: root                             # the one thing it needs to be
     # It touches three inodes and exits. `none` rather than a network, because
     # omitting the key puts it on compose's default bridge — which has a route
@@ -258,6 +259,26 @@ services:
     restart: "no"
     logging: *logging
 
+  # First boot and every boot after (`B-261`): the data directories, `alembic upgrade head`,
+  # then the seed, and exit. Every service that touches the database waits for it to finish,
+  # so a fresh server is `docker compose up -d` and nothing else. Each step is idempotent:
+  # the migration is a no-op at head and the seed skips every row it already wrote (config
+  # seeds at first boot only, scaffold §1.6). A failure stops the stack from starting rather
+  # than starting it against a schema it does not expect.
+  setup:
+    build: { context: ., dockerfile: deploy/tools/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-tools:${MERIDIAN_TAG:-stable}
+    env_file: .env
+    networks: [internal]
+    depends_on:
+      postgres: { condition: service_healthy }
+      datadirs: { condition: service_completed_successfully }
+    command: ["sh", "-c", "alembic upgrade head && python scripts/seed.py"]
+    # It exits: the image's probe would ask a question about a process that is gone.
+    healthcheck: { disable: true }
+    restart: "no"
+    logging: *logging
+
   # `.local` names for the services that call the GPU machine (`B-250`): mDNS does not
   # cross a bridge network, so this one looks them up on the host's network and writes
   # them to a file the others read. It is given the URL settings only, never `.env`
@@ -292,6 +313,7 @@ services:
     networks: [internal, egress]
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
       crawl4ai: { condition: service_healthy }
       # `service_started`, not `service_healthy`: searxng ships no healthcheck,
       # and the worker does not need it to start — a missing backend means
@@ -369,6 +391,7 @@ services:
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
       # `B-76`: the sidecar, loaded, before the backfill decides whether to use it.
       embedder: { condition: service_healthy }
     environment:
@@ -433,6 +456,7 @@ services:
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
     environment:
       MERIDIAN_EMBED_CACHE: /models
       # `worker.retopic` labels sources from their vectors and embeds each
@@ -476,6 +500,7 @@ services:
     networks: [internal, egress]
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -505,6 +530,7 @@ services:
     networks: [internal, egress, lan]
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
     environment:
       # Where a relay agent leaves prompts and finds answers (`P4-18`).
       MERIDIAN_RELAY_DIR: /relay
@@ -538,6 +564,7 @@ services:
     networks: [internal]          # cloudflared fronts it; it needs no egress
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
     # A container path, not configuration: set here beside the mount it names
     # rather than in `.env`, where it could drift from the volume below.
     environment:
@@ -594,6 +621,7 @@ services:
     networks: [internal]
     depends_on:
       postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
     command: ["sh", "-c", "alembic upgrade head && touch /tmp/migrated && exec sleep infinity"]
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/migrated"]

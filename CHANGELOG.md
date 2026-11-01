@@ -91,6 +91,14 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.186.1] — 2026-11-01
+
+### Changed
+
+- `B-261`: a fresh server is `docker compose up -d`. `datadirs` runs on every boot and a new
+  one-shot, `setup`, migrates and seeds; every service that touches the database waits for it
+  to exit successfully.
+
 ## [0.186.0] — 2026-11-01
 
 ### Added

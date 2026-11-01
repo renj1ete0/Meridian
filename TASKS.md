@@ -1996,6 +1996,10 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-260` **Reranker speed on the GPU machine** — 22 s for 30 real passages on the 6700 XT
       (embedding there is fast: ~16 passages/s). Find whether it is the card, one slot (`-np 1`) or
       the batch size; Find's rerank waits on it
+- [x] `B-261` **One command to deploy** (operator, 2026-11-01) — first boot was five commands
+      (`up postgres`, `datadirs`, migrate, seed, `up`). `datadirs` and a new `setup` one-shot
+      run on every `up`, and the database services wait for `setup`; tested on a fresh data
+      directory (13 s, then 2 s)
 - [x] `B-257` `v0.182.0`; screenshotted against the mock at 1440 and 390 wide. **People & permissions page, and an Admin that shows only what one may do** —
       the web half of `B-252`: Admin → People & permissions as `docs/design/AdminPeople.dc.html`
       (add, profile, per-permission Profile/On/Off, revoke, show revoked); `/api/me` drives the
