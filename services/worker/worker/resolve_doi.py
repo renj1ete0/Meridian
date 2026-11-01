@@ -13,23 +13,18 @@ import asyncio
 import contextlib
 import dataclasses
 import os
-import re
 import time
 from urllib.parse import quote
 
 import httpx
 
+# Re-exported: the normaliser moved to core so the connector shares it (`B-264`).
+from meridian_core.doi import DOI_PATTERN as DOI_PATTERN
+from meridian_core.doi import DoiError as DoiError
+from meridian_core.doi import normalise_doi
 from meridian_core.logging import get_logger
 
 log = get_logger(__name__)
-
-#: A DOI, as registered: a `10.` prefix, a registrant code, then an opaque
-#: suffix. Validated rather than trusted because the value reaches a URL path —
-#: citations come from crawled pages, and a page can say anything.
-DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$")
-
-#: Prefixes a DOI arrives wearing when it was written as a link or a URN.
-_DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "doi:")
 
 #: DataCite's arXiv prefix. An `arXiv` DOI resolves to arXiv, which is where
 #: Unpaywall would send us anyway — so the answer is available without a request.
@@ -46,10 +41,6 @@ PROVIDER_MIN_INTERVAL_S = {
     "openalex": 0.1,
     "core": 0.2,
 }
-
-
-class DoiError(ValueError):
-    """The DOI itself is not usable. Not retryable, and not the network's fault."""
 
 
 class ResolutionUnavailable(RuntimeError):
@@ -86,29 +77,6 @@ class OpenAccessCopy:
     #: still worth having and worth labelling as one.
     version: str | None = None
     license: str | None = None
-
-
-def normalise_doi(raw: str) -> str:
-    """Strip the ways a DOI is written down and check what is left.
-
-    Raises `DoiError` rather than returning None: a caller that got a bad DOI
-    has a bad row, not an empty result, and the two settle differently.
-    """
-    doi = (raw or "").strip()
-    lowered = doi.lower()
-    for prefix in _DOI_PREFIXES:
-        if lowered.startswith(prefix):
-            doi = doi[len(prefix) :]
-            lowered = doi.lower()
-            break
-    doi = doi.strip().rstrip(".,;)")
-    if not DOI_PATTERN.match(doi):
-        raise DoiError(f"not a DOI: {raw!r}")
-    # A DOI cannot contain whitespace or a fragment, and something claiming to
-    # is trying to reach a path this code never intended to construct.
-    if any(ch in doi for ch in ("#", "?", "\\")) or ".." in doi:
-        raise DoiError(f"refusing a DOI with URL syntax in it: {raw!r}")
-    return doi.lower()
 
 
 @dataclasses.dataclass(frozen=True)

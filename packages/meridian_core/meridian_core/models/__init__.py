@@ -44,6 +44,7 @@ from .source import (
     Source,
     TranslationLookup,
 )
+from .uploads import Upload
 from .views import SavedView
 
 __all__ = [
@@ -96,4 +97,5 @@ __all__ = [
     "TimestampMixin",
     "TopicConfig",
     "TranslationLookup",
+    "Upload",
 ]

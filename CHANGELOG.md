@@ -91,6 +91,22 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.191.0] — 2026-11-01
+
+### Added
+
+- `B-264`: a document connector, a separate service on its own port (`connector`, profile
+  `connector`, `${CONNECTOR_PORT:-22401}`) that lists the papers the crawl found but could not
+  get (`GET /connect/v1/wanted?kind=doi`) and takes documents back, for a DOI or any document
+  with a title and description (`POST /connect/v1/documents`, `GET /connect/v1/documents/{id}`).
+  A handed-in document goes through the same extraction as a crawled one and drops off the
+  wanted list. Bearer token `MERIDIAN_CONNECTOR_TOKEN`; without one it refuses everything. A
+  DOI with no open-access copy now records that answer on its queue row, which `/wanted` reads.
+  Migration `b264a1c2d3e4` (`uploads`, the `upload` task type and seed source).
+
+**Deploy:** `git pull && docker compose up -d`; to run the connector, set
+`MERIDIAN_CONNECTOR_TOKEN` and add `connector` to `COMPOSE_PROFILES` (see `.env.example`).
+
 ## [0.190.0] — 2026-11-01
 
 ### Added

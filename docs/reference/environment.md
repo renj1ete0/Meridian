@@ -129,6 +129,17 @@ or `model`); see [features/synthesis.md](../features/synthesis.md).
 | `MERIDIAN_VERSION` | from the image | Reported on `/health` |
 | `MERIDIAN_EVAL_RUNS_DIR` | `eval/runs` | Where Gaps reads question-set runs |
 
+## The document connector
+
+See [features/connector-api.md](../features/connector-api.md) (`B-264`).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MERIDIAN_CONNECTOR_TOKEN` | unset | The connector's bearer token. Unset, empty or under 16 characters, every `/connect/` request is refused (503) |
+| `MERIDIAN_CONNECTOR_MAX_MB` | 100 | Largest file the connector accepts, in MB; a malformed value stops it at start |
+| `MERIDIAN_INBOX_ROOT` | `/data/inbox` | Where handed-in files are kept: written by the connector, read by the worker (which claims `upload` rows only when this folder exists) |
+| `CONNECTOR_BIND`, `CONNECTOR_PORT` | `127.0.0.1`, 22401 | Where compose publishes the connector (read by compose) |
+
 ## Operations
 
 | Variable | Default | Meaning |
@@ -146,7 +157,8 @@ Read by the compose files, not by the code. `.env.example` says which a deployme
 | Variable | Default | Meaning |
 |---|---|---|
 | `PG_USER`, `PG_PASSWORD`, `PG_RW_PASSWORD`, `PG_RO_PASSWORD`, `PG_GUEST_PASSWORD` | — | Postgres owner and role passwords; `scripts/init-roles.sh` creates the roles on first start |
-| `DATA_ROOT` | `/srv/meridian` (`./.localdata` locally) | Host folder for raw files, model weights, relay files and question-set runs |
+| `DATA_ROOT` | `/srv/meridian` (`./.localdata` locally) | Host folder for raw files, model weights, relay files, question-set runs and the connector's inbox |
+| `COMPOSE_PROFILES` | unset | Optional services to run: `autoupdate` (Watchtower and `migrate`), `connector` (the document connector), comma-separated |
 | `MERIDIAN_REGISTRY`, `MERIDIAN_TAG` | the project's GHCR namespace, `stable` | Where images are pulled from, and which channel (ADR 0008) |
 | `MERIDIAN_POSTGRES_TAG`, `MERIDIAN_CRAWL4AI_TAG` | `stable` | Channels of the Postgres and browser images |
 | `GHCR_READ_USER`, `GHCR_READ_PAT` | unset | Read-only registry login for the `autoupdate` profile's watchtower |

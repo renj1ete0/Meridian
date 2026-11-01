@@ -21,7 +21,7 @@ import uuid
 from collections import Counter
 from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
@@ -38,7 +38,7 @@ from meridian_core.figures import FigureWrite, replace_figures
 from meridian_core.hostscores import Decision, HostPolicy, Standing, record_vouches
 from meridian_core.hostscores import load as load_host_scores
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
-from meridian_core.models import QueueTask, Source, Watch
+from meridian_core.models import QueueTask, Source, Upload, Watch
 from meridian_core.novelty import novelty_health
 from meridian_core.policy import frontier_settings, source_tier_map
 from meridian_core.queueing import (
@@ -72,6 +72,15 @@ from meridian_core.tiering import (
 )
 from meridian_core.titles import clean_title, title_from_text
 from meridian_core.trust import page_state, record_novel_fetch, record_screening
+from meridian_core.uploads import (
+    NO_COPY,
+    inbox_root,
+    read_upload,
+    settle_upload,
+    source_tier_for,
+    source_url_for,
+    upload_id_from_task,
+)
 
 from . import rawstore
 from .cleancut import clean_cut
@@ -119,10 +128,11 @@ class NotKept(RuntimeError):
 
 #: Task types this loop can actually process. `query` and `doi` are claimed only by
 #: a worker with a search backend or resolver; see `_claimable_task_types`.
-HANDLED_TASK_TYPES = ["url", "sitemap", "query", "doi"]
+HANDLED_TASK_TYPES = ["url", "sitemap", "query", "doi", "upload"]
 
-#: Which dependency each conditional task type needs, by attribute name.
-CONDITIONAL_TASK_TYPES = {"query": "_search", "doi": "_resolver"}
+#: Which dependency each conditional task type needs, by attribute name. An `upload`
+#: needs the connector's inbox mounted (`B-264`).
+CONDITIONAL_TASK_TYPES = {"query": "_search", "doi": "_resolver", "upload": "_inbox"}
 
 #: §6.6's format routing table, as far as it is built. Everything not listed is
 #: fetched, stored and left metadata-only until its extractor exists —
@@ -338,6 +348,35 @@ class Kept:
     document: ExtractedDocument | None = None
     chunks: int = 0
     queued: int = 0
+    source_id: int | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class HandedIn:
+    """What a document handed in through the connector changes on the fetched path (`B-264`).
+
+    Its tier, title and DOI are the sender's (validated by the connector), its text is
+    already extracted, and `provenance` rides in `sources.extra["upload"]`.
+    """
+
+    document: ExtractedDocument
+    tier: str
+    title: str | None = None
+    doi: str | None = None
+    provenance: dict[str, object] = dataclasses.field(default_factory=dict)
+
+    def applied_to(self, fields: dict[str, object]) -> dict[str, object]:
+        """`_bibliography`'s columns with the sender's title and DOI in place."""
+        out = dict(fields)
+        extra = dict(out.get("extra") or {})  # type: ignore[call-overload]
+        if self.title:
+            out["title"] = self.title
+            extra.pop("title_from", None)
+        if self.doi:
+            out["doi"] = self.doi
+        extra["upload"] = self.provenance
+        out["extra"] = extra
+        return out
 
 
 @dataclasses.dataclass
@@ -394,6 +433,7 @@ class Worker:
         search: SearxClient | None = None,
         resolver: DoiResolver | None = None,
         hosts: HostPolicy | None = None,
+        inbox: Path | None = None,
     ) -> None:
         self._crawler = crawler
         self._settings = settings or WorkerSettings()
@@ -417,6 +457,9 @@ class Worker:
         # labels a scheduled pass turned into per-host scores. None follows
         # every link, which is what a one-shot fetch or a test wants.
         self._hosts = hosts
+        # `B-264`: where the connector keeps handed-in files. None when it is not
+        # mounted, and then `upload` rows wait for a worker that has it.
+        self._inbox = inbox
         self._stopping = asyncio.Event()
         self._claims = 0
         self._directed_claims = 0
@@ -722,6 +765,9 @@ class Worker:
         if claim.task_type == "doi":
             await self._process_doi(claim)
             return
+        if claim.task_type == "upload":
+            await self._process_upload(claim)
+            return
 
         result = await self._crawler.fetch(
             claim.url, task_id=claim.task_id, attempt_number=claim.attempts + 1
@@ -772,11 +818,13 @@ class Worker:
         fetched_status: str = "fetched",
         floor_s: float = 0.0,
         max_retries: int | None = None,
+        note: str | None = None,
     ) -> None:
         """Apply one disposition to the queue row and drop the lease.
 
         ``fetched_status`` is where a successful fetch leaves the task: ``fetched``
-        for a page, ``done`` for a sitemap, whose reading is all its work.
+        for a page, ``done`` for a sitemap, whose reading is all its work. ``note`` is
+        kept on a ``done`` row as its answer, with the time it was given (`B-264`).
         """
         async with self._session_factory() as sess:
             task = await sess.get(QueueTask, claim.task_id)
@@ -794,6 +842,9 @@ class Worker:
                 await advance(sess, task, fetched_status)
                 self._stats.fetched += 1
             elif disposition == "done":
+                if note is not None:
+                    task.error = note
+                    task.fetched_at = dt.datetime.now(dt.UTC)
                 await advance(sess, task, "done")
                 self._stats.unchanged += 1
             elif disposition == "retry":
@@ -1127,12 +1178,20 @@ class Worker:
         else:
             # Including "no open-access copy exists", which is an answer (§6.5): done.
             disposition = "done"
-            detail = f"resolved_by: {copy.provider}" if copy else "no_open_access_copy"
+            detail = f"resolved_by: {copy.provider}" if copy else NO_COPY
             if copy is not None:
                 queued = await self._queue_resolved_copy(claim, copy)
                 self._stats.queued += queued
 
-        await self._settle(claim, disposition, detail, floor_s=floor_s, max_retries=max_retries)
+        await self._settle(
+            claim,
+            disposition,
+            detail,
+            floor_s=floor_s,
+            max_retries=max_retries,
+            # The connector's wanted list reads this (`B-264`).
+            note=NO_COPY if disposition == "done" and copy is None else None,
+        )
 
         log.info(
             "doi settled",
@@ -1174,6 +1233,86 @@ class Worker:
             )
             await sess.commit()
         return 1
+
+    async def _process_upload(self, claim: Claim) -> None:
+        """Turn one document handed in through the connector into a source (`B-264`).
+
+        The file is read from the inbox and goes through `_extract` and `_keep`, the path a
+        fetched document takes. Nothing is fetched, so no `fetch_attempts` row is written.
+        See docs/features/connector-api.md#how-an-upload-becomes-a-source.
+        """
+        try:
+            upload_id = upload_id_from_task(claim.url)
+        except ValueError as exc:
+            await self._settle(claim, "abandon", f"invalid_upload_task: {exc}")
+            return
+        async with self._session_factory() as sess:
+            upload = await sess.get(Upload, upload_id)
+        if upload is None:
+            await self._settle(claim, "abandon", "upload_missing")
+            return
+
+        try:
+            content = read_upload(upload, self._inbox)
+        except (OSError, ValueError) as exc:
+            await self._fail_upload(claim, upload_id, f"inbox_unreadable: {exc}")
+            return
+
+        url = source_url_for(upload)
+        result = FetchResult(
+            requested_url=url,
+            final_url=url,
+            outcome="success",
+            content=content,
+            media_type=upload.media_type,
+        )
+        target = dataclasses.replace(claim, url=url, topic=upload.topic or claim.topic)
+        document = await self._extract(target, result)
+        reason = _unusable(document, upload.media_type)
+        if reason is not None:
+            await self._fail_upload(claim, upload_id, reason)
+            return
+
+        handed_in = HandedIn(
+            document=document,  # type: ignore[arg-type]  # _unusable refused None
+            tier=source_tier_for(upload),
+            title=upload.title,
+            doi=upload.doi,
+            provenance=_upload_provenance(upload),
+        )
+        try:
+            kept = await self._keep(target, result, handed_in=handed_in)
+        except NotKept as exc:
+            await self._settle(claim, "retry", f"storage_error: {exc}")
+            return
+
+        async with self._session_factory() as sess:
+            await settle_upload(sess, upload_id, status="done", source_id=kept.source_id)
+            await sess.commit()
+        await self._settle(claim, "fetched", "upload_ok", fetched_status="done")
+        log.info(
+            "upload settled",
+            extra={
+                "task_id": claim.task_id,
+                "upload_id": upload_id,
+                "url": url,
+                "source_id": kept.source_id,
+                "chunks": kept.chunks,
+                "queued": kept.queued,
+                "needs_ocr": handed_in.document.needs_ocr,
+            },
+        )
+
+    async def _fail_upload(self, claim: Claim, upload_id: int, reason: str) -> None:
+        """Mark the upload failed and give up its task; the same bytes would fail again."""
+        async with self._session_factory() as sess:
+            await settle_upload(sess, upload_id, status="failed", error=reason[:500])
+            await sess.commit()
+        await self._settle(claim, "abandon", reason[:500])
+        log.warning(
+            "upload failed",
+            extra={"task_id": claim.task_id, "upload_id": upload_id, "reason": reason},
+        )
 
     async def _queue_search_results(self, claim: Claim, results: SearchResults) -> int:
         """Prefilter a query's results and enqueue what survives.
@@ -1272,11 +1411,14 @@ class Worker:
         except Exception:
             log.exception("could not record a freshness check", extra={"url": claim.url})
 
-    async def _keep(self, claim: Claim, result: FetchResult) -> Kept:
+    async def _keep(
+        self, claim: Claim, result: FetchResult, *, handed_in: HandedIn | None = None
+    ) -> Kept:
         """Keep what came back: the bytes, the checksum, and the validators.
 
         Raises :class:`NotKept` if it could not, so the task is retried rather than
-        advanced to `fetched` with no source row.
+        advanced to `fetched` with no source row. ``handed_in`` is a document from the
+        connector (`B-264`): see docs/features/connector-api.md#how-an-upload-becomes-a-source.
         """
         try:
             async with self._session_factory() as sess:
@@ -1284,9 +1426,12 @@ class Worker:
                 # Before extraction there is only the domain to go on, so an
                 # academic institution's page is stored as its own
                 # publication until the document shows otherwise (`B-50`).
-                tier = link_tier(result.domain, tiers)
+                tier = link_tier(result.domain, tiers) if handed_in is None else handed_in.tier
                 existing = await get_source(sess, claim.url)
                 current_retention = existing.retention_tier if existing else None
+            if handed_in is not None:
+                # A handed-in file exists nowhere to fetch again, so its bytes are kept.
+                current_retention = "primary"
 
             stored = rawstore.store(
                 claim.url,
@@ -1295,12 +1440,15 @@ class Worker:
                 media_type=result.media_type,
                 current_retention=current_retention,
             )
-            document = await self._extract(claim, result)
-            # `B-50`: the document's own DOI is the evidence that confirms a
-            # scholarly tier the domain alone could only guess at.
-            tier = document_tier(
-                result.domain, tiers, scholarly=bool(document is not None and document.doi)
-            )
+            if handed_in is None:
+                document = await self._extract(claim, result)
+                # `B-50`: the document's own DOI is the evidence that confirms a
+                # scholarly tier the domain alone could only guess at.
+                tier = document_tier(
+                    result.domain, tiers, scholarly=bool(document is not None and document.doi)
+                )
+            else:
+                document = handed_in.document
             screening = self._screen(claim, result, document)
             if screening is not None and screening.suspicious:
                 self._stats.flagged += 1
@@ -1311,15 +1459,26 @@ class Worker:
                 error_page_reason(document.title, document.text) if document is not None else None
             )
 
+            flagged = bool(screening and screening.suspicious)
+            fields = _bibliography(document, screening, url=claim.url)
+            if handed_in is not None:
+                fields = handed_in.applied_to(fields)
+
             async with self._session_factory() as sess:
-                # `P4-14`: fold this fetch into the domain's verdict before the
-                # page is written, so the page is stored under the updated verdict.
-                domain_trust = await record_screening(
-                    sess,
-                    result.domain,
-                    flagged=bool(screening and screening.suspicious),
-                    tier_mapped=is_tier_mapped(result.domain, await source_tier_map(sess)),
-                )
+                if handed_in is None:
+                    # `P4-14`: fold this fetch into the domain's verdict before the
+                    # page is written, so the page is stored under the updated verdict.
+                    domain_trust = await record_screening(
+                        sess,
+                        result.domain,
+                        flagged=flagged,
+                        tier_mapped=is_tier_mapped(result.domain, await source_tier_map(sess)),
+                    )
+                    trust_state = page_state(domain_trust, flagged=flagged)
+                else:
+                    # Chosen by whoever holds the connector's token, as a curated domain
+                    # is chosen; the screen can still quarantine it.
+                    trust_state = "quarantined" if flagged else "cleared"
                 source, changed = await upsert_source(
                     sess,
                     claim.url,
@@ -1327,14 +1486,12 @@ class Worker:
                     raw_file_path=stored.path,
                     raw_root=stored.root,
                     source_tier=tier,
-                    trust_state=page_state(
-                        domain_trust, flagged=bool(screening and screening.suspicious)
-                    ),
+                    trust_state=trust_state,
                     retention_tier="junk" if missing else stored.retention_tier,
                     media_type=result.media_type,
                     final_url=result.final_url,
                     crawled_for=self._crawled_for(claim),
-                    **_bibliography(document, screening, url=claim.url),
+                    **fields,
                     **validators(result.headers),
                 )
                 if document is not None and document.needs_ocr:
@@ -1359,7 +1516,12 @@ class Worker:
                     await sess.commit()
                     self._stats.stored += 1
                     return Kept(
-                        stored=stored, changed=changed, document=document, chunks=0, queued=0
+                        stored=stored,
+                        changed=changed,
+                        document=document,
+                        chunks=0,
+                        queued=0,
+                        source_id=source.source_id,
                     )
                 # In the same transaction as the source row, so chunks always come
                 # from the bytes the checksum describes. `B-59`: a listing is
@@ -1376,7 +1538,7 @@ class Worker:
                         tier=tier,
                     ),
                 )
-                if changed:
+                if changed and handed_in is None:
                     # `P4-12`: a domain earns its seeding allowance on *novel*
                     # documents, so a site cannot approve itself on volume.
                     await record_novel_fetch(sess, result.domain)
@@ -1403,6 +1565,7 @@ class Worker:
             document=document,
             chunks=chunks_written,
             queued=queued,
+            source_id=source.source_id,
         )
 
     async def _expand_frontier(
@@ -1864,6 +2027,7 @@ class Worker:
                 "tracked_domains": self._crawler.limiter.tracked_domains,
                 "browser": browser,
                 "search": search,
+                "inbox": "configured" if self._inbox is not None else "absent",
                 **novelty.as_dict(),
             },
         )
@@ -1999,6 +2163,11 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
         )
     resolver = DoiResolver(resolver_settings)
 
+    # `B-264`: absent is a deployment without the connector, not a fault.
+    inbox = inbox_root() if inbox_root().is_dir() else None
+    if inbox is None:
+        log.info("no connector inbox; upload rows will not be claimed")
+
     async with Fetcher(browser=browser) as fetcher:
         crawler = Crawler(session, fetcher=fetcher, limiter=DomainLimiter())
         worker = Worker(
@@ -2009,6 +2178,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
             search=search,
             resolver=resolver,
             hosts=hosts,
+            inbox=inbox,
         )
         await worker.refresh_hosts()
         install_signal_handlers(worker)
@@ -2090,6 +2260,36 @@ def _bibliography(
     if extra:
         fields["extra"] = extra
     return fields
+
+
+def _unusable(document: ExtractedDocument | None, media_type: str) -> str | None:
+    """Why a handed-in document cannot become a source, or None when it can (`B-264`).
+
+    A scan is usable: it is stored and queued for OCR, as a fetched one is.
+    """
+    if document is None:
+        return f"no_text: nothing could read this {media_type}"
+    if document.needs_ocr:
+        return None
+    if not document.has_text:
+        return f"no_text: {document.extractor or 'extraction'} found no text"
+    if (missing := error_page_reason(document.title, document.text)) is not None:
+        return f"error_page: {missing}"
+    return None
+
+
+def _upload_provenance(upload: Upload) -> dict[str, object]:
+    """Who handed the document in and what they said, for `sources.extra["upload"]`."""
+    fields = {
+        "upload_id": upload.upload_id,
+        "sha256": upload.sha256,
+        "filename": upload.filename,
+        "description": upload.description,
+        "source_url": upload.source_url,
+        "client_address": upload.client_address,
+        "submitted_at": upload.created_at.isoformat() if upload.created_at else None,
+    }
+    return {key: value for key, value in fields.items() if value is not None}
 
 
 def _backoff_for(consecutive_errors: int) -> float:

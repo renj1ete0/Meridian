@@ -2209,6 +2209,25 @@ Also from `P6-38`: the window a proposal waits (`steering_proposal_window_hours`
 in the global policy row) is not in Admin's fetch-policy `EDITABLE` set, so it
 is changed with SQL for now. Scheduled as `steerproposals`, hourly, enabled.
 
+### A DOI with no open-access copy used to leave no trace on its row
+
+Found building `B-264`. `_settle` threw away the detail of a `done` disposition, so a `doi`
+row whose providers all said "no copy" and one whose copy was queued looked identical:
+`done`, `error` NULL (or a stale error from an earlier retry), `fetched_at` NULL. Nothing
+could list "papers we could not get". `_settle(note=…)` now writes the answer and the time to
+the row, and only for that case. Rows settled before it carry nothing; setting them back to
+`pending` asks the resolver again. See docs/features/connector-api.md#failure-modes-and-traps.
+
+### A worker test that settles a committed row holds its lock until rollback
+
+The connector's tests commit their rows (its app reads on its own connections), then run a
+worker inside the test's transaction with `commit` downgraded to `flush`. The worker's
+settle updates the committed `uploads` and `queue` rows, and that transaction holds their
+row locks until it ends — so the fixture's teardown `DELETE`, on another connection, waits
+for ever. Roll the test's session back before teardown (`finally: await sess.rollback()`).
+A worker given nothing it can claim also never returns on `max_tasks`: stop it with
+`loop.call_later(…, worker.stop)`.
+
 ## 4. What is verified live, and what is only tested
 
 Tests are hermetic by design, so "the tests pass" and "it works against the real web"

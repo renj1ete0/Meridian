@@ -260,8 +260,65 @@ def test_every_long_running_service_can_be_probed(compose: dict) -> None:
     it crashes. Listed explicitly rather than "all services", because `api` is
     probed through its own HTTP `/health` and the one-shot passes are not
     long-running at all."""
-    for name in ("postgres", "crawl4ai", "worker", "embed", "embedder"):
+    for name in ("postgres", "crawl4ai", "worker", "embed", "embedder", "connector"):
         assert compose["services"][name].get("healthcheck"), f"{name} cannot be probed"
+
+
+# --------------------------------------------------------------------------
+# The document connector is on an open port, so it holds as little as it can (`B-264`)
+# --------------------------------------------------------------------------
+
+
+def test_the_connector_runs_only_when_asked_for(compose: dict) -> None:
+    """A port that takes files is a decision: `docker compose up -d` must not open it."""
+    assert compose["services"]["connector"].get("profiles") == ["connector"]
+
+
+def test_the_connector_runs_its_own_app_not_the_whole_api(compose: dict) -> None:
+    """The full app would put Explore, Admin and MCP on the connector's port, behind
+    nothing but the connector's token."""
+    command = _command_of(compose["services"]["connector"])
+    assert "api.connector:app" in command
+    assert "api.main:app" not in command
+
+
+def test_the_connector_reaches_the_database_and_not_the_open_web(compose: dict) -> None:
+    """`internal` for Postgres; `lan` only because an `internal`-only container cannot
+    publish its port. Never `egress`: it fetches nothing."""
+    assert networks_of(compose, "connector") == {"internal", "lan"}
+
+
+def test_the_connector_holds_only_the_variables_it_uses(compose: dict) -> None:
+    """`.env` holds every password and API key in the stack; a service on an open port is
+    given the database URLs and its own settings, by name."""
+    service = compose["services"]["connector"]
+    assert "env_file" not in service
+    names = set(service.get("environment") or {})
+    assert {"PG_RW_URL", "PG_RO_URL", "MERIDIAN_CONNECTOR_TOKEN"} <= names
+    allowed = {"PG_RW_URL", "PG_RO_URL", "MERIDIAN_INBOX_ROOT"}
+    extra = {n for n in names if n not in allowed and not n.startswith("MERIDIAN_CONNECTOR_")}
+    assert not extra, f"the connector is given {extra}"
+
+
+def test_the_connector_publishes_on_loopback_unless_told_otherwise(compose: dict) -> None:
+    ports = compose["services"]["connector"]["ports"]
+    assert ports == ["${CONNECTOR_BIND:-127.0.0.1}:${CONNECTOR_PORT:-22401}:8000"]
+
+
+def test_the_worker_reads_the_inbox_the_connector_writes(compose: dict) -> None:
+    """Two different host paths and every upload fails as "inbox_unreadable"."""
+    from meridian_core.uploads import DEFAULT_INBOX_ROOT
+
+    writer = [
+        v for v in compose["services"]["connector"]["volumes"] if ":" + DEFAULT_INBOX_ROOT in v
+    ]
+    reader = [v for v in compose["services"]["worker"]["volumes"] if ":" + DEFAULT_INBOX_ROOT in v]
+    assert len(writer) == 1 and len(reader) == 1
+    assert writer[0].split(":")[0] == reader[0].split(":")[0]
+    assert reader[0].endswith(":ro"), "the worker reads uploads and never changes them"
+    assert not writer[0].endswith(":ro")
+    env = compose["services"]["connector"]["environment"]
+    assert env["MERIDIAN_INBOX_ROOT"] == DEFAULT_INBOX_ROOT
 
 
 # --------------------------------------------------------------------------

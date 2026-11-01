@@ -1,6 +1,6 @@
 [project]
 name = "meridian-api"
-version = "0.190.0"
+version = "0.191.0"
 description = "Meridian read surface — Explore, Admin, MCP (spec §12.6)."
 requires-python = ">=3.12"
 license = "MIT"
@@ -18,6 +18,9 @@ dependencies = [
     # import that only resolves because something else happened to install it.
     # `[crypto]` because Access signs with RS256, which needs `cryptography`.
     "pyjwt[crypto]>=2.9",
+    # The connector's upload form (`B-264`): FastAPI refuses a `File()` route without it, and
+    # it is otherwise here only because `mcp` happens to pull it in.
+    "python-multipart>=0.0.20",
 ]
 
 # Deliberately NOT depending on sentence-transformers, and this is a decision

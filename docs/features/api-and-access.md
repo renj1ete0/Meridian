@@ -5,6 +5,10 @@ One FastAPI service serves the reader (`/api/explore/*`), the control surface
 boundary**: explore routes get a read-only database session, admin routes get a writable one
 behind an identity gate, and nothing under `/api/explore` can open a writable session.
 
+The same image also runs the [document connector](connector-api.md) (`B-264`), as a separate
+app on its own port with its own token: none of the routes here are on it, and it is not on
+this service. `api/requestlog.py` is the request log both share.
+
 - **Code:** `services/api/api/main.py`, `deps.py`, `access.py`, `auth.py`, `cache.py`,
   `tokens.py`, `routes/explore.py`, `routes/admin.py`, `routes/graph.py`, `routes/gaps.py`,
   `routes/connect.py`, `routes/neighbourhood.py`, `routes/steering_proposals.py`,

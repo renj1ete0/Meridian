@@ -102,6 +102,7 @@ def test_every_long_running_service_waits() -> None:
     ):
         assert "wait_before_start()" in (root / "services/worker" / path).read_text(), path
     assert "await wait_for_schema()" in (root / "services/api/api/main.py").read_text()
+    assert "await wait_for_schema()" in (root / "services/api/api/connector.py").read_text()
 
 
 def test_the_module_says_where_its_doc_is() -> None:

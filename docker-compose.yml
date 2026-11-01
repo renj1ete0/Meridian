@@ -226,9 +226,10 @@ services:
     # omitting the key puts it on compose's default bridge — which has a route
     # out, and this is the one container here running as root.
     network_mode: none
-    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay /data/eval-runs /lan"]
+    command: ["sh", "-c", "chown 1001:1001 /data/raw /data/figures /models /relay /data/eval-runs /lan /data/inbox"]
     volumes:
       - ${DATA_ROOT:-/srv/meridian}/lan:/lan
+      - ${DATA_ROOT:-/srv/meridian}/inbox:/data/inbox
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
       - ${DATA_ROOT:-/srv/meridian}/models:/models
@@ -330,6 +331,8 @@ services:
       - ${DATA_ROOT:-/srv/meridian}/raw:/data/raw
       - ${DATA_ROOT:-/srv/meridian}/figures:/data/figures
       - ${DATA_ROOT:-/srv/meridian}/models:/models
+      # Documents handed in through the connector (`B-264`), read and never changed here.
+      - ${DATA_ROOT:-/srv/meridian}/inbox:/data/inbox:ro
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -589,6 +592,49 @@ services:
     # rather than an error (`B-18`). Worse than useless, because it told the
     # next person to curl 21114 on the server and conclude the API was down.
     # `cloudflared` sits on `internal` and proxies inward; that is the door.
+
+  # The document connector (`B-264`, docs/features/connector-api.md): the API image running
+  # a second, smaller app that lists the papers the crawl could not get and takes documents
+  # back. Off unless asked for (COMPOSE_PROFILES=connector), and every request needs
+  # MERIDIAN_CONNECTOR_TOKEN; without one it refuses everything.
+  #
+  # `internal` for the database, and `lan` only because a container on `internal` alone
+  # cannot publish a port (`B-18`), as `deploy/lan/publish-web.yml` does for `web`. Named
+  # variables rather than `.env`: a service on an open port holds only what it uses.
+  connector:
+    <<: *common
+    build: { context: ., dockerfile: services/api/Dockerfile }
+    image: ${MERIDIAN_REGISTRY:-ghcr.io/renj1ete0}/meridian-api:${MERIDIAN_TAG:-stable}
+    labels: { com.centurylinklabs.watchtower.enable: "true" }
+    profiles: [connector]
+    command: ["uvicorn", "api.connector:app", "--host", "0.0.0.0", "--port", "8000",
+              "--workers", "1", "--no-access-log",
+              "--log-config", "/app/services/api/log_config.json"]
+    networks: [internal, lan]
+    depends_on:
+      postgres: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
+    environment:
+      PG_RW_URL: ${PG_RW_URL}
+      PG_RO_URL: ${PG_RO_URL}
+      MERIDIAN_CONNECTOR_TOKEN: ${MERIDIAN_CONNECTOR_TOKEN:-}
+      MERIDIAN_CONNECTOR_MAX_MB: ${MERIDIAN_CONNECTOR_MAX_MB:-100}
+      MERIDIAN_INBOX_ROOT: /data/inbox
+    ports:
+      - "${CONNECTOR_BIND:-127.0.0.1}:${CONNECTOR_PORT:-22401}:8000"
+    volumes:
+      - ${DATA_ROOT:-/srv/meridian}/inbox:/data/inbox
+    read_only: true
+    # Where an upload is spooled while it arrives, so it is bounded by the size cap.
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,json,sys; b=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)); sys.exit(0 if b.get('database') else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
 
   web:
     <<: *common

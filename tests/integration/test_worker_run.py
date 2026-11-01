@@ -42,6 +42,7 @@ from meridian_core.models import (
 )
 from meridian_core.policy import GLOBAL_DOMAIN, resolve_source_tier, source_tier_map
 from meridian_core.sources import get_source, upsert_source
+from meridian_core.uploads import NO_COPY
 from worker.crawl import Crawler
 from worker.extract.pdf import available as pdf_available
 from worker.fetch import Fetcher
@@ -2388,6 +2389,7 @@ async def test_a_resolved_doi_becomes_a_fetchable_url(
 
     await sess.refresh(task)
     assert task.status == "done", f"the DOI did not settle cleanly: {task.error}"
+    assert task.error != NO_COPY, "a resolved DOI must not be on the connector's wanted list"
     assert chain.asked == ["10.1016/j.trd.2021.103013"]
     assert stats.queued == 1
     queued = await rows_for(sess, run_domain, "doi")
@@ -2413,6 +2415,9 @@ async def test_a_paper_with_no_open_access_copy_is_done_not_retried(
     await sess.refresh(task)
     assert task.status == "done"
     assert task.attempts == 0
+    # `B-264`: the answer is kept on the row, which is what the connector's wanted list reads.
+    assert task.error == NO_COPY
+    assert task.fetched_at is not None, "when the resolver last answered"
 
 
 async def test_an_unreachable_resolver_retries(

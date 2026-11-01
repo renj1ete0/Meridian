@@ -234,6 +234,11 @@ Watchtower ([nickfedor/watchtower](https://github.com/nickfedor/watchtower)) pic
 within `WATCHTOWER_POLL_INTERVAL`, runs any new migration, and restarts only what changed;
 Postgres, the browser and the search engine are never touched.
 
+**Handing it documents.** Add `connector` to `COMPOSE_PROFILES` and set `MERIDIAN_CONNECTOR_TOKEN`
+(`openssl rand -hex 32`) in `.env`, then `docker compose up -d`: the
+[document connector](docs/features/connector-api.md) on port 22401 lists the papers the crawl
+could not get and takes documents back into the corpus.
+
 **Telegram.** With `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` set (how to get both is in
 `.env`), a chat gets the daily digest, a synthesis report every six hours, alerts when a
 problem lasts, and Watchtower's update notices (`WATCHTOWER_NOTIFICATION_URL`).

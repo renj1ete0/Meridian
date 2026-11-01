@@ -32,7 +32,8 @@ TASK_STATUS = constrained(
     name="task_status",
 )
 
-TASK_TYPE = constrained("url", "query", "doi", "sitemap", name="task_type")
+#: `upload` is a document handed in through the connector (`B-264`).
+TASK_TYPE = constrained("url", "query", "doi", "sitemap", "upload", name="task_type")
 
 # Who put this in the queue (§5.2). Model-emitted seeds are capped per run (§11.4).
 # See docs/reference/data-model.md#queue.
@@ -46,6 +47,7 @@ SEED_SOURCE = constrained(
     "user",
     "diversity",
     "watch",
+    "upload",
     name="seed_source",
 )
 
@@ -112,6 +114,14 @@ class QueueTask(Base, TimestampMixin):
         Index("ix_queue_claim", "status", "priority", "created_at", "next_attempt_at"),
         # Cheap already-seen check before enqueuing (§6.4 prefetch filtering).
         Index("ix_queue_url_or_query", "url_or_query"),
+        # The connector's wanted list (`B-264`): DOIs no provider had a copy of.
+        Index(
+            "ix_queue_no_copy_dois",
+            "task_id",
+            postgresql_where=text(
+                "task_type = 'doi' AND status = 'done' AND error = 'no_open_access_copy'"
+            ),
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

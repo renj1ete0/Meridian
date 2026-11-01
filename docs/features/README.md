@@ -25,6 +25,7 @@ the Ask panel.
 | Stage | Feature | What it covers |
 |---|---|---|
 | Discover | [discovery.md](discovery.md) | Search seeds, followed links, sitemaps, cited papers, diversity seeds, host scores |
+| Discover | [connector-api.md](connector-api.md) | The document connector: papers the crawl could not get, and documents handed back |
 | Crawl | [crawling.md](crawling.md) | The queue, worker lanes, politeness, robots.txt, SSRF protection, the attempt log |
 | Extract | [extraction.md](extraction.md) | HTML, PDF and Office extraction, cleaning, chunking, document kinds, titles, the raw store |
 | Embed | [embedding.md](embedding.md) | The embedding service, tiers and backpressure, GPU, what text is embedded |

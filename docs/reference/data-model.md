@@ -224,6 +224,25 @@ orchestrator never call each other, they only leave rows here (§2 principle 2).
   cited paper is worth what the citing page is worth: named by an on-topic page it is the best
   material the crawl can reach, named by an off-topic one it is the drift `B-48` stopped. A
   ranking input, not provenance, so it is set NULL rather than blocking a source's deletion.
+- **A `doi` row's answer** (`B-264`). When every provider answered and none had a legal copy,
+  the row settles `done` with `error = 'no_open_access_copy'` and `fetched_at` set to when the
+  resolver answered; the partial index `ix_queue_no_copy_dois` serves the document connector's
+  wanted list from those rows. A resolved DOI records nothing there.
+- **`upload` rows** (`B-264`). `task_type = 'upload'`, `seed_source = 'upload'`,
+  `url_or_query = 'upload:<upload_id>'`: a document handed in through the connector, read by the
+  worker from the inbox. See [Uploads](#uploads).
+
+## Uploads
+
+`uploads` (`B-264`): one row per distinct file handed in through the document connector
+([features/connector-api.md](../features/connector-api.md)). `sha256` is unique (CHECK: 64
+lower-case hex digits) and is the deduplication key; `inbox_path` is relative to the inbox and
+built from the digest alone. `doi`, `title`, `description`, `topic`, `source_url` and
+`source_tier` are what the sender said, validated before the row is written; `source_tier` is
+checked against `SOURCE_TIER` in code rather than by a CHECK. `status` is `queued`, `done` or
+`failed` (CHECK); `source_id` is the source it became and `error` why it failed. `task_id` and
+`source_id` are `ON DELETE SET NULL`. `client_address` and `user_agent` say who sent it. The
+read-only role can read the table and not write it; the guest role cannot read it.
 
 ## Fetch attempts
 
@@ -387,7 +406,8 @@ table a remote execution surface. See [scheduled-jobs.md](scheduled-jobs.md).
 `sitemap`, `feed` or `listing` (a latest-articles page read for its links, `B-255`); `topic` files its entries, or with `headline_filter` each entry is filed by
 the topic its headline names (CHECK: a topic, or the filter). `interval_seconds` is at least 300
 (CHECK); `last_queued_at` is when a read was last queued. Reads and entries carry `seed_source =
-'watch'`, a value of both seed-source CHECKs (`queue`, `fetch_policy`).
+'watch'`, a value of both seed-source CHECKs (`queue`, `fetch_policy`). `upload` (`B-264`) is the
+other value added to both since.
 
 ## Saved views
 

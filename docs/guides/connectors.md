@@ -1,6 +1,6 @@
 # Adding sources, and writing your own connector
 
-Four ways to widen what Meridian can reach, cheapest first. Most of what looks
+Five ways to widen what Meridian can reach, cheapest first. Most of what looks
 like it needs code does not, and the first thing to do with a new source is
 check which level it actually lives at.
 
@@ -10,6 +10,7 @@ check which level it actually lives at.
 | **2 · A provider in an existing chain** | The path already exists and you want another place it looks — one more open-access host, one more citation service | One function, one entry in a list |
 | **3 · A new task type** | The queue needs a row that means something the four existing kinds do not | Enum + migration + handler. Read §5 first |
 | **4 · A sidecar container** | The fetch itself needs software the worker should not contain — a headless browser with a session, a vendor SDK, a paid API client, something with a licence you would rather isolate | A client module plus a compose service. The pattern exists twice already |
+| **5 · Hand the document in** | You (or a tool of yours) can obtain the document and the crawl cannot — a paper with no open-access copy, a report sent by email | No code: the document connector |
 
 Level 4 is the one to reach for when a source "cannot be scraped" by the normal
 path. It is also the one with the most existing shape to copy, because
@@ -76,8 +77,8 @@ one does not throttle the one above it in the chain.
 
 ## 3. A new task type
 
-The queue's `task_type` is currently `url`, `sitemap`, `query`, `doi`. Adding a
-fifth means all of:
+The queue's `task_type` is currently `url`, `sitemap`, `query`, `doi`, `upload`. Adding
+another means all of:
 
 1. **The enum**, in `packages/meridian_core/meridian_core/models/queue.py` —
    `TASK_TYPE = constrained(...)`.
@@ -217,7 +218,34 @@ single-worker stack this is the difference between a restart and a data loss.
 
 ---
 
-## 5. Before you ship any of it
+## 5. Hand the document in
+
+Some documents cannot be fetched by anything you would put in a sidecar: a paper no
+provider has a legal copy of, a report that arrived by email, a file behind an
+institutional login you hold. For those the corpus takes the document directly, through
+the **document connector** ([features/connector-api.md](../features/connector-api.md)):
+
+```bash
+# .env: COMPOSE_PROFILES=connector, MERIDIAN_CONNECTOR_TOKEN=$(openssl rand -hex 32)
+docker compose up -d connector
+
+# what the crawl found and could not get
+curl -s -H "Authorization: Bearer $MERIDIAN_CONNECTOR_TOKEN" \
+  "http://127.0.0.1:22401/connect/v1/wanted?kind=doi"
+
+# hand one back
+curl -s -H "Authorization: Bearer $MERIDIAN_CONNECTOR_TOKEN" \
+  -F "file=@paper.pdf;type=application/pdf" -F "doi=10.1234/example" \
+  http://127.0.0.1:22401/connect/v1/documents
+```
+
+The document goes through the same extraction, chunking and source path a fetched one does
+(an `upload` task, `seed_source = 'upload'`), so nothing downstream needs to know where it
+came from — `sources.extra["upload"]` records that. This is also the shape to build on for a
+tool that fetches on your behalf: it can live anywhere, hold its own credentials, and talk to
+the corpus only through this one authenticated endpoint.
+
+## 6. Before you ship any of it
 
 - [ ] Does an absent connector degrade, or crash? It must degrade.
 - [ ] Does the health line say it is absent? A silent degradation is the bug.

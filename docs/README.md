@@ -17,6 +17,7 @@ decisions behind the design are kept as [decision records](adr/README.md).
 | Run it on your machine | [guides/setup.md](guides/setup.md) |
 | Deploy it on a server | [guides/deployment.md](guides/deployment.md) |
 | Deploy it on podman (Fedora CoreOS, a GPU machine on Windows) | [guides/deploy-podman.md](guides/deploy-podman.md) |
+| Hand it documents, or see which papers it could not get | [features/connector-api.md](features/connector-api.md) |
 | Measure the test suite (coverage, mutation testing) | [guides/testing.md](guides/testing.md) |
 | Know why something was decided | [adr/](adr/README.md) |
 | Pick up where the last session stopped | [handover.md](handover.md) and [`TASKS.md`](../TASKS.md) |

@@ -8,12 +8,10 @@ web app is same-origin. See docs/features/api-and-access.md.
 from __future__ import annotations
 
 import os
-import time
-import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -21,11 +19,12 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 
 from meridian_core.db import check_connection, dispose_engines
-from meridian_core.logging import bind_run_id, configure_logging, get_logger
+from meridian_core.logging import configure_logging, get_logger
 from meridian_core.schemaready import wait_for_schema
 
 from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
+from .requestlog import log_requests
 from .routes import (
     admin,
     connect,
@@ -96,32 +95,6 @@ def transport_security() -> TransportSecuritySettings:
         allowed_hosts=hosts or ["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*"],
         allowed_origins=origins or ["http://127.0.0.1:*", "http://localhost:*"],
     )
-
-
-async def log_requests(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    """One structured record per request, and a run_id that ties it to its work.
-
-    Replaces uvicorn's plain-text access log, which the Dockerfile disables. Each
-    request is a run, with its own per-task run id. See docs/features/api-and-access.md.
-    """
-    request_id = uuid.uuid4().hex[:12]
-    started = time.perf_counter()
-    with bind_run_id(f"req-{request_id}"):
-        response = await call_next(request)
-        log.info(
-            "request",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "status": response.status_code,
-                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
-            },
-        )
-    # Handed back so a caller chasing a slow or failed request can quote it.
-    response.headers["x-request-id"] = request_id
-    return response
 
 
 @asynccontextmanager

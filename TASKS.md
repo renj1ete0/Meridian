@@ -2013,6 +2013,10 @@ deploy runbook whose first two commands could not work (`B-17`).
       the database's tiers, so `tiers_allowed` can never admit peer_reviewed, preprint or
       institutional for a sharing grant, and the grants CHECK cannot store academic/industry.
       Order it by the real tiers, with a drift test against `SOURCE_TIER`
+- [x] `B-264` **A connector that takes back the documents the crawl could not get** (operator,
+      2026-11-01) — a separate service on port 22401: the DOIs with no open-access copy, and an
+      upload endpoint for those or any document with a title and description, read by the
+      worker's own extraction. docs/features/connector-api.md
 - [x] `B-257` `v0.182.0`; screenshotted against the mock at 1440 and 390 wide. **People & permissions page, and an Admin that shows only what one may do** —
       the web half of `B-252`: Admin → People & permissions as `docs/design/AdminPeople.dc.html`
       (add, profile, per-permission Profile/On/Off, revoke, show revoked); `/api/me` drives the

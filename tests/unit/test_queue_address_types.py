@@ -10,8 +10,9 @@ from __future__ import annotations
 from meridian_core.models.queue import TASK_TYPE
 from meridian_core.queueing import ADDRESS_TASK_TYPES
 
-#: Task types whose text names no host: search words, and DOIs before they resolve.
-NOT_ADDRESSES = frozenset({"query", "doi"})
+#: Task types whose text names no host: search words, DOIs before they resolve, and an
+#: `upload:<id>` naming a handed-in document (`B-264`).
+NOT_ADDRESSES = frozenset({"query", "doi", "upload"})
 
 
 def test_every_task_type_is_classified() -> None:

@@ -58,6 +58,7 @@ ENUM_PAIRS = [
     ("ProposalKind", models.config.PROPOSAL_KIND),
     ("ProposalStatus", models.config.PROPOSAL_STATUS),
     ("ChatRole", models.chat.CHAT_ROLE),
+    ("UploadStatus", models.uploads.UPLOAD_STATUS),
 ]
 
 
@@ -117,6 +118,8 @@ READ_PAIRS = [
     (models.Report, schemas.ReportRead, set()),
     (models.Notification, schemas.NotificationRead, set()),
     (models.SteeringProposal, schemas.SteeringProposalRead, set()),
+    # Where the file sits in the inbox is the connector's business, not its caller's.
+    (models.Upload, schemas.UploadRead, {"inbox_path"}),
 ]
 
 

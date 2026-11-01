@@ -90,6 +90,7 @@ from .steering_proposals import (
     SteeringProposalReject,
     SteeringProposalsRead,
 )
+from .uploads import UploadRead, WantedPage, WantedPaper
 from .views import SavedViewCreate, SavedViewEdit, SavedViewRead, SavedViewsRead
 
 __all__ = [
@@ -191,4 +192,8 @@ __all__ = [
     "SteeringProposalRead",
     "SteeringProposalReject",
     "SteeringProposalsRead",
+    # the document connector (B-264)
+    "UploadRead",
+    "WantedPage",
+    "WantedPaper",
 ]
