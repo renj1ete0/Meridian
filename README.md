@@ -211,7 +211,8 @@ examples beside them. The server finds the machine by its `.local` name, waits w
 off, and catches up when it wakes: embedding queues, synthesis defers, search answers on
 words meanwhile.
 
-**After the first start, in Admin:** enable `local-llamacpp` with its model, enable
+**After the first start, in Admin:** enable `local-llamacpp` with its model (Strata is the
+measured recommendation, [ADR 0026](docs/adr/0026-strata-for-local-synthesis.md)), enable
 `local-chat`, set a budget, and choose topics and seed sources or watches; the crawl starts
 from those.
 
@@ -232,7 +233,9 @@ make promote SHA=<older commit>              # roll back
 
 Watchtower ([nickfedor/watchtower](https://github.com/nickfedor/watchtower)) picks up a release
 within `WATCHTOWER_POLL_INTERVAL`, runs any new migration, and restarts only what changed;
-Postgres, the browser and the search engine are never touched.
+Postgres, the browser and the search engine are never touched. Each release's **Deploy:** line
+in [CHANGELOG.md](CHANGELOG.md) says whether that is all (`image only`) or whether it also needs
+`git pull && docker compose up -d` on the server, because the compose file itself changed.
 
 **Handing it documents.** Add `connector` to `COMPOSE_PROFILES` and set `MERIDIAN_CONNECTOR_TOKEN`
 (`openssl rand -hex 32`) in `.env`, then `docker compose up -d`: the
