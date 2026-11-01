@@ -5,13 +5,14 @@ vector arm (pgvector, using the same model the corpus was embedded with), fused 
 reciprocal rank. Filters (topic, place, source tier, language, publication date) apply inside
 both arms. Every hit
 carries its source, its age, and the rank each arm gave it. A search that could run only one
-arm says so.
+arm says so, and vector neighbours under a similarity floor are set aside and counted rather
+than offered as matches.
 
 - **Code:** `packages/meridian_core/meridian_core/search.py`, `answer.py`, `watch.py`,
   `stats.py`, `ageing.py`; `services/api/api/search_service.py`,
   `routes/explore.py`
 - **Tasks:** `P2-06`, `P2-07`, `P2-17`, `P2-20`, `B-65`, `P6-43`, `B-152`, `B-168`, `B-173`,
-  `B-174`, `B-175`, `B-178`, `B-190`, `B-194`, `B-206`
+  `B-174`, `B-175`, `B-178`, `B-190`, `B-194`, `B-206`, `B-235`
 
 ## How it works
 
@@ -19,7 +20,8 @@ arm says so.
 query ──► lexical arm: websearch_to_tsquery over chunks.search_vector
             RUM index: best LEXICAL_POOL (1000) by match, re-ordered by ts_rank_cd
       ──► vector arm: query embedded by the embedding service, HNSW nearest neighbours
-            over the half-precision index (vectorindex.indexed_distance)
+            over the half-precision index (vectorindex.indexed_distance);
+            neighbours under the similarity floor (0.55) set aside and counted
       ──► the same filter predicate inside both (search._conditions)
       ──► reciprocal rank fusion (k = 60), then ageing decay per source tier
       ──► one page of hits, each with source, ranks per arm, age and decay factor
@@ -255,8 +257,61 @@ passages rather than "167", "169". The cost is about 4 ms a query on the vector 
 ms over four queries, warm). Fragments stay stored and the lexical arm still finds them by their
 words; they are not removed from the embedding backlog, which would make "awaiting a vector"
 permanent for them. Nothing here says when nothing is close: a nonsense query now gets
-40–80-character passages instead of fragments, and a similarity floor that says "nothing near"
-is a separate question.
+40–80-character passages instead of fragments. The [similarity floor](#similarity-floor) is what
+says "nothing near".
+
+### Similarity floor
+
+A vector arm always has nearest neighbours, so a query nothing in the corpus answers still got
+a page of passages: the least bad ones, ranked with the same confidence as a real answer
+(`B-235`). Vector candidates whose cosine similarity to the query is under `VECTOR_FLOOR`
+(0.55) are now set aside before fusion, and counted.
+
+- **Meaning only.** A passage under the floor that matches the query's words stays, ranked by
+  the lexical arm alone (`vector_rank` None). A word match is evidence of its own.
+- **Reported, not hidden.** `SearchResult.below_floor` counts what was set aside and is not
+  in `vector_candidates`; `nearest` is the best similarity the arm saw, kept or not; `floor`
+  is the floor applied (None when off, or when no vector arm ran). The HTTP response carries
+  them as `below_floor`, `nearest_similarity` and `similarity_floor`. Find's summary line adds
+  "N set aside as not close", and an empty result says "Nothing close", with the nearest
+  passage's score against the floor, instead of "Nothing matched". MCP `search_chunks`
+  returns `below_floor`.
+- **It can be turned off**: `floor=false` on `/api/explore/search`, `vector_floor=None` in
+  `search()`. Every other caller (Ask, MCP, the answer page, the question set) has it on.
+- **It counts within the arm's candidates.** `below_floor` is how many of the vector arm's
+  top `candidates` fell under; a query whose hundred nearest all clear the floor reports 0
+  however much of the corpus lies further away.
+
+**Measured** on 2026-11-01 against the local corpus (1.5M embedded passages), with queries
+embedded by the corpus's own model (bge-m3 through the embedder image, on the CPU) and their
+100 nearest passages read through the same index and filters as the arm. 28 short queries on
+the corpus's subjects (a few words, acronyms included), the 41 held-out questions, 8 off-topic
+queries (a recipe, a play) and 22 nonsense strings:
+
+| queries | 1st neighbour, min / median | 10th, min / median | 20th, min |
+|---|---|---|---|
+| short, on subject (28) | 0.612 / 0.681 | 0.560 / 0.643 | 0.538 |
+| held-out questions (41) | 0.641 / 0.702 | 0.605 / 0.659 | 0.598 |
+| off-topic (8) | 0.518 / 0.576 | 0.445 / 0.527 | 0.435 |
+| nonsense (22) | 0.435 / 0.545 | 0.403 / 0.480 | 0.392 |
+
+| floor | real queries losing any of their top 10 | of their top 20 | nonsense left with no vector hit | off-topic |
+|---|---|---|---|---|
+| 0.50 | 0 of 69 | 0 | 4 of 22 | 0 of 8 |
+| **0.55** | **0 of 69** | **2** (both short) | **12 of 22** | **3 of 8** |
+| 0.60 | 7 of 69 | 9 | 17 of 22 | 5 of 8 |
+
+0.55 is the highest of these floors that leaves every real query's top ten untouched; the held-out
+questions keep all 100 of their candidates. It does not separate everything, and nothing at
+the vector level can: a one-word query ("the", "hello", "zzzzzz") reaches 0.60–0.63 on URL and
+fragment passages, and a few off-topic queries find a genuinely related passage (a cookie
+recipe in a food-labelling rule). Those keep a handful of weak hits, now counted beside the ones
+set aside. Before `B-235` retired them, two of the five nearest passages to one nonsense string
+were unreadable PDF text ([unreadable passages](extraction.md#unreadable-passages)).
+
+The floor is a property of the embedding model, not of the corpus's size: cosine similarities
+from another model sit on another scale. Changing the model means measuring this again.
+
 
 ### Per-source cap
 
@@ -481,6 +536,9 @@ and forgotten in the DTO fails rather than being dropped on the way out.
   a response that cannot say whether it delivered one is not answering the question.
 - **`candidates` is exposed** so a caller can tell "no more results" from "no more results
   within the pool".
+- **`below_floor`, `nearest_similarity` and `similarity_floor`** say what the
+  [similarity floor](#similarity-floor) set aside, so an empty page can say "nothing close"
+  and how far the nearest passage was, rather than "nothing matched".
 - **Age is published with its factor.** `age_days` is None for an undated document and `decay`
   is then 1.0, a guess in neither direction: around a third of crawled pages have no extractable
   date, and either default is wrong for the other kind.
@@ -501,6 +559,8 @@ and forgotten in the DTO fails rather than being dropped on the way out.
 ## Configuration
 
 - `MERIDIAN_EMBEDDER_URL` enables the vector arm. Without it, search is lexical-only.
+- `VECTOR_FLOOR` in `search.py` is the similarity floor; it is a constant measured for the
+  embedding model, not a setting. `floor=false` on a request keeps what it would set aside.
 - Filters and defaults are request parameters on `/api/explore/search`; see the route
   docstring.
 
@@ -565,4 +625,5 @@ next bind.
 
 `tests/integration/test_search.py`, `test_search_candidates.py`, `test_search_index.py`,
 `test_explore_api.py`, `test_explore_answer.py`, `test_watch.py`;
-`tests/unit/test_search.py`, `test_answer.py`.
+`tests/unit/test_search.py`, `test_answer.py`, `test_similarity_floor.py`;
+`web/tests/explore-page.test.tsx`.

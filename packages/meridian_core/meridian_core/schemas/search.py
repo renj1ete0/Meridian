@@ -101,6 +101,15 @@ class SearchResponse(BaseModel):
     #: Whether a cross-encoder re-ordered the top of the list (`B-167`). False when it
     #: was not asked for, is not configured, or failed. See docs/features/search.md#reranking.
     reranked: bool = False
+    #: Vector candidates set aside as not close in meaning (`B-235`): under
+    #: ``similarity_floor``, and not in ``vector_candidates``. See
+    #: docs/features/search.md#similarity-floor.
+    below_floor: int = 0
+    #: The best cosine similarity the vector arm saw, kept or not; None when it did not run
+    #: or found nothing.
+    nearest_similarity: float | None = None
+    #: The floor applied, or None when it was turned off or the vector arm did not run.
+    similarity_floor: float | None = None
 
 
 class PlaceRead(BaseModel):

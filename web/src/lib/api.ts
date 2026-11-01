@@ -140,6 +140,12 @@ export interface SearchResponse {
   vector_candidates: number
   /** Whether a cross-encoder re-ordered the top 30 (`B-167`); only when asked for. */
   reranked: boolean
+  /** Near-meaning candidates set aside under the similarity floor (`B-235`). */
+  below_floor: number
+  /** The best similarity the vector arm saw, kept or not; null when it did not run. */
+  nearest_similarity: number | null
+  /** The floor applied; null when off or when the vector arm did not run. */
+  similarity_floor: number | null
 }
 
 export const SEARCH_RESPONSE_FIELDS = [
@@ -154,6 +160,9 @@ export const SEARCH_RESPONSE_FIELDS = [
   'lexical_candidates',
   'vector_candidates',
   'reranked',
+  'below_floor',
+  'nearest_similarity',
+  'similarity_floor',
 ] as const
 
 /** Mirrors `CorpusStatsRead`. */

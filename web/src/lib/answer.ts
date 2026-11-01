@@ -110,6 +110,8 @@ export interface Answer {
   degraded_reason: string | null
   /** Whether a cross-encoder re-ordered the pool's top before grouping (`B-167`). */
   reranked: boolean
+  /** Near-meaning candidates set aside under the similarity floor (`B-235`). */
+  below_floor: number
 }
 
 export const ANSWER_FIELDS = [
@@ -131,6 +133,7 @@ export const ANSWER_FIELDS = [
   'degraded',
   'degraded_reason',
   'reranked',
+  'below_floor',
 ] as const
 
 export type AssertAnswerItem = Expect<Equal<keyof AnswerItem, (typeof ANSWER_ITEM_FIELDS)[number]>>

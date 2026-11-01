@@ -29,7 +29,7 @@ from meridian_core.places import countries_named, load_vocabulary
 from meridian_core.rerank import RERANK_DEPTH, Scorer, rerank_hits
 from meridian_core.schemas.answer import AnswerGroupRead, AnswerPlaceRead, AnswerRead
 from meridian_core.schemas.search import SearchHitRead, SearchResponse
-from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, search
+from meridian_core.search import DEFAULT_CANDIDATES, VECTOR_FLOOR, SearchFilters, search
 
 log = get_logger(__name__)
 
@@ -141,12 +141,14 @@ async def paged_search(
     offset: int,
     candidates: int = DEFAULT_CANDIDATES,
     rerank: bool = False,
+    floor: bool = True,
 ) -> SearchResponse:
     """One page of fused hits, with an account of how they were found.
 
     ``has_more`` comes from asking for one hit more than the page needs. ``rerank``
     re-orders the top :data:`RERANK_DEPTH` when the sidecar can (`B-167`); every page
-    asks for at least that many, so pages agree on the order.
+    asks for at least that many, so pages agree on the order. ``floor`` False keeps
+    vector candidates under the similarity floor (`B-235`).
     """
     check_window(limit, offset, candidates)
     vector = await embed_query(query)
@@ -165,6 +167,7 @@ async def paged_search(
         filters=filters,
         limit=window,
         candidates=candidates,
+        vector_floor=VECTOR_FLOOR if floor else None,
     )
 
     hits, reranked = (
@@ -183,6 +186,7 @@ async def paged_search(
             "offset": offset,
             "lexical_candidates": result.lexical_candidates,
             "vector_candidates": result.vector_candidates,
+            "below_floor": result.below_floor,
         },
     )
 
@@ -202,6 +206,9 @@ async def paged_search(
         lexical_candidates=result.lexical_candidates,
         vector_candidates=result.vector_candidates,
         reranked=reranked,
+        below_floor=result.below_floor,
+        nearest_similarity=result.nearest,
+        similarity_floor=result.floor,
     )
 
 
@@ -213,6 +220,7 @@ async def answer_search(
     candidates: int,
     top: int,
     rerank: bool = False,
+    floor: bool = True,
 ) -> AnswerRead:
     """The whole candidate pool, by place or as one list (see `meridian_core.answer`).
 
@@ -231,6 +239,7 @@ async def answer_search(
         filters=filters,
         limit=2 * candidates,
         candidates=candidates,
+        vector_floor=VECTOR_FLOOR if floor else None,
     )
     hits, reranked = (
         await rerank_hits(reranker(), query, result.hits) if rerank else (result.hits, False)
@@ -277,4 +286,5 @@ async def answer_search(
             result.arms, vector is not None, embedder_configured=embedder_configured
         ),
         reranked=reranked,
+        below_floor=result.below_floor,
     )

@@ -7,12 +7,13 @@ location (page or character offset) that a reader can follow back into the store
 
 - **Code:** `services/worker/worker/extract/` (`html.py`, `pdf.py`, `document.py`,
   `pdftables.py`, `figures.py`, `clean.py`, `chunk.py`, `dockind.py`, `errorpage.py`,
-  `injection.py`, `language.py`), `cleancut.py`, `rawstore.py`, `ocr_queue.py`, `boilerplate.py`,
-  `rechunk.py`, `retable.py`, `dockind.py`, `retitle.py`, `relanguage.py`;
+  `injection.py`, `language.py`, `readable.py`), `cleancut.py`, `rawstore.py`, `ocr_queue.py`,
+  `boilerplate.py`, `rechunk.py`, `retable.py`, `dockind.py`, `retitle.py`, `relanguage.py`,
+  `unreadable.py`;
   `packages/meridian_core/meridian_core/chunks.py`, `sources.py`, `boilerplate.py`, `titles.py`,
   `figures.py`
 - **Tasks:** `P1-07`–`P1-13`, `P2-02`, `B-42`–`B-45`, `B-59`, `B-69`, `B-153`, `B-191`, `B-195`,
-  `B-214`, `B-215`
+  `B-214`, `B-215`, `B-235`
 - **Decisions:** [ADR 0019](../adr/0019-stored-pdfs-re-extracted-for-their-tables.md)
 
 ## How it works
@@ -27,6 +28,7 @@ bytes ──► route by media type
        ──► document kind: paper, listing, legal, news, report, profile, other
        ──► clean: drop whole lines (skip links, menus, site boilerplate, running headers)
        ──► chunk: split on paragraphs and headings; sentences, then a hard cap, as fallbacks
+       ──► leave out passages that are mostly unreadable characters (an unmapped font)
        ──► write: new chunks; the old ones are superseded, not deleted
 ```
 
@@ -156,7 +158,8 @@ queued for OCR and stays metadata-only.
   as a page-length run of control characters: not blank, so it passes the scan check, and it
   embeds as noise. A page more than a set share control, private-use or replacement characters
   has no readable text. Measured over a real crawl, garbled documents sat at 60–66% and the next
-  highest ordinary document at 5%.
+  highest ordinary document at 5%. Garble under that share, or confined to part of a page, is judged
+  passage by passage ([Unreadable passages](#unreadable-passages)).
 - **OCR never runs inline**: it would stall the loop for one document. The queue row is not a
   promise; OCR passes are user-triggered because they are expensive (§6.6), and which tier a
   scan deserves (multi-column reports need the expensive one) is a judgement nothing at
@@ -408,6 +411,65 @@ out rows whose every cell is empty or `NaN` (padding; several thousand stored pa
 of them), packing the rows either side apart so each passage stays a slice; and a continuation
 passage is embedded with its table's header (see
 [the embedding view](embedding.md#the-embedding-view)).
+<a id="unreadable-passages"></a>
+### Unreadable passages
+
+A PDF font with no Unicode map hands `pdftotext` glyph numbers instead of letters (`B-235`).
+In the common case each glyph sits 29 code points below its letter, so "the and" arrives as
+`WKH\x03DQG`: printable capitals, digits as control characters, and the space glyph as
+U+0003. Other fonts land in the Greek and Latin Extended blocks, or in private use. The
+page-level check above catches a page that is a fifth or more unreadable characters; this
+text is a control character every word or so, often under that, and on pages where the rest
+is readable. Such passages were embedded and searched: their vectors sit near nothing in
+particular, so a nonsense query's nearest neighbours were mostly these.
+
+**The test** (`extract/readable.py`): split the passage into words at the gaps a reader sees
+(spaces, line breaks, tabs, and BEL and BS, which is how a word processor's bullets and tab
+leaders reach the text layer), and count the characters of every word that holds a control,
+private-use or replacement character. More than half (`UNREADABLE_WORD_SHARE`), and the
+passage is unreadable. By word, because the character share of such text is about a fifth
+and overlaps tables of contents and bulleted lists; by word, nearly all of it is unreadable
+and those are almost none. `str.isspace` is not used to find the gaps: it counts U+001C to
+U+001F, which is where the shifted font puts the digits.
+
+**Measured** on the local corpus (2026-11-01, 1,370,561 live passages, read only): 13,003
+passages hold at least one such character. Over the threshold:
+
+| words unreadable, more than | passages | sources |
+|---|---|---|
+| 30% | 990 | 163 |
+| 40% | 776 | 119 |
+| **50%** | **657** (0.048%) | **95** |
+| 60% | 559 | 79 |
+| 70% | 459 | 56 |
+
+All but one are PDF passages; 552 were embedded. Read by eye, the passages between 30% and
+50% are mostly readable: tables of contents, equations with symbol-font brackets, Tamil and
+Bengali text with a replacement character inside some words, a paragraph followed by a
+garbled one. Above 50% nearly all are glyph numbers. The misses at 50%: a three-word heading
+with a private-use ligature ("In\ue207astructure is not enough"), a URL glued to a bullet
+character, and a few equation fragments; most of them are short enough that the vector arm
+already left them out.
+
+- **Left out at the cut, not cleaned out as lines.** `cleancut.clean_cut` drops an
+  unreadable passage after chunking and renumbers `chunk_index`; offsets still point into
+  the extracted text, so every kept passage stays a slice. A line is too little text to
+  judge (a bulleted heading is one word with a control in it), and a passage is what is
+  embedded and searched. A passage half garbled and half a real paragraph is kept for its
+  readable half. `Cut.unreadable` counts them and the "chunked" log line carries it.
+- **Stored passages** are retired by `worker.unreadable`: report by default, `--apply`
+  supersedes them (`superseded_at`, as a re-crawl does), so they leave search, embedding and
+  every reader surface and still resolve for anything that cites them; the report counts
+  those. It asks the database for candidates with `UNREADABLE_CLASS`, one character class
+  that Python and Postgres read alike (a test compares the two at every boundary), and
+  judges each with the same function as the cut. `--source` narrows it, `--limit` stops it
+  early. `worker.rechunk --apply` also drops them, as a side effect of re-cutting, but skips
+  any source that is cited.
+- **Not sent to OCR.** A document whose pages are mostly glyph numbers is still caught by
+  the page check and queued for OCR; one whose garble is under that keeps its readable
+  passages and loses the rest. OCR would recover the text; deciding which of these
+  documents deserve it is not done here.
+
 ### Document kinds
 
 `source_tier` says who published a document; the kind says what it *is* (`B-59`). It matters most
@@ -551,6 +613,9 @@ One row per URL, created on first fetch and updated on every fetch.
 - `boilerplate` runs daily. `rechunk`, `retable`, `dockind`, `retitle` and `furniture` are one-off
   passes for what was stored before a rule existed. Each reports by default, needs `--apply`
   to write, and never touches a source that anything cites.
+- `unreadable` retires stored passages a reader could not read
+  ([Unreadable passages](#unreadable-passages)); report by default, `--apply` supersedes them,
+  cited or not, since a superseded passage still resolves.
 - `relanguage` is a one-off pass too, reporting by default and writing with `--apply`; it
   changes only a source's language and marks labels for relabelling ([Language](#language)).
 - `pdftotext` (poppler) is required in the worker image. Without it every PDF fails loudly,
@@ -572,6 +637,7 @@ One row per URL, created on first fetch and updated on every fetch.
 `tests/unit/test_chunk*.py`, `test_clean*.py`, `test_extract_html.py`,
 `test_extract_pdf.py`, `test_pdf_tables.py`, `test_extract_document.py`, `test_extract_figures.py`, `test_dockind*.py`, `test_errorpage.py`, `test_titles.py`,
 `test_injection_screen.py`, `test_rawstore*.py`, `test_pdf_garbled.py`, `test_language_detection.py`,
-`test_storable.py`; `tests/integration/test_chunks*.py`, `test_rechunk*.py`, `test_retable.py`,
+`test_storable.py`, `test_readable.py`; `tests/integration/test_chunks*.py`, `test_rechunk*.py`,
+`test_retable.py`, `test_unreadable.py`,
 `test_relanguage.py`, `test_retitle.py`, `test_dockind_backfill.py`, `test_boilerplate.py`,
 `test_nul_bytes.py`.

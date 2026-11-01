@@ -91,6 +91,20 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.190.0] — 2026-11-01
+
+### Added
+
+- `B-235`: a similarity floor on search's vector arm (0.55 cosine, measured on 99 queries):
+  passages no closer in meaning are set aside unless they match the words, and the response
+  says how many and how close the nearest was (`below_floor`, `nearest_similarity`,
+  `similarity_floor`; `floor=false` turns it off). Unreadable passages (mostly glyph-number
+  text from broken PDF fonts) are kept out at chunking, and `worker.unreadable --apply`
+  supersedes the stored ones.
+
+**Deploy:** image only; then `docker compose run --rm worker python -m worker.unreadable` to see
+what it would retire, and again with `--apply`.
+
 ## [0.189.3] — 2026-11-01
 
 ### Fixed

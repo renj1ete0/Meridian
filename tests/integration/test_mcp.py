@@ -167,6 +167,9 @@ async def test_an_empty_search_still_carries_the_caveat(mcp) -> None:
 
     assert body["returned"] == 0
     assert body["retrieval"], "an empty result set arrived with no explanation"
+    # `B-235`: how many near-meaning passages the floor left out, so an empty answer can be
+    # told apart from one where something close exists and was filtered.
+    assert body["below_floor"] == 0
 
 
 def test_the_degraded_wording_tells_the_model_what_to_do(mcp) -> None:

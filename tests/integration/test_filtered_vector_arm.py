@@ -101,7 +101,7 @@ async def test_results_come_back_nearest_first(sess) -> None:
         await sess.execute(text(f"SET LOCAL {setting} = off"))
 
     found = await _vector(sess, at(1.0, 1), SearchFilters(source_tiers=["government"]), 50)
-    mine = [i for i in found if i in ids]
+    mine = [i for i, _ in found if i in ids]
 
     assert mine == [ids[1], ids[2], ids[0]]
 
@@ -121,7 +121,10 @@ async def test_a_fragment_is_left_out_of_the_vector_arm_but_found_by_its_words(s
         [at(1.0, 3), at(0.9, 4)],
         texts=[fragment, f"{word} and a full sentence that says something about it."],
     )
-    near = await _vector(sess, at(1.0, 3), SearchFilters(source_tiers=["government"]), 20)
+    near = [
+        i
+        for i, _ in await _vector(sess, at(1.0, 3), SearchFilters(source_tiers=["government"]), 20)
+    ]
     assert ids[0] not in near
     assert ids[1] in near
 

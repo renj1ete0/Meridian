@@ -94,3 +94,5 @@ class AnswerRead(BaseModel):
     degraded_reason: str | None = None
     #: Whether a cross-encoder re-ordered the top of the pool before grouping (`B-167`).
     reranked: bool = False
+    #: Vector candidates set aside as not close in meaning, as on a search (`B-235`).
+    below_floor: int = 0

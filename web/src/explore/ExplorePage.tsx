@@ -750,7 +750,24 @@ export function summaryLine(results: SearchResponse): string {
   const parts = [`${shown} ${shown === 1 ? 'passage' : 'passages'} shown`]
   if (results.arms.includes('lexical')) parts.push(`${count(results.lexical_candidates)} matched the words`)
   if (results.arms.includes('vector')) parts.push(`${count(results.vector_candidates)} near in meaning`)
+  if (results.below_floor > 0) parts.push(`${results.below_floor.toLocaleString('en')} set aside as not close`)
   return parts.join(' · ')
+}
+
+/**
+ * What an empty result means (`B-235`). When the vector arm set candidates aside under the
+ * similarity floor, the corpus was searched and nothing in it is close: say how far the
+ * nearest passage was, rather than a bare "nothing matched".
+ */
+export function emptyLine(asked: string, results: SearchResponse): string {
+  const { below_floor, nearest_similarity, similarity_floor } = results
+  if (below_floor > 0 && nearest_similarity !== null && similarity_floor !== null) {
+    return (
+      `Nothing close to "${asked}". No passage contains these words, and the nearest in meaning ` +
+      `scored ${nearest_similarity.toFixed(2)}, under the ${similarity_floor.toFixed(2)} a close match needs.`
+    )
+  }
+  return `Nothing matched "${asked}".`
 }
 
 export function SearchOutcome({
@@ -775,7 +792,7 @@ export function SearchOutcome({
       ) : null}
 
       {empty ? (
-        <p className="text-[13.5px] text-text-muted">Nothing matched {`"${asked}"`}.</p>
+        <p className="text-[13.5px] text-text-muted">{emptyLine(asked, results)}</p>
       ) : (
         <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

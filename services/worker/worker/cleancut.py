@@ -2,7 +2,8 @@
 
 Shared by the fetch path (`main._chunk`) and `worker.rechunk`, so a page is cut the same
 way whenever it arrives. Records the page's line hashes from the *uncleaned* text, reads
-the host's boilerplate set, picks lines to drop and chunks around them.
+the host's boilerplate set, picks lines to drop and chunks around them, and keeps no passage
+a reader could not read (`B-235`).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from meridian_core.boilerplate import boilerplate_for, record_page_lines
 from .extract.base import Page
 from .extract.chunk import TextChunk, chunk_pages, chunk_text
 from .extract.clean import clean_pages, clean_text, document_share, page_line_hashes
+from .extract.readable import is_unreadable
 
 
 @dataclasses.dataclass(frozen=True)
@@ -29,6 +31,8 @@ class Cut:
     total_chars: int
     kept_original: bool
     reasons: dict[str, int]
+    #: Passages left out as unreadable (`B-235`), after the cut and before the write.
+    unreadable: int = 0
 
 
 async def clean_cut(
@@ -71,6 +75,13 @@ async def clean_cut(
         removals = list(cleaning.removals)
     for removal in removals:
         reasons[removal.reason] = reasons.get(removal.reason, 0) + 1
+    # Left out after the cut, not as lines before it: one line is too little text to judge.
+    # Renumbered so `chunk_index` stays a run; offsets still point into the text.
+    # See docs/features/extraction.md#unreadable-passages.
+    readable = [c for c in chunks if not is_unreadable(c.text)]
+    unreadable = len(chunks) - len(readable)
+    if unreadable:
+        chunks = [dataclasses.replace(c, index=i) for i, c in enumerate(readable)]
     return Cut(
         chunks=chunks,
         lines_removed=len(removals),
@@ -78,4 +89,5 @@ async def clean_cut(
         total_chars=total,
         kept_original=kept,
         reasons=reasons,
+        unreadable=unreadable,
     )

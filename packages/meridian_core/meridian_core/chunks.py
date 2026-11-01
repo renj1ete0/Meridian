@@ -13,7 +13,7 @@ import dataclasses
 import datetime as dt
 from collections.abc import Collection, Iterable, Mapping, Sequence
 
-from sqlalchemy import and_, delete, exists, func, or_, select, update
+from sqlalchemy import TextClause, and_, delete, exists, func, or_, select, update
 from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -194,6 +194,11 @@ def _cited(chunk_ref: str) -> str:
 
 
 _UNCITED = f"NOT ({_cited('chunks.chunk_id')})"
+
+
+def cited_clause() -> TextClause:
+    """A predicate over ``chunks``: true for a chunk anything with provenance cites."""
+    return sql_text(f"({_cited('chunks.chunk_id')})")
 
 
 async def cited_source_ids(sess: AsyncSession) -> set[int]:

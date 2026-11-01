@@ -124,6 +124,7 @@ function answer(over: Partial<Answer> = {}): Answer {
     degraded: false,
     degraded_reason: null,
     reranked: false,
+    below_floor: 0,
     ...over,
   }
 }
@@ -442,6 +443,9 @@ describe('the rest of a country (B-175)', () => {
           lexical_candidates: 0,
           vector_candidates: 0,
           reranked: false,
+          below_floor: 0,
+          nearest_similarity: null,
+          similarity_floor: null,
         },
       },
     })

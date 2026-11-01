@@ -1407,6 +1407,14 @@ pytest with a bare `KeyError` on a stash key rather than anything that names the
 To assert on a log record, attach a handler to the module's own logger — see
 `tests/unit/test_fetch_signals.py`.
 
+### `str.isspace` counts four control characters as whitespace
+
+U+001C–U+001F (file, group, record and unit separators) are whitespace to `str.isspace` and
+to `str.split()`. A PDF font with no Unicode map puts its digits there, so splitting such
+text into words with `split()` makes a year look like gaps. `worker.extract.readable` names
+its gaps explicitly for that reason (`B-235`, [unreadable
+passages](features/extraction.md#unreadable-passages)).
+
 ### A workspace package must declare its own dependencies, or only the container finds out
 
 `meridian_core.policy` imports `yaml`, and `pyyaml` was declared on the *root*

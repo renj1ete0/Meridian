@@ -1705,6 +1705,7 @@ class Worker:
                 "paginated": document.is_paginated,
                 "lines_removed": cut.lines_removed,
                 "kept_whole": cut.kept_original,
+                "unreadable": cut.unreadable,
             },
         )
         return written

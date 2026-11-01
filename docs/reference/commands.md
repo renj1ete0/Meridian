@@ -94,6 +94,7 @@ ones take `--once` to run a single pass and exit.
 | `worker.boilerplate` | always (`--report` dry) | Repeated lines per site |
 | `worker.rechunk` | `--apply` | Re-cuts stored sources with furniture removed |
 | `worker.retable` | `--apply` | Re-extracts stored PDFs whose tables a fresh extraction would keep, replacing their passages; `--domain`, `--source`, `--limit` narrow it (`B-215`) |
+| `worker.unreadable` | `--apply` | Supersedes stored passages a reader could not read (an unmapped PDF font); `--source`, `--limit` narrow it (`B-235`) |
 | `worker.reembed` | `--apply` | Re-embeds passages whose embedded text has changed |
 | `worker.dockind` | `--apply` | Classifies stored documents by kind; `--all` re-derives, `--kind news` only what is recorded as news (`B-253`) |
 | `worker.furniture` | `--apply` | Demotes site furniture to junk |

@@ -1933,7 +1933,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       results and exports cite "n.d.". Resolve from identifiers (arXiv ID gives year and month:
       500 arXiv sources undated; DOI via Crossref/OpenAlex), reject placeholder titles; `B-220`
       is one case of it
-- [ ] `B-235` **Search has no relevance floor, and indexes undecodable text** (review) — a nonsense
+- [x] `B-235` **Search has no relevance floor, and indexes undecodable text** (review) — a nonsense
       query returns 20 passages; the top ones were PDF text with broken font maps (a 3-letter
       shift, ~0.09% of passages). Detect and drop such text at extraction; say "no good matches"
       under a floor

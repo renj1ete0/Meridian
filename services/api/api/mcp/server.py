@@ -191,7 +191,8 @@ def build_mcp(
 
         Returns a `retrieval` field describing how the match was made — read it.
         When it says word-matching, absence of results is not evidence of
-        absence, and you should retry with different wording.
+        absence, and you should retry with different wording. `below_floor`
+        counts passages left out as not close in meaning to the query.
 
         `topic` keeps sources carrying any of the named topics. Documents
         crawled before topics were recorded carry none and are excluded by it,
@@ -237,6 +238,9 @@ def build_mcp(
             "reranked": reranked,
             "results": [_cite(hit) for hit in hits],
             "returned": len(hits),
+            # Near-meaning candidates under the similarity floor, left out (`B-235`). Results
+            # empty and this above zero: the corpus holds nothing close to the query.
+            "below_floor": result.below_floor,
             # Structured `results` for rendering citations, and `framed` (`P4-06`) to
             # paste into a prompt. See docs/features/mcp.md#what-reaches-a-model.
             "framed": frame_passages(hits, detailed=True),

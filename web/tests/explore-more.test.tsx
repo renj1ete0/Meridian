@@ -56,6 +56,9 @@ function page(from: number, count: number, over: Partial<SearchResponse> = {}): 
     lexical_candidates: 50,
     vector_candidates: 100,
     reranked: false,
+    below_floor: 0,
+    nearest_similarity: null,
+    similarity_floor: null,
     ...over,
   }
 }

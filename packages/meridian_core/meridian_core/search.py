@@ -1,7 +1,8 @@
 """Hybrid retrieval: lexical and vector arms fused by reciprocal rank (task P2-06, §12.5).
 
 Filters are one predicate (`_conditions`) applied inside both arms. A missing arm is
-reported on the result, and near-duplicates are excluded by default but counted. See
+reported on the result, near-duplicates are excluded by default but counted, and vector
+candidates under a similarity floor are set aside and counted (`B-235`). See
 docs/features/search.md for the design and its reasons.
 """
 
@@ -50,6 +51,11 @@ DEFAULT_CANDIDATES = 100
 #: stay stored, and the lexical arm still finds them by their words.
 #: See docs/features/search.md#fragments.
 VECTOR_MIN_CHARS = 40
+
+#: Cosine similarity under which a vector candidate is not evidence of anything (`B-235`).
+#: A property of the embedding model (bge-m3), measured on a real corpus; re-measure it
+#: before changing either. See docs/features/search.md#similarity-floor.
+VECTOR_FLOOR = 0.55
 
 DEFAULT_LIMIT = 20
 
@@ -181,6 +187,14 @@ class SearchResult:
     #: How many hits the per-source cap displaced from this page (`B-30`). Zero when
     #: the cap is off, which is the default.
     held_back: int = 0
+    #: Vector candidates set aside as under :attr:`floor` (`B-235`), not counted in
+    #: ``vector_candidates``. A passage that matched the words is kept by the lexical arm.
+    below_floor: int = 0
+    #: The best cosine similarity the vector arm saw, kept or not; None when it found nothing
+    #: or did not run. How a caller says how far "no close match" was.
+    nearest: float | None = None
+    #: The similarity floor applied; None when the caller turned it off or no vector arm ran.
+    floor: float | None = None
 
     @property
     def degraded(self) -> bool:
@@ -353,8 +367,8 @@ async def _lexical_cjk(
 
 async def _vector(
     sess: AsyncSession, vector: Sequence[float], filters: SearchFilters, candidates: int
-) -> list[int]:
-    """Chunk ids by cosine distance, nearest first, filtered inside the statement (§12.5)."""
+) -> list[tuple[int, float]]:
+    """``(chunk id, cosine similarity)``, nearest first, filtered inside the statement (§12.5)."""
     # `set_config` because `SET` takes no bind parameters; local, so it cannot leak to
     # the next caller on a pooled connection.
     await sess.execute(
@@ -378,7 +392,23 @@ async def _vector(
         .limit(candidates)
     )
     rows = (await sess.execute(stmt)).all()
-    return [chunk_id for chunk_id, _ in sorted(rows, key=lambda r: (float(r[1]), r[0]))]
+    return [
+        (chunk_id, 1.0 - float(distance))
+        for chunk_id, distance in sorted(rows, key=lambda r: (float(r[1]), r[0]))
+    ]
+
+
+def above_floor(
+    neighbours: Sequence[tuple[int, float]], floor: float | None
+) -> tuple[list[int], int]:
+    """The ids of ``neighbours`` at or above ``floor``, in order, and how many fell under it.
+
+    ``floor`` None keeps every one. See docs/features/search.md#similarity-floor.
+    """
+    if floor is None:
+        return [chunk_id for chunk_id, _ in neighbours], 0
+    kept = [chunk_id for chunk_id, similarity in neighbours if similarity >= floor]
+    return kept, len(neighbours) - len(kept)
 
 
 def fuse(*ranked: Sequence[int], k: int = RRF_K) -> dict[int, float]:
@@ -435,12 +465,14 @@ async def search(
     candidates: int = DEFAULT_CANDIDATES,
     k: int = RRF_K,
     max_per_source: int | None = None,
+    vector_floor: float | None = VECTOR_FLOOR,
 ) -> SearchResult:
     """Hybrid retrieval over the chunk corpus.
 
     ``max_per_source`` caps how many chunks one document may contribute; off by
     default (`B-30`). ``query_vector`` is the caller's to compute; omitting it is
-    lexical-only, and :attr:`SearchResult.degraded` says so. See
+    lexical-only, and :attr:`SearchResult.degraded` says so. Vector candidates under
+    ``vector_floor`` are set aside and counted; None keeps them (`B-235`). See
     docs/features/search.md#ageing-and-the-baseline.
     """
     filters = filters or SearchFilters()
@@ -454,17 +486,30 @@ async def search(
     arms: set[str] = set()
     lexical: list[int] = []
     vectorial: list[int] = []
+    below_floor = 0
+    nearest: float | None = None
 
     if query:
         lexical = await _lexical(sess, query, filters, candidates)
         arms.add("lexical")
     if query_vector is not None:
-        vectorial = await _vector(sess, query_vector, filters, candidates)
+        neighbours = await _vector(sess, query_vector, filters, candidates)
+        nearest = neighbours[0][1] if neighbours else None
+        vectorial, below_floor = above_floor(neighbours, vector_floor)
         arms.add("vector")
 
+    floor = vector_floor if "vector" in arms else None
     scores = fuse(lexical, vectorial, k=k)
     if not scores:
-        return SearchResult([], frozenset(arms), len(lexical), len(vectorial))
+        return SearchResult(
+            [],
+            frozenset(arms),
+            len(lexical),
+            len(vectorial),
+            below_floor=below_floor,
+            nearest=nearest,
+            floor=floor,
+        )
 
     lexical_at = {chunk_id: i for i, chunk_id in enumerate(lexical, start=1)}
     vector_at = {chunk_id: i for i, chunk_id in enumerate(vectorial, start=1)}
@@ -535,7 +580,16 @@ async def search(
     # result list whose order disagrees with its own scores.
     hits.sort(key=lambda hit: hit.score, reverse=True)
 
-    return SearchResult(hits, frozenset(arms), len(lexical), len(vectorial), held_back=held_back)
+    return SearchResult(
+        hits,
+        frozenset(arms),
+        len(lexical),
+        len(vectorial),
+        held_back=held_back,
+        below_floor=below_floor,
+        nearest=nearest,
+        floor=floor,
+    )
 
 
 def _decay_for(source: Source, filters: SearchFilters) -> float:

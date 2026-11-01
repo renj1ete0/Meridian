@@ -22,7 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { CLAMP_OVER, ResultList, passageOnlyTopics } from '../src/explore/ResultList'
-import { RetrievalNotice, SearchOutcome, entryState, summaryLine } from '../src/explore/ExplorePage'
+import { RetrievalNotice, SearchOutcome, emptyLine, entryState, summaryLine } from '../src/explore/ExplorePage'
 import type { CorpusStats } from '../src/lib/api'
 import type { SearchHit, SearchResponse } from '../src/lib/api'
 
@@ -78,6 +78,9 @@ function response(over: Partial<SearchResponse> = {}): SearchResponse {
     lexical_candidates: 9,
     vector_candidates: 0,
     reranked: false,
+    below_floor: 0,
+    nearest_similarity: null,
+    similarity_floor: null,
     ...over,
   }
 }
@@ -337,6 +340,48 @@ describe('the results summary', () => {
   it('says how it was found in words, not in the machinery', () => {
     const line = summaryLine(response({ arms: ['lexical', 'vector'], lexical_candidates: 5, vector_candidates: 7 }))
     expect(line).not.toMatch(/lexical|vector/)
+  })
+
+  it('counts what the similarity floor set aside, and says nothing when it set none aside', () => {
+    const floored = response({
+      arms: ['lexical', 'vector'],
+      lexical_candidates: 2,
+      vector_candidates: 3,
+      below_floor: 97,
+    })
+    expect(summaryLine(floored)).toBe(
+      '1 passage shown · 2 matched the words · 3 near in meaning · 97 set aside as not close',
+    )
+    expect(summaryLine(response({ arms: ['lexical', 'vector'], vector_candidates: 100 }))).not.toContain('set aside')
+  })
+})
+
+describe('an empty result under the similarity floor (B-235)', () => {
+  const floored = (over: Partial<SearchResponse> = {}) =>
+    response({
+      hits: [],
+      arms: ['lexical', 'vector'],
+      degraded: false,
+      degraded_reason: null,
+      lexical_candidates: 0,
+      vector_candidates: 0,
+      below_floor: 100,
+      nearest_similarity: 0.4613,
+      similarity_floor: 0.55,
+      ...over,
+    })
+
+  it('says nothing is close, and how far the nearest passage was', () => {
+    const rendered = text(renderToStaticMarkup(<SearchOutcome asked="xqzv blorp" results={floored()} />))
+    expect(rendered).toContain('Nothing close to "xqzv blorp"')
+    expect(rendered).toContain('scored 0.46, under the 0.55')
+    expect(rendered).not.toContain('Nothing matched')
+  })
+
+  it('falls back to "nothing matched" when nothing was set aside or the floor was off', () => {
+    expect(emptyLine('q', floored({ below_floor: 0 }))).toBe('Nothing matched "q".')
+    expect(emptyLine('q', floored({ similarity_floor: null }))).toBe('Nothing matched "q".')
+    expect(emptyLine('q', floored({ nearest_similarity: null }))).toBe('Nothing matched "q".')
   })
 })
 

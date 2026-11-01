@@ -218,6 +218,13 @@ async def explore_search(
             "ask for the plain order first."
         ),
     ] = False,
+    floor: Annotated[
+        bool,
+        Query(
+            description="Set aside passages under the similarity floor, which are not close in "
+            "meaning to the query (`below_floor` counts them). False keeps them."
+        ),
+    ] = True,
 ) -> SearchResponse:
     """Hybrid retrieval over the corpus.
 
@@ -247,6 +254,7 @@ async def explore_search(
             offset=offset,
             candidates=candidates,
             rerank=rerank,
+            floor=floor,
         )
     except WindowTooDeep as exc:
         # 422, not 500: the request is the thing that is wrong, and the message
@@ -280,6 +288,7 @@ async def explore_answer(
     rerank: Annotated[
         bool, Query(description="As on `/search`: the top 30 of the pool, before grouping.")
     ] = False,
+    floor: Annotated[bool, Query(description="As on `/search`.")] = True,
 ) -> AnswerRead:
     """A question answered as evidence, by country when it is about places, else one list.
 
@@ -301,7 +310,7 @@ async def explore_answer(
         sites=_sites(site),
     )
     return await answer_search(
-        sess, q, filters=filters, candidates=candidates, top=top, rerank=rerank
+        sess, q, filters=filters, candidates=candidates, top=top, rerank=rerank, floor=floor
     )
 
 

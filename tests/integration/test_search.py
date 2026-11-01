@@ -520,3 +520,80 @@ async def test_the_pool_is_never_shallower_than_the_candidates(
     got = await search_module._lexical(sess, term, only(scope), candidates=5)
 
     assert len(got) == 5
+
+
+# --------------------------------------------------------------------------
+# The similarity floor (`B-235`)
+# --------------------------------------------------------------------------
+
+FAR = "Wording about another matter altogether, long enough for the vector arm."
+NEAR = "Wording close to the question, at the length of a passage the arm reads."
+
+
+async def test_a_neighbour_under_the_floor_is_set_aside_and_counted(
+    session_for, scope, cleanup
+) -> None:
+    """A nonsense query was answered with twenty "least bad" neighbours. Under the floor a
+    neighbour is not offered, and the result says how many were set aside."""
+    sess = await session_for("rw")
+    floor = search_module.VECTOR_FLOOR
+    await a_source(sess, scope, [NEAR, FAR], [at(floor + 0.05, 3), at(floor - 0.05, 4)])
+
+    result = await search(sess, "", query_vector=QUERY, filters=only(scope))
+
+    assert [h.text for h in result.hits] == [NEAR]
+    assert result.vector_candidates == 1
+    assert result.below_floor == 1
+    assert result.floor == floor
+    assert result.nearest == pytest.approx(floor + 0.05, abs=0.01)
+
+
+async def test_nothing_close_is_an_empty_result_that_says_how_far_the_nearest_was(
+    session_for, scope, cleanup
+) -> None:
+    sess = await session_for("rw")
+    await a_source(sess, scope, [FAR], [at(0.3, 4)])
+
+    result = await search(sess, "", query_vector=QUERY, filters=only(scope))
+
+    assert result.hits == []
+    assert result.below_floor == 1
+    assert result.nearest == pytest.approx(0.3, abs=0.01)
+    assert result.arms == {"vector"}, "the arm ran; it found nothing close"
+
+
+async def test_a_passage_under_the_floor_that_matches_the_words_is_kept(
+    session_for, scope, term, cleanup
+) -> None:
+    """The floor judges meaning only. A word match is evidence of its own, so the passage
+    stays, ranked by the lexical arm alone."""
+    sess = await session_for("rw")
+    text_ = f"The {term} programme, reviewed at some length in this passage."
+    await a_source(sess, scope, [text_], [at(0.2, 5)])
+
+    result = await search(sess, term, query_vector=QUERY, filters=only(scope))
+
+    [hit] = result.hits
+    assert hit.lexical_rank == 1 and hit.vector_rank is None
+    assert result.below_floor == 1
+
+
+async def test_the_floor_can_be_turned_off(session_for, scope, cleanup) -> None:
+    sess = await session_for("rw")
+    await a_source(sess, scope, [FAR], [at(0.3, 4)])
+
+    result = await search(sess, "", query_vector=QUERY, filters=only(scope), vector_floor=None)
+
+    assert [h.text for h in result.hits] == [FAR]
+    assert result.below_floor == 0 and result.floor is None
+
+
+async def test_a_words_only_search_reports_no_floor(session_for, scope, term, cleanup) -> None:
+    """No vector, no floor applied: None, not the constant, or a reader would be told a
+    floor shaped a result it never touched."""
+    sess = await session_for("rw")
+    await a_source(sess, scope, [f"The {term} programme was reviewed."], [at(0.2, 5)])
+
+    result = await search(sess, term, filters=only(scope))
+
+    assert result.floor is None and result.nearest is None and result.below_floor == 0
