@@ -81,6 +81,7 @@ from meridian_core.schemas.search import (
     SitesRead,
     SourceChunksRead,
     SourceFiguresRead,
+    TopicCardsRead,
     TopicOverlapsRead,
 )
 from meridian_core.schemas.settings import DisplaySettingsRead
@@ -90,6 +91,7 @@ from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_fo
 from meridian_core.sites import DEFAULT_SITES, MAX_SITES, site_counts
 from meridian_core.stats import corpus_stats
 from meridian_core.timefmt import display_zone, zone_label
+from meridian_core.topiccards import topic_cards
 from meridian_core.topicoverlaps import topic_overlaps
 
 from ..cache import KeptByKey
@@ -338,6 +340,12 @@ async def explore_topic_overlaps(sess: ReadSession) -> TopicOverlapsRead:
     in all of it, then searches with ``topic_match=all``.
     """
     return await topic_overlaps(sess)
+
+
+@router.get("/topics", response_model=TopicCardsRead)
+async def explore_topics(sess: ReadSession) -> TopicCardsRead:
+    """The topics collected for, with what each holds (`B-238`): the landing's front door."""
+    return await topic_cards(sess)
 
 
 @router.get("/settings", response_model=DisplaySettingsRead)

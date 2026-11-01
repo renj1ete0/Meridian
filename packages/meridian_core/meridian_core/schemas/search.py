@@ -408,6 +408,44 @@ class TopicOverlapsRead(BaseModel):
     labelled_sources: int
 
 
+class TopicFieldRead(BaseModel):
+    """A map field holding many of a topic's passages (`B-238`): where it sits on the Map."""
+
+    area_id: int
+    #: The region holding it, which the Map opens to draw it.
+    parent_id: int | None
+    name: str
+    #: The topic's passages in this field.
+    passages: int
+
+
+class TopicNewestRead(BaseModel):
+    """A topic's most recently published source (`B-238`)."""
+
+    source_id: int
+    title: str | None
+    published: dt.date
+
+
+class TopicCardRead(BaseModel):
+    """One topic as a reader meets it on the landing (`B-238`)."""
+
+    topic: str
+    description: str | None
+    #: Sources labelled with the topic that a reader can find (not junk, not a copy).
+    sources: int
+    #: None when no on-topic source carries a publication date.
+    newest: TopicNewestRead | None
+    #: The map fields holding most of its passages, most first; empty before a map is built.
+    fields: list[TopicFieldRead]
+
+
+class TopicCardsRead(BaseModel):
+    """The topics this deployment collects for, heaviest first, archived ones left out."""
+
+    topics: list[TopicCardRead]
+
+
 class SiteRead(BaseModel):
     """One site and how many sources the corpus holds from it (`B-254`)."""
 

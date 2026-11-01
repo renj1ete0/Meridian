@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.192.0] — 2026-11-01
+
+### Added
+
+- `B-238`: the landing lists the topics, heaviest first, each with its description, how many
+  findable sources carry it, its newest source, its top Map fields, and ways into it (Find
+  within the topic, Growth). New `GET /api/explore/topics`; mock `ExploreTopics.dc.html`.
+
+**Deploy:** image only.
+
 ## [0.191.1] — 2026-11-01
 
 ### Changed

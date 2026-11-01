@@ -92,6 +92,12 @@ export function shortDateOf(date: string): string {
   return `${pad(d)} ${MONTHS[m - 1]}`
 }
 
+/** `05 Oct 2026` from a calendar date (`YYYY-MM-DD`), never converted, as {@link shortDateOf}. */
+export function dateOf(date: string): string {
+  const [y = 0] = date.split('-').map(Number)
+  return `${shortDateOf(date)} ${y}`
+}
+
 /** `GMT+8`: the display zone's offset at an instant, as a reader says it. */
 export function zoneLabel(at: Date | string = new Date(), inZone: string = zone): string {
   const minutes = zoneOffsetMinutes(typeof at === 'string' ? new Date(at) : at, inZone)

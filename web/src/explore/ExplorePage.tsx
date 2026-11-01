@@ -17,6 +17,7 @@ import { ResultList } from './ResultList'
 import { SaveView } from './SaveView'
 import { SearchField } from './SearchField'
 import { SinceLastVisit } from './SinceLastVisit'
+import { TopicCards } from './TopicCards'
 import { NeighbourhoodPanel, type NeighbourhoodPanelProps } from './neighbourhood/NeighbourhoodPanel'
 import { getTermNeighbourhood, worthShowing } from './neighbourhood/api'
 import { FiltersButton, FindRail } from './FindRail'
@@ -32,6 +33,7 @@ import {
   getAnnotations,
   getCrawlProgress,
   getSavedViews,
+  getTopicCards,
   markViewOpened,
   renameView,
   rewriteAnnotation,
@@ -44,6 +46,7 @@ import {
   type SavedViewRecord,
   type SearchHit,
   type SearchResponse,
+  type TopicCard,
 } from '../lib/api'
 import {
   activeCount,
@@ -155,6 +158,7 @@ export function ExplorePage() {
   const [stats, setStats] = useState<CorpusStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
   const [progress, setProgress] = useState<CrawlProgress | null>(null)
+  const [topics, setTopics] = useState<TopicCard[] | null>(null)
 
   // The reader's own layer (`P6-05`). Loaded beside the stats rather than
   // behind a click: §12.5's argument for building the affordance early is that
@@ -226,6 +230,18 @@ export function ExplorePage() {
       .catch(() => setProgress(null))
     return () => controller.abort()
   }, [empty])
+
+  // The topics' front door (`B-238`). Like saved views, a convenience: a landing that failed
+  // to render for want of it would cost the reader the search above it.
+  useEffect(() => {
+    const controller = new AbortController()
+    getTopicCards({ signal: controller.signal })
+      .then((body) => setTopics(body.topics))
+      .catch(() => {
+        if (!controller.signal.aborted) setTopics(null)
+      })
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -594,6 +610,17 @@ export function ExplorePage() {
             }}
             unavailable={unavailable}
             descriptions={descriptions}
+          />
+        )}
+
+        {empty ? null : (
+          <TopicCards
+            topics={topics}
+            onFind={(topic) => {
+              narrow({ ...NO_FILTERS, topics: [topic] })
+              window.scrollTo({ top: 0 })
+              focusSearch()
+            }}
           />
         )}
 

@@ -210,6 +210,10 @@ labels, since a count of documents is what a person weighing "is there anything 
   **Admin → Topic weights**. The add-topic dialog asks what the topic is about, and its
   searches are built from that; once added, Admin says what the topic needs next, with links
   to Seeds and Crawl health (`B-196`).
+- Readers meet each topic not archived on the Explore landing, description included, with its
+  source count, newest source and Map fields (`B-238`, `topiccards.py`, `/api/explore/topics`;
+  see [web-app.md](web-app.md#topics-on-the-landing)). A description is therefore written
+  for readers as well as for the labeller.
 - Thresholds are constants in `topiclabels.py`. Changing one changes the basis, so every
   source is relabelled on the next `topics` run (about minutes, not hours).
 

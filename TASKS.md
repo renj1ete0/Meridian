@@ -1943,7 +1943,7 @@ deploy runbook whose first two commands could not work (`B-17`).
 - [ ] `B-237` **Nothing answers "what is new"** (review) — Growth is crawl volume; no view or MCP tool
       by publication date; `list_new_since` starts at passage 1 with no date or topic. A "what's
       new" view and tool by publication date per topic, and a freshness line on Home
-- [ ] `B-238` **Topics have no front door** (review) — Home lists no topics; their descriptions live
+- [x] `B-238` **Topics have no front door** (review) — Home lists no topics; their descriptions live
       only in Admin. Topic cards: description, on-topic source count, newest source, subthemes
 - [x] `B-239` **Operator diagnostics on reader pages** (review) — Gaps opens on question-set items and
       search tasks; the header pill and notifications speak crawler ("paused for embedding");

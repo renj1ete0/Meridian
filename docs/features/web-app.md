@@ -13,7 +13,7 @@ mock in `docs/design/*.dc.html` and the design system in `docs/design/design-sys
 
 | Path | Page | Shows | Design |
 |---|---|---|---|
-| `/` | `ExplorePage` | Find (hybrid search), the answer view, entry points, corpus counts, what is new since the last visit | `ExploreLanding.dc.html`, `Explore.dc.html` |
+| `/` | `ExplorePage` | Find (hybrid search), the answer view, entry points, corpus counts, the topics, what is new since the last visit | `ExploreLanding.dc.html`, `ExploreTopics.dc.html`, `Explore.dc.html` |
 | `/sources/:id` | `SourcePage` | One source: metadata, passages in reading order, figures | `Explore.dc.html` |
 | `/nodes/:id` | `NodePage` | A node's neighbourhood (graph, table or matrix view), its evidence, notes | `Main.dc.html` |
 | `/map` | `MapPage` | Areas and topics as nested circles, zoom by level, bridges, steering | `Main.dc.html` |
@@ -375,7 +375,7 @@ Other private-use characters (icon fonts) are left alone, having no letter to ma
 
 **The landing is §8's default state** (`P6-27`), not a focus+expand view and never the whole
 graph: the lockup above a centred, wide search field; four counts; the three entry points as
-parallel cards; a short "where you were". Behind it, the mark's circle-and-meridian, scaled up,
+parallel cards; the topics ([below](#topics-on-the-landing)); a short "where you were". Behind it, the mark's circle-and-meridian, scaled up,
 cropped and fixed so it also sits under the translucent top bar, transcribed from the artboard's
 1440 × 900 frame. It is decoration: hidden from assistive technology, never interactive, and
 nothing on it is corpus data.
@@ -525,6 +525,34 @@ first screen (`P6-44`). A card that has no action is drawn as a card, not a butt
 that cannot be opened says why. Each card may carry one mono line of a measured fact; where none
 is supplied the line is absent rather than invented. None is supplied yet: the artboard's "9
 thin cells · 3 stale" could now come from Gaps, but is not wired.
+
+### <a id="topics-on-the-landing"></a>Topics on the landing (`B-238`)
+
+`ExploreTopics.dc.html`, `explore/TopicCards.tsx`, `GET /api/explore/topics`
+(`meridian_core.topiccards`, read-only role). A reader could not find out what the corpus collects
+for: Home listed no topics, and their descriptions were readable only in Admin. Below the entry
+points, each topic not archived is a card, heaviest first, as the operator weighs them:
+
+- **its description**, the sentence the operator wrote for the labeller, or a line saying none
+  has been written: the labeller compares pages against it, so it is the truest short account
+  of what the topic covers;
+- **how many sources**, counted with `kept_sources()` as the counts above and Growth count,
+  over sources labelled with the topic;
+- **the newest source by publication date**, linked, and never one dated after today (a
+  parsing error, not news); "no source in it carries a date" and "nothing collected yet" are
+  told apart;
+- **its fields**: the three Map areas (level 2 of the newest build) holding most of its
+  passages, from `areas.topic_mix`. Each opens the Map at its region with the field picked
+  (`?area=&pick=`). Absent before a map is built. These are what the review called subthemes:
+  the corpus has no configured subtopics, and a field is measured rather than declared.
+- **ways in**: "Find in this topic" narrows Find in place, as the filter rail would, and waits
+  for the words (a modified click opens the link instead); "Growth" opens Growth filtered by
+  the topic.
+
+The list is read once, like saved views, and its failure leaves the landing whole: the section
+is simply absent, as it is while the corpus is empty (the first hour shows instead). One query
+per topic: a deployment has a handful of topics, and each count rides the GIN index on
+`topic_labels`.
 
 ### Corpus counts
 

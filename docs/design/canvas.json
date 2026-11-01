@@ -34,7 +34,8 @@
 
     { "file": "CorpusGrowth.dc.html", "x": 0, "y": 8540, "w": 1440, "h": 900, "title": "24 · Corpus growth (B-140)" },
     { "file": "AdminAssistantAccess.dc.html", "x": 1520, "y": 8540, "w": 1440, "h": 900, "title": "25 · Admin · Assistant access (B-146)" },
-    { "file": "AdminDisplay.dc.html", "x": 3040, "y": 8540, "w": 1440, "h": 900, "title": "26 · Admin · Display (B-145)" }
+    { "file": "AdminDisplay.dc.html", "x": 3040, "y": 8540, "w": 1440, "h": 900, "title": "26 · Admin · Display (B-145)" },
+    { "file": "ExploreTopics.dc.html", "x": 0, "y": 9560, "w": 1440, "h": 900, "title": "27 · Explore, topics (B-238)" }
   ],
   "annotations": [
     {

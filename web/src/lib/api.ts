@@ -680,6 +680,54 @@ export function getTopicOverlaps(init?: RequestInit): Promise<TopicOverlaps> {
   return request<TopicOverlaps>('/api/explore/topic-overlaps', init)
 }
 
+/** Mirrors `TopicFieldRead` (`B-238`): a map field holding many of a topic's passages. */
+export interface TopicField {
+  area_id: number
+  /** The region holding it, which the Map opens to draw it. */
+  parent_id: number | null
+  name: string
+  /** The topic's passages in this field. */
+  passages: number
+}
+
+/** Mirrors `TopicNewestRead` (`B-238`): a topic's most recently published source. */
+export interface TopicNewest {
+  source_id: number
+  title: string | null
+  /** A calendar date (`YYYY-MM-DD`), never shifted (ADR 0009). */
+  published: string
+}
+
+/** Mirrors `TopicCardRead` (`B-238`): one topic as the landing lists it. */
+export interface TopicCard {
+  topic: string
+  description: string | null
+  /** Sources labelled with the topic that a reader can find (not junk, not a copy). */
+  sources: number
+  newest: TopicNewest | null
+  fields: TopicField[]
+}
+
+/** Mirrors `TopicCardsRead` (`B-238`): heaviest first, archived topics left out. */
+export interface TopicCards {
+  topics: TopicCard[]
+}
+
+export const TOPIC_FIELD_FIELDS = ['area_id', 'parent_id', 'name', 'passages'] as const
+export const TOPIC_NEWEST_FIELDS = ['source_id', 'title', 'published'] as const
+export const TOPIC_CARD_FIELDS = ['topic', 'description', 'sources', 'newest', 'fields'] as const
+export const TOPIC_CARDS_FIELDS = ['topics'] as const
+
+export type AssertTopicField = Expect<Equal<keyof TopicField, (typeof TOPIC_FIELD_FIELDS)[number]>>
+export type AssertTopicNewest = Expect<Equal<keyof TopicNewest, (typeof TOPIC_NEWEST_FIELDS)[number]>>
+export type AssertTopicCard = Expect<Equal<keyof TopicCard, (typeof TOPIC_CARD_FIELDS)[number]>>
+export type AssertTopicCards = Expect<Equal<keyof TopicCards, (typeof TOPIC_CARDS_FIELDS)[number]>>
+
+/** The topics with their descriptions and what each holds: the landing's front door (`B-238`). */
+export function getTopicCards(init?: RequestInit): Promise<TopicCards> {
+  return request<TopicCards>('/api/explore/topics', init)
+}
+
 export function getSource(sourceId: number, init?: RequestInit): Promise<SourceWithPage> {
   return request<SourceWithPage>(`/api/explore/sources/${sourceId}`, init)
 }
