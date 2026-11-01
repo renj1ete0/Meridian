@@ -490,7 +490,10 @@ sources with one title; and nothing at all, common on PDFs. `clean_title` drops 
 strips a site name off "Page | Site". The fallback is the first line when it looks like a heading
 and nothing else: three to twenty-five words, starting with a capital or digit, not ending in a
 colon or full stop, and none of a first page's furniture (journal banners, DOIs, "Received:").
-A wrong title is worse than none, which shows the address instead. `retitle` applies this to
+A wrong title is worse than none, which shows the address instead. An author line is not a title either (`B-220`): a PDF whose metadata title is its editor
+("… (Editor)"), a bare "Name et al", or a reference-list entry ("Surname, I., Surname, I., …").
+Those three shapes matched 6 of 105,909 stored titles; a looser name-list rule also caught
+headlines and case names, so it is kept to these. `retitle` applies this to
 stored sources, keeping a replaced title in `extra['declared_title']` and marking a guessed one in
 `extra['title_from']`.
 

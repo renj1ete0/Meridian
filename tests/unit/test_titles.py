@@ -153,3 +153,37 @@ def test_small_capitals_in_a_declared_title_are_read_as_letters() -> None:
     declared = "T J  L U"
     assert clean_title(declared) == "The Journal of Land Use"
     assert plain_letters("V. 9 ") == "Vol. 9 ", "other private use is kept"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "R Balcombe, TRL Limited (Editor)",
+        "Transport Research Review (Eds.)",
+        "1 Hong et al",
+        "Ruan et al.",
+        "Lai, D., Lian, Z., Liu, W., and Chen, Q. 2020 “A comprehensive review of",
+        "Borremans, B., Faust, C., Manlove, K. R. (2019)",
+    ],
+)
+def test_an_author_line_is_not_a_title(title) -> None:
+    """`B-220`: a PDF whose metadata title is its editor showed the editor as the title in
+    Find. These are the shapes found in the stored corpus."""
+    assert clean_title(title) is None
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "UNITED STATES POSTAL SERVICE, et al. v. CALIFORNIA, et al.",
+        "DP Architects, PSB Academy to exit Marina Square ahead of revamp",
+        "Loss of laminin-γ1 in pericytes impairs microvascular function. Ruan et al",
+        "JST Washington, D.C. Office",
+        "Edited volume on transport (eds) planning",
+        "Singapore, a city in a garden",
+    ],
+)
+def test_a_title_with_names_in_it_is_still_a_title(title) -> None:
+    """The near misses a looser name-list rule caught: a case name, headlines, a title that
+    merely ends with its authors."""
+    assert clean_title(title) == title

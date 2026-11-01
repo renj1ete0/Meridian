@@ -2095,7 +2095,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       Data, Mathematics, Social Sciences and Transportation overlap, and their "N subfields
       inside" lines run under neighbours and under the solid links. Check the layout's
       collision radius against the drawn radius, and whether labels should sit above links
-- [ ] `B-220` **A source titled by its editor** (UX sweep 2026-10-11) — a TRL report's passages
+- [x] `B-220` **A source titled by its editor** (UX sweep 2026-10-11) — a TRL report's passages
       show "R Balcombe, TRL Limited (Editor)" as the title in Find; the PDF's metadata title is
       the author line. Count how many sources' titles look like a name list before choosing a
       fix (`clean_title`, `B-69`)

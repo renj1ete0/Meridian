@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.189.3] — 2026-11-01
+
+### Fixed
+
+- `B-220`: a declared title that is an author line (an editor, "Name et al", a reference-list
+  entry) is refused like a placeholder, so the source falls back to its first heading.
+  Stored sources follow with `worker.retitle --apply`.
+
+**Deploy:** image only.
+
 ## [0.189.2] — 2026-11-01
 
 ### Changed
