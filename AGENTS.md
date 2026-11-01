@@ -202,7 +202,13 @@ single source of truth; service `pyproject.toml` files and `web/package.json` mi
 Rules:
 
 - Bump on every change to application code, in the same commit as the change.
-- Add a [CHANGELOG.md](CHANGELOG.md) entry under the new version, with the task ID.
+- Add a [CHANGELOG.md](CHANGELOG.md) entry under the new version, with the task ID, and a
+  **Deploy:** line saying how a server takes it: `image only` (Watchtower does it), or
+  `git pull && docker compose up -d` when `docker-compose.yml` or `.env.example` changed
+  (Watchtower replaces images, never the compose file). A migration is image only: services
+  wait for it (`meridian_core.schemaready`).
+- A new migration moves `meridian_core.schemaready.EXPECTED_REVISION` to its revision in the same
+  commit (a test fails otherwise).
 - Documentation, spec, and design-only changes don't need a bump — note them under
   `Unreleased` if they're worth recording.
 - Tag releases `v0.1.0`. While `MAJOR` is `0`, breaking changes bump `MINOR`.

@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.187.1] — 2026-11-01
+
+### Changed
+
+- `B-263`: every service that uses the database waits at start until it is at the migration
+  its image expects, so an automatic update never runs new code on the old schema while
+  `migrate` catches up. `MERIDIAN_SCHEMA_WAIT_S` (600 s; 0 is off). From here on each entry
+  says how a server takes it.
+
+**Deploy:** image only.
+
 ## [0.187.0] — 2026-11-01
 
 ### Added

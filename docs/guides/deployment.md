@@ -338,7 +338,21 @@ MERIDIAN_PLATFORMS=linux/amd64 make release    # build, push, and move `stable` 
 ```
 
 Within the poll interval Watchtower pulls the changed images, `migrate` runs any new migration,
-the changed services restart, and Telegram says so. Postgres, the browser, SearXNG and
+the changed services restart, and Telegram says so.
+
+<a id="updates-and-migrations"></a>**What an update does by itself, and what it does not.**
+
+- **A new migration: by itself.** `migrate` is updated with the rest and runs `alembic upgrade
+  head`. Every service that uses the database waits at start until the database is at the
+  revision its image expects (`B-263`, `meridian_core.schemaready`), so the worker or API that
+  restarts first does not run new code on the old schema. A wait longer than
+  `MERIDIAN_SCHEMA_WAIT_S` (600 s) starts the service anyway and logs an error: that is a
+  migration that failed (`docker compose logs migrate`), or a rollback to an older image, which
+  an additive schema still serves.
+- **A change to `docker-compose.yml` or a new setting in `.env.example`: not by itself.**
+  Watchtower replaces images, never the compose file. Such a release says so in its
+  `CHANGELOG.md` entry (**Deploy:** `git pull && docker compose up -d`); on the server, do that
+  once. Everything else is image-only (**Deploy:** image only) and needs nothing. Postgres, the browser, SearXNG and
 cloudflared are never touched (no Watchtower label). Rollback is `make promote SHA=<older>`.
 Without `GHCR_READ_*` a private image is invisible to Watchtower and it reports nothing at all.
 

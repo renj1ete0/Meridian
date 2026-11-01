@@ -25,6 +25,7 @@ from meridian_core.schedule import (
     release_claims,
     settle_job,
 )
+from meridian_core.schemaready import wait_before_start
 
 from .liveness import beat
 
@@ -198,6 +199,7 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging("scheduler")
+    wait_before_start()  # `B-263`
     with bind_run_id(f"sched-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         asyncio.run(
             run_scheduler(

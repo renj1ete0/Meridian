@@ -22,6 +22,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from meridian_core.db import check_connection, dispose_engines
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
+from meridian_core.schemaready import wait_for_schema
 
 from .access import AccessSettings, AccessVerifier, access_middleware
 from .mcp.server import build_mcp
@@ -132,6 +133,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     configure_logging("api")
     log.info("api starting", extra={"routes": len(app.routes)})
+    # `B-263`: an updated API waits for `migrate` rather than serving against the old schema.
+    await wait_for_schema()
 
     # Streamable HTTP keeps per-connection state, so its manager runs for the app's
     # life; mounted but not run, it fails on the first message.

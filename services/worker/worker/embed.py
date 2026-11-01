@@ -31,6 +31,7 @@ from meridian_core.chunks import (
 from meridian_core.db import dispose_engines, session
 from meridian_core.embedtext import VIEW_VERSION, embedding_view, with_table_head
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
+from meridian_core.schemaready import wait_before_start
 
 from .embeddings import EmbeddingError
 from .liveness import beat
@@ -304,6 +305,7 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging("embedder")
+    wait_before_start()  # `B-263`
     with bind_run_id(f"embed-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         asyncio.run(run_backfill(once=args.once, max_batches=args.max_batches))
 

@@ -68,6 +68,7 @@ from meridian_core.runs import (
     finish,
     unfinished,
 )
+from meridian_core.schemaready import wait_before_start
 from meridian_core.validation import ValidationError
 from meridian_core.writes import add_edge, tag_entity
 
@@ -1026,6 +1027,7 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging("orchestrate")
+    wait_before_start()  # `B-263`
     with bind_run_id(f"orch-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         if args.daemon:
             asyncio.run(_serve(args))

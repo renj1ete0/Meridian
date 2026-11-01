@@ -59,6 +59,7 @@ from meridian_core.queueing import (
     release_worker_claims,
     retry_floor_s,
 )
+from meridian_core.schemaready import wait_before_start
 from meridian_core.sources import get_source, touch_source, upsert_source
 from meridian_core.steering import draw_shares, draw_topic
 from meridian_core.steering import topics as steering_topics
@@ -2022,6 +2023,7 @@ async def run_worker(settings: WorkerSettings | None = None) -> WorkerStats:
 def main() -> None:
     """Entry point: `python -m worker.main`."""
     configure_logging("worker")
+    wait_before_start()  # `B-263`: never new code on the old schema
     settings = WorkerSettings.from_env()
     # One run_id for the process, on every record it emits. Ctrl-C and a second
     # signal are ordinary endings and print no traceback.

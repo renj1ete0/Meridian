@@ -14,6 +14,7 @@ import time
 
 from meridian_core.db import dispose_engines, session
 from meridian_core.logging import bind_run_id, configure_logging, get_logger
+from meridian_core.schemaready import wait_before_start
 
 from .commands import authorised, execute, parse
 from .liveness import beat
@@ -136,6 +137,7 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging("bot")
+    wait_before_start()  # `B-263`
     with bind_run_id(f"bot-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         asyncio.run(run_bot(max_polls=args.max_polls))
 
