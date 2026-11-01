@@ -1993,7 +1993,7 @@ deploy runbook whose first two commands could not work (`B-17`).
       `press_release` (an organisation speaking for itself; government domain + media-release
       path, schema.org `PressRelease`), maybe `opinion`; a watched outlet's entries are news.
       Migration for the CHECK; re-classify stored sources from their raw pages
-- [ ] `B-254` **Find by kind and by outlet** (operator) — Find filters by tier (`press` among
+- [x] `B-254` **Find by kind and by outlet** (operator) — Find filters by tier (`press` among
       them) but not by document kind or publisher. Add both to `SearchFilters`, `/search`,
       `/answer`, saved views and the filter rail (find.ts is the one model)
 - [ ] `B-255` **Listing pages as watches** — outlets with no news sitemap or feed (several in the

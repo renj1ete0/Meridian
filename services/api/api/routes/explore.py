@@ -64,7 +64,7 @@ from meridian_core.schemas.chat import (
     ChatThreadsRead,
 )
 from meridian_core.schemas.corpusmap import CorpusMapRead
-from meridian_core.schemas.enums import SourceTier
+from meridian_core.schemas.enums import DocKind, SourceTier
 from meridian_core.schemas.graph import EntityRead
 from meridian_core.schemas.runs import NotificationItemRead
 from meridian_core.schemas.search import (
@@ -78,6 +78,7 @@ from meridian_core.schemas.search import (
     NotificationsRead,
     SearchHitRead,
     SearchResponse,
+    SitesRead,
     SourceChunksRead,
     SourceFiguresRead,
     TopicOverlapsRead,
@@ -85,7 +86,8 @@ from meridian_core.schemas.search import (
 from meridian_core.schemas.settings import DisplaySettingsRead
 from meridian_core.schemas.source import ChunkRead, SourcePageRead
 from meridian_core.schemas.views import SavedViewRead, SavedViewsRead
-from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for
+from meridian_core.search import DEFAULT_CANDIDATES, SearchFilters, page_unit_for, site_key
+from meridian_core.sites import DEFAULT_SITES, MAX_SITES, site_counts
 from meridian_core.stats import corpus_stats
 from meridian_core.timefmt import display_zone, zone_label
 from meridian_core.topicoverlaps import topic_overlaps
@@ -122,6 +124,19 @@ MAX_PANEL_ANNOTATIONS = 10
 
 #: How many notes one export may carry: a page cap, so all of them stay reachable.
 MAX_EXPORT_ANNOTATIONS = 500
+
+
+def _sites(values: list[str] | None) -> list[str] | None:
+    """`site` values as hosts; a 422 naming one that has none, rather than matching nothing."""
+    if not values:
+        return None
+    keys = []
+    for value in values:
+        key = site_key(value)
+        if key is None:
+            raise HTTPException(status_code=422, detail=f"not a site: {value!r} (expected a host)")
+        keys.append(key)
+    return keys
 
 
 # `Annotated[...]` rather than `= Query(...)`, so a handler stays callable from a test.
@@ -161,6 +176,20 @@ async def explore_search(
     ] = None,
     published_after: Annotated[dt.date | None, Query()] = None,
     published_before: Annotated[dt.date | None, Query()] = None,
+    doc_kind: Annotated[
+        list[DocKind] | None,
+        Query(
+            description="Repeat to allow several: what a document is (`news`, `press_release`, "
+            "`opinion`, `report`, …). Sources not yet classified are excluded."
+        ),
+    ] = None,
+    site: Annotated[
+        list[str] | None,
+        Query(
+            description="Repeat to allow several: a host (`example.org`), which also keeps its "
+            "subdomains. A pasted address is read for its host; a value with none is a 422.",
+        ),
+    ] = None,
     include_duplicates: Annotated[
         bool,
         Query(
@@ -204,6 +233,8 @@ async def explore_search(
         places=place,
         published_after=published_after,
         published_before=published_before,
+        doc_kinds=doc_kind,
+        sites=_sites(site),
         include_duplicates=include_duplicates,
         include_junk=include_junk,
     )
@@ -234,6 +265,8 @@ async def explore_answer(
     language: Annotated[list[str] | None, Query()] = None,
     published_after: Annotated[dt.date | None, Query(description="As on `/search`.")] = None,
     published_before: Annotated[dt.date | None, Query(description="As on `/search`.")] = None,
+    doc_kind: Annotated[list[DocKind] | None, Query(description="As on `/search`.")] = None,
+    site: Annotated[list[str] | None, Query(description="As on `/search`.")] = None,
     candidates: Annotated[
         int,
         Query(ge=1, le=1000, description="How deep the one search goes before grouping."),
@@ -260,9 +293,27 @@ async def explore_answer(
         places=place,
         published_after=published_after,
         published_before=published_before,
+        doc_kinds=doc_kind,
+        sites=_sites(site),
     )
     return await answer_search(
         sess, q, filters=filters, candidates=candidates, top=top, rerank=rerank
+    )
+
+
+@router.get("/sites", response_model=SitesRead)
+async def explore_sites(
+    sess: ReadSession,
+    doc_kind: Annotated[
+        list[DocKind] | None, Query(description="Count only sources of these kinds.")
+    ] = None,
+    source_tier: Annotated[list[SourceTier] | None, Query()] = None,
+    q: Annotated[str, Query(max_length=200, description="Part of a host, to find one.")] = "",
+    limit: Annotated[int, Query(ge=1, le=MAX_SITES)] = DEFAULT_SITES,
+) -> SitesRead:
+    """Sites by how many sources they hold (`B-254`): what Find's site filter offers."""
+    return await site_counts(
+        sess, doc_kinds=doc_kind, source_tiers=source_tier, contains=q, limit=limit
     )
 
 

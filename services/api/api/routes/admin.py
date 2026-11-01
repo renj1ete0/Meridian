@@ -36,6 +36,7 @@ from meridian_core.models import (
     Source,
     SteeringLog,
 )
+from meridian_core.models.source import DOC_KIND
 from meridian_core.policy import (
     GLOBAL_DOMAIN,
     NOT_FETCH_SETTINGS,
@@ -98,7 +99,7 @@ from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.schemas.queue import QueueTaskRead
 from meridian_core.schemas.settings import DisplaySettingsRead, DisplayZoneEdit
 from meridian_core.schemas.views import SavedViewCreate, SavedViewEdit, SavedViewRead
-from meridian_core.search import SearchFilters
+from meridian_core.search import SearchFilters, site_key
 from meridian_core.timefmt import ZONE_KEY, zone_label
 from meridian_core.validation import ValidationError, check_seed_allowed
 
@@ -777,6 +778,15 @@ def _validated_filters(filters: dict, *, node: bool) -> None:
         SearchFilters(**filters)
     except TypeError as exc:
         raise HTTPException(status_code=422, detail=f"Unusable filter set: {exc}") from exc
+    # `B-254`: values the search would silently match nothing with.
+    kinds = filters.get("doc_kinds") or []
+    unknown = [k for k in kinds if k not in DOC_KIND.enums] if isinstance(kinds, list) else [kinds]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown document kind: {unknown[0]!r}")
+    sites = filters.get("sites") or []
+    hostless = [s for s in sites if not isinstance(s, str) or site_key(s) is None]
+    if not isinstance(sites, list) or hostless:
+        raise HTTPException(status_code=422, detail=f"Not a site: {(hostless or [sites])[0]!r}")
 
 
 @router.patch("/views/{view_id}", response_model=SavedViewRead)

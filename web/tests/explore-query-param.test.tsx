@@ -89,7 +89,16 @@ describe('a search written back to the URL (B-95)', () => {
     const cases: Array<[string, FindFilters, 'answer' | 'passages' | undefined]> = [
       [
         'x y',
-        { topics: ['a', 'b'], match: 'all', places: ['DE', 'FR'], tiers: ['press'], from: 2010, to: 2020 },
+        {
+          topics: ['a', 'b'],
+          match: 'all',
+          places: ['DE', 'FR'],
+          tiers: ['press'],
+          kinds: ['news', 'press_release'],
+          sites: ['example.org', 'news.example.net'],
+          from: 2010,
+          to: 2020,
+        },
         'answer',
       ],
       ['x', { ...NO_FILTERS, topics: ['a'] }, undefined],
@@ -103,6 +112,14 @@ describe('a search written back to the URL (B-95)', () => {
       expect(back.view).toBe(view ?? null)
     }
     expect(findLink('')).toBe('/')
+  })
+
+  it('reads kinds and sites a hand-edited link carries, as the server would (B-254)', () => {
+    const back = readFind(
+      '?kind=opinion&kind=listing&kind=webpage&kind=opinion&site=https://WWW.Example.org/a&site=not%20a%20host',
+    )
+    // `listing` is a real kind but never searched, so a link cannot ask for it.
+    expect(back.filters).toEqual({ ...NO_FILTERS, kinds: ['opinion'], sites: ['example.org'] })
   })
 
   it('drops what a hand-edited link cannot mean, rather than searching for it', () => {

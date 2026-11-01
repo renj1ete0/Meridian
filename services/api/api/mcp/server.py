@@ -16,6 +16,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 from sqlalchemy import select
 
@@ -28,9 +29,9 @@ from meridian_core.models import Chunk, Source
 from meridian_core.readonly_query import DEFAULT_MAX_ROWS, QueryRefused
 from meridian_core.readonly_query import run_readonly_query as execute_readonly
 from meridian_core.rerank import RERANK_DEPTH, rerank_hits
-from meridian_core.schemas.enums import SourceTier
+from meridian_core.schemas.enums import DocKind, SourceTier
 from meridian_core.schemas.graphview import GraphFilters
-from meridian_core.search import SearchFilters, readable_passage_conditions, search
+from meridian_core.search import SearchFilters, readable_passage_conditions, search, site_key
 from meridian_core.stats import corpus_stats
 
 from ..auth import require_tool, sees_notes
@@ -171,6 +172,17 @@ def build_mcp(
             dt.date | None,
             Field(description="YYYY-MM-DD. Undated documents are left out while a date is set."),
         ] = None,
+        doc_kind: Annotated[
+            list[DocKind] | None,
+            Field(
+                description="Keep only these kinds of document: news, press_release (an "
+                "organisation's own announcement), opinion, report, paper, legal, …"
+            ),
+        ] = None,
+        site: Annotated[
+            list[str] | None,
+            Field(description="Keep only sources on these hosts (example.org), subdomains too."),
+        ] = None,
         include_duplicates: Annotated[
             bool, Field(description="Include passages the corpus marked as copies of others.")
         ] = False,
@@ -186,12 +198,17 @@ def build_mcp(
         so a narrowed search can miss older material that is genuinely relevant.
         """
         require_tool("search_chunks")
+        hostless = [s for s in site or [] if site_key(s) is None]
+        if hostless:
+            raise ToolError(f"site: {hostless[0]!r} is not a host; give one like example.org")
 
         filters = SearchFilters(
             source_tiers=source_tier or None,
             topics=topic or None,
             published_after=published_after,
             published_before=published_before,
+            doc_kinds=doc_kind or None,
+            sites=site or None,
             include_duplicates=include_duplicates,
             # Cleared material only (`P4-14`, §11.8): this is the path into a prompt.
             # See docs/features/mcp.md#what-reaches-a-model.

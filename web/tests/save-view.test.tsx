@@ -133,6 +133,8 @@ const EVERYTHING: FindFilters = {
   match: 'all',
   places: ['DE'],
   tiers: ['government', 'press'],
+  kinds: ['press_release', 'opinion'],
+  sites: ['example.org'],
   from: 2015,
   to: 2020,
 }

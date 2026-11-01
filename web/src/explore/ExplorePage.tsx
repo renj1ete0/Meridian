@@ -49,6 +49,7 @@ import {
   activeCount,
   filtersOfView,
   findLink,
+  KIND_LABEL,
   NO_FILTERS,
   readFind,
   searchFilters,
@@ -911,6 +912,8 @@ export function ActiveFilters({
     ...filters.topics.map(topicWords),
     ...filters.places.map((code) => placeNames[code] ?? code),
     ...filters.tiers.map((tier) => TIER_LABEL[tier].toLowerCase()),
+    ...filters.kinds.map((kind) => KIND_LABEL[kind].toLowerCase()),
+    ...filters.sites,
   ]
   if (filters.from !== null || filters.to !== null) {
     parts.push(`published ${filters.from ?? '…'}–${filters.to ?? '…'}`)

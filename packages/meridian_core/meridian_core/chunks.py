@@ -285,7 +285,7 @@ def _held():
     )
 
 
-def _host_of(url_column):
+def host_of(url_column):
     """`boilerplate.host_key` in SQL: lower-case host, port and a leading www. dropped."""
     host = func.split_part(func.split_part(url_column, "://", 2), "/", 1)
     return func.regexp_replace(func.lower(host), r"^www\.|:\d+$", "", "g")
@@ -298,7 +298,7 @@ def _host_standing(*, off_topic: bool):
     share = HostScore.on_topic * 1.0 / func.nullif(HostScore.examined, 0)
     cond = share < OFFTOPIC_SHARE if off_topic else share >= OFFTOPIC_SHARE
     return exists().where(
-        HostScore.host == _host_of(Source.url), HostScore.examined >= MIN_EXAMINED, cond
+        HostScore.host == host_of(Source.url), HostScore.examined >= MIN_EXAMINED, cond
     )
 
 

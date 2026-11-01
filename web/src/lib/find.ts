@@ -6,7 +6,7 @@
  */
 import { SOURCE_TIERS, type SourceTier } from '../ui/Tier'
 import type { ResultMode } from './answer'
-import type { SearchParams, TopicMatch } from './api'
+import type { DocKind, SearchParams, TopicMatch } from './api'
 
 export interface FindFilters {
   topics: readonly string[]
@@ -15,12 +15,73 @@ export interface FindFilters {
   /** Place codes, as `sources.places` stores them. */
   places: readonly string[]
   tiers: readonly SourceTier[]
+  /** Document kinds (`B-254`): news, press releases, opinion, …. */
+  kinds: readonly DocKind[]
+  /** Sites as {@link siteKey} writes them; each also keeps its subdomains. */
+  sites: readonly string[]
   /** First and last publication year, inclusive. Null is open-ended. */
   from: number | null
   to: number | null
 }
 
-export const NO_FILTERS: FindFilters = { topics: [], match: 'any', places: [], tiers: [], from: null, to: null }
+export const NO_FILTERS: FindFilters = {
+  topics: [],
+  match: 'any',
+  places: [],
+  tiers: [],
+  kinds: [],
+  sites: [],
+  from: null,
+  to: null,
+}
+
+/**
+ * Kinds a reader can filter by, in the rail's order (the news kinds first, design `Explore`):
+ * every kind but `listing`, which is never searched. `tests/find-rail.test.tsx` holds it to
+ * `DOC_KINDS`, so a new kind cannot be left out of the rail.
+ */
+export const FIND_KINDS: readonly DocKind[] = [
+  'news',
+  'press_release',
+  'opinion',
+  'report',
+  'paper',
+  'legal',
+  'profile',
+  'other',
+]
+
+/** What each kind is called in the rail and the "searching within" line. */
+export const KIND_LABEL: Readonly<Record<DocKind, string>> = {
+  news: 'News',
+  press_release: 'Press releases',
+  opinion: 'Opinion',
+  report: 'Reports',
+  paper: 'Papers',
+  legal: 'Legal texts',
+  profile: 'Organisation pages',
+  listing: 'Listings',
+  other: 'Other',
+}
+
+/**
+ * A site as the server's `site_key` reads it: a bare host, lower-cased, `www.` and port
+ * dropped, from a typed name or a pasted address. Null when there is no host in it.
+ */
+export function siteKey(value: string): string | null {
+  let text = value.trim().toLowerCase()
+  if (!text) return null
+  if (!text.includes('://')) text = `http://${text}`
+  let host: string
+  try {
+    host = new URL(text).hostname
+  } catch {
+    return null
+  }
+  host = host.replace(/\.$/, '')
+  if (host.startsWith('www.')) host = host.slice(4)
+  return host.includes('.') ? host : null
+}
 
 /** Years a reader may type. Outside this a typo, not a filter. */
 export const EARLIEST_YEAR = 1800
@@ -41,6 +102,8 @@ export function activeCount(filters: FindFilters): number {
     filters.topics.length +
     filters.places.length +
     filters.tiers.length +
+    filters.kinds.length +
+    filters.sites.length +
     (filters.from !== null ? 1 : 0) +
     (filters.to !== null ? 1 : 0)
   )
@@ -64,6 +127,8 @@ export function searchFilters(filters: FindFilters): Omit<SearchParams, 'q'> {
     topic_match: filters.topics.length > 0 ? filters.match : undefined,
     place: filters.places,
     source_tier: filters.tiers,
+    doc_kind: filters.kinds,
+    site: filters.sites,
     published_after: from !== null ? `${from}-01-01` : undefined,
     published_before: to !== null ? `${to}-12-31` : undefined,
   }
@@ -81,6 +146,8 @@ export function findLink(query: string, filters: FindFilters = NO_FILTERS, view?
   if (filters.topics.length > 0 && filters.match === 'all') params.set('topic_match', 'all')
   for (const place of filters.places) params.append('place', place)
   for (const tier of filters.tiers) params.append('tier', tier)
+  for (const kind of filters.kinds) params.append('kind', kind)
+  for (const site of filters.sites) params.append('site', site)
   if (filters.from !== null) params.set('from', String(filters.from))
   if (filters.to !== null) params.set('to', String(filters.to))
   if (view) params.set('view', view)
@@ -92,7 +159,19 @@ function distinct(values: readonly string[]): string[] {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))]
 }
 
-/** What Find reads back out of its URL. Unknown tiers and implausible years are dropped. */
+function kindsOf(values: readonly string[]): DocKind[] {
+  const known = new Set<string>(FIND_KINDS)
+  return distinct(values).filter((k): k is DocKind => known.has(k))
+}
+
+function sitesOf(values: readonly string[]): string[] {
+  return distinct(values.map((v) => siteKey(v) ?? ''))
+}
+
+/**
+ * What Find reads back out of its URL. Unknown tiers and kinds, sites with no host and
+ * implausible years are dropped.
+ */
 export function readFind(search: string): { q: string; filters: FindFilters; view: ResultMode | null } {
   const params = new URLSearchParams(search)
   const known = new Set<string>(SOURCE_TIERS)
@@ -104,6 +183,8 @@ export function readFind(search: string): { q: string; filters: FindFilters; vie
       match: params.get('topic_match') === 'all' ? 'all' : 'any',
       places: distinct(params.getAll('place')),
       tiers: distinct(params.getAll('tier')).filter((t): t is SourceTier => known.has(t)),
+      kinds: kindsOf(params.getAll('kind')),
+      sites: sitesOf(params.getAll('site')),
       from: parseYear(params.get('from')),
       to: parseYear(params.get('to')),
     },
@@ -119,6 +200,8 @@ export function sameFilters(a: FindFilters, b: FindFilters): boolean {
     (a.topics.length < 2 || a.match === b.match) &&
     set(a.places) === set(b.places) &&
     set(a.tiers) === set(b.tiers) &&
+    set(a.kinds) === set(b.kinds) &&
+    set(a.sites) === set(b.sites) &&
     a.from === b.from &&
     a.to === b.to
   )
@@ -135,6 +218,8 @@ export function viewFiltersOf(filters: FindFilters): Record<string, unknown> {
   if (filters.topics.length > 1 && filters.match === 'all') out.topics_all = true
   if (filters.places.length > 0) out.places = [...filters.places]
   if (filters.tiers.length > 0) out.source_tiers = [...filters.tiers]
+  if (filters.kinds.length > 0) out.doc_kinds = [...filters.kinds]
+  if (filters.sites.length > 0) out.sites = [...filters.sites]
   if (wire.published_after) out.published_after = wire.published_after
   if (wire.published_before) out.published_before = wire.published_before
   return out
@@ -157,6 +242,8 @@ export function filtersOfView(stored: Record<string, unknown>): FindFilters {
     match: stored.topics_all === true ? 'all' : 'any',
     places: strings(stored.places),
     tiers: strings(stored.source_tiers).filter((t): t is SourceTier => known.has(t)),
+    kinds: kindsOf(strings(stored.doc_kinds)),
+    sites: sitesOf(strings(stored.sites)),
     from: yearOf(stored.published_after),
     to: yearOf(stored.published_before),
   }

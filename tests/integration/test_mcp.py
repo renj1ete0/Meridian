@@ -469,6 +469,8 @@ async def test_a_bad_argument_is_refused_naming_the_argument(mcp) -> None:
         ({"query": "x", "published_after": "2024/01/01"}, "published_after"),
         ({"query": "x", "source_tier": ["bogus"]}, "source_tier"),
         ({"query": "x", "limit": 500}, "limit"),
+        ({"query": "x", "doc_kind": ["webpage"]}, "doc_kind"),
+        ({"query": "x", "site": ["not a host"]}, "site"),
     ):
         try:
             result = await mcp.call_tool("search_chunks", arguments)

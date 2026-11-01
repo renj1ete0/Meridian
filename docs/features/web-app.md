@@ -485,6 +485,13 @@ the search route had always taken, had no control. An intermediate reader's firs
   unticked. "All at once" appears only when two topics are chosen.
 - **Years commit on Enter or on leaving the box**, so typing "20" does not search for the year
   20. Something that is not a plausible year is put back, not applied.
+- **Kind and site** (`B-254`). Kind lists every document kind but `listing` (never searched),
+  news kinds first; a test holds the list to `DOC_KINDS`, so a new kind cannot be left out.
+  Site shows the six sites holding the most sources for the kinds chosen, with counts, any
+  chosen site (so it can be unticked), and a box that suggests sites by part of a name after
+  two letters and takes a pasted address as its host on Enter. Text with no host in it is
+  refused under the box, not searched. The rail loads the list itself and still filters by what
+  is typed when the list cannot be read. Both travel in the link as `kind` and `site`.
 - **The Answer tab gets the same filters**: `/api/explore/answer` takes the dates too now, and
   an integration test compares the two routes' signatures so a filter added to one is not
   silently ignored by the other.

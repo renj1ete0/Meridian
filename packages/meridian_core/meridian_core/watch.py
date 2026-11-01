@@ -56,6 +56,8 @@ def _narrows(filters: SearchFilters) -> bool:
         filters.topics
         or filters.places
         or filters.source_tiers
+        or filters.doc_kinds
+        or filters.sites
         or filters.published_after
         or filters.published_before
     )

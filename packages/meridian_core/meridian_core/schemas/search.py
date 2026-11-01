@@ -397,3 +397,18 @@ class TopicOverlapsRead(BaseModel):
 
     overlaps: list[TopicOverlapRead]
     labelled_sources: int
+
+
+class SiteRead(BaseModel):
+    """One site and how many sources the corpus holds from it (`B-254`)."""
+
+    site: str
+    sources: int
+    #: The newest publication date among them; None when none is dated.
+    latest: dt.date | None = None
+
+
+class SitesRead(BaseModel):
+    """Sites by how many sources they hold, most first: what Find's site filter offers."""
+
+    sites: list[SiteRead]

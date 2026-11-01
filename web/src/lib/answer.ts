@@ -6,7 +6,7 @@
  * below hold the interfaces to the lists.
  */
 import type { SourceTier } from '../ui/Tier'
-import { addSeed, request, searchQuery, type QueueTask, type TopicMatch } from './api'
+import { addSeed, request, searchQuery, type DocKind, type QueueTask, type TopicMatch } from './api'
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
@@ -117,6 +117,8 @@ export interface AnswerParams {
   topic_match?: TopicMatch
   place?: readonly string[]
   source_tier?: readonly SourceTier[]
+  doc_kind?: readonly DocKind[]
+  site?: readonly string[]
   published_after?: string
   published_before?: string
 }

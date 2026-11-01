@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import Date, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .chunks import _host_of
+from .chunks import host_of
 from .models import (
     AreaBuildHistory,
     Chunk,
@@ -118,7 +118,7 @@ async def growth(
     crawled = set(await sess.scalars(crawled_q)) | set(per_day)
 
     # New sites: hosts whose first kept page arrived in the window.
-    host = _host_of(Source.url)
+    host = host_of(Source.url)
     firsts = (
         select(host.label("host"), func.min(Source.created_at).label("first"))
         .where(*_kept(), Source.created_at <= now)

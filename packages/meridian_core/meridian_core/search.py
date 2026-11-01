@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 from collections.abc import Sequence
+from urllib.parse import urlsplit
 
 from sqlalchemy import ColumnElement, Float, Select, and_, cast, func, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import cjk
 from .ageing import age_in_days, decay_factor
+from .chunks import host_of
 from .logging import get_logger
 from .models import Chunk, ChunkTopics, Source
 from .passagetopics import carries_all_topics, on_topic_passage
@@ -88,6 +90,12 @@ class SearchFilters:
     places: Sequence[str] | None = None
     published_after: dt.date | None = None
     published_before: dt.date | None = None
+    #: Match a source of any of these document kinds (`B-254`), as `sources.doc_kind` holds
+    #: them. A source never classified (NULL) is excluded by it.
+    doc_kinds: Sequence[str] | None = None
+    #: Match a source on any of these sites (`B-254`): a host as `site_key` writes it, which
+    #: also matches its subdomains, so `example.org` keeps `news.example.org`.
+    sites: Sequence[str] | None = None
     #: Near-duplicates are out unless asked for. The gate marked them for a reason.
     include_duplicates: bool = False
     #: §5.4's junk tier is material a sweep will eventually drop; it should not
@@ -211,6 +219,10 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         where.append(Source.publication_date >= filters.published_after)
     if filters.published_before is not None:
         where.append(Source.publication_date <= filters.published_before)
+    if filters.doc_kinds:
+        where.append(Source.doc_kind.in_(list(filters.doc_kinds)))
+    if filters.sites:
+        where.append(on_sites(filters.sites))
     if not filters.include_duplicates:
         where.append(Chunk.duplicate_of.is_(None))
         # And the document-level verdict (`B-44`): a source that is a copy of
@@ -223,6 +235,33 @@ def _conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:
         where.append(Source.trust_state.in_(READABLE_STATES))
 
     return where
+
+
+def site_key(value: str) -> str | None:
+    """A site as the filter matches it: a bare host, lower-cased, `www.` and port dropped.
+
+    Accepts what a reader pastes (`https://www.Example.org/news/a`). None for something with
+    no host in it, which a caller refuses rather than matching nothing silently.
+    """
+    text = value.strip().lower()
+    if "://" not in text:
+        text = "//" + text
+    host = (urlsplit(text).hostname or "").rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    return host if host and "." in host and " " not in host else None
+
+
+def on_sites(sites: Sequence[str]) -> ColumnElement[bool]:
+    """A source served from any of `sites` or a subdomain of one (`B-254`).
+
+    Values that are not hosts are dropped; with none left nothing matches, never everything.
+    """
+    keys = sorted({k for k in (site_key(s) for s in sites) if k})
+    if not keys:
+        return literal_column("false")
+    host = host_of(Source.url)
+    return or_(*(or_(host == k, host.endswith("." + k, autoescape=True)) for k in keys))
 
 
 def passage_conditions(filters: SearchFilters) -> list[ColumnElement[bool]]:

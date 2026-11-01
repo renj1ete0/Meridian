@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.184.0] — 2026-11-01
+
+### Added
+
+- `B-254`: Find by document kind and by site. `doc_kind` and `site` on `/search`, `/answer` and
+  the MCP `search_chunks` tool; `doc_kinds` and `sites` in `SearchFilters` and saved views (an
+  unknown kind or a hostless site is refused); `/api/explore/sites` lists sites by source count.
+  The filter rail gains Kind (news kinds first) and Site (the most-held sites for the kinds
+  chosen, and a box that finds one by name or takes a pasted address).
+
 ## [0.183.0] — 2026-11-01
 
 ### Added

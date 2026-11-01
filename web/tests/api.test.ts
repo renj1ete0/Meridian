@@ -54,7 +54,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STATE_LABELS } from '../src/admin/CrawlHealthPanel'
 import { ANSWER_FIELDS, ANSWER_GROUP_FIELDS, ANSWER_ITEM_FIELDS } from '../src/lib/answer'
 // P6-28: the bulk gazetteer decision.
-import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX } from '../src/lib/api'
+import { GAZETTEER_BULK_FIELDS, GAZETTEER_BULK_MAX, SITE_FIELDS } from '../src/lib/api'
 import {
   AREA_BUILD_FIELDS,
   AREA_FIELDS,
@@ -162,6 +162,7 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['SavedViewRead', 'views.py', SAVED_VIEW_FIELDS],
     ['SavedViewsRead', 'views.py', SAVED_VIEWS_FIELDS],
     ['DisplaySettingsRead', 'settings.py', DISPLAY_SETTINGS_FIELDS],
+    ['SiteRead', 'search.py', SITE_FIELDS],
     ['GrowthRead', 'growth.py', GROWTH_FIELDS],
     ['GrowthDay', 'growth.py', GROWTH_DAY_FIELDS],
     ['GrowthCount', 'growth.py', GROWTH_COUNT_FIELDS],

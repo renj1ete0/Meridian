@@ -474,6 +474,10 @@ export interface SearchParams {
   topic_match?: TopicMatch
   /** Keep sources about any of these places — stored codes (`P2-23`). */
   place?: readonly string[]
+  /** Keep sources of any of these document kinds (`B-254`). */
+  doc_kind?: readonly DocKind[]
+  /** Keep sources on any of these sites, subdomains included (`B-254`). */
+  site?: readonly string[]
   published_after?: string
   published_before?: string
   include_duplicates?: boolean
@@ -512,8 +516,32 @@ export function searchQuery(params: SearchParams): string {
   for (const language of params.language ?? []) query.append('language', language)
   for (const topic of params.topic ?? []) query.append('topic', topic)
   for (const place of params.place ?? []) query.append('place', place)
+  for (const kind of params.doc_kind ?? []) query.append('doc_kind', kind)
+  for (const site of params.site ?? []) query.append('site', site)
 
   return query.toString()
+}
+
+/** Mirrors `SiteRead` (`B-254`). */
+export interface SiteCount {
+  site: string
+  sources: number
+  latest: string | null
+}
+export const SITE_FIELDS = ['site', 'sources', 'latest'] as const
+export type AssertSite = Expect<Equal<keyof SiteCount, (typeof SITE_FIELDS)[number]>>
+
+/** Sites by how many sources they hold, narrowed by kind and by part of a name. */
+export function listSites(
+  params: { doc_kind?: readonly DocKind[]; q?: string; limit?: number } = {},
+  init?: RequestInit,
+): Promise<{ sites: SiteCount[] }> {
+  const query = new URLSearchParams()
+  for (const kind of params.doc_kind ?? []) query.append('doc_kind', kind)
+  if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.limit) query.set('limit', String(params.limit))
+  const suffix = query.toString()
+  return request<{ sites: SiteCount[] }>(`/api/explore/sites${suffix ? `?${suffix}` : ''}`, init)
 }
 
 export function searchCorpus(params: SearchParams, init?: RequestInit): Promise<SearchResponse> {

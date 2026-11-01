@@ -131,7 +131,8 @@ calling every tool in-process):
   each URL (`frame_passages(..., detailed=True)`), so a citation can be produced from the
   framed text alone. Synthesis prompts keep the plain form: their wording is the key relay
   answers are filed under, and changing it would orphan answers already filed.
-- Arguments are typed. `source_tier` is the database's enum, dates are `YYYY-MM-DD`, `limit`
+- Arguments are typed. `source_tier` and `doc_kind` (`B-254`) are the database's enums, a `site`
+  must be a host (`example.org`, its subdomains included), dates are `YYYY-MM-DD`, `limit`
   is at most 50, and every parameter has a description in the input schema. A bad value is
   refused before any search, with the argument named in the message; before, a date in another
   form surfaced as "Error executing tool search_chunks". Each passage still appears twice

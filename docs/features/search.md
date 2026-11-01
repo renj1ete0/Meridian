@@ -94,6 +94,20 @@ and what is safe to filter on is the module's decision, not each caller's.
   fetched page into a prompt. It means "only cleared", not "not quarantined": an `unscreened`
   page has not been examined, and admitting it would make screening optional in exactly the
   case it exists for.
+- **Kind and site** (`B-254`). `doc_kinds` keeps sources of the named kinds
+  ([document kinds](extraction.md#document-kinds): news, press releases, opinion, …); a source
+  never classified is excluded, as unexamined labels are. `sites` keeps sources served from a
+  host or any subdomain of it, so `example.org` keeps `news.example.org` but not
+  `notexample.org`, and a subdomain never widens to its parent. The host is parsed from
+  `sources.url` in SQL by `chunks.host_of` (`www.` and the port dropped, as
+  `boilerplate.host_key` does); the suffix match escapes LIKE's wildcards, so a `_` in a site
+  is a character, not "any letter". `search.site_key` reads what a reader types or pastes
+  (`https://WWW.Example.org/a` is `example.org`); the routes answer 422 for a value with no host
+  rather than match nothing, and a saved view refuses an unknown kind or a hostless site.
+  `/api/explore/sites` lists sites by how many sources they hold, narrowed by kind and by part
+  of a name, for the rail. No index serves the host expression: the predicate narrows a
+  search's candidates, and the list's full grouping costs a scan of `sources` that measured
+  fine on the local corpus; an expression index is the remedy if it stops being.
 - **Superseded passages are never searchable**, and no caller can turn that off (`P1-32`).
   They are text a page used to carry; retrieving one would quote a document as saying
   something it no longer says, with a citation that opens a page without the passage.

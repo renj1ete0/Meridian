@@ -20,7 +20,7 @@ from meridian_core.chunks import (
     SAMPLE_HEAD,
     SAMPLE_STRIDE,
     ChunkWrite,
-    _host_of,
+    host_of,
     chunks_without_embeddings,
     embed_tier,
     embedding_backlog,
@@ -221,7 +221,7 @@ async def test_an_unknown_tier_is_refused() -> None:
 )
 async def test_the_sql_host_matches_host_key(sess, url) -> None:
     """`host_scores` is keyed by `host_key`; a host the SQL spells differently is never judged."""
-    assert await sess.scalar(select(_host_of(url))) == host_key(url)
+    assert await sess.scalar(select(host_of(url))) == host_key(url)
 
 
 # --------------------------------------------------------------------------
