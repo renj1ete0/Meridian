@@ -158,12 +158,12 @@ def test_small_capitals_in_a_declared_title_are_read_as_letters() -> None:
 @pytest.mark.parametrize(
     "title",
     [
-        "R Balcombe, TRL Limited (Editor)",
-        "Transport Research Review (Eds.)",
-        "1 Hong et al",
-        "Ruan et al.",
-        "Lai, D., Lian, Z., Liu, W., and Chen, Q. 2020 “A comprehensive review of",
-        "Borremans, B., Faust, C., Manlove, K. R. (2019)",
+        "J Marlowe, Northfield Transport Lab (Editor)",
+        "Corridor Studies Review (Eds.)",
+        "1 Tamsin et al",
+        "Okafor et al.",
+        "Varga, D., Holm, P., Ostrow, W., and Quell, R. 2020 “A broad review of",
+        "Brandt, B., Faulk, C., Merrow, K. R. (2019)",
     ],
 )
 def test_an_author_line_is_not_a_title(title) -> None:
@@ -175,12 +175,12 @@ def test_an_author_line_is_not_a_title(title) -> None:
 @pytest.mark.parametrize(
     "title",
     [
-        "UNITED STATES POSTAL SERVICE, et al. v. CALIFORNIA, et al.",
-        "DP Architects, PSB Academy to exit Marina Square ahead of revamp",
-        "Loss of laminin-γ1 in pericytes impairs microvascular function. Ruan et al",
-        "JST Washington, D.C. Office",
+        "NORTHFIELD FREIGHT COMPANY, et al. v. ARDEN COUNTY, et al.",
+        "Halden Partners, Brook Academy to leave Quayside Mall ahead of revamp",
+        "Shade cover on footpaths changes walking speed. Okafor et al",
+        "ARC Springfield, D.C. Office",
         "Edited volume on transport (eds) planning",
-        "Singapore, a city in a garden",
+        "Arden, a city of gardens",
     ],
 )
 def test_a_title_with_names_in_it_is_still_a_title(title) -> None:

@@ -20,10 +20,10 @@ _PLACEHOLDER = re.compile(
 #: A file name in the title field says what the file was saved as.
 _FILE_NAME = re.compile(r"\.(?:docx?|pdf|pptx?|xlsx?|tex|dvi|indd|rtf|odt|txt)$", re.IGNORECASE)
 #: A title that is the author line instead (`B-220`): a PDF whose metadata title is its editor
-#: ("R Balcombe, TRL Limited (Editor)"), a bare "Name et al", or a reference-list entry
-#: ("Lai, D., Lian, Z., … 2020 …"). Narrow on purpose: measured on 105,909 stored titles these
-#: shapes matched 6, while a looser name-list pattern also caught headlines ("DP Architects,
-#: PSB Academy to exit …") and case names ("… SERVICE, et al. v. CALIFORNIA, et al.").
+#: ("J Marlowe, Northfield Transport Lab (Editor)"), a bare "Name et al", or a reference-list entry
+#: ("Varga, D., Holm, P., … 2020 …"). Narrow on purpose: measured on 105,909 stored titles these
+#: shapes matched 6, while a looser name-list pattern also caught headlines ("Halden
+#: Partners, Brook Academy to leave …") and case names ("… COMPANY, et al. v. ARDEN COUNTY, et al.").
 _AUTHOR_LINE = re.compile(
     r"\((?:eds?|editors?)\.?\)\s*$"
     r"|^(?:\d+\s+)?[A-Z][\w'\u2019-]+(?:\s+[A-Z][\w'\u2019-]+)?\s+et\s+al\.?$"
