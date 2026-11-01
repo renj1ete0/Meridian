@@ -1995,7 +1995,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       body carries it and that a server ignoring it still answers
 - [ ] `B-260` **Reranker speed on the GPU machine** — 22 s for 30 real passages on the 6700 XT
       (embedding there is fast: ~16 passages/s). Find whether it is the card, one slot (`-np 1`) or
-      the batch size; Find's rerank waits on it
+      the batch size; Find's rerank waits on it. **2026-11-02 shakedown:** embedding is now slow
+      too — 1, 16 and 64 passages of ~260 tokens took 4.6, 12 and 48 s with the language model
+      idle (1.3 passages/s, an eighth of the earlier rate), while the crawl stores ~400 passages a
+      minute, so the backlog only grows. Check where the model manager placed `bge-m3` (the
+      earlier rate was measured with it alone on a card); operator side, then re-measure
 - [x] `B-261` **One command to deploy** (operator, 2026-11-01) — first boot was five commands
       (`up postgres`, `datadirs`, migrate, seed, `up`). `datadirs` and a new `setup` one-shot
       run on every `up`, and the database services wait for `setup`; tested on a fresh data
