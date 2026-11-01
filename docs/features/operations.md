@@ -130,6 +130,17 @@ monitoring without the fact of it.
   needs most of an hour to catch up, and a share, since a small corpus 90% unembedded is in
   trouble the count would call fine.
 
+- <a id="the-runs-report"></a>**The runs report** (`B-262`, `worker.digest --runs`, every 6
+  hours). What synthesis wrote since the last report (runs done and failed, relations,
+  attributes, seeds, tokens, which agent), the first failures with their reasons, and the
+  waiting run with its reason, which is most often a GPU machine that is off. Not a message per
+  run: the daemon finishes one a minute while it works, and a channel that noisy stops being
+  read. Nothing is sent when nothing ended and nothing waits. Each report is a `run_summary`
+  row in `notifications`, and the next one starts at its time.
+- **The digest's last three lines** (`B-262`): sources and passages added in the day, passages
+  still waiting for a vector (a backlog that grows all day is a GPU machine that has not woken),
+  and what synthesis wrote.
+
 ### Telegram
 
 `telegram.py` (transport), `bot.py` (the loop) and `commands.py` (meaning), `P5-07`, §13.3.

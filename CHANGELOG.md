@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.187.0] — 2026-11-01
+
+### Added
+
+- `B-262`: a synthesis report to Telegram every six hours (`worker.digest --runs`: what runs
+  wrote since the last report, failures and the waiting run with reasons; silent when nothing
+  happened), three more lines in the daily digest (corpus growth, embedding backlog, synthesis
+  output), and `make release` (build, push and promote the current commit, which servers on the
+  `autoupdate` profile pick up through Watchtower). Migration `b262a1c2d3e4` adds the timetable
+  row to existing deployments.
+
 ## [0.186.1] — 2026-11-01
 
 ### Changed

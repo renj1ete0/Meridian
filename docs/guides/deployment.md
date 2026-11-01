@@ -305,6 +305,43 @@ wait for a vector. Waking the machine is not built (`B-229`).
 
 ---
 
+## 3d. Updating itself, and telling you (`B-262`)
+
+The server can update itself from images you push, and post to a Telegram chat: Watchtower's
+note when it updates, a daily digest, a synthesis report every six hours, and alerts.
+
+**Telegram.** Make a bot with @BotFather (it gives a token), send it a message, and read your
+chat id from `https://api.telegram.org/bot<token>/getUpdates`. In `.env`:
+
+```bash
+TELEGRAM_BOT_TOKEN=<token>
+TELEGRAM_CHAT_ID=<chat id>
+WATCHTOWER_NOTIFICATION_URL=telegram://<token>@telegram/?chats=<chat id>
+```
+
+**Updates.** Images go to GitHub's registry under the `stable` channel, and the server follows
+it. In `.env`:
+
+```bash
+COMPOSE_PROFILES=autoupdate              # Watchtower, and `migrate` on every new tools image
+GHCR_READ_USER=<your GitHub user>
+GHCR_READ_PAT=<a token with read:packages only>
+WATCHTOWER_POLL_INTERVAL=3600            # seconds between checks
+```
+
+Then, on the server, pull instead of building: `docker compose pull && docker compose up -d`.
+From your own machine, each release is one command, from a clean checkout of what you want to
+ship:
+
+```bash
+MERIDIAN_PLATFORMS=linux/amd64 make release    # build, push, and move `stable` to this commit
+```
+
+Within the poll interval Watchtower pulls the changed images, `migrate` runs any new migration,
+the changed services restart, and Telegram says so. Postgres, the browser, SearXNG and
+cloudflared are never touched (no Watchtower label). Rollback is `make promote SHA=<older>`.
+Without `GHCR_READ_*` a private image is invisible to Watchtower and it reports nothing at all.
+
 ## 4. The smoke run
 
 The point is "do the containers come up and talk to each other", **not** corpus

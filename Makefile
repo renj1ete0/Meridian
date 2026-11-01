@@ -11,7 +11,7 @@
 -include .env.dev
 export
 
-.PHONY: promote dev-up dev-down up down logs migrate seed quickstart preflight \
+.PHONY: release promote dev-up dev-down up down logs migrate seed quickstart preflight \
         local-up local-down local-logs \
         snapshot-corpus restore-corpus backup lint test coverage mutate stale-dist-info clock-check leak-check bench-search build-push build-worker
 
@@ -133,6 +133,14 @@ build-push:
 promote:
 	@test -n "$(SHA)" || { echo 'usage: make promote SHA=<commit>'; exit 1; }
 	./scripts/promote.sh $(SHA)
+
+# Build, push and promote the current commit in one go (`B-262`): servers with the
+# `autoupdate` profile pull it within WATCHTOWER_POLL_INTERVAL, migrate, and restart what
+# changed. Refuses a dirty tree (build_and_push.sh). `MERIDIAN_PLATFORMS=linux/amd64` skips
+# the arm64 build when every server is x86.
+release:
+	./scripts/build_and_push.sh
+	./scripts/promote.sh $$(git rev-parse --short HEAD)
 
 # Build the worker image locally, for the host's own architecture. The build
 # context is the repo root because the services share a uv workspace; multi-arch
