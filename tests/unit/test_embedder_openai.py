@@ -446,3 +446,50 @@ def test_retry_after_reads_seconds_dates_and_milliseconds() -> None:
     when = "Sun, 01 Nov 2026 00:01:00 GMT"
     now = 1793491200.0  # 2026-11-01T00:00:00Z
     assert retry_after_s({"Retry-After": when}, 30, now=now) == 60
+
+
+# --------------------------------------------------------------------------
+# A backfill does not hold a reader's query (`B-269`)
+# --------------------------------------------------------------------------
+
+
+async def test_a_large_batch_is_asked_in_slices_and_comes_back_whole_and_in_order() -> None:
+    """A model server answers one request at a time: 256 texts in one request held a reader's
+    one-text query past its timeout. In slices the query waits for one slice."""
+    server = FakeLlama(reverse=True)
+    texts = [f"text {i}" for i in range(37)]
+
+    vectors = await client(server, request_texts=16).embed(texts)
+
+    sizes = [len(body["input"]) for path, body in server.requests if path == "/v1/embeddings"]
+    assert sizes == [16, 16, 5]
+    assert len(vectors) == 37
+    assert vectors[0] == [0.6, 0.8] and vectors[1] == [0.0, 1.0] and vectors[36] == [0.6, 0.8]
+
+
+async def test_a_query_is_one_request() -> None:
+    server = FakeLlama()
+    await client(server, request_texts=16).embed_one("one question")
+    assert [len(b["input"]) for p, b in server.requests if p == "/v1/embeddings"] == [1]
+
+
+async def test_the_slice_size_comes_from_the_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_URL", EMBED)
+    monkeypatch.setenv("MERIDIAN_EMBEDDER_API", "openai")
+    monkeypatch.setenv("MERIDIAN_EMBED_REQUEST_TEXTS", "8")
+    assert RemoteEmbedder.from_env()._request_texts == 8
+    monkeypatch.setenv("MERIDIAN_EMBED_REQUEST_TEXTS", "0")
+    assert RemoteEmbedder.from_env()._request_texts == 1, "never zero: that would ask nothing"
+
+
+async def test_an_outage_with_no_message_still_says_what_happened() -> None:
+    """httpx's timeouts have empty messages; the log said only the URL."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("", request=request)
+
+    embedder = RemoteEmbedder(
+        EMBED, api="openai", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(EmbeddingUnavailable, match="ReadTimeout"):
+        await embedder.embed_one("q")

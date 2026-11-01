@@ -40,6 +40,10 @@ SECONDS_PER_TEXT = 2.0
 #: subnet never refuses, so one timeout for both made a search wait all 30 s. See
 #: docs/features/embedding.md#when-the-gpu-machine-is-off.
 DEFAULT_CONNECT_TIMEOUT_S = 3.0
+#: Texts per request to an OpenAI-compatible server (`B-269`): a reader's query waits behind
+#: at most this many. 16 bge-m3 passages took about a second on the operator's card, where
+#: a 256-passage request held a query past its 30 s timeout three times in four.
+DEFAULT_REQUEST_TEXTS = 16
 
 #: How long a sidecar that refused a connection is not asked again, by any client in
 #: this process (`B-223`). The API opens a client per search, so this lives here.
@@ -110,6 +114,16 @@ RERANK_PAIR_MARGIN = 8
 DEFAULT_RERANK_TIMEOUT_S = 60.0
 
 
+def _said(exc: BaseException) -> str:
+    """An exception as a log line can carry it: its type, and its message if it has one.
+
+    httpx's timeouts have empty messages, so "{url}: {exc}" logged an outage as nothing
+    at all (`B-269`).
+    """
+    text = str(exc).strip()
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
 class RemoteEmbedder:
     """Vectors from the embedding sidecar.
 
@@ -135,6 +149,7 @@ class RemoteEmbedder:
         rerank_max_tokens: int = DEFAULT_RERANK_MAX_TOKENS,
         served_model: str | None = None,
         rerank_model: str | None = None,
+        request_texts: int = DEFAULT_REQUEST_TEXTS,
     ) -> None:
         if api not in EMBEDDER_APIS:
             raise ValueError(f"unknown embedder API {api!r}; expected one of {EMBEDDER_APIS}")
@@ -161,6 +176,8 @@ class RemoteEmbedder:
         #: server holding several models routes by it.
         self.served_model = served_model or expect_model
         self.rerank_model = rerank_model
+        #: The most texts one request to an OpenAI-compatible server carries (`B-269`).
+        self._request_texts = max(1, request_texts)
 
     @classmethod
     def from_env(cls) -> RemoteEmbedder | None:
@@ -194,6 +211,7 @@ class RemoteEmbedder:
             ),
             served_model=os.environ.get("MERIDIAN_EMBEDDER_MODEL", "").strip() or None,
             rerank_model=os.environ.get("MERIDIAN_RERANKER_MODEL", "").strip() or None,
+            request_texts=int(_float_env("MERIDIAN_EMBED_REQUEST_TEXTS", DEFAULT_REQUEST_TEXTS)),
         )
 
     def _http(self) -> httpx.AsyncClient:
@@ -289,7 +307,7 @@ class RemoteEmbedder:
             body = response.json()
         except httpx.HTTPError as exc:
             self._note(exc)
-            raise EmbeddingUnavailable(f"{self.base_url}: {exc}") from exc
+            raise EmbeddingUnavailable(f"{self.base_url}: {_said(exc)}") from exc
         except ValueError as exc:
             raise EmbeddingUnavailable(f"{self.base_url}: unreadable response") from exc
 
@@ -351,7 +369,7 @@ class RemoteEmbedder:
             body = response.json()
         except httpx.HTTPError as exc:
             self._note(exc, self.rerank_url)
-            raise EmbeddingUnavailable(f"{self.rerank_url}: {exc}") from exc
+            raise EmbeddingUnavailable(f"{self.rerank_url}: {_said(exc)}") from exc
         except ValueError as exc:
             raise EmbeddingUnavailable(f"{self.rerank_url}: unreadable response") from exc
         scores = body.get("scores")
@@ -383,7 +401,7 @@ class RemoteEmbedder:
             )
         except httpx.HTTPError as exc:
             self._note(exc, url)
-            raise EmbeddingUnavailable(f"{url}: {exc}") from exc
+            raise EmbeddingUnavailable(f"{url}: {_said(exc)}") from exc
         if response.status_code in WAIT_STATUSES:
             wait = retry_after_s(response.headers, self._down_for)
             if wait > 0:
@@ -400,7 +418,7 @@ class RemoteEmbedder:
             response.raise_for_status()
             body = response.json()
         except httpx.HTTPError as exc:
-            raise EmbeddingUnavailable(f"{url}: {exc}") from exc
+            raise EmbeddingUnavailable(f"{url}: {_said(exc)}") from exc
         except ValueError as exc:
             raise EmbeddingUnavailable(f"{url}: unreadable response") from exc
         if not isinstance(body, dict):
@@ -488,7 +506,20 @@ class RemoteEmbedder:
             )
 
     async def _embed_openai(self, texts: Sequence[str]) -> list[list[float]]:
+        """Vectors for ``texts``, asked in slices of `request_texts` (`B-269`).
+
+        A model server answers one request at a time, so a backfill of 256 passages sent
+        whole made a reader's one-text query wait behind all of it, past its timeout, and
+        search fell back to words while new pages were embedded. In slices the query waits
+        for one slice; the throughput is the same.
+        """
         await self._check_listed()
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self._request_texts):
+            vectors += await self._embed_slice(texts[start : start + self._request_texts])
+        return vectors
+
+    async def _embed_slice(self, texts: Sequence[str]) -> list[list[float]]:
         inputs = [await self._embedding_input(text) for text in texts]
         response = await self._call(
             "POST",

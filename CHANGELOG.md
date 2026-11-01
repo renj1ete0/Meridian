@@ -91,6 +91,17 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.192.1] — 2026-11-01
+
+### Fixed
+
+- `B-269`: search no longer falls back to words while new pages are embedded on a remote model
+  server. The client asks for vectors in slices of 16 texts (`MERIDIAN_EMBED_REQUEST_TEXTS`),
+  so a reader's query waits for one slice instead of a whole 256-passage batch; an outage with
+  no message (a timeout) now says its type in the log.
+
+**Deploy:** image only.
+
 ## [0.192.0] — 2026-11-01
 
 ### Added

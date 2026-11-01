@@ -2085,6 +2085,9 @@ deploy runbook whose first two commands could not work (`B-17`).
       compare with the operator's server model (Qwen Flash Next through seismo once it is
       registered; else the 27B, said so). Only if agreement is good: a stance-over-time strip on
       node pages, a Find filter, one-sided evidence as a gap, an MCP tool
+- [x] `B-269` **Search fell back to words while pages were embedded** (found by the
+      end-to-end run, 2026-11-01) — the backfill's 256-passage requests held a reader's query
+      past its timeout on a one-slot model server; the client now asks in slices of 16
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published

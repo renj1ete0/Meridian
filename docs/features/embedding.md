@@ -375,6 +375,13 @@ What the client does that the sidecar did for it:
   texts, which it truncates itself. Rerank passages are cut through `/detokenize` to fit
   `MERIDIAN_RERANK_MAX_TOKENS`. Give llama.cpp `--ubatch-size` and `--batch-size` of at least
   1024 (embedding) and 2048 (reranking).
+- **Asks in slices of 16 texts** (`MERIDIAN_EMBED_REQUEST_TEXTS`, `B-269`). A model server
+  answers one request at a time. The backfill's 256-passage batches went as one request, and a
+  reader's one-text query waited behind it past its 30 s timeout three times in four (measured
+  on the operator's machine during an end-to-end run), so search fell back to words exactly
+  while a crawl was adding pages. In slices a query waits for one slice, about a second; the
+  backfill's throughput does not change. Giving the server more than one slot (llama.cpp
+  `-np`) removes the wait altogether.
 - **Scales vectors to length one**, as the worker stores them; maps results back by `index`,
   since rerank results arrive sorted by score.
 - **Reads 404 or 501 from `/v1/rerank` as reranking off**, not an outage: 501 is a llama.cpp
