@@ -21,6 +21,12 @@ against a real Postgres, 1053 frontend.
 
 ## Resume here (written 2026-09-26, end of session)
 
+> **Waiting on the operator, on the live server (2026-11-02).** After deploying v0.206.x
+> (`git pull && docker compose pull && docker compose up -d`; B-266 changed the compose file), run
+> the one-off passes in docs/guides/deployment.md#one-off-passes — `retier`, `dockind --kind news`,
+> `unreadable`, `remeta`, `contested` — each report-only first, then `--apply`. Remind the operator
+> at the start of each session until they say it is done; untick nothing here until then.
+
 > **2026-11-01 (later) — `v0.183.0`–`v0.185.0`, committed locally, not pushed** (v0.182.0 was
 > pushed). Built: press releases and opinion told apart from news (`B-253`; stored sources not yet
 > re-derived: `worker.dockind --kind news --apply` in the worker image once the local stack is

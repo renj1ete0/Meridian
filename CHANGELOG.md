@@ -91,6 +91,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.206.1] — 2026-11-02
+
+## [0.206.1] — 2026-11-02
+
+### Changed
+
+- The deployment guide lists the one-off passes over stored rows (`retier`, `dockind`,
+  `unreadable`, `remeta`, `contested`) in one place: what each re-judges, that each reports
+  before it writes, and that they run on the server, not a development machine. See
+  docs/guides/deployment.md#one-off-passes.
+
+**Deploy:** image only.
+
 ## [0.206.0] — 2026-11-02
 
 ### Added

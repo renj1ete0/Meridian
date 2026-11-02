@@ -356,6 +356,30 @@ the changed services restart, and Telegram says so.
   `CHANGELOG.md` entry (**Deploy:** `git pull && docker compose up -d`); on the server, do that
   once. Everything else is image-only (**Deploy:** image only) and needs nothing. Postgres, the browser, SearXNG and
 cloudflared are never touched (no Watchtower label). Rollback is `make promote SHA=<older>`.
+- **A pass over what is already stored: not by itself, and only on the server.** Some releases
+  change how something is judged at write time (a source's tier, its kind, its metadata, a
+  claim's contested mark). New writes get the new judgement as soon as the image runs, but rows
+  written before keep the old one until a one-off pass re-judges them. The release's **Deploy:**
+  line names the pass. Run it on the server, in the checkout, not on a development machine:
+  there it would only correct the development database.
+
+<a id="one-off-passes"></a>**The one-off passes.** Each one reports by default and writes only
+with `--apply`, and none deletes anything. Run each once without `--apply`, read what it would
+change, then run it again with `--apply`. They do not depend on each other.
+
+```bash
+docker compose run --rm worker python -m worker.retier          # quality tier of stored sources
+docker compose run --rm worker python -m worker.dockind --kind news   # press release / opinion / news
+docker compose run --rm worker python -m worker.unreadable      # retire garbled passages (superseded, kept)
+docker compose run --rm worker python -m worker.remeta          # titles and dates; old values in extra.replaced_metadata
+docker compose run --rm worker python -m worker.contested       # mark contested claims; never removes a mark
+# then the same command with --apply
+```
+
+`remeta`, `unreadable` and `dockind` take `--limit N` to try a small batch first; `remeta` also
+takes `--after <source id>` to continue where a batch stopped. `docker compose exec worker …`
+does the same inside the running worker instead of a fresh container. Afterwards, `/tiers` and
+`/contested` in Telegram show the result.
 Without `GHCR_READ_*` a private image is invisible to Watchtower and it reports nothing at all.
 
 ## 4. The smoke run
