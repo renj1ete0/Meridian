@@ -91,6 +91,16 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.207.1] — 2026-11-07
+
+### Changed
+
+- `B-273`: the graph audit's merge and match cards show the signals behind the score (name,
+  meaning, shared passages), not the total alone. See
+  docs/features/knowledge-graph.md#the-graph-audit.
+
+**Deploy:** image only.
+
 ## [0.207.0] — 2026-11-07
 
 ### Added

@@ -71,6 +71,28 @@ export function gradedText(tally: AuditTally, population: number): string {
   return `${tally.graded} of ${tally.drawn} graded${unsure} · from ${population.toLocaleString()}`
 }
 
+/** What each resolver signal is called on the page; see docs/features/knowledge-graph.md#resolution. */
+const SIGNAL_LABEL: Record<string, string> = { string: 'name', embedding: 'meaning', context: 'shared passages' }
+const SIGNAL_ORDER = ['string', 'embedding', 'context']
+
+/**
+ * The signals behind a resolver's score, in a fixed order: "name 0.88 · meaning 0.97". A signal
+ * the resolver could not compute is absent, not zero, and is left out; null when none was kept.
+ */
+export function signalsText(signals: Record<string, number> | null): string | null {
+  if (!signals) return null
+  const keys = Object.keys(signals).sort(
+    (a, b) => (SIGNAL_ORDER.indexOf(a) + 1 || 99) - (SIGNAL_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b),
+  )
+  if (keys.length === 0) return null
+  return keys.map((k) => `${SIGNAL_LABEL[k] ?? k.replaceAll('_', ' ')} ${signals[k]!.toFixed(2)}`).join(' · ')
+}
+
+function Signals({ signals }: { signals: Record<string, number> | null }) {
+  const text = signalsText(signals)
+  return text ? <span className="font-mono text-[10.5px] text-text-faint">from {text}</span> : null
+}
+
 const VERDICTS: readonly { key: AuditVerdict; label: string }[] = [
   { key: 'correct', label: 'Correct' },
   { key: 'wrong', label: 'Wrong' },
@@ -139,6 +161,7 @@ function MergeBody({ shown }: { shown: MergeShown }) {
         Were these one thing? Merged {stamp(shown.merged_at)}, {score}, decided by {shown.decided_by};{' '}
         {shown.moved_edges} {shown.moved_edges === 1 ? 'link' : 'links'} moved.
       </p>
+      <Signals signals={shown.signals} />
       <div className="grid gap-5 md:grid-cols-2">
         <Side side={shown.source} role="Merged away" />
         <Side side={shown.target} role="Into" />
@@ -155,6 +178,7 @@ function MatchBody({ shown }: { shown: MatchShown }) {
         Is this the same thing? A run read this name and joined it to an existing node {stamp(shown.matched_at)}, score{' '}
         {shown.score.toFixed(2)}.
       </p>
+      <Signals signals={shown.signals} />
       <div className="grid gap-5 md:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-2">
           <span className={LABEL}>Name read</span>

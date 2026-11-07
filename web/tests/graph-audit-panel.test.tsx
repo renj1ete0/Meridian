@@ -7,7 +7,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { GraphAuditPanel, gradedText, precisionText } from '../src/admin/GraphAuditPanel'
+import { GraphAuditPanel, gradedText, precisionText, signalsText } from '../src/admin/GraphAuditPanel'
 import { SECTIONS } from '../src/admin/sections'
 import { ApiError } from '../src/lib/api'
 import type { AuditDraw, AuditDrawDetail, AuditSample, AuditTally, GraphAudit } from '../src/lib/graphAudit'
@@ -175,6 +175,27 @@ describe('the measure', () => {
   })
 })
 
+describe('the signals behind a score', () => {
+  it('names each signal in a fixed order, whatever order the server sent', () => {
+    expect(signalsText({ context: 0.1, string: 0.9, embedding: 0.75 })).toBe(
+      'name 0.90 · meaning 0.75 · shared passages 0.10',
+    )
+  })
+
+  it('leaves out a signal the resolver could not compute rather than showing it as zero', () => {
+    expect(signalsText({ string: 0.88 })).toBe('name 0.88')
+  })
+
+  it('says nothing when no signals were kept', () => {
+    expect(signalsText(null)).toBeNull()
+    expect(signalsText({})).toBeNull()
+  })
+
+  it('keeps a signal it has no word for, by its own name, last', () => {
+    expect(signalsText({ new_signal: 0.5, string: 0.2 })).toBe('name 0.20 · new signal 0.50')
+  })
+})
+
 describe('the panel', () => {
   it('shows each draw with its precision, and opens the newest', async () => {
     const { loadDraw } = await open()
@@ -201,6 +222,7 @@ describe('the panel', () => {
     expect(screen.getByText(/2 passages cited/)).toBeTruthy()
     expect(screen.getByText('Merged away')).toBeTruthy()
     expect(screen.getByText(/score 0.91, decided by user; 3 links moved/)).toBeTruthy()
+    expect(screen.getByText('from name 0.90')).toBeTruthy()
     // The graded one is under All, not under To grade.
     expect(screen.queryAllByRole('group', { name: /Grade item/ })).toHaveLength(3)
     await act(async () => {
@@ -214,6 +236,7 @@ describe('the panel', () => {
     await open()
     expect(screen.getByText('4. Match')).toBeTruthy()
     expect(screen.getByText(/joined it to an existing node .*score 0.93/)).toBeTruthy()
+    expect(screen.getByText('from name 0.88 · meaning 0.97')).toBeTruthy()
     expect(screen.getByText('Name read')).toBeTruthy()
     expect(screen.getByText('Transport Authority Pte Ltd')).toBeTruthy()
     expect(screen.getByText('organisation · SG')).toBeTruthy()

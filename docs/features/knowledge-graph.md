@@ -518,7 +518,10 @@ links moved; for a match, the name as the model wrote it (type, jurisdiction, th
 was read in) beside the node as the resolver saw it (`resolution_matches.node_name`,
 `node_aliases` and `node_chunk_ids`, from before the mention joined it, so the mention's own
 passage is not shown as the node's evidence), the score and its signals, and the run. A relation
-corroborated later, or a merge reversed, does not change what was graded.
+corroborated later, or a merge reversed, does not change what was graded. A merge's and a match's card print the score with
+the signals behind it ("from name 0.88 · meaning 0.97"), since a score carried by the name alone
+is what a conflation looks like; a signal the resolver could not compute is left out, not shown
+as zero.
 
 **Grades** are `correct`, `wrong` or `unsure`, with an optional note; a grade replaces an earlier
 one (`POST /api/admin/graph-audit/samples/{id}`, permission `graph.audit`). The card does not
