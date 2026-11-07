@@ -484,6 +484,9 @@ async def test_the_routes_refuse_in_words(client) -> None:
     )
     assert extra.status_code == 422
     assert (await client.get("/api/explore/graph-audit")).status_code == 404
+    gone = await client.post("/api/admin/graph-audit/matches/999999999999/split")
+    assert gone.status_code == 409 and "No match" in gone.json()["detail"]
+    assert (await client.post("/api/explore/graph-audit/matches/1/split")).status_code == 404
 
 
 async def test_a_match_at_resolution_is_drawn_as_a_third_kind(sess) -> None:
@@ -587,3 +590,24 @@ async def test_the_database_refuses_a_nameless_match_and_a_score_out_of_range(se
             s=dt.datetime(2002, 1, 1, tzinfo=UTC),
             e=dt.datetime(2002, 2, 1, tzinfo=UTC),
         )
+
+
+async def test_a_split_match_says_so_in_its_draw_and_its_grade(sess) -> None:
+    """`B-274`: the card must know the remedy was taken, or it offers it again."""
+    from meridian_core.mentions import split_match
+
+    entry = await a_match(sess, at=INSIDE)
+    await an_edge(sess, at=INSIDE)
+    row = await graphaudit.draw(sess, now=NOW, since=START, seed="split")
+    match_sample = next(s for s in await samples_of(sess, row.draw_id) if s.kind == "match")
+
+    before = await graphaudit.draw_detail(sess, row.draw_id)
+    assert {s.split_entity_id for s in before.samples} == {None}
+
+    done = await split_match(sess, entry.match_id, split_by="user", now=NOW)
+    after = await graphaudit.draw_detail(sess, row.draw_id)
+    by_kind = {s.kind: s.split_entity_id for s in after.samples}
+    assert by_kind == {"edge": None, "match": done.split_entity_id}
+
+    graded = await graphaudit.grade(sess, match_sample.sample_id, "wrong", graded_by="u")
+    assert graded.split_entity_id == done.split_entity_id

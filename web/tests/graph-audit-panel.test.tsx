@@ -11,7 +11,9 @@ import { GraphAuditPanel, gradedText, precisionText, signalsText } from '../src/
 import { SECTIONS } from '../src/admin/sections'
 import { ApiError } from '../src/lib/api'
 import type { AuditDraw, AuditDrawDetail, AuditSample, AuditTally, GraphAudit } from '../src/lib/graphAudit'
+import { MeProvider } from '../src/lib/me'
 import { BY_NAME_LABEL } from '../src/lib/permissionLabels'
+import type { Me } from '../src/lib/people'
 
 afterEach(cleanup)
 
@@ -76,6 +78,7 @@ const EDGE: AuditSample = {
   note: null,
   graded_by: null,
   graded_at: null,
+  split_entity_id: null,
 }
 
 const GRADED: AuditSample = {
@@ -114,6 +117,7 @@ const MERGE: AuditSample = {
   note: null,
   graded_by: null,
   graded_at: null,
+  split_entity_id: null,
 }
 
 const MATCH: AuditSample = {
@@ -147,10 +151,43 @@ const MATCH: AuditSample = {
   note: null,
   graded_by: null,
   graded_at: null,
+  split_entity_id: null,
 }
 
 const AUDIT: GraphAudit = { draws: [DRAW], ungraded: 3 }
 const DETAIL: AuditDrawDetail = { draw: DRAW, samples: [EDGE, GRADED, MERGE, MATCH] }
+
+const WRONG_MATCH: AuditSample = {
+  ...MATCH,
+  grade: 'wrong',
+  graded_by: 'user',
+  graded_at: '2026-10-03T00:00:00Z',
+}
+
+const me = (permissions: string[]): Me => ({
+  subject: 'colleague@example.test',
+  profile: 'analyst',
+  owner: false,
+  permissions,
+  setup_needed: false,
+})
+
+/** The panel opened on one draw holding `samples`, everything under All. */
+async function openOn(samples: AuditSample[], props: Partial<Parameters<typeof GraphAuditPanel>[0]> = {}) {
+  await act(async () => {
+    render(
+      <GraphAuditPanel
+        initial={AUDIT}
+        initialDraw={{ draw: DRAW, samples }}
+        grade={vi.fn()}
+        split={props.split ?? vi.fn()}
+      />,
+    )
+  })
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+  })
+}
 
 async function open(props: Partial<Parameters<typeof GraphAuditPanel>[0]> = {}) {
   const load = props.load ?? vi.fn(async () => AUDIT)
@@ -172,6 +209,77 @@ describe('the measure', () => {
       '12 of 30 graded · 2 unsure · from 1,200',
     )
     expect(gradedText(tally(), 0)).toBe('none made')
+  })
+})
+
+describe('splitting a wrong match off (B-274)', () => {
+  it('is offered only on a match graded wrong', async () => {
+    await openOn([
+      EDGE,
+      MERGE,
+      MATCH,
+      { ...MATCH, sample_id: 15, grade: 'correct', graded_by: 'u', graded_at: DRAW.drawn_at },
+    ])
+    expect(screen.queryByRole('button', { name: 'Split this name off' })).toBeNull()
+    cleanup()
+    await openOn([{ ...EDGE, grade: 'wrong', graded_by: 'u', graded_at: DRAW.drawn_at }, WRONG_MATCH])
+    expect(screen.getAllByRole('button', { name: 'Split this name off' })).toHaveLength(1)
+    // It is not a grade: the grade group still holds the three grades and nothing else.
+    expect(within(screen.getByRole('group', { name: 'Grade item 4' })).getAllByRole('button')).toHaveLength(3)
+  })
+
+  it('splits the match by its id and then says where the name went', async () => {
+    const split = vi.fn(async (matchId: number) => ({
+      match_id: matchId,
+      entity_id: 9,
+      split_entity_id: 77,
+      alias_removed: true,
+      chunks_moved: 1,
+    }))
+    await openOn([WRONG_MATCH], { split })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Split this name off' }))
+    })
+    expect(split).toHaveBeenCalledWith(501)
+    expect(screen.queryByRole('button', { name: 'Split this name off' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'its own node' }).getAttribute('href')).toBe('/nodes/77')
+    // The grade stays as it was: splitting changes the graph, not the judgement.
+    expect(screen.getByText(/Graded wrong/)).toBeTruthy()
+  })
+
+  it('shows a refusal in the server’s words and keeps the button', async () => {
+    const split = vi.fn(async () => {
+      throw new ApiError(409, 'Node #9 has since been merged into #4; undo that merge first.')
+    })
+    await openOn([WRONG_MATCH], { split })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Split this name off' }))
+    })
+    expect(screen.getByRole('alert').textContent).toContain('merged into #4')
+    expect(screen.getByRole('button', { name: 'Split this name off' })).toBeTruthy()
+  })
+
+  it('says a match already split off was split, rather than offering it again', async () => {
+    await openOn([{ ...WRONG_MATCH, split_entity_id: 77 }])
+    expect(screen.queryByRole('button', { name: 'Split this name off' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'its own node' }).getAttribute('href')).toBe('/nodes/77')
+  })
+
+  it('needs the merging permission, not the grading one', async () => {
+    await act(async () => {
+      render(
+        <MeProvider load={async () => me(['admin.view', 'graph.audit'])}>
+          <GraphAuditPanel initial={AUDIT} initialDraw={{ draw: DRAW, samples: [WRONG_MATCH] }} grade={vi.fn()} />
+        </MeProvider>,
+      )
+    })
+    await act(async () => undefined)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+    })
+    const button = screen.getByRole('button', { name: 'Split this name off' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.title).toContain(BY_NAME_LABEL['duplicates.decide']!)
   })
 })
 

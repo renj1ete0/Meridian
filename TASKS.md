@@ -2156,6 +2156,11 @@ deploy runbook whose first two commands could not work (`B-17`).
       for every high-band match including exact names (homonyms conflate too); the draw takes up
       to 20 (`--matches`), Admin › Graph audit shows the name read beside the node. Matches made
       before `v0.207.0` were never recorded
+- [x] `B-274` `v0.208.0` **A match graded wrong can be split off** (operator, 2026-11-07; ADR 0027) —
+      "Split this name off" on a wrong match's audit card: a node of its own for the name, the old
+      node loses the alias and passages the match added. Relations written from the name stay put
+      (they name no mention); making the split exact would need resolution to record what each
+      match fed, not built
 - [ ] `B-232` **Measure a stronger embedder's recall on the GPU before re-embedding** — the graded
       re-order test (search.md#reranking) put Qwen3-Embedding-0.6B at 0.63 against bge-m3's 0.60,
       but inside a pool bge-m3 chose, so it cannot see passages bge-m3 never retrieves; published

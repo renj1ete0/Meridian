@@ -35,6 +35,7 @@ import {
   EDGE_SHOWN_FIELDS,
   GRAPH_AUDIT_FIELDS,
   MATCH_SHOWN_FIELDS,
+  MATCH_SPLIT_FIELDS,
   MERGE_SHOWN_FIELDS,
 } from '../src/lib/graphAudit'
 import {
@@ -227,6 +228,7 @@ describe('the client types match the DTOs across the language boundary', () => {
     ['AuditSampleRead', 'graphaudit.py', AUDIT_SAMPLE_FIELDS],
     ['GraphAuditRead', 'graphaudit.py', GRAPH_AUDIT_FIELDS],
     ['AuditDrawDetailRead', 'graphaudit.py', AUDIT_DRAW_DETAIL_FIELDS],
+    ['MatchSplitRead', 'graphaudit.py', MATCH_SPLIT_FIELDS],
     ['SourceRead', 'source.py', SOURCE_FIELDS],
     ['SourcePageRead', 'source.py', SOURCE_PAGE_FIELDS],
     ['GazetteerTermRead', 'gazetteer.py', GAZETTEER_TERM_FIELDS],

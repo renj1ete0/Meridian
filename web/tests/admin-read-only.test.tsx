@@ -244,6 +244,7 @@ const AUDIT_DRAW: AuditDrawDetail = {
       note: null,
       graded_by: null,
       graded_at: null,
+      split_entity_id: null,
     },
   ],
 }

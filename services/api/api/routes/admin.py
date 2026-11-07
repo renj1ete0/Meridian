@@ -10,6 +10,7 @@ See docs/features/api-and-access.md#admin-routes.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import os
 from typing import Annotated, Literal
@@ -18,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 
-from meridian_core import annotations, chat, duplicates, graphaudit, mapsteer, steering
+from meridian_core import annotations, chat, duplicates, graphaudit, mapsteer, mentions, steering
 from meridian_core.areaview import AreaNotFound
 from meridian_core.budget import BUDGET_ID, load_budget, month_to_date_cost
 from meridian_core.chunks import embedding_backlog
@@ -100,6 +101,7 @@ from meridian_core.schemas.graphaudit import (
     AuditGrade,
     AuditSampleRead,
     GraphAuditRead,
+    MatchSplitRead,
 )
 from meridian_core.schemas.graphview import GraphFilters
 from meridian_core.schemas.queue import QueueTaskRead
@@ -941,6 +943,29 @@ async def grade_audit_sample(
     await sess.commit()
     log.info("audit sample graded", extra={"sample_id": sample_id, "grade": body.grade})
     return graded
+
+
+@router.post("/graph-audit/matches/{match_id}/split", response_model=MatchSplitRead)
+async def split_matched_mention(
+    match_id: int, _: CanDecideDuplicates, sess: WriteSession
+) -> MatchSplitRead:
+    """Split a mention resolution matched to a node back off, into a node of its own (`B-274`).
+
+    The same permission as merging, since it is the same decision undone; a merge in Possible
+    duplicates undoes a split.
+    """
+    try:
+        done = await mentions.split_match(
+            sess, match_id, split_by=ACTOR, now=dt.datetime.now(dt.UTC)
+        )
+    except mentions.SplitRefused as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from refused
+    await sess.commit()
+    log.info(
+        "matched mention split off",
+        extra={"match_id": match_id, "split_entity": done.split_entity_id},
+    )
+    return MatchSplitRead(**dataclasses.asdict(done))
 
 
 # ---------------------------------------------------------------------------

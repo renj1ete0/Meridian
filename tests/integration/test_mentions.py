@@ -19,9 +19,10 @@ import datetime as dt
 import uuid
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
 
-from meridian_core.mentions import resolve_mention
+from meridian_core.mentions import SplitRefused, resolve_mention, split_match
 from meridian_core.models import Entity, Notification, ResolutionMatch
 from meridian_core.validation import ValidationError
 
@@ -445,3 +446,125 @@ async def test_a_new_node_records_no_match(sess, marker: str) -> None:
 
     assert adjudicated.created
     assert await _matches(sess, marker) == []
+
+
+# --------------------------------------------------------------------------
+# Splitting a wrong match back off (`B-274`)
+# --------------------------------------------------------------------------
+
+LATER = NOW + dt.timedelta(days=3)
+
+
+async def test_a_split_gives_the_mention_a_node_of_its_own(sess, marker: str) -> None:
+    """A match graded wrong is undone as far as it can be: the mention becomes the node it
+    should have founded, and the node it joined loses the name and the passages it brought."""
+    first = await resolve(sess, f"{marker} Authority", marker, chunks=[1], jurisdiction="SG")
+    await resolve(
+        sess, f"{marker} Authority Pte Ltd", marker, chunks=[2, 3], jurisdiction="SG", run_id=9
+    )
+    [match] = await _matches(sess, marker)
+
+    done = await split_match(sess, match.match_id, split_by="user", now=LATER)
+
+    old = await sess.get(Entity, first.entity.entity_id)
+    new = await sess.get(Entity, done.split_entity_id)
+    assert (done.entity_id, done.alias_removed, done.chunks_moved) == (old.entity_id, True, 2)
+    assert old.aliases == [] and old.supporting_chunk_ids == [1]
+    assert new.entity_id != old.entity_id
+    assert (new.canonical_name, new.node_type, new.jurisdiction) == (
+        f"{marker} Authority Pte Ltd",
+        "organisation",
+        "SG",
+    )
+    assert new.supporting_chunk_ids == [2, 3]
+    # §2.3: the new node is the model's reading, not the person's; it carries the model's name.
+    assert (new.produced_by, new.model, new.quality_tier) == ("test-agent", "test-model-1", 3)
+    assert (match.split_at, match.split_by, match.split_entity_id) == (
+        LATER,
+        "user",
+        new.entity_id,
+    )
+
+
+async def test_a_split_leaves_what_another_match_still_rests_on(sess, marker: str) -> None:
+    """Two mentions brought the same name and passage; splitting one off must not take away
+    what the other, still standing, rests on."""
+    first = await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    await resolve(sess, f"{marker} Authority Pte Ltd", marker, chunks=[2, 4])
+    await resolve(sess, f"{marker} Authority Pte Ltd", marker, chunks=[2])
+    one, _ = await _matches(sess, marker)
+
+    done = await split_match(sess, one.match_id, split_by="user", now=LATER)
+
+    old = await sess.get(Entity, first.entity.entity_id)
+    assert done.alias_removed is False and done.chunks_moved == 1
+    assert old.aliases == [f"{marker} Authority Pte Ltd"]
+    assert old.supporting_chunk_ids == [1, 2]
+
+
+async def test_splitting_an_exact_name_match_keeps_the_node_its_name(sess, marker: str) -> None:
+    """One name for two things: the split founds a second node of the same name, and the
+    first keeps its name, since it was never an alias."""
+    first = await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    await resolve(sess, f"{marker} Authority", marker, chunks=[5])
+    [match] = await _matches(sess, marker)
+
+    done = await split_match(sess, match.match_id, split_by="user", now=LATER)
+
+    old = await sess.get(Entity, first.entity.entity_id)
+    new = await sess.get(Entity, done.split_entity_id)
+    assert old.canonical_name == new.canonical_name == f"{marker} Authority"
+    assert old.supporting_chunk_ids == [1] and new.supporting_chunk_ids == [5]
+    assert done.alias_removed is False
+
+
+async def test_a_split_that_cannot_be_made_is_refused_and_changes_nothing(
+    sess, marker: str
+) -> None:
+    first = await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    await resolve(sess, f"{marker} Authority Pte Ltd", marker, chunks=[2])
+    [match] = await _matches(sess, marker)
+
+    with pytest.raises(SplitRefused, match="who"):
+        await split_match(sess, match.match_id, split_by="", now=LATER)
+    with pytest.raises(SplitRefused, match="No match"):
+        await split_match(sess, 999_999_999_999, split_by="user", now=LATER)
+
+    done = await split_match(sess, match.match_id, split_by="user", now=LATER)
+    count = await sess.scalar(
+        select(func.count(Entity.entity_id)).where(Entity.canonical_name.like(f"%{marker}%"))
+    )
+    with pytest.raises(SplitRefused, match=f"Already split off, as node #{done.split_entity_id}"):
+        await split_match(sess, match.match_id, split_by="user", now=LATER)
+    assert (
+        await sess.scalar(
+            select(func.count(Entity.entity_id)).where(Entity.canonical_name.like(f"%{marker}%"))
+        )
+        == count
+    ), "a second split founds no second node"
+
+    # A node merged away since: the split names where it went instead of guessing.
+    await resolve(sess, f"{marker} Board", marker, chunks=[7])
+    await resolve(sess, f"{marker} Board", marker, chunks=[8])
+    target = await resolve(sess, f"{marker} Office of Coastal Records", marker, chunks=[9])
+    board_match = (await _matches(sess, marker))[-1]
+    board = await sess.get(Entity, board_match.entity_id)
+    board.redirects_to = target.entity.entity_id
+    await sess.flush()
+    with pytest.raises(SplitRefused, match=f"merged into #{target.entity.entity_id}"):
+        await split_match(sess, board_match.match_id, split_by="user", now=LATER)
+    assert board_match.split_at is None
+    assert first.entity.entity_id != target.entity.entity_id
+
+
+async def test_the_database_refuses_half_a_split(sess, marker: str) -> None:
+    """Raw SQL, so the CHECK is what is tested."""
+    await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    await resolve(sess, f"{marker} Authority Pte Ltd", marker, chunks=[2])
+    [match] = await _matches(sess, marker)
+    with pytest.raises(IntegrityError, match="match_split_together"):
+        async with sess.begin_nested():
+            await sess.execute(
+                text("UPDATE resolution_matches SET split_at = now() WHERE match_id = :id"),
+                {"id": match.match_id},
+            )

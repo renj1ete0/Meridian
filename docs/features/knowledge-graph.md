@@ -542,10 +542,21 @@ are one thing" is made while a run writes: the high band resolves a mention to a
 (`mentions.resolve_mention`), and the mention becomes that node with no merge. Those are where
 conflation would happen unattended, so each is written to `resolution_matches` before the node
 takes the mention in, and the draw samples them as a third kind. Every match is recorded,
-exact-name ones included: a homonym (one name, two things) is a conflation too. A match has no
-undo of its own; a grade of wrong is for a person to act on through the node page. Matches made
+exact-name ones included: a homonym (one name, two things) is a conflation too. Matches made
 before `v0.207.0` were never recorded and cannot be drawn. The near-misses §14.1 also names
 (pairs kept apart) are not drawn either.
+
+**Splitting a wrong match off** (`B-274`, ADR 0027). A match graded wrong offers "Split this name
+off" on its card (`POST /api/admin/graph-audit/matches/{id}/split`, permission
+`duplicates.decide`, since it undoes the decision a merge makes; `mentions.split_match`). The name
+becomes a node of its own with its type, jurisdiction, passages and the model's provenance; the
+node it had joined loses the alias and the passages the match added, except what another match
+still standing on it brought too, and an exact-name match leaves the node its name. The match
+row records `split_at`, `split_by` and `split_entity_id`, the card then links the new node, and
+a second split is refused, as is one whose node has since been merged away (undo that merge
+first). **Relations and tags written from the mention stay on the node it joined**: they name no
+mention, so nothing tells them apart from the node's own, and the card says so beside the button.
+A merge in Possible duplicates rejoins the two.
 
 ### Reading the graph
 

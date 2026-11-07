@@ -6,6 +6,7 @@ import {
   getGraphAudit,
   gradeAuditSample,
   isEdgeShown,
+  splitMatch,
   isMatchShown,
   KIND_LABEL,
   type AuditDraw,
@@ -17,12 +18,13 @@ import {
   type EdgeShown,
   type GraphAudit,
   type MatchShown,
+  type MatchSplit,
   type MergeShown,
   type MergeSide,
 } from '../lib/graphAudit'
 import { readable } from '../lib/readable'
 import { hrefForNode, hrefForSource, onInternalClick } from '../lib/route'
-import { useEdit } from './editGate'
+import { EditGate, useEdit } from './editGate'
 import {
   BUTTON_PRIMARY,
   BUTTON_ROW,
@@ -54,6 +56,7 @@ export interface GraphAuditPanelProps {
   load?: () => Promise<GraphAudit>
   loadDraw?: (drawId: number) => Promise<AuditDrawDetail>
   grade?: (sampleId: number, verdict: AuditVerdict) => Promise<AuditSample>
+  split?: (matchId: number) => Promise<MatchSplit>
 }
 
 const pct = (value: number) => `${Math.round(value * 100)}%`
@@ -222,12 +225,72 @@ function EdgeBody({ sample }: { sample: AuditSample & { shown: EdgeShown } }) {
   )
 }
 
+/**
+ * The remedy for a match graded wrong (`B-274`): split the name back off into a node of its own.
+ * Offered only once a person has judged it wrong, and gated by the merging permission, since a
+ * merge in Possible duplicates is what undoes it.
+ */
+function SplitOff({ sample, onSplit }: { sample: AuditSample; onSplit: (sample: AuditSample) => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  const edit = useEdit()
+
+  if (sample.split_entity_id !== null) {
+    const href = hrefForNode(sample.split_entity_id)
+    return (
+      <p role="status" className="font-mono text-[11px] text-accent-graph">
+        Split off as{' '}
+        <a href={href} onClick={onInternalClick(href)} className="text-accent-graph">
+          its own node
+        </a>
+        . A merge in Possible duplicates would join them again.
+      </p>
+    )
+  }
+  if (sample.grade !== 'wrong') return null
+
+  async function go() {
+    setBusy(true)
+    setFailed(null)
+    try {
+      await onSplit(sample)
+    } catch (cause) {
+      setFailed(cause instanceof ApiError ? cause.message : 'That did not go through.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+      <button
+        type="button"
+        className={BUTTON_SECONDARY}
+        {...edit(busy, 'Make the name read its own node, with its passages')}
+        onClick={() => void go()}
+      >
+        Split this name off
+      </button>
+      <span className="font-mono text-[10.5px] text-text-faint">
+        relations already written from it stay on the node it joined
+      </span>
+      {failed ? (
+        <p role="alert" className="w-full font-mono text-[11px] text-accent-attention">
+          Refused: {failed}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function SampleCard({
   sample,
   onGrade,
+  onSplit,
 }: {
   sample: AuditSample
   onGrade: (sample: AuditSample, verdict: AuditVerdict) => Promise<void>
+  onSplit: (sample: AuditSample) => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
@@ -284,6 +347,11 @@ function SampleCard({
           </p>
         ) : null}
       </div>
+      {sample.kind === 'match' ? (
+        <EditGate permission="duplicates.decide">
+          <SplitOff sample={sample} onSplit={onSplit} />
+        </EditGate>
+      ) : null}
     </Card>
   )
 }
@@ -387,6 +455,7 @@ export function GraphAuditPanel({
   load = getGraphAudit,
   loadDraw = getAuditDraw,
   grade = gradeAuditSample,
+  split = splitMatch,
 }: GraphAuditPanelProps) {
   const [audit, setAudit] = useState<GraphAudit | null>(initial ?? null)
   const [selected, setSelected] = useState<number | null>(
@@ -433,6 +502,20 @@ export function GraphAuditPanel({
     setGradedHere((seen) => new Set(seen).add(graded.sample_id))
     setDetail((d) => (d ? { ...d, samples: d.samples.map((s) => (s.sample_id === graded.sample_id ? graded : s)) } : d))
     void refresh()
+  }
+
+  async function onSplit(sample: AuditSample) {
+    const done = await split(sample.item_id)
+    setDetail((d) =>
+      d
+        ? {
+            ...d,
+            samples: d.samples.map((s) =>
+              s.sample_id === sample.sample_id ? { ...s, split_entity_id: done.split_entity_id } : s,
+            ),
+          }
+        : d,
+    )
   }
 
   if (audit === null) {
@@ -493,7 +576,9 @@ export function GraphAuditPanel({
                   {samples.length === 0 ? 'Loading this draw.' : 'Every item in this draw is graded.'}
                 </p>
               ) : (
-                listed.map((sample) => <SampleCard key={sample.sample_id} sample={sample} onGrade={onGrade} />)
+                listed.map((sample) => (
+                  <SampleCard key={sample.sample_id} sample={sample} onGrade={onGrade} onSplit={onSplit} />
+                ))
               )}
             </>
           ) : null}

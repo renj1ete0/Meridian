@@ -69,6 +69,8 @@ class AuditSampleRead(BaseModel):
     note: str | None
     graded_by: str | None
     graded_at: str | None
+    #: For a match a person has since split off (`B-274`), the node it became; else None.
+    split_entity_id: int | None
 
 
 class GraphAuditRead(BaseModel):
@@ -82,6 +84,17 @@ class GraphAuditRead(BaseModel):
 class AuditDrawDetailRead(BaseModel):
     draw: AuditDrawRead
     samples: list[AuditSampleRead]
+
+
+class MatchSplitRead(BaseModel):
+    """What splitting a matched mention off did (`B-274`)."""
+
+    match_id: int
+    #: The node the mention had joined, and the one it became.
+    entity_id: int
+    split_entity_id: int
+    alias_removed: bool
+    chunks_moved: int
 
 
 class AuditGrade(BaseModel):

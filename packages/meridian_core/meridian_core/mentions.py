@@ -25,8 +25,11 @@ log = get_logger(__name__)
 
 __all__ = [
     "ANNOTATION",
+    "MatchSplit",
     "Resolved",
+    "SplitRefused",
     "resolve_mention",
+    "split_match",
 ]
 
 
@@ -204,6 +207,114 @@ async def resolve_mention(
         await _adjudication(sess, mention=cleaned, kept=entity, other=match)
 
     return Resolved(entity=entity, created=True, band=band, verdict=best)
+
+
+class SplitRefused(RuntimeError):
+    """A split that cannot be made, said in words a person can act on."""
+
+
+@dataclasses.dataclass(frozen=True)
+class MatchSplit:
+    """What a split did: the node the mention became, and what left the node it had joined."""
+
+    match_id: int
+    entity_id: int
+    split_entity_id: int
+    alias_removed: bool
+    chunks_moved: int
+
+
+async def split_match(
+    sess: AsyncSession, match_id: int, *, split_by: str, now: dt.datetime
+) -> MatchSplit:
+    """Split a matched mention back off the node it joined, into a node of its own (`B-274`).
+
+    The new node takes the mention's name, type, jurisdiction, provenance and passages; the
+    old node loses the alias and the passages this match added, unless another unsplit match
+    on it brought the same. Relations and tags written from the mention stay where they are:
+    they name no mention, so they cannot be told apart. A merge undoes a split. Refuses a
+    match already split, or whose node is gone or merged away. Flushes; does not commit.
+    See docs/features/knowledge-graph.md#the-graph-audit.
+    """
+    if not split_by:
+        raise SplitRefused("A split needs to say who made it.")
+    match = await sess.get(ResolutionMatch, match_id, with_for_update=True)
+    if match is None:
+        raise SplitRefused(f"No match {match_id}.")
+    if match.split_entity_id is not None:
+        raise SplitRefused(
+            f"Already split off, as node #{match.split_entity_id}, by {match.split_by}."
+        )
+    node = await sess.get(Entity, match.entity_id, with_for_update=True)
+    if node is None:
+        raise SplitRefused(f"Node #{match.entity_id} no longer exists; there is nothing to split.")
+    if node.redirects_to is not None:
+        raise SplitRefused(
+            f"Node #{node.entity_id} has since been merged into #{node.redirects_to}; "
+            "undo that merge first, or split the name off there by hand."
+        )
+
+    # What other matches on this node, still standing, brought in: a split must not take
+    # away what they rest on.
+    others = list(
+        await sess.scalars(
+            select(ResolutionMatch).where(
+                ResolutionMatch.entity_id == node.entity_id,
+                ResolutionMatch.match_id != match.match_id,
+                ResolutionMatch.split_at.is_(None),
+            )
+        )
+    )
+    kept_chunks = set(match.node_chunk_ids) | {
+        c for other in others for c in other.supporting_chunk_ids
+    }
+    moved = set(match.supporting_chunk_ids) - kept_chunks
+    node.supporting_chunk_ids = sorted(set(node.supporting_chunk_ids or ()) - moved)
+
+    folded = match.mention.casefold()
+    had_it = folded == match.node_name.casefold() or any(
+        alias.casefold() == folded for alias in match.node_aliases
+    )
+    still_named = any(other.mention.casefold() == folded for other in others)
+    alias_removed = False
+    if not had_it and not still_named and node.aliases:
+        remaining = [alias for alias in node.aliases if alias.casefold() != folded]
+        alias_removed = len(remaining) != len(node.aliases)
+        node.aliases = remaining
+
+    entity = Entity(
+        canonical_name=match.mention,
+        node_type=match.node_type,
+        jurisdiction=match.jurisdiction,
+        supporting_chunk_ids=sorted(set(match.supporting_chunk_ids)),
+        produced_by=match.produced_by,
+        model=match.model,
+        quality_tier=match.quality_tier,
+        produced_at=now,
+    )
+    sess.add(entity)
+    await sess.flush()
+
+    match.split_at = now
+    match.split_by = split_by
+    match.split_entity_id = entity.entity_id
+    await sess.flush()
+    log.info(
+        "matched mention split off",
+        extra={
+            "match_id": match.match_id,
+            "entity": node.entity_id,
+            "split_entity": entity.entity_id,
+            "chunks_moved": len(moved),
+        },
+    )
+    return MatchSplit(
+        match_id=match.match_id,
+        entity_id=node.entity_id,
+        split_entity_id=entity.entity_id,
+        alias_removed=alias_removed,
+        chunks_moved=len(moved),
+    )
 
 
 #: Entities embedded per backfill call. Small, because it runs inside a

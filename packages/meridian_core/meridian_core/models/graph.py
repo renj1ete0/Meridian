@@ -329,9 +329,21 @@ class ResolutionMatch(Base):
     model: Mapped[str | None] = mapped_column(Text)
     quality_tier: Mapped[int | None] = mapped_column(Integer)
 
+    #: Set when a person split the mention back off into a node of its own (`B-274`): when,
+    #: who, and the node it became. The row stays, as a reversed merge's does.
+    split_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    split_by: Mapped[str | None] = mapped_column(Text)
+    split_entity_id: Mapped[int | None] = mapped_column(BigInteger)
+
     __table_args__ = (
         CheckConstraint("btrim(mention) <> ''", name="match_mention_named"),
         CheckConstraint("score >= 0 AND score <= 1", name="match_score_in_range"),
+        # A split without its time, its author or its node is half a write.
+        CheckConstraint(
+            "(split_at IS NULL) = (split_by IS NULL) AND (split_at IS NULL) = "
+            "(split_entity_id IS NULL)",
+            name="match_split_together",
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

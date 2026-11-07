@@ -484,6 +484,9 @@ feature is in
   and `run_id`, `produced_by`, `model`, `quality_tier`. `entity_id` and `run_id` are not
   foreign keys, as `merge_log`'s are not: the record outlives a node merged away. Written by
   `resolve_mention`, in the run's transaction, so a batch rolled back leaves none.
+  `split_at`, `split_by` and `split_entity_id` record a person splitting the mention back off
+  (`B-274`); a CHECK holds all three set or all NULL, and the row stays, as a reversed merge's
+  does.
 - **A grade is written whole**: a CHECK holds `grade`, `graded_at` and `graded_by` all set or all
   NULL. `grade` and `kind` are `constrained()` columns (`AuditVerdict`, `AuditKind`).
 

@@ -123,6 +123,17 @@ export interface AuditSample {
   note: string | null
   graded_by: string | null
   graded_at: string | null
+  /** For a match a person has since split off (`B-274`), the node it became. */
+  split_entity_id: number | null
+}
+
+/** What splitting a matched mention off did (`B-274`). */
+export interface MatchSplit {
+  match_id: number
+  entity_id: number
+  split_entity_id: number
+  alias_removed: boolean
+  chunks_moved: number
 }
 
 export interface GraphAudit {
@@ -164,7 +175,9 @@ export const AUDIT_SAMPLE_FIELDS = [
   'note',
   'graded_by',
   'graded_at',
+  'split_entity_id',
 ] as const
+export const MATCH_SPLIT_FIELDS = ['match_id', 'entity_id', 'split_entity_id', 'alias_removed', 'chunks_moved'] as const
 export const GRAPH_AUDIT_FIELDS = ['draws', 'ungraded'] as const
 export const AUDIT_DRAW_DETAIL_FIELDS = ['draw', 'samples'] as const
 
@@ -201,6 +214,7 @@ export type AssertAuditTally = Expect<Equal<keyof AuditTally, (typeof AUDIT_TALL
 export type AssertAuditProducer = Expect<Equal<keyof AuditProducer, (typeof AUDIT_PRODUCER_FIELDS)[number]>>
 export type AssertAuditDraw = Expect<Equal<keyof AuditDraw, (typeof AUDIT_DRAW_FIELDS)[number]>>
 export type AssertAuditSample = Expect<Equal<keyof AuditSample, (typeof AUDIT_SAMPLE_FIELDS)[number]>>
+export type AssertMatchSplit = Expect<Equal<keyof MatchSplit, (typeof MATCH_SPLIT_FIELDS)[number]>>
 export type AssertGraphAudit = Expect<Equal<keyof GraphAudit, (typeof GRAPH_AUDIT_FIELDS)[number]>>
 export type AssertAuditDrawDetail = Expect<Equal<keyof AuditDrawDetail, (typeof AUDIT_DRAW_DETAIL_FIELDS)[number]>>
 
@@ -223,6 +237,11 @@ export function getGraphAudit(init?: RequestInit): Promise<GraphAudit> {
 
 export function getAuditDraw(drawId: number, init?: RequestInit): Promise<AuditDrawDetail> {
   return request<AuditDrawDetail>(`/api/admin/graph-audit/${drawId}`, init)
+}
+
+/** Split a matched mention back off into a node of its own; needs `duplicates.decide`. */
+export function splitMatch(matchId: number): Promise<MatchSplit> {
+  return request<MatchSplit>(`/api/admin/graph-audit/matches/${matchId}/split`, { method: 'POST' })
 }
 
 export function gradeAuditSample(sampleId: number, grade: AuditVerdict, note?: string): Promise<AuditSample> {

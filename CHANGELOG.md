@@ -91,6 +91,18 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
+## [0.208.0] — 2026-11-07
+
+### Added
+
+- `B-274`: a match the graph audit's grader marked wrong can be split off from its card: the
+  name becomes a node of its own with its passages and the model's provenance, and the node it
+  had joined loses the alias and passages the match added. Needs the permission that decides
+  merges; a merge rejoins them. Relations written from the name stay where they are (ADR 0027).
+  See docs/features/knowledge-graph.md#the-graph-audit.
+
+**Deploy:** image only (a migration; services wait for it).
+
 ## [0.207.1] — 2026-11-07
 
 ### Changed

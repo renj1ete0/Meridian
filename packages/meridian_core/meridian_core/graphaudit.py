@@ -416,8 +416,10 @@ def _iso(moment: dt.datetime | None) -> str | None:
     return moment.isoformat() if moment else None
 
 
-def _sample_read(sample: GraphAuditSample) -> AuditSampleRead:
+def _sample_read(sample: GraphAuditSample, split: dict[int, int] | None = None) -> AuditSampleRead:
+    """``split`` maps a match's id to the node it was split off as, for match samples."""
     return AuditSampleRead(
+        split_entity_id=(split or {}).get(sample.item_id) if sample.kind == "match" else None,
         sample_id=sample.sample_id,
         draw_id=sample.draw_id,
         kind=sample.kind,
@@ -460,7 +462,7 @@ async def grade(
     sample.graded_by = graded_by
     sample.graded_at = now or dt.datetime.now(dt.UTC)
     await sess.flush()
-    return _sample_read(sample)
+    return _sample_read(sample, await _splits(sess, [sample]))
 
 
 def _draw_read(row: GraphAuditDraw, samples: Sequence[GraphAuditSample]) -> AuditDrawRead:
@@ -488,6 +490,19 @@ def _draw_read(row: GraphAuditDraw, samples: Sequence[GraphAuditSample]) -> Audi
             )
         ],
     )
+
+
+async def _splits(sess: AsyncSession, samples: Sequence[GraphAuditSample]) -> dict[int, int]:
+    """For the match samples among ``samples``, the node each was split off as, if it was."""
+    ids = [s.item_id for s in samples if s.kind == "match"]
+    if not ids:
+        return {}
+    rows = await sess.execute(
+        select(ResolutionMatch.match_id, ResolutionMatch.split_entity_id).where(
+            ResolutionMatch.match_id.in_(ids), ResolutionMatch.split_entity_id.is_not(None)
+        )
+    )
+    return dict(rows.tuples().all())
 
 
 async def report(sess: AsyncSession, *, limit: int = 24) -> GraphAuditRead:
@@ -526,8 +541,9 @@ async def draw_detail(sess: AsyncSession, draw_id: int) -> AuditDrawDetailRead:
             .order_by(GraphAuditSample.position)
         )
     )
+    split = await _splits(sess, samples)
     return AuditDrawDetailRead(
-        draw=_draw_read(row, samples), samples=[_sample_read(s) for s in samples]
+        draw=_draw_read(row, samples), samples=[_sample_read(s, split) for s in samples]
     )
 
 
