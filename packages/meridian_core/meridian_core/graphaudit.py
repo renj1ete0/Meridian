@@ -1,7 +1,8 @@
 """Edge precision sampling and the entity resolution audit (task `P7-10`, spec §14.1).
 
-A draw takes a reproducible random sample of the relations written and the merges made in a
-window, and keeps each with what a grader will be shown. A person grades them; precision is
+A draw takes a reproducible random sample of the relations written, the merges made and the
+mentions matched to an existing node at resolution in a window, and keeps each with what a
+grader will be shown. A person grades them; precision is
 reported per draw and per producer. Nothing here changes the graph: a relation graded wrong
 stays, and a merge graded wrong is not reversed. See
 docs/features/knowledge-graph.md#the-graph-audit.
@@ -20,7 +21,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .annotations import HUMAN
 from .logging import get_logger
-from .models import Chunk, Edge, Entity, GraphAuditDraw, GraphAuditSample, MergeLog, Source
+from .models import (
+    Chunk,
+    Edge,
+    Entity,
+    GraphAuditDraw,
+    GraphAuditSample,
+    MergeLog,
+    ResolutionMatch,
+    Source,
+)
 from .schemas.graphaudit import (
     NOTE_MAX_CHARS,
     AuditDrawDetailRead,
@@ -37,6 +47,9 @@ log = get_logger(__name__)
 EDGES_PER_DRAW = 30
 #: The spec names no number for merges; fewer are made than relations.
 MERGES_PER_DRAW = 20
+#: Nor for matches at resolution, of which there are many; the same as merges, since both
+#: answer "were these one thing?".
+MATCHES_PER_DRAW = 20
 #: The most either sample may ask for: a draw is read by a person.
 MAX_PER_DRAW = 200
 
@@ -55,7 +68,7 @@ PASSAGE_CHARS = 600
 Z95 = 1.959964
 
 GRADES = ("correct", "wrong", "unsure")
-KINDS = ("edge", "merge")
+KINDS = ("edge", "merge", "match")
 
 
 class AuditRefused(RuntimeError):
@@ -127,6 +140,8 @@ def _population(kind: str, start: dt.datetime, end: dt.datetime) -> tuple:
             MergeLog.at < end,
             MergeLog.reversed_at.is_(None),
         )
+    if kind == "match":
+        return ResolutionMatch.match_id, (ResolutionMatch.at >= start, ResolutionMatch.at < end)
     raise ValueError(f"not a kind of audited item: {kind!r}")
 
 
@@ -241,17 +256,43 @@ async def _merge_shown(sess: AsyncSession, entry: MergeLog) -> dict:
     }
 
 
+async def _match_shown(sess: AsyncSession, entry: ResolutionMatch) -> dict:
+    node = await sess.get(Entity, entry.entity_id)
+    return {
+        "mention": {
+            "name": entry.mention,
+            "node_type": entry.node_type,
+            "jurisdiction": entry.jurisdiction,
+            "passages": await _passages(sess, entry.supporting_chunk_ids, PASSAGES_PER_SIDE),
+        },
+        # The node as the resolver saw it: its name, aliases and passages from before this
+        # mention joined them.
+        "node": {
+            **_node(node, entry.entity_id),
+            "name": entry.node_name,
+            "description": node.description if node else None,
+            "aliases": sorted(entry.node_aliases or ()),
+            "passages": await _passages(sess, entry.node_chunk_ids, PASSAGES_PER_SIDE),
+        },
+        "score": entry.score,
+        "signals": entry.signals,
+        "matched_at": entry.at.isoformat(),
+        "run_id": entry.run_id,
+    }
+
+
 async def draw(
     sess: AsyncSession,
     *,
     now: dt.datetime,
     edges: int = EDGES_PER_DRAW,
     merges: int = MERGES_PER_DRAW,
+    matches: int = MATCHES_PER_DRAW,
     seed: str | None = None,
     since: dt.datetime | None = None,
     drawn_by: str = "scheduler",
 ) -> GraphAuditDraw | None:
-    """Sample the relations and merges made since the last draw, for a person to grade.
+    """Sample the relations, merges and matches made since the last draw, for a person to grade.
 
     The window is ``[since, now)``: ``since`` defaults to where the last draw ended, or
     :data:`FIRST_WINDOW` before ``now`` for the first. None, and nothing recorded, when the
@@ -260,11 +301,11 @@ async def draw(
     """
     if now.tzinfo is None:
         raise AuditRefused("A draw needs an instant with a zone, not a local time.")
-    for name, size in (("edges", edges), ("merges", merges)):
+    for name, size in (("edges", edges), ("merges", merges), ("matches", matches)):
         if not 0 <= size <= MAX_PER_DRAW:
             raise AuditRefused(f"{name}={size}: a draw takes 0 to {MAX_PER_DRAW} of each.")
-    if edges == 0 and merges == 0:
-        raise AuditRefused("A draw of nothing: ask for some relations or some merges.")
+    if edges == 0 and merges == 0 and matches == 0:
+        raise AuditRefused("A draw of nothing: ask for some relations, merges or matches.")
 
     if since is None:
         last = await sess.scalar(select(func.max(GraphAuditDraw.window_end)))
@@ -278,6 +319,7 @@ async def draw(
     seed = seed or secrets.token_hex(8)
     edge_pop = await population(sess, "edge", since, now)
     merge_pop = await population(sess, "merge", since, now)
+    match_pop = await population(sess, "match", since, now)
     reversed_count = int(
         await sess.scalar(
             select(func.count(MergeLog.merge_id)).where(
@@ -286,7 +328,7 @@ async def draw(
         )
         or 0
     )
-    if edge_pop == 0 and merge_pop == 0:
+    if edge_pop == 0 and merge_pop == 0 and match_pop == 0:
         log.info(
             "graph audit: nothing to sample",
             extra={"since": since.isoformat(), "through": now.isoformat()},
@@ -299,6 +341,7 @@ async def draw(
         window_end=now,
         edge_population=edge_pop,
         merge_population=merge_pop,
+        match_population=match_pop,
         merges_reversed=reversed_count,
         drawn_by=drawn_by,
     )
@@ -333,6 +376,21 @@ async def draw(
                 produced_by=entry.decided_by,
             )
         )
+    match_ids = await sample_ids(sess, "match", seed=seed, start=since, end=now, n=matches)
+    for position, match_id in enumerate(match_ids, start=len(edge_ids) + len(merge_ids)):
+        match = await sess.get(ResolutionMatch, match_id)
+        sess.add(
+            GraphAuditSample(
+                draw_id=row.draw_id,
+                kind="match",
+                item_id=match_id,
+                position=position,
+                shown=await _match_shown(sess, match),
+                produced_by=match.produced_by,
+                model=match.model,
+                quality_tier=match.quality_tier,
+            )
+        )
     await sess.flush()
     log.info(
         "graph audit drawn",
@@ -340,8 +398,10 @@ async def draw(
             "draw_id": row.draw_id,
             "edges": len(edge_ids),
             "merges": len(merge_ids),
+            "matches": len(match_ids),
             "edge_population": edge_pop,
             "merge_population": merge_pop,
+            "match_population": match_pop,
         },
     )
     return row
@@ -416,9 +476,11 @@ def _draw_read(row: GraphAuditDraw, samples: Sequence[GraphAuditSample]) -> Audi
         drawn_by=row.drawn_by,
         edge_population=row.edge_population,
         merge_population=row.merge_population,
+        match_population=row.match_population,
         merges_reversed=row.merges_reversed,
         edges=tally(s.grade for s in samples if s.kind == "edge"),
         merges=tally(s.grade for s in samples if s.kind == "merge"),
+        matches=tally(s.grade for s in samples if s.kind == "match"),
         by_producer=[
             AuditProducerRead(kind=kind, produced_by=who, model=model, tally=tally(grades))
             for (kind, who, model), grades in sorted(
@@ -478,15 +540,17 @@ def _percent(t: AuditTallyRead) -> str:
 def summary(current: AuditDrawRead, previous: AuditDrawRead | None) -> str:
     """The message a draw sends: what to grade now, and how the last draw came out."""
     lines = [
-        f"Graph audit: {current.edges.drawn} relations and {current.merges.drawn} merges to grade",
+        f"Graph audit: {current.edges.drawn} relations, {current.merges.drawn} merges and "
+        f"{current.matches.drawn} matches to grade",
         "",
-        f"drawn from {current.edge_population} relations and {current.merge_population} "
-        f"merges since {current.window_start[:10]}",
+        f"drawn from {current.edge_population} relations, {current.merge_population} merges "
+        f"and {current.match_population} matches since {current.window_start[:10]}",
     ]
     if current.merges_reversed:
         lines.append(f"{current.merges_reversed} merges in the window were already reversed")
     if previous is not None:
         lines.append(
             f"last draw: relations {_percent(previous.edges)}; merges {_percent(previous.merges)}"
+            f"; matches {_percent(previous.matches)}"
         )
     return "\n".join(lines)

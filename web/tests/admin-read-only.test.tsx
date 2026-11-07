@@ -213,9 +213,11 @@ const AUDIT_DRAW: AuditDrawDetail = {
     drawn_by: 'scheduler',
     edge_population: 1,
     merge_population: 0,
+    match_population: 0,
     merges_reversed: 0,
     edges: AUDIT_TALLY,
     merges: { ...AUDIT_TALLY, drawn: 0 },
+    matches: { ...AUDIT_TALLY, drawn: 0 },
     by_producer: [],
   },
   samples: [

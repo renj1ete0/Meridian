@@ -29,6 +29,7 @@ from .graph import (
     Entity,
     MergeLog,
     Observation,
+    ResolutionMatch,
 )
 from .graphaudit import GraphAuditDraw, GraphAuditSample
 from .mixins import (
@@ -100,6 +101,7 @@ __all__ = [
     "BudgetConfig",
     "Grant",
     "MergeLog",
+    "ResolutionMatch",
     "GrantAudit",
     "GrantChange",
     "ScheduledJob",

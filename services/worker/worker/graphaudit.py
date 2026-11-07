@@ -1,9 +1,10 @@
 """The monthly graph audit draw (task `P7-10`, spec §14.1).
 
-`python -m worker.graphaudit`, on the timetable. Draws a reproducible sample of the relations
-and merges made since the last draw, records it for a person to grade in Admin › Graph audit,
-and says so in the bell (and on Telegram, when configured). It samples and measures; it never
-changes or deletes anything in the graph. See docs/features/knowledge-graph.md#the-graph-audit.
+`python -m worker.graphaudit`, on the timetable. Draws a reproducible sample of the relations,
+merges and matches at resolution made since the last draw, records it for a person to grade in
+Admin › Graph audit, and says so in the bell (and on Telegram, when configured). It samples and
+measures; it never changes or deletes anything in the graph. See
+docs/features/knowledge-graph.md#the-graph-audit.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ async def run_draw(
     *,
     edges: int = graphaudit.EDGES_PER_DRAW,
     merges: int = graphaudit.MERGES_PER_DRAW,
+    matches: int = graphaudit.MATCHES_PER_DRAW,
     seed: str | None = None,
     send: bool = True,
     now: dt.datetime | None = None,
@@ -43,7 +45,9 @@ async def run_draw(
     now = now or dt.datetime.now(dt.UTC)
     async with session() as sess:
         try:
-            row = await graphaudit.draw(sess, now=now, edges=edges, merges=merges, seed=seed)
+            row = await graphaudit.draw(
+                sess, now=now, edges=edges, merges=merges, matches=matches, seed=seed
+            )
         except graphaudit.AuditRefused as refused:
             log.info("graph audit not drawn", extra={"reason": str(refused)})
             await dispose_engines()
@@ -55,7 +59,7 @@ async def run_draw(
         earlier = [
             d
             for d in (await graphaudit.report(sess, limit=6)).draws
-            if d.draw_id != row.draw_id and (d.edges.graded or d.merges.graded)
+            if d.draw_id != row.draw_id and (d.edges.graded or d.merges.graded or d.matches.graded)
         ]
         text = graphaudit.summary(current.draw, earlier[0] if earlier else None)
         sess.add(
@@ -88,6 +92,7 @@ def main() -> None:
     )
     parser.add_argument("--edges", type=int, default=graphaudit.EDGES_PER_DRAW)
     parser.add_argument("--merges", type=int, default=graphaudit.MERGES_PER_DRAW)
+    parser.add_argument("--matches", type=int, default=graphaudit.MATCHES_PER_DRAW)
     parser.add_argument(
         "--seed", help="order the sample by this seed instead of a fresh random one"
     )
@@ -97,7 +102,13 @@ def main() -> None:
     configure_logging("graphaudit")
     with bind_run_id(f"graphaudit-{int(time.time())}"), contextlib.suppress(KeyboardInterrupt):
         asyncio.run(
-            run_draw(edges=args.edges, merges=args.merges, seed=args.seed, send=not args.no_send)
+            run_draw(
+                edges=args.edges,
+                merges=args.merges,
+                matches=args.matches,
+                seed=args.seed,
+                send=not args.no_send,
+            )
         )
 
 

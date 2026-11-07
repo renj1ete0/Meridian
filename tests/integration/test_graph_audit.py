@@ -26,6 +26,7 @@ from meridian_core import graphaudit
 from meridian_core.annotations import HUMAN
 from meridian_core.chunks import ChunkWrite, replace_chunks
 from meridian_core.db import dispose_engines
+from meridian_core.mentions import resolve_mention
 from meridian_core.models import (
     Chunk,
     Edge,
@@ -34,6 +35,7 @@ from meridian_core.models import (
     GraphAuditSample,
     MergeLog,
     Notification,
+    ResolutionMatch,
 )
 from meridian_core.resolution import merge, reverse
 from meridian_core.sources import upsert_source
@@ -104,6 +106,37 @@ async def a_merge(sess, *, at: dt.datetime, decided_by: str = "user") -> MergeLo
     entry = await merge(sess, source.entity_id, target.entity_id, decided_by=decided_by)
     entry.at = at
     await sess.flush()
+    return entry
+
+
+async def a_match(sess, *, at: dt.datetime, chunks=(), model: str = "model-a"):
+    """A mention the high band resolves to an existing node, recorded as it would be in a run."""
+    name = f"Transit Authority {uuid.uuid4().hex[:8]}"
+    existing = await resolve_mention(
+        sess,
+        name=name,
+        node_type="organisation",
+        supporting_chunk_ids=list(chunks[:1]),
+        produced_by="agent-small",
+        model=model,
+        quality_tier=1,
+        now=at,
+    )
+    await resolve_mention(
+        sess,
+        name=f"{name} Pte Ltd",
+        node_type="organisation",
+        supporting_chunk_ids=list(chunks[1:]),
+        produced_by="agent-small",
+        model=model,
+        quality_tier=1,
+        run_id=77,
+        now=at,
+    )
+    entry = await sess.scalar(
+        select(ResolutionMatch).where(ResolutionMatch.entity_id == existing.entity.entity_id)
+    )
+    assert entry is not None, "the second mention should have matched the first's node"
     return entry
 
 
@@ -223,7 +256,8 @@ async def test_each_draw_starts_where_the_last_ended(sess) -> None:
     [
         ({"edges": -1}, "0 to"),
         ({"merges": graphaudit.MAX_PER_DRAW + 1}, "0 to"),
-        ({"edges": 0, "merges": 0}, "nothing"),
+        ({"edges": 0, "merges": 0, "matches": 0}, "nothing"),
+        ({"matches": graphaudit.MAX_PER_DRAW + 1}, "matches="),
         ({"now": dt.datetime(2001, 4, 1)}, "zone"),
         ({"since": NOW - dt.timedelta(hours=2)}, "Too soon"),
     ],
@@ -450,3 +484,106 @@ async def test_the_routes_refuse_in_words(client) -> None:
     )
     assert extra.status_code == 422
     assert (await client.get("/api/explore/graph-audit")).status_code == 404
+
+
+async def test_a_match_at_resolution_is_drawn_as_a_third_kind(sess) -> None:
+    """`B-273`: the commonest "these are one thing" is made while a run writes, not in
+    Possible duplicates. It is drawn from its own window like relations and merges, shown with
+    the node as the resolver saw it, and attributed to the model that named the mention."""
+    chunk_ids = await passages(sess, "The authority runs the buses.", "The authority Pte Ltd.")
+    inside = await a_match(sess, at=INSIDE, chunks=chunk_ids, model="model-m")
+    await a_match(sess, at=BEFORE)
+    await a_match(sess, at=NOW)
+
+    row = await graphaudit.draw(sess, now=NOW, since=START, seed="matches")
+    assert row is not None
+    assert (row.edge_population, row.merge_population, row.match_population) == (0, 0, 1)
+
+    [sample] = await samples_of(sess, row.draw_id)
+    assert (sample.kind, sample.item_id, sample.position) == ("match", inside.match_id, 0)
+    assert (sample.produced_by, sample.model, sample.quality_tier) == ("agent-small", "model-m", 1)
+
+    shown = sample.shown
+    assert set(shown) == {"mention", "node", "score", "signals", "matched_at", "run_id"}
+    assert shown["mention"]["name"] == inside.mention
+    assert [p["chunk_id"] for p in shown["mention"]["passages"]] == chunk_ids[1:]
+    # The node's own evidence from before the match, not the mention's passage folded in.
+    assert shown["node"]["entity_id"] == inside.entity_id
+    assert shown["node"]["name"] == inside.node_name
+    assert shown["node"]["aliases"] == []
+    assert [p["chunk_id"] for p in shown["node"]["passages"]] == chunk_ids[:1]
+    assert shown["score"] == pytest.approx(inside.score)
+    assert shown["signals"] == inside.signals
+    assert shown["run_id"] == 77
+
+    detail = await graphaudit.draw_detail(sess, row.draw_id)
+    assert detail.draw.match_population == 1
+    assert detail.draw.matches.drawn == 1
+    assert detail.draw.edges.drawn == detail.draw.merges.drawn == 0
+
+
+async def test_matches_are_ordered_after_relations_and_merges_and_capped(sess) -> None:
+    await an_edge(sess, at=INSIDE)
+    await a_merge(sess, at=INSIDE)
+    for _ in range(3):
+        await a_match(sess, at=INSIDE)
+
+    row = await graphaudit.draw(sess, now=NOW, since=START, seed="order", matches=2)
+    kinds = [s.kind for s in await samples_of(sess, row.draw_id)]
+    assert kinds == ["edge", "merge", "match", "match"]
+    assert row.match_population == 3
+
+    # The same seed over the same rows names the same matches, so the draw can be checked.
+    again = await graphaudit.sample_ids(sess, "match", seed="order", start=START, end=NOW, n=2)
+    assert again == [s.item_id for s in await samples_of(sess, row.draw_id) if s.kind == "match"]
+
+
+async def test_a_window_with_only_matches_is_drawn(sess) -> None:
+    """Before matches were counted, a window holding only them recorded nothing."""
+    await a_match(sess, at=INSIDE)
+    row = await graphaudit.draw(sess, now=NOW, since=START, seed="only", edges=0, merges=0)
+    assert row is not None and row.match_population == 1
+
+
+async def test_grading_a_match_changes_the_sample_and_never_the_graph(sess) -> None:
+    entry = await a_match(sess, at=INSIDE)
+    node = await sess.get(Entity, entry.entity_id)
+    aliases, chunks = list(node.aliases or []), list(node.supporting_chunk_ids)
+    row = await graphaudit.draw(sess, now=NOW, since=START, seed="grade")
+    [sample] = await samples_of(sess, row.draw_id)
+
+    graded = await graphaudit.grade(sess, sample.sample_id, "wrong", graded_by="u", now=NOW)
+    assert graded.kind == "match" and graded.grade == "wrong"
+    await sess.refresh(node)
+    assert (list(node.aliases or []), list(node.supporting_chunk_ids)) == (aliases, chunks)
+    assert node.redirects_to is None
+    assert await sess.get(ResolutionMatch, entry.match_id) is not None
+
+    detail = await graphaudit.draw_detail(sess, row.draw_id)
+    assert (detail.draw.matches.wrong, detail.draw.matches.precision) == (1, 0.0)
+    [producer] = [p for p in detail.draw.by_producer if p.kind == "match"]
+    assert (producer.produced_by, producer.model) == ("agent-small", "model-a")
+
+
+async def test_the_database_refuses_a_nameless_match_and_a_score_out_of_range(sess) -> None:
+    """Raw SQL, so the CHECKs are what is tested."""
+    insert = (
+        "INSERT INTO resolution_matches (entity_id, mention, node_type, supporting_chunk_ids, "
+        "node_name, node_aliases, node_chunk_ids, score, signals) "
+        "VALUES (1, :mention, 'concept', '{}', 'n', '{}', '{}', :score, '{}')"
+    )
+    with pytest.raises(IntegrityError, match="match_mention_named"):
+        await _raw(sess, insert, mention="  ", score=0.9)
+    with pytest.raises(IntegrityError, match="match_score_in_range"):
+        await _raw(sess, insert, mention="n", score=1.5)
+    with pytest.raises(IntegrityError, match="match_score_in_range"):
+        await _raw(sess, insert, mention="n", score=-0.1)
+    with pytest.raises(IntegrityError, match="audit_counts_not_negative"):
+        await _raw(
+            sess,
+            "INSERT INTO graph_audit_draws (seed, window_start, window_end, edge_population, "
+            "merge_population, match_population, merges_reversed, drawn_by) "
+            "VALUES ('x', :s, :e, 0, 0, -1, 0, 't')",
+            s=dt.datetime(2002, 1, 1, tzinfo=UTC),
+            e=dt.datetime(2002, 2, 1, tzinfo=UTC),
+        )

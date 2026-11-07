@@ -22,7 +22,7 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from meridian_core.mentions import resolve_mention
-from meridian_core.models import Entity, Notification
+from meridian_core.models import Entity, Notification, ResolutionMatch
 from meridian_core.validation import ValidationError
 
 pytestmark = pytest.mark.usefixtures("require_db")
@@ -380,3 +380,68 @@ async def test_backfill_embeds_entities_that_have_no_vector(sess, marker) -> Non
     assert done >= 1
     await sess.refresh(made.entity)
     assert made.entity.embedding is not None
+
+
+async def _matches(sess, marker: str) -> list[ResolutionMatch]:
+    return list(
+        await sess.scalars(
+            select(ResolutionMatch)
+            .where(ResolutionMatch.mention.like(f"%{marker}%"))
+            .order_by(ResolutionMatch.match_id)
+        )
+    )
+
+
+async def test_a_match_to_an_existing_node_is_recorded_for_the_audit(sess, marker: str) -> None:
+    """`B-273`, §14.1: "conflation is invisible once done, so it must be looked for
+    deliberately". The high band joins a mention to a node with no merge, so the decision is
+    recorded where the graph audit can draw it: the node as the resolver saw it, before the
+    mention's name and passages joined it, the score and every signal, and who named it."""
+    first = await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    second = await resolve(
+        sess, f"{marker} Authority Pte Ltd", marker, chunks=[3, 2, 3], run_id=4242
+    )
+    assert not second.created
+
+    [match] = await _matches(sess, marker)
+    assert match.entity_id == first.entity.entity_id
+    assert match.mention == f"{marker} Authority Pte Ltd"
+    assert match.node_type == "organisation"
+    assert match.supporting_chunk_ids == [2, 3]
+    # Before, not after: the node's own name, no alias yet, and only its first passage.
+    assert match.node_name == f"{marker} Authority"
+    assert match.node_aliases == []
+    assert match.node_chunk_ids == [1]
+    assert match.score == pytest.approx(second.verdict.score)
+    assert match.signals == second.verdict.signals
+    assert (match.run_id, match.produced_by, match.model, match.quality_tier) == (
+        4242,
+        "test-agent",
+        "test-model-1",
+        3,
+    )
+    assert match.at == NOW
+
+
+async def test_every_match_is_recorded_not_only_the_first(sess, marker: str) -> None:
+    """Each mention is its own decision; the second sees the node the first enlarged."""
+    await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    await resolve(sess, f"{marker} Authority Pte Ltd", marker, chunks=[2])
+    await resolve(sess, f"{marker} Authority", marker, chunks=[5])
+
+    first, second = await _matches(sess, marker)
+    assert second.node_aliases == [f"{marker} Authority Pte Ltd"]
+    assert second.node_chunk_ids == [1, 2]
+    assert first.run_id is None  # resolved outside a run: recorded all the same
+
+
+async def test_a_new_node_records_no_match(sess, marker: str) -> None:
+    """Founding a node, or the middle band's second node, is not "these are one thing"; the
+    middle band is already in front of a person as a possible duplicate."""
+    await resolve(sess, f"{marker} Authority", marker, chunks=[1])
+    await resolve(sess, f"{marker} Office of Coastal Records", marker, chunks=[1])
+    await resolve(sess, f"{marker} Regional Transit Board", marker, chunks=[1])
+    adjudicated = await resolve(sess, f"{marker} Regional Transit Bureau", marker, chunks=[1])
+
+    assert adjudicated.created
+    assert await _matches(sess, marker) == []

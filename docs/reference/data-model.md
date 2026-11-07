@@ -463,19 +463,27 @@ tool calls.
 
 ## Graph audit
 
-`graph_audit_draws` and `graph_audit_samples` (`P7-10`); the feature is in
+`graph_audit_draws`, `graph_audit_samples` (`P7-10`) and `resolution_matches` (`B-273`); the
+feature is in
 [knowledge-graph.md](../features/knowledge-graph.md#the-graph-audit).
 
 - **A draw records its window, its seed and its populations.** The window is half-open,
   `[window_start, window_end)`, and `window_start` is unique, so two schedulers racing over one
-  period cannot both record it. `edge_population` and `merge_population` say what each sample
-  was drawn from; `merges_reversed` counts the merges in the window already undone.
+  period cannot both record it. `edge_population`, `merge_population` and `match_population`
+  say what each sample was drawn from (`match_population` is 0 on draws made before `B-273`); `merges_reversed` counts the merges in the window already undone.
 - **A sample keeps what the grader was shown** (`shown`, JSONB), not a reference to read live:
   a relation gains citations and a merge can be reversed after the draw, and a grade is about
-  the claim as it stood. `item_id` names `edges.edge_id` or `merge_log.merge_id` and is not a
-  foreign key, as `merge_log`'s own ids are not: a grade outlives the row it judged.
+  the claim as it stood. `item_id` names `edges.edge_id`, `merge_log.merge_id` or
+  `resolution_matches.match_id` and is not a foreign key, as `merge_log`'s own ids are not: a grade outlives the row it judged.
 - **Who produced it is in columns** (`produced_by`, `model`, `quality_tier`), so precision splits
-  by them; for a merge, `produced_by` is `merge_log.decided_by`.
+  by them; for a merge, `produced_by` is `merge_log.decided_by`; for a match, the agent and
+  model that named the mention.
+- **A match at resolution is a row of its own** (`resolution_matches`): the mention (name, type,
+  jurisdiction, passages), the node it joined by id and as it stood before (`node_name`,
+  `node_aliases`, `node_chunk_ids`), the `score` (a CHECK holds it in [0, 1]) and `signals`,
+  and `run_id`, `produced_by`, `model`, `quality_tier`. `entity_id` and `run_id` are not
+  foreign keys, as `merge_log`'s are not: the record outlives a node merged away. Written by
+  `resolve_mention`, in the run's transaction, so a batch rolled back leaves none.
 - **A grade is written whole**: a CHECK holds `grade`, `graded_at` and `graded_by` all set or all
   NULL. `grade` and `kind` are `constrained()` columns (`AuditVerdict`, `AuditKind`).
 

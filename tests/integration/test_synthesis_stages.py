@@ -32,6 +32,7 @@ from meridian_core.models import (
     Edge,
     Entity,
     Notification,
+    ResolutionMatch,
     Run,
     Source,
 )
@@ -166,6 +167,7 @@ async def corpus(session_for, marker: str):
     yield sess, ids, marker
 
     await sess.rollback()
+    await sess.execute(delete(ResolutionMatch).where(ResolutionMatch.mention.like(f"{marker}%")))
     entity_ids = list(
         await sess.scalars(select(Entity.entity_id).where(Entity.canonical_name.like(f"{marker}%")))
     )
@@ -321,6 +323,35 @@ async def test_the_same_claim_twice_corroborates_rather_than_duplicating(
     assert len(edges) == 1
     assert edges[0].supporting_chunk_ids == [ids[0], ids[1]]
     assert run.edges_added == 1, "corroboration is not a new edge"
+
+
+async def test_a_name_resolved_to_an_existing_node_is_recorded_with_its_run(
+    corpus, monkeypatch
+) -> None:
+    """`B-273`: the second claim's names join the nodes the first founded, and each join is
+    recorded for the graph audit with the run and the agent that named it."""
+    sess, ids, marker = corpus
+    both = answer(
+        relation(f"{marker} Agency", f"{marker} Scheme"),
+        {**relation(f"{marker} Agency", f"{marker} Scheme"), "citations": [2]},
+    )
+
+    run, _, _ = await drive(sess, ids, FakeModel(extract=both), monkeypatch)
+
+    matches = list(
+        await sess.scalars(
+            select(ResolutionMatch)
+            .where(ResolutionMatch.mention.like(f"{marker}%"))
+            .order_by(ResolutionMatch.match_id)
+        )
+    )
+    assert [m.mention for m in matches] == [f"{marker} Agency", f"{marker} Scheme"]
+    assert {m.run_id for m in matches} == {run.run_id}
+    assert {(m.produced_by, m.model, m.quality_tier) for m in matches} == {
+        (AGENT, "test-model-1", 4)
+    }
+    assert all(m.supporting_chunk_ids == [ids[1]] for m in matches)
+    assert all(m.node_chunk_ids == [ids[0]] for m in matches)
 
 
 async def test_a_tag_lands_on_the_entity_extraction_created(corpus, monkeypatch) -> None:

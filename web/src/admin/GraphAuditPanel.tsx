@@ -6,6 +6,8 @@ import {
   getGraphAudit,
   gradeAuditSample,
   isEdgeShown,
+  isMatchShown,
+  KIND_LABEL,
   type AuditDraw,
   type AuditDrawDetail,
   type AuditPassage,
@@ -14,6 +16,7 @@ import {
   type AuditVerdict,
   type EdgeShown,
   type GraphAudit,
+  type MatchShown,
   type MergeShown,
   type MergeSide,
 } from '../lib/graphAudit'
@@ -38,8 +41,8 @@ import {
 } from './ui'
 
 /**
- * The graph audit (`P7-10`, spec §14.1): a monthly random sample of new relations and merges,
- * graded by a person. Precision per draw is the measure over time; a grade changes nothing in
+ * The graph audit (`P7-10`, spec §14.1): a monthly random sample of new relations, merges and
+ * matches at resolution (`B-273`), graded by a person. Precision per draw is the measure over time; a grade changes nothing in
  * the graph. See docs/features/knowledge-graph.md#the-graph-audit.
  */
 
@@ -144,6 +147,30 @@ function MergeBody({ shown }: { shown: MergeShown }) {
   )
 }
 
+function MatchBody({ shown }: { shown: MatchShown }) {
+  const m = shown.mention
+  return (
+    <>
+      <p className="text-[13px] text-text">
+        Is this the same thing? A run read this name and joined it to an existing node {stamp(shown.matched_at)}, score{' '}
+        {shown.score.toFixed(2)}.
+      </p>
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-2">
+          <span className={LABEL}>Name read</span>
+          <span className="text-[14px] font-semibold leading-snug text-text">{m.name}</span>
+          <span className="font-mono text-[10.5px] text-text-faint">
+            {(m.node_type ?? 'unknown').replaceAll('_', ' ')}
+            {m.jurisdiction ? ` · ${m.jurisdiction}` : ''}
+          </span>
+          <Passages passages={m.passages} />
+        </div>
+        <Side side={shown.node} role="Joined to" />
+      </div>
+    </>
+  )
+}
+
 function EdgeBody({ sample }: { sample: AuditSample & { shown: EdgeShown } }) {
   const s = sample.shown
   const qualifiers = [
@@ -197,9 +224,15 @@ function SampleCard({
   return (
     <Card className="flex flex-col gap-3 px-[18px] py-4">
       <span className={LABEL}>
-        {sample.position + 1}. {sample.kind === 'edge' ? 'Relation' : 'Merge'}
+        {sample.position + 1}. {KIND_LABEL[sample.kind].replace(/^./, (c) => c.toUpperCase())}
       </span>
-      {isEdgeShown(sample) ? <EdgeBody sample={sample} /> : <MergeBody shown={sample.shown as MergeShown} />}
+      {isEdgeShown(sample) ? (
+        <EdgeBody sample={sample} />
+      ) : isMatchShown(sample) ? (
+        <MatchBody shown={sample.shown} />
+      ) : (
+        <MergeBody shown={sample.shown as MergeShown} />
+      )}
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`Grade item ${sample.position + 1}`}>
         {VERDICTS.map(({ key, label }) => (
           <button
@@ -248,6 +281,7 @@ function DrawsTable({
           <th className={TH}>Window</th>
           <th className={TH}>Relations</th>
           <th className={TH}>Merges</th>
+          <th className={TH}>Matches</th>
           <th className={TH}>
             <span className="sr-only">Open</span>
           </th>
@@ -270,6 +304,10 @@ function DrawsTable({
                 {gradedText(d.merges, d.merge_population)}
                 {d.merges_reversed ? ` · ${d.merges_reversed} reversed already` : ''}
               </div>
+            </td>
+            <td className={TD}>
+              <span className="font-mono text-[11.5px] tabular-nums">{precisionText(d.matches)}</span>
+              <div className="text-[11.5px] text-text-faint">{gradedText(d.matches, d.match_population)}</div>
             </td>
             <td className={TD}>
               <button type="button" data-view className={BUTTON_ROW} onClick={() => onSelect(d.draw_id)}>
@@ -302,7 +340,7 @@ function ByProducer({ draw }: { draw: AuditDraw }) {
         <tbody>
           {rows.map((p) => (
             <tr key={`${p.kind}-${p.produced_by}-${p.model}`} className={ROW}>
-              <td className={TD}>{p.kind === 'edge' ? 'relation' : 'merge'}</td>
+              <td className={TD}>{KIND_LABEL[p.kind]}</td>
               <td className={`${TDM} text-text-muted`}>{p.produced_by ?? '—'}</td>
               <td className={`${TDM} text-text-muted`}>{p.model ?? '—'}</td>
               <td className={TDM}>{precisionText(p.tally)}</td>
@@ -391,8 +429,8 @@ export function GraphAuditPanel({
   return (
     <section className="flex flex-col gap-5">
       <PageHeader title="Graph audit">
-        A random sample of the relations and merges made each month, for a person to grade: how many are wrong is the
-        number anything written from the graph rests on. A grade changes nothing in the graph.{' '}
+        A random sample of the relations, merges and name matches made each month, for a person to grade: how many are
+        wrong is the number anything written from the graph rests on. A grade changes nothing in the graph.{' '}
         {audit.ungraded.toLocaleString()} waiting to be graded.
       </PageHeader>
       {error ? (

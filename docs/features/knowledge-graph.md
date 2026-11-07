@@ -482,7 +482,7 @@ The page is Admin › Possible duplicates (`DuplicatesPanel`).
 §14.1 asks for two measurements nothing else takes: "Read 30 random edges monthly, count how
 many are wrong", because a graph with many bad edges cannot ground anything written from it; and
 "sample merges …; conflation is invisible once done, so it must be looked for deliberately".
-`graphaudit.py` (`P7-10`) draws the samples and measures the grades; a person grades. It never
+`graphaudit.py` (`P7-10`, `B-273`) draws the samples and measures the grades; a person grades. It never
 changes the graph: a relation graded wrong stays, a merge graded wrong is not reversed, and
 what to do about either is a person's call through the tools that already exist (Possible
 duplicates' undo, a re-derivation).
@@ -490,7 +490,8 @@ duplicates' undo, a re-derivation).
 **The draw** (`worker.graphaudit`, on the timetable every 30 days; `graph-audit` row). The window
 is `[since, now)`, `since` being where the last draw ended (30 days back for the first), so no
 relation is in two draws and none falls between them. It samples up to 30 relations created in
-the window and up to 20 merges logged in it (`--edges`, `--merges`), and records them with a
+the window, up to 20 merges logged in it and up to 20 matches at resolution (`--edges`,
+`--merges`, `--matches`), and records them with a
 notification (a `job_complete` row whose payload names the job, so the bell's row says "Grade"
 and opens Admin › Graph audit) and a Telegram message when one is configured. What it leaves out:
 
@@ -513,7 +514,11 @@ the relation, its stance, certainty, comparison axis and disanalogy, validity pe
 chunk id and the first three passages; for a merge, both sides as they stood (the target's
 passages and aliases from before the merge, from `merge_log.target_fields`, so the source's
 evidence is not shown as the target's own), the score and its signals, who decided, and how many
-links moved. A relation corroborated later, or a merge reversed, does not change what was graded.
+links moved; for a match, the name as the model wrote it (type, jurisdiction, the passages it
+was read in) beside the node as the resolver saw it (`resolution_matches.node_name`,
+`node_aliases` and `node_chunk_ids`, from before the mention joined it, so the mention's own
+passage is not shown as the node's evidence), the score and its signals, and the run. A relation
+corroborated later, or a merge reversed, does not change what was graded.
 
 **Grades** are `correct`, `wrong` or `unsure`, with an optional note; a grade replaces an earlier
 one (`POST /api/admin/graph-audit/samples/{id}`, permission `graph.audit`). The card does not
@@ -524,15 +529,20 @@ neither. Each figure comes with its 95% Wilson interval, because thirty grades s
 number: 27 of 30 is "90% (74–97%)". Wilson rather than the plain normal interval, which collapses
 to zero width at 30 of 30 and leaves [0, 1] near the ends. It is reported per draw (the measure
 over time, `GET /api/admin/graph-audit`) and per producer within a draw: an edge's agent and
-model, a merge's `decided_by`. §2.3's provenance exists so this can say *which* model writes bad
-edges.
+model, a merge's `decided_by`, a match's agent and model (the model that named the mention, since
+the resolver's own thresholds are the same for every match). §2.3's provenance exists so this
+can say *which* model writes bad edges.
 
-**What it cannot yet sample.** `merge_log` holds only merges made through `resolution.merge`,
-which today is a person deciding a possible duplicate. When resolution matches a mention to an
-existing node at write time (the high band), the mention simply becomes that node: an alias is
-added and a log line written, and no row records the decision. Those auto-resolutions are where
-conflation would happen unattended, and the audit cannot draw them until they are recorded.
-The near-misses §14.1 also names (pairs kept apart) are not drawn either.
+**Matches at resolution** (`B-273`). `merge_log` holds only merges made through
+`resolution.merge`, which today is a person deciding a possible duplicate. The commoner "these
+are one thing" is made while a run writes: the high band resolves a mention to an existing node
+(`mentions.resolve_mention`), and the mention becomes that node with no merge. Those are where
+conflation would happen unattended, so each is written to `resolution_matches` before the node
+takes the mention in, and the draw samples them as a third kind. Every match is recorded,
+exact-name ones included: a homonym (one name, two things) is a conflation too. A match has no
+undo of its own; a grade of wrong is for a person to act on through the node page. Matches made
+before `v0.207.0` were never recorded and cannot be drawn. The near-misses §14.1 also names
+(pairs kept apart) are not drawn either.
 
 ### Reading the graph
 

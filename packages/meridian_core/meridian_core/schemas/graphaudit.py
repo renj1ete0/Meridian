@@ -29,7 +29,10 @@ class AuditTallyRead(BaseModel):
 
 
 class AuditProducerRead(BaseModel):
-    """Precision for one producer: an edge's agent and model, or whoever decided a merge."""
+    """Precision for one producer: an agent and model, or whoever decided a merge.
+
+    For a relation or a matched mention, the agent and model that named it.
+    """
 
     kind: AuditKind
     produced_by: str | None
@@ -46,9 +49,11 @@ class AuditDrawRead(BaseModel):
     drawn_by: str
     edge_population: int
     merge_population: int
+    match_population: int
     merges_reversed: int
     edges: AuditTallyRead
     merges: AuditTallyRead
+    matches: AuditTallyRead
     by_producer: list[AuditProducerRead]
 
 
@@ -58,7 +63,7 @@ class AuditSampleRead(BaseModel):
     kind: AuditKind
     item_id: int
     position: int
-    #: What the grader is shown; see the feature doc for its two shapes.
+    #: What the grader is shown; see the feature doc for its three shapes.
     shown: dict
     grade: AuditVerdict | None
     note: str | None

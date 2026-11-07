@@ -91,7 +91,19 @@ design-only changes do not require a version bump, but may be listed under Unrel
   searching for more
 
 
-## [0.206.1] — 2026-11-02
+## [0.207.0] — 2026-11-07
+
+### Added
+
+- `B-273`: the graph audit samples a third kind, the match at resolution: a mention the high band
+  joined to an existing node, which is the same "these are one thing" decision a merge records but
+  was made with no row to sample. Each match is now written to `resolution_matches` with the node
+  as it stood before the mention joined it, the score and its signals, and the run and model that
+  named the mention. A draw takes up to 20 (`--matches`), shows the name read beside the node with
+  each side's passages, and reports their precision per draw and per model. See
+  docs/features/knowledge-graph.md#the-graph-audit.
+
+**Deploy:** image only (a migration; services wait for it).
 
 ## [0.206.1] — 2026-11-02
 

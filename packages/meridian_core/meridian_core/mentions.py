@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .annotations import ANNOTATION
 from .embedder import MAX_TEXTS, EmbeddingUnavailable
 from .logging import get_logger
-from .models import Entity, Notification
+from .models import Entity, Notification, ResolutionMatch
 from .resolution import Verdict, block, score
 from .validation import ValidationError
 
@@ -94,12 +94,15 @@ async def resolve_mention(
     jurisdiction: str | None = None,
     expansions: dict[str, str] | None = None,
     embedding: Sequence[float] | None = None,
+    run_id: int | None = None,
     now: dt.datetime,
 ) -> Resolved:
     """The node this mention refers to, creating one if it refers to nothing yet.
 
     ``embedding`` is the mention name's vector (`B-40`); without it blocking and
-    scoring use the name alone. Flushes so the id exists; does not commit.
+    scoring use the name alone. A match to an existing node is recorded as a
+    `ResolutionMatch` for the graph audit, naming ``run_id``. Flushes so the id
+    exists; does not commit.
     """
     cleaned = name.strip()
     if not cleaned:
@@ -140,6 +143,28 @@ async def resolve_mention(
             best, match = verdict, candidate.entity
 
     if best is not None and match is not None and best.merges:
+        # Recorded before the node takes the mention in, so the audit shows the node as the
+        # resolver saw it. See docs/features/knowledge-graph.md#the-graph-audit.
+        sess.add(
+            ResolutionMatch(
+                at=now,
+                entity_id=match.entity_id,
+                mention=cleaned,
+                node_type=node_type,
+                jurisdiction=jurisdiction,
+                supporting_chunk_ids=sorted(set(supporting_chunk_ids)),
+                node_name=match.canonical_name,
+                node_aliases=list(match.aliases or []),
+                node_chunk_ids=list(match.supporting_chunk_ids or []),
+                # A cosine can round a hair past 1; the column holds [0, 1].
+                score=min(1.0, max(0.0, best.score)),
+                signals=dict(best.signals),
+                run_id=run_id,
+                produced_by=produced_by,
+                model=model,
+                quality_tier=quality_tier,
+            )
+        )
         # The mention's chunks join the entity's, which is what makes context
         # overlap — §5.5's strongest signal — get better with every mention
         # rather than staying at whatever the first one happened to see.

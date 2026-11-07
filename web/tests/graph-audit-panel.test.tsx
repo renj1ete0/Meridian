@@ -36,9 +36,11 @@ const DRAW: AuditDraw = {
   drawn_by: 'scheduler',
   edge_population: 412,
   merge_population: 3,
+  match_population: 57,
   merges_reversed: 1,
   edges: tally({ drawn: 2, graded: 1, correct: 1, precision: 1, low: 0.21, high: 1 }),
   merges: tally({ drawn: 1 }),
+  matches: tally({ drawn: 1 }),
   by_producer: [
     {
       kind: 'edge',
@@ -114,8 +116,41 @@ const MERGE: AuditSample = {
   graded_at: null,
 }
 
-const AUDIT: GraphAudit = { draws: [DRAW], ungraded: 2 }
-const DETAIL: AuditDrawDetail = { draw: DRAW, samples: [EDGE, GRADED, MERGE] }
+const MATCH: AuditSample = {
+  sample_id: 14,
+  draw_id: 4,
+  kind: 'match',
+  item_id: 501,
+  position: 3,
+  shown: {
+    mention: {
+      name: 'Transport Authority Pte Ltd',
+      node_type: 'organisation',
+      jurisdiction: 'SG',
+      passages: [passage(8, 'Transport Authority Pte Ltd tendered the line')],
+    },
+    node: {
+      entity_id: 9,
+      name: 'Transport Authority',
+      node_type: 'organisation',
+      jurisdiction: null,
+      description: null,
+      aliases: [],
+      passages: [passage(6, 'The Transport Authority runs the buses')],
+    },
+    score: 0.93,
+    signals: { string: 0.88, embedding: 0.97 },
+    matched_at: '2026-09-20T00:00:00Z',
+    run_id: 31,
+  },
+  grade: null,
+  note: null,
+  graded_by: null,
+  graded_at: null,
+}
+
+const AUDIT: GraphAudit = { draws: [DRAW], ungraded: 3 }
+const DETAIL: AuditDrawDetail = { draw: DRAW, samples: [EDGE, GRADED, MERGE, MATCH] }
 
 async function open(props: Partial<Parameters<typeof GraphAuditPanel>[0]> = {}) {
   const load = props.load ?? vi.fn(async () => AUDIT)
@@ -148,14 +183,16 @@ describe('the panel', () => {
     expect(within(row).getByText('1 of 2 graded · from 412')).toBeTruthy()
     expect(within(row).getByText(/1 reversed already/)).toBeTruthy()
     expect(loadDraw).toHaveBeenCalledWith(4)
-    expect(screen.getByText(/2 waiting to be graded/)).toBeTruthy()
+    expect(screen.getByText(/3 waiting to be graded/)).toBeTruthy()
+    // Matches at resolution have their own column, with what they were drawn from.
+    expect(within(row).getByText('0 of 1 graded · from 57')).toBeTruthy()
     // By who wrote it: which model's relations are wrong.
     expect(screen.getByText('model-a')).toBeTruthy()
   })
 
   it('lists what is left to grade, with the claim, its passages and the merge sides', async () => {
     await open()
-    expect(screen.getByRole('button', { name: 'To grade (2)' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'To grade (3)' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('link', { name: 'An agency' }).getAttribute('href')).toBe('/nodes/1')
     expect(screen.getByText('funds')).toBeTruthy()
     expect(screen.getAllByRole('link', { name: /The agency funds the programme/ })[0]!.getAttribute('href')).toBe(
@@ -165,12 +202,27 @@ describe('the panel', () => {
     expect(screen.getByText('Merged away')).toBeTruthy()
     expect(screen.getByText(/score 0.91, decided by user; 3 links moved/)).toBeTruthy()
     // The graded one is under All, not under To grade.
-    expect(screen.queryAllByRole('group', { name: /Grade item/ })).toHaveLength(2)
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'All (3)' }))
-    })
     expect(screen.queryAllByRole('group', { name: /Grade item/ })).toHaveLength(3)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'All (4)' }))
+    })
+    expect(screen.queryAllByRole('group', { name: /Grade item/ })).toHaveLength(4)
     expect(screen.getByRole('status').textContent).toContain('Graded correct')
+  })
+
+  it('shows a match at resolution with the name read beside the node as it was (B-273)', async () => {
+    await open()
+    expect(screen.getByText('4. Match')).toBeTruthy()
+    expect(screen.getByText(/joined it to an existing node .*score 0.93/)).toBeTruthy()
+    expect(screen.getByText('Name read')).toBeTruthy()
+    expect(screen.getByText('Transport Authority Pte Ltd')).toBeTruthy()
+    expect(screen.getByText('organisation · SG')).toBeTruthy()
+    expect(screen.getByText('Joined to')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Transport Authority' }).getAttribute('href')).toBe('/nodes/9')
+    // Each side's own passage, so the grader can see whether they are about one thing.
+    expect(screen.getByRole('link', { name: /tendered the line/ }).getAttribute('href')).toBe('/sources/80?passage=8')
+    expect(screen.getByRole('link', { name: /runs the buses/ }).getAttribute('href')).toBe('/sources/60?passage=6')
+    expect(within(screen.getByRole('group', { name: 'Grade item 4' })).getAllByRole('button')).toHaveLength(3)
   })
 
   it('grades, keeps the graded card in view to correct a slip, and refreshes the measure', async () => {

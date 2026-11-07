@@ -986,10 +986,11 @@ It reads like one, and `P7-10` was specified as if it were ("sample recent node 
 But `merge_log` gets a row only from `resolution.merge`, whose one caller today is a person
 deciding a possible duplicate. When resolution matches a mention to an existing node at write
 time (`mentions.resolve_mention`, the high band), nothing is merged: the mention becomes that
-node, an alias is appended, and the only trace is a log line. So the graph audit's merge sample
-holds person-made merges, and the unattended decisions where conflation would actually happen
-cannot be sampled until something records them (a row per high-band match whose name differs
-from the node's, with the verdict and signals). See
+node, an alias is appended, and no merge row is written. So the graph audit's merge sample
+holds person-made merges only. Since `B-273` (`v0.207.0`) each high-band match is written to
+`resolution_matches` and drawn as the audit's third kind; look there, not in `merge_log`, for what
+resolution decided unattended. Every match is recorded, an exact-name one too (a homonym is a
+conflation), and none made before `v0.207.0` exists. See
 [features/knowledge-graph.md](features/knowledge-graph.md#the-graph-audit).
 
 ### An absent signal counted as zero splits every entity it touches

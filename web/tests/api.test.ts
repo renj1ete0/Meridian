@@ -34,6 +34,7 @@ import {
   AUDIT_TALLY_FIELDS,
   EDGE_SHOWN_FIELDS,
   GRAPH_AUDIT_FIELDS,
+  MATCH_SHOWN_FIELDS,
   MERGE_SHOWN_FIELDS,
 } from '../src/lib/graphAudit'
 import {
@@ -295,6 +296,7 @@ describe('what a sampled item shows matches what the draw writes (P7-10)', () =>
   it.each([
     ['_edge_shown', EDGE_SHOWN_FIELDS],
     ['_merge_shown', MERGE_SHOWN_FIELDS],
+    ['_match_shown', MATCH_SHOWN_FIELDS],
   ] as const)('%s', (fn, declared) => {
     const keys = returnedKeys(fn)
     expect(keys.length).toBeGreaterThan(5)

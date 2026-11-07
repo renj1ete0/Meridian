@@ -495,6 +495,7 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
                 quality_tier=batch.quality_tier,
                 expansions=expansions,
                 embedding=vectors.get(proposal.subject.name.strip()),
+                run_id=run.run_id,
                 now=now,
             )
             target = await resolve_mention(
@@ -508,6 +509,7 @@ async def _extract(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journ
                 quality_tier=batch.quality_tier,
                 expansions=expansions,
                 embedding=vectors.get(proposal.object.name.strip()),
+                run_id=run.run_id,
                 now=now,
             )
             journal.call(
@@ -675,6 +677,7 @@ async def _tag(sess: AsyncSession, run: Run, batch: Batch, *, journal: Journal, 
                 quality_tier=quality_tier,
                 expansions=expansions,
                 embedding=vectors.get(proposal.entity.name.strip()),
+                run_id=run.run_id,
                 now=now,
             )
             attribute = proposal.attribute

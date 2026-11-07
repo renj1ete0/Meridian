@@ -285,6 +285,59 @@ class MergeLog(Base):
         return f"<MergeLog {self.source_entity_id}->{self.target_entity_id}>"
 
 
+class ResolutionMatch(Base):
+    """A mention resolution matched to an existing node in the high band (task `B-273`).
+
+    The same decision a merge records, "these are one thing", taken while a run writes: the
+    mention becomes the node and no merge happens. Kept so the graph audit can sample it. See
+    docs/features/knowledge-graph.md#the-graph-audit.
+    """
+
+    __tablename__ = "resolution_matches"
+
+    match_id: Mapped[int] = pk()
+
+    at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+
+    #: The node the mention became. Not a foreign key, as `merge_log`'s are not: the record
+    #: must outlive a node later merged away.
+    entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    #: The name as the model wrote it, its stated type and jurisdiction, and the passages it
+    #: was read in.
+    mention: Mapped[str] = mapped_column(Text, nullable=False)
+    node_type: Mapped[str] = mapped_column(Text, nullable=False)
+    jurisdiction: Mapped[str | None] = mapped_column(Text)
+    supporting_chunk_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False)
+
+    #: The node as it stood before this mention joined it, so its evidence is not shown
+    #: mixed with the mention's.
+    node_name: Mapped[str] = mapped_column(Text, nullable=False)
+    node_aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    node_chunk_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), nullable=False)
+
+    #: What the resolver thought: the score and each signal behind it.
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    signals: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    #: The run whose model named the mention, and that model. Not a foreign key, for the same
+    #: reason as `entity_id`.
+    run_id: Mapped[int | None] = mapped_column(BigInteger)
+    produced_by: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(Text)
+    quality_tier: Mapped[int | None] = mapped_column(Integer)
+
+    __table_args__ = (
+        CheckConstraint("btrim(mention) <> ''", name="match_mention_named"),
+        CheckConstraint("score >= 0 AND score <= 1", name="match_score_in_range"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<ResolutionMatch {self.mention!r}->{self.entity_id}>"
+
+
 class AttributeDefinition(Base, TimestampMixin):
     """The attribute schema itself (§7.1, §7.3).
 

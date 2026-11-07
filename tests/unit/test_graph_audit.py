@@ -119,20 +119,50 @@ def _draw(**over) -> AuditDrawRead:
         "drawn_by": "scheduler",
         "edge_population": 120,
         "merge_population": 4,
+        "match_population": 50,
         "merges_reversed": 0,
         "edges": graded,
         "merges": empty,
+        "matches": empty,
         "by_producer": [],
     }
     return AuditDrawRead(**(values | over))
 
 
+def _b273():
+    path = next((ROOT / "migrations" / "versions").glob("*b273a1c2d3e4*.py"))
+    spec = importlib.util.spec_from_file_location("b273", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_match_migration_writes_the_kinds_and_counts_the_models_hold() -> None:
+    """Drift: the migration spells its CHECKs out, as a migration must not change when the code
+    does; the newest copy must still say what the model's do."""
+    from meridian_core.models import GraphAuditDraw
+
+    assert tuple(AUDIT_KIND.enums) == _b273().KINDS
+    [counts] = [
+        c.sqltext.text
+        for c in GraphAuditDraw.__table__.constraints
+        if getattr(c, "name", None) and "audit_counts_not_negative" in str(c.name)
+    ]
+    assert " ".join(_b273().COUNTS.split()) == " ".join(counts.split())
+
+
 def test_the_message_says_what_to_grade_and_how_the_last_draw_came_out() -> None:
-    current = _draw(edges=tally([None] * 30), merges=tally([None] * 4), merges_reversed=2)
-    text = summary(current, _draw())
+    current = _draw(
+        edges=tally([None] * 30),
+        merges=tally([None] * 4),
+        matches=tally([None] * 20),
+        merges_reversed=2,
+    )
+    text = summary(current, _draw(matches=tally(["correct"] * 3 + ["wrong"])))
     lines = text.splitlines()
-    assert lines[0] == "Graph audit: 30 relations and 4 merges to grade"
-    assert "since 2001-03-01" in text
+    assert lines[0] == "Graph audit: 30 relations, 4 merges and 20 matches to grade"
+    assert "120 relations, 4 merges and 50 matches since 2001-03-01" in text
+    assert "matches 75%" in text
     assert "2 merges in the window were already reversed" in text
     assert "relations 90%" in text and "of 10 judged" in text
     assert "merges not graded" in text
